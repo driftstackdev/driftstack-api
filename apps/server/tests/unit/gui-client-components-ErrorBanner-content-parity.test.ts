@@ -51,8 +51,9 @@ describe('W478.A apps/gui-client/src/components/ErrorBanner.tsx content parity',
     expect(body).toMatch(
       /export function ErrorBanner\(\{ message, onDismiss \}: ErrorBannerProps\): JSX\.Element \{/,
     );
+    // role="alert" so screen readers announce the error (a11y, 2026-06-15).
     expect(body).toMatch(
-      /<div className="flex items-start justify-between gap-3 rounded border border-status-error\/30 bg-status-error\/10 px-3 py-2">\s*\n?\s*<div className="flex flex-col gap-0\.5 min-w-0">\s*\n?\s*<span className="section-label text-status-error\/80">Error<\/span>/,
+      /<div\s*\n?\s*role="alert"\s*\n?\s*className="flex items-start justify-between gap-3 rounded border border-status-error\/30 bg-status-error\/10 px-3 py-2"\s*\n?\s*>\s*\n?\s*<div className="flex flex-col gap-0\.5 min-w-0">\s*\n?\s*<span className="section-label text-status-error\/80">Error<\/span>/,
     );
     expect(body).toMatch(
       /<span className="whitespace-pre-line text-sm text-ink-primary">\{message\}<\/span>\s*\n?\s*<\/div>\s*\n?\s*<button type="button" className="btn-secondary" onClick=\{onDismiss\}>\s*\n?\s*Dismiss\s*\n?\s*<\/button>/,

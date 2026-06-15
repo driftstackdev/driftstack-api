@@ -18,7 +18,10 @@ export function ErrorBanner({ message, onDismiss }: ErrorBannerProps): JSX.Eleme
     record('error', ['[ui] ' + message]);
   }, [message]);
   return (
-    <div className="flex items-start justify-between gap-3 rounded border border-status-error/30 bg-status-error/10 px-3 py-2">
+    <div
+      role="alert"
+      className="flex items-start justify-between gap-3 rounded border border-status-error/30 bg-status-error/10 px-3 py-2"
+    >
       <div className="flex flex-col gap-0.5 min-w-0">
         <span className="section-label text-status-error/80">Error</span>
         {/* 2026-05-20 — whitespace-pre-line so multi-line diagnostic
