@@ -114,6 +114,7 @@ describe('OpenAPI spec generation', () => {
         '/v1/account/me/billing-portal',
         '/v1/account/me/bundled-llm-settings',
         '/v1/account/me/bundled-llm-status',
+        '/v1/account/me/organization',
         '/v1/account/me/byok-anthropic-key',
         '/v1/account/me/byok-anthropic-key/test',
         // Arc 7 docs.openapi — OAuth-client IDP signin (V-667.C)

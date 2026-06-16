@@ -85,15 +85,15 @@ describe('OpenAPI — BYOK Anthropic + Bundled LLM endpoints', () => {
   });
 
   it('BYOK endpoints tag = "account" (consistent with the rest of /v1/account/me/*)', () => {
-    // Five "account" tags across BYOK + bundled-LLM — count the
-    // registration block's tags entries inside the new section.
-    // Bounded count check ensures the tag isn't accidentally
-    // changed to a different namespace.
+    // "account" tags across BYOK (4) + bundled-LLM (3) + org GET/PUT (2) = 9 —
+    // count the registration block's tags entries inside the section. Bounded
+    // count check ensures the tag isn't accidentally changed to a different
+    // namespace. (org endpoint added 2026-06-16.)
     const slice = src.slice(
       src.indexOf('Arc 7 docs.openapi'),
       src.indexOf('RateLimitBucketOpenApi'),
     );
     const tagOccurrences = (slice.match(/tags:\s*\['account'\]/g) ?? []).length;
-    expect(tagOccurrences).toBe(7);
+    expect(tagOccurrences).toBe(9);
   });
 });

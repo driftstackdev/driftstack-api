@@ -1629,6 +1629,45 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
     },
   });
+  // Per-account organization taxonomy (2026-06-16) — empty folders (+icons) +
+  // tags defined in the GUI rail, synced per-account.
+  const AccountOrganizationOpenApi = z
+    .object({
+      folders: z.array(z.object({ name: z.string(), icon: z.string().optional() })),
+      tags: z.array(z.string()),
+    })
+    .openapi('AccountOrganization');
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/account/me/organization',
+    summary: 'Account organization taxonomy (empty folders + tags)',
+    tags: ['account'],
+    security: auth,
+    responses: {
+      200: {
+        description: "The caller's folder/tag taxonomy. Empty arrays by default.",
+        content: { 'application/json': { schema: AccountOrganizationOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'put',
+    path: '/v1/account/me/organization',
+    summary: 'Replace the account organization taxonomy (account_owner)',
+    tags: ['account'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: AccountOrganizationOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'The stored taxonomy.',
+        content: { 'application/json': { schema: AccountOrganizationOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/me/bundled-llm-status',
