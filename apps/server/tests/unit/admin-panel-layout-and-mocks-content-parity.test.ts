@@ -83,9 +83,9 @@ describe('W789 admin-panel AdminLayout + mocks content parity', () => {
     const p = read(LAYOUT);
 
     expect(p).toMatch(
-      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=3" \/>/,
+      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=4" \/>/,
     );
-    expect(p).toMatch(/src="\/driftstack-mark\.svg\?v=3"/);
+    expect(p).toMatch(/src="\/driftstack-mark\.svg\?v=4"/);
   });
 
   it("CRITICAL 'admin' pill styling pinned — bg-tk-accent/10 + text-tk-accent + font-mono uppercase. The oxblood-50 background distinguishes admin from customer-side blue palettes.", () => {

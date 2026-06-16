@@ -216,10 +216,10 @@ describe('W627 R7-R17 marketing additions content parity', () => {
       expect(svg).toMatch(/aria-label="Driftstack logo"/);
     });
 
-    it('Fleet L2 mark pinned (founder-picked 2026-06-12, replaces the R17 gradient D-badge): ink-outline back layer (stroke #474a55 @ .55, rotate -7) + violet #6d5efc flat-filled front layer + white home-indicator dot — flat fills so the mark stays crisp at favicon sizes', () => {
+    it('Fleet L2 mark pinned (founder-picked 2026-06-12; rebranded to oxblood 2026-06-16): ink-outline back layer (stroke #474a55 @ .55, rotate -7) + oxblood #9b3b46 flat-filled front layer + white home-indicator dot — flat fills so the mark stays crisp at favicon sizes', () => {
       expect(svg).toMatch(/stroke="#474a55" stroke-width="14" opacity="0\.55"/);
       expect(svg).toMatch(/transform="rotate\(-7 105 127\)"/);
-      expect(svg).toMatch(/<rect x="86" y="30" width="118" height="194" rx="34" fill="#6d5efc"\/>/);
+      expect(svg).toMatch(/<rect x="86" y="30" width="118" height="194" rx="34" fill="#9b3b46"\/>/);
       expect(svg).toMatch(/<circle cx="145" cy="192" r="12" fill="#ffffff"\/>/);
       // the old gradient/glow-filter internals must be GONE (flat-fill commitment)
       expect(svg).not.toMatch(/<linearGradient/);

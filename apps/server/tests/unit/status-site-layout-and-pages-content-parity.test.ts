@@ -52,7 +52,7 @@ describe('W790 status-site src content parity bundle', () => {
   it("CRITICAL StatusLayout brand-mark + 'Driftstack · status' header framing pinned. The wordmark + middle-dot + 'status' suffix is the canonical status-site branding.", () => {
     const p = read(LAYOUT);
 
-    expect(p).toMatch(/<img\s*\n\s+src="\/driftstack-mark\.svg\?v=3"\s*\n\s+alt="Driftstack"/);
+    expect(p).toMatch(/<img\s*\n\s+src="\/driftstack-mark\.svg\?v=4"\s*\n\s+alt="Driftstack"/);
     expect(p).toMatch(
       /<span class="text-base font-black italic tracking-tight text-ink-primary">DRIFT<span class="text-glow-red">STACK<\/span><\/span>\s*\n\s+<span class="text-ink-muted">·<\/span>\s*\n\s+<span class="text-ink-muted">status<\/span>/,
     );

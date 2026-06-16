@@ -182,23 +182,24 @@ describe('W792 docs/public configs + cross-app brand-SVG parity', () => {
       }
       expect(refCount, `${app} references driftstack-mark.svg?v= at least once`).toBeGreaterThan(0);
     }
-    // The union of every app's referenced versions must be exactly {3}: all
-    // apps on one version, and that version is the current v3.
+    // The union of every app's referenced versions must be exactly {4}: all
+    // apps on one version, and that version is the current v4 (bumped 2026-06-16
+    // with the oxblood-mark rebrand to bust the stale violet favicon).
     expect(
       [...allVersions].sort(),
-      'all 5 apps share ONE cache-bust version (currently v3) — bump them together',
-    ).toEqual(['3']);
+      'all 5 apps share ONE cache-bust version (currently v4) — bump them together',
+    ).toEqual(['4']);
   });
 
-  it("CRITICAL driftstack-mark.svg shape pinned — 256×256 viewBox + aria-label 'Driftstack logo' + the L2 Drift Layers framing (founder-picked 2026-06-12: violet #6d5efc filled front layer + ink outline back layer, flat fills for favicon crispness). Drift to a different viewBox/aria would break responsive sizing + a11y.", () => {
+  it("CRITICAL driftstack-mark.svg shape pinned — 256×256 viewBox + aria-label 'Driftstack logo' + the L2 Drift Layers framing (front layer filled in the brand oxblood #9b3b46 since the 2026-06-16 rebrand — founder: 'logo still purple, use the new red'; ink outline back layer, flat fills for favicon crispness). Drift to a different viewBox/aria would break responsive sizing + a11y.", () => {
     const mark = readFileSync(resolve(REPO_ROOT, 'apps/docs/public/driftstack-mark.svg'), 'utf8');
 
     expect(mark).toMatch(
       /<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 256 256" width="256" height="256" aria-label="Driftstack logo">/,
     );
     expect(mark).toMatch(/the L2 "Drift Layers" mark \(founder-picked/);
-    expect(mark).toMatch(/front layer is filled in the brand violet #6d5efc/);
-    expect(mark).toMatch(/fill="#6d5efc"/);
+    expect(mark).toMatch(/front layer is filled in the brand oxblood #9b3b46/);
+    expect(mark).toMatch(/fill="#9b3b46"/);
     expect(mark).toMatch(/stroke="#474a55" stroke-width="14" opacity="0\.55"/);
   });
 

@@ -99,16 +99,16 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     );
   });
 
-  it('CRITICAL Driftstack favicon at /driftstack-mark.svg?v=3 (cache-busted v=3, L2 rebrand bytes). Drift to dropping the version-qstring would let stale-favicon caches persist across deploys.', () => {
+  it('CRITICAL Driftstack favicon at /driftstack-mark.svg?v=4 (cache-busted v=3, L2 rebrand bytes). Drift to dropping the version-qstring would let stale-favicon caches persist across deploys.', () => {
     const l = read(LAYOUT);
 
     expect(l).toMatch(
-      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=3" \/>/,
+      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=4" \/>/,
     );
 
     // 2 logo IMG references (sidebar + headerless-onboarding) both use v=3.
-    const logoCount = (l.match(/\/driftstack-mark\.svg\?v=3/g) ?? []).length;
-    expect(logoCount, 'driftstack-mark.svg?v=3 references').toBeGreaterThanOrEqual(2);
+    const logoCount = (l.match(/\/driftstack-mark\.svg\?v=4/g) ?? []).length;
+    expect(logoCount, 'driftstack-mark.svg?v=4 references').toBeGreaterThanOrEqual(2);
   });
 
   it('CRITICAL noindex robots meta pinned. The dashboard MUST NOT be indexed by search engines (per V-204+ standard for authenticated surfaces). Drift to dropping would let Google index customer URLs.', () => {
