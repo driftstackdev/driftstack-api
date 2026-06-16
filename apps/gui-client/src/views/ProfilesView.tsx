@@ -41,6 +41,7 @@ import {
 } from '../components/ProfilesActionBar';
 import { ProxyCapabilityChips, proxyCapabilities } from '../components/ProxyCapabilities';
 import { ProfilePhoneCard } from '../components/ProfilePhoneCard';
+import { RelativeTime } from '../components/RelativeTime';
 import {
   ProfilesTable,
   type ProfileTableRow,
@@ -106,6 +107,9 @@ interface Profile {
   last_used_at: string | null;
   created_at: string;
   updated_at: string;
+  // L4b recycle bin — null for live profiles; set for trashed ones (only the
+  // GET /v1/profiles/trash response carries a non-null value).
+  deleted_at: string | null;
 }
 
 interface ProfilesState {
@@ -246,6 +250,12 @@ export function ProfilesView({
   const [bulkTag, setBulkTag] = useState('');
   const [bulkExporting, setBulkExporting] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  // L4b recycle bin — Trash view: a rail entry flips trashView on, which swaps
+  // the grid/table for a list of soft-deleted profiles with Restore actions.
+  const [trashView, setTrashView] = useState(false);
+  const [trashed, setTrashed] = useState<Profile[]>([]);
+  const [trashLoading, setTrashLoading] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const confirm = useConfirm();
   // Onboarding checklist dismissal — webview localStorage persists per
   // install. Guarded: some embeddings/test environments stub storage out.
@@ -348,6 +358,49 @@ export function ProfilesView({
       }
     },
     [client, settings.baseUrl],
+  );
+
+  // L4b — load the account's trashed profiles for the recycle-bin view.
+  // Best-effort: an older server without /trash (404/405) just yields [].
+  const loadTrash = useCallback(async (): Promise<void> => {
+    if (!client || typeof client.profiles.listTrash !== 'function') {
+      setTrashed([]);
+      return;
+    }
+    setTrashLoading(true);
+    try {
+      const page = await client.profiles.listTrash();
+      setTrashed(page.data);
+    } catch {
+      setTrashed([]);
+    } finally {
+      setTrashLoading(false);
+    }
+  }, [client]);
+
+  // L4b — restore a trashed profile, then refresh both the trash list and the
+  // live profile list. A 409 (a live profile took the name) surfaces as a
+  // notice telling the customer to rename first.
+  const handleRestore = useCallback(
+    async (id: string): Promise<void> => {
+      if (!client) return;
+      setRestoringId(id);
+      try {
+        await client.profiles.restore(id);
+        await Promise.all([loadTrash(), refresh(false)]);
+      } catch (err) {
+        const status = (err as { status?: number }).status;
+        await confirm(
+          status === 409
+            ? 'A live profile already uses this name. Rename it, then restore again.'
+            : friendlyError(err, settings.baseUrl),
+          { confirmLabel: 'OK' },
+        );
+      } finally {
+        setRestoringId(null);
+      }
+    },
+    [client, loadTrash, refresh, confirm, settings.baseUrl],
   );
 
   useEffect(() => {
@@ -1592,13 +1645,47 @@ export function ProfilesView({
                 New tag
               </button>
             )}
+            {/* L4b recycle bin — Trash entry, pinned at the bottom of the rail.
+                Toggles the trashed-profiles view; loads on open. */}
+            <button
+              type="button"
+              onClick={() => {
+                setTrashView((on) => {
+                  const next = !on;
+                  if (next) void loadTrash();
+                  return next;
+                });
+              }}
+              className={`mt-3 flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                trashView
+                  ? 'border-accent bg-accent-subtle text-ink-primary'
+                  : 'border-transparent text-ink-muted hover:bg-surface-elevated hover:text-ink-primary'
+              }`}
+              aria-pressed={trashView}
+            >
+              <span aria-hidden="true">🗑️</span>
+              <span className="flex-1 truncate text-left">Trash</span>
+              {trashed.length > 0 ? (
+                <span className="rounded-full bg-surface-divider px-1.5 text-[10px] text-ink-secondary">
+                  {trashed.length}
+                </span>
+              ) : null}
+            </button>
           </aside>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
             {/* min-h-0 + overflow-y-auto so the grid/table scrolls WITHIN the
                 view on small screens instead of overflowing off-screen
                 (founder: "profile list isn't fully in view, should auto-scale"). */}
             <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-              {viewMode === 'grid' ? (
+              {trashView ? (
+                <TrashPanel
+                  trashed={trashed}
+                  loading={trashLoading}
+                  restoringId={restoringId}
+                  onRestore={(id) => void handleRestore(id)}
+                  onBack={() => setTrashView(false)}
+                />
+              ) : viewMode === 'grid' ? (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(178px,1fr))] gap-3">
                   {filteredProfiles.length === 0 ? (
                     <div className="col-span-full">
@@ -2933,4 +3020,83 @@ function friendlyError(err: unknown, baseUrl?: string): string {
     return err.message;
   }
   return String(err);
+}
+
+// L4b recycle bin — the Trash view. Lists soft-deleted profiles with a Restore
+// action; the row data + DEK survive server-side until a purge. Restore returns
+// a profile to the live list (its name must be free, else the server 409s).
+function TrashPanel({
+  trashed,
+  loading,
+  restoringId,
+  onRestore,
+  onBack,
+}: {
+  trashed: Profile[];
+  loading: boolean;
+  restoringId: string | null;
+  onRestore: (id: string) => void;
+  onBack: () => void;
+}): JSX.Element {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-ink-primary">Recycle bin</h3>
+          <p className="mt-0.5 text-[11px] text-ink-secondary">
+            Deleted profiles are kept here so you can restore them. Restoring returns a profile to
+            your list; its name must be free.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onBack}
+          className="shrink-0 rounded-lg border border-surface-divider px-2.5 py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:text-ink-primary"
+        >
+          ← Back to profiles
+        </button>
+      </div>
+      {loading ? (
+        <p className="py-8 text-center text-xs text-ink-muted">Loading…</p>
+      ) : trashed.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-surface-divider py-10 text-center text-xs text-ink-muted">
+          Trash is empty.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {trashed.map((p) => {
+            const id = p.id.replace(/^prof_/, '');
+            const restoring = restoringId === id || restoringId === p.id;
+            return (
+              <div
+                key={p.id}
+                className="flex items-center justify-between gap-2 rounded-lg border border-surface-divider bg-surface-raised px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-ink-primary">{p.name}</div>
+                  <div className="truncate text-[11px] text-ink-muted">
+                    {formatDeviceName(p.archetype)}
+                    {p.deleted_at !== null ? (
+                      <>
+                        {' · deleted '}
+                        <RelativeTime iso={p.deleted_at} />
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onRestore(p.id)}
+                  disabled={restoring}
+                  className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+                >
+                  {restoring ? 'Restoring…' : 'Restore'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
