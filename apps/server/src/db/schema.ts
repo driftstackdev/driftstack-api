@@ -312,6 +312,16 @@ export const accounts = pgTable(
     bundledLlmMonthlyCapUsdCents: integer('bundled_llm_monthly_cap_usd_cents')
       .notNull()
       .default(2000),
+    // Account-level organization TAXONOMY (2026-06-16) — the empty folders
+    // (+icons) and tags a customer defines in the GUI rail before assigning
+    // them to a profile. Stored per-account so the taxonomy syncs across
+    // machines (was local-only in the GUI's Tauri store). Profile-level
+    // folder/tags ASSIGNMENT + icon/note live on the profile row (0076/0078);
+    // this is just the not-yet-assigned names. `{}` = empty taxonomy.
+    organization: jsonb('organization')
+      .$type<{ folders?: { name: string; icon?: string }[]; tags?: string[] }>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),

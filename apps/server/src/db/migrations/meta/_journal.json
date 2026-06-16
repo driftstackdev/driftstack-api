@@ -554,6 +554,13 @@
       "when": 1780285200000,
       "tag": "0078_profile_icon_note",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1780288800000,
+      "tag": "0079_account_organization",
+      "breakpoints": true
     }
   ]
 }

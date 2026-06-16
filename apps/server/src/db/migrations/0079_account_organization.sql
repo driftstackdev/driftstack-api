@@ -1,0 +1,11 @@
+-- 2026-06-16 — account-level organization taxonomy (per-account sync phase 3).
+-- Holds the EMPTY folders (+icons) and tags a customer defines in the GUI rail
+-- before assigning them to a profile. Was local-only in each machine's Tauri
+-- store (founder: "should be account constants"). Profile-level folder/tags
+-- assignment + icon/note already sync on the profile row (0076/0078); this
+-- closes the not-yet-assigned-taxonomy gap.
+--
+-- jsonb shape: { "folders": [{ "name": string, "icon"?: string }], "tags": [string] }.
+-- Additive + idempotent; defaults to an empty object so existing rows need no
+-- backfill and a pre-migration server reads it as absent → empty.
+ALTER TABLE "accounts" ADD COLUMN IF NOT EXISTS "organization" jsonb NOT NULL DEFAULT '{}'::jsonb;
