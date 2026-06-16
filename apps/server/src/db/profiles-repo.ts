@@ -1,6 +1,7 @@
 // Drizzle-backed ProfilesRepo (V-081).
 
-import { and, count, desc, eq, isNull, lt, or } from 'drizzle-orm';
+import { and, count, desc, eq, isNotNull, isNull, lt, or } from 'drizzle-orm';
+import { isUniqueViolation } from '../lib/pg-error.js';
 import type {
   ListProfilesArgs,
   ListProfilesPage,
@@ -35,6 +36,7 @@ function toRecord(r: typeof profiles.$inferSelect): ProfileRecord {
     lastUsedAt: r.lastUsedAt,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+    deletedAt: r.deletedAt,
   };
 }
 
@@ -223,5 +225,67 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
       .update(profiles)
       .set({ lastUsedAt: args.at })
       .where(and(eq(profiles.id, args.id), eq(profiles.accountId, args.accountId), notDeleted));
+  }
+
+  // L4b recycle bin — inverse of the live read paths: ONLY trashed rows
+  // (deletedAt IS NOT NULL), most-recently trashed first so the newest deletions
+  // surface at the top of the Trash view.
+  async listTrashed(args: { accountId: string }): Promise<ProfileRecord[]> {
+    const rows = await this.database.db
+      .select()
+      .from(profiles)
+      .where(and(eq(profiles.accountId, args.accountId), isNotNull(profiles.deletedAt)))
+      .orderBy(desc(profiles.deletedAt), desc(profiles.id));
+    return rows.map(toRecord);
+  }
+
+  // L4b — restore (clear deletedAt). 'not_found' if no trashed row matches;
+  // 'name_conflict' if a LIVE profile already holds the name (freed + reused
+  // while trashed) — caught both by a pre-check and by the partial-unique-index
+  // 23505 (the pre-check→update window is not atomic, so the catch is the real
+  // guard; the pre-check just gives the common case a query-cheap answer).
+  async restore(args: {
+    id: string;
+    accountId: string;
+  }): Promise<'restored' | 'not_found' | 'name_conflict'> {
+    const [trashed] = await this.database.db
+      .select({ name: profiles.name })
+      .from(profiles)
+      .where(
+        and(
+          eq(profiles.id, args.id),
+          eq(profiles.accountId, args.accountId),
+          isNotNull(profiles.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (trashed === undefined) return 'not_found';
+
+    const [liveSameName] = await this.database.db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(
+        and(eq(profiles.accountId, args.accountId), eq(profiles.name, trashed.name), notDeleted),
+      )
+      .limit(1);
+    if (liveSameName !== undefined) return 'name_conflict';
+
+    try {
+      const result = await this.database.db
+        .update(profiles)
+        .set({ deletedAt: null, updatedAt: new Date() })
+        .where(
+          and(
+            eq(profiles.id, args.id),
+            eq(profiles.accountId, args.accountId),
+            isNotNull(profiles.deletedAt),
+          ),
+        )
+        .returning({ id: profiles.id });
+      return result.length > 0 ? 'restored' : 'not_found';
+    } catch (err) {
+      if (isUniqueViolation(err, 'profiles_account_name_unique')) return 'name_conflict';
+      throw err;
+    }
   }
 }

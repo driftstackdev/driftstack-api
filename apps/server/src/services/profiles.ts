@@ -30,6 +30,13 @@ export interface ProfileRecord {
   lastUsedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  /**
+   * L4b recycle bin — NULL for a live profile; set to the trash timestamp for a
+   * soft-deleted (trashed) profile. Live read paths only ever return rows where
+   * this is NULL; the trash-list path returns trashed rows so the customer can
+   * see when each was deleted and restore it.
+   */
+  deletedAt: Date | null;
 }
 
 export interface NewProfileInput {
@@ -92,6 +99,24 @@ export interface ProfilesRepo {
   update(args: { id: string; accountId: string; updates: ProfileUpdates }): Promise<ProfileRecord>;
   /** Returns true if a row was deleted, false if not found / wrong account. */
   delete(args: { id: string; accountId: string }): Promise<boolean>;
+  /**
+   * L4b — list the account's TRASHED (soft-deleted) profiles, most-recently
+   * trashed first. Inverse of the live read paths: returns ONLY rows where
+   * deletedAt IS NOT NULL. Trash is small + ephemeral so this is unpaginated.
+   */
+  listTrashed(args: { accountId: string }): Promise<ProfileRecord[]>;
+  /**
+   * L4b — restore a trashed profile (clear deletedAt). Returns:
+   *  - 'restored'      the row was trashed and is now live again;
+   *  - 'not_found'     no trashed row with that id for this account;
+   *  - 'name_conflict' a LIVE profile now holds the name (it was freed + reused
+   *                    while trashed), so the partial unique index rejects the
+   *                    restore — the caller must rename one first.
+   */
+  restore(args: {
+    id: string;
+    accountId: string;
+  }): Promise<'restored' | 'not_found' | 'name_conflict'>;
   /** Mark `last_used_at` — fire-and-forget from sessions service. */
   touch(args: { id: string; accountId: string; at: Date }): Promise<void>;
   /**
@@ -157,7 +182,12 @@ export class ProfilesService {
 
   private async emitAuditBestEffort(
     accountId: string,
-    action: 'profile.created' | 'profile.deleted' | 'profile.exported' | 'profile.imported',
+    action:
+      | 'profile.created'
+      | 'profile.deleted'
+      | 'profile.restored'
+      | 'profile.exported'
+      | 'profile.imported',
     targetResourceId: string,
     payload: Record<string, unknown>,
   ): Promise<void> {
@@ -342,6 +372,34 @@ export class ProfilesService {
 
   async touch(args: { id: string; accountId: string; at: Date }): Promise<void> {
     return this.repo.touch(args);
+  }
+
+  /** L4b — the account's trashed profiles (recycle bin), most-recently trashed first. */
+  async listTrash(args: { accountId: string }): Promise<ProfileRecord[]> {
+    return this.repo.listTrashed(args);
+  }
+
+  /**
+   * L4b — restore a trashed profile. 404 if there's no trashed row with that id
+   * for the account; 409 if a live profile took the name while it was trashed
+   * (the customer must rename one first). On success returns the now-live record
+   * + emits a best-effort profile.restored audit event.
+   */
+  async restore(args: { id: string; accountId: string }): Promise<ProfileRecord> {
+    const outcome = await this.repo.restore(args);
+    if (outcome === 'not_found') throw new NotFoundError('Profile not found.');
+    if (outcome === 'name_conflict') {
+      throw new ConflictError(
+        'A live profile already uses this name — rename it before restoring.',
+        { resource: 'profile', field: 'name' },
+      );
+    }
+    const row = await this.repo.findById(args);
+    if (row === null) throw new NotFoundError('Profile not found.');
+    await this.emitAuditBestEffort(args.accountId, 'profile.restored', `profile_${args.id}`, {
+      name: row.name,
+    });
+    return row;
   }
 
   /**

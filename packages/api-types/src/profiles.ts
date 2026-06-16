@@ -47,6 +47,11 @@ export const ProfileSchema = z.object({
   last_used_at: Iso8601Schema.nullable(),
   created_at: Iso8601Schema,
   updated_at: Iso8601Schema,
+  /**
+   * L4b recycle bin — null for a live profile; the trash timestamp for a
+   * soft-deleted one. Only GET /v1/profiles/trash returns rows with this set.
+   */
+  deleted_at: Iso8601Schema.nullable(),
 });
 export type Profile = z.infer<typeof ProfileSchema>;
 

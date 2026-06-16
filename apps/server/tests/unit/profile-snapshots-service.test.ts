@@ -32,6 +32,7 @@ function makeProfile(overrides: Partial<ProfileRecord> = {}): ProfileRecord {
     lastUsedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+    deletedAt: null,
     ...overrides,
   };
 }
@@ -120,6 +121,7 @@ function makeRepos(
         lastUsedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
+        deletedAt: null,
       };
       profiles.push(row);
       return Promise.resolve(row);
@@ -142,6 +144,7 @@ function makeRepos(
         lastUsedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
+        deletedAt: null,
       };
       profiles.push(row);
       return Promise.resolve({ record: row });
@@ -157,6 +160,9 @@ function makeRepos(
     list: () => Promise.resolve({ data: profiles, hasMore: false, nextCursor: null }),
     update: ({ id }) => Promise.resolve(profiles.find((p) => p.id === id) as ProfileRecord),
     delete: () => Promise.resolve(true),
+    listTrashed: ({ accountId }) =>
+      Promise.resolve(profiles.filter((p) => p.accountId === accountId && p.deletedAt !== null)),
+    restore: () => Promise.resolve('not_found' as const),
     touch: () => Promise.resolve(),
     getWrappedDek: () => Promise.resolve(null),
   };

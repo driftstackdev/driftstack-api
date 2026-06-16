@@ -15,6 +15,7 @@ interface ProfileResponse {
   last_used_at: string | null;
   created_at: string;
   updated_at: string;
+  deleted_at: string | null;
 }
 
 describe('POST /v1/profiles', () => {
@@ -703,5 +704,134 @@ describe('POST /v1/profiles/:id/clone (V-313)', () => {
     expect(matching?.payload).toMatchObject({
       cloned_from: `profile_${srcId.replace(/^prof_/, '')}`,
     });
+  });
+});
+
+describe('L4b recycle bin — GET /v1/profiles/trash + POST /v1/profiles/:id/restore', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('trash lists soft-deleted profiles (deleted_at set), excluding live ones', async () => {
+    fx = await buildTestApp();
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const live = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'keep' },
+    });
+    const doomed = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'trash-me' },
+    });
+    const doomedId = doomed.json<ProfileResponse>().id;
+    await fx.app.inject({ method: 'DELETE', url: `/v1/profiles/${doomedId}`, headers: auth });
+
+    const trash = await fx.app.inject({ method: 'GET', url: '/v1/profiles/trash', headers: auth });
+    expect(trash.statusCode).toBe(200);
+    const data = trash.json<{ data: ProfileResponse[] }>().data;
+    expect(data.map((p) => p.id)).toEqual([doomedId]);
+    expect(data[0]!.deleted_at).not.toBeNull();
+    // live profile stays out of the trash list and still has null deleted_at on the main list
+    expect(data.map((p) => p.name)).not.toContain('keep');
+    const list = await fx.app.inject({ method: 'GET', url: '/v1/profiles', headers: auth });
+    expect(list.json<{ data: ProfileResponse[] }>().data.every((p) => p.deleted_at === null)).toBe(
+      true,
+    );
+    expect(live.statusCode).toBe(200);
+  });
+
+  it('restore un-trashes a profile: it leaves trash, returns to the list, and GET resolves again', async () => {
+    fx = await buildTestApp();
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'oops' },
+    });
+    const id = created.json<ProfileResponse>().id;
+    await fx.app.inject({ method: 'DELETE', url: `/v1/profiles/${id}`, headers: auth });
+
+    const restored = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${id}/restore`,
+      headers: auth,
+    });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json<ProfileResponse>().id).toBe(id);
+    expect(restored.json<ProfileResponse>().deleted_at).toBeNull();
+
+    const trash = await fx.app.inject({ method: 'GET', url: '/v1/profiles/trash', headers: auth });
+    expect(trash.json<{ data: ProfileResponse[] }>().data).toHaveLength(0);
+    const get = await fx.app.inject({ method: 'GET', url: `/v1/profiles/${id}`, headers: auth });
+    expect(get.statusCode).toBe(200);
+  });
+
+  it('restore 404s on a live (not-trashed) profile and on an unknown id', async () => {
+    fx = await buildTestApp();
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'alive' },
+    });
+    const id = created.json<ProfileResponse>().id;
+    const live = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${id}/restore`,
+      headers: auth,
+    });
+    expect(live.statusCode).toBe(404);
+    const unknown = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles/prof_00000000-0000-4000-8000-000000000099/restore',
+      headers: auth,
+    });
+    expect(unknown.statusCode).toBe(404);
+  });
+
+  it('restore 409s when the name was reused by a live profile while trashed', async () => {
+    fx = await buildTestApp();
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'dup' },
+    });
+    const firstId = first.json<ProfileResponse>().id;
+    await fx.app.inject({ method: 'DELETE', url: `/v1/profiles/${firstId}`, headers: auth });
+    // recreate the same name (freed by the partial unique index)
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'dup' },
+    });
+    // restoring the original now conflicts with the live namesake
+    const restore = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${firstId}/restore`,
+      headers: auth,
+    });
+    expect(restore.statusCode).toBe(409);
+    expect(restore.json<{ type: string }>().type).toBe(PROBLEM_TYPES.Conflict);
+  });
+
+  it('restore requires write:profiles scope (read-only key → 403)', async () => {
+    fx = await buildTestApp({ scopes: ['read'] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles/prof_00000000-0000-4000-8000-000000000099/restore',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(403);
   });
 });

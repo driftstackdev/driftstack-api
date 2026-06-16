@@ -200,11 +200,14 @@ describe('W948 V-225 + V-136 profiles cross-source invariant', () => {
 
   // ─── 4-action audit vocabulary ───────────────────────────────
 
-  it("CRITICAL emitAuditBestEffort action type — 'profile.created' | 'profile.deleted' | 'profile.exported' | 'profile.imported'. The 4-action vocabulary covers CRUD + export/import paths.", () => {
+  it('CRITICAL emitAuditBestEffort action type — 5-action vocabulary: profile.created | deleted | restored (L4b) | exported | imported. Covers CRUD + recycle-bin restore + export/import paths.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/profiles.ts'));
-    expect(p).toMatch(
-      /action: 'profile\.created' \| 'profile\.deleted' \| 'profile\.exported' \| 'profile\.imported'/,
-    );
+    // prettier-wrapped one-per-line — assert each member.
+    expect(p).toContain("| 'profile.created'");
+    expect(p).toContain("| 'profile.deleted'");
+    expect(p).toContain("| 'profile.restored'");
+    expect(p).toContain("| 'profile.exported'");
+    expect(p).toContain("| 'profile.imported'");
   });
 
   it("CRITICAL emitAuditBestEffort wraps record() in try-catch — 'best-effort — audit failures don't break the CRUD path' inline comment. The swallowed-throw is the V-225 best-effort guarantee.", () => {

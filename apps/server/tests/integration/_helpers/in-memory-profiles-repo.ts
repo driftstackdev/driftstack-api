@@ -11,12 +11,11 @@ import type {
 } from '../../../src/services/profiles.js';
 
 export class InMemoryProfilesRepo implements ProfilesRepo {
+  // L4b — rows carry deletedAt (NULL = live, Date = trashed), mirroring the
+  // prod deletedAt column: trashed rows are skipped by every customer-facing
+  // read path (count/find/list/name-lookup) and can't be updated/touched, but
+  // the row survives (recycle bin) for listTrashed/restore until a purge.
   private readonly rows = new Map<string, ProfileRecord>();
-  // L4b — ids of soft-deleted (trashed) profiles. Mirrors the prod repo's
-  // deletedAt marker: trashed rows are skipped by every customer-facing read
-  // path (count/find/list/name-lookup) and can't be updated/touched, but the
-  // row data survives (recycle bin) until a purge.
-  private readonly deleted = new Set<string>();
 
   insert(input: NewProfileInput): Promise<ProfileRecord> {
     const now = new Date();
@@ -31,6 +30,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
       lastUsedAt: null,
       createdAt: now,
       updatedAt: now,
+      deletedAt: null,
     };
     this.rows.set(row.id, row);
     return Promise.resolve(row);
@@ -39,7 +39,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
   countByAccount(accountId: string): Promise<number> {
     let n = 0;
     for (const r of this.rows.values())
-      if (r.accountId === accountId && !this.deleted.has(r.id)) n += 1;
+      if (r.accountId === accountId && r.deletedAt === null) n += 1;
     return Promise.resolve(n);
   }
 
@@ -54,7 +54,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
     if (limit !== null) {
       let current = 0;
       for (const r of this.rows.values())
-        if (r.accountId === input.accountId && !this.deleted.has(r.id)) current += 1;
+        if (r.accountId === input.accountId && r.deletedAt === null) current += 1;
       if (current >= limit) {
         return Promise.resolve({ limitExceeded: true as const, current });
       }
@@ -71,6 +71,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
       lastUsedAt: null,
       createdAt: now,
       updatedAt: now,
+      deletedAt: null,
     };
     this.rows.set(row.id, row);
     return Promise.resolve({ record: row });
@@ -78,8 +79,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
 
   findById(args: { id: string; accountId: string }): Promise<ProfileRecord | null> {
     const r = this.rows.get(args.id);
-    if (!r || r.accountId !== args.accountId || this.deleted.has(r.id))
-      return Promise.resolve(null);
+    if (!r || r.accountId !== args.accountId || r.deletedAt !== null) return Promise.resolve(null);
     return Promise.resolve(r);
   }
 
@@ -91,7 +91,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
 
   findByAccountAndName(args: { accountId: string; name: string }): Promise<ProfileRecord | null> {
     for (const r of this.rows.values()) {
-      if (r.accountId === args.accountId && r.name === args.name && !this.deleted.has(r.id))
+      if (r.accountId === args.accountId && r.name === args.name && r.deletedAt === null)
         return Promise.resolve(r);
     }
     return Promise.resolve(null);
@@ -100,7 +100,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
   list(args: ListProfilesArgs): Promise<ListProfilesPage> {
     const limit = Math.min(args.limit ?? 50, 100);
     const all = Array.from(this.rows.values())
-      .filter((r) => r.accountId === args.accountId && !this.deleted.has(r.id))
+      .filter((r) => r.accountId === args.accountId && r.deletedAt === null)
       .sort((a, b) => {
         const t = b.createdAt.getTime() - a.createdAt.getTime();
         return t !== 0 ? t : b.id.localeCompare(a.id);
@@ -121,7 +121,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
 
   update(args: { id: string; accountId: string; updates: ProfileUpdates }): Promise<ProfileRecord> {
     const r = this.rows.get(args.id);
-    if (!r || r.accountId !== args.accountId || this.deleted.has(r.id)) {
+    if (!r || r.accountId !== args.accountId || r.deletedAt !== null) {
       return Promise.reject(new Error('update: row not found / wrong account'));
     }
     const next: ProfileRecord = {
@@ -137,20 +137,50 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
     return Promise.resolve(next);
   }
 
-  // L4b soft delete — mark trashed (idempotent: re-deleting a trashed row is a
+  // L4b soft delete — set deletedAt (idempotent: re-deleting a trashed row is a
   // no-op). The row stays in the map so it survives until purge.
   delete(args: { id: string; accountId: string }): Promise<boolean> {
     const r = this.rows.get(args.id);
-    if (!r || r.accountId !== args.accountId || this.deleted.has(r.id))
-      return Promise.resolve(false);
-    this.deleted.add(r.id);
+    if (!r || r.accountId !== args.accountId || r.deletedAt !== null) return Promise.resolve(false);
+    this.rows.set(r.id, { ...r, deletedAt: new Date() });
     return Promise.resolve(true);
   }
 
   touch(args: { id: string; accountId: string; at: Date }): Promise<void> {
     const r = this.rows.get(args.id);
-    if (!r || r.accountId !== args.accountId || this.deleted.has(r.id)) return Promise.resolve();
+    if (!r || r.accountId !== args.accountId || r.deletedAt !== null) return Promise.resolve();
     this.rows.set(r.id, { ...r, lastUsedAt: args.at });
     return Promise.resolve();
+  }
+
+  // L4b — trashed rows only, most-recently trashed first (matches the prod
+  // orderBy(desc(deletedAt), desc(id))).
+  listTrashed(args: { accountId: string }): Promise<ProfileRecord[]> {
+    const trashed = Array.from(this.rows.values())
+      .filter((r) => r.accountId === args.accountId && r.deletedAt !== null)
+      .sort((a, b) => {
+        const t = b.deletedAt!.getTime() - a.deletedAt!.getTime();
+        return t !== 0 ? t : b.id.localeCompare(a.id);
+      });
+    return Promise.resolve(trashed);
+  }
+
+  // L4b — restore (clear deletedAt). 'not_found' if no trashed row matches;
+  // 'name_conflict' if a LIVE profile already holds the name.
+  restore(args: {
+    id: string;
+    accountId: string;
+  }): Promise<'restored' | 'not_found' | 'name_conflict'> {
+    const r = this.rows.get(args.id);
+    if (!r || r.accountId !== args.accountId || r.deletedAt === null) {
+      return Promise.resolve('not_found');
+    }
+    for (const other of this.rows.values()) {
+      if (other.accountId === args.accountId && other.name === r.name && other.deletedAt === null) {
+        return Promise.resolve('name_conflict');
+      }
+    }
+    this.rows.set(r.id, { ...r, deletedAt: null, updatedAt: new Date() });
+    return Promise.resolve('restored');
   }
 }

@@ -59,13 +59,17 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
     expect(body).toMatch(/lastUsedAt: Date \| null;/);
   });
 
-  it('V-225 emitAuditBestEffort: 4-action union (profile.created/deleted/V-480 exported/imported)', () => {
+  it('V-225 emitAuditBestEffort: 5-action union (profile.created/deleted/restored/V-480 exported/imported)', () => {
     expect(body).toMatch(
       /V-225 — optional customer-facing audit log\. When wired, emits\s*\n?\s*\*\s*profile\.created \/ profile\.deleted entries\./,
     );
-    expect(body).toMatch(
-      /action: 'profile\.created' \| 'profile\.deleted' \| 'profile\.exported' \| 'profile\.imported',/,
-    );
+    // The union is prettier-wrapped one-per-line — assert each member (incl.
+    // the L4b profile.restored) rather than a single-line chain.
+    expect(body).toContain("| 'profile.created'");
+    expect(body).toContain("| 'profile.deleted'");
+    expect(body).toContain("| 'profile.restored'");
+    expect(body).toContain("| 'profile.exported'");
+    expect(body).toContain("| 'profile.imported'");
   });
 
   it("create: profileLimitFor tier-cap; TierLimitError with limit+current+resource:'profile'+tier; ConflictError on duplicate name; DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID", () => {

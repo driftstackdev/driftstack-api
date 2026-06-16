@@ -42,7 +42,10 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
   });
 
   it('imports: and/count/desc/eq/lt/or from drizzle-orm; 6 service types (ListProfilesArgs/Page + NewProfileInput + ProfileRecord + ProfileUpdates + ProfilesRepo); Database; profiles schema', () => {
-    expect(body).toMatch(/import \{ and, count, desc, eq, isNull, lt, or \} from 'drizzle-orm';/);
+    expect(body).toMatch(
+      /import \{ and, count, desc, eq, isNotNull, isNull, lt, or \} from 'drizzle-orm';/,
+    );
+    expect(body).toMatch(/import \{ isUniqueViolation \} from '\.\.\/lib\/pg-error\.js';/);
     expect(body).toMatch(
       /import type \{\s*\n?\s*ListProfilesArgs,\s*\n?\s*ListProfilesPage,\s*\n?\s*NewProfileInput,\s*\n?\s*ProfileRecord,\s*\n?\s*ProfileUpdates,\s*\n?\s*ProfilesRepo,\s*\n?\s*\} from '\.\.\/services\/profiles\.js';/,
     );
@@ -68,6 +71,7 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
     expect(body).toContain('lastUsedAt: r.lastUsedAt,');
     expect(body).toContain('createdAt: r.createdAt,');
     expect(body).toContain('updatedAt: r.updatedAt,');
+    expect(body).toContain('deletedAt: r.deletedAt,'); // L4b recycle bin
   });
 
   it("insert: 7-field values (accountId + name + archetype + description + folder + tags + wrappedDek); returning(); throws 'insert profile: no row returned'", () => {

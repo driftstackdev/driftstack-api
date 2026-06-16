@@ -63,7 +63,7 @@ describe('W1051 routes/profiles V-081 + V-313 + V-480 + V-326e4 cross-source inv
     expect(p).toMatch(/Profile routes — five endpoints under \/v1\/profiles \(V-081\)\./);
   });
 
-  it('CRITICAL endpoint roster — 5 core (POST/GET/GET-:id/PATCH/DELETE) + 3 supplemental (V-313 clone + V-480 export + V-480 import). 8 total mount sites.', () => {
+  it('CRITICAL endpoint roster — 5 core (POST/GET/GET-:id/PATCH/DELETE) + 3 supplemental (V-313 clone + V-480 export + V-480 import) + 2 L4b recycle bin (GET trash + POST restore). 10 total mount sites.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/profiles.ts'));
     expect(p).toMatch(/POST\s+\/v1\/profiles\s+— create \(tier-limit enforced\)/);
     expect(p).toMatch(/GET\s+\/v1\/profiles\s+— list \(cursor pagination\)/);
@@ -75,6 +75,9 @@ describe('W1051 routes/profiles V-081 + V-313 + V-480 + V-326e4 cross-source inv
     expect(p).toMatch(/'\/v1\/profiles\/:id\/clone'/);
     expect(p).toMatch(/'\/v1\/profiles\/:id\/export'/);
     expect(p).toMatch(/'\/v1\/profiles\/import'/);
+    // L4b recycle bin
+    expect(p).toMatch(/'\/v1\/profiles\/trash'/);
+    expect(p).toMatch(/'\/v1\/profiles\/:id\/restore'/);
   });
 
   // ─── V-326e4 team-RBAC ──────────────────────────────────────
@@ -164,18 +167,20 @@ describe('W1051 routes/profiles V-081 + V-313 + V-480 + V-326e4 cross-source inv
 
   // ─── Auth + rate-limit on every route ───────────────────────
 
-  it('CRITICAL requireAuth + global rate-limit on every profile route; write:profiles on the 6 mutations.', () => {
+  it('CRITICAL requireAuth + global rate-limit on every profile route; write:profiles on the 7 mutations (incl. L4b restore).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/profiles.ts'));
-    // Count requireAuth + rateLimit('global') independently — the 6
+    // Count requireAuth + rateLimit('global') independently — the
     // mutations now carry app.requireScope('write:profiles') between
     // them (V-481 scope enforcement), so the old adjacent-pair regex no
-    // longer matches those routes.
+    // longer matches those routes. 10 routes now (8 + L4b trash/restore).
     const authRefs = p.match(/app\.requireAuth/g) ?? [];
-    expect(authRefs.length, 'requireAuth on every route').toBeGreaterThanOrEqual(8);
+    expect(authRefs.length, 'requireAuth on every route').toBeGreaterThanOrEqual(10);
     const rateRefs = p.match(/app\.rateLimit\('global'\)/g) ?? [];
-    expect(rateRefs.length, 'global rate-limit on every route').toBeGreaterThanOrEqual(8);
+    expect(rateRefs.length, 'global rate-limit on every route').toBeGreaterThanOrEqual(10);
+    // write:profiles on the 7 mutations: create, update, delete, clone,
+    // import, transfer, restore (L4b). Trash-list is read-only (no scope).
     const scopeRefs = p.match(/app\.requireScope\('write:profiles'\)/g) ?? [];
-    expect(scopeRefs.length, 'write:profiles on the profile mutations').toBe(6);
+    expect(scopeRefs.length, 'write:profiles on the profile mutations').toBe(7);
   });
 
   // ─── 204 on delete ───────────────────────────────────────────

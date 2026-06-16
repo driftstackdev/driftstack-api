@@ -69,7 +69,7 @@ describe('W1002 db/profiles-repo V-081 cross-source invariant', () => {
 
   // ─── 8-method surface ────────────────────────────────────────
 
-  it('CRITICAL 8-method surface — insert + countByAccount + findById + findByAccountAndName + list + update + delete + touch. The 8-method ProfilesRepo covers full CRUD + count + dedup-by-name + lastUsedAt touch.', () => {
+  it('CRITICAL 10-method surface — insert + countByAccount + findById + findByAccountAndName + list + update + delete + touch + listTrashed + restore. CRUD + count + dedup-by-name + lastUsedAt touch + L4b recycle bin (trash list + restore).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/profiles-repo.ts'));
     expect(p).toMatch(/async insert\(input: NewProfileInput\): Promise<ProfileRecord> \{/);
     expect(p).toMatch(/async countByAccount\(accountId: string\): Promise<number> \{/);
@@ -85,6 +85,18 @@ describe('W1002 db/profiles-repo V-081 cross-source invariant', () => {
     expect(p).toMatch(
       /async touch\(args: \{ id: string; accountId: string; at: Date \}\): Promise<void> \{/,
     );
+    expect(p).toMatch(
+      /async listTrashed\(args: \{ accountId: string \}\): Promise<ProfileRecord\[\]> \{/,
+    );
+    expect(p).toContain("Promise<'restored' | 'not_found' | 'name_conflict'>");
+  });
+
+  it('CRITICAL L4b listTrashed inverts the live filter — isNotNull(deletedAt), orderBy desc(deletedAt). restore pre-checks a LIVE same-name (notDeleted) → name_conflict, else clears deletedAt; catches the 23505 partial-index race.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/profiles-repo.ts'));
+    expect(p).toContain('isNotNull(profiles.deletedAt)');
+    expect(p).toMatch(/\.orderBy\(desc\(profiles\.deletedAt\), desc\(profiles\.id\)\)/);
+    expect(p).toContain('.set({ deletedAt: null, updatedAt: new Date() })');
+    expect(p).toMatch(/isUniqueViolation\(err, 'profiles_account_name_unique'\)/);
   });
 
   // ─── countByAccount drizzle count() ─────────────────────────
@@ -188,6 +200,7 @@ describe('W1002 db/profiles-repo V-081 cross-source invariant', () => {
     expect(p).toMatch(/lastUsedAt: r\.lastUsedAt,/);
     expect(p).toMatch(/createdAt: r\.createdAt,/);
     expect(p).toMatch(/updatedAt: r\.updatedAt,/);
+    expect(p).toMatch(/deletedAt: r\.deletedAt,/); // L4b recycle bin
   });
 
   it('test file metadata — file exists at canonical path', () => {

@@ -64,6 +64,9 @@ function publicProfile(p: ProfileRecord): Record<string, unknown> {
     last_used_at: p.lastUsedAt ? p.lastUsedAt.toISOString() : null,
     created_at: p.createdAt.toISOString(),
     updated_at: p.updatedAt.toISOString(),
+    // L4b recycle bin — null for a live profile; the trash timestamp for a
+    // trashed one (only the GET /v1/profiles/trash path returns trashed rows).
+    deleted_at: p.deletedAt ? p.deletedAt.toISOString() : null,
   };
 }
 
@@ -202,6 +205,38 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       const accountId = eff ?? ctx.account.id;
       await service.delete({ id, accountId });
       return reply.code(204).send();
+    },
+  );
+
+  // ── GET /v1/profiles/trash (L4b recycle bin) ─────────────────────────
+  // Lists the account's TRASHED profiles (deleted_at set), newest first.
+  // Read-only → both team roles, same effective-account scoping as the list
+  // endpoint. Static path → Fastify matches it ahead of /v1/profiles/:id.
+  app.get(
+    '/v1/profiles/trash',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (req) => {
+      const ctx = requireCtx(req);
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));
+      const rows = await service.listTrash({ accountId: effective.accountId });
+      return { data: rows.map(publicProfile) };
+    },
+  );
+
+  // ── POST /v1/profiles/:id/restore (L4b recycle bin) ──────────────────
+  // Un-trashes a soft-deleted profile. Same write-scope + admin-only-on-team
+  // gate as delete. 404 if no trashed row; 409 if a live profile took the name
+  // (the service maps the repo's name_conflict outcome).
+  app.post<{ Params: { id: string } }>(
+    '/v1/profiles/:id/restore',
+    { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
+    async (req) => {
+      const ctx = requireCtx(req);
+      const id = uuidFromProfileId(req.params.id);
+      const eff = effectiveAccountIdForWrite(req, ctx);
+      const accountId = eff ?? ctx.account.id;
+      const row = await service.restore({ id, accountId });
+      return publicProfile(row);
     },
   );
 

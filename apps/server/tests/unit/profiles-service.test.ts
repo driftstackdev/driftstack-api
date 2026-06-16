@@ -39,6 +39,7 @@ function makeProfile(overrides: Partial<ProfileRecord> = {}): ProfileRecord {
     lastUsedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+    deletedAt: null,
     ...overrides,
   };
 }
@@ -66,6 +67,7 @@ function makeRepo(
         lastUsedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
+        deletedAt: null,
       };
       rows.push(row);
       return Promise.resolve(row);
@@ -88,6 +90,7 @@ function makeRepo(
         lastUsedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
+        deletedAt: null,
       };
       rows.push(row);
       return Promise.resolve({ record: row });
@@ -125,6 +128,19 @@ function makeRepo(
       if (idx < 0) return Promise.resolve(false);
       rows.splice(idx, 1);
       return Promise.resolve(true);
+    },
+    listTrashed: ({ accountId }) =>
+      Promise.resolve(rows.filter((r) => r.accountId === accountId && r.deletedAt !== null)),
+    restore: ({ id, accountId }) => {
+      const r = rows.find((row) => row.id === id && row.accountId === accountId);
+      if (!r || r.deletedAt === null) return Promise.resolve('not_found' as const);
+      if (
+        rows.some((o) => o.accountId === accountId && o.name === r.name && o.deletedAt === null)
+      ) {
+        return Promise.resolve('name_conflict' as const);
+      }
+      r.deletedAt = null;
+      return Promise.resolve('restored' as const);
     },
     touch: () => Promise.resolve(),
     getWrappedDek: () => Promise.resolve(null),

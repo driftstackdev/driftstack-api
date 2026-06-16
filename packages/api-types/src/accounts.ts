@@ -236,6 +236,9 @@ export const AccountAuditActionSchema = z.enum([
   'session.destroyed',
   'profile.created',
   'profile.deleted',
+  // L4b recycle bin — fires when a trashed profile is restored (deletedAt
+  // cleared) via POST /v1/profiles/:id/restore.
+  'profile.restored',
   // V-480 — profile import/export. exported fires on GET ../export
   // (read-side audit trail for "who pulled what out"); imported fires
   // on the POST /v1/profiles/import handler when a new profile is
