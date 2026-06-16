@@ -31,9 +31,11 @@ import { consequentialSignature } from '../services/agent-executor.js';
 import type { DecomposeUsage } from '../services/agent-decomposer.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { ProfilesService } from '../services/profiles.js';
+import type { SessionRepo } from '../services/sessions.js';
 import { buildAssignProfileBlock } from '../services/profile-store.js';
 import type { R2 } from '../lib/r2.js';
 import { parseProfileId } from '../lib/profile-id.js';
+import { parseSessionId } from '../lib/session-id.js';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
 import type { BundledLlmService } from '../services/bundled-llm.js';
@@ -193,7 +195,10 @@ function publicAgentSession(
   const base: PublicAgentSession = {
     id: rec.id,
     account_id: rec.accountId,
-    driftstack_session_id: rec.driftstackSessionId,
+    // Strict-FK: stored as a bare uuid; return the canonical ses_<uuid> form so
+    // input + output use the same prefixed contract.
+    driftstack_session_id:
+      rec.driftstackSessionId !== null ? `ses_${rec.driftstackSessionId}` : null,
     status: rec.status,
     closed_reason: rec.closedReason,
     token_budget_total: rec.tokenBudgetTotal,
@@ -351,6 +356,14 @@ export interface AgentSessionsRoutesDeps {
    * unsupported (no profiles service to validate against).
    */
   profilesService?: ProfilesService;
+  /**
+   * Strict-FK (2026-06-16) — driver SessionsRepo. When wired + a create carries
+   * `driftstack_session_id`, the route validates the referenced session is owned
+   * by the same (owner) account before storing the uuid, closing the latent
+   * cross-account pointer gap. Absent → driftstack_session_id is rejected
+   * (no repo to validate against), since the column is now a strict FK.
+   */
+  driverSessionsRepo?: SessionRepo;
   /**
    * Private R2 (sealed-profile-blob bucket). When wired alongside a profile-
    * backed create, the dispatch builds the full profile block via
@@ -633,6 +646,7 @@ export function registerAgentSessionsRoutes(
     sessionPageStateStore,
     sessionDispatch,
     profilesService,
+    driverSessionsRepo,
     r2,
   } = deps;
 
@@ -745,6 +759,23 @@ export function registerAgentSessionsRoutes(
         await profilesService.get({ id: profileBareId, accountId: ownerAccountId });
       }
 
+      // Strict-FK (2026-06-16) — normalize the optional driftstack_session_id
+      // (ses_<uuid> | <uuid>) to the bare uuid + verify the referenced session
+      // is owned by the (owner) account before storing. The column is now a FK;
+      // a dangling or cross-account pointer must be rejected, not persisted.
+      let driftstackSessionUuid: string | undefined;
+      if (parsed.data.driftstack_session_id !== undefined) {
+        driftstackSessionUuid = parseSessionId(parsed.data.driftstack_session_id);
+        if (driverSessionsRepo === undefined) {
+          throw new NotFoundError(`Session ${parsed.data.driftstack_session_id} not found.`);
+        }
+        const ref = await driverSessionsRepo.findSession(driftstackSessionUuid, ownerAccountId);
+        if (ref === null) {
+          // 404 (not 403) — never confirm another account's session exists.
+          throw new NotFoundError(`Session ${parsed.data.driftstack_session_id} not found.`);
+        }
+      }
+
       const idempotencyKey = idempotency.kind === 'valid' ? idempotency.key : null;
       if (idempotencyKey !== null) {
         const existing = await sessions.findByIdempotencyKey(ownerAccountId, idempotencyKey);
@@ -775,8 +806,8 @@ export function registerAgentSessionsRoutes(
         created = await sessions.create({
           accountId: ownerAccountId,
           tokenBudgetTotal: parsed.data.token_budget ?? DEFAULT_TOKEN_BUDGET,
-          ...(parsed.data.driftstack_session_id !== undefined
-            ? { driftstackSessionId: parsed.data.driftstack_session_id }
+          ...(driftstackSessionUuid !== undefined
+            ? { driftstackSessionId: driftstackSessionUuid }
             : {}),
           ...(idempotencyKey !== null ? { idempotencyKey } : {}),
           // Arc 2 sub-slice 8.5 (v2-#8) — forward mode when supplied;

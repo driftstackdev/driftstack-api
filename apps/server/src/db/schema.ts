@@ -1859,7 +1859,12 @@ export const agentSessions = pgTable(
     accountId: uuid('account_id')
       .notNull()
       .references(() => accounts.id, { onDelete: 'cascade' }),
-    driftstackSessionId: text('driftstack_session_id'),
+    // Strict FK (2026-06-16) — was loose text; now uuid → sessions(id) ON
+    // DELETE SET NULL (the agent session outlives a deleted driver session).
+    // The route normalizes ses_<uuid>→uuid + validates account ownership.
+    driftstackSessionId: uuid('driftstack_session_id').references(() => sessions.id, {
+      onDelete: 'set null',
+    }),
     status: text('status').notNull(),
     // jsonb transcript — `ReadonlyArray<TranscriptEntry>` at the
     // service layer; Drizzle returns it as `unknown` so the repo

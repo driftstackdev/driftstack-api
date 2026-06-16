@@ -1054,3 +1054,77 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(body.closed_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
   });
 });
+
+describe('AI-D /v1/agent-sessions — driftstack_session_id strict FK (2026-06-16)', () => {
+  let fx: TestAppFixture;
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('links an OWNED session (ses_<uuid>) → 201, response echoes the canonical ses_<uuid>', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const seeded = fx.sessionsRepo.seedSession({ accountId: fx.accountId, createdAt: new Date() });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, driftstack_session_id: `ses_${seeded.id}` },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json<{ driftstack_session_id: string }>().driftstack_session_id).toBe(
+      `ses_${seeded.id}`,
+    );
+  });
+
+  it('also accepts a bare uuid (backward-compatible) for an owned session → 201', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const seeded = fx.sessionsRepo.seedSession({ accountId: fx.accountId, createdAt: new Date() });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, driftstack_session_id: seeded.id },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('404s on an UNKNOWN session id (never silently stores a dangling pointer)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {
+        token_budget: 50_000,
+        driftstack_session_id: 'ses_00000000-0000-4000-8000-0000000000ff',
+      },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("CROSS-ACCOUNT: a session owned by ANOTHER account → 404 (not 201, not 403) — can't point at someone else's session", async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const foreign = fx.sessionsRepo.seedSession({
+      accountId: '00000000-0000-4000-8000-0000000000aa',
+      createdAt: new Date(),
+    });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, driftstack_session_id: `ses_${foreign.id}` },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('400s on a malformed driftstack_session_id', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, driftstack_session_id: 'not-a-session' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});

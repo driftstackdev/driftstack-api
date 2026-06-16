@@ -1308,6 +1308,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // create + ship its DEK in the dispatch. Wired unconditionally (the
       // validation runs even without the fleet CP).
       ...(deps.profilesService !== undefined ? { profilesService: deps.profilesService } : {}),
+      // Strict-FK: validate an owned driftstack_session_id on create (closes the
+      // latent cross-account pointer gap). The driver SessionRepo is the same
+      // one /v1/sessions uses.
+      ...(deps.sessionRepo !== undefined ? { driverSessionsRepo: deps.sessionRepo } : {}),
       // Private R2 → profile-backed dispatch ships restore/save-back URLs.
       ...(deps.r2 ? { r2: deps.r2 } : {}),
     });
