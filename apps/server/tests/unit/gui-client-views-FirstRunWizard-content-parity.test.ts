@@ -77,6 +77,15 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     );
   });
 
+  it('Stepper is accessible: <nav aria-label="Setup progress"> wrapping an <ol> of <li> steps, the active step carries aria-current="step" + an sr-only "(current step)" cue, and the connector rule is aria-hidden — pinned so a screen-reader user can tell which setup step they are on (the progress was previously conveyed by colour alone)', () => {
+    expect(body).toMatch(/<nav aria-label="Setup progress" className="mb-8">\s*\n?\s*<ol /);
+    expect(body).toMatch(/aria-current=\{active \? 'step' : undefined\}/);
+    expect(body).toMatch(/\{active && <span className="sr-only"> \(current step\)<\/span>\}/);
+    expect(body).toMatch(
+      /<span aria-hidden="true" className="mx-2 h-px w-6 bg-surface-divider" \/>/,
+    );
+  });
+
   it("validateAndSave: baseUrl trimmed + trailing-slash stripped (.replace(/\\/+$/, '')) + apiKey trimmed (with ffe8bfa4 overrideKey-first fallback for the browser-sign-in stale-closure fix) before constructing one-shot Driftstack client + calling client.account.me() — pinned so a trailing-slash-typed URL doesn't double-slash in the SDK request path (which a strict server would 404 on), AND so the stale-closure bug (validateAndSave reading apiKey from old render closure → 401) can't re-emerge", () => {
     expect(body).toMatch(
       /const trimmedUrl = baseUrl\.trim\(\)\.replace\(\/\\\/\+\$\/, ''\);\s*\n?\s*const trimmedKey = \(overrideKey \?\? apiKey\)\.trim\(\);/,

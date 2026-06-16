@@ -139,35 +139,44 @@ const STEP_LABELS: Record<WizardStep, string> = {
 function Stepper({ current }: { current: WizardStep }): JSX.Element {
   const currentIdx = STEP_ORDER.indexOf(current);
   return (
-    <div className="mb-8 flex items-center gap-2">
-      {STEP_ORDER.map((s, i) => {
-        const active = i === currentIdx;
-        const done = i < currentIdx;
-        return (
-          <div key={s} className="flex items-center gap-2">
-            <div
-              className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
-                active
-                  ? 'bg-accent text-white'
-                  : done
-                    ? 'bg-accent-subtle text-accent'
-                    : 'bg-surface-raised text-ink-muted'
-              }`}
+    <nav aria-label="Setup progress" className="mb-8">
+      <ol className="flex items-center gap-2">
+        {STEP_ORDER.map((s, i) => {
+          const active = i === currentIdx;
+          const done = i < currentIdx;
+          return (
+            <li
+              key={s}
+              className="flex items-center gap-2"
+              aria-current={active ? 'step' : undefined}
             >
-              {i + 1}
-            </div>
-            <span
-              className={`text-xs ${
-                active ? 'text-ink-primary' : done ? 'text-ink-secondary' : 'text-ink-muted'
-              }`}
-            >
-              {STEP_LABELS[s]}
-            </span>
-            {i < STEP_ORDER.length - 1 && <span className="mx-2 h-px w-6 bg-surface-divider" />}
-          </div>
-        );
-      })}
-    </div>
+              <div
+                className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
+                  active
+                    ? 'bg-accent text-white'
+                    : done
+                      ? 'bg-accent-subtle text-accent'
+                      : 'bg-surface-raised text-ink-muted'
+                }`}
+              >
+                {i + 1}
+              </div>
+              <span
+                className={`text-xs ${
+                  active ? 'text-ink-primary' : done ? 'text-ink-secondary' : 'text-ink-muted'
+                }`}
+              >
+                {STEP_LABELS[s]}
+                {active && <span className="sr-only"> (current step)</span>}
+              </span>
+              {i < STEP_ORDER.length - 1 && (
+                <span aria-hidden="true" className="mx-2 h-px w-6 bg-surface-divider" />
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
   );
 }
 
