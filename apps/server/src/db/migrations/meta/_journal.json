@@ -568,6 +568,13 @@
       "when": 1780292400000,
       "tag": "0080_agent_sessions_driftstack_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1780296000000,
+      "tag": "0081_account_proxies",
+      "breakpoints": true
     }
   ]
 }

@@ -10,9 +10,13 @@ import {
   keysEqual,
   mintDek,
   mintWrappedProfileDek,
+  unwrapAccountSecret,
   unwrapDek,
   unwrapProfileDek,
+  unwrapSecret,
+  wrapAccountSecret,
   wrapDek,
+  wrapSecret,
 } from '../../src/lib/profile-key-hierarchy.js';
 
 const MASTER = Buffer.alloc(32, 9).toString('base64');
@@ -106,5 +110,55 @@ describe('mintWrappedProfileDek / unwrapProfileDek', () => {
   it('a different master key cannot unwrap', () => {
     const { wrappedDek } = mintWrappedProfileDek(decodeMasterKey(MASTER), ACCT_A);
     expect(() => unwrapProfileDek(decodeMasterKey(OTHER_MASTER), ACCT_A, wrappedDek)).toThrow();
+  });
+});
+
+// ARC A — arbitrary-length account secrets (customer proxy passwords). Same
+// AEAD + TMK as the DEK, so the same isolation guarantees must hold.
+describe('wrapSecret / unwrapSecret', () => {
+  it('round-trips an arbitrary-length secret under a raw TMK', () => {
+    const tmk = deriveTenantMasterKey(decodeMasterKey(MASTER), ACCT_A);
+    const secret = Buffer.from('s0cks-p@ssw0rd-with-üñïçödé-and-长度', 'utf8');
+    expect(unwrapSecret(wrapSecret(secret, tmk), tmk).equals(secret)).toBe(true);
+  });
+  it('handles an empty secret', () => {
+    const tmk = deriveTenantMasterKey(decodeMasterKey(MASTER), ACCT_A);
+    expect(unwrapSecret(wrapSecret(Buffer.alloc(0), tmk), tmk).length).toBe(0);
+  });
+  it('produces distinct ciphertext per call (random IV) for the same plaintext', () => {
+    const tmk = deriveTenantMasterKey(decodeMasterKey(MASTER), ACCT_A);
+    const p = Buffer.from('same', 'utf8');
+    expect(wrapSecret(p, tmk)).not.toBe(wrapSecret(p, tmk));
+  });
+  it('a wrong TMK cannot unwrap (GCM tag fails)', () => {
+    const m = decodeMasterKey(MASTER);
+    const wrapped = wrapSecret(Buffer.from('x'), deriveTenantMasterKey(m, ACCT_A));
+    expect(() => unwrapSecret(wrapped, deriveTenantMasterKey(m, ACCT_B))).toThrow();
+  });
+  it('rejects a too-short blob', () => {
+    const tmk = deriveTenantMasterKey(decodeMasterKey(MASTER), ACCT_A);
+    expect(() => unwrapSecret(Buffer.alloc(4, 1).toString('base64'), tmk)).toThrow(/at least/);
+  });
+});
+
+describe('wrapAccountSecret / unwrapAccountSecret', () => {
+  it('round-trips for the same account', () => {
+    const m = decodeMasterKey(MASTER);
+    const secret = Buffer.from('hunter2', 'utf8');
+    const wrapped = wrapAccountSecret(m, ACCT_A, secret);
+    expect(unwrapAccountSecret(m, ACCT_A, wrapped).equals(secret)).toBe(true);
+  });
+  it('CROSS-ACCOUNT ISOLATION: account B cannot unwrap account A’s proxy secret', () => {
+    const m = decodeMasterKey(MASTER);
+    const wrapped = wrapAccountSecret(m, ACCT_A, Buffer.from('hunter2'));
+    expect(() => unwrapAccountSecret(m, ACCT_B, wrapped)).toThrow();
+  });
+  it('a different master key cannot unwrap', () => {
+    const wrapped = wrapAccountSecret(decodeMasterKey(MASTER), ACCT_A, Buffer.from('hunter2'));
+    expect(() => unwrapAccountSecret(decodeMasterKey(OTHER_MASTER), ACCT_A, wrapped)).toThrow();
+  });
+  it('the wrapped form never contains the plaintext', () => {
+    const wrapped = wrapAccountSecret(decodeMasterKey(MASTER), ACCT_A, Buffer.from('hunter2'));
+    expect(Buffer.from(wrapped, 'base64').toString('utf8')).not.toContain('hunter2');
   });
 });

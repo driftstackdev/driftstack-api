@@ -593,6 +593,41 @@ export const profiles = pgTable(
   ],
 );
 
+// ARC A — per-account customer proxies. A customer registers their own
+// SOCKS5/HTTP proxies here so a session can be dispatched through one
+// (session-create `proxy_id`). The password is wrapped under the account TMK
+// (base64([iv|tag|ct]), see lib/profile-key-hierarchy.ts wrapAccountSecret) and
+// is NEVER returned over the API (responses expose `has_password` only).
+// host/port/username are not secret. Was client-only (the GUI Tauri store);
+// this is the per-account synced superset.
+export const accountProxies = pgTable(
+  'account_proxies',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    label: text('label').notNull(),
+    scheme: text('scheme').notNull().default('socks5'),
+    host: text('host').notNull(),
+    port: integer('port').notNull(),
+    username: text('username'),
+    // Proxy password wrapped under the account TMK — base64([iv|tag|ct]).
+    // NULL = no password (or PROFILE_MASTER_KEY unset → feature inert). The
+    // plaintext is never stored; it's unwrapped server-side only at dispatch.
+    wrappedPassword: text('wrapped_password'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index('account_proxies_account_idx').on(t.accountId)],
+);
+
 /**
  * V-312 — profile snapshots. Immutable point-in-time copy of a
  * profile's metadata + state at capture time. Per founder Tier-2

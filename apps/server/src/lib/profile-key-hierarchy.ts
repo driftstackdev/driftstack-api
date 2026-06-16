@@ -141,3 +141,57 @@ export function unwrapProfileDek(masterKey: Buffer, accountId: string, wrappedDe
 export function keysEqual(a: Buffer, b: Buffer): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// Arbitrary-length account secrets (ARC A — customer proxy passwords).
+//
+// Same AEAD construction as wrapDek/unwrapDek (AES-256-GCM under the account
+// TMK) but without the 32-byte constraint, so account-scoped secrets reuse this
+// one audited primitive instead of a parallel crypto path. A secret wrapped
+// under account A's TMK cannot be unwrapped with account B's TMK (the GCM tag
+// fails to verify) — the same cross-account isolation the DEK relies on.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Envelope-encrypt an arbitrary-length secret under a TMK → base64([IV | tag | ciphertext]). */
+export function wrapSecret(plaintext: Buffer, tmk: Buffer): string {
+  const iv = randomBytes(GCM_IV_BYTES);
+  const cipher = createCipheriv('aes-256-gcm', tmk, iv);
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, tag, ciphertext]).toString('base64');
+}
+
+/** Unwrap a base64([IV | tag | ciphertext]) secret under a TMK. Throws if the
+ *  blob is malformed or the GCM tag fails (wrong-account TMK / tamper). */
+export function unwrapSecret(wrappedBase64: string, tmk: Buffer): Buffer {
+  const blob = Buffer.from(wrappedBase64, 'base64');
+  const min = GCM_IV_BYTES + GCM_TAG_BYTES; // empty plaintext is permitted
+  if (blob.length < min) {
+    throw new Error(
+      `wrapped secret blob is ${blob.length.toString()} bytes; expected at least ${min.toString()} (iv + tag)`,
+    );
+  }
+  const iv = blob.subarray(0, GCM_IV_BYTES);
+  const tag = blob.subarray(GCM_IV_BYTES, GCM_IV_BYTES + GCM_TAG_BYTES);
+  const ciphertext = blob.subarray(GCM_IV_BYTES + GCM_TAG_BYTES);
+  const decipher = createDecipheriv('aes-256-gcm', tmk, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+}
+
+/** Wrap an account-scoped secret (e.g. a proxy password) for storage — derives
+ *  the account TMK then envelope-encrypts. Mirrors mintWrappedProfileDek. */
+export function wrapAccountSecret(masterKey: Buffer, accountId: string, plaintext: Buffer): string {
+  return wrapSecret(plaintext, deriveTenantMasterKey(masterKey, accountId));
+}
+
+/** Recover an account-scoped secret from its stored wrapped form. Throws if it
+ *  wasn't wrapped under THIS account's TMK (cross-account isolation). Mirrors
+ *  unwrapProfileDek. */
+export function unwrapAccountSecret(
+  masterKey: Buffer,
+  accountId: string,
+  wrappedBase64: string,
+): Buffer {
+  return unwrapSecret(wrappedBase64, deriveTenantMasterKey(masterKey, accountId));
+}
