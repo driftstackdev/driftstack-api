@@ -19,8 +19,9 @@ import {
   saveProfilesMetaBulk,
   type ProfilesMetaMap,
 } from '../lib/profiles-meta';
-import { loadFolders, addFolder, loadFolderIcons } from '../lib/folders-store';
-import { loadTags, addTag } from '../lib/tags-store';
+import { loadFolders, addFolder, loadFolderIcons, replaceAllFolders } from '../lib/folders-store';
+import { loadTags, addTag, replaceAllTags } from '../lib/tags-store';
+import { fetchOrganization, saveOrganization } from '../lib/account-organization';
 import {
   loadProbeCache,
   saveProbeResult,
@@ -286,6 +287,50 @@ export function ProfilesView({
     void loadFolderIcons().then(setCustomFolderIcons);
     void loadTags().then(setCustomTags);
   }, []);
+
+  // org-sync phase 3c (2026-06-16) — pull the account-level taxonomy (empty
+  // folders/icons + tags) from the server so it follows the account across
+  // machines. Server WINS on a successful load; the local folders/tags store
+  // (loaded above) is the offline cache, kept aligned via replaceAll*. Re-runs
+  // if the key/baseUrl change. Failure (offline/unauth) keeps the local cache.
+  useEffect(() => {
+    const apiKey = settings.apiKey;
+    if (apiKey === null || apiKey.length === 0) return;
+    void (async () => {
+      try {
+        const org = await fetchOrganization(settings.baseUrl, apiKey);
+        const names = org.folders.map((f) => f.name);
+        const icons: Record<string, string> = {};
+        for (const f of org.folders)
+          if (f.icon !== undefined && f.icon.length > 0) icons[f.name] = f.icon;
+        setCustomFolders([...names].sort((a, b) => a.localeCompare(b)));
+        setCustomFolderIcons(icons);
+        setCustomTags([...org.tags].sort((a, b) => a.localeCompare(b)));
+        await replaceAllFolders(names, icons);
+        await replaceAllTags(org.tags);
+      } catch {
+        /* offline / unauth → keep the local cache loaded on mount */
+      }
+    })();
+  }, [settings.apiKey, settings.baseUrl]);
+
+  // org-sync — push the full account taxonomy to the server after a local
+  // mutation (best-effort; the local store stays the source if it fails).
+  const pushOrg = useCallback(
+    (folders: string[], icons: Record<string, string>, tags: string[]): void => {
+      if (settings.apiKey === null || settings.apiKey.length === 0) return;
+      const org = {
+        folders: folders.map((name) =>
+          icons[name] !== undefined && icons[name].length > 0
+            ? { name, icon: icons[name] }
+            : { name },
+        ),
+        tags,
+      };
+      void saveOrganization(settings.baseUrl, settings.apiKey, org).catch(() => undefined);
+    },
+    [settings.apiKey, settings.baseUrl],
+  );
 
   const refresh = useCallback(
     async (showLoading: boolean): Promise<void> => {
@@ -557,11 +602,12 @@ export function ProfilesView({
   const handleCreateTag = useCallback(async () => {
     const next = await addTag(newTagName);
     setCustomTags(next);
+    pushOrg(customFolders, customFolderIcons, next); // org-sync write-through
     const created = newTagName.trim().replace(/^#+/, '').trim();
     if (created.length > 0) setTagFilter(created);
     setNewTagName('');
     setCreatingTag(false);
-  }, [newTagName]);
+  }, [newTagName, pushOrg, customFolders, customFolderIcons]);
 
   // Create a folder from the rail's inline input: persist the name, refresh the
   // list, jump the filter to the new folder, and close the input.
@@ -569,14 +615,19 @@ export function ProfilesView({
     const next = await addFolder(newFolderName, newFolderIcon);
     setCustomFolders(next);
     const created = newFolderName.trim();
+    const nextIcons =
+      created.length > 0 && newFolderIcon.length > 0
+        ? { ...customFolderIcons, [created]: newFolderIcon }
+        : customFolderIcons;
     if (created.length > 0 && newFolderIcon.length > 0) {
-      setCustomFolderIcons((m) => ({ ...m, [created]: newFolderIcon }));
+      setCustomFolderIcons(nextIcons);
     }
+    pushOrg(next, nextIcons, customTags); // org-sync write-through
     if (created.length > 0 && next.includes(created)) setFolderFilter(created);
     setNewFolderName('');
     setNewFolderIcon('');
     setCreatingFolder(false);
-  }, [newFolderName, newFolderIcon]);
+  }, [newFolderName, newFolderIcon, pushOrg, customFolderIcons, customTags]);
 
   // 2026-05-21 — derive the filtered/sorted view over state.profiles.
   // Search matches name + description + archetype; status filter treats a

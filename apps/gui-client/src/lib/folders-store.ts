@@ -114,6 +114,34 @@ export function addFolder(rawName: string, icon?: string): Promise<string[]> {
   });
 }
 
+/** org-sync (2026-06-16) — bulk-replace the local cache (names + icons) from
+ *  the server's authoritative taxonomy. Server wins on a successful load; this
+ *  keeps the offline cache aligned. */
+export function replaceAllFolders(names: string[], icons: Record<string, string>): Promise<void> {
+  return writeLock(async () => {
+    const cleanNames: string[] = [];
+    for (const n of names) {
+      const name = normalizeFolderName(n);
+      if (name !== null && !cleanNames.includes(name) && cleanNames.length < MAX_FOLDERS) {
+        cleanNames.push(name);
+      }
+    }
+    const cleanIcons: Record<string, string> = {};
+    for (const [k, v] of Object.entries(icons)) {
+      const name = normalizeFolderName(k);
+      if (name !== null && typeof v === 'string' && v.length > 0) {
+        cleanIcons[name] = v.slice(0, MAX_ICON_CHARS);
+      }
+    }
+    await getStore().set(
+      KEY,
+      cleanNames.sort((a, b) => a.localeCompare(b)),
+    );
+    await getStore().set(ICONS_KEY, cleanIcons);
+    await getStore().save();
+  });
+}
+
 /** Remove a user-created folder name from the persisted set. Profiles still
  *  carrying that folder keep deriving it (so it only disappears from the rail
  *  once it's both removed here AND empty of profiles). */

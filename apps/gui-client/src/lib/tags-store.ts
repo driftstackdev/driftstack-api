@@ -67,6 +67,23 @@ export function addTag(rawName: string): Promise<string[]> {
   });
 }
 
+/** org-sync (2026-06-16) — bulk-replace the local tag cache from the server's
+ *  authoritative taxonomy. Server wins on a successful load. */
+export function replaceAllTags(names: string[]): Promise<void> {
+  return writeLock(async () => {
+    const clean: string[] = [];
+    for (const n of names) {
+      const name = normalizeTagName(n);
+      if (name !== null && !clean.includes(name) && clean.length < MAX_TAGS) clean.push(name);
+    }
+    await getStore().set(
+      KEY,
+      clean.sort((a, b) => a.localeCompare(b)),
+    );
+    await getStore().save();
+  });
+}
+
 /** Remove a user-created tag name. Profiles still carrying it keep deriving it
  *  (so it only disappears from the rail once removed here AND unused). */
 export function removeTag(name: string): Promise<string[]> {
