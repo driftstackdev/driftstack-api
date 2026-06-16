@@ -113,11 +113,34 @@ export class ProfilesResource {
     });
   }
 
-  /** Delete a profile. Idempotent. */
+  /** Delete a profile. Idempotent. Soft delete (L4b) — recoverable via restore(). */
   delete(id: string): Promise<void> {
     return this.http.request<void>({
       method: 'DELETE',
       path: `/v1/profiles/${encodeURIComponent(id)}`,
+    });
+  }
+
+  /**
+   * L4b recycle bin — list the account's trashed (soft-deleted) profiles,
+   * most-recently trashed first. Each carries `deleted_at`.
+   */
+  listTrash(): Promise<{ data: Profile[] }> {
+    return this.http.request<{ data: Profile[] }>({
+      method: 'GET',
+      path: '/v1/profiles/trash',
+    });
+  }
+
+  /**
+   * L4b recycle bin — restore a trashed profile (clears `deleted_at`). 404 if
+   * there's no trashed profile with that id; 409 if a live profile already
+   * holds the name (rename it first).
+   */
+  restore(id: string): Promise<Profile> {
+    return this.http.request<Profile>({
+      method: 'POST',
+      path: `/v1/profiles/${encodeURIComponent(id)}/restore`,
     });
   }
 

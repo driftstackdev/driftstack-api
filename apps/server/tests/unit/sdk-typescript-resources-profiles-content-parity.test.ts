@@ -109,7 +109,7 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
   });
 
   it('delete verb — DELETE /v1/profiles/${encodeURIComponent(id)} → Promise<void>. CRITICAL "Idempotent" framing — drift to non-idempotent would break the standard cleanup-in-finally pattern where the dashboard fires delete without first checking liveness (e.g. after a customer clicks "Delete" + the request times out + retries).', () => {
-    expect(body).toMatch(/\/\*\* Delete a profile\. Idempotent\. \*\//);
+    expect(body).toMatch(/\/\*\* Delete a profile\. Idempotent\./);
     expect(body).toMatch(
       /delete\(id: string\): Promise<void> \{\s*\n?\s*return this\.http\.request<void>\(\{\s*\n?\s*method: 'DELETE',\s*\n?\s*path: `\/v1\/profiles\/\$\{encodeURIComponent\(id\)\}`,\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
@@ -124,18 +124,20 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
     );
   });
 
-  it('encodeURIComponent invariant — :id escaped EXACTLY 7 times (get + update + delete + launch + clone + export + transfer). import() takes no :id (POST /v1/profiles/import). 2026-05-31 — export/transfer added for V-480/V-666 portability.', () => {
+  it('encodeURIComponent invariant — :id escaped EXACTLY 8 times (get + update + delete + launch + clone + export + transfer + L4b restore). import() + listTrash() take no :id. 2026-05-31 — export/transfer (V-480/V-666); 2026-06-16 — restore (L4b).', () => {
     const matches = body.match(/encodeURIComponent\(id\)/g) ?? [];
-    expect(matches.length, 'expected encodeURIComponent(id) 7 times').toBe(7);
+    expect(matches.length, 'expected encodeURIComponent(id) 8 times').toBe(8);
   });
 
-  it('11-verb inventory + verb-mix invariants — exactly 11 method declarations (create + list + iterate + get + update + launch + delete + clone + export + import + transfer). Verb mix: 5 POSTs (create + launch + clone + import + transfer) + 3 GETs (list + get + export) + 1 PATCH (update) + 1 DELETE (delete) = 10 wire-call verbs (iterate is delegation). NO PUT — partial updates use PATCH.', () => {
+  it('13-verb inventory + verb-mix invariants — exactly 13 method declarations (create + list + iterate + get + update + launch + delete + listTrash + restore + clone + export + import + transfer). Verb mix: 6 POSTs (create + launch + restore + clone + import + transfer) + 4 GETs (list + get + listTrash + export) + 1 PATCH (update) + 1 DELETE (delete) = 12 wire-call verbs (iterate is delegation). NO PUT — partial updates use PATCH.', () => {
     const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
-    expect(methods.length, 'expected 11 verb declarations').toBe(11);
+    expect(methods.length, 'expected 13 verb declarations').toBe(13);
     const posts = (body.match(/method: 'POST'/g) ?? []).length;
-    expect(posts, 'expected 5 POSTs (create + launch + clone + import + transfer)').toBe(5);
+    expect(posts, 'expected 6 POSTs (create + launch + restore + clone + import + transfer)').toBe(
+      6,
+    );
     const gets = (body.match(/method: 'GET'/g) ?? []).length;
-    expect(gets, 'expected 3 GETs (list + get + export)').toBe(3);
+    expect(gets, 'expected 4 GETs (list + get + listTrash + export)').toBe(4);
     const patches = (body.match(/method: 'PATCH'/g) ?? []).length;
     expect(patches, 'expected 1 PATCH (update)').toBe(1);
     const deletes = (body.match(/method: 'DELETE'/g) ?? []).length;

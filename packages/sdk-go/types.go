@@ -696,6 +696,9 @@ type Profile struct {
 	LastUsedAt  *time.Time `json:"last_used_at"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
+	// DeletedAt — L4b recycle bin. nil for a live profile; set to the trash
+	// timestamp for a soft-deleted one (only ListTrash returns trashed rows).
+	DeletedAt *time.Time `json:"deleted_at"`
 }
 
 // CreateProfileRequest — V-426. Server's CreateProfileRequestSchema
@@ -727,6 +730,12 @@ type ProfilesListPage struct {
 	Data       []Profile `json:"data"`
 	HasMore    bool      `json:"has_more"`
 	NextCursor *string   `json:"next_cursor"`
+}
+
+// ProfilesTrashList — L4b recycle bin. The trashed-profiles list is small +
+// ephemeral, so it's an unpaginated { data } envelope (no cursor).
+type ProfilesTrashList struct {
+	Data []Profile `json:"data"`
 }
 
 type ListProfilesQuery struct {

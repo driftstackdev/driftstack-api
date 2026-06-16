@@ -65,6 +65,21 @@ class ProfilesResource:
     def delete(self, profile_id: str) -> None:
         self._http.request("DELETE", f"/v1/profiles/{quote(profile_id, safe='')}")
 
+    def list_trash(self) -> dict[str, Any]:
+        """L4b recycle bin — the account's trashed profiles, newest first.
+
+        Each carries ``deleted_at``. Returns a ``{"data": [...]}`` envelope.
+        """
+        return self._http.request("GET", "/v1/profiles/trash")
+
+    def restore(self, profile_id: str) -> dict[str, Any]:
+        """L4b recycle bin — restore a trashed profile (clears ``deleted_at``).
+
+        404 if there's no trashed profile with that id; 409 if a live profile
+        already holds the name (rename it first).
+        """
+        return self._http.request("POST", f"/v1/profiles/{quote(profile_id, safe='')}/restore")
+
     def launch(self, profile_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         """2026-05-20 — antidetect-browser-style one-shot launch. Creates a
         session bound to this profile (archetype + metadata inherited).

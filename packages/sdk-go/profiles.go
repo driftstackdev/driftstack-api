@@ -114,12 +114,41 @@ func (r *ProfilesResource) Update(ctx context.Context, profileID string, body *U
 }
 
 // Delete removes a profile. Idempotent — calling on a missing id is
-// not an error (returns nil).
+// not an error (returns nil). Soft delete (L4b) — recoverable via Restore.
 func (r *ProfilesResource) Delete(ctx context.Context, profileID string) error {
 	return r.client.do(ctx, requestOptions{
 		method: "DELETE",
 		path:   "/v1/profiles/" + url.PathEscape(profileID),
 	})
+}
+
+// ListTrash returns the account's trashed (soft-deleted) profiles, most-
+// recently trashed first. Each carries DeletedAt. L4b recycle bin.
+func (r *ProfilesResource) ListTrash(ctx context.Context) (*ProfilesTrashList, error) {
+	var out ProfilesTrashList
+	if err := r.client.do(ctx, requestOptions{
+		method: "GET",
+		path:   "/v1/profiles/trash",
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Restore un-trashes a profile (clears DeletedAt). Returns a 404 error if
+// there's no trashed profile with that id, or 409 if a live profile already
+// holds the name (rename it first). L4b recycle bin.
+func (r *ProfilesResource) Restore(ctx context.Context, profileID string) (*Profile, error) {
+	var out Profile
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/profiles/" + url.PathEscape(profileID) + "/restore",
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // LaunchProfileRequest — 2026-05-20 antidetect-browser-style one-shot
