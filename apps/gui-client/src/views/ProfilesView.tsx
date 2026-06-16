@@ -978,7 +978,7 @@ export function ProfilesView({
   }
 
   return (
-    <div className="flex h-full flex-col gap-4 p-6">
+    <div className="flex h-full min-w-0 flex-col gap-4 p-6">
       {/* ALWAYS-RENDERED workspace recovery bar (independent of profiles/
           accountMe load state). A persisted activeWorkspace pointing at a
           team the user was REMOVED from 403s every request → profiles +

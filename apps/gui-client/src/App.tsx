@@ -292,7 +292,14 @@ function Shell(): JSX.Element {
           />
           {/* key by view.kind so switching views replays the fade-in (5→10
               G8 polish); same element + classes, so no layout-chain change. */}
-          <main key={view.kind} className="flex-1 overflow-auto bg-surface-base animate-view-in">
+          {/* min-w-0 is load-bearing: without it a flex item keeps min-width:auto
+              and refuses to shrink below its content's intrinsic width, so a wide
+              table (Profiles list view) blows the whole layout past the viewport
+              instead of letting its own overflow-x-auto scroll. (founder 2026-06-16) */}
+          <main
+            key={view.kind}
+            className="min-w-0 flex-1 overflow-auto bg-surface-base animate-view-in"
+          >
             <CurrentView view={view} onNavigate={setView} />
           </main>
         </div>

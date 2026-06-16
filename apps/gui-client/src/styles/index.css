@@ -201,3 +201,26 @@
   --status-idle-rgb: 107 114 128;
   --accent-subtle-alpha: 0.25;
 }
+
+/* ─── Profiles list-view responsive columns (founder 2026-06-16) ──────────
+   The list/table must reflow to its OWN available width, not the viewport.
+   Viewport breakpoints (md:/lg:) misfire because the table area = viewport
+   minus the nav sidebar AND the folder/tag rail, so columns never collapsed
+   on a non-maximized window and the table scrolled horizontally instead of
+   fitting. Container queries key off the table card's real width: secondary
+   columns drop as the card narrows, keeping Profile · Exit IP · Actions
+   always in view. container-type also contains the table so it can't blow
+   the layout past the window. */
+.ds-table-shell {
+  container-type: inline-size;
+}
+@container (max-width: 1000px) {
+  .ds-col-l {
+    display: none;
+  }
+}
+@container (max-width: 720px) {
+  .ds-col-m {
+    display: none;
+  }
+}

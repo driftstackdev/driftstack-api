@@ -89,15 +89,19 @@ const COLS: ReadonlyArray<Col> = [
 ];
 
 // Two responsive tiers so the table fits narrow windows without assuming a
-// full-width viewport (founder 2026-06-16): below lg, the secondary columns
-// (Tags/Created/Last used/Notes) collapse; below md, Status + UDP also
-// collapse, leaving the essentials — select · Profile · Exit IP · Actions.
-const HIDE_SMALL = 'hidden lg:table-cell';
-const HIDE_MED = 'hidden md:table-cell';
+// full-width viewport (founder 2026-06-16). These are CONTAINER queries
+// (see .ds-table-shell + @container in styles/index.css), NOT viewport
+// breakpoints: the table area is the window minus the nav sidebar AND the
+// folder/tag rail, so md:/lg: misfired and the table scrolled instead of
+// fitting. Keyed off the card's own width: under 1000px the secondary
+// columns (Tags/Created/Last used/Notes) collapse; under 720px Status + UDP
+// also collapse, leaving the essentials — select · Profile · Exit IP · Actions.
+const HIDE_SMALL = 'ds-col-l';
+const HIDE_MED = 'ds-col-m';
 
 export function ProfilesTable(p: ProfilesTableProps): JSX.Element {
   return (
-    <div className="overflow-x-auto rounded-lg border border-surface-divider bg-surface-raised">
+    <div className="ds-table-shell overflow-x-auto rounded-lg border border-surface-divider bg-surface-raised">
       <table className="w-full border-collapse text-left text-xs">
         <thead>
           <tr className="border-b border-surface-divider text-ink-muted">
