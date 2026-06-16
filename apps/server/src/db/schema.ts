@@ -546,6 +546,12 @@ export const profiles = pgTable(
       .$type<string[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
+    // Per-profile UI organization metadata (2026-06-16) — server-side so it
+    // syncs per ACCOUNT, not per machine (was local-only in the GUI's Tauri
+    // store). icon = short emoji (NULL = monogram); note = short inline
+    // annotation, distinct from the longer create-time `description`.
+    icon: text('icon'),
+    note: text('note'),
     /** Last time a session was created against this profile. Updated by SessionsService at create-time. */
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
     // Profile-backed sessions (file 57 key hierarchy): the per-profile DEK,
