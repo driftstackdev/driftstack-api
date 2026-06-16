@@ -154,6 +154,10 @@ export function ProfilesView({
   // Track live sessions + GUI-local bindings so we can show per-profile
   // Launch/Stop buttons + a status badge per row.
   const [activeSessions, setActiveSessions] = useState<Session[]>([]);
+  // Worktimer (2026-06-16) — agent sessions (id + created_at) for the running-
+  // row live-elapsed timer; agent sessions aren't in activeSessions (driver-
+  // only), so we fetch them separately. Empty when the runtime isn't wired.
+  const [agentSessions, setAgentSessions] = useState<Array<{ id: string; created_at: string }>>([]);
   const [bindings, setBindings] = useState<ProfileBinding[]>([]);
   const [proxies, setProxies] = useState<LocalProxyConfig[]>([]);
   // V-239 — gate the New profile button at the tier cap (skip when
@@ -297,6 +301,19 @@ export function ProfilesView({
         setActiveSessions(sessionsPage.data);
         setBindings(currentBindings);
         setProxies(currentProxies);
+        // Worktimer (founder) — fetch agent sessions (best-effort, separate
+        // from the critical Promise.all: the list endpoint 503s when the agent
+        // runtime isn't wired, which must not blank the whole hub). Gives the
+        // running-row live "running for" timer the agent session's created_at
+        // (driver sessions already carry it in activeSessions).
+        if (typeof client.agentSessions.list === 'function') {
+          void client.agentSessions
+            .list()
+            .then((page) =>
+              setAgentSessions(page.data.map((s) => ({ id: s.id, created_at: s.created_at }))),
+            )
+            .catch(() => undefined);
+        }
         setState((s) => ({
           profiles: profilesPage,
           refreshedAt: Date.now(),
@@ -386,6 +403,19 @@ export function ProfilesView({
     if (sid === null) return null;
     if (sid.startsWith('agt_')) return { id: sid, kind: 'agent' };
     return activeSessions.some((s) => s.id === sid) ? { id: sid, kind: 'driver' } : null;
+  }
+
+  // Worktimer — the ISO start time of a profile's bound running session, or
+  // null. Driver sessions carry created_at in activeSessions; agent sessions
+  // come from the separately-fetched agentSessions list (absent until/unless
+  // that fetch succeeds → the timer just doesn't show, never errors).
+  function boundSessionStartedAt(profileId: string): string | null {
+    const bound = boundSession(profileId);
+    if (bound === null) return null;
+    if (bound.kind === 'driver') {
+      return activeSessions.find((s) => s.id === bound.id)?.created_at ?? null;
+    }
+    return agentSessions.find((s) => s.id === bound.id)?.created_at ?? null;
   }
 
   // W624 — re-open the live stream for an already-running agent session
@@ -1659,6 +1689,7 @@ export function ProfilesView({
                       icon: profilesMeta[profile.id]?.icon ?? '',
                       deviceLabel: formatDeviceName(profile.archetype),
                       running: bound !== null,
+                      runningSinceIso: boundSessionStartedAt(profile.id),
                       hasProxy: px !== null,
                       flag: probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍',
                       countryCode: probe?.exitCountry ?? null,

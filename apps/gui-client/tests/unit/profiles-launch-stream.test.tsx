@@ -45,6 +45,9 @@ vi.mock('../../src/lib/SettingsContext', () => {
         close: (id: string) => agentClose(id),
         // W624 — Live-view re-open path for an already-running agent session.
         livekitToken: () => Promise.resolve(LIVEKIT),
+        // Worktimer — the refresh loop lists agent sessions (best-effort) for
+        // the running-row elapsed timer.
+        list: () => Promise.resolve({ data: [] }),
       },
     },
     settings: { apiKey: 'ds_test_x', baseUrl: 'http://localhost:3000' },

@@ -146,6 +146,21 @@ describe('ProfilesTable', () => {
     cleanup();
   });
 
+  it('worktimer: a running row with a known start time shows a live elapsed; idle/unknown shows none', () => {
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    render(
+      <ProfilesTable {...props({ rows: [row({ running: true, runningSinceIso: fiveMinAgo })] })} />,
+    );
+    expect(screen.getByText(/^\d+m$/)).toBeTruthy(); // "5m" (minute-granular elapsed)
+    cleanup();
+    // idle row → no elapsed
+    render(
+      <ProfilesTable {...props({ rows: [row({ running: false, runningSinceIso: null })] })} />,
+    );
+    expect(screen.queryByText(/^\d+m$/)).toBeNull();
+    cleanup();
+  });
+
   it('no proxy → "no proxy"; never-probed → "untested"; probed-but-no-IP → "no exit IP"', () => {
     render(
       <ProfilesTable

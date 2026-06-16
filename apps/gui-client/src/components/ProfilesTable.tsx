@@ -25,6 +25,9 @@ export interface ProfileTableRow {
   icon?: string;
   deviceLabel: string;
   running: boolean;
+  /** Worktimer — ISO start time of the bound running session (null when idle
+   *  or the start time isn't known). Drives the live "running for" elapsed. */
+  runningSinceIso?: string | null;
   hasProxy: boolean;
   flag: string;
   countryCode: string | null;
@@ -211,7 +214,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
           <span className="text-ink-muted">—</span>
         )}
       </td>
-      {/* Status (collapses below md) */}
+      {/* Status (collapses below md) — running rows show a live worktimer. */}
       <td className={`px-3 py-2 ${HIDE_MED}`}>
         <span
           className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
@@ -220,6 +223,14 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
         >
           {r.running ? 'Live' : 'Idle'}
         </span>
+        {r.running && r.runningSinceIso != null && r.runningSinceIso.length > 0 && (
+          <span
+            className="mono mt-0.5 block text-[10px] text-ink-muted"
+            title={`Running since ${new Date(r.runningSinceIso).toLocaleString()}`}
+          >
+            {formatElapsed(r.runningSinceIso)}
+          </span>
+        )}
       </td>
       {/* Exit IP — flag + IP + location + latency + inline Test */}
       <td className="px-3 py-2">
@@ -388,6 +399,20 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
       </td>
     </tr>
   );
+}
+
+/** Worktimer — compact elapsed since an ISO start ("12s" / "4m" / "1h 2m" /
+ *  "2d 3h"). Recomputed on each render; the parent's poll re-renders it. */
+function formatElapsed(startIso: string): string {
+  const start = new Date(startIso).getTime();
+  if (Number.isNaN(start)) return '';
+  const sec = Math.max(0, Math.floor((Date.now() - start) / 1000));
+  if (sec < 60) return `${sec.toString()}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min.toString()}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr.toString()}h ${(min % 60).toString()}m`;
+  return `${Math.floor(hr / 24).toString()}d ${(hr % 24).toString()}h`;
 }
 
 function SortCaret({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }): JSX.Element {

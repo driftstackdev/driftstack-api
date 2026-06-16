@@ -41,6 +41,7 @@ export type {
 } from './resources/egress.js';
 export type {
   AgentSession,
+  AgentSessionsListPage,
   CreateAgentSessionRequest,
   AgentIntent,
   AgentIntentResult,

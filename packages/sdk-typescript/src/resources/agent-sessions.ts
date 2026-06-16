@@ -128,6 +128,11 @@ export interface AgentSession {
   livekit?: LiveKitInfo;
 }
 
+/** GET /v1/agent-sessions envelope — newest-first, server-capped at 100. */
+export interface AgentSessionsListPage {
+  data: AgentSession[];
+}
+
 export interface CreateAgentSessionRequest {
   driftstack_session_id?: string;
   token_budget?: number;
@@ -266,6 +271,19 @@ export class AgentSessionsResource {
     return this.http.request<AgentSession>({
       method: 'GET',
       path: `/v1/agent-sessions/${encodeURIComponent(id)}`,
+    });
+  }
+
+  /**
+   * List the account's agent sessions (newest first, capped at 100 by the
+   * server). Mirrors the GET /v1/agent-sessions envelope `{ data: [...] }`.
+   * Used by the dashboard's recent-sessions list + the desktop GUI's live
+   * "running for" timer (it reads each session's `created_at`).
+   */
+  list(): Promise<AgentSessionsListPage> {
+    return this.http.request<AgentSessionsListPage>({
+      method: 'GET',
+      path: '/v1/agent-sessions',
     });
   }
 
