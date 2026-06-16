@@ -128,6 +128,13 @@ export interface ProfilesRepo {
     id: string;
     accountId: string;
   }): Promise<'restored' | 'not_found' | 'name_conflict'>;
+  /**
+   * L4b Step 4 — retention purge. HARD-deletes trashed profiles (the only hard
+   * delete now that `delete()` is soft) whose `deletedAt` is older than
+   * `cutoff`, account-wide. Removes the row + its wrapped DEK. Returns the
+   * number of rows purged. Driven by the daily profile-trash-purge sweep.
+   */
+  purgeTrashedBefore(cutoff: Date): Promise<number>;
   /** Mark `last_used_at` — fire-and-forget from sessions service. */
   touch(args: { id: string; accountId: string; at: Date }): Promise<void>;
   /**

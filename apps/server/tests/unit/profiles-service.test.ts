@@ -148,6 +148,14 @@ function makeRepo(
       r.deletedAt = null;
       return Promise.resolve('restored' as const);
     },
+    purgeTrashedBefore: (cutoff) => {
+      const before = rows.length;
+      for (let i = rows.length - 1; i >= 0; i--) {
+        const r = rows[i]!;
+        if (r.deletedAt !== null && r.deletedAt.getTime() < cutoff.getTime()) rows.splice(i, 1);
+      }
+      return Promise.resolve(before - rows.length);
+    },
     touch: () => Promise.resolve(),
     getWrappedDek: () => Promise.resolve(null),
   };

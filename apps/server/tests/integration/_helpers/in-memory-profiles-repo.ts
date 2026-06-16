@@ -187,4 +187,17 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
     this.rows.set(r.id, { ...r, deletedAt: null, updatedAt: new Date() });
     return Promise.resolve('restored');
   }
+
+  // L4b Step 4 — hard-delete trashed rows older than cutoff (mirrors the prod
+  // DELETE WHERE deletedAt IS NOT NULL AND deletedAt < cutoff).
+  purgeTrashedBefore(cutoff: Date): Promise<number> {
+    let purged = 0;
+    for (const [id, r] of this.rows) {
+      if (r.deletedAt !== null && r.deletedAt.getTime() < cutoff.getTime()) {
+        this.rows.delete(id);
+        purged += 1;
+      }
+    }
+    return Promise.resolve(purged);
+  }
 }

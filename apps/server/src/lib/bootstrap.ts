@@ -126,6 +126,11 @@ import {
   registerAuthTokensSweepJob,
 } from '../services/auth-flows-sweeper.js';
 import {
+  ProfileTrashPurgeSweeperService,
+  enqueueNextProfileTrashPurge,
+  registerProfileTrashPurgeJob,
+} from '../services/profile-trash-purge-sweeper.js';
+import {
   SessionDurationSweeperService,
   enqueueNextSessionDurationSweep,
   registerSessionDurationSweepJob,
@@ -1021,6 +1026,16 @@ export async function createProductionDeps(
   // V-081: Profiles service.
   // V-225 — accountAudit wired for profile.{created,deleted}.
   const profilesRepo = new DrizzleProfilesRepo(dbHandle);
+  // L4b Step 4 — recycle-bin retention purge. Daily 04:00 UTC sweep that
+  // hard-deletes trashed profiles (+ their wrapped DEK) older than 30 days;
+  // re-arms after each run. Without it, soft-deleted rows accumulate forever.
+  const profileTrashPurgeSweeper = new ProfileTrashPurgeSweeperService({ repo: profilesRepo });
+  registerProfileTrashPurgeJob({
+    scheduledJobs: scheduledJobsService,
+    sweeper: profileTrashPurgeSweeper,
+    logger,
+  });
+  await enqueueNextProfileTrashPurge({ scheduledJobs: scheduledJobsService });
   // Profile-backed sessions (file 57): decode the master key once at boot (null
   // when PROFILE_MASTER_KEY unset → profiles created without a DEK; feature inert).
   const profileMasterKeyBuf =

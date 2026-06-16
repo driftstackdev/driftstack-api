@@ -296,4 +296,16 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
       throw err;
     }
   }
+
+  // L4b Step 4 — retention purge. The ONLY hard DELETE on profiles (delete()
+  // is now soft). Scoped to trashed rows older than cutoff so a live profile
+  // can never be reached: isNotNull(deletedAt) AND deletedAt < cutoff. Removing
+  // the row also drops its wrapped DEK. Returns the purged count.
+  async purgeTrashedBefore(cutoff: Date): Promise<number> {
+    const result = await this.database.db
+      .delete(profiles)
+      .where(and(isNotNull(profiles.deletedAt), lt(profiles.deletedAt, cutoff)))
+      .returning({ id: profiles.id });
+    return result.length;
+  }
 }
