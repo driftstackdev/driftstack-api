@@ -160,6 +160,18 @@ export function ProfilesView({
   const profileCap = accountMe?.profile_cap ?? null;
   const profileCount = accountMe?.profile_count ?? null;
   const atProfileCap = profileCap !== null && profileCount !== null && profileCount >= profileCap;
+  // Teams (2026-06-16) — the server now lets a team ADMIN launch the owner's
+  // profiles (agent-sessions create honors X-Driftstack-Account for admins;
+  // the client already ships that header for the active workspace). So launch
+  // is blocked only for NON-admin members of a team workspace; admins + Personal
+  // can launch.
+  const activeRole =
+    activeWorkspace !== null
+      ? ((accountMe?.teams ?? []).find((t) => t.owner_account_id === activeWorkspace)?.role ?? null)
+      : null;
+  const teamLaunchBlocked = activeWorkspace !== null && activeRole !== 'admin';
+  const teamLaunchBlockedReason =
+    'Shared team profile — ask a team admin to launch it (you have read-only access here).';
   const [state, setState] = useState<ProfilesState>({
     profiles: [],
     refreshedAt: null,
@@ -1449,8 +1461,8 @@ export function ProfilesView({
                         busy={busyId === profile.id}
                         testing={px !== null && testingProxyId === px.id}
                         testDisabled={testingProxyId !== null}
-                        launchDisabled={activeWorkspace !== null}
-                        launchDisabledReason="Launching a team-workspace profile isn’t available yet — switch to Personal to launch your own."
+                        launchDisabled={teamLaunchBlocked}
+                        launchDisabledReason={teamLaunchBlockedReason}
                         onToggleSelect={() => toggleSelected(profile.id)}
                         onPrimary={() => {
                           if (running && bound !== null) onOpenSession(bound.id);
@@ -1520,12 +1532,13 @@ export function ProfilesView({
                       busy: busyId === profile.id,
                       testing: px !== null && testingProxyId === px.id,
                       testDisabled: testingProxyId !== null,
-                      // Launch gates on team-workspace only — NOT atProfileCap: the
-                      // cap limits CREATING profiles, launching consumes a session
-                      // slot (free-tier fix 0ccff415; the table Launch is busy-only).
-                      launchDisabled: activeWorkspace !== null,
-                      launchDisabledReason:
-                        'Launching a team-workspace profile isn’t available yet — switch to Personal to launch your own.',
+                      // Launch blocks NON-admin team members only — the server
+                      // lets admins launch the owner's profile (V-326e3-style);
+                      // admins + Personal can launch. NOT atProfileCap: the cap
+                      // limits CREATING, launching consumes a session slot
+                      // (free-tier fix 0ccff415; the table Launch is busy-only).
+                      launchDisabled: teamLaunchBlocked,
+                      launchDisabledReason: teamLaunchBlockedReason,
                     };
                   });
                   const dir = sortDir === 'asc' ? 1 : -1;

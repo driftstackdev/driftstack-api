@@ -133,10 +133,13 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).not.toMatch(/disabled=\{busy\s*\|\|\s*atProfileCap\}/);
   });
 
-  it("Launch is gated in a team workspace (activeWorkspace !== null): profiles.list honors X-Driftstack-Account so the cards show the OWNER's profiles, but agent-sessions create is self-scoped + ships the profile DEK (member-launches-owner RBAC unresolved → would 404). Gate it honestly with a tooltip rather than present a 404-ing button; launch from Personal. GRID gates via the GX ProfilePhoneCard's launchDisabled prop; the LIST view (ProfilesTable) gates via the row-model launchDisabled field.", () => {
-    expect(body).toContain('launchDisabled={activeWorkspace !== null}'); // grid card prop
-    expect(body).toContain('launchDisabled: activeWorkspace !== null'); // table row model
-    expect(body).toMatch(/Launching a team-workspace profile isn.t available yet/);
+  it("Launch in a team workspace is gated by ROLE (2026-06-16): the server now lets a team ADMIN launch the owner's profile (agent-sessions create honors X-Driftstack-Account for admins, mirroring driver V-326e3), so only NON-admin members are blocked. activeRole reads the membership role for the active workspace; teamLaunchBlocked = activeWorkspace !== null && activeRole !== 'admin'. GRID gates via the ProfilePhoneCard launchDisabled prop, LIST via the row-model field — both off the shared teamLaunchBlocked.", () => {
+    expect(body).toMatch(
+      /const teamLaunchBlocked = activeWorkspace !== null && activeRole !== 'admin'/,
+    );
+    expect(body).toContain('launchDisabled={teamLaunchBlocked}'); // grid card prop
+    expect(body).toContain('launchDisabled: teamLaunchBlocked'); // table row model
+    expect(body).toMatch(/ask a team admin to launch it/);
   });
 
   it('Workspace recovery bar is ALWAYS rendered when activeWorkspace !== null — independent of profiles/accountMe load state (a revoked-membership persisted workspace 403s everything; the in-stats-row switcher is gated on profiles.length>0 AND accountMe.teams, so without this top-level Switch-to-Personal escape the hub would brick with no way back).', () => {
