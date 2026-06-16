@@ -91,21 +91,9 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     );
   });
 
-  it("V-318 StatusFooter framing pinned: 'surface tier + concurrent usage in the footer so the customer sees starter · 2 / 4 sessions at-a-glance, matching the file-127 enforcement-aware UX intent. accountMe comes from the SettingsContext (V-239 pre-fetch); when it's null we fall back to the prior connection-only chrome rather than blocking.' + atCap calc — pinned so the cap visibility stays present on every screen, not just SessionsView", () => {
-    expect(body).toMatch(
-      /\/\/ V-318 — surface tier \+ concurrent usage in the footer so the\s*\n?\s*\/\/ customer sees "starter · 2 \/ 4 sessions" at-a-glance, matching the\s*\n?\s*\/\/ file-127 enforcement-aware UX intent\. accountMe comes from the\s*\n?\s*\/\/ SettingsContext \(V-239 pre-fetch\); when it's null we fall back to\s*\n?\s*\/\/ the prior connection-only chrome rather than blocking\./,
-    );
-    expect(body).toMatch(
-      /const atCap =\s*\n?\s*accountMe !== null && accountMe\.concurrent_session_active >= accountMe\.concurrent_session_cap;/,
-    );
-    // 2026-05-21 Slice E — same shape for profile cap so the footer
-    // mirrors the Sidebar's per-item count badges on every view.
-    expect(body).toMatch(
-      /const atProfileCap =\s*\n?\s*accountMe !== null &&\s*\n?\s*accountMe\.profile_cap !== null &&\s*\n?\s*accountMe\.profile_count >= accountMe\.profile_cap;/,
-    );
-  });
-
-  it('footer no longer shows the masked API key + base URL (founder 2026-06-15: redundant — the TitleBar already shows the deployment mode + the connection pill carries the host). The full secret never belongs in the always-visible chrome, and the host duplicated the title bar — both removed', () => {
+  it('the bottom status footer is REMOVED (founder 2026-06-16: redundant + overlapping — connection state lives in the TitleBar pill, the tier/session/profile caps live in the Sidebar). No StatusFooter component, no footer mount, no masked key / base URL in the chrome', () => {
+    expect(body).not.toMatch(/function StatusFooter/);
+    expect(body).not.toMatch(/<StatusFooter\s*\/>/);
     expect(body).not.toMatch(/settings\.apiKey\.slice\(0, 8\)/);
     expect(body).not.toMatch(/redactBaseUrl/);
   });

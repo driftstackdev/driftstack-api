@@ -296,7 +296,6 @@ function Shell(): JSX.Element {
             <CurrentView view={view} onNavigate={setView} />
           </main>
         </div>
-        <StatusFooter />
         <CommandPalette
           open={paletteOpen}
           actions={paletteActions}
@@ -397,69 +396,6 @@ function deploymentLabel(baseUrl: string): 'cloud' | 'self-hosted' {
     // since cloud customers wouldn't typo their base URL).
     return 'self-hosted';
   }
-}
-
-function StatusFooter(): JSX.Element {
-  // V-318 — surface tier + concurrent usage in the footer so the
-  // customer sees "starter · 2 / 4 sessions" at-a-glance, matching the
-  // file-127 enforcement-aware UX intent. accountMe comes from the
-  // SettingsContext (V-239 pre-fetch); when it's null we fall back to
-  // the prior connection-only chrome rather than blocking.
-  // 2026-05-21 — Slice E expansion: also surface profile_count / cap
-  // alongside sessions so the customer sees both caps at-a-glance
-  // (matches the Sidebar's per-item count badges; the footer is the
-  // always-visible mirror that survives across every view).
-  const { client, accountMe, activeWorkspace } = useSettings();
-  const connected = client !== null;
-  const atCap =
-    accountMe !== null && accountMe.concurrent_session_active >= accountMe.concurrent_session_cap;
-  const atProfileCap =
-    accountMe !== null &&
-    accountMe.profile_cap !== null &&
-    accountMe.profile_count >= accountMe.profile_cap;
-  return (
-    <footer
-      className="flex h-6 items-center justify-between border-t
-                 border-surface-divider bg-surface-raised px-3
-                 text-2xs text-ink-muted"
-    >
-      <div className="flex items-center gap-2">
-        <span className={`status-pip ${connected ? 'bg-status-ready' : 'bg-status-idle'}`} />
-        <span>{connected ? 'connected' : 'not connected'}</span>
-        {/* account/me is self-scoped (it ignores X-Driftstack-Account), so
-            its tier + session/profile caps describe the SIGNED-IN account,
-            not the active team. In a team workspace those personal numbers
-            don't govern the work — profiles + sessions there count against
-            the owner's caps — so showing them would mislead. Surface the
-            workspace context instead; the personal caps return on Personal. */}
-        {accountMe !== null && activeWorkspace === null && (
-          <>
-            <span className="text-ink-muted">·</span>
-            <span className="section-label">{accountMe.tier}</span>
-            <span className={atCap ? 'mono text-status-error' : 'mono'}>
-              {accountMe.concurrent_session_active} / {accountMe.concurrent_session_cap} sessions
-            </span>
-            <span className="text-ink-muted">·</span>
-            <span className={atProfileCap ? 'mono text-status-error' : 'mono'}>
-              {accountMe.profile_count}
-              {accountMe.profile_cap !== null ? ` / ${accountMe.profile_cap}` : ''} profiles
-            </span>
-          </>
-        )}
-        {activeWorkspace !== null && (
-          <>
-            <span className="text-ink-muted">·</span>
-            <span
-              className="section-label"
-              title="In a team workspace, plan limits are managed by the workspace owner — your personal caps don't apply here."
-            >
-              team workspace
-            </span>
-          </>
-        )}
-      </div>
-    </footer>
-  );
 }
 
 /**

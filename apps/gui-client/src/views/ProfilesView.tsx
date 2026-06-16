@@ -994,7 +994,7 @@ export function ProfilesView({
           real memberships so the demo's team surface stops being
           invisible. Sits below the stat strip (not inside the bordered
           grid) so the metrics read as a clean console strip. */}
-      {state.profiles.length > 0 && (accountMe?.teams?.length ?? 0) > 0 && (
+      {state.profiles.length > 0 && (
         <div
           data-component="workspace-strip"
           className="flex flex-wrap items-center gap-2 rounded-md border border-surface-divider bg-surface-raised px-3 py-2 text-xs"
@@ -1032,6 +1032,16 @@ export function ProfilesView({
               Team · {t.role}
             </button>
           ))}
+          {/* Discoverability (2026-06-16, founder "where am I supposed to look"):
+              the strip now renders for everyone (not only team members). With no
+              teams yet, explain what team workspaces are + where to set one up,
+              so Teams isn't invisible until you already belong to one. */}
+          {(accountMe?.teams?.length ?? 0) === 0 && (
+            <span className="ml-auto text-2xs text-ink-muted">
+              Team workspaces let members share profiles — set one up in the web dashboard (Team),
+              then it appears here.
+            </span>
+          )}
           {activeWorkspace !== null && (
             <span className="ml-auto text-2xs text-ink-muted">
               Viewing a team workspace — writes need the admin role.
@@ -1404,7 +1414,7 @@ export function ProfilesView({
               </button>
             )}
           </aside>
-          <div className="flex min-w-0 flex-1 flex-col gap-3">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
             {/* G3 — TAG filter rail (founder: "missing tags"). Composes (AND)
                 with the folder rail. Hidden when the account has no tags. */}
             <TagFilterRail
@@ -1412,7 +1422,10 @@ export function ProfilesView({
               active={tagFilter}
               onSelect={setTagFilter}
             />
-            <div className="min-w-0 flex-1">
+            {/* min-h-0 + overflow-y-auto so the grid/table scrolls WITHIN the
+                view on small screens instead of overflowing off-screen
+                (founder: "profile list isn't fully in view, should auto-scale"). */}
+            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
               {viewMode === 'grid' ? (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(178px,1fr))] gap-3">
                   {filteredProfiles.length === 0 ? (
