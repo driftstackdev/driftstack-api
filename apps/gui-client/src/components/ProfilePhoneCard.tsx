@@ -9,7 +9,7 @@
 // organize slot. flag covers every ISO country via flagEmoji (regional-indicator
 // transform — no hardcoded list).
 
-import type { JSX, ReactNode } from 'react';
+import { useState, type JSX, type ReactNode } from 'react';
 import { proxyCapabilities } from './ProxyCapabilities';
 import { RelativeTime } from './RelativeTime';
 import type { ProxyTestResult } from '../lib/proxies';
@@ -52,6 +52,10 @@ export interface ProfilePhoneCardProps {
 }
 
 export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
+  // Secondary actions (Watch/Test/Assist) live behind a ⋯ button in the dock so
+  // they're tap-discoverable on a trackpad, not hover-only (founder 2026-06-16,
+  // matching the visual-demo dock). Mouse hover still reveals them too.
+  const [actionsOpen, setActionsOpen] = useState(false);
   // UDP badge state + the WebRTC/QUIC detail shown on hover. proxyCapabilities
   // gates WebRTC/QUIC on reachable+auth+udp_associate (they ride UDP).
   const caps = p.capabilities !== null ? proxyCapabilities(p.capabilities) : null;
@@ -286,22 +290,33 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
         {/* footer: the Launch dock + a hover action strip that floats ABOVE it
             (bottom-full) so the secondary actions never overlap Launch. */}
         <div className="relative z-10">
-          {/* hover action strip — LABELLED (icon + caption); floats just above
-              the dock, so it can't collide with Launch/Open. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-full z-20 mb-1.5 flex justify-center gap-1 px-1.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100">
+          {/* action strip — LABELLED (icon + caption); floats just above the
+              dock so it never collides with Launch/Open. Revealed on hover
+              (mouse) OR by the ⋯ toggle (tap/trackpad). */}
+          <div
+            className={`absolute inset-x-0 bottom-full z-20 mb-1.5 flex justify-center gap-1 px-1.5 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 ${
+              actionsOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
+            }`}
+          >
             {p.onAssist ? (
               <ActionBtn
                 glyph="✦"
                 caption="Assist"
                 label={`Ask the AI assistant about ${p.name}`}
-                onClick={p.onAssist}
+                onClick={() => {
+                  setActionsOpen(false);
+                  p.onAssist?.();
+                }}
               />
             ) : null}
             <ActionBtn
               glyph={p.running ? '◉' : '▶'}
               caption={p.running ? 'View' : 'Watch'}
               label={p.running ? 'Open the live view' : 'Launch and watch live'}
-              onClick={p.onWatch}
+              onClick={() => {
+                setActionsOpen(false);
+                p.onWatch();
+              }}
               disabled={p.busy || (!p.running && p.launchDisabled)}
             />
             {p.hasProxy ? (
@@ -309,17 +324,21 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 glyph={p.testing ? '…' : '⟳'}
                 caption="Test"
                 label="Test proxy — reachability, latency, exit IP"
-                onClick={p.onTest}
+                onClick={() => {
+                  setActionsOpen(false);
+                  p.onTest();
+                }}
                 disabled={p.testDisabled}
               />
             ) : null}
           </div>
 
-          {/* dock — Launch/Open ONLY, full width, always visible + prominent */}
-          <div className="border-t border-surface-divider bg-white/[0.03] px-2.5 py-2">
+          {/* dock — Launch/Open (flex-1) + a persistent ⋯ for the secondary
+              actions, mirroring the visual-demo dock (founder 2026-06-16). */}
+          <div className="flex items-center gap-2 border-t border-surface-divider bg-white/[0.03] px-2.5 py-2">
             <button
               type="button"
-              className={`w-full rounded-[10px] py-1.5 text-[11.5px] font-semibold transition-colors disabled:opacity-50 ${
+              className={`flex-1 rounded-[10px] py-1.5 text-[11.5px] font-semibold transition-colors disabled:opacity-50 ${
                 p.running
                   ? 'border border-surface-divider bg-surface-elevated text-ink-primary hover:bg-surface-divider'
                   : 'bg-accent text-white shadow-[0_3px_10px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-accent-hover'
@@ -333,10 +352,29 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             >
               {p.running ? 'Open session' : p.busy ? 'Launching…' : 'Launch'}
             </button>
-            {/* iOS home indicator — sells the phone metaphor */}
+            <button
+              type="button"
+              aria-label="More actions"
+              aria-expanded={actionsOpen}
+              title="More actions"
+              className={`flex h-[30px] w-[34px] shrink-0 items-center justify-center rounded-[10px] border text-[15px] leading-none transition-colors ${
+                actionsOpen
+                  ? 'border-accent bg-accent-subtle text-ink-primary'
+                  : 'border-surface-divider bg-surface-elevated text-ink-secondary hover:text-ink-primary'
+              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActionsOpen((v) => !v);
+              }}
+            >
+              ⋯
+            </button>
+          </div>
+          {/* iOS home indicator — sells the phone metaphor; below the dock row. */}
+          <div className="bg-white/[0.03] pb-2">
             <span
               aria-hidden="true"
-              className="mx-auto mt-2 block h-1 w-10 rounded-full bg-ink-muted/40"
+              className="mx-auto block h-1 w-10 rounded-full bg-ink-muted/40"
             />
           </div>
         </div>
