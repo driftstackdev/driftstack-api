@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
+import { RelativeTime } from '../components/RelativeTime';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError, type Session } from '../lib/client';
 
@@ -155,7 +156,11 @@ export function SessionsHistoryView(): JSX.Element {
                 <p className="mono text-sm text-ink-primary">{s.id}</p>
                 <p className="mt-1 text-2xs text-ink-muted">
                   {s.archetype} · {fmtDuration(s.created_at, s.destroyed_at)} ·{' '}
-                  <span title={s.destroyed_at ?? undefined}>{fmtWhen(s.destroyed_at)}</span>
+                  {s.destroyed_at ? (
+                    <RelativeTime iso={s.destroyed_at} tooltipPrefix="Ended" />
+                  ) : (
+                    '—'
+                  )}
                 </p>
               </div>
               <span
@@ -178,20 +183,6 @@ export function SessionsHistoryView(): JSX.Element {
 // Mirrors SessionsView.formatTime — wall-clock of the last refresh.
 function formatTime(ms: number): string {
   return new Date(ms).toLocaleTimeString();
-}
-
-// Friendly "when it ended" — relative for recent, absolute date past a day.
-// Full ISO is exposed via the row's title attribute for precision.
-function fmtWhen(destroyedIso: string | null): string {
-  if (!destroyedIso) return '—';
-  const then = new Date(destroyedIso).getTime();
-  if (Number.isNaN(then)) return '—';
-  const ms = Date.now() - then;
-  if (ms < 0) return new Date(then).toLocaleString();
-  if (ms < 60_000) return 'just now';
-  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`;
-  if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`;
-  return new Date(then).toLocaleDateString();
 }
 
 function fmtDuration(createdIso: string, destroyedIso: string | null): string {

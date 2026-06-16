@@ -107,9 +107,9 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
     );
   });
 
-  it('Per-row: id mono + archetype + fmtDuration(created_at, destroyed_at) + friendly fmtWhen(destroyed_at) with full ISO on title hover + status pill: errored → status-error/20 / status-error else surface-elevated / ink-secondary', () => {
+  it("Per-row: id mono + archetype + fmtDuration(created_at, destroyed_at) + shared <RelativeTime iso={destroyed_at} tooltipPrefix='Ended'> (null → '—') + status pill: errored → status-error/20 / status-error else surface-elevated / ink-secondary", () => {
     expect(body).toMatch(
-      /\{s\.archetype\} · \{fmtDuration\(s\.created_at, s\.destroyed_at\)\} ·\{' '\}\s*\n?\s*<span title=\{s\.destroyed_at \?\? undefined\}>\{fmtWhen\(s\.destroyed_at\)\}<\/span>/,
+      /\{s\.archetype\} · \{fmtDuration\(s\.created_at, s\.destroyed_at\)\} ·\{' '\}\s*\n?\s*\{s\.destroyed_at \? \(\s*\n?\s*<RelativeTime iso=\{s\.destroyed_at\} tooltipPrefix="Ended" \/>\s*\n?\s*\) : \(\s*\n?\s*'—'\s*\n?\s*\)\}/,
     );
     expect(body).toMatch(
       /className=\{`rounded-full px-2 py-0\.5 text-2xs font-medium uppercase tracking-wide \$\{\s*\n?\s*s\.status === 'errored'\s*\n?\s*\? 'bg-status-error\/20 text-status-error'\s*\n?\s*: 'bg-surface-elevated text-ink-secondary'\s*\n?\s*\}`\}/,
@@ -139,15 +139,10 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
     );
   });
 
-  it("fmtWhen friendly relative time: !destroyedIso → '—' / NaN guard → '—' / negative (clock skew) → locale string / <60s → 'just now' / <1h → 'Nm ago' / <1d → 'Nh ago' / else locale date — full ISO precision stays available via the row title attribute", () => {
-    expect(body).toMatch(
-      /function fmtWhen\(destroyedIso: string \| null\): string \{\s*\n?\s*if \(!destroyedIso\) return '—';/,
-    );
-    expect(body).toMatch(/if \(ms < 60_000\) return 'just now';/);
-    expect(body).toMatch(/if \(ms < 3_600_000\) return `\$\{Math\.floor\(ms \/ 60_000\)\}m ago`;/);
-    expect(body).toMatch(
-      /if \(ms < 86_400_000\) return `\$\{Math\.floor\(ms \/ 3_600_000\)\}h ago`;/,
-    );
+  it('Relative time uses the shared RelativeTime component (Intl.RelativeTimeFormat + semantic <time> + absolute-time tooltip) rather than an ad-hoc local formatter — keeps "X ago" rendering consistent across views', () => {
+    expect(body).toMatch(/import \{ RelativeTime \} from '\.\.\/components\/RelativeTime';/);
+    // The ad-hoc fmtWhen helper was removed in favour of the shared component.
+    expect(body).not.toMatch(/function fmtWhen\(/);
   });
 
   it('file exists at canonical path', () => {
