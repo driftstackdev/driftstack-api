@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
+import { SkeletonRows } from '../components/Skeleton';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError, type Session } from '../lib/client';
 
@@ -79,18 +80,29 @@ export function SessionsHistoryView(): JSX.Element {
     );
   }
 
+  const hasSessions = state.sessions.length > 0;
+  const showSkeleton = state.loading && !hasSessions;
+
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <header className="flex items-center justify-between">
+      <header className="flex items-start justify-between gap-4">
         <div>
           <span className="section-label">History</span>
-          <h2 className="mt-1 text-lg font-medium tracking-tight text-ink-primary">
+          <h2 className="mt-1 flex items-baseline gap-2 text-lg font-medium tracking-tight text-ink-primary">
             Past sessions
+            {hasSessions && (
+              <span className="text-sm font-normal text-ink-muted">{state.sessions.length}</span>
+            )}
           </h2>
           <p className="mt-1 text-xs text-ink-muted">
             Sessions that have ended (destroyed or errored). Active sessions live under "Active" in
             the sidebar.
           </p>
+          {state.refreshedAt !== null && (
+            <p className="mt-1 text-2xs text-ink-muted">
+              Refreshed <span className="mono">{formatTime(state.refreshedAt)}</span>
+            </p>
+          )}
         </div>
         <button
           type="button"
@@ -109,7 +121,9 @@ export function SessionsHistoryView(): JSX.Element {
         />
       )}
 
-      {state.sessions.length === 0 && state.error === null && !state.loading && (
+      {showSkeleton && <SkeletonRows rows={5} label="Loading session history…" />}
+
+      {!hasSessions && !showSkeleton && state.error === null && (
         <EmptyState
           icon={
             <svg
@@ -141,7 +155,7 @@ export function SessionsHistoryView(): JSX.Element {
                 <p className="mono text-sm text-ink-primary">{s.id}</p>
                 <p className="mt-1 text-2xs text-ink-muted">
                   {s.archetype} · {fmtDuration(s.created_at, s.destroyed_at)} ·{' '}
-                  {s.destroyed_at ? new Date(s.destroyed_at).toISOString() : '—'}
+                  <span title={s.destroyed_at ?? undefined}>{fmtWhen(s.destroyed_at)}</span>
                 </p>
               </div>
               <span
@@ -159,6 +173,25 @@ export function SessionsHistoryView(): JSX.Element {
       )}
     </div>
   );
+}
+
+// Mirrors SessionsView.formatTime — wall-clock of the last refresh.
+function formatTime(ms: number): string {
+  return new Date(ms).toLocaleTimeString();
+}
+
+// Friendly "when it ended" — relative for recent, absolute date past a day.
+// Full ISO is exposed via the row's title attribute for precision.
+function fmtWhen(destroyedIso: string | null): string {
+  if (!destroyedIso) return '—';
+  const then = new Date(destroyedIso).getTime();
+  if (Number.isNaN(then)) return '—';
+  const ms = Date.now() - then;
+  if (ms < 0) return new Date(then).toLocaleString();
+  if (ms < 60_000) return 'just now';
+  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`;
+  if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`;
+  return new Date(then).toLocaleDateString();
 }
 
 function fmtDuration(createdIso: string, destroyedIso: string | null): string {

@@ -93,8 +93,10 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
     );
     // W463 — empty state upgraded to the shared <EmptyState> primitive.
     expect(body).toMatch(/import \{ EmptyState \} from '\.\.\/components\/EmptyState';/);
+    // Empty state shows only when there is genuinely nothing AND we are not
+    // mid first-load (skeleton owns that window) — gated on hasSessions/showSkeleton.
     expect(body).toMatch(
-      /state\.sessions\.length === 0 && state\.error === null && !state\.loading && \(\s*\n?\s*<EmptyState/,
+      /!hasSessions && !showSkeleton && state\.error === null && \(\s*\n?\s*<EmptyState/,
     );
     expect(body).toMatch(/title="No past sessions yet"/);
     expect(body).toMatch(
@@ -105,9 +107,9 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
     );
   });
 
-  it("Per-row: id mono + archetype + fmtDuration(created_at, destroyed_at) + destroyed_at ISO with '—' fallback + status pill: errored → status-error/20 / status-error else surface-elevated / ink-secondary", () => {
+  it('Per-row: id mono + archetype + fmtDuration(created_at, destroyed_at) + friendly fmtWhen(destroyed_at) with full ISO on title hover + status pill: errored → status-error/20 / status-error else surface-elevated / ink-secondary', () => {
     expect(body).toMatch(
-      /\{s\.archetype\} · \{fmtDuration\(s\.created_at, s\.destroyed_at\)\} ·\{' '\}\s*\n?\s*\{s\.destroyed_at \? new Date\(s\.destroyed_at\)\.toISOString\(\) : '—'\}/,
+      /\{s\.archetype\} · \{fmtDuration\(s\.created_at, s\.destroyed_at\)\} ·\{' '\}\s*\n?\s*<span title=\{s\.destroyed_at \?\? undefined\}>\{fmtWhen\(s\.destroyed_at\)\}<\/span>/,
     );
     expect(body).toMatch(
       /className=\{`rounded-full px-2 py-0\.5 text-2xs font-medium uppercase tracking-wide \$\{\s*\n?\s*s\.status === 'errored'\s*\n?\s*\? 'bg-status-error\/20 text-status-error'\s*\n?\s*: 'bg-surface-elevated text-ink-secondary'\s*\n?\s*\}`\}/,
@@ -117,6 +119,34 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
   it("fmtDuration piecewise: !destroyedIso → '—' / ms < 0 → '—' (negative-time guard for clock skew) / <1000 → `${ms}ms` (raw) / <60_000 → `${Math.round(ms/100)/10}s` (1 decimal) / <3_600_000 → `${Math.round(ms/6_000)/10}m` (1 decimal) / else `${Math.round(ms/360_000)/10}h` (1 decimal)", () => {
     expect(body).toMatch(
       /function fmtDuration\(createdIso: string, destroyedIso: string \| null\): string \{\s*\n?\s*if \(!destroyedIso\) return '—';\s*\n?\s*const ms = new Date\(destroyedIso\)\.getTime\(\) - new Date\(createdIso\)\.getTime\(\);\s*\n?\s*if \(ms < 0\) return '—';\s*\n?\s*if \(ms < 1000\) return `\$\{ms\}ms`;\s*\n?\s*if \(ms < 60_000\) return `\$\{Math\.round\(ms \/ 100\) \/ 10\}s`;\s*\n?\s*if \(ms < 3_600_000\) return `\$\{Math\.round\(ms \/ 6_000\) \/ 10\}m`;\s*\n?\s*return `\$\{Math\.round\(ms \/ 360_000\) \/ 10\}h`;\s*\n?\s*\}/,
+    );
+  });
+
+  it("Polish parity with sibling SessionsView: SkeletonRows first-load state (showSkeleton = loading && !hasSessions), a 'Refreshed <formatTime>' indicator surfacing the previously-dead refreshedAt state, and a header count next to the title", () => {
+    expect(body).toMatch(/import \{ SkeletonRows \} from '\.\.\/components\/Skeleton';/);
+    expect(body).toMatch(/const hasSessions = state\.sessions\.length > 0;/);
+    expect(body).toMatch(/const showSkeleton = state\.loading && !hasSessions;/);
+    expect(body).toMatch(
+      /\{showSkeleton && <SkeletonRows rows=\{5\} label="Loading session history…" \/>\}/,
+    );
+    // refreshedAt was tracked in state but never rendered before this slice.
+    expect(body).toMatch(
+      /\{state\.refreshedAt !== null && \(\s*\n?\s*<p className="mt-1 text-2xs text-ink-muted">\s*\n?\s*Refreshed <span className="mono">\{formatTime\(state\.refreshedAt\)\}<\/span>/,
+    );
+    // Header count next to the title (only when there are sessions).
+    expect(body).toMatch(
+      /\{hasSessions && \(\s*\n?\s*<span className="text-sm font-normal text-ink-muted">\{state\.sessions\.length\}<\/span>\s*\n?\s*\)\}/,
+    );
+  });
+
+  it("fmtWhen friendly relative time: !destroyedIso → '—' / NaN guard → '—' / negative (clock skew) → locale string / <60s → 'just now' / <1h → 'Nm ago' / <1d → 'Nh ago' / else locale date — full ISO precision stays available via the row title attribute", () => {
+    expect(body).toMatch(
+      /function fmtWhen\(destroyedIso: string \| null\): string \{\s*\n?\s*if \(!destroyedIso\) return '—';/,
+    );
+    expect(body).toMatch(/if \(ms < 60_000\) return 'just now';/);
+    expect(body).toMatch(/if \(ms < 3_600_000\) return `\$\{Math\.floor\(ms \/ 60_000\)\}m ago`;/);
+    expect(body).toMatch(
+      /if \(ms < 86_400_000\) return `\$\{Math\.floor\(ms \/ 3_600_000\)\}h ago`;/,
     );
   });
 
