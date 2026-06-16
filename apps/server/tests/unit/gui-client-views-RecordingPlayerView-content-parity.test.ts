@@ -86,9 +86,12 @@ describe('W482.B apps/gui-client/src/views/RecordingPlayerView.tsx content parit
     );
   });
 
-  it("Lazy-hydrate effect: when recording.hydrated && recording.frames.length === 0 → setHydrating(true) + hydrateFrames(recordingId).finally(setHydrating false); recording null branch → 'Recording not found' empty state + 'It may have been deleted or the app restarted.' + Back button", () => {
+  it("Lazy-hydrate effect: loadFrames() (setHydrating(true) + clear error + hydrateFrames(recordingId).catch→setHydrateError.finally→setHydrating(false)) called when recording.hydrated && recording.frames.length === 0; recording null branch → 'Recording not found' empty state + 'It may have been deleted or the app restarted.' + Back button", () => {
     expect(body).toMatch(
-      /if \(recording === null\) return;\s*\n?\s*if \(!recording\.hydrated \|\| recording\.frames\.length > 0\) return;\s*\n?\s*setHydrating\(true\);\s*\n?\s*void hydrateFrames\(recordingId\)\.finally\(\(\) => setHydrating\(false\)\);/,
+      /const loadFrames = useCallback\(\(\): void => \{\s*\n?\s*setHydrating\(true\);\s*\n?\s*setHydrateError\(null\);\s*\n?\s*void hydrateFrames\(recordingId\)\s*\n?\s*\.catch\(\(err: unknown\) => \{\s*\n?\s*setHydrateError\(\s*\n?\s*err instanceof Error \? err\.message : 'Could not read the recording from disk\.',\s*\n?\s*\);\s*\n?\s*\}\)\s*\n?\s*\.finally\(\(\) => setHydrating\(false\)\);\s*\n?\s*\}, \[hydrateFrames, recordingId\]\);/,
+    );
+    expect(body).toMatch(
+      /if \(recording === null\) return;\s*\n?\s*if \(!recording\.hydrated \|\| recording\.frames\.length > 0\) return;\s*\n?\s*loadFrames\(\);/,
     );
     expect(body).toMatch(
       /if \(recording === null\) \{\s*\n?\s*return \(\s*\n?\s*<div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">\s*\n?\s*<span className="section-label">Recording not found<\/span>\s*\n?\s*<p className="text-sm text-ink-secondary">It may have been deleted or the app restarted\.<\/p>/,
@@ -103,9 +106,18 @@ describe('W482.B apps/gui-client/src/views/RecordingPlayerView.tsx content parit
     );
   });
 
-  it("Frame display branch: hydrating → 'Loading frames…' / currentFrame === null → 'No frames captured' / else <img src={currentFrame.dataUrl} alt=`recording frame at ${formatDuration(currentFrame.at - recording.startedAt)}` /> — pinned so the player surfaces a clean message during hydration instead of a black frame", () => {
+  it("Frame display branch: hydrating → 'Loading frames…' / hydrateError !== null → 'Couldn't load frames' error state + message + 'Try again' (onClick=loadFrames) / currentFrame === null → 'No frames captured' / else <img src={currentFrame.dataUrl} … /> — pinned so a read FAILURE reads distinctly from a genuinely empty recording, with a retry", () => {
     expect(body).toMatch(
-      /\{hydrating \? \(\s*\n?\s*<span className="section-label text-ink-muted">Loading frames…<\/span>\s*\n?\s*\) : currentFrame === null \? \(\s*\n?\s*<span className="section-label text-ink-muted">No frames captured<\/span>\s*\n?\s*\) : \(\s*\n?\s*<img\s*\n?\s*src=\{currentFrame\.dataUrl\}\s*\n?\s*alt=\{`recording frame at \$\{formatDuration\(currentFrame\.at - recording\.startedAt\)\}`\}/,
+      /\{hydrating \? \(\s*\n?\s*<span className="section-label text-ink-muted">Loading frames…<\/span>\s*\n?\s*\) : hydrateError !== null \? \(/,
+    );
+    expect(body).toMatch(
+      /<span className="section-label text-status-error">Couldn't load frames<\/span>/,
+    );
+    expect(body).toMatch(
+      /<button type="button" className="btn-secondary" onClick=\{loadFrames\}>\s*\n?\s*Try again\s*\n?\s*<\/button>/,
+    );
+    expect(body).toMatch(
+      /\) : currentFrame === null \? \(\s*\n?\s*<span className="section-label text-ink-muted">No frames captured<\/span>\s*\n?\s*\) : \(\s*\n?\s*<img\s*\n?\s*src=\{currentFrame\.dataUrl\}/,
     );
   });
 

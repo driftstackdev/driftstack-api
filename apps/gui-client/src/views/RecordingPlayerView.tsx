@@ -32,17 +32,33 @@ export function RecordingPlayerView({
   const [cursorMs, setCursorMs] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [hydrating, setHydrating] = useState(false);
+  // A frame-load FAILURE must read differently from a genuinely empty
+  // recording: "No frames captured" implies the recording is fine but empty,
+  // which is misleading when the read actually errored. Track it separately
+  // and offer a retry.
+  const [hydrateError, setHydrateError] = useState<string | null>(null);
   const tickRef = useRef<number | null>(null);
   // Wall-clock anchor for the playback loop: { wallStart, cursorBase }
   const playStateRef = useRef<{ wallStart: number; cursorBase: number } | null>(null);
+
+  const loadFrames = useCallback((): void => {
+    setHydrating(true);
+    setHydrateError(null);
+    void hydrateFrames(recordingId)
+      .catch((err: unknown) => {
+        setHydrateError(
+          err instanceof Error ? err.message : 'Could not read the recording from disk.',
+        );
+      })
+      .finally(() => setHydrating(false));
+  }, [hydrateFrames, recordingId]);
 
   // Lazy-load frames the first time this player opens for a persisted recording.
   useEffect(() => {
     if (recording === null) return;
     if (!recording.hydrated || recording.frames.length > 0) return;
-    setHydrating(true);
-    void hydrateFrames(recordingId).finally(() => setHydrating(false));
-  }, [recording, recordingId, hydrateFrames]);
+    loadFrames();
+  }, [recording, loadFrames]);
 
   const totalMs = useMemo(
     () => (recording !== null ? recordingDurationMs(recording) : 0),
@@ -160,6 +176,14 @@ export function RecordingPlayerView({
       <div className="flex flex-1 items-center justify-center overflow-hidden rounded border border-surface-divider bg-black">
         {hydrating ? (
           <span className="section-label text-ink-muted">Loading frames…</span>
+        ) : hydrateError !== null ? (
+          <div className="flex flex-col items-center gap-3 px-8 text-center">
+            <span className="section-label text-status-error">Couldn't load frames</span>
+            <p className="max-w-sm text-xs text-ink-secondary">{hydrateError}</p>
+            <button type="button" className="btn-secondary" onClick={loadFrames}>
+              Try again
+            </button>
+          </div>
         ) : currentFrame === null ? (
           <span className="section-label text-ink-muted">No frames captured</span>
         ) : (
