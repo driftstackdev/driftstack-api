@@ -890,6 +890,14 @@ export function ProfilesView({
       activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
     );
     setProfilesMeta(next);
+    // Per-account sync — write each icon through to the server profile row.
+    if (client) {
+      for (const id of selectedIds) {
+        void client.profiles
+          .update(id, { icon: icon.length > 0 ? icon : null })
+          .catch(() => undefined);
+      }
+    }
   }
 
   // Bulk export — snapshot each selected profile via profiles.export (the v1
@@ -1888,6 +1896,13 @@ export function ProfilesView({
                           { note },
                           state.profiles.map((pr) => pr.id),
                         ).then(setProfilesMeta);
+                        // Per-account sync (2026-06-16) — write the note through
+                        // to the server profile row so it follows the account.
+                        if (client) {
+                          void client.profiles
+                            .update(id, { note: note.length > 0 ? note : null })
+                            .catch(() => undefined);
+                        }
                       }}
                     />
                   );
@@ -2134,6 +2149,8 @@ function CreateProfileModal({
         ...(description.trim().length > 0 ? { description: description.trim() } : {}),
         ...(folder.trim().length > 0 ? { folder: folder.trim().slice(0, 32) } : {}),
         ...(tagList.length > 0 ? { tags: [...new Set(tagList)] } : {}),
+        // Per-account sync — send the chosen icon so it follows the account.
+        ...(icon.length > 0 ? { icon } : {}),
       });
       // Mirror into the local organization cache so the hub shows the
       // folder/tags immediately (and offline).

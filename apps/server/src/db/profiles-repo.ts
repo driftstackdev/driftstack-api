@@ -33,6 +33,8 @@ function toRecord(r: typeof profiles.$inferSelect): ProfileRecord {
     description: r.description,
     folder: r.folder,
     tags: r.tags,
+    icon: r.icon,
+    note: r.note,
     lastUsedAt: r.lastUsedAt,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
@@ -53,6 +55,8 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
         description: input.description,
         folder: input.folder ?? null,
         tags: input.tags ?? [],
+        icon: input.icon ?? null,
+        note: input.note ?? null,
         wrappedDek: input.wrappedDek ?? null,
       })
       .returning();
@@ -108,6 +112,8 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
           description: input.description,
           folder: input.folder ?? null,
           tags: input.tags ?? [],
+          icon: input.icon ?? null,
+          note: input.note ?? null,
           wrappedDek: input.wrappedDek ?? null,
         })
         .returning();
@@ -196,6 +202,8 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
     if (args.updates.description !== undefined) sets.description = args.updates.description;
     if (args.updates.folder !== undefined) sets.folder = args.updates.folder;
     if (args.updates.tags !== undefined) sets.tags = args.updates.tags;
+    if (args.updates.icon !== undefined) sets.icon = args.updates.icon;
+    if (args.updates.note !== undefined) sets.note = args.updates.note;
 
     const [row] = await this.database.db
       .update(profiles)

@@ -61,6 +61,8 @@ function publicProfile(p: ProfileRecord): Record<string, unknown> {
     description: p.description,
     folder: p.folder,
     tags: p.tags,
+    icon: p.icon,
+    note: p.note,
     last_used_at: p.lastUsedAt ? p.lastUsedAt.toISOString() : null,
     created_at: p.createdAt.toISOString(),
     updated_at: p.updatedAt.toISOString(),
@@ -116,6 +118,8 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
         ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
         ...(parsed.data.folder !== undefined ? { folder: parsed.data.folder } : {}),
         ...(parsed.data.tags !== undefined ? { tags: parsed.data.tags } : {}),
+        ...(parsed.data.icon !== undefined ? { icon: parsed.data.icon } : {}),
+        ...(parsed.data.note !== undefined ? { note: parsed.data.note } : {}),
       });
       return publicProfile(profile);
     },
@@ -180,11 +184,15 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
         description?: string | null;
         folder?: string | null;
         tags?: string[];
+        icon?: string | null;
+        note?: string | null;
       } = {};
       if (parsed.data.name !== undefined) updates.name = parsed.data.name;
       if (parsed.data.description !== undefined) updates.description = parsed.data.description;
       if (parsed.data.folder !== undefined) updates.folder = parsed.data.folder;
       if (parsed.data.tags !== undefined) updates.tags = parsed.data.tags;
+      if (parsed.data.icon !== undefined) updates.icon = parsed.data.icon;
+      if (parsed.data.note !== undefined) updates.note = parsed.data.note;
 
       const eff = effectiveAccountIdForWrite(req, ctx);
       const accountId = eff ?? ctx.account.id;

@@ -68,6 +68,8 @@ export const MOCK_PROFILES: Profile[] = [
     created_at: '2026-04-15T09:05:00Z',
     updated_at: '2026-05-02T18:30:00Z',
     deleted_at: null,
+    icon: null,
+    note: null,
   },
   {
     id: 'prof_00000000-0000-4000-8000-0000000000a2',
@@ -80,6 +82,8 @@ export const MOCK_PROFILES: Profile[] = [
     created_at: '2026-04-20T14:00:00Z',
     updated_at: '2026-05-01T11:15:00Z',
     deleted_at: null,
+    icon: null,
+    note: null,
   },
 ];
 

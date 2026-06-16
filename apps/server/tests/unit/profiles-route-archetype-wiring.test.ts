@@ -30,6 +30,8 @@ function recordFor(name: string, archetype: string): ProfileRecord {
     createdAt: new Date('2026-05-20T10:00:00.000Z'),
     updatedAt: new Date('2026-05-20T10:00:00.000Z'),
     deletedAt: null,
+    icon: null,
+    note: null,
   };
 }
 

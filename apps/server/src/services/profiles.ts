@@ -27,6 +27,10 @@ export interface ProfileRecord {
   folder: string | null;
   /** Organization metadata — exact tag set ([] = untagged). */
   tags: string[];
+  /** UI metadata (synced per-account, 2026-06-16) — short emoji icon (NULL = monogram). */
+  icon: string | null;
+  /** UI metadata — short inline note, distinct from the create-time `description`. */
+  note: string | null;
   lastUsedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -47,6 +51,9 @@ export interface NewProfileInput {
   /** Organization metadata — omitted/undefined → unfiled / no tags. */
   folder?: string | null;
   tags?: string[];
+  /** UI metadata — omitted/undefined → stored NULL. */
+  icon?: string | null;
+  note?: string | null;
   /**
    * Profile-backed sessions (file 57): the per-profile DEK wrapped under the
    * account TMK (base64[iv|tag|ct]). Optional — absent/undefined → stored NULL
@@ -63,6 +70,10 @@ export interface ProfileUpdates {
   folder?: string | null;
   /** Exact-set replace; `[]` clears all tags. */
   tags?: string[];
+  /** UI metadata — `null`/'' clears the icon (falls back to the monogram). */
+  icon?: string | null;
+  /** UI metadata — `null`/'' clears the note. */
+  note?: string | null;
 }
 
 export interface ListProfilesArgs {
@@ -158,6 +169,9 @@ export interface CreateProfileArgs {
   description?: string;
   folder?: string;
   tags?: string[];
+  /** UI metadata — a profile created with an icon picked in the GUI. */
+  icon?: string;
+  note?: string;
 }
 
 export class ProfilesService {
@@ -259,6 +273,8 @@ export class ProfilesService {
           description: args.description ?? null,
           folder: args.folder ?? null,
           tags: args.tags ?? [],
+          icon: args.icon ?? null,
+          note: args.note ?? null,
           wrappedDek,
         },
         limit,

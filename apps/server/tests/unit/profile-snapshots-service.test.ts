@@ -33,6 +33,8 @@ function makeProfile(overrides: Partial<ProfileRecord> = {}): ProfileRecord {
     createdAt: new Date(),
     updatedAt: new Date(),
     deletedAt: null,
+    icon: null,
+    note: null,
     ...overrides,
   };
 }
@@ -122,6 +124,8 @@ function makeRepos(
         createdAt: new Date(),
         updatedAt: new Date(),
         deletedAt: null,
+        icon: null,
+        note: null,
       };
       profiles.push(row);
       return Promise.resolve(row);
@@ -145,6 +149,8 @@ function makeRepos(
         createdAt: new Date(),
         updatedAt: new Date(),
         deletedAt: null,
+        icon: null,
+        note: null,
       };
       profiles.push(row);
       return Promise.resolve({ record: row });

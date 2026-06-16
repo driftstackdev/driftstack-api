@@ -15,6 +15,8 @@ function fakeProfile(id: string): Profile {
     created_at: '2026-05-04T00:00:00Z',
     updated_at: '2026-05-04T00:00:00Z',
     deleted_at: null,
+    icon: null,
+    note: null,
   };
 }
 

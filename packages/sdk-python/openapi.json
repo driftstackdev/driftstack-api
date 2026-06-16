@@ -24746,6 +24746,14 @@
                       "maxLength": 24
                     },
                     "maxItems": 12
+                  },
+                  "icon": {
+                    "type": "string",
+                    "maxLength": 16
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 280
                   }
                 },
                 "required": ["name"]
@@ -24783,6 +24791,12 @@
                         "type": "string"
                       }
                     },
+                    "icon": {
+                      "type": ["string", "null"]
+                    },
+                    "note": {
+                      "type": ["string", "null"]
+                    },
                     "last_used_at": {
                       "type": ["string", "null"],
                       "format": "date-time",
@@ -24811,6 +24825,8 @@
                     "description",
                     "folder",
                     "tags",
+                    "icon",
+                    "note",
                     "last_used_at",
                     "created_at",
                     "updated_at",
@@ -24939,6 +24955,12 @@
                               "type": "string"
                             }
                           },
+                          "icon": {
+                            "type": ["string", "null"]
+                          },
+                          "note": {
+                            "type": ["string", "null"]
+                          },
                           "last_used_at": {
                             "type": ["string", "null"],
                             "format": "date-time",
@@ -24967,6 +24989,8 @@
                           "description",
                           "folder",
                           "tags",
+                          "icon",
+                          "note",
                           "last_used_at",
                           "created_at",
                           "updated_at",
@@ -25079,6 +25103,12 @@
                         "type": "string"
                       }
                     },
+                    "icon": {
+                      "type": ["string", "null"]
+                    },
+                    "note": {
+                      "type": ["string", "null"]
+                    },
                     "last_used_at": {
                       "type": ["string", "null"],
                       "format": "date-time",
@@ -25107,6 +25137,8 @@
                     "description",
                     "folder",
                     "tags",
+                    "icon",
+                    "note",
                     "last_used_at",
                     "created_at",
                     "updated_at",
@@ -25216,6 +25248,14 @@
                       "maxLength": 24
                     },
                     "maxItems": 12
+                  },
+                  "icon": {
+                    "type": ["string", "null"],
+                    "maxLength": 16
+                  },
+                  "note": {
+                    "type": ["string", "null"],
+                    "maxLength": 280
                   }
                 }
               }
@@ -25252,6 +25292,12 @@
                         "type": "string"
                       }
                     },
+                    "icon": {
+                      "type": ["string", "null"]
+                    },
+                    "note": {
+                      "type": ["string", "null"]
+                    },
                     "last_used_at": {
                       "type": ["string", "null"],
                       "format": "date-time",
@@ -25280,6 +25326,8 @@
                     "description",
                     "folder",
                     "tags",
+                    "icon",
+                    "note",
                     "last_used_at",
                     "created_at",
                     "updated_at",

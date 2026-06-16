@@ -687,15 +687,19 @@ type APIKeyRevokedData struct {
 // the customer API surfaces only the metadata below. `Description`
 // is `*string` to capture explicit-null vs. unset.
 type Profile struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Archetype   string     `json:"archetype"`
-	Description *string    `json:"description"`
-	Folder      *string    `json:"folder"`
-	Tags        []string   `json:"tags"`
-	LastUsedAt  *time.Time `json:"last_used_at"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Archetype   string   `json:"archetype"`
+	Description *string  `json:"description"`
+	Folder      *string  `json:"folder"`
+	Tags        []string `json:"tags"`
+	// Icon + Note — per-account UI metadata (2026-06-16). Icon = short emoji
+	// (nil/empty = monogram); Note = short inline annotation.
+	Icon       *string    `json:"icon"`
+	Note       *string    `json:"note"`
+	LastUsedAt *time.Time `json:"last_used_at"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
 	// DeletedAt — L4b recycle bin. nil for a live profile; set to the trash
 	// timestamp for a soft-deleted one (only ListTrash returns trashed rows).
 	DeletedAt *time.Time `json:"deleted_at"`

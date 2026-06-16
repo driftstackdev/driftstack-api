@@ -44,6 +44,13 @@ export const ProfileSchema = z.object({
   description: z.string().nullable(),
   folder: z.string().nullable(),
   tags: z.array(z.string()),
+  /**
+   * Per-account UI metadata (2026-06-16) — short emoji icon (null = monogram)
+   * and a short inline note, synced server-side so they follow the account
+   * across machines (was local-only).
+   */
+  icon: z.string().nullable(),
+  note: z.string().nullable(),
   last_used_at: Iso8601Schema.nullable(),
   created_at: Iso8601Schema,
   updated_at: Iso8601Schema,
@@ -67,6 +74,9 @@ export const CreateProfileRequestSchema = z.object({
   description: z.string().max(2048).optional(),
   folder: ProfileFolderSchema.optional(),
   tags: ProfileTagsSchema.optional(),
+  /** UI metadata — short emoji icon + inline note (synced per-account). */
+  icon: z.string().max(16).optional(),
+  note: z.string().max(280).optional(),
 });
 export type CreateProfileRequest = z.infer<typeof CreateProfileRequestSchema>;
 
@@ -77,6 +87,9 @@ export const UpdateProfileRequestSchema = z.object({
   folder: ProfileFolderSchema.nullable().optional(),
   /** Exact-set replace; `[]` clears all tags. */
   tags: ProfileTagsSchema.optional(),
+  /** UI metadata — `null`/'' clears it. */
+  icon: z.string().max(16).nullable().optional(),
+  note: z.string().max(280).nullable().optional(),
 });
 export type UpdateProfileRequest = z.infer<typeof UpdateProfileRequestSchema>;
 

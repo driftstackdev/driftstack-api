@@ -166,6 +166,9 @@ export interface ServerProfileOrg {
   id: string;
   folder?: string | null;
   tags?: string[];
+  /** UI metadata synced per-account (2026-06-16). */
+  icon?: string | null;
+  note?: string | null;
 }
 
 /**
@@ -184,8 +187,12 @@ export function seedMetaFromServer(
     if (p.id.length === 0 || map[p.id] !== undefined) continue;
     const folder = typeof p.folder === 'string' ? p.folder : '';
     const tags = Array.isArray(p.tags) ? p.tags : [];
-    if (folder.length === 0 && tags.length === 0) continue; // nothing to seed
-    map[p.id] = cleanEntry({ folder, tags, note: '' });
+    const icon = typeof p.icon === 'string' ? p.icon : '';
+    const note = typeof p.note === 'string' ? p.note : '';
+    if (folder.length === 0 && tags.length === 0 && icon.length === 0 && note.length === 0) {
+      continue; // nothing to seed
+    }
+    map[p.id] = cleanEntry({ folder, tags, icon, note });
     changed = true;
   }
   return { map, changed };
