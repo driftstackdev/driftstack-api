@@ -16,8 +16,14 @@ import { makeWriteLock } from './store-write-lock';
 
 const STORE_FILE = 'folders.json';
 const KEY = 'names';
+// 2026-06-16 (founder: "attach an icon to a folder") — a SEPARATE map keyed by
+// folder name → emoji, so the `names` array shape stays unchanged (old
+// folders.json still loads) and an icon can attach to ANY folder name (custom
+// or one derived from profiles).
+const ICONS_KEY = 'icons';
 const MAX_FOLDER_CHARS = 60;
 const MAX_FOLDERS = 200;
+const MAX_ICON_CHARS = 8;
 
 let store: LazyStore | null = null;
 function getStore(): LazyStore {
@@ -50,14 +56,55 @@ export async function loadFolders(): Promise<string[]> {
   }
 }
 
-/** Add a folder name (idempotent, deduped case-sensitively against the stored
- *  set). Returns the updated sorted list. A no-op (returns current) when the
- *  name is blank or already present. */
-export function addFolder(rawName: string): Promise<string[]> {
+/** Folder-name → icon (emoji) map. Absent / unknown names just have no icon
+ *  (the rail falls back to the deterministic folderGlyph). */
+export async function loadFolderIcons(): Promise<Record<string, string>> {
+  try {
+    const raw = await getStore().get<unknown>(ICONS_KEY);
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      const name = normalizeFolderName(k);
+      if (name !== null && typeof v === 'string' && v.length > 0) {
+        out[name] = v.slice(0, MAX_ICON_CHARS);
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** Set (or clear, with '') the icon for a folder name. Returns the updated map. */
+export function setFolderIcon(rawName: string, icon: string): Promise<Record<string, string>> {
   return writeLock(async () => {
     const name = normalizeFolderName(rawName);
+    if (name === null) return loadFolderIcons();
+    const icons = await loadFolderIcons();
+    const trimmed = icon.trim().slice(0, MAX_ICON_CHARS);
+    if (trimmed.length === 0) delete icons[name];
+    else icons[name] = trimmed;
+    await getStore().set(ICONS_KEY, icons);
+    await getStore().save();
+    return icons;
+  });
+}
+
+/** Add a folder name (idempotent, deduped case-sensitively against the stored
+ *  set), optionally with an icon. Returns the updated sorted list. A no-op for
+ *  the names list when blank/already present, but still sets the icon if given. */
+export function addFolder(rawName: string, icon?: string): Promise<string[]> {
+  return writeLock(async () => {
+    const name = normalizeFolderName(rawName);
+    if (name === null) return loadFolders();
+    if (icon !== undefined && icon.trim().length > 0) {
+      const icons = await loadFolderIcons();
+      icons[name] = icon.trim().slice(0, MAX_ICON_CHARS);
+      await getStore().set(ICONS_KEY, icons);
+    }
     const current = await loadFolders();
-    if (name === null || current.includes(name) || current.length >= MAX_FOLDERS) {
+    if (current.includes(name) || current.length >= MAX_FOLDERS) {
+      await getStore().save();
       return current;
     }
     const next = [...current, name].sort((a, b) => a.localeCompare(b));

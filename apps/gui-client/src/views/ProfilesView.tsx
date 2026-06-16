@@ -19,7 +19,7 @@ import {
   saveProfilesMetaBulk,
   type ProfilesMetaMap,
 } from '../lib/profiles-meta';
-import { loadFolders, addFolder } from '../lib/folders-store';
+import { loadFolders, addFolder, loadFolderIcons } from '../lib/folders-store';
 import {
   loadProbeCache,
   saveProbeResult,
@@ -221,8 +221,11 @@ export function ProfilesView({
   // survives. The rail/pickers show the UNION of these + folders derived from
   // profile metadata. `newFolderName` drives the inline create input.
   const [customFolders, setCustomFolders] = useState<string[]>([]);
+  // 2026-06-16 (founder) — per-folder icon (name→emoji), shown in the rail.
+  const [customFolderIcons, setCustomFolderIcons] = useState<Record<string, string>>({});
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+  const [newFolderIcon, setNewFolderIcon] = useState('');
   // G3 — filter the grid by a single tag (null = all). Composes (AND) with the
   // folder + status + search filters.
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -259,6 +262,7 @@ export function ProfilesView({
     void loadProfilesMeta().then(setProfilesMeta);
     void loadProbeCache().then(setProbeCache);
     void loadFolders().then(setCustomFolders);
+    void loadFolderIcons().then(setCustomFolderIcons);
   }, []);
 
   const refresh = useCallback(
@@ -440,13 +444,17 @@ export function ProfilesView({
   // Create a folder from the rail's inline input: persist the name, refresh the
   // list, jump the filter to the new folder, and close the input.
   const handleCreateFolder = useCallback(async () => {
-    const next = await addFolder(newFolderName);
+    const next = await addFolder(newFolderName, newFolderIcon);
     setCustomFolders(next);
     const created = newFolderName.trim();
+    if (created.length > 0 && newFolderIcon.length > 0) {
+      setCustomFolderIcons((m) => ({ ...m, [created]: newFolderIcon }));
+    }
     if (created.length > 0 && next.includes(created)) setFolderFilter(created);
     setNewFolderName('');
+    setNewFolderIcon('');
     setCreatingFolder(false);
-  }, [newFolderName]);
+  }, [newFolderName, newFolderIcon]);
 
   // 2026-05-21 — derive the filtered/sorted view over state.profiles.
   // Search matches name + description + archetype; status filter treats a
@@ -1364,6 +1372,7 @@ export function ProfilesView({
                 key={f}
                 variant="rail"
                 label={f}
+                icon={customFolderIcons[f]}
                 count={state.profiles.filter((p) => profilesMeta[p.id]?.folder === f).length}
                 active={folderFilter === f}
                 onSelect={() => setFolderFilter(f)}
@@ -1376,31 +1385,65 @@ export function ProfilesView({
               active={folderFilter === 'unfiled'}
               onSelect={() => setFolderFilter('unfiled')}
             />
-            {/* 2026-06-15 (founder) — create a new (possibly empty) folder right
-                from the rail. Toggles an inline input; Enter/blur commits via
-                handleCreateFolder, Escape cancels. Move profiles in afterward
-                via the bulk bar's folder picker. */}
+            {/* 2026-06-15/16 (founder) — create a new (possibly empty) folder
+                from the rail, now WITH an optional icon picker. Name + icon +
+                Add; Enter-in-name or Add commits via handleCreateFolder, Escape
+                cancels. (No blur-commit — clicking the icon select blurs the
+                name input, which must not fire a create.) */}
             {creatingFolder ? (
-              <input
-                autoFocus
-                aria-label="New folder name"
-                placeholder="Folder name…"
-                value={newFolderName}
-                maxLength={60}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void handleCreateFolder();
-                  else if (e.key === 'Escape') {
-                    setNewFolderName('');
-                    setCreatingFolder(false);
-                  }
-                }}
-                onBlur={() => {
-                  if (newFolderName.trim().length > 0) void handleCreateFolder();
-                  else setCreatingFolder(false);
-                }}
-                className="mt-0.5 w-full rounded-lg border border-surface-divider bg-surface-inset px-2.5 py-1.5 text-xs text-ink-primary placeholder:text-ink-muted focus:border-accent focus:outline-none"
-              />
+              <div className="mt-0.5 flex flex-col gap-1 rounded-lg border border-surface-divider bg-surface-inset p-1.5">
+                <input
+                  autoFocus
+                  aria-label="New folder name"
+                  placeholder="Folder name…"
+                  value={newFolderName}
+                  maxLength={60}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void handleCreateFolder();
+                    else if (e.key === 'Escape') {
+                      setNewFolderName('');
+                      setNewFolderIcon('');
+                      setCreatingFolder(false);
+                    }
+                  }}
+                  className="w-full rounded border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary placeholder:text-ink-muted focus:border-accent focus:outline-none"
+                />
+                <select
+                  aria-label="New folder icon"
+                  value={newFolderIcon}
+                  onChange={(e) => setNewFolderIcon(e.target.value)}
+                  className="w-full rounded border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary focus:border-accent focus:outline-none"
+                >
+                  <option value="">— Icon (optional) —</option>
+                  {PROFILE_ICONS.map((i) => (
+                    <option key={i.emoji} value={i.emoji}>
+                      {i.emoji} {i.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void handleCreateFolder()}
+                    disabled={newFolderName.trim().length === 0}
+                    className="flex-1 rounded bg-accent-subtle px-2 py-1 text-xs font-medium text-ink-primary disabled:opacity-50"
+                  >
+                    Add
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewFolderName('');
+                      setNewFolderIcon('');
+                      setCreatingFolder(false);
+                    }}
+                    className="rounded px-2 py-1 text-xs text-ink-muted hover:text-ink-primary"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
             ) : (
               <button
                 type="button"
@@ -2530,6 +2573,7 @@ function FolderItem({
   active,
   onSelect,
   variant = 'pill',
+  icon,
 }: {
   label: string;
   count: number;
@@ -2539,6 +2583,9 @@ function FolderItem({
   // for the S3 (2026-06-15) left folder rail (icon + name on the left, count
   // pushed right). Same folderFilter selection behavior either way.
   variant?: 'pill' | 'rail';
+  // 2026-06-16 (founder) — a user-chosen folder icon; overrides the
+  // deterministic folderGlyph when set.
+  icon?: string;
 }): JSX.Element {
   const namedFolder = label !== 'All profiles' && label !== 'Unfiled';
   const rail = variant === 'rail';
@@ -2562,7 +2609,7 @@ function FolderItem({
       }
     >
       <span aria-hidden="true" className="text-[13px] leading-none">
-        {folderGlyph(label)}
+        {icon !== undefined && icon.length > 0 ? icon : folderGlyph(label)}
       </span>
       {namedFolder && (
         <span

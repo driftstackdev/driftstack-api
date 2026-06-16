@@ -39,6 +39,8 @@ import {
   addFolder,
   removeFolder,
   normalizeFolderName,
+  loadFolderIcons,
+  setFolderIcon,
 } from '../../src/lib/folders-store';
 
 beforeEach(() => {
@@ -57,6 +59,23 @@ describe('folders-store', () => {
     const list = await addFolder('Aged');
     expect(list).toEqual(['Aged', 'Shopping']); // sorted
     expect(await loadFolders()).toEqual(['Aged', 'Shopping']);
+  });
+
+  it('addFolder with an icon stores it; loadFolderIcons round-trips; names list unaffected', async () => {
+    await addFolder('Shopping', '🛒');
+    expect(await loadFolders()).toEqual(['Shopping']);
+    expect(await loadFolderIcons()).toEqual({ Shopping: '🛒' });
+  });
+
+  it('setFolderIcon sets + clears an icon (works for any folder name, even derived)', async () => {
+    expect(await setFolderIcon('Work', '💼')).toEqual({ Work: '💼' });
+    expect(await loadFolderIcons()).toEqual({ Work: '💼' });
+    expect(await setFolderIcon('Work', '')).toEqual({}); // empty clears
+  });
+
+  it('loadFolderIcons degrades to {} on a corrupt (non-object) value', async () => {
+    stores.set('folders.json', new Map([['icons', ['not', 'an', 'object']]]));
+    expect(await loadFolderIcons()).toEqual({});
   });
 
   it('addFolder is idempotent + trims (no dupes from whitespace variants)', async () => {
