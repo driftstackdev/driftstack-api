@@ -14,7 +14,7 @@
 //    spill outside the table; wide content scrolls within the bordered box.
 //  - More useful columns: Tags, Created, Last used, Notes.
 
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { RelativeTime } from './RelativeTime';
 
 export type ProfilesTableSortKey = 'name' | 'status' | 'country' | 'created' | 'lastUsed';
@@ -60,6 +60,9 @@ export interface ProfilesTableProps {
   onStop: (id: string) => void;
   onTest: (id: string) => void;
   onDelete: (id: string) => void;
+  // Inline note editing (founder batch #2 "Add note"). Called with the trimmed
+  // note on commit (Enter / blur); empty string clears the note.
+  onSaveNote: (id: string, note: string) => void;
 }
 
 interface Col {
@@ -135,6 +138,12 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
   const stop = (fn: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();
     fn();
+  };
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteDraft, setNoteDraft] = useState(r.note);
+  const commitNote = (): void => {
+    p.onSaveNote(r.id, noteDraft.trim());
+    setEditingNote(false);
   };
   const exitHover = [r.proxyAddress, r.locationLabel].filter((x) => x !== null).join(' · ');
   return (
@@ -280,14 +289,51 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
           'never'
         )}
       </td>
-      {/* Notes */}
-      <td className={`px-3 py-2 ${HIDE_SMALL}`}>
-        {r.note.trim() !== '' ? (
-          <span className="block max-w-[16rem] truncate text-ink-secondary" title={r.note}>
+      {/* Notes — click to edit inline (founder batch #2 "Add note"). The cell
+          stops click propagation so editing never toggles row selection. */}
+      <td className={`px-3 py-2 ${HIDE_SMALL}`} onClick={(e) => e.stopPropagation()}>
+        {editingNote ? (
+          <input
+            autoFocus
+            aria-label={`Note for ${r.name}`}
+            value={noteDraft}
+            maxLength={280}
+            placeholder="Add a note…"
+            onChange={(e) => setNoteDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitNote();
+              else if (e.key === 'Escape') {
+                setNoteDraft(r.note);
+                setEditingNote(false);
+              }
+            }}
+            onBlur={commitNote}
+            className="w-full max-w-[16rem] rounded border border-surface-divider bg-surface-inset px-1.5 py-0.5 text-xs text-ink-primary placeholder:text-ink-muted focus:border-accent focus:outline-none"
+          />
+        ) : r.note.trim() !== '' ? (
+          <button
+            type="button"
+            onClick={() => {
+              setNoteDraft(r.note);
+              setEditingNote(true);
+            }}
+            className="block max-w-[16rem] truncate text-left text-ink-secondary hover:text-ink-primary"
+            title="Click to edit note"
+          >
             {r.note}
-          </span>
+          </button>
         ) : (
-          <span className="text-ink-muted">—</span>
+          <button
+            type="button"
+            onClick={() => {
+              setNoteDraft('');
+              setEditingNote(true);
+            }}
+            className="text-ink-muted transition-colors hover:text-ink-primary"
+            title="Add a note"
+          >
+            + note
+          </button>
         )}
       </td>
       {/* Actions */}

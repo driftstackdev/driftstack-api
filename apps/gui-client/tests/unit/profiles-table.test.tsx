@@ -54,6 +54,7 @@ function props(over: Partial<ProfilesTableProps> = {}): ProfilesTableProps {
     onStop: vi.fn(),
     onTest: vi.fn(),
     onDelete: vi.fn(),
+    onSaveNote: vi.fn(),
     ...over,
   };
 }
@@ -98,6 +99,27 @@ describe('ProfilesTable', () => {
     expect(onToggleSelect).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByLabelText('Select all profiles'));
     expect(onToggleSelectAll).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
+
+  it('notes: empty cell shows "+ note", clicking opens an editor, Enter commits via onSaveNote (trimmed), and editing does not toggle row select', () => {
+    const onSaveNote = vi.fn();
+    const onToggleSelect = vi.fn();
+    render(<ProfilesTable {...props({ rows: [row({ note: '' })], onSaveNote, onToggleSelect })} />);
+    fireEvent.click(screen.getByTitle('Add a note'));
+    const input = screen.getByLabelText('Note for amsterdam shopper');
+    fireEvent.change(input, { target: { value: '  aged 30d  ' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onSaveNote).toHaveBeenCalledWith('p1', 'aged 30d'); // trimmed
+    expect(onToggleSelect).not.toHaveBeenCalled(); // cell stops propagation
+    cleanup();
+  });
+
+  it('notes: an existing note renders clickable for editing', () => {
+    render(<ProfilesTable {...props({ rows: [row({ note: 'vip buyer' })] })} />);
+    fireEvent.click(screen.getByTitle('Click to edit note'));
+    expect(screen.getByLabelText('Select amsterdam shopper')).toBeTruthy();
+    expect(screen.getByLabelText('Note for amsterdam shopper').value).toBe('vip buyer');
     cleanup();
   });
 

@@ -167,6 +167,7 @@ export function Gallery(): JSX.Element {
         onStop={noop}
         onTest={noop}
         onDelete={noop}
+        onSaveNote={noop}
       />
     </div>
   );

@@ -1596,6 +1596,13 @@ export function ProfilesView({
                         if (px !== null) void handleTestProxy(px);
                       }}
                       onDelete={(id) => void handleDelete(id)}
+                      onSaveNote={(id, note) => {
+                        void saveProfileMeta(
+                          id,
+                          { note },
+                          state.profiles.map((pr) => pr.id),
+                        ).then(setProfilesMeta);
+                      }}
                     />
                   );
                 })()
