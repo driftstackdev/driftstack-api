@@ -99,7 +99,7 @@ const ALLOW_LIST: Record<string, string[]> = {
   // schema.ts partial-index expressions reference Drizzle COLUMNS via
   // `t.fieldName` — those render as SQL identifiers at build time, not
   // as JS Date values. Safe.
-  'apps/server/src/db/schema.ts': ['t.revokedAt', 't.livekitApiKey'],
+  'apps/server/src/db/schema.ts': ['t.revokedAt', 't.livekitApiKey', 't.deletedAt'],
   // usage-repo aggregates by day via `date_trunc('day', <column>)` —
   // `usageRecords.recordedAt` is a column REFERENCE (Drizzle's typed
   // accessor), not a JS Date.

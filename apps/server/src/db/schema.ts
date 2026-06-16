@@ -561,9 +561,18 @@ export const profiles = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
+    // L4b recycle bin — soft delete. NULL = live profile; non-NULL = trashed
+    // (hidden from list/cap/lookup, restorable, purged by the retention job).
+    // The DEK stays wrapped-at-rest while trashed; restore re-exposes it,
+    // purge hard-deletes the row. All read paths filter `deletedAt IS NULL`.
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => [
-    uniqueIndex('profiles_account_name_unique').on(t.accountId, t.name),
+    // Partial unique: a name is only reserved among LIVE profiles, so trashing
+    // "shopper" frees the name for a new profile while the trashed row keeps it.
+    uniqueIndex('profiles_account_name_unique')
+      .on(t.accountId, t.name)
+      .where(sql`${t.deletedAt} is null`),
     index('profiles_account_idx').on(t.accountId),
   ],
 );
