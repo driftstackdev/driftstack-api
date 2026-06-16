@@ -42,6 +42,9 @@ export function FleetView(): JSX.Element {
   const [members, setMembers] = useState<FleetMember[]>([]);
   const [pings, setPings] = useState<Record<string, FleetMemberPing | 'pending'>>({});
   const [loading, setLoading] = useState(true);
+  // A failed registry read must not leave the view stuck on a blank
+  // perpetual-loading screen — surface it with a retry instead.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>({
     draft: EMPTY_DRAFT,
     errors: {},
@@ -51,9 +54,17 @@ export function FleetView(): JSX.Element {
   const formRef = useRef<HTMLFormElement | null>(null);
 
   const refresh = useCallback(async () => {
-    const all = await listFleetMembers();
-    setMembers(all);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const all = await listFleetMembers();
+      setMembers(all);
+    } catch (err) {
+      setLoadError(
+        err instanceof Error ? err.message : 'Could not read the fleet registry from disk.',
+      );
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -216,7 +227,17 @@ export function FleetView(): JSX.Element {
         </form>
       )}
 
-      {!loading && sorted.length === 0 && !form.visible && (
+      {!loading && loadError !== null && (
+        <div className="flex flex-col items-center gap-3 rounded border border-surface-divider bg-surface-raised p-8 text-center">
+          <span className="section-label text-status-error">Couldn't load the fleet</span>
+          <p className="max-w-md text-sm text-ink-secondary">{loadError}</p>
+          <button type="button" className="btn-secondary" onClick={() => void refresh()}>
+            Try again
+          </button>
+        </div>
+      )}
+
+      {!loading && loadError === null && sorted.length === 0 && !form.visible && (
         <div className="rounded border border-surface-divider bg-surface-raised p-8 text-center text-sm text-ink-secondary">
           No fleet members yet. Click "Add member" to register the first Mac mini's API URL.
         </div>
