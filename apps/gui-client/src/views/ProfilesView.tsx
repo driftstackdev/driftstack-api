@@ -1682,6 +1682,10 @@ function CreateProfileModal({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [archetype, setArchetype] = useState(KNOWN_ARCHETYPES[0]?.id ?? '');
+  // Icon at create (founder 2026-06-16: "same for new Profile" — the icon
+  // picker existed only for bulk-edit; offer it up-front too). Saved into
+  // profilesMeta alongside folder/tags after create.
+  const [icon, setIcon] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Configurator port (founder-approved profile-create demo, 2026-06-12):
@@ -1873,8 +1877,8 @@ function CreateProfileModal({
       });
       // Mirror into the local organization cache so the hub shows the
       // folder/tags immediately (and offline).
-      if (folder.trim().length > 0 || tagList.length > 0) {
-        await saveProfileMeta(profile.id, { folder: folder.trim(), tags: tagList });
+      if (folder.trim().length > 0 || tagList.length > 0 || icon.length > 0) {
+        await saveProfileMeta(profile.id, { folder: folder.trim(), tags: tagList, icon });
       }
       // 3. Bind the chosen proxy to the new profile. null = use the
       //    first-available proxy at Launch time.
@@ -1993,6 +1997,27 @@ function CreateProfileModal({
                   />
                   <span className="text-xs text-ink-muted">
                     Used to identify the profile in lists + when attaching sessions.
+                  </span>
+                </label>
+
+                <label className="flex flex-col gap-1">
+                  <span className="section-label">Icon (optional)</span>
+                  <select
+                    value={icon}
+                    onChange={(e) => setIcon(e.target.value)}
+                    disabled={submitting}
+                    className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+                    aria-label="Profile icon"
+                  >
+                    <option value="">— No icon —</option>
+                    {PROFILE_ICONS.map((i) => (
+                      <option key={i.emoji} value={i.emoji}>
+                        {i.emoji} {i.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-xs text-ink-muted">
+                    A quick visual marker shown on the profile card + list.
                   </span>
                 </label>
 
