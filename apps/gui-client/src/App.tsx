@@ -31,6 +31,7 @@ import { RecordingPlayerView } from './views/RecordingPlayerView';
 import { RecordingsView } from './views/RecordingsView';
 import { FleetView } from './views/FleetView';
 import { SessionsHistoryView } from './views/SessionsHistoryView';
+import { TeamView } from './views/TeamView';
 import { SessionsView } from './views/SessionsView';
 import { SettingsView } from './views/SettingsView';
 import { UpdateBanner } from './components/UpdateBanner';
@@ -50,6 +51,7 @@ type View =
   | { kind: 'proxies' }
   | { kind: 'connectivity' }
   | { kind: 'fleet' }
+  | { kind: 'team' }
   | { kind: 'settings' };
 
 export function App(): JSX.Element {
@@ -380,6 +382,8 @@ function CurrentView({
       return <SessionsHistoryView />;
     case 'fleet':
       return <FleetView />;
+    case 'team':
+      return <TeamView />;
   }
 }
 

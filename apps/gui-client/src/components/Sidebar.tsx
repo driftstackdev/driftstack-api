@@ -32,6 +32,7 @@ export type SidebarViewKind =
   | 'sessions'
   | 'connectivity'
   | 'fleet'
+  | 'team'
   | 'settings';
 
 interface SidebarProps {
@@ -69,6 +70,13 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
   const sessionsActive = accountMe?.concurrent_session_active ?? null;
   const sessionsCap = accountMe?.concurrent_session_cap ?? null;
   const teamCount = accountMe?.teams.length ?? 0;
+  // Show the Team section to anyone who's a MEMBER of a team (teamCount>0) OR
+  // is on a team-capable tier (so an owner can manage their team even before
+  // adding members) — "if the user has access for Teams" (founder 2026-06-16).
+  const tier = accountMe?.tier ?? null;
+  const teamCapableTier =
+    tier === 'team_manual' || tier === 'agency_manual' || tier === 'enterprise';
+  const showTeam = teamCount > 0 || teamCapableTier;
   const planLabel =
     accountMe?.tier != null
       ? accountMe.tier.charAt(0).toUpperCase() + accountMe.tier.slice(1)
@@ -173,8 +181,13 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
       )}
 
       <SidebarSection label="Account">
-        {teamCount > 0 && (
-          <SidebarItem icon={<IconUsers />} badge={String(teamCount)}>
+        {showTeam && (
+          <SidebarItem
+            icon={<IconUsers />}
+            badge={teamCount > 0 ? String(teamCount) : undefined}
+            active={current === 'team'}
+            onClick={() => onNavigate('team')}
+          >
             Team
           </SidebarItem>
         )}

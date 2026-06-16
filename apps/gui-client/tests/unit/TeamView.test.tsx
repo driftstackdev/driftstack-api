@@ -1,0 +1,83 @@
+// Team management view — invite, list, remove (founder 2026-06-16).
+
+import { describe, expect, it, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+
+const invite = vi.fn((_email: string, _opts: unknown) => Promise.resolve({ message: 'ok' }));
+const removeMember = vi.fn((_id: string) => Promise.resolve());
+const listMembers = vi.fn(() =>
+  Promise.resolve({
+    data: [
+      {
+        id: 'mem_1',
+        owner_account_id: 'o',
+        member_account_id: 'a',
+        member_email: 'alice@co.com',
+        role: 'admin',
+        invited_at: '2026-06-01T00:00:00Z',
+        accepted_at: '2026-06-02T00:00:00Z',
+        invited_by_account_id: null,
+      },
+    ],
+  }),
+);
+const listInvites = vi.fn(() =>
+  Promise.resolve({
+    data: [
+      {
+        id: 'inv_1',
+        owner_account_id: 'o',
+        invitee_email: 'newhire@co.com',
+        role: 'member',
+        expires_at: '2026-07-01T00:00:00Z',
+        invited_by_account_id: null,
+        accepted_at: null,
+        created_at: '2026-06-10T00:00:00Z',
+      },
+    ],
+  }),
+);
+
+// Stable references — a fresh object each render would churn the `client`
+// identity and never let the load effect settle.
+const STABLE_CLIENT = { team: { invite, removeMember, listMembers, listInvites } };
+const STABLE_SETTINGS = { apiKey: 'ds_x', baseUrl: 'http://localhost:3000' };
+vi.mock('../../src/lib/SettingsContext', () => ({
+  useSettings: () => ({ client: STABLE_CLIENT, settings: STABLE_SETTINGS }),
+}));
+
+vi.mock('../../src/components/ConfirmProvider', () => ({
+  useConfirm: () => () => Promise.resolve(true),
+}));
+
+const { TeamView } = await import('../../src/views/TeamView');
+
+describe('TeamView', () => {
+  it('lists members + pending invites, sends an invite, and removes a member', async () => {
+    render(<TeamView />);
+    // members + pending invites render
+    expect(await screen.findByText('alice@co.com')).toBeTruthy();
+    expect(screen.getByText('newhire@co.com')).toBeTruthy();
+
+    // invite flow
+    fireEvent.change(screen.getByLabelText('Invitee email'), {
+      target: { value: 'bob@co.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send invite' }));
+    await waitFor(() => expect(invite).toHaveBeenCalledWith('bob@co.com', { role: 'member' }));
+
+    // remove flow (confirm mocked → true)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(removeMember).toHaveBeenCalledWith('mem_1'));
+  });
+
+  it('rejects a malformed email without calling invite', async () => {
+    invite.mockClear();
+    render(<TeamView />);
+    await screen.findByText('alice@co.com');
+    fireEvent.change(screen.getByLabelText('Invitee email'), { target: { value: 'not-an-email' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send invite' }));
+    expect(await screen.findByText('Enter a valid email address.')).toBeTruthy();
+    expect(invite).not.toHaveBeenCalled();
+  });
+});

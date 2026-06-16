@@ -40,9 +40,9 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
     expect(body).not.toMatch(/Raw sessions/);
   });
 
-  it("SidebarViewKind 12-variant union exported: home / ai / recipes / logs / profiles / proxies / sessions-history / recordings / sessions / connectivity / fleet / settings — pinned so App.tsx + future callers stay tied to the canonical nav-key taxonomy (live-session + recording-player are not in this union — they are routed-to, not navigated-to). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice.", () => {
+  it("SidebarViewKind 13-variant union exported: home / ai / recipes / logs / profiles / proxies / sessions-history / recordings / sessions / connectivity / fleet / team / settings — pinned so App.tsx + future callers stay tied to the canonical nav-key taxonomy (live-session + recording-player are not in this union — they are routed-to, not navigated-to). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice; 'team' by the Teams-management slice (2026-06-16).", () => {
     expect(body).toMatch(
-      /export type SidebarViewKind =\s*\n?\s*\| 'home'\s*\n?\s*\| 'ai'\s*\n?\s*\| 'recipes'\s*\n?\s*\| 'logs'\s*\n?\s*\| 'profiles'\s*\n?\s*\| 'proxies'\s*\n?\s*\| 'sessions-history'\s*\n?\s*\| 'recordings'\s*\n?\s*\| 'sessions'\s*\n?\s*\| 'connectivity'\s*\n?\s*\| 'fleet'\s*\n?\s*\| 'settings';/,
+      /export type SidebarViewKind =\s*\n?\s*\| 'home'\s*\n?\s*\| 'ai'\s*\n?\s*\| 'recipes'\s*\n?\s*\| 'logs'\s*\n?\s*\| 'profiles'\s*\n?\s*\| 'proxies'\s*\n?\s*\| 'sessions-history'\s*\n?\s*\| 'recordings'\s*\n?\s*\| 'sessions'\s*\n?\s*\| 'connectivity'\s*\n?\s*\| 'fleet'\s*\n?\s*\| 'team'\s*\n?\s*\| 'settings';/,
     );
   });
 
@@ -59,8 +59,10 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
     );
   });
 
-  it('Team-item visibility gate: teamCount > 0 — pinned so solo accounts (the v1.0 baseline) do not see a dead "Team" affordance, while customers with at least one team membership see the count badge', () => {
-    expect(body).toMatch(/\{teamCount > 0 &&/);
+  it('Team-item visibility gate: showTeam (teamCount > 0 OR a team-capable tier) — and the item navigates to the team view. Pinned so solo accounts (the v1.0 baseline) do not see the affordance, while members AND team-capable owners reach team management (2026-06-16).', () => {
+    expect(body).toMatch(/\{showTeam &&/);
+    expect(body).toMatch(/const showTeam = teamCount > 0 \|\| teamCapableTier;/);
+    expect(body).toMatch(/onClick=\{\(\) => onNavigate\('team'\)\}/);
   });
 
   it("Sign-out block: rendered only when signedIn (settings.apiKey !== null); ⌘⇧L hint preserved next to the button — pinned so the keyboard-shortcut affordance doesn't silently drop in a future restyle", () => {
