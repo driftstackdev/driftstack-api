@@ -333,6 +333,16 @@ export function ProfilesView({
 
   async function handleDelete(id: string): Promise<void> {
     if (!client) return;
+    // Founder 2026-06-16 — confirm before a single-profile delete (the bulk bar
+    // already confirms; the per-row/card delete did not). Profile delete is a
+    // permanent server hard-delete (the identity's cookies/storage/fingerprint
+    // + its encryption key are destroyed), so it must not fire on a stray click.
+    const name = state.profiles.find((p) => p.id === id)?.name ?? 'this profile';
+    const ok = await confirm(
+      `Delete "${name}"? This permanently removes the profile's identity — its cookies, storage, and fingerprint — from your account and can't be undone.`,
+      { confirmLabel: 'Delete' },
+    );
+    if (!ok) return;
     setBusyId(id);
     try {
       await client.profiles.delete(id);

@@ -70,21 +70,27 @@ interface Col {
   label: string;
   align?: 'right';
   hideSmall?: boolean;
+  hideMed?: boolean;
 }
 
 const COLS: ReadonlyArray<Col> = [
   { key: 'name', label: 'Profile' },
   { key: null, label: 'Tags', hideSmall: true },
-  { key: 'status', label: 'Status' },
+  { key: 'status', label: 'Status', hideMed: true },
   { key: 'country', label: 'Exit IP' },
-  { key: null, label: 'UDP' },
+  { key: null, label: 'UDP', hideMed: true },
   { key: 'created', label: 'Created', hideSmall: true },
   { key: 'lastUsed', label: 'Last used', hideSmall: true },
   { key: null, label: 'Notes', hideSmall: true },
   { key: null, label: 'Actions', align: 'right' },
 ];
 
+// Two responsive tiers so the table fits narrow windows without assuming a
+// full-width viewport (founder 2026-06-16): below lg, the secondary columns
+// (Tags/Created/Last used/Notes) collapse; below md, Status + UDP also
+// collapse, leaving the essentials — select · Profile · Exit IP · Actions.
 const HIDE_SMALL = 'hidden lg:table-cell';
+const HIDE_MED = 'hidden md:table-cell';
 
 export function ProfilesTable(p: ProfilesTableProps): JSX.Element {
   return (
@@ -106,7 +112,7 @@ export function ProfilesTable(p: ProfilesTableProps): JSX.Element {
               <th
                 key={c.label}
                 scope="col"
-                className={`px-3 py-2 font-medium ${c.align === 'right' ? 'text-right' : ''} ${c.hideSmall ? HIDE_SMALL : ''}`}
+                className={`px-3 py-2 font-medium ${c.align === 'right' ? 'text-right' : ''} ${c.hideSmall ? HIDE_SMALL : ''} ${c.hideMed ? HIDE_MED : ''}`}
               >
                 {c.key !== null ? (
                   <button
@@ -205,8 +211,8 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
           <span className="text-ink-muted">—</span>
         )}
       </td>
-      {/* Status */}
-      <td className="px-3 py-2">
+      {/* Status (collapses below md) */}
+      <td className={`px-3 py-2 ${HIDE_MED}`}>
         <span
           className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
             r.running ? 'bg-status-ready/15 text-status-ready' : 'bg-surface-inset text-ink-muted'
@@ -252,8 +258,8 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
           <span className="text-ink-muted">no proxy</span>
         )}
       </td>
-      {/* UDP */}
-      <td className="px-3 py-2">
+      {/* UDP (collapses below md) */}
+      <td className={`px-3 py-2 ${HIDE_MED}`}>
         {r.udp === 'unknown' ? (
           <span className="text-ink-muted">–</span>
         ) : (
