@@ -72,11 +72,14 @@ import {
   ByokAnthropicRequiredError,
   ConflictError,
   FeatureUnavailableError,
+  ForbiddenError,
   NotFoundError,
   PairModeConflictError,
   PairModeStateInvalidTransitionRouteError,
   ValidationError,
 } from '../lib/errors.js';
+import { resolveEffectiveAccount } from '../services/auth.js';
+import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
 import { readClientIp } from '../lib/client-ip.js';
@@ -711,6 +714,22 @@ export function registerAgentSessionsRoutes(
           fieldErrors: {},
         });
       }
+      // Team RBAC (2026-06-16) — mirrors the proven driver pattern in
+      // sessions.ts (V-326e3): an ADMIN team member may launch the team
+      // owner's profile. The entire create then scopes to the OWNER's account
+      // (profile validation, per-profile DEK, session ownership, idempotency,
+      // BYOK key, LiveKit identity) so the run counts against the owner and
+      // reads the owner's encrypted store — exactly as if the owner created it.
+      // Non-admin members are refused (read-only on a team workspace). Self
+      // (no X-Driftstack-Account header) resolves ownerAccountId = ctx.account.id,
+      // so the existing self-scoped behaviour is unchanged.
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));
+      if (effective.kind === 'team' && effective.role !== 'admin') {
+        throw new ForbiddenError(
+          'Launching an agent session on a team owner requires admin role on that team.',
+        );
+      }
+      const ownerAccountId = effective.accountId;
       // Profile-backed (file 57): a supplied profile_id MUST reference an owned
       // profile — validate before create/dispatch so an unknown/foreign id is a
       // clean 404, not a silent best-effort skip in the dispatch. (404 also when
@@ -723,12 +742,12 @@ export function registerAgentSessionsRoutes(
         if (profilesService === undefined) {
           throw new NotFoundError(`Profile ${parsed.data.profile_id} not found.`);
         }
-        await profilesService.get({ id: profileBareId, accountId: ctx.account.id });
+        await profilesService.get({ id: profileBareId, accountId: ownerAccountId });
       }
 
       const idempotencyKey = idempotency.kind === 'valid' ? idempotency.key : null;
       if (idempotencyKey !== null) {
-        const existing = await sessions.findByIdempotencyKey(ctx.account.id, idempotencyKey);
+        const existing = await sessions.findByIdempotencyKey(ownerAccountId, idempotencyKey);
         if (existing !== null) {
           // Replay the prior 201 response. We re-attach the cached
           // BYOK key plaintext too: if the original session-create
@@ -742,19 +761,19 @@ export function registerAgentSessionsRoutes(
             // resolves to null + the resolution chain falls through to
             // header / fallback / 502.
             const stored = await byokService.getPlaintext({
-              accountId: ctx.account.id,
+              accountId: ownerAccountId,
               now: new Date(),
             });
             if (stored !== null) byokKeyCache.set(existing.id, stored);
           }
-          const livekit = await maybeMintLivekit(existing.id, ctx.account.id);
+          const livekit = await maybeMintLivekit(existing.id, ownerAccountId);
           return reply.code(201).send(publicAgentSession(existing, livekit));
         }
       }
       let created: AgentSessionRecord;
       try {
         created = await sessions.create({
-          accountId: ctx.account.id,
+          accountId: ownerAccountId,
           tokenBudgetTotal: parsed.data.token_budget ?? DEFAULT_TOKEN_BUDGET,
           ...(parsed.data.driftstack_session_id !== undefined
             ? { driftstackSessionId: parsed.data.driftstack_session_id }
@@ -779,16 +798,16 @@ export function registerAgentSessionsRoutes(
         // insert is the idempotency-key race; isUniqueViolation reads top
         // level on drizzle 0.38, err.cause on 0.45.)
         if (idempotencyKey !== null && isUniqueViolation(err)) {
-          const winner = await sessions.findByIdempotencyKey(ctx.account.id, idempotencyKey);
+          const winner = await sessions.findByIdempotencyKey(ownerAccountId, idempotencyKey);
           if (winner !== null) {
             if (byokService !== undefined && byokKeyCache !== undefined) {
               const stored = await byokService.getPlaintext({
-                accountId: ctx.account.id,
+                accountId: ownerAccountId,
                 now: new Date(),
               });
               if (stored !== null) byokKeyCache.set(winner.id, stored);
             }
-            const livekit = await maybeMintLivekit(winner.id, ctx.account.id);
+            const livekit = await maybeMintLivekit(winner.id, ownerAccountId);
             return reply.code(201).send(publicAgentSession(winner, livekit));
           }
         }
@@ -801,14 +820,14 @@ export function registerAgentSessionsRoutes(
       // older than maxKeyAgeMs (90d default).
       if (byokService !== undefined && byokKeyCache !== undefined) {
         const stored = await byokService.getPlaintext({
-          accountId: ctx.account.id,
+          accountId: ownerAccountId,
           now: new Date(),
         });
         if (stored !== null) {
           byokKeyCache.set(created.id, stored);
         }
       }
-      const livekit = await maybeMintLivekit(created.id, ctx.account.id);
+      const livekit = await maybeMintLivekit(created.id, ownerAccountId);
       // Fleet-CP session dispatch — hand the new session to a connected
       // harness node (local fleet-demo). No-op in prod (no registry); best-
       // effort (never throws) so it can't break session-create.
@@ -820,8 +839,10 @@ export function registerAgentSessionsRoutes(
         sessionDispatch,
         logger: req.log,
         // Profile-backed (file 57): thread the validated profile_id so the
-        // dispatch ships its DEK in SessionAssign.profile.
-        accountId: ctx.account.id,
+        // dispatch ships its DEK in SessionAssign.profile. Owner-scoped so an
+        // admin team-launch ships the OWNER's profile DEK (the profile + its
+        // encrypted store live under the owner's account).
+        accountId: ownerAccountId,
         ...(profileBareId !== undefined ? { profileId: profileBareId } : {}),
         profilesService,
         ...(r2 !== undefined ? { r2 } : {}),
@@ -832,7 +853,10 @@ export function registerAgentSessionsRoutes(
       // session at the regular /v1/sessions surface).
       try {
         await accountAudit?.record({
-          accountId: ctx.account.id,
+          // Owner-scoped: the session lives under the owner's account, so the
+          // create lands in the OWNER's audit log (an admin team-launch shows
+          // up where the session actually is).
+          accountId: ownerAccountId,
           actorType: 'customer',
           action: 'agent_session.created',
           targetResourceId: `agent_session_${created.id}`,

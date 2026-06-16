@@ -169,6 +169,60 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(body.detail).toContain('write');
   });
 
+  // Team RBAC (2026-06-16) — agent-session create now honors X-Driftstack-Account
+  // (admin team-launch). These pin the SECURITY boundary: the new header path
+  // must fail CLOSED for non-members / malformed headers, and self-scope must be
+  // unaffected. (Mirrors the driver-session V-326e3 contract + the
+  // team-rbac-x-driftstack-account-end-to-end read tests.)
+  it('create with X-Driftstack-Account pointing at a non-member account → fail-closed (4xx, never 201/500)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': 'acc_00000000-0000-4000-8000-000000000002',
+      },
+      payload: { token_budget: 50_000 },
+    });
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    expect(res.statusCode).toBeLessThan(500); // not a 500 — a clean fail-closed
+    expect(res.statusCode).not.toBe(201); // never silently creates under a foreign account
+  });
+
+  it('create with a malformed X-Driftstack-Account → 4xx, not 500', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': 'not-a-valid-acc-id',
+      },
+      payload: { token_budget: 50_000 },
+    });
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    expect(res.statusCode).toBeLessThan(500);
+  });
+
+  it("create with the caller's OWN account-id in X-Driftstack-Account → 201 (self-scope unchanged)", async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const me = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    const ownId = me.json<{ id?: string }>().id ?? '';
+    expect(ownId).toMatch(/^acc_/);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'x-driftstack-account': ownId },
+      payload: { token_budget: 50_000 },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
   it('W393 POST /:id/resume → 202 for an owned active session; 404 unknown; 409 terminal', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({
