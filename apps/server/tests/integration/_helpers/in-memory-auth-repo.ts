@@ -2,6 +2,7 @@
 // they can run without a real Postgres. Mirrors DrizzleAccountAuthRepo
 // behaviour exactly.
 
+import type { AccountOrganization } from '@driftstack/api-types';
 import type {
   AccountAuthRepo,
   AccountRow,
@@ -171,6 +172,19 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
     };
     this.accounts.set(id, updated);
     return Promise.resolve(updated);
+  }
+
+  // Per-account org-sync (0079) — in-memory taxonomy store.
+  private readonly organizations = new Map<string, AccountOrganization>();
+
+  getOrganization(id: string): Promise<AccountOrganization | null> {
+    if (!this.accounts.has(id)) return Promise.resolve(null);
+    return Promise.resolve(this.organizations.get(id) ?? { folders: [], tags: [] });
+  }
+
+  setOrganization(id: string, org: AccountOrganization): Promise<void> {
+    this.organizations.set(id, org);
+    return Promise.resolve();
   }
 
   /** Test helper: seed team memberships for a member account. */

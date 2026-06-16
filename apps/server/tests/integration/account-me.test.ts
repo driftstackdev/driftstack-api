@@ -616,3 +616,64 @@ describe('PATCH /v1/account/me — region (V-298b)', () => {
     },
   );
 });
+
+describe('GET/PUT /v1/account/me/organization (per-account org-sync phase 3)', () => {
+  let fx: TestAppFixture;
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('GET returns an empty taxonomy on a fresh account', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/organization',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ folders: [], tags: [] });
+  });
+
+  it('PUT persists the taxonomy; GET reads it back', async () => {
+    fx = await buildTestApp();
+    const payload = {
+      folders: [{ name: 'Sales', icon: '🛒' }, { name: 'QA' }],
+      tags: ['aged', 'warmup'],
+    };
+    const put = await fx.app.inject({
+      method: 'PUT',
+      url: '/v1/account/me/organization',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload,
+    });
+    expect(put.statusCode).toBe(200);
+    const get = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/organization',
+      headers: auth(fx),
+    });
+    expect(get.json()).toEqual(payload);
+  });
+
+  it('PUT 403 without account_owner scope', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write'] });
+    const res = await fx.app.inject({
+      method: 'PUT',
+      url: '/v1/account/me/organization',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { folders: [], tags: [] },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('PUT 400 on a duplicate folder name', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PUT',
+      url: '/v1/account/me/organization',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { folders: [{ name: 'Dup' }, { name: 'Dup' }], tags: [] },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});

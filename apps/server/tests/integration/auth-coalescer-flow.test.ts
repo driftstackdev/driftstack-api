@@ -55,6 +55,13 @@ class CountingAuthRepo implements AccountAuthRepo {
   updateAccountBasics(): Promise<null> {
     return Promise.resolve(null);
   }
+  // Per-account org-sync — stubbed; not exercised by coalescer tests.
+  getOrganization(): Promise<{ folders: never[]; tags: never[] }> {
+    return Promise.resolve({ folders: [], tags: [] });
+  }
+  setOrganization(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 async function seed(repo: CountingAuthRepo): Promise<{ plaintext: string; accountId: string }> {

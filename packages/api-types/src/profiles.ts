@@ -37,6 +37,30 @@ export const ProfileTagsSchema = z
     message: 'tags must be unique',
   });
 
+// Account-level organization TAXONOMY (2026-06-16, per-account org-sync phase 3)
+// — the empty folders (+icons) and tags a customer defines in the GUI rail
+// before assigning them to a profile, synced per-account. Generous caps so the
+// rail stays usable while bounding payload: ≤200 folders, ≤200 tags.
+export const AccountOrganizationFolderSchema = z.object({
+  name: ProfileFolderSchema,
+  icon: z.string().max(16).optional(),
+});
+export const AccountOrganizationSchema = z.object({
+  folders: z
+    .array(AccountOrganizationFolderSchema)
+    .max(200)
+    .default([])
+    .refine((f) => new Set(f.map((x) => x.name)).size === f.length, {
+      message: 'folder names must be unique',
+    }),
+  tags: z
+    .array(ProfileTagSchema)
+    .max(200)
+    .default([])
+    .refine((t) => new Set(t).size === t.length, { message: 'tags must be unique' }),
+});
+export type AccountOrganization = z.infer<typeof AccountOrganizationSchema>;
+
 export const ProfileSchema = z.object({
   id: ProfileIdSchema,
   name: z.string(),

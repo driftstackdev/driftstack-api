@@ -17,6 +17,7 @@ import { sha256Hex } from './auth-cache.js';
 import type { AuthCoalescer } from './auth-coalescer.js';
 import type { ApiKeyScope } from '@driftstack/api-types';
 import type { AccountTier } from '@driftstack/api-types';
+import type { AccountOrganization } from '@driftstack/api-types';
 
 const CACHE_TTL_SEC = 30;
 
@@ -138,6 +139,15 @@ export interface AccountAuthRepo {
       region?: 'us' | 'eu' | 'apac' | null;
     },
   ): Promise<AccountRow | null>;
+  /**
+   * Per-account org-sync (2026-06-16) — read/write the account-level
+   * organization taxonomy (the empty folders + tags a customer defines in the
+   * GUI rail before assigning them). Backed by accounts.organization jsonb
+   * (0079). getOrganization returns the stored {folders, tags} (empty arrays
+   * when unset); null only when the account no longer exists.
+   */
+  getOrganization(id: string): Promise<AccountOrganization | null>;
+  setOrganization(id: string, org: AccountOrganization): Promise<void>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────

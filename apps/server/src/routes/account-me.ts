@@ -11,6 +11,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import {
+  AccountOrganizationSchema,
   AVATAR_MAX_BYTES,
   PROFILES_PER_TIER,
   TIER_CONCURRENT_SESSION_LIMITS,
@@ -254,6 +255,38 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           membership_id: `mem_${t.membershipId}`,
         })),
       };
+    },
+  );
+
+  // Per-account org-sync (2026-06-16) — the calling account's organization
+  // TAXONOMY: the empty folders (+icons) and tags defined in the GUI rail
+  // before assignment. Read is open to any auth context (returns the caller's
+  // own taxonomy); the PUT is account_owner-scoped like PATCH /me. Stored as
+  // accounts.organization jsonb (0079). Not part of the cached AccountContext,
+  // so no auth-cache invalidation needed.
+  app.get(
+    '/v1/account/me/organization',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const org = await authRepo.getOrganization(ctx.account.id);
+      return org ?? { folders: [], tags: [] };
+    },
+  );
+
+  app.put(
+    '/v1/account/me/organization',
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const parsed = AccountOrganizationSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid organization.');
+      }
+      await authRepo.setOrganization(ctx.account.id, parsed.data);
+      return parsed.data;
     },
   );
 

@@ -9,6 +9,7 @@ import type {
   TeamMembership,
   WebSessionAuthRow,
 } from '../services/auth.js';
+import type { AccountOrganization } from '@driftstack/api-types';
 import type { Database } from './client.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
 import { accounts, apiKeys, rateLimitOverrides, teamMembers, webSessions } from './schema.js';
@@ -156,6 +157,25 @@ export class DrizzleAccountAuthRepo implements AccountAuthRepo {
       }
       throw err;
     }
+  }
+
+  // Per-account org-sync (0079) — the account-level folder/tag taxonomy.
+  async getOrganization(id: string): Promise<AccountOrganization | null> {
+    const [row] = await this.database.db
+      .select({ organization: accounts.organization })
+      .from(accounts)
+      .where(eq(accounts.id, id))
+      .limit(1);
+    if (!row) return null;
+    const org = row.organization;
+    return { folders: org.folders ?? [], tags: org.tags ?? [] };
+  }
+
+  async setOrganization(id: string, org: AccountOrganization): Promise<void> {
+    await this.database.db
+      .update(accounts)
+      .set({ organization: org, updatedAt: new Date() })
+      .where(eq(accounts.id, id));
   }
 }
 
