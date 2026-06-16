@@ -20,6 +20,7 @@ import {
   type ProfilesMetaMap,
 } from '../lib/profiles-meta';
 import { loadFolders, addFolder, loadFolderIcons } from '../lib/folders-store';
+import { loadTags, addTag } from '../lib/tags-store';
 import {
   loadProbeCache,
   saveProbeResult,
@@ -229,6 +230,12 @@ export function ProfilesView({
   // G3 — filter the grid by a single tag (null = all). Composes (AND) with the
   // folder + status + search filters.
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  // 2026-06-16 (founder) — tags moved into the LEFT rail under Folders, with a
+  // create affordance mirroring "New folder". User-created tag names persist so
+  // an empty tag survives; the rail shows the UNION of these + derived tags.
+  const [customTags, setCustomTags] = useState<string[]>([]);
+  const [creatingTag, setCreatingTag] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
   // Increment 3 — bulk select: client-side organize actions over a selection.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkFolder, setBulkFolder] = useState('');
@@ -263,6 +270,7 @@ export function ProfilesView({
     void loadProbeCache().then(setProbeCache);
     void loadFolders().then(setCustomFolders);
     void loadFolderIcons().then(setCustomFolderIcons);
+    void loadTags().then(setCustomTags);
   }, []);
 
   const refresh = useCallback(
@@ -450,6 +458,27 @@ export function ProfilesView({
     const set = new Set<string>([...folderList(scopedMeta), ...customFolders]);
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [scopedMeta, customFolders]);
+
+  // Effective tag list (rail) = tags derived from profiles (with counts) UNION
+  // the user-created tags (count 0 until a profile uses them), sorted by name.
+  const allTags = useMemo<Array<{ tag: string; count: number }>>(() => {
+    const counts = new Map<string, number>();
+    for (const { tag, count } of aggregateTags(scopedMeta)) counts.set(tag, count);
+    for (const t of customTags) if (!counts.has(t)) counts.set(t, 0);
+    return [...counts.entries()]
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => a.tag.localeCompare(b.tag));
+  }, [scopedMeta, customTags]);
+
+  // Create a tag from the rail's inline input (mirrors handleCreateFolder).
+  const handleCreateTag = useCallback(async () => {
+    const next = await addTag(newTagName);
+    setCustomTags(next);
+    const created = newTagName.trim().replace(/^#+/, '').trim();
+    if (created.length > 0) setTagFilter(created);
+    setNewTagName('');
+    setCreatingTag(false);
+  }, [newTagName]);
 
   // Create a folder from the rail's inline input: persist the name, refresh the
   // list, jump the filter to the new folder, and close the input.
@@ -1366,8 +1395,8 @@ export function ProfilesView({
               shelf + the redundant filter dropdown. Counts derive from the same
               organization map; selection drives folderFilter unchanged. */}
           <aside
-            aria-label="Folders"
-            className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-surface-divider pr-3"
+            aria-label="Folders and tags"
+            className="flex min-h-0 w-44 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-surface-divider pr-3"
           >
             <span className="section-label px-2.5 pb-1">Folders</span>
             <FolderItem
@@ -1466,15 +1495,75 @@ export function ProfilesView({
                 New folder
               </button>
             )}
+            {/* 2026-06-16 (founder) — TAGS section in the left rail, under
+                Folders, with a create affordance (mirrors folders). Filtering
+                by a tag composes (AND) with the folder filter. */}
+            <span className="section-label px-2.5 pb-1 pt-3">Tags</span>
+            {allTags.map(({ tag, count }) => {
+              const active = tagFilter === tag;
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setTagFilter(active ? null : tag)}
+                  className={`flex w-full items-center gap-2 rounded-lg border border-transparent px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                    active
+                      ? 'bg-accent-subtle font-semibold text-ink-primary'
+                      : 'text-ink-secondary hover:bg-surface-raised hover:text-ink-primary'
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="h-1.5 w-1.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: folderColor(tag) }}
+                  />
+                  <span className="flex-1 truncate text-left">#{tag}</span>
+                  <span
+                    className={`mono rounded-[5px] px-1.5 py-px text-2xs font-semibold ${
+                      active ? 'bg-accent/15 text-ink-primary' : 'bg-surface-inset text-ink-muted'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+            {creatingTag ? (
+              <input
+                autoFocus
+                aria-label="New tag name"
+                placeholder="Tag name…"
+                value={newTagName}
+                maxLength={40}
+                onChange={(e) => setNewTagName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleCreateTag();
+                  else if (e.key === 'Escape') {
+                    setNewTagName('');
+                    setCreatingTag(false);
+                  }
+                }}
+                onBlur={() => {
+                  if (newTagName.trim().length > 0) void handleCreateTag();
+                  else setCreatingTag(false);
+                }}
+                className="mt-0.5 w-full rounded-lg border border-surface-divider bg-surface-inset px-2.5 py-1.5 text-xs text-ink-primary placeholder:text-ink-muted focus:border-accent focus:outline-none"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCreatingTag(true)}
+                className="mt-0.5 flex w-full items-center gap-1.5 rounded-lg border border-dashed border-surface-divider px-2.5 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:border-ink-muted/60 hover:text-ink-primary"
+              >
+                <span aria-hidden="true" className="text-sm leading-none">
+                  +
+                </span>
+                New tag
+              </button>
+            )}
           </aside>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-            {/* G3 — TAG filter rail (founder: "missing tags"). Composes (AND)
-                with the folder rail. Hidden when the account has no tags. */}
-            <TagFilterRail
-              tags={aggregateTags(scopedMeta)}
-              active={tagFilter}
-              onSelect={setTagFilter}
-            />
             {/* min-h-0 + overflow-y-auto so the grid/table scrolls WITHIN the
                 view on small screens instead of overflowing off-screen
                 (founder: "profile list isn't fully in view, should auto-scale"). */}
