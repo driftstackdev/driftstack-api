@@ -42,7 +42,7 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
   });
 
   it('imports: and/count/desc/eq/lt/or from drizzle-orm; 6 service types (ListProfilesArgs/Page + NewProfileInput + ProfileRecord + ProfileUpdates + ProfilesRepo); Database; profiles schema', () => {
-    expect(body).toMatch(/import \{ and, count, desc, eq, lt, or \} from 'drizzle-orm';/);
+    expect(body).toMatch(/import \{ and, count, desc, eq, isNull, lt, or \} from 'drizzle-orm';/);
     expect(body).toMatch(
       /import type \{\s*\n?\s*ListProfilesArgs,\s*\n?\s*ListProfilesPage,\s*\n?\s*NewProfileInput,\s*\n?\s*ProfileRecord,\s*\n?\s*ProfileUpdates,\s*\n?\s*ProfilesRepo,\s*\n?\s*\} from '\.\.\/services\/profiles\.js';/,
     );
@@ -87,22 +87,34 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
 
   it('countByAccount: select count() helper aggregate where accountId; row?.n ?? 0', () => {
     expect(body).toMatch(
-      /async countByAccount\(accountId: string\): Promise<number> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\{ n: count\(\) \}\)\s*\n?\s*\.from\(profiles\)\s*\n?\s*\.where\(eq\(profiles\.accountId, accountId\)\);\s*\n?\s*return row\?\.n \?\? 0;\s*\n?\s*\}/,
+      /async countByAccount\(accountId: string\): Promise<number> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\{ n: count\(\) \}\)\s*\n?\s*\.from\(profiles\)\s*\n?\s*\.where\(and\(eq\(profiles\.accountId, accountId\), notDeleted\)\);\s*\n?\s*return row\?\.n \?\? 0;\s*\n?\s*\}/,
     );
   });
 
   it('findById + findByAccountAndName: account-scoped via and() + limit 1', () => {
     expect(body).toMatch(
-      /async findById\(args: \{ id: string; accountId: string \}\): Promise<ProfileRecord \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(profiles\)\s*\n?\s*\.where\(and\(eq\(profiles\.id, args\.id\), eq\(profiles\.accountId, args\.accountId\)\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toRecord\(row\) : null;\s*\n?\s*\}/,
+      /async findById\(args: \{ id: string; accountId: string \}\): Promise<ProfileRecord \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(profiles\)\s*\n?\s*\.where\(and\(eq\(profiles\.id, args\.id\), eq\(profiles\.accountId, args\.accountId\), notDeleted\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toRecord\(row\) : null;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /async findByAccountAndName\(args: \{\s*\n?\s*accountId: string;\s*\n?\s*name: string;\s*\n?\s*\}\): Promise<ProfileRecord \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(profiles\)\s*\n?\s*\.where\(and\(eq\(profiles\.accountId, args\.accountId\), eq\(profiles\.name, args\.name\)\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toRecord\(row\) : null;\s*\n?\s*\}/,
+      /async findByAccountAndName\(args: \{\s*\n?\s*accountId: string;\s*\n?\s*name: string;\s*\n?\s*\}\): Promise<ProfileRecord \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(profiles\)\s*\n?\s*\.where\(and\(eq\(profiles\.accountId, args\.accountId\), eq\(profiles\.name, args\.name\), notDeleted\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toRecord\(row\) : null;\s*\n?\s*\}/,
     );
   });
 
   it('list cursor framing pinned: cursor lookup is ACCOUNT-SCOPED via and(eq(id, cursor), eq(accountId, args.accountId)) — prevents cross-account cursor probe; composite OR(lt(createdAt, c.createdAt), and(eq(createdAt, c.createdAt), lt(id, c.id)))', () => {
-    expect(body).toMatch(
-      /if \(args\.cursor !== undefined && parseUuidCursor\(args\.cursor\) !== undefined\) \{\s*\n?\s*const \[cursorRow\] = await this\.database\.db\s*\n?\s*\.select\(\{ createdAt: profiles\.createdAt, id: profiles\.id \}\)\s*\n?\s*\.from\(profiles\)\s*\n?\s*\.where\(and\(eq\(profiles\.id, args\.cursor\), eq\(profiles\.accountId, args\.accountId\)\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*if \(cursorRow !== undefined\) \{\s*\n?\s*cursorWhere = or\(\s*\n?\s*lt\(profiles\.createdAt, cursorRow\.createdAt\),\s*\n?\s*and\(eq\(profiles\.createdAt, cursorRow\.createdAt\), lt\(profiles\.id, cursorRow\.id\)\),\s*\n?\s*\);\s*\n?\s*\}\s*\n?\s*\}/,
+    // Per-fragment toContain (no long \s*\n?\s* chain — it backtracks
+    // pathologically AND breaks when prettier wraps the .where() across lines;
+    // see feedback_no_long_chain_parity_regex). The security-relevant pins are
+    // the account-scoped + notDeleted cursor lookup and the composite tiebreak.
+    expect(body).toContain(
+      'if (args.cursor !== undefined && parseUuidCursor(args.cursor) !== undefined) {',
+    );
+    expect(body).toContain('.select({ createdAt: profiles.createdAt, id: profiles.id })');
+    expect(body).toContain(
+      'and(eq(profiles.id, args.cursor), eq(profiles.accountId, args.accountId), notDeleted)',
+    );
+    expect(body).toContain('lt(profiles.createdAt, cursorRow.createdAt),');
+    expect(body).toContain(
+      'and(eq(profiles.createdAt, cursorRow.createdAt), lt(profiles.id, cursorRow.id)),',
     );
   });
 
@@ -120,13 +132,17 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
     expect(body).toMatch(/if \(!row\) throw new Error\('update profile: no row returned'\);/);
   });
 
-  it('delete + touch: account-scoped via and(eq(id), eq(accountId)); delete returning {id} + length > 0; touch sets only lastUsedAt (no updatedAt bump)', () => {
+  it('delete: L4b SOFT delete — UPDATE set {deletedAt, updatedAt} account-scoped + notDeleted (idempotent), returning {id} + length > 0; touch sets only lastUsedAt account-scoped + notDeleted', () => {
     expect(body).toMatch(
-      /async delete\(args: \{ id: string; accountId: string \}\): Promise<boolean> \{\s*\n?\s*const result = await this\.database\.db\s*\n?\s*\.delete\(profiles\)\s*\n?\s*\.where\(and\(eq\(profiles\.id, args\.id\), eq\(profiles\.accountId, args\.accountId\)\)\)\s*\n?\s*\.returning\(\{ id: profiles\.id \}\);\s*\n?\s*return result\.length > 0;\s*\n?\s*\}/,
+      /async delete\(args: \{ id: string; accountId: string \}\): Promise<boolean> \{\s*\n?\s*const now = new Date\(\);\s*\n?\s*const result = await this\.database\.db\s*\n?\s*\.update\(profiles\)\s*\n?\s*\.set\(\{ deletedAt: now, updatedAt: now \}\)\s*\n?\s*\.where\(and\(eq\(profiles\.id, args\.id\), eq\(profiles\.accountId, args\.accountId\), notDeleted\)\)\s*\n?\s*\.returning\(\{ id: profiles\.id \}\);\s*\n?\s*return result\.length > 0;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /async touch\(args: \{ id: string; accountId: string; at: Date \}\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(profiles\)\s*\n?\s*\.set\(\{ lastUsedAt: args\.at \}\)\s*\n?\s*\.where\(and\(eq\(profiles\.id, args\.id\), eq\(profiles\.accountId, args\.accountId\)\)\);\s*\n?\s*\}/,
+      /async touch\(args: \{ id: string; accountId: string; at: Date \}\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(profiles\)\s*\n?\s*\.set\(\{ lastUsedAt: args\.at \}\)\s*\n?\s*\.where\(and\(eq\(profiles\.id, args\.id\), eq\(profiles\.accountId, args\.accountId\), notDeleted\)\);\s*\n?\s*\}/,
     );
+  });
+
+  it('L4b notDeleted predicate present: const notDeleted = isNull(profiles.deletedAt)', () => {
+    expect(body).toMatch(/const notDeleted = isNull\(profiles\.deletedAt\);/);
   });
 
   it('file exists at canonical path', () => {

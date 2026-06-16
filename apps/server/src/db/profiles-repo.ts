@@ -1,6 +1,6 @@
 // Drizzle-backed ProfilesRepo (V-081).
 
-import { and, count, desc, eq, lt, or } from 'drizzle-orm';
+import { and, count, desc, eq, isNull, lt, or } from 'drizzle-orm';
 import type {
   ListProfilesArgs,
   ListProfilesPage,
@@ -15,6 +15,13 @@ import { parseUuidCursor } from '../lib/keyset-cursor.js';
 
 const DEFAULT_PAGE = 50;
 const MAX_PAGE = 100;
+
+// L4b recycle bin — every customer-facing read path excludes soft-deleted
+// (trashed) profiles: they don't count against the cap, can't be found,
+// listed, name-matched, or have their DEK unwrapped. Only the dedicated
+// recycle-bin / restore / purge paths look at trashed rows. `delete()` here
+// is a soft delete (sets deletedAt); a hard row removal happens at purge.
+const notDeleted = isNull(profiles.deletedAt);
 
 function toRecord(r: typeof profiles.$inferSelect): ProfileRecord {
   return {
@@ -55,7 +62,7 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
     const [row] = await this.database.db
       .select({ n: count() })
       .from(profiles)
-      .where(eq(profiles.accountId, accountId));
+      .where(and(eq(profiles.accountId, accountId), notDeleted));
     return row?.n ?? 0;
   }
 
@@ -84,7 +91,7 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
         const [c] = await tx
           .select({ n: count() })
           .from(profiles)
-          .where(eq(profiles.accountId, input.accountId));
+          .where(and(eq(profiles.accountId, input.accountId), notDeleted));
         const current = c?.n ?? 0;
         if (current >= limit) {
           return { limitExceeded: true as const, current };
@@ -111,7 +118,7 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
     const [row] = await this.database.db
       .select()
       .from(profiles)
-      .where(and(eq(profiles.id, args.id), eq(profiles.accountId, args.accountId)))
+      .where(and(eq(profiles.id, args.id), eq(profiles.accountId, args.accountId), notDeleted))
       .limit(1);
     return row ? toRecord(row) : null;
   }
@@ -122,7 +129,7 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
     const [row] = await this.database.db
       .select({ wrappedDek: profiles.wrappedDek })
       .from(profiles)
-      .where(and(eq(profiles.id, args.id), eq(profiles.accountId, args.accountId)))
+      .where(and(eq(profiles.id, args.id), eq(profiles.accountId, args.accountId), notDeleted))
       .limit(1);
     return row?.wrappedDek ?? null;
   }
@@ -134,7 +141,7 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
     const [row] = await this.database.db
       .select()
       .from(profiles)
-      .where(and(eq(profiles.accountId, args.accountId), eq(profiles.name, args.name)))
+      .where(and(eq(profiles.accountId, args.accountId), eq(profiles.name, args.name), notDeleted))
       .limit(1);
     return row ? toRecord(row) : null;
   }
@@ -147,7 +154,9 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
       const [cursorRow] = await this.database.db
         .select({ createdAt: profiles.createdAt, id: profiles.id })
         .from(profiles)
-        .where(and(eq(profiles.id, args.cursor), eq(profiles.accountId, args.accountId)))
+        .where(
+          and(eq(profiles.id, args.cursor), eq(profiles.accountId, args.accountId), notDeleted),
+        )
         .limit(1);
       if (cursorRow !== undefined) {
         cursorWhere = or(
@@ -162,8 +171,8 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
       .from(profiles)
       .where(
         cursorWhere !== undefined
-          ? and(eq(profiles.accountId, args.accountId), cursorWhere)
-          : eq(profiles.accountId, args.accountId),
+          ? and(eq(profiles.accountId, args.accountId), notDeleted, cursorWhere)
+          : and(eq(profiles.accountId, args.accountId), notDeleted),
       )
       .orderBy(desc(profiles.createdAt), desc(profiles.id))
       .limit(limit + 1);
@@ -189,16 +198,22 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
     const [row] = await this.database.db
       .update(profiles)
       .set(sets)
-      .where(and(eq(profiles.id, args.id), eq(profiles.accountId, args.accountId)))
+      .where(and(eq(profiles.id, args.id), eq(profiles.accountId, args.accountId), notDeleted))
       .returning();
     if (!row) throw new Error('update profile: no row returned');
     return toRecord(row);
   }
 
+  // L4b — soft delete: mark the profile trashed (recycle bin) instead of
+  // removing the row, so it can be restored and its DEK survives until purge.
+  // notDeleted guard makes this idempotent — re-deleting a trashed profile is
+  // a no-op (returns false) and never overwrites the original trash time.
   async delete(args: { id: string; accountId: string }): Promise<boolean> {
+    const now = new Date();
     const result = await this.database.db
-      .delete(profiles)
-      .where(and(eq(profiles.id, args.id), eq(profiles.accountId, args.accountId)))
+      .update(profiles)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(and(eq(profiles.id, args.id), eq(profiles.accountId, args.accountId), notDeleted))
       .returning({ id: profiles.id });
     return result.length > 0;
   }
@@ -207,6 +222,6 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
     await this.database.db
       .update(profiles)
       .set({ lastUsedAt: args.at })
-      .where(and(eq(profiles.id, args.id), eq(profiles.accountId, args.accountId)));
+      .where(and(eq(profiles.id, args.id), eq(profiles.accountId, args.accountId), notDeleted));
   }
 }

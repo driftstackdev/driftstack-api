@@ -12,6 +12,11 @@ import type {
 
 export class InMemoryProfilesRepo implements ProfilesRepo {
   private readonly rows = new Map<string, ProfileRecord>();
+  // L4b — ids of soft-deleted (trashed) profiles. Mirrors the prod repo's
+  // deletedAt marker: trashed rows are skipped by every customer-facing read
+  // path (count/find/list/name-lookup) and can't be updated/touched, but the
+  // row data survives (recycle bin) until a purge.
+  private readonly deleted = new Set<string>();
 
   insert(input: NewProfileInput): Promise<ProfileRecord> {
     const now = new Date();
@@ -33,7 +38,8 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
 
   countByAccount(accountId: string): Promise<number> {
     let n = 0;
-    for (const r of this.rows.values()) if (r.accountId === accountId) n += 1;
+    for (const r of this.rows.values())
+      if (r.accountId === accountId && !this.deleted.has(r.id)) n += 1;
     return Promise.resolve(n);
   }
 
@@ -47,7 +53,8 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
   ): Promise<{ record: ProfileRecord } | { limitExceeded: true; current: number }> {
     if (limit !== null) {
       let current = 0;
-      for (const r of this.rows.values()) if (r.accountId === input.accountId) current += 1;
+      for (const r of this.rows.values())
+        if (r.accountId === input.accountId && !this.deleted.has(r.id)) current += 1;
       if (current >= limit) {
         return Promise.resolve({ limitExceeded: true as const, current });
       }
@@ -71,7 +78,8 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
 
   findById(args: { id: string; accountId: string }): Promise<ProfileRecord | null> {
     const r = this.rows.get(args.id);
-    if (!r || r.accountId !== args.accountId) return Promise.resolve(null);
+    if (!r || r.accountId !== args.accountId || this.deleted.has(r.id))
+      return Promise.resolve(null);
     return Promise.resolve(r);
   }
 
@@ -83,7 +91,8 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
 
   findByAccountAndName(args: { accountId: string; name: string }): Promise<ProfileRecord | null> {
     for (const r of this.rows.values()) {
-      if (r.accountId === args.accountId && r.name === args.name) return Promise.resolve(r);
+      if (r.accountId === args.accountId && r.name === args.name && !this.deleted.has(r.id))
+        return Promise.resolve(r);
     }
     return Promise.resolve(null);
   }
@@ -91,7 +100,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
   list(args: ListProfilesArgs): Promise<ListProfilesPage> {
     const limit = Math.min(args.limit ?? 50, 100);
     const all = Array.from(this.rows.values())
-      .filter((r) => r.accountId === args.accountId)
+      .filter((r) => r.accountId === args.accountId && !this.deleted.has(r.id))
       .sort((a, b) => {
         const t = b.createdAt.getTime() - a.createdAt.getTime();
         return t !== 0 ? t : b.id.localeCompare(a.id);
@@ -112,7 +121,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
 
   update(args: { id: string; accountId: string; updates: ProfileUpdates }): Promise<ProfileRecord> {
     const r = this.rows.get(args.id);
-    if (!r || r.accountId !== args.accountId) {
+    if (!r || r.accountId !== args.accountId || this.deleted.has(r.id)) {
       return Promise.reject(new Error('update: row not found / wrong account'));
     }
     const next: ProfileRecord = {
@@ -128,16 +137,19 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
     return Promise.resolve(next);
   }
 
+  // L4b soft delete — mark trashed (idempotent: re-deleting a trashed row is a
+  // no-op). The row stays in the map so it survives until purge.
   delete(args: { id: string; accountId: string }): Promise<boolean> {
     const r = this.rows.get(args.id);
-    if (!r || r.accountId !== args.accountId) return Promise.resolve(false);
-    this.rows.delete(args.id);
+    if (!r || r.accountId !== args.accountId || this.deleted.has(r.id))
+      return Promise.resolve(false);
+    this.deleted.add(r.id);
     return Promise.resolve(true);
   }
 
   touch(args: { id: string; accountId: string; at: Date }): Promise<void> {
     const r = this.rows.get(args.id);
-    if (!r || r.accountId !== args.accountId) return Promise.resolve();
+    if (!r || r.accountId !== args.accountId || this.deleted.has(r.id)) return Promise.resolve();
     this.rows.set(r.id, { ...r, lastUsedAt: args.at });
     return Promise.resolve();
   }

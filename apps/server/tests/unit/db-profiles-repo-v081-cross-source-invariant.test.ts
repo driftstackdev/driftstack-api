@@ -92,7 +92,7 @@ describe('W1002 db/profiles-repo V-081 cross-source invariant', () => {
   it("CRITICAL countByAccount uses drizzle count() aggregator — '.select({ n: count() }).from(profiles).where(eq(accountId))'. The count() helper avoids hand-writing sql<number>`count(*)`.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/profiles-repo.ts'));
     expect(p).toMatch(/\.select\(\{ n: count\(\) \}\)/);
-    expect(p).toMatch(/\.where\(eq\(profiles\.accountId, accountId\)\);/);
+    expect(p).toMatch(/\.where\(and\(eq\(profiles\.accountId, accountId\), notDeleted\)\);/);
     expect(p).toMatch(/return row\?\.n \?\? 0;/);
   });
 
@@ -101,14 +101,14 @@ describe('W1002 db/profiles-repo V-081 cross-source invariant', () => {
   it('CRITICAL findById tenant-scoped — and(eq(id), eq(accountId)) + limit(1). The 2-cond scope prevents cross-account lookup.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/profiles-repo.ts'));
     expect(p).toMatch(
-      /\.where\(and\(eq\(profiles\.id, args\.id\), eq\(profiles\.accountId, args\.accountId\)\)\)/,
+      /\.where\(and\(eq\(profiles\.id, args\.id\), eq\(profiles\.accountId, args\.accountId\), notDeleted\)\)/,
     );
   });
 
-  it('CRITICAL findByAccountAndName tenant-scoped by (accountId, name) — and(eq(accountId), eq(name)). The (account, name) tuple is the dedup-on-name lookup.', () => {
+  it('CRITICAL findByAccountAndName tenant-scoped by (accountId, name) — and(eq(accountId), eq(name), notDeleted). The (account, name) tuple is the dedup-on-name lookup; notDeleted excludes trashed.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/profiles-repo.ts'));
     expect(p).toMatch(
-      /\.where\(and\(eq\(profiles\.accountId, args\.accountId\), eq\(profiles\.name, args\.name\)\)\)/,
+      /\.where\(and\(eq\(profiles\.accountId, args\.accountId\), eq\(profiles\.name, args\.name\), notDeleted\)\)/,
     );
   });
 
@@ -153,9 +153,13 @@ describe('W1002 db/profiles-repo V-081 cross-source invariant', () => {
 
   // ─── delete returning length ─────────────────────────────────
 
-  it("CRITICAL delete returns boolean — 'result.length > 0'. The .length check is the deleted-or-not signal.", () => {
+  it("CRITICAL delete is a L4b SOFT delete — UPDATE set({deletedAt, updatedAt}) where (id, accountId, notDeleted), returning {id}, 'result.length > 0'. The notDeleted guard makes it idempotent; the .length check is the deleted-or-not signal.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/profiles-repo.ts'));
-    expect(p).toMatch(/\.delete\(profiles\)/);
+    expect(p).toMatch(/const notDeleted = isNull\(profiles\.deletedAt\);/);
+    expect(p).toMatch(/\.set\(\{ deletedAt: now, updatedAt: now \}\)/);
+    expect(p).toMatch(
+      /\.where\(and\(eq\(profiles\.id, args\.id\), eq\(profiles\.accountId, args\.accountId\), notDeleted\)\)/,
+    );
     expect(p).toMatch(/\.returning\(\{ id: profiles\.id \}\);/);
     expect(p).toMatch(/return result\.length > 0;/);
   });
@@ -167,7 +171,7 @@ describe('W1002 db/profiles-repo V-081 cross-source invariant', () => {
     expect(p).toMatch(/\.update\(profiles\)/);
     expect(p).toMatch(/\.set\(\{ lastUsedAt: args\.at \}\)/);
     expect(p).toMatch(
-      /\.where\(and\(eq\(profiles\.id, args\.id\), eq\(profiles\.accountId, args\.accountId\)\)\);/,
+      /\.where\(and\(eq\(profiles\.id, args\.id\), eq\(profiles\.accountId, args\.accountId\), notDeleted\)\);/,
     );
   });
 

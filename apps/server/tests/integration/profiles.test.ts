@@ -414,6 +414,41 @@ describe('DELETE /v1/profiles/:id', () => {
     });
     expect(res.statusCode).toBe(204);
   });
+
+  it('L4b soft delete: a deleted profile drops out of the list and frees its name for a new profile (different id)', async () => {
+    fx = await buildTestApp();
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'shopper' },
+    });
+    const firstId = first.json<ProfileResponse>().id;
+
+    const del = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/profiles/${firstId}`,
+      headers: auth,
+    });
+    expect(del.statusCode).toBe(204);
+
+    // Gone from the list (not just unreachable by id).
+    const list = await fx.app.inject({ method: 'GET', url: '/v1/profiles', headers: auth });
+    const ids = list.json<{ data: ProfileResponse[] }>().data.map((p) => p.id);
+    expect(ids).not.toContain(firstId);
+
+    // The name is freed (partial unique index) — re-creating 'shopper' succeeds
+    // (200) with a brand-new id rather than 409-ing on the trashed row's name.
+    const second = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'shopper' },
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json<ProfileResponse>().id).not.toBe(firstId);
+  });
 });
 
 // ── V-313 — POST /v1/profiles/:id/clone ─────────────────────────────────
