@@ -4,7 +4,7 @@
 // device). Mocks the livekit wrapper so no real WebRTC spins up in jsdom.
 
 import { describe, expect, it, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, fireEvent } from '@testing-library/react';
 
 vi.mock('../../src/lib/livekit', () => ({
   createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
@@ -66,7 +66,7 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(statusBar?.className).toContain('shrink-0');
   });
 
-  it('renders the Driftstack control toolbar above the device: device name + close/minimize + screenshot/rotate', () => {
+  it('renders the Driftstack control toolbar above the device: device name + close/minimize + a record + the expand chevron (controls live in the expandable panel)', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
     const { container } = render(
       <RecordingsProvider>
@@ -77,27 +77,53 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(toolbar).not.toBeNull();
     // Device name (from the ?name= query) shows in the toolbar.
     expect(toolbar?.textContent).toContain('iPhone 17');
-    // Window controls + actions present (the window is borderless, so close/
-    // minimize live here). aria-labels are the stable contract.
-    for (const label of ['Close', 'Minimize', 'Screenshot']) {
+    // Window controls + the quick record + the expand chevron live in the slim
+    // bar (the window is borderless, so close/minimize live here). aria-labels
+    // are the stable contract.
+    for (const label of ['Close', 'Minimize', 'Start recording', 'Show controls']) {
       expect(toolbar?.querySelector(`[aria-label="${label}"]`), label).not.toBeNull();
     }
-    // Rotate toggles its label between portrait/landscape — match either.
+    // Founder 2026-06-17: the snapshot / rotate / pin / info controls moved into
+    // the EXPANDABLE panel, so the default (collapsed) chrome stays minimal —
+    // they are NOT in the DOM until the panel is expanded.
+    const wrap = container.querySelector('[data-component="simulator-toolbar-wrap"]');
+    expect(wrap?.querySelector('[data-component="simulator-controls"]')).toBeNull();
     expect(
-      toolbar?.querySelector(
-        '[aria-label="Rotate to landscape"], [aria-label="Rotate to portrait"]',
-      ),
-    ).not.toBeNull();
-    // Pin toggle (always-on-top) — defaults pinned (the floating-iPhone
-    // vision); unpinned = a normal sibling window (Cmd+backtick / Mission
-    // Control identity).
-    expect(toolbar?.querySelector('[aria-label="Unpin (stop floating on top)"]')).not.toBeNull();
+      wrap?.querySelector('[aria-label="Rotate to landscape"], [aria-label="Rotate to portrait"]'),
+    ).toBeNull();
     // The toolbar is a drag-region (drag the window by it); the button clusters
     // opt out so clicks land.
     expect(toolbar?.getAttribute('data-tauri-drag-region')).toBe('true');
-    // It sits above the device in the shell (not inside the bezel).
+    // The toolbar is wrapped (so the absolute control panel can anchor to it);
+    // the WRAP is what sits directly above the device in the shell.
     const shell = container.querySelector('[data-component="simulator-shell"]');
-    expect(shell?.firstElementChild).toBe(toolbar);
+    expect(shell?.firstElementChild).toBe(wrap);
+    expect(wrap?.querySelector('[data-component="simulator-toolbar"]')).toBe(toolbar);
+  });
+
+  it('the expand chevron reveals a labelled control panel — Full-control mode + snapshot / rotate / pin / info', () => {
+    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    const wrap = container.querySelector('[data-component="simulator-toolbar-wrap"]');
+    const chevron = wrap?.querySelector('[aria-label="Show controls"]');
+    expect(chevron).not.toBeNull();
+    fireEvent.click(chevron as Element);
+    const panel = wrap?.querySelector('[data-component="simulator-controls"]');
+    expect(panel).not.toBeNull();
+    // The control-mode line makes "full control + tap to interact" explicit.
+    expect(panel?.textContent).toContain('Full control');
+    // The labelled controls now live here (clearer than the old icon-only bar).
+    expect(panel?.querySelector('[aria-label="Save snapshot"]')).not.toBeNull();
+    expect(
+      panel?.querySelector('[aria-label="Rotate to landscape"], [aria-label="Rotate to portrait"]'),
+    ).not.toBeNull();
+    // Pin toggle (always-on-top) — defaults pinned (the floating-iPhone vision).
+    expect(panel?.querySelector('[aria-label="Unpin from top"]')).not.toBeNull();
+    expect(panel?.querySelector('[aria-label="Session info"]')).not.toBeNull();
   });
 
   it('brands the toolbar: Drift mark + profile name (primary) with the device muted beside it', () => {

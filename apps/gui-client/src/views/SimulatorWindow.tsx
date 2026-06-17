@@ -83,28 +83,6 @@ function useStatusClock(): string {
   return time;
 }
 
-/** Capture the current live video frame to a PNG download. The <video> is the
- *  device screen rendered by AgentSessionPanel; we grab its natural-resolution
- *  pixels. No-op until a frame with real dimensions is playing. */
-function captureScreenshot(deviceName: string): void {
-  const video = document.querySelector('video');
-  if (video === null || video.videoWidth === 0 || video.videoHeight === 0) return;
-  const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
-  if (ctx === null) return;
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const slug = deviceName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
-  const a = document.createElement('a');
-  a.href = canvas.toDataURL('image/png');
-  a.download = `driftstack-${slug || 'device'}.png`;
-  a.click();
-}
-
 /**
  * Driftstack control toolbar — the bar above the device (founder's "thing above
  * with the mac icons"). Personalized to Driftstack, not a literal Simulator
@@ -135,14 +113,17 @@ function DriftMark(): JSX.Element {
   );
 }
 
-function DeviceToolbar({
+export function DeviceToolbar({
   deviceName,
   profileName,
   landscape,
   pinned,
+  infoOpen,
+  expanded,
   onToggleRotate,
   onTogglePinned,
   onToggleInfo,
+  onToggleExpanded,
   onSnapshot,
   recording,
   onToggleRecord,
@@ -151,9 +132,12 @@ function DeviceToolbar({
   profileName: string;
   landscape: boolean;
   pinned: boolean;
+  infoOpen: boolean;
+  expanded: boolean;
   onToggleRotate: () => void;
   onTogglePinned: () => void;
   onToggleInfo: () => void;
+  onToggleExpanded: () => void;
   onSnapshot: () => void;
   recording: boolean;
   onToggleRecord: () => void;
@@ -161,142 +145,197 @@ function DeviceToolbar({
   return (
     <div
       data-tauri-drag-region
-      data-component="simulator-toolbar"
-      className="flex h-[34px] w-full shrink-0 items-center justify-between rounded-t-[14px] bg-[#161618] px-3 ring-1 ring-white/10"
+      data-component="simulator-toolbar-wrap"
+      className="relative w-full shrink-0"
     >
-      {/* Left — window controls (the window is borderless, so these ARE the
-          only way to close/minimize it). */}
-      <div data-tauri-drag-region="false" className="flex items-center gap-2">
-        <button
-          type="button"
-          aria-label="Close"
-          title="Close"
-          onClick={() => void withCurrentWindow((w) => w.close())}
-          className="h-3 w-3 rounded-full bg-[#ff5f57] ring-1 ring-black/20 transition hover:brightness-110"
-        />
-        <button
-          type="button"
-          aria-label="Minimize"
-          title="Minimize"
-          onClick={() => void withCurrentWindow((w) => w.minimize())}
-          className="h-3 w-3 rounded-full bg-[#febc2e] ring-1 ring-black/20 transition hover:brightness-110"
-        />
-      </div>
-      {/* Center — Drift mark + identity: the profile this phone runs as
-          (primary) and the device (muted). Profile-less → device only. */}
       <div
         data-tauri-drag-region
-        className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5"
+        data-component="simulator-toolbar"
+        className="flex h-[34px] w-full items-center justify-between rounded-t-[14px] bg-[#161618] px-3 ring-1 ring-white/10"
       >
-        <DriftMark />
-        <span className="max-w-[140px] truncate text-2xs font-semibold tracking-tight text-ink-secondary">
-          {profileName !== '' ? profileName : deviceName}
-        </span>
-        {profileName !== '' && (
-          <span className="text-2xs tracking-tight text-ink-muted">· {deviceName}</span>
-        )}
+        {/* Left — window controls (the window is borderless, so these ARE the
+            only way to close/minimize it). */}
+        <div data-tauri-drag-region="false" className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-label="Close"
+            title="Close"
+            onClick={() => void withCurrentWindow((w) => w.close())}
+            className="h-3 w-3 rounded-full bg-[#ff5f57] ring-1 ring-black/20 transition hover:brightness-110"
+          />
+          <button
+            type="button"
+            aria-label="Minimize"
+            title="Minimize"
+            onClick={() => void withCurrentWindow((w) => w.minimize())}
+            className="h-3 w-3 rounded-full bg-[#febc2e] ring-1 ring-black/20 transition hover:brightness-110"
+          />
+        </div>
+        {/* Center — Drift mark + identity: the profile this phone runs as
+            (primary) and the device (muted). Profile-less → device only. */}
+        <div
+          data-tauri-drag-region
+          className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5"
+        >
+          <DriftMark />
+          <span className="max-w-[140px] truncate text-2xs font-semibold tracking-tight text-ink-secondary">
+            {profileName !== '' ? profileName : deviceName}
+          </span>
+          {profileName !== '' && (
+            <span className="text-2xs tracking-tight text-ink-muted">· {deviceName}</span>
+          )}
+        </div>
+        {/* Right — quick Record + the expand chevron. The window-controls
+            (snapshot / rotate / pin / info) live in the expandable panel below
+            so the default chrome stays minimal (founder 2026-06-17: "phone
+            showing only" by default, a clean expandable row for the controls). */}
+        <div data-tauri-drag-region="false" className="flex items-center gap-1 text-ink-muted">
+          <button
+            type="button"
+            aria-label={recording ? 'Stop recording' : 'Start recording'}
+            title={recording ? 'Stop and save the recording' : 'Record this session (1fps)'}
+            className={
+              recording
+                ? 'animate-pulse rounded px-1.5 py-0.5 text-[13px] text-red-400 transition hover:bg-white/10'
+                : 'rounded px-1.5 py-0.5 text-[13px] transition hover:bg-white/10 hover:text-ink-primary'
+            }
+            onClick={onToggleRecord}
+          >
+            ●
+          </button>
+          <button
+            type="button"
+            aria-label={expanded ? 'Hide controls' : 'Show controls'}
+            aria-expanded={expanded}
+            title={expanded ? 'Hide controls' : 'More controls'}
+            onClick={onToggleExpanded}
+            className={`rounded p-1 transition hover:bg-white/10 hover:text-ink-primary ${expanded ? 'text-accent' : ''}`}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+        </div>
       </div>
-      {/* Right — actions. */}
-      <div data-tauri-drag-region="false" className="flex items-center gap-1.5 text-ink-muted">
-        {/* Record / Snapshot / Info — real toolbar siblings (were
-            accidentally nested inside the Pin button's <svg>, which made
-            the whole recording + snapshot surface unreachable). */}
-        <button
-          type="button"
-          aria-label={recording ? 'Stop recording' : 'Start recording'}
-          title={recording ? 'Stop and save the recording' : 'Record this session (1fps)'}
-          className={
-            recording
-              ? 'animate-pulse rounded px-1.5 py-0.5 text-[13px] text-red-400 transition hover:bg-white/10'
-              : 'rounded px-1.5 py-0.5 text-[13px] transition hover:bg-white/10 hover:text-ink-primary'
-          }
-          onClick={onToggleRecord}
+      {/* Expandable control panel — an ABSOLUTE dropdown so it never changes the
+          toolbar height (the window-sizing math in handleVideoDimensions depends
+          on the fixed TOOLBAR_H). Clear LABELLED rows, led by the control-mode
+          line so the default "full control + iOS tap" is obvious. */}
+      {expanded && (
+        <div
+          data-tauri-drag-region="false"
+          data-component="simulator-controls"
+          className="absolute right-2 top-full z-30 mt-1 w-56 overflow-hidden rounded-xl border border-white/10 bg-[#161618] py-1 shadow-[0_14px_34px_rgba(0,0,0,0.6)]"
         >
-          ●
-        </button>
-        <button
-          type="button"
-          aria-label="Save snapshot"
-          title="Save a PNG of the current frame to Downloads"
-          className="rounded px-1.5 py-0.5 text-[13px] transition hover:bg-white/10 hover:text-ink-primary"
-          onClick={onSnapshot}
-        >
-          ⤓
-        </button>
-        <button
-          type="button"
-          aria-label="Session info"
-          title="Session info"
-          onClick={onToggleInfo}
-          className="rounded px-1.5 py-0.5 text-[13px] transition hover:bg-white/10 hover:text-ink-primary"
-        >
-          ⓘ
-        </button>
-        <button
-          type="button"
-          aria-label={pinned ? 'Unpin (stop floating on top)' : 'Pin on top'}
-          title={pinned ? 'Unpin — behave like a normal window' : 'Pin — float above everything'}
-          onClick={onTogglePinned}
-          className={`rounded p-1 transition hover:bg-white/10 hover:text-ink-primary ${pinned ? 'text-accent' : ''}`}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12 17v5" />
-            <path d="M9 3h6l-1 7 3 3H7l3-3z" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          aria-label="Screenshot"
-          title="Save a screenshot"
-          onClick={() => captureScreenshot(deviceName)}
-          className="rounded p-1 transition hover:bg-white/10 hover:text-ink-primary"
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-            <circle cx="12" cy="13" r="4" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          aria-label={landscape ? 'Rotate to portrait' : 'Rotate to landscape'}
-          title="Rotate"
-          onClick={onToggleRotate}
-          className={`rounded p-1 transition hover:bg-white/10 hover:text-ink-primary ${landscape ? 'text-accent' : ''}`}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M23 4v6h-6" />
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-          </svg>
-        </button>
-      </div>
+          <div className="flex items-center gap-2 px-3 py-2 text-[11px]">
+            <span className="text-accent" aria-hidden="true">
+              ◉
+            </span>
+            <span className="font-semibold text-ink-primary">Full control</span>
+            <span className="text-ink-muted">· tap the screen to interact</span>
+          </div>
+          <div className="mx-3 mb-1 h-px bg-white/10" aria-hidden="true" />
+          <LabeledControl
+            label="Save snapshot"
+            hint="Save a PNG of the current frame"
+            onClick={onSnapshot}
+            glyph={<span className="text-[13px] leading-none">⤓</span>}
+          />
+          <LabeledControl
+            label={landscape ? 'Rotate to portrait' : 'Rotate to landscape'}
+            active={landscape}
+            onClick={onToggleRotate}
+            glyph={
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M23 4v6h-6" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+            }
+          />
+          <LabeledControl
+            label={pinned ? 'Unpin from top' : 'Pin on top'}
+            hint={pinned ? 'Behave like a normal window' : 'Float above everything'}
+            active={pinned}
+            onClick={onTogglePinned}
+            glyph={
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 17v5" />
+                <path d="M9 3h6l-1 7 3 3H7l3-3z" />
+              </svg>
+            }
+          />
+          <LabeledControl
+            label="Session info"
+            active={infoOpen}
+            onClick={onToggleInfo}
+            glyph={<span className="text-[13px] leading-none">ⓘ</span>}
+          />
+        </div>
+      )}
     </div>
+  );
+}
+
+/** One labelled row in the simulator's expandable control panel — a glyph + a
+ *  text label (clearer than the old cryptic icon-only toolbar), with an active
+ *  accent state for the toggles (rotate / pin / info). */
+function LabeledControl({
+  glyph,
+  label,
+  hint,
+  active,
+  onClick,
+}: {
+  glyph: JSX.Element;
+  label: string;
+  hint?: string;
+  active?: boolean;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={active}
+      title={hint ?? label}
+      onClick={onClick}
+      className={`flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[11.5px] transition-colors hover:bg-white/10 ${
+        active === true ? 'text-accent' : 'text-ink-secondary hover:text-ink-primary'
+      }`}
+    >
+      <span className="w-4 shrink-0 text-center leading-none" aria-hidden="true">
+        {glyph}
+      </span>
+      <span className="leading-none">{label}</span>
+    </button>
   );
 }
 
@@ -468,6 +507,9 @@ export function SimulatorWindow(): JSX.Element {
   const [pinned, setPinned] = useState(true);
   // Cockpit info overlay (demo-concepts arc): session facts at a glance.
   const [infoOpen, setInfoOpen] = useState(false);
+  // Expandable control panel — collapsed by default so the window is phone-only
+  // (founder 2026-06-17); the chevron reveals the labelled control rows.
+  const [toolbarExpanded, setToolbarExpanded] = useState(false);
   const togglePinned = (): void => {
     const next = !pinned;
     setPinned(next);
@@ -528,9 +570,12 @@ export function SimulatorWindow(): JSX.Element {
             profileName={profileName}
             landscape={landscape}
             pinned={pinned}
+            infoOpen={infoOpen}
+            expanded={toolbarExpanded}
             onToggleRotate={toggleRotate}
             onTogglePinned={togglePinned}
             onToggleInfo={() => setInfoOpen((v) => !v)}
+            onToggleExpanded={() => setToolbarExpanded((v) => !v)}
             onSnapshot={() => void handleSnapshot()}
             recording={recordingId !== null}
             onToggleRecord={toggleRecord}

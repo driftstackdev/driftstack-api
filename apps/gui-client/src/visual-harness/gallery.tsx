@@ -12,6 +12,7 @@ import { ProfilesTable, type ProfileTableRow } from '../components/ProfilesTable
 import { CostPanel } from '../components/CostPanel';
 import { SkeletonRows } from '../components/Skeleton';
 import { ProxyForm } from '../views/ProxiesView';
+import { DeviceToolbar } from '../views/SimulatorWindow';
 
 const noop = (): void => undefined;
 
@@ -200,6 +201,52 @@ export function Gallery(): JSX.Element {
             billingCycle="2026-06"
           />
         </BillingWrapperShell>
+      </div>
+
+      <h1 className="mb-3 mt-10 text-lg font-semibold text-ink-primary">
+        SimulatorWindow toolbar — collapsed (phone-only) + expanded controls
+      </h1>
+      <div className="flex flex-wrap gap-10">
+        <div className="w-72">
+          <span className="mb-1 block text-2xs uppercase tracking-wide text-ink-muted">
+            collapsed
+          </span>
+          <DeviceToolbar
+            deviceName="iPhone 17"
+            profileName="amsterdam shopper"
+            landscape={false}
+            pinned
+            infoOpen={false}
+            expanded={false}
+            onToggleRotate={noop}
+            onTogglePinned={noop}
+            onToggleInfo={noop}
+            onToggleExpanded={noop}
+            onSnapshot={noop}
+            recording={false}
+            onToggleRecord={noop}
+          />
+        </div>
+        <div className="w-72 pb-48">
+          <span className="mb-1 block text-2xs uppercase tracking-wide text-ink-muted">
+            expanded
+          </span>
+          <DeviceToolbar
+            deviceName="iPhone 17"
+            profileName="amsterdam shopper"
+            landscape={false}
+            pinned
+            infoOpen={false}
+            expanded
+            onToggleRotate={noop}
+            onTogglePinned={noop}
+            onToggleInfo={noop}
+            onToggleExpanded={noop}
+            onSnapshot={noop}
+            recording={false}
+            onToggleRecord={noop}
+          />
+        </div>
       </div>
 
       <h1 className="mb-3 mt-10 text-lg font-semibold text-ink-primary">
