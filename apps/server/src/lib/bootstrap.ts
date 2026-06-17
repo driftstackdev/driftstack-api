@@ -1350,6 +1350,22 @@ export async function createProductionDeps(
             // A3 W1364: a profileSaveFailed frame (save-back failed at teardown)
             // → relay as the customer-facing session.profile_save_failed webhook.
             makeProfileSaveFailedRelay(agentSessionsRepo, webhooksService, logger),
+            // Fleet-admin Phase 0 (file-48 §A5): a heartbeat (macNodeId already
+            // cross-checked against the JWT nodeId in the connection) → bump
+            // fleet_nodes.last_seen_at so the admin panel's "Last seen" stops
+            // being NULL. Best-effort + fire-and-forget off the receive loop;
+            // touchLastSeen is an UPDATE-by-id (no-op for an unregistered node),
+            // so a self-seeded/unknown node is harmless. A failed write just
+            // leaves last_seen stale until the next 10s beat — never throws into
+            // the socket loop.
+            (frame) => {
+              void drizzleFleetNodesRepo.touchLastSeen(frame.macNodeId).catch((err) => {
+                logger.warn(
+                  { component: 'fleet-heartbeat', nodeId: frame.macNodeId, err: String(err) },
+                  'touchLastSeen failed (last_seen stays stale until next beat)',
+                );
+              });
+            },
           ),
           // Local fleet-demo: the config a dispatched session browses with. Only
           // assembled behind FLEET_CONTROL_PLANE_ENABLED (so inert in prod). The

@@ -442,6 +442,7 @@ export const HeartbeatSchema = z.object({
   /** Harness build identity (e.g. git sha) — "Harness version" column (A3 W2189). */
   harnessVersion: z.string().optional(),
 });
+export type Heartbeat = z.infer<typeof HeartbeatSchema>;
 
 export const ErrorEventSchema = z.object({
   type: z.literal('errorEvent'),

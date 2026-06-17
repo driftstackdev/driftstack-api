@@ -17,7 +17,7 @@ import {
   serializePauseSession,
   serializeResumeSession,
 } from '../../src/services/harness-control-codec.js';
-import type { IntentDispatch } from '../../src/schemas/harness-control-protocol.js';
+import type { IntentDispatch, Heartbeat } from '../../src/schemas/harness-control-protocol.js';
 
 function dispatch(intentId: string, sessionId = 'ses_x'): IntentDispatch {
   return {
@@ -173,6 +173,52 @@ describe('FleetControlConnection', () => {
       { type: 'profileSaved', sessionId: 'ses_x', profile_id: 'p1', sealed_blob: 'YmxvYg==' },
       { type: 'profileSaved', sessionId: 'ses_y', profile_id: 'p2', stored: true },
     ]);
+  });
+
+  it('routes a heartbeat → onHeartbeat ONLY when macNodeId matches the JWT nodeId (spoof/mismatch dropped)', () => {
+    const seen: Heartbeat[] = [];
+    const conn = new FleetControlConnection(
+      'node-1',
+      () => {},
+      undefined, // onProfileSaved
+      undefined, // onChallengeDetected
+      undefined, // onPageState
+      undefined, // onProfileSaveFailed
+      (f) => seen.push(f), // onHeartbeat
+    );
+    const beat = (macNodeId: string): string =>
+      JSON.stringify({
+        type: 'heartbeat',
+        macNodeId,
+        timestamp: 't',
+        cpuPercent: 10,
+        memoryPercent: 20,
+        activeSessionCount: 1,
+        maxConcurrent: 8,
+      });
+    // matching id → consumed
+    conn.handleInbound(beat('node-1'));
+    // mismatched id (another node / spoof) → dropped, never touches node-1's liveness
+    conn.handleInbound(beat('node-2'));
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.macNodeId).toBe('node-1');
+    expect(seen[0]!.maxConcurrent).toBe(8);
+  });
+
+  it('a heartbeat with no handler wired is accepted + ignored (no crash — stateless deploy)', () => {
+    const conn = new FleetControlConnection('node-1', () => {});
+    expect(() =>
+      conn.handleInbound(
+        JSON.stringify({
+          type: 'heartbeat',
+          macNodeId: 'node-1',
+          timestamp: 't',
+          cpuPercent: 1,
+          memoryPercent: 1,
+          activeSessionCount: 0,
+        }),
+      ),
+    ).not.toThrow();
   });
 
   it('a profileSaved frame with no handler wired is accepted + ignored (no crash — stateless deploy)', () => {

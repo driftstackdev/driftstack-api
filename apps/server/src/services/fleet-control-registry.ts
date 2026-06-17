@@ -28,6 +28,7 @@ import {
   type ProfileSaveFailed,
   type ChallengeDetected,
   type PageStateFrame,
+  type Heartbeat,
 } from '../schemas/harness-control-protocol.js';
 import { IntentDispatchCorrelator, type DispatchTransport } from './harness-dispatch-correlator.js';
 
@@ -47,6 +48,7 @@ export class FleetControlConnection {
   private readonly onChallengeDetected?: (frame: ChallengeDetected) => void;
   private readonly onPageState?: (frame: PageStateFrame) => void;
   private readonly onProfileSaveFailed?: (frame: ProfileSaveFailed) => void;
+  private readonly onHeartbeat?: (frame: Heartbeat) => void;
 
   constructor(
     readonly nodeId: string,
@@ -55,12 +57,14 @@ export class FleetControlConnection {
     onChallengeDetected?: (frame: ChallengeDetected) => void,
     onPageState?: (frame: PageStateFrame) => void,
     onProfileSaveFailed?: (frame: ProfileSaveFailed) => void,
+    onHeartbeat?: (frame: Heartbeat) => void,
   ) {
     this.send = send;
     this.onProfileSaved = onProfileSaved;
     this.onChallengeDetected = onChallengeDetected;
     this.onPageState = onPageState;
     this.onProfileSaveFailed = onProfileSaveFailed;
+    this.onHeartbeat = onHeartbeat;
     const transport: DispatchTransport = { send: (d) => send(JSON.stringify(d)) };
     this.correlator = new IntentDispatchCorrelator(transport);
   }
@@ -168,7 +172,19 @@ export class FleetControlConnection {
           // like the others.
           this.onProfileSaveFailed?.(frame);
           break;
-        // heartbeat / capabilityReport / errorEvent: accepted, not yet consumed.
+        case 'heartbeat':
+          // Liveness + fleet telemetry (file-48 §A5, fleet-admin-panel-design
+          // Phase 0). SECURITY: cross-check the frame's self-reported macNodeId
+          // against this connection's JWT-authenticated nodeId — a mismatch (bug
+          // or spoof) must NOT touch another node's liveness/telemetry, so drop
+          // it. On match, hand the validated frame to the consumer (wired in
+          // bootstrap → repo.touchLastSeen + telemetry upsert). Absent consumer
+          // (stateless deploy) → accepted + ignored, like the frames above.
+          if (frame.macNodeId === this.nodeId) {
+            this.onHeartbeat?.(frame);
+          }
+          break;
+        // capabilityReport / errorEvent: accepted, not yet consumed.
         //
         // FORWARD-GUARD (A3 bus W1859): an `errorEvent` (summary/detail) and an
         // errored `sessionStatus.detail` can carry the Mac fleet NODE's real IP on
@@ -223,6 +239,7 @@ export class FleetControlRegistry {
     private readonly onChallengeDetected?: (frame: ChallengeDetected) => void,
     private readonly onPageState?: (frame: PageStateFrame) => void,
     private readonly onProfileSaveFailed?: (frame: ProfileSaveFailed) => void,
+    private readonly onHeartbeat?: (frame: Heartbeat) => void,
   ) {}
 
   register(nodeId: string, send: FleetNodeSocketSend): FleetControlConnection {
@@ -237,6 +254,7 @@ export class FleetControlRegistry {
       this.onChallengeDetected,
       this.onPageState,
       this.onProfileSaveFailed,
+      this.onHeartbeat,
     );
     this.connections.set(nodeId, conn);
     return conn;
