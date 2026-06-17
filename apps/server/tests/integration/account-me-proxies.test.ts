@@ -27,6 +27,7 @@ interface ProxyMeta {
   port: number;
   username: string | null;
   has_password: boolean;
+  has_secret?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -240,5 +241,102 @@ describe('account_owner scope', () => {
       headers: auth(fx),
     });
     expect(res.statusCode).toBe(403);
+  });
+});
+
+// OVPN/WG arc slice 2 — VPN proxy create. The SECRET (config_blob / private_key)
+// is write-only: wrapped under the account TMK, NEVER echoed (has_secret instead).
+describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
+  const WG_PRIV = 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=';
+  const WG_PUB = 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=';
+  const OVPN_BLOB = 'client\nremote vpn.example.com 1194 udp\ndev tun\n';
+
+  it('creates a WireGuard proxy — private_key is NEVER echoed (has_secret=true)', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'wg-home',
+        scheme: 'wireguard',
+        host: 'vpn.example.com',
+        port: 51820,
+        wireguard: {
+          private_key: WG_PRIV,
+          peer_public_key: WG_PUB,
+          endpoint: 'vpn.example.com:51820',
+          allowed_ips: '0.0.0.0/0',
+        },
+      },
+    });
+    expect(create.statusCode).toBe(201);
+    const meta = create.json<ProxyMeta>();
+    expect(meta.scheme).toBe('wireguard');
+    expect(meta.has_secret).toBe(true);
+    expect(meta.has_password).toBe(false);
+    // The secret key must not appear anywhere in the response body.
+    expect(create.body).not.toContain(WG_PRIV);
+    // …nor in the list view.
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+    });
+    expect(list.body).not.toContain(WG_PRIV);
+  });
+
+  it('creates an OpenVPN proxy — config_blob is NEVER echoed (has_secret=true)', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'ovpn-work',
+        scheme: 'openvpn',
+        host: 'vpn.example.com',
+        port: 1194,
+        openvpn: { config_blob: OVPN_BLOB, username: 'u' },
+      },
+    });
+    expect(create.statusCode).toBe(201);
+    const meta = create.json<ProxyMeta>();
+    expect(meta.scheme).toBe('openvpn');
+    expect(meta.has_secret).toBe(true);
+    expect(create.body).not.toContain('remote vpn.example.com');
+  });
+
+  it('scheme=wireguard WITHOUT a wireguard block → 400', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: { label: 'bad', scheme: 'wireguard', host: 'h', port: 51820 },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('a VPN block on a socks5 scheme → 400 (stray block, no half-typed row)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'mismatch',
+        scheme: 'socks5',
+        host: '1.2.3.4',
+        port: 1080,
+        wireguard: {
+          private_key: WG_PRIV,
+          peer_public_key: WG_PUB,
+          endpoint: 'vpn.example.com:51820',
+          allowed_ips: '0.0.0.0/0',
+        },
+      },
+    });
+    expect(res.statusCode).toBe(400);
   });
 });

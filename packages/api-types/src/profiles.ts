@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import { Iso8601Schema, PrefixedId } from './common.js';
+import { OpenVpnProxyConfigSchema, WireGuardProxyConfigSchema } from './egress.js';
 
 export const ProfileIdSchema = PrefixedId('prof');
 export type ProfileId = z.infer<typeof ProfileIdSchema>;
@@ -65,7 +66,13 @@ export type AccountOrganization = z.infer<typeof AccountOrganizationSchema>;
 // SOCKS5/HTTP proxies so a session can be dispatched through one. The password
 // is WRITE-ONLY: accepted on create/update, wrapped server-side under the
 // account TMK, and NEVER returned — responses expose `has_password` instead.
-export const AccountProxySchemeSchema = z.enum(['socks5', 'http']);
+// OVPN/WG arc — socks5/http (transport proxies) + openvpn/wireguard (VPN
+// proxies). The discriminator reuses this one column; the VPN config rides the
+// optional `openvpn`/`wireguard` blocks below (validated against the scheme by
+// the route). host/port stay the (display) endpoint for ALL schemes — the GUI
+// fills them from the parsed wg0.conf/.ovpn endpoint (lib/parse-wireguard,
+// lib/parse-openvpn).
+export const AccountProxySchemeSchema = z.enum(['socks5', 'http', 'openvpn', 'wireguard']);
 
 export const AccountProxyInputSchema = z.object({
   label: z.string().min(1).max(80),
@@ -75,6 +82,11 @@ export const AccountProxyInputSchema = z.object({
   username: z.string().max(255).nullable().default(null),
   // Write-only — wrapped server-side, never echoed back.
   password: z.string().max(1024).nullable().default(null),
+  // VPN config blocks — present only for the matching scheme (route-enforced).
+  // The secret-bearing parts (openvpn.config_blob/password, wireguard.private_key)
+  // are write-only — wrapped under the account TMK, NEVER echoed back.
+  openvpn: OpenVpnProxyConfigSchema.optional(),
+  wireguard: WireGuardProxyConfigSchema.optional(),
 });
 export type AccountProxyInput = z.infer<typeof AccountProxyInputSchema>;
 
@@ -88,6 +100,8 @@ export const AccountProxyUpdateSchema = z.object({
   port: z.number().int().min(1).max(65535).optional(),
   username: z.string().max(255).nullable().optional(),
   password: z.string().max(1024).nullable().optional(),
+  openvpn: OpenVpnProxyConfigSchema.optional(),
+  wireguard: WireGuardProxyConfigSchema.optional(),
 });
 export type AccountProxyUpdate = z.infer<typeof AccountProxyUpdateSchema>;
 
@@ -99,6 +113,9 @@ export const AccountProxyMetadataSchema = z.object({
   port: z.number().int(),
   username: z.string().nullable(),
   has_password: z.boolean(),
+  // True when a VPN secret (openvpn config_blob / wireguard private_key) is
+  // stored. Write-only like the password — the secret itself is never returned.
+  has_secret: z.boolean(),
   created_at: z.string(),
   updated_at: z.string(),
 });

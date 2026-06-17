@@ -2889,7 +2889,7 @@
           },
           "scheme": {
             "type": "string",
-            "enum": ["socks5", "http"]
+            "enum": ["socks5", "http", "openvpn", "wireguard"]
           },
           "host": {
             "type": "string"
@@ -2901,6 +2901,9 @@
             "type": ["string", "null"]
           },
           "has_password": {
+            "type": "boolean"
+          },
+          "has_secret": {
             "type": "boolean"
           },
           "created_at": {
@@ -2918,6 +2921,7 @@
           "port",
           "username",
           "has_password",
+          "has_secret",
           "created_at",
           "updated_at"
         ]
@@ -2942,7 +2946,7 @@
           },
           "scheme": {
             "type": "string",
-            "enum": ["socks5", "http"]
+            "enum": ["socks5", "http", "openvpn", "wireguard"]
           },
           "host": {
             "type": "string"
@@ -2955,6 +2959,42 @@
           },
           "password": {
             "type": ["string", "null"]
+          },
+          "openvpn": {
+            "type": "object",
+            "properties": {
+              "config_blob": {
+                "type": "string"
+              },
+              "username": {
+                "type": "string"
+              },
+              "password": {
+                "type": "string"
+              }
+            },
+            "required": ["config_blob"]
+          },
+          "wireguard": {
+            "type": "object",
+            "properties": {
+              "private_key": {
+                "type": "string"
+              },
+              "peer_public_key": {
+                "type": "string"
+              },
+              "endpoint": {
+                "type": "string"
+              },
+              "allowed_ips": {
+                "type": "string"
+              },
+              "dns": {
+                "type": "string"
+              }
+            },
+            "required": ["private_key", "peer_public_key", "endpoint"]
           }
         },
         "required": ["label", "host", "port"]

@@ -333,6 +333,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       port: r.port,
       username: r.username,
       has_password: r.wrappedPassword !== null,
+      has_secret: r.wrappedSecret !== null,
       created_at: r.createdAt.toISOString(),
       updated_at: r.updatedAt.toISOString(),
     };
@@ -364,6 +365,65 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
     return wrapAccountSecret(proxyMasterKey, accountId, Buffer.from(password, 'utf8'));
   }
 
+  // Wrap a non-empty VPN secret payload under the account TMK. Like
+  // wrapProxyPassword but mandatory (a VPN proxy always carries a secret) — 503
+  // if encryption isn't configured (NEVER store a VPN key in the clear).
+  function wrapProxySecret(accountId: string, secret: string): string {
+    if (proxyMasterKey === null) {
+      throw new FeatureUnavailableError('VPN proxies are unavailable (encryption not configured).');
+    }
+    return wrapAccountSecret(proxyMasterKey, accountId, Buffer.from(secret, 'utf8'));
+  }
+
+  // Resolve the encrypted-secret + non-secret config for a VPN scheme. Returns
+  // null for socks5/http (the caller keeps the password path). For openvpn the
+  // SECRET is {config_blob[,password]} (the blob embeds certs/keys); for
+  // wireguard it's the private_key. The non-secret structured fields ride
+  // `config` (jsonb) so the GUI/dispatch can read them without decrypting.
+  function buildVpnSecretAndConfig(
+    accountId: string,
+    input: {
+      scheme?: string;
+      openvpn?: { config_blob: string; username?: string; password?: string };
+      wireguard?: {
+        private_key: string;
+        peer_public_key: string;
+        endpoint: string;
+        allowed_ips: string;
+        dns?: string;
+      };
+    },
+  ): { wrappedSecret: string; config: Record<string, unknown> } | null {
+    if (input.scheme === 'openvpn') {
+      if (!input.openvpn) {
+        throw new BadRequestError('An `openvpn` config is required for scheme "openvpn".');
+      }
+      const { config_blob, username, password } = input.openvpn;
+      const secret = JSON.stringify({ config_blob, ...(password ? { password } : {}) });
+      return {
+        wrappedSecret: wrapProxySecret(accountId, secret),
+        config: { ...(username ? { username } : {}) },
+      };
+    }
+    if (input.scheme === 'wireguard') {
+      if (!input.wireguard) {
+        throw new BadRequestError('A `wireguard` config is required for scheme "wireguard".');
+      }
+      const { private_key, peer_public_key, endpoint, allowed_ips, dns } = input.wireguard;
+      return {
+        wrappedSecret: wrapProxySecret(accountId, private_key),
+        config: { peer_public_key, endpoint, allowed_ips, ...(dns ? { dns } : {}) },
+      };
+    }
+    // socks5/http: a stray VPN block is a client error (avoids a half-typed row).
+    if (input.openvpn || input.wireguard) {
+      throw new BadRequestError(
+        '`openvpn`/`wireguard` config is only valid for the matching scheme.',
+      );
+    }
+    return null;
+  }
+
   app.get(
     '/v1/account/me/proxies',
     { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
@@ -388,7 +448,11 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid proxy.');
       }
       assertSafeProxyHost(parsed.data.host);
-      const wrappedPassword = wrapProxyPassword(ctx.account.id, parsed.data.password);
+      // VPN schemes carry an encrypted secret (config_blob / private_key) + a
+      // non-secret config block; socks5/http use the write-only password.
+      const vpn = buildVpnSecretAndConfig(ctx.account.id, parsed.data);
+      const wrappedPassword =
+        vpn === null ? wrapProxyPassword(ctx.account.id, parsed.data.password) : null;
       const row = await accountProxiesRepo.create(ctx.account.id, {
         label: parsed.data.label,
         scheme: parsed.data.scheme,
@@ -396,6 +460,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         port: parsed.data.port,
         username: parsed.data.username,
         wrappedPassword,
+        ...(vpn !== null ? { wrappedSecret: vpn.wrappedSecret, config: vpn.config } : {}),
       });
       reply.code(201);
       return proxyToMetadata(row);
@@ -422,8 +487,15 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       if (parsed.data.host !== undefined) updates.host = parsed.data.host;
       if (parsed.data.port !== undefined) updates.port = parsed.data.port;
       if (parsed.data.username !== undefined) updates.username = parsed.data.username;
-      // password: key absent = keep existing; null = clear; string = (re)wrap.
-      if ('password' in body) {
+      // VPN re-config: a VPN block (with its matching scheme) re-wraps the secret
+      // + rewrites config + clears any password. Otherwise the socks5/http
+      // password path: key absent = keep existing; null = clear; string = (re)wrap.
+      const vpn = buildVpnSecretAndConfig(ctx.account.id, parsed.data);
+      if (vpn !== null) {
+        updates.wrappedSecret = vpn.wrappedSecret;
+        updates.config = vpn.config;
+        updates.wrappedPassword = null;
+      } else if ('password' in body) {
         updates.wrappedPassword = wrapProxyPassword(ctx.account.id, parsed.data.password ?? null);
       }
       const row = await accountProxiesRepo.update({ id, accountId: ctx.account.id, updates });

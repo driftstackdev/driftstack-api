@@ -1670,25 +1670,40 @@ function buildRegistry(): OpenAPIRegistry {
   });
   // ARC A — per-account customer proxies. The password is write-only (accepted
   // on create/update, never returned); responses expose has_password.
+  const OpenVpnConfigOpenApi = z.object({
+    config_blob: z.string(),
+    username: z.string().optional(),
+    password: z.string().optional(),
+  });
+  const WireGuardConfigOpenApi = z.object({
+    private_key: z.string(),
+    peer_public_key: z.string(),
+    endpoint: z.string(),
+    allowed_ips: z.string().optional(),
+    dns: z.string().optional(),
+  });
   const AccountProxyInputOpenApi = z
     .object({
       label: z.string(),
-      scheme: z.enum(['socks5', 'http']).optional(),
+      scheme: z.enum(['socks5', 'http', 'openvpn', 'wireguard']).optional(),
       host: z.string(),
       port: z.number().int(),
       username: z.string().nullable().optional(),
       password: z.string().nullable().optional(),
+      openvpn: OpenVpnConfigOpenApi.optional(),
+      wireguard: WireGuardConfigOpenApi.optional(),
     })
     .openapi('AccountProxyInput');
   const AccountProxyMetadataOpenApi = z
     .object({
       id: z.string(),
       label: z.string(),
-      scheme: z.enum(['socks5', 'http']),
+      scheme: z.enum(['socks5', 'http', 'openvpn', 'wireguard']),
       host: z.string(),
       port: z.number().int(),
       username: z.string().nullable(),
       has_password: z.boolean(),
+      has_secret: z.boolean(),
       created_at: z.string(),
       updated_at: z.string(),
     })
