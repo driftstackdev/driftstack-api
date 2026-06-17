@@ -1162,7 +1162,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             const ok = await window.driftstackConfirm(
               'Delete profile "' +
                 name +
-                '"? Cookies + storage are wiped. Sessions currently bound to this profile will fail unless you set force=true. This cannot be undone.',
+                '"? It moves to the recycle bin — you can restore it within 30 days, after which it is permanently purged. Sessions currently bound to this profile will fail unless you set force=true.',
               { confirmLabel: 'Delete' },
             );
             if (!ok) return;

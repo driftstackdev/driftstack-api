@@ -114,10 +114,12 @@ describe('W497.A apps/customer-dashboard/src/pages/profiles.astro content parity
     expect(body).toMatch(/URL\.revokeObjectURL\(url\);/);
   });
 
-  it('Delete-with-force framing pinned: \'Delete profile "<name>"? Cookies + storage are wiped. Sessions currently bound to this profile will fail unless you set force=true. This cannot be undone.\' — pinned so customers know the cookie-wipe consequences AND the force=true escape-hatch (drift to dropping force=true reference would orphan customers needing to delete an in-use profile)', () => {
-    expect(body).toMatch(
-      /'Delete profile "' \+\s*\n?\s*name \+\s*\n?\s*'"\? Cookies \+ storage are wiped\. Sessions currently bound to this profile will fail unless you set force=true\. This cannot be undone\.',/,
-    );
+  it('Delete-with-force framing pinned (L4b recycle bin): mentions the recycle bin + 30-day restore window + keeps the force=true escape-hatch reference; the stale "This cannot be undone" / "Cookies + storage are wiped" framing is GONE (delete is now a soft-delete — recoverable, state retained until purge)', () => {
+    expect(body).toMatch(/It moves to the recycle bin/);
+    expect(body).toMatch(/restore it within 30 days/);
+    expect(body).toMatch(/unless you set force=true/);
+    expect(body).not.toMatch(/This cannot be undone/);
+    expect(body).not.toMatch(/Cookies \+ storage are wiped/);
   });
 
   it("V-331b act-as header + 'Custom' cap rendering pinned. Re-enabled by slice 219 after verifying V-331b framing at profiles.astro:446-450 + 'Custom' fallback at profiles.astro:551", () => {

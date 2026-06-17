@@ -89,12 +89,13 @@ describe('W752 dashboard /profiles page V-284 + V-470 + V-480 parity', () => {
     );
   });
 
-  it("CRITICAL delete-confirm framing pinned — 'Cookies + storage are wiped. Sessions currently bound to this profile will fail unless you set force=true. This cannot be undone.' Drift to omitting the force=true mention would leave customers confused why their live sessions broke.", () => {
+  it('CRITICAL delete-confirm framing pinned (L4b recycle bin) — recycle bin + 30-day restore window + keeps the force=true escape-hatch; stale permanent-deletion framing removed (delete is now soft).', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /'Delete profile "' \+\s*\n\s+name \+\s*\n\s+'"\? Cookies \+ storage are wiped\. Sessions currently bound to this profile will fail unless you set force=true\. This cannot be undone\.',/,
-    );
+    expect(p).toMatch(/It moves to the recycle bin/);
+    expect(p).toMatch(/restore it within 30 days/);
+    expect(p).toMatch(/unless you set force=true/);
+    expect(p).not.toMatch(/This cannot be undone/);
   });
 
   it('CRITICAL DELETE /v1/profiles/<id> + 204-or-error handling. Drift to a 200-only check would let the 204-on-success response trigger a false-positive error path.', () => {

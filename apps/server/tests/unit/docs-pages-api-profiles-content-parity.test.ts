@@ -194,19 +194,25 @@ describe('W763 docs /api/profiles content parity', () => {
     );
   });
 
-  it("CRITICAL DELETE profile hard-deletes + cascades-state framing pinned. The 'Hard-deletes the profile metadata + cascades the underlying state' wording matches W752 dashboard delete-confirm 'Cookies + storage are wiped' framing.", () => {
+  it('CRITICAL DELETE profile is a SOFT delete (L4b recycle bin) — moves to trash, recoverable, frees the name, 30-day retention then purge. (Was hard-delete pre-recycle-bin; docs updated to match.)', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Hard-deletes the profile metadata \+ cascades the underlying state\./);
-    expect(p).toMatch(/`session\.created` events bound to the deleted profile fail loudly/);
+    expect(p).toMatch(/\*\*Soft-deletes\*\* the profile/);
+    expect(p).toContain('recycle bin');
+    expect(p).toMatch(/retained for 30 days.*then permanently purged/s);
+    // The stale hard-delete claim must be gone.
+    expect(p).not.toMatch(/the metadata is hard-deleted, not soft-deleted/);
   });
 
-  it('CRITICAL DELETE idempotent-204 framing pinned. The delete is genuinely idempotent — a re-delete returns 204, not 404 (2026-05-31 founder decision); the wording still explains the hard-delete-without-soft-delete model.', () => {
+  it('CRITICAL DELETE idempotent-204 framing pinned (re-deleting an already-trashed profile returns 204, not 404 — 2026-05-31 founder decision, still holds under soft-delete).', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Returns `204 No Content`, and is idempotent — re-deleting an\s*\n?already-deleted profile \(or an id that was never yours\) also returns\s*\n?`204` \(the metadata is hard-deleted, not soft-deleted\)\./,
+      /Returns `204 No Content`, and is idempotent — re-deleting an already-trashed\s*\n?profile \(or an id that was never yours\) also returns `204`\./,
     );
+    // Trash + restore endpoints documented.
+    expect(p).toMatch(/`GET \/v1\/profiles\/trash`/);
+    expect(p).toMatch(/`POST \/v1\/profiles\/:id\/restore`/);
   });
 
   it('CRITICAL 6-endpoint canonical action set pinned — POST + GET-list + GET-one + PATCH + POST-clone + DELETE.', () => {

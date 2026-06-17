@@ -293,17 +293,40 @@ the snapshot's `parent_profile_id` to `null` but does NOT delete
 the snapshot — the captured `parent_archetype` + `parent_name` +
 state remain restorable.
 
-## Delete
+## Delete (recycle bin)
 
 `DELETE /v1/profiles/:id`
 
-Hard-deletes the profile metadata + cascades the underlying state.
-`session.created` events bound to the deleted profile fail loudly
-on next use (no orphan-state retention).
+**Soft-deletes** the profile — it moves to the **recycle bin** rather than
+being destroyed. A trashed profile is hidden from `GET /v1/profiles`, doesn't
+count against your tier's profile cap, and can't be launched or looked up by id,
+but it's **recoverable** (see Restore below). Deleting also **frees the name**
+immediately, so you can create a new profile with the same name right away.
 
-Returns `204 No Content`, and is idempotent — re-deleting an
-already-deleted profile (or an id that was never yours) also returns
-`204` (the metadata is hard-deleted, not soft-deleted).
+Returns `204 No Content`, and is idempotent — re-deleting an already-trashed
+profile (or an id that was never yours) also returns `204`.
+
+Trashed profiles are **retained for 30 days**, then permanently purged (the
+underlying state is hard-deleted at that point and is no longer recoverable).
+
+## List trash
+
+`GET /v1/profiles/trash` → `{ "data": [ ...profile ] }`
+
+Lists your trashed profiles, newest-deleted first. Each row has the same shape
+as a live profile plus a non-null `deleted_at` timestamp. Read scope suffices
+(both team roles).
+
+## Restore
+
+`POST /v1/profiles/:id/restore` → the restored profile
+
+Un-trashes a soft-deleted profile (write scope; admin-only on a team workspace,
+same as delete). Returns:
+
+- `404` if the id isn't one of your trashed profiles.
+- `409 Conflict` if a **live** profile has since taken the trashed profile's
+  name — rename the live one (or the restored profile) first, then retry.
 
 ## Auth + scoping
 
