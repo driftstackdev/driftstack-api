@@ -125,7 +125,6 @@ import {
   UpdateWebhookRequestSchema,
   SessionStateSchema,
   SessionEgressConfigSchema,
-  SavedProxyConfigSchema,
   AgentModelSchema,
   AgentSessionSchema,
   ResumeSessionRequestSchema,
@@ -3097,77 +3096,10 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
   });
-  registerRoute(r, {
-    method: 'post',
-    path: '/v1/proxies',
-    summary: 'Save a reusable customer proxy config (SOCKS5/OpenVPN/WireGuard)',
-    tags: ['egress'],
-    security: auth,
-    request: {
-      body: { content: { 'application/json': { schema: SavedProxyConfigSchema } } },
-    },
-    responses: {
-      201: {
-        description: 'Proxy config saved; raw secrets are NEVER echoed back.',
-        content: {
-          'application/json': {
-            schema: z.object({
-              id: z.string(),
-              label: z.string(),
-              type: z.enum(['socks5', 'openvpn', 'wireguard']),
-            }),
-          },
-        },
-      },
-      ...errors4xx,
-      503: {
-        description: 'Egress backend not yet wired on this deployment.',
-        content: problemContent,
-      },
-    },
-  });
-  registerRoute(r, {
-    method: 'get',
-    path: '/v1/proxies',
-    summary: 'List the calling account saved proxy configs (no secret material)',
-    tags: ['egress'],
-    security: auth,
-    responses: {
-      200: {
-        description: 'List of saved proxy summaries.',
-        content: {
-          'application/json': {
-            schema: z.object({
-              data: z.array(
-                z.object({
-                  id: z.string(),
-                  label: z.string(),
-                  type: z.enum(['socks5', 'openvpn', 'wireguard']),
-                }),
-              ),
-            }),
-          },
-        },
-      },
-      ...errors4xx,
-    },
-  });
-  registerRoute(r, {
-    method: 'delete',
-    path: '/v1/proxies/{id}',
-    summary: 'Remove a saved proxy config',
-    tags: ['egress'],
-    security: auth,
-    responses: {
-      204: { description: 'Deleted.' },
-      404: { description: 'Proxy not found.', content: problemContent },
-      ...errors4xx,
-      503: {
-        description: 'Egress backend not yet wired on this deployment.',
-        content: problemContent,
-      },
-    },
-  });
+  // NOTE: the legacy /v1/proxies saved-proxies surface is intentionally NOT
+  // documented — it's a never-backed 503 stub, superseded by the live
+  // account-proxies API (/v1/account/me/proxies, documented above). The
+  // routes stay mounted but undocumented until a follow-up retires them.
 
   // ── AI-D — agent chat sessions ──────────────────────────────────
   // All four routes register as 503 FeatureUnavailable stubs until the
