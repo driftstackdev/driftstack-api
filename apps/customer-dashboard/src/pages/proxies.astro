@@ -2,20 +2,18 @@
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 
-// EG-API-1.5 — customer-facing /proxies page. Library of saved
-// SOCKS5/OpenVPN/WireGuard configs (per planning 133 §"Cross-agent
-// split" Agent 2 scope: POST/GET/DELETE /v1/proxies). Phase 1 surfaces
-// only SOCKS5 in the create form; OpenVPN + WireGuard cards are
-// stubbed with "coming in Phase 2/3" labels per planning 133's locked
-// roadmap.
+// Customer-facing /proxies page — a library of saved SOCKS5 / OpenVPN
+// configs the customer can attach to a session. Wired against the LIVE
+// account-proxies API (/v1/account/me/proxies: GET list, POST create,
+// DELETE, POST :id/test) — the same backend the desktop app uses, so a
+// proxy added here shows up there and vice-versa. (Superseded the old
+// /v1/proxies saved-proxies stub, which 503'd "not yet shipped".)
 //
 // Progressive-enhancement pattern same as the other dashboard pages:
-// SSG renders empty list + create form; inline <script> wires fetch
-// against /v1/proxies (with web-session-token Bearer auth via
-// ds_web_session_token). When the backend isn't wired yet (current
-// posture), POST 503s and the customer sees a "Saved-proxy storage is
-// not yet wired" banner — same activation-gate UX as the rest of the
-// dashboard's pre-launch surfaces.
+// SSG renders the list + create forms; the inline <script> wires fetch
+// with web-session-token Bearer auth (ds_web_session_token). Secrets
+// (passwords / .ovpn config) are write-only — wrapped server-side under
+// the account key, never echoed back.
 
 const apiBaseUrl = resolveApiBaseUrl();
 ---
@@ -121,13 +119,6 @@ const apiBaseUrl = resolveApiBaseUrl();
             class="mt-1 block w-full rounded-md border border-tk-border px-3 py-2 text-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
           />
         </label>
-        <div class="block">
-          <span class="block text-sm font-medium text-tk-ink-2">UDP ASSOCIATE</span>
-          <label class="mt-2 flex items-center gap-2 text-sm text-tk-ink-3">
-            <input id="proxy-udp" type="checkbox" checked class="rounded" />
-            Required for WebRTC (recommended)
-          </label>
-        </div>
         <label class="block">
           <span class="block text-sm font-medium text-tk-ink-2">Username (optional)</span>
           <input
@@ -305,13 +296,17 @@ const apiBaseUrl = resolveApiBaseUrl();
               '<p class="text-sm font-medium text-tk-ink">' +
               escapeHtml(p.label) +
               '</p>' +
-              '<p class="mt-1 text-xs text-tk-ink-3">type ' +
+              '<p class="mt-1 text-xs text-tk-ink-3">' +
               '<code class="font-mono">' +
-              escapeHtml(p.type) +
-              '</code> · id ' +
+              escapeHtml(p.scheme) +
+              '</code> · ' +
               '<code class="font-mono">' +
-              escapeHtml(p.id) +
+              escapeHtml(p.host) +
+              ':' +
+              escapeHtml(p.port) +
               '</code>' +
+              (p.username ? ' · ' + escapeHtml(p.username) : '') +
+              (p.has_secret ? ' · 🔒 config' : p.has_password ? ' · 🔒 auth' : '') +
               '</p>' +
               '<p class="mt-1 hidden text-xs" data-test-result="' +
               escapeHtml(p.id) +
@@ -355,7 +350,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           return;
         }
         try {
-          const res = await fetch(apiBaseUrl + '/v1/proxies', {
+          const res = await fetch(apiBaseUrl + '/v1/account/me/proxies', {
             headers: { authorization: 'Bearer ' + token },
             credentials: 'include',
           });
@@ -390,8 +385,6 @@ const apiBaseUrl = resolveApiBaseUrl();
         const port = readNumber('proxy-port');
         const username = readString('proxy-username');
         const password = readString('proxy-password');
-        const udpEl = root.querySelector('#proxy-udp');
-        const udp_associate = udpEl ? udpEl.checked : true;
         if (!label || !host || port === null) {
           setStatus('Label, host, and port are required.', 'error');
           return;
@@ -403,33 +396,23 @@ const apiBaseUrl = resolveApiBaseUrl();
         saveBtn.setAttribute('disabled', 'true');
         setStatus('Saving…', 'pending');
         try {
+          // Live account-proxies API (/v1/account/me/proxies): a flat body,
+          // scheme-tagged. password is write-only (wrapped server-side).
           const body = {
             label,
-            proxy: {
-              type: 'socks5',
-              socks5: {
-                host,
-                port,
-                udp_associate,
-                ...(username ? { username } : {}),
-                ...(password ? { password } : {}),
-              },
-            },
+            scheme: 'socks5',
+            host,
+            port,
+            username: username || null,
+            password: password || null,
           };
-          const res = await fetch(apiBaseUrl + '/v1/proxies', {
+          const res = await fetch(apiBaseUrl + '/v1/account/me/proxies', {
             method: 'POST',
             headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify(body),
           });
-          if (res.status === 503) {
-            const errBody = await res.json().catch(() => ({}));
-            setStatus(
-              errBody.detail ||
-                'Saved-proxy storage is not yet wired on this server. Check back after the EGRESS Phase 1 backend ships.',
-              'error',
-            );
-          } else if (!res.ok) {
+          if (!res.ok) {
             const errBody = await res.json().catch(() => ({}));
             setStatus(errBody.detail || 'Save failed (HTTP ' + res.status + ').', 'error');
           } else {
@@ -446,11 +429,12 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
       });
 
-      // Wave 1119+ founder-priority OpenVPN form. Same POST /v1/proxies
-      // contract as SOCKS5 — body shape is { label, proxy: {
-      // type:'openvpn', openvpn:{ config_blob, username?, password? }
-      // } }. Server-side validation (api-types egress.ts directive
-      // checks) surfaces missing `client` / `remote` errors here.
+      // Founder-priority OpenVPN form. Same live account-proxies API as
+      // SOCKS5 — flat body { label, scheme:'openvpn', host, port,
+      // openvpn:{ config_blob, username?, password? } }; host/port are the
+      // VPN endpoint parsed from the `remote` directive. Server-side
+      // validation (api-types egress.ts directive checks) surfaces missing
+      // `client` / `remote` errors here.
       const ovpnSaveBtn = root.querySelector('[data-action="save-openvpn"]');
       const ovpnStatus = root.querySelector('#ovpn-status');
 
@@ -485,34 +469,40 @@ const apiBaseUrl = resolveApiBaseUrl();
           setOvpnStatus('Sign in first.', 'error');
           return;
         }
+        // The live API stores the VPN endpoint as host:port (extracted from the
+        // `remote <host> <port>` directive — defaults to 1194 when the port is
+        // omitted). Surface the missing-remote case before the round-trip.
+        const remoteMatch = /^[ \t]*remote[ \t]+(\S+)(?:[ \t]+(\d+))?/m.exec(blob);
+        if (!remoteMatch) {
+          setOvpnStatus(
+            'OpenVPN config needs a `remote <host> <port>` directive (the VPN endpoint).',
+            'error',
+          );
+          return;
+        }
+        const ovpnHost = remoteMatch[1];
+        const ovpnPort = remoteMatch[2] ? Number(remoteMatch[2]) : 1194;
         ovpnSaveBtn.setAttribute('disabled', 'true');
         setOvpnStatus('Saving…', 'pending');
         try {
           const body = {
             label,
-            proxy: {
-              type: 'openvpn',
-              openvpn: {
-                config_blob: blob,
-                ...(username ? { username } : {}),
-                ...(password ? { password } : {}),
-              },
+            scheme: 'openvpn',
+            host: ovpnHost,
+            port: ovpnPort,
+            openvpn: {
+              config_blob: blob,
+              ...(username ? { username } : {}),
+              ...(password ? { password } : {}),
             },
           };
-          const res = await fetch(apiBaseUrl + '/v1/proxies', {
+          const res = await fetch(apiBaseUrl + '/v1/account/me/proxies', {
             method: 'POST',
             headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify(body),
           });
-          if (res.status === 503) {
-            const errBody = await res.json().catch(() => ({}));
-            setOvpnStatus(
-              errBody.detail ||
-                'Saved-proxy storage is not yet wired on this server. Check back after the EGRESS Phase 1 backend ships.',
-              'error',
-            );
-          } else if (res.status === 400) {
+          if (res.status === 400) {
             const errBody = await res.json().catch(() => ({}));
             setOvpnStatus(
               errBody.detail ||
@@ -541,9 +531,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         const target = event.target;
         if (!(target instanceof Element)) return;
 
-        // EG-API-1.7 — Test button: POST /v1/proxies/:id/test (runs from a
-        // Mac-fleet node). Pre-runner the endpoint 503s; surface the
-        // "scheduled / runs from a Mac node" message inline per-row.
+        // Test button: POST /v1/account/me/proxies/:id/test — a server-side
+        // TCP-reachability probe (SSRF-guarded). Surfaces reachable+latency or
+        // unreachable+reason inline per-row.
         const testBtn = target.closest('[data-action="test-proxy"]');
         if (testBtn) {
           const tid = testBtn.getAttribute('data-id');
@@ -553,28 +543,32 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (resultEl) {
             resultEl.classList.remove('hidden', 'text-emerald-300', 'text-red-300');
             resultEl.classList.add('text-tk-ink-3');
-            resultEl.textContent = 'Testing reachability from a Mac-fleet node…';
+            resultEl.textContent = 'Testing reachability…';
           }
           try {
-            const res = await fetch(apiBaseUrl + '/v1/proxies/' + encodeURIComponent(tid) + '/test', {
-              method: 'POST',
-              headers: { authorization: 'Bearer ' + token },
-              credentials: 'include',
-            });
+            const res = await fetch(
+              apiBaseUrl + '/v1/account/me/proxies/' + encodeURIComponent(tid) + '/test',
+              {
+                method: 'POST',
+                headers: { authorization: 'Bearer ' + token },
+                credentials: 'include',
+              },
+            );
             if (resultEl) {
-              if (res.ok) {
-                const b = await res.json().catch(() => ({}));
+              // Server-side TCP-reachability probe: 200 with { ok, latency_ms }
+              // on success, { ok:false, reason } on an unreachable proxy.
+              const b = await res.json().catch(() => ({}));
+              if (res.ok && b.ok) {
                 resultEl.classList.remove('text-tk-ink-3', 'text-red-300');
                 resultEl.classList.add('text-emerald-300');
                 resultEl.textContent =
                   'Reachable' +
-                  (b.udp_associate ? ' · UDP-ASSOCIATE ok' : '') +
                   (typeof b.latency_ms === 'number' ? ' · ' + b.latency_ms + 'ms' : '');
               } else {
-                const e = await res.json().catch(() => ({}));
-                resultEl.classList.add('text-tk-ink-3');
+                resultEl.classList.remove('text-tk-ink-3', 'text-emerald-300');
+                resultEl.classList.add('text-red-300');
                 resultEl.textContent =
-                  e.detail || 'Reachability testing runs from a Mac-fleet node and is not yet wired.';
+                  'Unreachable' + (b.reason ? ' · ' + b.reason : b.detail ? ' · ' + b.detail : '');
               }
             }
           } catch (err) {
@@ -596,18 +590,15 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!(await window.driftstackConfirm('Delete this saved proxy?', { confirmLabel: 'Delete' })))
           return;
         try {
-          const res = await fetch(apiBaseUrl + '/v1/proxies/' + encodeURIComponent(id), {
-            method: 'DELETE',
-            headers: { authorization: 'Bearer ' + token },
-            credentials: 'include',
-          });
-          if (res.status === 503) {
-            const errBody = await res.json().catch(() => ({}));
-            showBanner(
-              errBody.detail ||
-                'Saved-proxy delete not yet wired (no backend). Check back after EGRESS Phase 1.',
-            );
-          } else if (!res.ok && res.status !== 204) {
+          const res = await fetch(
+            apiBaseUrl + '/v1/account/me/proxies/' + encodeURIComponent(id),
+            {
+              method: 'DELETE',
+              headers: { authorization: 'Bearer ' + token },
+              credentials: 'include',
+            },
+          );
+          if (!res.ok && res.status !== 204) {
             showBanner('Delete failed (HTTP ' + res.status + ').');
           } else {
             await fetchList();

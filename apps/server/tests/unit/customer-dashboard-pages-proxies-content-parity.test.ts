@@ -1,10 +1,9 @@
-// EG-API-1.5 — drift guard for apps/customer-dashboard/src/pages/proxies.astro.
-// Customer-facing /proxies page (saved-config library) per planning 133
-// §"Cross-agent split" Agent 2 scope. Drift here either drops the SOCKS5
-// UDP_ASSOCIATE default-on (would silently disable WebRTC routing in
-// customer-saved configs) or breaks the activation-gate banner pattern
-// (would surface a confusing error on a fresh customer's first visit
-// before the EGRESS Phase 1 backend ships).
+// Drift guard for apps/customer-dashboard/src/pages/proxies.astro.
+// Customer-facing /proxies page (saved-config library). 2026-06-17 — migrated
+// off the dead /v1/proxies saved-proxies stub (which 503'd "not yet shipped")
+// onto the LIVE account-proxies API (/v1/account/me/proxies), the same backend
+// the desktop app uses. Drift here either breaks that wiring or drops the
+// write-only-secret framing.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -19,17 +18,18 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-describe('EG-API-1.5 apps/customer-dashboard/src/pages/proxies.astro content parity', () => {
+describe('apps/customer-dashboard/src/pages/proxies.astro content parity', () => {
   const body = read(LIB);
 
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it('Planning-133 framing pinned in source comment + Phase 1/2/3 roadmap reference', () => {
-    expect(body).toMatch(/EG-API-1\.5 — customer-facing \/proxies page/);
-    expect(body).toMatch(/per planning 133/);
-    expect(body).toMatch(/Phase 1 surfaces[\s\S]*?only SOCKS5/);
+  it('source comment documents the LIVE account-proxies API migration (no stale /v1/proxies stub framing)', () => {
+    expect(body).toMatch(/account-proxies API \(\/v1\/account\/me\/proxies/);
+    expect(body).toMatch(/the same backend the desktop app uses/i);
+    // The old EG-API-1.5 "503 not yet wired" activation-gate framing is gone.
+    expect(body).not.toMatch(/POST 503s and the customer sees/);
   });
 
   it('resolveApiBaseUrl wired — no hardcoded prod URL (W192 single-source-of-truth pattern)', () => {
@@ -38,51 +38,61 @@ describe('EG-API-1.5 apps/customer-dashboard/src/pages/proxies.astro content par
     expect(body).not.toMatch(/'https:\/\/api\.driftstack\.dev'/);
   });
 
-  it('SOCKS5 create form: label + host + port + UDP ASSOCIATE checkbox default-checked + username/password optional inputs', () => {
+  it('SOCKS5 create form: label + host + port + username/password optional inputs (the inert UDP checkbox is gone — the live API has no udp_associate field)', () => {
     expect(body).toMatch(/<input\s+id="proxy-label"[^>]*maxlength="120"/);
     expect(body).toMatch(/<input\s+id="proxy-host"[^>]*maxlength="253"/);
     expect(body).toMatch(/<input\s+id="proxy-port"[^>]*type="number"[^>]*min="1"[^>]*max="65535"/);
-    expect(body).toMatch(/<input\s+id="proxy-udp"\s+type="checkbox"\s+checked/);
     expect(body).toMatch(
       /<input\s+id="proxy-password"[^>]*type="password"[^>]*autocomplete="new-password"/,
     );
+    expect(body).not.toMatch(/id="proxy-udp"/);
   });
 
-  it('save-proxy handler POSTs to /v1/proxies with SavedProxyConfigSchema-shaped body { label, proxy: { type:"socks5", socks5:{host,port,udp_associate,?username,?password} } }', () => {
-    expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/proxies'/);
+  it('save-proxy handler POSTs to /v1/account/me/proxies with the flat AccountProxyInput body { label, scheme:"socks5", host, port, username, password }', () => {
+    expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/account\/me\/proxies'/);
     expect(body).toMatch(/method: 'POST'/);
-    expect(body).toMatch(/type: 'socks5',\s*\n?\s+socks5: \{/);
-    expect(body).toMatch(/udp_associate,/);
+    expect(body).toMatch(/scheme: 'socks5',/);
+    // password is write-only — sent as `password || null`, never re-read.
+    expect(body).toMatch(/password: password \|\| null,/);
+    // The dead /v1/proxies stub path + its 503 activation-gate handling are gone.
+    expect(body).not.toMatch(/fetch\(apiBaseUrl \+ '\/v1\/proxies'/);
+    expect(body).not.toMatch(/res\.status === 503/);
   });
 
-  it('503 handler surfaces planning-133-aware message ("Saved-proxy storage is not yet wired ... after the EGRESS Phase 1 backend ships") — pins the activation-gate UX so fresh customers do not see a bare HTTP-503 banner before the backend lands', () => {
-    expect(body).toMatch(/if \(res\.status === 503\)/);
-    expect(body).toMatch(/Saved-proxy storage is not yet wired/);
-    expect(body).toMatch(/EGRESS Phase 1 backend ships/);
-  });
-
-  it('list fetch wires GET /v1/proxies with the web-session-token Bearer + renders { data: [] } empty state', () => {
-    expect(body).toMatch(/await fetch\(apiBaseUrl \+ '\/v1\/proxies'/);
+  it('list fetch wires GET /v1/account/me/proxies with the web-session-token Bearer + renders the scheme/host:port row + empty state', () => {
+    expect(body).toMatch(/await fetch\(apiBaseUrl \+ '\/v1\/account\/me\/proxies'/);
     expect(body).toMatch(/'No saved proxies yet\.'/);
+    // Row renders the live metadata shape (scheme + host:port + secret marker).
+    expect(body).toMatch(/escapeHtml\(p\.scheme\)/);
+    expect(body).toMatch(/escapeHtml\(p\.host\)/);
+    expect(body).toMatch(/p\.has_secret \? ' · 🔒 config'/);
   });
 
-  it('delete handler wires DELETE /v1/proxies/<id> via delegated click + branded driftstackConfirm guard', () => {
+  it('delete handler wires DELETE /v1/account/me/proxies/<id> via delegated click + branded driftstackConfirm guard', () => {
     expect(body).toMatch(/method: 'DELETE'/);
-    expect(body).toMatch(/'\/v1\/proxies\/' \+ encodeURIComponent\(id\)/);
+    expect(body).toMatch(/'\/v1\/account\/me\/proxies\/' \+ encodeURIComponent\(id\)/);
     expect(body).toMatch(/window\.driftstackConfirm\('Delete this saved proxy\?'/);
   });
 
-  it('Phase 2 OpenVPN + Phase 3 WireGuard placeholder cards pinned (planning 133 phased roadmap)', () => {
+  it('test handler POSTs /v1/account/me/proxies/<id>/test and reads the server-side probe result { ok, latency_ms } | { ok:false, reason }', () => {
+    expect(body).toMatch(/'\/v1\/account\/me\/proxies\/' \+ encodeURIComponent\(tid\) \+ '\/test'/);
+    expect(body).toMatch(/res\.ok && b\.ok/);
+    expect(body).toMatch(/b\.latency_ms/);
+    expect(body).toMatch(/b\.reason/);
+  });
+
+  it('UDP-ASSOCIATE rationale copy retained as form guidance (not a stylistic note) — pins the WebRTC reason so a copy-edit does not lose the signal', () => {
+    expect(body).toMatch(/UDP ASSOCIATE/);
+    expect(body).toMatch(/WebRTC/);
+  });
+
+  it('Phase 2 OpenVPN + Phase 3 WireGuard egress-backend roadmap cards pinned', () => {
     expect(body).toMatch(/Phase 2[\s\S]*?OpenVPN/);
     expect(body).toMatch(/Phase 3[\s\S]*?WireGuard/);
     expect(body).toMatch(/Apple\s+Virtualization\.framework Lightweight VM/);
   });
 
-  it("UDP ASSOCIATE hint text is the WebRTC rationale (not a stylistic note) — pins the planning-133 reason so a future copy-edit doesn't lose the signal that disabling UDP ASSOCIATE breaks WebRTC routing", () => {
-    expect(body).toMatch(/Required for WebRTC/);
-  });
-
-  it('Wave 1119+ founder-priority OpenVPN form (2026-05-16 founder verdict: focus OpenVPN/SOCKS5 over WireGuard). Form fields pinned: label (maxlength=120), .ovpn config_blob textarea (maxlength=262144 = 256KB), optional username/password inputs, save button with data-action="save-openvpn", + a server-side 400-handler with the api-types directive-rejection message ("`client` and `remote <host> <port>` directives" framing matches the egress.ts refine message).', () => {
+  it('founder-priority OpenVPN form: label + .ovpn textarea (256KB) + optional creds + save button; posts the flat scheme:"openvpn" body with host/port parsed from the remote directive; 400-handler keeps the directive-rejection hint', () => {
     expect(body).toMatch(/<section[^>]*data-create-openvpn-form/);
     expect(body).toMatch(/<input\s+id="ovpn-label"[^>]*maxlength="120"/);
     expect(body).toMatch(/<textarea\s+id="ovpn-blob"[^>]*maxlength="262144"/);
@@ -90,11 +100,13 @@ describe('EG-API-1.5 apps/customer-dashboard/src/pages/proxies.astro content par
       /<input\s+id="ovpn-password"[^>]*type="password"[^>]*autocomplete="new-password"/,
     );
     expect(body).toMatch(/data-action="save-openvpn"/);
-    expect(body).toMatch(/type: 'openvpn',\s*\n?\s+openvpn: \{/);
+    expect(body).toMatch(/scheme: 'openvpn',/);
     expect(body).toMatch(/config_blob: blob/);
+    // host/port extracted from the `remote <host> <port>` directive client-side.
+    expect(body).toContain('const remoteMatch =');
+    expect(body).toContain('host: ovpnHost,');
+    expect(body).toContain('port: ovpnPort,');
     expect(body).toMatch(/`client`\s+and\s+`remote <host> <port>` directives/);
-    // 400-branch surfaces the server-side .ovpn-validation reject with
-    // a user-actionable hint pointing at the missing directive.
     expect(body).toMatch(/res\.status === 400/);
   });
 });
