@@ -13,6 +13,7 @@ const ACTION_LABEL: Record<string, string> = {
   'account.login': 'Login',
   'account.logout': 'Logout',
   'account.password_changed': 'Password changed',
+  'account.web_session_revoked': 'Sign-in revoked',
   // V-398 — V-353b MFA lifecycle.
   'account.mfa_enrolled': 'MFA enrolled',
   'account.mfa_disabled': 'MFA disabled',
@@ -94,6 +95,7 @@ const FILTER_OPTIONS = [
   { value: 'account.login', label: 'Logins' },
   { value: 'account.logout', label: 'Logouts' },
   { value: 'account.password_changed', label: 'Password changes' },
+  { value: 'account.web_session_revoked', label: 'Sign-ins revoked' },
   // V-398 — V-353b MFA lifecycle (enroll / disable / recovery use).
   { value: 'account.mfa_enrolled', label: 'MFA enrolled' },
   { value: 'account.mfa_disabled', label: 'MFA disabled' },

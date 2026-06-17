@@ -1067,7 +1067,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     });
     // V-355 — customer-facing web-session list + revoke. Lives next to
     // the auth flows since it shares the AuthFlowsService surface.
-    registerAccountWebSessionsRoutes(app, { service: deps.authFlowsService });
+    registerAccountWebSessionsRoutes(app, {
+      service: deps.authFlowsService,
+      // Audit sign-in revocations (account.web_session_revoked).
+      ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
+    });
   }
   // V-353b — customer-facing MFA enrollment + verify + disable +
   // recovery codes. Independent of authFlowsService — the routes are

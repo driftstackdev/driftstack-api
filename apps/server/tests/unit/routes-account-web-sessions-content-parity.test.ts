@@ -111,7 +111,11 @@ describe('W417.B apps/server/src/routes/account-web-sessions.ts content parity',
       /app\.delete<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/account\/web-sessions\/:id',[\s\S]*?\{ preHandler: \[app\.requireAuth, app\.requireScope\('account_owner'\), app\.rateLimit\('global'\)\] \},/,
     );
     expect(body).toMatch(
-      /const ok = await service\.revokeWebSessionForAccount\(ctx\.account\.id, sessionId\);\s*\n?\s*if \(!ok\) throw new NotFoundError\('Session not found\.'\);\s*\n?\s*reply\.code\(204\);/,
+      /const ok = await service\.revokeWebSessionForAccount\(ctx\.account\.id, sessionId\);\s*\n?\s*if \(!ok\) throw new NotFoundError\('Session not found\.'\);/,
+    );
+    // Security-relevant revocation is audited (account.web_session_revoked).
+    expect(body).toMatch(
+      /await emitRevoked\(request, ctx\.account\.id, `wsess_\$\{sessionId\}`, \{ scope: 'single' \}\);\s*\n?\s*reply\.code\(204\);/,
     );
   });
 
@@ -130,8 +134,11 @@ describe('W417.B apps/server/src/routes/account-web-sessions.ts content parity',
 
   it('Bulk revoke service dispatch: revokeAllWebSessionsExceptCurrent(accountId, currentId); 200 reply { revoked: n }', () => {
     expect(body).toMatch(
-      /const n = await service\.revokeAllWebSessionsExceptCurrent\(ctx\.account\.id, currentId\);\s*\n?\s*reply\.code\(200\);\s*\n?\s*return \{ revoked: n \};/,
+      /const n = await service\.revokeAllWebSessionsExceptCurrent\(ctx\.account\.id, currentId\);/,
     );
+    // Bulk revocation is audited too (only when something was actually revoked).
+    expect(body).toMatch(/if \(n > 0\) \{\s*\n?\s*await emitRevoked\(/);
+    expect(body).toMatch(/reply\.code\(200\);\s*\n?\s*return \{ revoked: n \};/);
   });
 
   it('GET list: requireAuth + rateLimit; service.listActiveWebSessions(accountId); { data: rows.map(publicSession) }', () => {

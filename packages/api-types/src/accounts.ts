@@ -226,6 +226,9 @@ export const AccountAuditActionSchema = z.enum([
   'account.login',
   'account.logout',
   'account.password_changed',
+  // V-355 — a dashboard web session (sign-in) was revoked, either a single
+  // device or "sign out everywhere except current". Security-relevant.
+  'account.web_session_revoked',
   'api_key.minted',
   'api_key.revoked',
   // V-296 — customer self-service rotation; old key continues for grace

@@ -18,10 +18,15 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AuthFlowsService, WebSessionRow } from '../services/auth-flows.js';
+import type { AccountAuditService } from '../services/account-audit.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
+import { readClientIp } from '../lib/client-ip.js';
 
 export interface AccountWebSessionsRoutesOptions {
   service: AuthFlowsService;
+  /** Best-effort audit emitter for account.web_session_revoked (a
+   *  security-relevant sign-in revocation). Omitted → no audit. */
+  accountAudit?: AccountAuditService;
 }
 
 /**
@@ -110,6 +115,31 @@ export function registerAccountWebSessionsRoutes(
   opts: AccountWebSessionsRoutesOptions,
 ): void {
   const { service } = opts;
+  const accountAudit = opts.accountAudit ?? null;
+
+  // Best-effort audit of a sign-in revocation (single device or bulk). Carries
+  // only the scope + count — no IP/UA of the revoked session. Swallows failures
+  // so an audit hiccup never blocks the security operation the customer asked for.
+  async function emitRevoked(
+    request: FastifyRequest,
+    accountId: string,
+    targetResourceId: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    if (!accountAudit) return;
+    try {
+      await accountAudit.record({
+        accountId,
+        actorType: 'customer',
+        action: 'account.web_session_revoked',
+        targetResourceId,
+        payload,
+        ipAddress: readClientIp(request),
+      });
+    } catch {
+      // Swallow — audit failures must not break session revocation.
+    }
+  }
 
   app.get(
     '/v1/account/web-sessions',
@@ -136,6 +166,7 @@ export function registerAccountWebSessionsRoutes(
       const sessionId = uuidFromPublicSessionId(request.params.id);
       const ok = await service.revokeWebSessionForAccount(ctx.account.id, sessionId);
       if (!ok) throw new NotFoundError('Session not found.');
+      await emitRevoked(request, ctx.account.id, `wsess_${sessionId}`, { scope: 'single' });
       reply.code(204);
       return null;
     },
@@ -161,6 +192,12 @@ export function registerAccountWebSessionsRoutes(
         throw new BadRequestError('Bulk revoke is only callable from a dashboard web session.');
       }
       const n = await service.revokeAllWebSessionsExceptCurrent(ctx.account.id, currentId);
+      if (n > 0) {
+        await emitRevoked(request, ctx.account.id, `account_${ctx.account.id}`, {
+          scope: 'all_except_current',
+          revoked: n,
+        });
+      }
       reply.code(200);
       return { revoked: n };
     },

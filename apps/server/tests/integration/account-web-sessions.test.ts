@@ -161,6 +161,18 @@ describe('DELETE /v1/account/web-sessions/:id (V-355)', () => {
       headers: { authorization: `Bearer ${a.token}` },
     });
     expect(list2.json<ListWebSessionsResponse>().data.length).toBe(1);
+
+    // The revocation is audited (account.web_session_revoked, security-relevant).
+    const log = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=account.web_session_revoked&limit=10',
+      headers: { authorization: `Bearer ${a.token}` },
+    });
+    expect(log.statusCode).toBe(200);
+    const entries = log.json<{
+      data: Array<{ action: string; target_resource_id: string | null }>;
+    }>().data;
+    expect(entries.some((e) => e.target_resource_id === other!.id)).toBe(true);
   });
 
   it('400 on malformed id', async () => {
