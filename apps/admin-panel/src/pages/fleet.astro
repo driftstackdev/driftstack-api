@@ -32,7 +32,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     >
     </div>
 
-    <div class="overflow-hidden rounded-lg border border-tk-border">
+    <div class="overflow-x-auto rounded-lg border border-tk-border">
       <table class="min-w-full divide-y divide-tk-border text-sm">
         <thead class="bg-tk-bg text-left text-xs font-medium uppercase tracking-wide text-tk-ink-3">
           <tr>
@@ -40,12 +40,18 @@ const apiBaseUrl = resolveApiBaseUrl();
             <th class="px-4 py-3">Region</th>
             <th class="px-4 py-3">Connected</th>
             <th class="px-4 py-3">LiveKit</th>
+            <th class="px-4 py-3">Sessions</th>
+            <th class="px-4 py-3">CPU / Mem</th>
+            <th class="px-4 py-3">Disk free</th>
+            <th class="px-4 py-3">Health</th>
+            <th class="px-4 py-3">Uptime</th>
+            <th class="px-4 py-3">Harness</th>
             <th class="px-4 py-3">Last seen</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100" data-list="fleet">
           <tr>
-            <td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">Loading…</td>
+            <td colspan="11" class="px-4 py-8 text-center text-sm text-tk-ink-3">Loading…</td>
           </tr>
         </tbody>
       </table>
@@ -82,6 +88,49 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!iso) return '—';
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
       }
+      function fmtPct(n) {
+        return typeof n === 'number' ? Math.round(n) + '%' : '—';
+      }
+      function fmtSessions(hb) {
+        if (!hb) return '—';
+        const active = typeof hb.activeSessionCount === 'number' ? hb.activeSessionCount : '?';
+        const max = typeof hb.maxConcurrent === 'number' ? hb.maxConcurrent : '?';
+        return active + ' / ' + max;
+      }
+      function fmtUptime(s) {
+        if (typeof s !== 'number' || s < 0) return '—';
+        const d = Math.floor(s / 86400);
+        const h = Math.floor((s % 86400) / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        if (d > 0) return d + 'd ' + h + 'h';
+        if (h > 0) return h + 'h ' + m + 'm';
+        return m + 'm';
+      }
+      // thermalState nominal|fair|serious|critical → green/amber/red; a draining
+      // node + a non-normal memory-pressure level each add a badge. '—' when no
+      // heartbeat telemetry has arrived yet.
+      function pill(text, cls) {
+        return '<span class="rounded-full px-2 py-0.5 text-xs ' + cls + '">' + escapeHtml(text) + '</span>';
+      }
+      function healthBadges(hb) {
+        if (!hb) return '<span class="text-tk-ink-3">—</span>';
+        const out = [];
+        const t = hb.thermalState;
+        if (typeof t === 'string') {
+          const cls =
+            t === 'nominal'
+              ? 'bg-emerald-50 text-emerald-700'
+              : t === 'fair'
+                ? 'bg-amber-50 text-amber-700'
+                : 'bg-red-50 text-red-700';
+          out.push(pill(t, cls));
+        }
+        if (hb.drainState === 'draining') out.push(pill('draining', 'bg-amber-50 text-amber-700'));
+        const mp = hb.memoryPressureLevel;
+        if (typeof mp === 'string' && mp !== 'normal')
+          out.push(pill('mem ' + mp, 'bg-red-50 text-red-700'));
+        return out.length > 0 ? out.join(' ') : pill('ok', 'bg-emerald-50 text-emerald-700');
+      }
       function boolBadge(value, onText, offText, unknownText) {
         if (value === null || value === undefined) {
           return (
@@ -116,6 +165,29 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<td class="px-4 py-3">' +
           boolBadge(n.has_livekit, 'yes', 'no', '—') +
           '</td>' +
+          // Latest-heartbeat telemetry (migration 0083); '—' until the node beats.
+          '<td class="px-4 py-3 text-tk-ink-2">' +
+          escapeHtml(fmtSessions(n.last_heartbeat)) +
+          '</td>' +
+          '<td class="px-4 py-3 text-tk-ink-2">' +
+          escapeHtml(
+            fmtPct(n.last_heartbeat && n.last_heartbeat.cpuPercent) +
+              ' / ' +
+              fmtPct(n.last_heartbeat && n.last_heartbeat.memoryPercent),
+          ) +
+          '</td>' +
+          '<td class="px-4 py-3 text-tk-ink-2">' +
+          escapeHtml(fmtPct(n.last_heartbeat && n.last_heartbeat.diskFreePercent)) +
+          '</td>' +
+          '<td class="px-4 py-3">' +
+          healthBadges(n.last_heartbeat) +
+          '</td>' +
+          '<td class="px-4 py-3 text-tk-ink-2">' +
+          escapeHtml(fmtUptime(n.last_heartbeat && n.last_heartbeat.uptimeSeconds)) +
+          '</td>' +
+          '<td class="px-4 py-3 font-mono text-xs text-tk-ink-3">' +
+          escapeHtml((n.last_heartbeat && n.last_heartbeat.harnessVersion) || '—') +
+          '</td>' +
           '<td class="px-4 py-3 text-tk-ink-2">' +
           escapeHtml(fmtIso(n.last_seen_at)) +
           '</td>' +
@@ -127,7 +199,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!token) {
           if (tbody)
             tbody.innerHTML =
-              '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">Sign in as a staff admin to view the fleet.</td></tr>';
+              '<tr><td colspan="11" class="px-4 py-8 text-center text-sm text-tk-ink-3">Sign in as a staff admin to view the fleet.</td></tr>';
           return Promise.resolve();
         }
         return fetch(apiBaseUrl + '/v1/mac-nodes', {
@@ -143,7 +215,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (tbody) {
               if (rows.length === 0) {
                 tbody.innerHTML =
-                  '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">No fleet nodes registered yet. Start a Mac worker (harness with DRIFTSTACK_ENABLE_DRIVE_BRIDGE=1) and it will appear here once it registers.</td></tr>';
+                  '<tr><td colspan="11" class="px-4 py-8 text-center text-sm text-tk-ink-3">No fleet nodes registered yet. Start a Mac worker (harness with DRIFTSTACK_ENABLE_DRIVE_BRIDGE=1) and it will appear here once it registers.</td></tr>';
               } else {
                 tbody.innerHTML = rows.map(rowHtml).join('');
               }
@@ -165,7 +237,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             // W604 discipline: never leave fabricated rows; show honest state.
             if (tbody)
               tbody.innerHTML =
-                '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">Could not load fleet nodes. Resolve the error above and retry.</td></tr>';
+                '<tr><td colspan="11" class="px-4 py-8 text-center text-sm text-tk-ink-3">Could not load fleet nodes. Resolve the error above and retry.</td></tr>';
             if (footnote) footnote.textContent = '';
             if (msg === 'forbidden') {
               showBanner(
