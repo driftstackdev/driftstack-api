@@ -22,7 +22,15 @@ import { z } from 'zod';
 import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
 import { encryptLivekitSecret } from '../lib/livekit-secret-encryption.js';
-import { BadRequestError, NotFoundError, ValidationError } from '../lib/errors.js';
+import {
+  BadRequestError,
+  ConflictError,
+  FeatureUnavailableError,
+  NotFoundError,
+  ValidationError,
+} from '../lib/errors.js';
+import { serializeControlCommand } from '../services/harness-control-codec.js';
+import { CONTROL_COMMANDS } from '../schemas/harness-control-protocol.js';
 import type { AdminAuditService } from '../services/admin-audit.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 import { readClientIp } from '../lib/client-ip.js';
@@ -53,6 +61,15 @@ const RegisterNodeBodySchema = z.object({
   display_name: z.string().min(1).max(128),
   region: z.string().min(1).max(64),
   hardware_class: z.string().min(1).max(64),
+});
+
+// Fleet-admin (§A5) node control body — POST /v1/mac-nodes/:id/control.
+// command is the node-level action; reason is operator free text (logged on the
+// node + carried for the audit trail). The frame itself is built by
+// serializeControlCommand and pushed over the node's WSS.
+const ControlNodeBodySchema = z.object({
+  command: z.enum(CONTROL_COMMANDS),
+  reason: z.string().min(1).max(512).optional(),
 });
 
 export interface RegisterMacNodesRoutesDeps {
@@ -283,6 +300,63 @@ export function registerMacNodesRoutes(
               ? null
               : deps.controlRegistry.get(n.id) !== undefined,
         })),
+      });
+    },
+  );
+
+  // Fleet-admin (§A5) node control — POST /v1/mac-nodes/:id/control. Admin-scoped
+  // operator action (cordon / uncordon / drain / restart) pushed to the node over
+  // its live WSS connection via the controlCommand frame (A2-A3-BUS W2203). v1
+  // RBAC: driftstack_internal_admin (there is no finer staff operator/admin split
+  // yet; admin-only is the conservative choice — the §A5 operator/admin tiering is
+  // a later slice once a staff-role surface exists). 503 when the control plane is
+  // off (no registry); 404 unknown node; 409 when the node has no live connection
+  // (can't deliver). 202 on accepted — the harness applies it asynchronously and
+  // reflects the result via heartbeat (drainState) / reconnect (restart).
+  app.post(
+    '/v1/mac-nodes/:id/control',
+    {
+      preHandler: [
+        app.requireAuth,
+        app.requireScope('driftstack_internal_admin'),
+        app.rateLimit('global'),
+      ],
+    },
+    async (req, reply) => {
+      if (deps.controlRegistry === undefined) {
+        throw new FeatureUnavailableError('Fleet control plane is not enabled.');
+      }
+      const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+      if (!params.success) {
+        throw new BadRequestError('mac node id must be a UUID.');
+      }
+      const parsed = ControlNodeBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError(parsed.error.flatten());
+      }
+      const nodeId = params.data.id;
+      // 404 an unknown node BEFORE checking the connection (clearer than a bare
+      // "not connected" for an id that was never registered).
+      const detail = await repo.getDetail(nodeId);
+      if (detail === null) {
+        throw new NotFoundError(`Fleet node ${nodeId} not found.`);
+      }
+      const conn = deps.controlRegistry.get(nodeId);
+      if (conn === undefined) {
+        throw new ConflictError(
+          `Fleet node ${nodeId} has no live control-plane connection — cannot deliver the command.`,
+        );
+      }
+      conn.sendControlCommand(
+        serializeControlCommand({
+          command: parsed.data.command,
+          ...(parsed.data.reason !== undefined ? { reason: parsed.data.reason } : {}),
+        }),
+      );
+      return reply.code(202).send({
+        mac_node_id: nodeId,
+        command: parsed.data.command,
+        accepted: true,
       });
     },
   );
