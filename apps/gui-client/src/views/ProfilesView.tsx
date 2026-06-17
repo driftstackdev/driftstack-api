@@ -2058,6 +2058,9 @@ export function ProfilesView({
       {createOpen && (
         <CreateProfileModal
           existingFolders={allFolders}
+          // When the user is viewing a specific folder, a new profile inherits it
+          // (founder: "created inside a folder → add it to that folder, not unfiled").
+          initialFolder={folderFilter !== 'all' && folderFilter !== 'unfiled' ? folderFilter : ''}
           onClose={() => setCreateOpen(false)}
           onCreated={() => {
             setCreateOpen(false);
@@ -2089,11 +2092,15 @@ function CreateProfileModal({
   onClose,
   onCreated,
   existingFolders,
+  initialFolder,
 }: {
   onClose: () => void;
   onCreated: () => void;
   /** Folder names for the Notes-tab picker (from the hub's organization map). */
   existingFolders: string[];
+  /** Pre-selected folder — the one the user is currently viewing, so a profile
+   *  created from inside a folder lands there. Empty = unfiled. */
+  initialFolder?: string;
 }): JSX.Element {
   const { client, settings } = useSettings();
   const [name, setName] = useState('');
@@ -2112,7 +2119,7 @@ function CreateProfileModal({
     'identity',
   );
   // Organization metadata at create (backend columns, migration 0076).
-  const [folder, setFolder] = useState('');
+  const [folder, setFolder] = useState(initialFolder ?? '');
   const [tags, setTags] = useState('');
   // Night-arc H: named create-presets (demo's From-template / Save-as-
   // template) — client-side store; loading one fills the form fields.
