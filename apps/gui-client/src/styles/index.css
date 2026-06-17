@@ -193,11 +193,14 @@
   --surface-base-rgb: 15 23 42; /* slate-900 #0f172a */
   --surface-raised-rgb: 30 41 59; /* slate-800 #1e293b */
   --surface-elevated-rgb: 51 65 85; /* slate-700 #334155 */
-  --surface-inset-rgb: 2 6 23; /* slate-950 #020617 */
+  --surface-inset-rgb: 10 15 28; /* recessed slate (#0a0f1c) — inputs/insets stay in
+                                     the slate family instead of reading as near-black
+                                     holes against the lifted cards (founder: "match the grey"). */
   --surface-divider-rgb: 71 85 105; /* slate-600 #475569 */
   --ink-primary-rgb: 241 245 249; /* slate-100 — crisp on the lighter slate */
-  --ink-secondary-rgb: 148 163 184; /* slate-400 */
-  --ink-muted-rgb: 100 116 139; /* slate-500 */
+  --ink-secondary-rgb: 203 213 225; /* slate-300 — lighter so secondary text reads
+                                        clearly on the lifted slate (founder: "lighter/white"). */
+  --ink-muted-rgb: 148 163 184; /* slate-400 — muted but legible, not washed out */
   --ink-inverted-rgb: 15 23 42;
   --status-ready-rgb: 52 211 153;
   --status-busy-rgb: 251 191 36;
