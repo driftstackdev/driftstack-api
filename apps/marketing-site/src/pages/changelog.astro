@@ -17,6 +17,18 @@ interface ChangelogEntry {
 
 const ENTRIES: readonly ChangelogEntry[] = [
   {
+    date: '2026-06-16',
+    category: 'launch',
+    title: 'Route sessions through your own proxies',
+    body: 'You can now register your own SOCKS5 proxies against your account and run a session through one, so it browses from your egress IP. Manage them in the desktop app under Proxies (set one as a profile default and launching routes through it automatically) or via the API at /v1/account/me/proxies — list, create, update, delete, and test reachability. Pass proxy_id when creating a session to choose the egress per run. Proxy passwords are encrypted at rest under your account key and are never returned, and hosts pointed at private or internal addresses are rejected. Documented at docs.driftstack.dev/api/proxies.',
+  },
+  {
+    date: '2026-06-16',
+    category: 'launch',
+    title: 'Deleted profiles go to a recycle bin',
+    body: 'Deleting a profile is now reversible. A deleted profile moves to a recycle bin — hidden from your list and freeing up its name for reuse, but restorable for 30 days, after which it is permanently purged. Restore from the Trash view in the desktop app, or via the API: GET /v1/profiles/trash to list trashed profiles and POST /v1/profiles/:id/restore to bring one back. Documented at docs.driftstack.dev/api/profiles.',
+  },
+  {
     date: '2026-06-11',
     category: 'launch',
     title: 'Desktop app: the session viewer is now a real phone browser',
