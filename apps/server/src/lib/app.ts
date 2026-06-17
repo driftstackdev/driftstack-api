@@ -1027,6 +1027,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       accountProxiesRepo: deps.accountProxiesRepo ?? null,
       profileMasterKey: deps.profileMasterKey ?? null,
       ...(deps.proxyTcpProbe !== undefined ? { proxyTcpProbe: deps.proxyTcpProbe } : {}),
+      // Audit egress-config changes (proxy.created / proxy.deleted).
+      ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
       // 2026-05-19 — OAuth-IDP avatar fallback for the avatar_url
       // response field. When the account has no R2-uploaded avatar
       // BUT has an OAuth link with a provider_avatar_url, return that

@@ -340,3 +340,59 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe('proxy audit emit — egress-config changes land in the account audit log', () => {
+  interface AuditEntry {
+    action: string;
+    target_resource_id: string | null;
+  }
+
+  it('POST emits proxy.created with the proxy id + non-secret metadata (no password)', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'audited', host: '1.2.3.4', port: 1080, password: 'hunter2' },
+    });
+    expect(create.statusCode).toBe(201);
+    const id = create.json<ProxyMeta>().id;
+
+    const log = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=proxy.created&limit=10',
+      headers: auth(fx),
+    });
+    expect(log.statusCode).toBe(200);
+    const entries = log.json<{ data: AuditEntry[] }>().data;
+    const entry = entries.find((e) => e.target_resource_id === `proxy_${id}`);
+    expect(entry).toBeTruthy();
+    // The secret must never leak into the audit log either.
+    expect(log.body).not.toContain('hunter2');
+  });
+
+  it('DELETE emits proxy.deleted for the removed proxy', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'to-delete', host: '5.6.7.8', port: 1080 },
+    });
+    const id = create.json<ProxyMeta>().id;
+    const del = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/account/me/proxies/${id}`,
+      headers: auth(fx),
+    });
+    expect(del.statusCode).toBe(204);
+
+    const log = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=proxy.deleted&limit=10',
+      headers: auth(fx),
+    });
+    const entries = log.json<{ data: AuditEntry[] }>().data;
+    expect(entries.some((e) => e.target_resource_id === `proxy_${id}`)).toBe(true);
+  });
+});

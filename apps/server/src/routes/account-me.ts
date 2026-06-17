@@ -9,7 +9,7 @@
 // and `/v1/account/audit-log` (event ledger) — this is the dashboard
 // header view.
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   AccountOrganizationSchema,
   AccountProxyInputSchema,
@@ -27,6 +27,8 @@ import type { AuthCache } from '../services/auth-cache.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import type { MfaService } from '../services/mfa.js';
+import type { AccountAuditService } from '../services/account-audit.js';
+import { readClientIp } from '../lib/client-ip.js';
 import type {
   AccountProxiesRepo,
   AccountProxyRow,
@@ -86,6 +88,10 @@ export interface AccountMeRoutesOptions {
    *  endpoint (resolves on connect, rejects on timeout/refused). Defaults to the
    *  SOCKS5 backend's defaultTcpProbe; tests inject a deterministic stub. */
   proxyTcpProbe?: (host: string, port: number, timeoutMs: number) => Promise<void>;
+  /** Best-effort audit emitter for proxy.created / proxy.deleted (egress-config
+   *  changes are security-relevant + already have dashboard labels/filters).
+   *  Omitted → no audit (the customer op still succeeds). */
+  accountAudit?: AccountAuditService;
 }
 
 /**
@@ -108,6 +114,31 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   const accountProxiesRepo = opts.accountProxiesRepo ?? null;
   const proxyMasterKey = opts.profileMasterKey ?? null;
   const proxyTcpProbe = opts.proxyTcpProbe ?? defaultTcpProbe;
+  const accountAudit = opts.accountAudit ?? null;
+
+  // Best-effort audit emit for proxy lifecycle (egress-config changes). Carries
+  // only non-secret metadata (id / label / scheme) — NEVER the credential.
+  // Swallows failures so an audit hiccup never breaks the customer operation.
+  async function emitProxyAudit(
+    request: FastifyRequest,
+    accountId: string,
+    action: 'proxy.created' | 'proxy.deleted',
+    proxy: { id: string; label: string; scheme: string },
+  ): Promise<void> {
+    if (!accountAudit) return;
+    try {
+      await accountAudit.record({
+        accountId,
+        actorType: 'customer',
+        action,
+        targetResourceId: `proxy_${proxy.id}`,
+        payload: { proxy_id: proxy.id, label: proxy.label, scheme: proxy.scheme },
+        ipAddress: readClientIp(request),
+      });
+    } catch {
+      // Swallow — audit emit failures must not break the proxy operation.
+    }
+  }
 
   // 2026-05-19 — first non-null providerAvatarUrl from the
   // account's OAuth links, used as fallback when avatar_r2_key is
@@ -469,6 +500,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         wrappedPassword,
         ...(vpn !== null ? { wrappedSecret: vpn.wrappedSecret, config: vpn.config } : {}),
       });
+      await emitProxyAudit(request, ctx.account.id, 'proxy.created', row);
       reply.code(201);
       return proxyToMetadata(row);
     },
@@ -519,8 +551,14 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       if (!ctx) throw new Error('account context missing after requireAuth');
       if (!accountProxiesRepo) throw new FeatureUnavailableError('Proxies are not configured.');
       const { id } = request.params as { id: string };
+      // Read the row first so the audit entry carries its label/scheme (delete
+      // returns only a boolean). Best-effort — a missing read still deletes.
+      const existing = await accountProxiesRepo.findById({ id, accountId: ctx.account.id });
       const ok = await accountProxiesRepo.delete({ id, accountId: ctx.account.id });
       if (!ok) throw new NotFoundError('Proxy not found.');
+      if (existing !== null) {
+        await emitProxyAudit(request, ctx.account.id, 'proxy.deleted', existing);
+      }
       reply.code(204);
       return null;
     },
