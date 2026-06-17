@@ -230,7 +230,7 @@ export function ProxiesView(): JSX.Element {
     editor.kind === 'edit' ? (state.proxies.find((p) => p.id === editor.id) ?? null) : null;
 
   return (
-    <div className="flex h-full flex-col gap-4 p-6">
+    <div className="flex flex-col gap-4 p-6">
       {/* HERO strip (console.html) — section-label + title with at-a-glance
           context on the left; quiet Test-all + primary New-proxy on the
           right. Mirrors the Profiles hub hero rhythm. */}
@@ -297,54 +297,53 @@ export function ProxiesView(): JSX.Element {
         </div>
       </div>
 
-      {/* Scrollable content region — the hero stays pinned while the stats,
-          proxy list, and (tall) add/edit form scroll, so the form's buttons +
-          the stats are always reachable instead of clipped off-screen. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-        {/* Pool summary — capability-board port. Counts are over TESTED
-          proxies only (no fabricated health for never-probed entries). */}
-        {tested.length > 0 && (
-          <div
-            data-component="proxy-pool-stats"
-            className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-surface-divider bg-surface-divider"
-          >
-            <PoolStat k="Tested" v={`${String(tested.length)} / ${String(state.proxies.length)}`} />
-            <PoolStat k="Healthy" v={String(healthy.length)} tone="ok" />
-            <PoolStat k="WebRTC + QUIC" v={String(udpCapable.length)} tone="ok" />
-          </div>
-        )}
+      {/* Add/Edit form renders FIRST (right under the hero) when open, so it's
+          immediately in view — no scrolling past the list, no clipped bottom
+          (the whole page scrolls inside the app's <main overflow-auto>). */}
+      {(editor.kind === 'add' || editor.kind === 'edit') && (
+        <ProxyForm
+          initial={editing !== null ? toDraft(editing) : EMPTY_DRAFT}
+          mode={editor.kind}
+          onCancel={() => setEditor({ kind: 'idle' })}
+          onSave={(d) => void handleSave(d)}
+        />
+      )}
 
-        {state.error !== null && (
-          <ErrorBanner
-            message={state.error}
-            onDismiss={() => setState((s) => ({ ...s, error: null }))}
-          />
-        )}
+      {/* Pool summary — hidden while the form is open (it's noise then; founder:
+          the stats shouldn't show when New proxy is clicked) + only over TESTED
+          proxies (no fabricated health for never-probed entries). */}
+      {tested.length > 0 && editor.kind === 'idle' && (
+        <div
+          data-component="proxy-pool-stats"
+          className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-surface-divider bg-surface-divider"
+        >
+          <PoolStat k="Tested" v={`${String(tested.length)} / ${String(state.proxies.length)}`} />
+          <PoolStat k="Healthy" v={String(healthy.length)} tone="ok" />
+          <PoolStat k="WebRTC + QUIC" v={String(udpCapable.length)} tone="ok" />
+        </div>
+      )}
 
-        {state.proxies.length === 0 ? (
-          <Empty loading={state.loading} onAdd={() => setEditor({ kind: 'add' })} />
-        ) : (
-          <ProxyList
-            proxies={state.proxies}
-            busyId={busyId}
-            testingId={testingId}
-            testResults={testResults}
-            exitResults={exitResults}
-            onEdit={(id) => setEditor({ kind: 'edit', id })}
-            onRemove={(id) => void handleRemove(id)}
-            onTest={(p) => void handleTest(p)}
-          />
-        )}
+      {state.error !== null && (
+        <ErrorBanner
+          message={state.error}
+          onDismiss={() => setState((s) => ({ ...s, error: null }))}
+        />
+      )}
 
-        {(editor.kind === 'add' || editor.kind === 'edit') && (
-          <ProxyForm
-            initial={editing !== null ? toDraft(editing) : EMPTY_DRAFT}
-            mode={editor.kind}
-            onCancel={() => setEditor({ kind: 'idle' })}
-            onSave={(d) => void handleSave(d)}
-          />
-        )}
-      </div>
+      {state.proxies.length === 0 ? (
+        <Empty loading={state.loading} onAdd={() => setEditor({ kind: 'add' })} />
+      ) : (
+        <ProxyList
+          proxies={state.proxies}
+          busyId={busyId}
+          testingId={testingId}
+          testResults={testResults}
+          exitResults={exitResults}
+          onEdit={(id) => setEditor({ kind: 'edit', id })}
+          onRemove={(id) => void handleRemove(id)}
+          onTest={(p) => void handleTest(p)}
+        />
+      )}
     </div>
   );
 }
