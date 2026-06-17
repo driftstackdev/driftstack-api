@@ -236,6 +236,29 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
     expect(decodeWireData(a.inlineProxyConfig as string)).toEqual(proxy);
   });
 
+  it('inlineProxyConfig (VPN) → base64 of the FLAT wire (A3 W2163: type + sibling fields, NOT nested)', () => {
+    const wg = {
+      type: 'wireguard' as const,
+      private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
+      peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
+      endpoint: 'vpn.example.com:51820',
+      allowed_ips: '0.0.0.0/0',
+      address: '10.7.0.2/32',
+    };
+    const a = serializeSessionAssign({ ...base, inlineProxyConfig: wg });
+    // FLAT: the decoded object has `type` + the WG fields as DIRECT siblings —
+    // never nested under a `wireguard` key (a nested payload fails A3's guard).
+    expect(decodeWireData(a.inlineProxyConfig as string)).toEqual(wg);
+
+    const ovpn = {
+      type: 'openvpn' as const,
+      config_blob: 'client\nremote h 1194\n',
+      username: 'u',
+    };
+    const b = serializeSessionAssign({ ...base, inlineProxyConfig: ovpn });
+    expect(decodeWireData(b.inlineProxyConfig as string)).toEqual(ovpn);
+  });
+
   it('profile-backed (A3 W417): camelCase in → snake_case wire; omits absent blob fields', () => {
     // inline (≤256KB) shape
     const inline = serializeSessionAssign({

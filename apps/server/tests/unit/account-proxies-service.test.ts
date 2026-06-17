@@ -7,6 +7,7 @@
 // behaviour.
 
 import { describe, expect, it } from 'vitest';
+import type { SocksProxyConfig } from '@driftstack/api-types';
 import { InMemoryAccountProxiesRepo } from '../../src/db/account-proxies-repo.js';
 import { AccountProxiesService, UnsafeProxyHostError } from '../../src/services/account-proxies.js';
 import { wrapAccountSecret } from '../../src/lib/profile-key-hierarchy.js';
@@ -36,7 +37,10 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     const repo = new InMemoryAccountProxiesRepo();
     const svc = new AccountProxiesService(repo, MASTER);
     const row = await seed(repo, ACCT_A);
-    const cfg = await svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_A });
+    const cfg = (await svc.resolveForDispatch({
+      proxyId: row.id,
+      accountId: ACCT_A,
+    })) as SocksProxyConfig | null;
     expect(cfg).not.toBeNull();
     expect(cfg?.host).toBe('203.0.113.10');
     expect(cfg?.port).toBe(1080);
@@ -79,7 +83,10 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     const repo = new InMemoryAccountProxiesRepo();
     const svc = new AccountProxiesService(repo, null);
     const row = await seed(repo, ACCT_A);
-    const cfg = await svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_A });
+    const cfg = (await svc.resolveForDispatch({
+      proxyId: row.id,
+      accountId: ACCT_A,
+    })) as SocksProxyConfig | null;
     expect(cfg?.password).toBeUndefined();
     expect(cfg?.host).toBe('203.0.113.10');
   });
@@ -88,9 +95,96 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     const repo = new InMemoryAccountProxiesRepo();
     const svc = new AccountProxiesService(repo, MASTER);
     const row = await seed(repo, ACCT_A, { wrappedPassword: null, username: null });
-    const cfg = await svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_A });
+    const cfg = (await svc.resolveForDispatch({
+      proxyId: row.id,
+      accountId: ACCT_A,
+    })) as SocksProxyConfig | null;
     expect(cfg?.password).toBeUndefined();
     expect(cfg?.username).toBeUndefined();
+  });
+
+  // OVPN/WG slice 4 — VPN rows resolve to the FLAT inline wire (A3 W2163), with
+  // the secret unwrapped under the owner TMK + cross-account isolation preserved.
+  it('resolves a WireGuard proxy to the FLAT wire (type sibling fields, secret unwrapped)', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await repo.create(ACCT_A, {
+      label: 'wg',
+      scheme: 'wireguard',
+      host: 'vpn.example.com',
+      port: 51820,
+      username: null,
+      wrappedPassword: null,
+      wrappedSecret: wrapAccountSecret(
+        MASTER,
+        ACCT_A,
+        Buffer.from('yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=', 'utf8'),
+      ),
+      config: {
+        peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
+        endpoint: 'vpn.example.com:51820',
+        allowed_ips: '0.0.0.0/0',
+        address: '10.7.0.2/32',
+      },
+    });
+    const cfg = await svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_A });
+    expect(cfg).toEqual({
+      type: 'wireguard',
+      private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
+      peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
+      endpoint: 'vpn.example.com:51820',
+      allowed_ips: '0.0.0.0/0',
+      address: '10.7.0.2/32',
+    });
+  });
+
+  it('resolves an OpenVPN proxy to the FLAT wire (config_blob from the unwrapped secret)', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await repo.create(ACCT_A, {
+      label: 'ovpn',
+      scheme: 'openvpn',
+      host: 'vpn.example.com',
+      port: 1194,
+      username: null,
+      wrappedPassword: null,
+      wrappedSecret: wrapAccountSecret(
+        MASTER,
+        ACCT_A,
+        Buffer.from(
+          JSON.stringify({ config_blob: 'client\nremote vpn.example.com 1194\n' }),
+          'utf8',
+        ),
+      ),
+      config: { username: 'u' },
+    });
+    const cfg = await svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_A });
+    expect(cfg).toEqual({
+      type: 'openvpn',
+      config_blob: 'client\nremote vpn.example.com 1194\n',
+      username: 'u',
+    });
+  });
+
+  it('OWNER SCOPING (VPN): account B cannot resolve account A’s WireGuard secret → null (GCM unwrap fails)', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await repo.create(ACCT_A, {
+      label: 'wg',
+      scheme: 'wireguard',
+      host: 'vpn.example.com',
+      port: 51820,
+      username: null,
+      wrappedPassword: null,
+      wrappedSecret: wrapAccountSecret(MASTER, ACCT_A, Buffer.from('secret-key', 'utf8')),
+      config: {
+        peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
+        endpoint: 'vpn.example.com:51820',
+        allowed_ips: '0.0.0.0/0',
+        address: '10.7.0.2/32',
+      },
+    });
+    expect(await svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_B })).toBeNull();
   });
 });
 

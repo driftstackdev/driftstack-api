@@ -34,7 +34,12 @@ import {
   type HarnessIntentName,
   type HarnessErrorCode,
 } from '../schemas/harness-control-protocol.js';
-import { SocksProxyConfigSchema, type SocksProxyConfig } from '@driftstack/api-types';
+import {
+  SocksProxyConfigSchema,
+  InlineVpnProxyWireSchema,
+  type SocksProxyConfig,
+  type InlineVpnProxyWire,
+} from '@driftstack/api-types';
 
 /** Thrown when an inbound envelope's base64/JSON `Data` field is malformed —
  *  a harness↔server protocol violation, surfaced rather than silently dropped. */
@@ -121,8 +126,10 @@ export function serializeSessionAssign(args: {
   idleTimeoutSeconds?: number;
   maxDurationSeconds?: number;
   proxyConfigId?: string;
-  /** Logical SocksProxyConfig; base64-encoded into the wire `inlineProxyConfig`. */
-  inlineProxyConfig?: SocksProxyConfig;
+  /** Logical socks5 config OR a FLAT VPN wire object ({type:openvpn|wireguard,…});
+   *  base64-encoded into the wire `inlineProxyConfig`. socks5 keeps its existing
+   *  (type-less) shape; VPN uses the flat sibling-field shape A3 W2163 verified. */
+  inlineProxyConfig?: SocksProxyConfig | InlineVpnProxyWire;
   initialUrl?: string;
   /** camelCase in; emitted as the snake_case wire object (room/token/ws_url/expires_at). */
   livekit?: { room: string; token: string; wsUrl: string; expiresAt: string };
@@ -139,14 +146,28 @@ export function serializeSessionAssign(args: {
 }): SessionAssign {
   let inlineProxyConfig: string | undefined;
   if (args.inlineProxyConfig !== undefined) {
-    const parsed = SocksProxyConfigSchema.safeParse(args.inlineProxyConfig);
-    if (!parsed.success) {
-      throw new HarnessWireCodecError(
-        `inlineProxyConfig failed the SocksProxyConfig contract before assign: ${parsed.error.message}`,
-      );
+    // VPN configs carry a `type` of openvpn|wireguard and use the FLAT
+    // sibling-field wire (A3 W2163 — NOT nested); socks5 keeps its existing
+    // type-less SocksProxyConfig shape. Validate against the matching contract,
+    // then base64( utf8( JSON.stringify ) ) verbatim (same Data encoding as inputParams).
+    const cfg = args.inlineProxyConfig as { type?: unknown };
+    if (cfg.type === 'openvpn' || cfg.type === 'wireguard') {
+      const parsed = InlineVpnProxyWireSchema.safeParse(args.inlineProxyConfig);
+      if (!parsed.success) {
+        throw new HarnessWireCodecError(
+          `inlineProxyConfig failed the InlineVpnProxyWire contract before assign: ${parsed.error.message}`,
+        );
+      }
+      inlineProxyConfig = encodeWireData(parsed.data);
+    } else {
+      const parsed = SocksProxyConfigSchema.safeParse(args.inlineProxyConfig);
+      if (!parsed.success) {
+        throw new HarnessWireCodecError(
+          `inlineProxyConfig failed the SocksProxyConfig contract before assign: ${parsed.error.message}`,
+        );
+      }
+      inlineProxyConfig = encodeWireData(parsed.data);
     }
-    // base64( utf8( JSON.stringify(config) ) ) — same Data encoding as inputParams.
-    inlineProxyConfig = encodeWireData(parsed.data);
   }
   const assign = {
     type: 'sessionAssign' as const,

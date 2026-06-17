@@ -2990,6 +2990,9 @@
               "allowed_ips": {
                 "type": "string"
               },
+              "address": {
+                "type": "string"
+              },
               "dns": {
                 "type": "string"
               }
@@ -15615,6 +15618,9 @@
                                 "type": "string",
                                 "default": "0.0.0.0/0"
                               },
+                              "address": {
+                                "type": "string"
+                              },
                               "dns": {
                                 "type": "string"
                               }
@@ -15973,6 +15979,9 @@
                               "allowed_ips": {
                                 "type": "string",
                                 "default": "0.0.0.0/0"
+                              },
+                              "address": {
+                                "type": "string"
                               },
                               "dns": {
                                 "type": "string"

@@ -390,6 +390,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         peer_public_key: string;
         endpoint: string;
         allowed_ips: string;
+        address?: string;
         dns?: string;
       };
     },
@@ -409,10 +410,16 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       if (!input.wireguard) {
         throw new BadRequestError('A `wireguard` config is required for scheme "wireguard".');
       }
-      const { private_key, peer_public_key, endpoint, allowed_ips, dns } = input.wireguard;
+      const { private_key, peer_public_key, endpoint, allowed_ips, address, dns } = input.wireguard;
       return {
         wrappedSecret: wrapProxySecret(accountId, private_key),
-        config: { peer_public_key, endpoint, allowed_ips, ...(dns ? { dns } : {}) },
+        config: {
+          peer_public_key,
+          endpoint,
+          allowed_ips,
+          ...(address ? { address } : {}),
+          ...(dns ? { dns } : {}),
+        },
       };
     }
     // socks5/http: a stray VPN block is a client error (avoids a half-typed row).

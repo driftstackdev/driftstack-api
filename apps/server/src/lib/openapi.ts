@@ -1680,6 +1680,7 @@ function buildRegistry(): OpenAPIRegistry {
     peer_public_key: z.string(),
     endpoint: z.string(),
     allowed_ips: z.string().optional(),
+    address: z.string().optional(),
     dns: z.string().optional(),
   });
   const AccountProxyInputOpenApi = z

@@ -28,6 +28,9 @@ export interface ParsedWireGuard {
   peer_public_key: string;
   endpoint: string;
   allowed_ips: string;
+  /** [Interface] Address (e.g. 10.7.0.2/32) — the userspace WG ifconfig needs
+   *  it; the harness dispatch parses it (A3 W2109). Required for a usable WG. */
+  address: string;
   dns?: string;
 }
 
@@ -60,18 +63,23 @@ export function parseWireGuardConfig(input: string): ParsedWireGuard | null {
   const peerPublicKey = values.get('publickey') ?? '';
   const endpoint = values.get('endpoint') ?? '';
   const allowedIps = values.get('allowedips') ?? '0.0.0.0/0';
+  const address = values.get('address') ?? '';
   const dns = values.get('dns');
 
   // Required fields must be present + well-formed, else the paste is unusable.
   if (!WG_KEY_RE.test(privateKey)) return null;
   if (!WG_KEY_RE.test(peerPublicKey)) return null;
   if (!WG_ENDPOINT_RE.test(endpoint)) return null;
+  // Address (the interface IP/CIDR) is required — the harness userspace WG
+  // ifconfig can't bring up the tunnel without it.
+  if (address === '') return null;
 
   const result: ParsedWireGuard = {
     private_key: privateKey,
     peer_public_key: peerPublicKey,
     endpoint,
     allowed_ips: allowedIps,
+    address,
   };
   if (dns !== undefined && dns !== '') result.dns = dns;
   return result;

@@ -63,7 +63,7 @@ import {
 } from '../services/harness-control-codec.js';
 import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
 import type { SessionPageStateStore } from '../services/session-page-state-store.js';
-import type { SocksProxyConfig } from '@driftstack/api-types';
+import type { SocksProxyConfig, InlineVpnProxyWire } from '@driftstack/api-types';
 import {
   decryptGuiControlKey,
   encryptGuiControlKey,
@@ -522,7 +522,9 @@ export async function dispatchSessionAssignOnCreate(args: {
     // operator default. resolveForDispatch throws UnsafeProxyHostError on an
     // internal-reachable host → caught by the outer best-effort wrapper, which
     // skips the dispatch (fail-closed: never run through an unsafe proxy).
-    let inlineProxyConfig = sessionDispatch.proxy;
+    // socks5 operator default OR the customer's resolved socks5/VPN config (the
+    // latter is the FLAT VPN wire for openvpn/wireguard — A3 W2163).
+    let inlineProxyConfig: SocksProxyConfig | InlineVpnProxyWire = sessionDispatch.proxy;
     if (proxyId !== undefined && accountId !== undefined && accountProxiesService !== undefined) {
       const resolved = await accountProxiesService.resolveForDispatch({ proxyId, accountId });
       if (resolved !== null) inlineProxyConfig = resolved;

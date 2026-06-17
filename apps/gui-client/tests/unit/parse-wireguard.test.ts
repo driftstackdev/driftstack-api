@@ -23,6 +23,7 @@ describe('parseWireGuardConfig', () => {
       peer_public_key: PUB,
       endpoint: 'vpn.example.com:51820',
       allowed_ips: '0.0.0.0/0',
+      address: '10.0.0.2/32',
       dns: '1.1.1.1',
     });
   });
@@ -31,6 +32,7 @@ describe('parseWireGuardConfig', () => {
     const conf = [
       '[Interface]',
       `PrivateKey=${PRIV}`,
+      'Address=10.0.0.2/32',
       '[Peer]',
       `PublicKey=${PUB}`,
       'Endpoint=203.0.113.5:51820',
@@ -40,6 +42,7 @@ describe('parseWireGuardConfig', () => {
       peer_public_key: PUB,
       endpoint: '203.0.113.5:51820',
       allowed_ips: '0.0.0.0/0',
+      address: '10.0.0.2/32',
     });
   });
 
@@ -48,6 +51,7 @@ describe('parseWireGuardConfig', () => {
       '# my home VPN',
       '[Interface]',
       `privatekey = ${PRIV}`,
+      'address = 10.0.0.2/32',
       '; a semicolon comment',
       '',
       '[Peer]',
@@ -59,11 +63,29 @@ describe('parseWireGuardConfig', () => {
       peer_public_key: PUB,
       endpoint: '198.51.100.7:443',
       allowed_ips: '0.0.0.0/0',
+      address: '10.0.0.2/32',
     });
   });
 
   it('returns null when a required field is missing (no Endpoint)', () => {
-    const conf = ['[Interface]', `PrivateKey=${PRIV}`, '[Peer]', `PublicKey=${PUB}`].join('\n');
+    const conf = [
+      '[Interface]',
+      `PrivateKey=${PRIV}`,
+      'Address=10.0.0.2/32',
+      '[Peer]',
+      `PublicKey=${PUB}`,
+    ].join('\n');
+    expect(parseWireGuardConfig(conf)).toBeNull();
+  });
+
+  it('returns null when Address is missing (the WG ifconfig needs it)', () => {
+    const conf = [
+      '[Interface]',
+      `PrivateKey=${PRIV}`,
+      '[Peer]',
+      `PublicKey=${PUB}`,
+      'Endpoint=vpn.example.com:51820',
+    ].join('\n');
     expect(parseWireGuardConfig(conf)).toBeNull();
   });
 

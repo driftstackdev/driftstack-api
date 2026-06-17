@@ -10,6 +10,7 @@ const WG: WireGuardConfigInput = {
   peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
   endpoint: 'vpn.example.com:51820',
   allowed_ips: '0.0.0.0/0',
+  address: '10.7.0.2/32',
 };
 
 describe('buildWireGuardProxyInput', () => {

@@ -24,6 +24,8 @@ export interface WireGuardConfigInput {
   peer_public_key: string;
   endpoint: string;
   allowed_ips: string;
+  /** [Interface] Address (e.g. 10.7.0.2/32) — the harness WG ifconfig needs it. */
+  address: string;
   dns?: string;
 }
 

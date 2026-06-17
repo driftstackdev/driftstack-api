@@ -142,6 +142,10 @@ export const WireGuardProxyConfigSchema = z.object({
     message: 'endpoint must be host:port (port 1-65535)',
   }),
   allowed_ips: z.string().default('0.0.0.0/0'),
+  // [Interface] Address (e.g. 10.7.0.2/32) — the harness userspace WireGuard
+  // ifconfig needs it to bring up the tunnel (A3 W2109). Optional in the schema
+  // for back-compat; the GUI's wg0.conf parser requires it before create.
+  address: z.string().optional(),
   dns: z.string().optional(),
 });
 export type WireGuardProxyConfig = z.infer<typeof WireGuardProxyConfigSchema>;
@@ -163,6 +167,35 @@ export const ProxyConfigSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('wireguard'), wireguard: WireGuardProxyConfigSchema }),
 ]);
 export type ProxyConfig = z.infer<typeof ProxyConfigSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
+// Inline VPN dispatch wire (FLAT) — what serializeSessionAssign base64-JSONs
+// into `inlineProxyConfig` for a VPN session. A3 (W2163/W2164) code-verified the
+// harness `parseVPNProxyConfig` reads `obj["type"]` then the VPN fields as DIRECT
+// SIBLINGS of `type` — NOT nested under obj["openvpn"]/obj["wireguard"] (a nested
+// payload fails closed at provision). socks5 keeps its existing SocksProxyConfig
+// wire (no `type`), so only the VPN types need this flat shape.
+// ───────────────────────────────────────────────────────────────────────────
+export const InlineOpenVpnWireSchema = z.object({
+  type: z.literal('openvpn'),
+  config_blob: z.string().min(1),
+  username: z.string().optional(),
+  password: z.string().optional(),
+});
+export const InlineWireGuardWireSchema = z.object({
+  type: z.literal('wireguard'),
+  private_key: z.string().min(1),
+  peer_public_key: z.string().min(1),
+  endpoint: z.string().min(1),
+  allowed_ips: z.string().min(1),
+  address: z.string().min(1),
+  dns: z.string().optional(),
+});
+export const InlineVpnProxyWireSchema = z.discriminatedUnion('type', [
+  InlineOpenVpnWireSchema,
+  InlineWireGuardWireSchema,
+]);
+export type InlineVpnProxyWire = z.infer<typeof InlineVpnProxyWireSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
 // Egress safeguard

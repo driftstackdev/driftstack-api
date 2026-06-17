@@ -4,7 +4,8 @@
 // Encapsulates the two sensitive operations (cross-account decrypt + SSRF) in
 // one tested place, used by the agent-session dispatch.
 
-import type { SocksProxyConfig } from '@driftstack/api-types';
+import type { InlineVpnProxyWire, SocksProxyConfig } from '@driftstack/api-types';
+import { InlineVpnProxyWireSchema } from '@driftstack/api-types';
 import type { AccountProxiesRepo, AccountProxyRow } from '../db/account-proxies-repo.js';
 import { unwrapAccountSecret } from '../lib/profile-key-hierarchy.js';
 import { classifyUnsafeHost } from '../lib/webhook-target-guard.js';
@@ -43,14 +44,20 @@ export class AccountProxiesService {
   async resolveForDispatch(args: {
     proxyId: string;
     accountId: string;
-  }): Promise<SocksProxyConfig | null> {
+  }): Promise<SocksProxyConfig | InlineVpnProxyWire | null> {
     const row = await this.repo.findById({ id: args.proxyId, accountId: args.accountId });
     if (row === null) return null;
-    if (row.scheme !== 'socks5') return null;
-    // The host was validated at create/update; re-assert here so a row inserted
-    // by any other path can't smuggle a private/loopback/metadata host.
+    // The host (socks5 host / VPN endpoint host) was validated at create; re-assert
+    // here so a row inserted by any other path can't smuggle a private/loopback/
+    // metadata host into egress. Applies to ALL schemes.
     const unsafe = classifyUnsafeHost(row.host);
     if (unsafe !== null) throw new UnsafeProxyHostError(unsafe);
+
+    if (row.scheme === 'openvpn' || row.scheme === 'wireguard') {
+      return this.resolveVpnForDispatch(row, args.accountId);
+    }
+    if (row.scheme !== 'socks5') return null; // http isn't an inline-dispatch target
+
     let password: string | undefined;
     if (row.wrappedPassword !== null && this.masterKey !== null) {
       password = unwrapAccountSecret(this.masterKey, args.accountId, row.wrappedPassword).toString(
@@ -67,5 +74,64 @@ export class AccountProxiesService {
       ...(row.username !== null ? { username: row.username } : {}),
       ...(password !== undefined ? { password } : {}),
     };
+  }
+
+  /**
+   * Build the FLAT inline VPN dispatch wire (A3 W2163: sibling fields, NOT
+   * nested) from a stored VPN row. Unwraps the secret under THIS account's TMK —
+   * a row wrapped under a different account CANNOT be decrypted (GCM auth fails),
+   * the same cross-account isolation the socks5 password + profile DEK rely on.
+   * The non-secret fields ride `config` (jsonb). Returns null when encryption
+   * isn't configured or the row is malformed (fail-closed; the session just runs
+   * without this proxy rather than dispatching a broken VPN).
+   */
+  private resolveVpnForDispatch(
+    row: AccountProxyRow,
+    accountId: string,
+  ): InlineVpnProxyWire | null {
+    if (row.wrappedSecret === null || this.masterKey === null) return null;
+    let secret: string;
+    try {
+      secret = unwrapAccountSecret(this.masterKey, accountId, row.wrappedSecret).toString('utf8');
+    } catch {
+      return null; // wrong-account TMK / corrupted blob → fail-closed
+    }
+    const cfg = row.config;
+    const str = (k: string): string | undefined =>
+      typeof cfg[k] === 'string' ? cfg[k] : undefined;
+
+    let candidate: unknown;
+    if (row.scheme === 'openvpn') {
+      // secret = JSON { config_blob, password? }; username rides config.
+      let parsed: { config_blob?: unknown; password?: unknown };
+      try {
+        parsed = JSON.parse(secret) as typeof parsed;
+      } catch {
+        return null;
+      }
+      if (typeof parsed.config_blob !== 'string') return null;
+      candidate = {
+        type: 'openvpn',
+        config_blob: parsed.config_blob,
+        ...(str('username') !== undefined ? { username: str('username') } : {}),
+        ...(typeof parsed.password === 'string' ? { password: parsed.password } : {}),
+      };
+    } else {
+      // wireguard: secret = the raw private_key; the rest rides config.
+      candidate = {
+        type: 'wireguard',
+        private_key: secret,
+        peer_public_key: str('peer_public_key'),
+        endpoint: str('endpoint'),
+        allowed_ips: str('allowed_ips'),
+        address: str('address'),
+        ...(str('dns') !== undefined ? { dns: str('dns') } : {}),
+      };
+    }
+    // Validate the FLAT wire before it leaves the server — a missing field
+    // (e.g. a WG row stored before `address` was captured) fails closed here
+    // rather than erroring every session at the harness provision step.
+    const parsed = InlineVpnProxyWireSchema.safeParse(candidate);
+    return parsed.success ? parsed.data : null;
   }
 }
