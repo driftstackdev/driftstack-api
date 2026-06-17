@@ -8,6 +8,10 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `proxy_id` on agent-session create (`agent_sessions.create` body) — route
+  the session's egress through one of your account proxies (managed at
+  `/v1/account/me/proxies`). Must be an owned proxy id (unknown / not-owned
+  → 404). Optional; omit for the default egress.
 - `session.profile_save_failed` webhook event (regenerated models) — a
   profile-backed session's save-back failed at teardown (terminal; the
   next restore of that profile will be stale). Subscribable; payload
