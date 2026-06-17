@@ -2479,17 +2479,18 @@ function CreateProfileModal({
                   )}
                   {proxies.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.label} · {p.host}:{p.port}
+                      {p.label} ·{' '}
+                      {p.scheme === 'openvpn' || p.scheme === 'wireguard'
+                        ? `${p.scheme} · ${p.host}:${p.port}`
+                        : `${p.host}:${p.port}`}
                     </option>
                   ))}
                   <option value="create-new">+ Add new SOCKS5 proxy…</option>
-                  <option value="future-openvpn" disabled>
-                    + Add new OpenVPN (coming soon)
-                  </option>
-                  <option value="future-wireguard" disabled>
-                    + Add new WireGuard (coming soon)
-                  </option>
                 </select>
+                <span className="mt-1 text-2xs text-ink-muted">
+                  OpenVPN / WireGuard: add it on the Proxies tab (paste or upload your .ovpn /
+                  wg0.conf), then pick it here.
+                </span>
                 {proxyChoice === 'create-new' && (
                   <div className="mt-2 flex flex-col gap-1.5 rounded-sm border border-dashed border-surface-divider bg-surface-base/60 p-2">
                     <div className="grid grid-cols-2 gap-1.5">
