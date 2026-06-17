@@ -59,6 +59,12 @@ describe('docs/api/team content parity', () => {
     expect(body).toMatch(/- `\/v1\/account\/audit-log` \(GET\) \+ `\/audit-log\/export` \(GET\)/);
     expect(body).toMatch(/- `\/v1\/account\/email-preferences` \(GET \/ PUT — PUT admin-only\)/);
     expect(body).toMatch(/- `\/v1\/usage` \+ `\/v1\/usage\/series` \(GET\)/);
+    // Teams member-launch (898cb5f): agent-session create honors the header so an
+    // admin launches the owner's profile (owner-scoped run + owner DEK).
+    expect(body).toMatch(
+      /- `\/v1\/agent-sessions` \(POST create\) — an \*\*admin\*\* member can launch/,
+    );
+    expect(body).toMatch(/ships the owner's per-profile DEK/);
   });
 
   it("3-NOT-honored endpoint roster pinned: /v1/team/* (managing own team) + /v1/account/me (always own profile) + /v1/auth/* (per-caller authentication). + 'Endpoints that do not honor the header (operate on the caller's own account regardless)' framing — pinned so the 3-NOT-honored exception list + caller's-own-account semantics contract all stay documented", () => {

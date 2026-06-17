@@ -54,6 +54,10 @@ Endpoints that honor the header :
 
 - `/v1/sessions` (GET / POST / DELETE) + `/:id/{navigate,interact,
 wait,capture,gui-input,state}`
+- `/v1/agent-sessions` (POST create) — an **admin** member can launch
+  the owner's profile; the run scopes to the owner (counts against the
+  owner's cap, ships the owner's per-profile DEK). `member` role gets
+  `403`.
 - `/v1/profiles` (GET / POST / PATCH / DELETE)
 - `/v1/api-keys` (GET / POST / DELETE / `:id/rotate`)
 - `/v1/webhooks` (GET / POST / DELETE) + `/:id/deliveries` +
