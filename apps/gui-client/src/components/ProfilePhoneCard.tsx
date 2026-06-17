@@ -294,16 +294,20 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
         {/* footer: the Launch dock + a hover action strip that floats ABOVE it
             (bottom-full) so the secondary actions never overlap Launch. */}
         <div className="relative z-10">
-          {/* action strip — LABELLED (icon + caption); floats just above the
-              dock so it never collides with Launch/Open. Revealed on hover
-              (mouse) OR by the ⋯ toggle (tap/trackpad). */}
+          {/* action menu — a clean VERTICAL DROPDOWN of labelled rows (founder
+              2026-06-17), anchored above the dock so it never collides with
+              Launch/Open. Revealed on hover (mouse) OR by the ⋯ toggle
+              (tap/trackpad). Rows stay in the DOM (opacity-toggled) so the
+              accessible labels are always queryable. */}
           <div
-            className={`absolute inset-x-0 bottom-full z-20 mb-1.5 flex flex-wrap justify-center gap-1 px-1.5 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 ${
+            data-component="card-actions-menu"
+            role="menu"
+            className={`absolute bottom-full right-1.5 z-20 mb-1.5 w-44 overflow-hidden rounded-xl border border-surface-divider bg-surface-raised py-1 shadow-[0_12px_30px_rgba(0,0,0,0.5)] transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 ${
               actionsOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
             }`}
           >
             {p.onAssist ? (
-              <ActionBtn
+              <MenuRow
                 glyph="✦"
                 caption="Assist"
                 label={`Ask the AI assistant about ${p.name}`}
@@ -313,9 +317,9 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 }}
               />
             ) : null}
-            <ActionBtn
+            <MenuRow
               glyph={p.running ? '◉' : '▶'}
-              caption={p.running ? 'View' : 'Watch'}
+              caption={p.running ? 'View live' : 'Watch'}
               label={p.running ? 'Open the live view' : 'Launch and watch live'}
               onClick={() => {
                 setActionsOpen(false);
@@ -324,9 +328,9 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
               disabled={p.busy || (!p.running && p.launchDisabled)}
             />
             {p.hasProxy ? (
-              <ActionBtn
+              <MenuRow
                 glyph={p.testing ? '…' : '⟳'}
-                caption="Test"
+                caption="Test proxy"
                 label="Test proxy — reachability, latency, exit IP"
                 onClick={() => {
                   setActionsOpen(false);
@@ -336,7 +340,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
               />
             ) : null}
             {p.onExport ? (
-              <ActionBtn
+              <MenuRow
                 glyph="⤓"
                 caption="Export"
                 label={`Export ${p.name} as a portable JSON copy`}
@@ -347,16 +351,19 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
               />
             ) : null}
             {p.onDelete ? (
-              <ActionBtn
-                glyph="🗑"
-                caption="Delete"
-                label={`Delete ${p.name}`}
-                tone="danger"
-                onClick={() => {
-                  setActionsOpen(false);
-                  p.onDelete?.();
-                }}
-              />
+              <>
+                <div className="my-1 h-px bg-surface-divider" aria-hidden="true" />
+                <MenuRow
+                  glyph="🗑"
+                  caption="Delete"
+                  label={`Delete ${p.name}`}
+                  tone="danger"
+                  onClick={() => {
+                    setActionsOpen(false);
+                    p.onDelete?.();
+                  }}
+                />
+              </>
             ) : null}
           </div>
 
@@ -410,7 +417,11 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   );
 }
 
-function ActionBtn({
+// MenuRow — one labelled row in the grid-card ⋯ dropdown menu (founder
+// 2026-06-17: "the dots should be a cleaner vertical dropdown with labels").
+// glyph + caption are visible; `label` is the descriptive aria-label/title
+// (kept stable so the harness queries by it).
+function MenuRow({
   glyph,
   caption,
   label,
@@ -435,16 +446,16 @@ function ActionBtn({
         e.stopPropagation();
         onClick();
       }}
-      className={`flex min-w-[34px] flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 backdrop-blur-sm transition-colors disabled:opacity-40 ${
+      className={`flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[11.5px] font-medium transition-colors disabled:opacity-40 ${
         tone === 'danger'
-          ? 'bg-black/70 text-status-error/90 hover:bg-status-error/25 hover:text-status-error'
-          : 'bg-black/70 text-white/90 hover:bg-black/85 hover:text-white'
+          ? 'text-status-error/90 hover:bg-status-error/15 hover:text-status-error'
+          : 'text-ink-secondary hover:bg-surface-elevated hover:text-ink-primary'
       }`}
     >
-      <span className="text-[12px] leading-none" aria-hidden="true">
+      <span className="w-4 shrink-0 text-center text-[13px] leading-none" aria-hidden="true">
         {glyph}
       </span>
-      <span className="text-[8px] font-medium leading-none">{caption}</span>
+      <span className="leading-none">{caption}</span>
     </button>
   );
 }
