@@ -49,6 +49,10 @@ export interface ProfilePhoneCardProps {
   onWatch: () => void;
   onTest: () => void;
   onAssist?: () => void;
+  /** Management actions in the ⋯ menu (grid view) — export a portable copy,
+   *  delete the profile. Omitted → that action isn't offered. */
+  onExport?: () => void;
+  onDelete?: () => void;
 }
 
 export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
@@ -294,7 +298,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
               dock so it never collides with Launch/Open. Revealed on hover
               (mouse) OR by the ⋯ toggle (tap/trackpad). */}
           <div
-            className={`absolute inset-x-0 bottom-full z-20 mb-1.5 flex justify-center gap-1 px-1.5 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 ${
+            className={`absolute inset-x-0 bottom-full z-20 mb-1.5 flex flex-wrap justify-center gap-1 px-1.5 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 ${
               actionsOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
             }`}
           >
@@ -329,6 +333,29 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                   p.onTest();
                 }}
                 disabled={p.testDisabled}
+              />
+            ) : null}
+            {p.onExport ? (
+              <ActionBtn
+                glyph="⤓"
+                caption="Export"
+                label={`Export ${p.name} as a portable JSON copy`}
+                onClick={() => {
+                  setActionsOpen(false);
+                  p.onExport?.();
+                }}
+              />
+            ) : null}
+            {p.onDelete ? (
+              <ActionBtn
+                glyph="🗑"
+                caption="Delete"
+                label={`Delete ${p.name}`}
+                tone="danger"
+                onClick={() => {
+                  setActionsOpen(false);
+                  p.onDelete?.();
+                }}
               />
             ) : null}
           </div>
@@ -389,12 +416,14 @@ function ActionBtn({
   label,
   onClick,
   disabled,
+  tone,
 }: {
   glyph: ReactNode;
   caption: string;
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  tone?: 'danger';
 }): JSX.Element {
   return (
     <button
@@ -406,7 +435,11 @@ function ActionBtn({
         e.stopPropagation();
         onClick();
       }}
-      className="flex min-w-[34px] flex-col items-center gap-0.5 rounded-lg bg-black/70 px-1.5 py-1 text-white/90 backdrop-blur-sm transition-colors hover:bg-black/85 hover:text-white disabled:opacity-40"
+      className={`flex min-w-[34px] flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 backdrop-blur-sm transition-colors disabled:opacity-40 ${
+        tone === 'danger'
+          ? 'bg-black/70 text-status-error/90 hover:bg-status-error/25 hover:text-status-error'
+          : 'bg-black/70 text-white/90 hover:bg-black/85 hover:text-white'
+      }`}
     >
       <span className="text-[12px] leading-none" aria-hidden="true">
         {glyph}

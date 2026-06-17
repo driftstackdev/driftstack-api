@@ -51,6 +51,8 @@ function base(over: Partial<ProfilePhoneCardProps>): ProfilePhoneCardProps {
     onWatch: noop,
     onTest: noop,
     onAssist: noop,
+    onExport: noop,
+    onDelete: noop,
     ...over,
   };
 }

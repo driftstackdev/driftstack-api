@@ -1023,6 +1023,18 @@ export function ProfilesView({
     }
   }
 
+  // Single-profile export — the grid ⋯ menu's Export action. Downloads the
+  // portable JSON envelope for one profile (same format as bulk, one entry).
+  async function handleExport(id: string): Promise<void> {
+    if (!client) return;
+    try {
+      const envelope = await client.profiles.export(id);
+      downloadJson(timestampedFilename('driftstack-profile', 'json', new Date()), envelope);
+    } catch (err) {
+      setState((s) => ({ ...s, error: friendlyError(err) }));
+    }
+  }
+
   // Bulk launch — start a session for each selected profile, sequentially (so
   // the fleet sees distinct launches + we don't blast the concurrency cap).
   // Confirms first since each launch spawns a billed session; best-effort per
@@ -1900,6 +1912,8 @@ export function ProfilesView({
                           if (px !== null) void handleTestProxy(px);
                         }}
                         onAssist={onAssist ? () => onAssist(profile.id) : undefined}
+                        onExport={() => void handleExport(profile.id)}
+                        onDelete={() => void handleDelete(profile.id)}
                       />
                     );
                   })}
