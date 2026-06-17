@@ -109,4 +109,19 @@ describe('apps/customer-dashboard/src/pages/proxies.astro content parity', () =>
     expect(body).toMatch(/`client`\s+and\s+`remote <host> <port>` directives/);
     expect(body).toMatch(/res\.status === 400/);
   });
+
+  it('WireGuard form: label + wg0.conf textarea + save button; client-side parse → flat scheme:"wireguard" body { host, port from Endpoint, wireguard:{...} }', () => {
+    expect(body).toMatch(/<section[^>]*data-create-wireguard-form/);
+    expect(body).toMatch(/<input\s+id="wg-label"[^>]*maxlength="120"/);
+    expect(body).toMatch(/<textarea\s+id="wg-conf"/);
+    expect(body).toMatch(/data-action="save-wireguard"/);
+    // Inline wg0.conf parser mirrors parse-wireguard.ts (key/endpoint regexes,
+    // required fields), then posts the structured wireguard block.
+    expect(body).toContain('function parseWgConf(');
+    expect(body).toMatch(/scheme: 'wireguard',/);
+    expect(body).toContain('wireguard: wg');
+    // host/port split off the peer Endpoint (host:port).
+    expect(body).toContain('wg.endpoint.lastIndexOf');
+    expect(body).toMatch(/private_key:|peer_public_key:/);
+  });
 });
