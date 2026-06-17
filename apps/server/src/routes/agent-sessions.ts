@@ -31,6 +31,7 @@ import { consequentialSignature } from '../services/agent-executor.js';
 import type { DecomposeUsage } from '../services/agent-decomposer.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { ProfilesService } from '../services/profiles.js';
+import type { AccountProxiesService } from '../services/account-proxies.js';
 import type { SessionRepo } from '../services/sessions.js';
 import { buildAssignProfileBlock } from '../services/profile-store.js';
 import type { R2 } from '../lib/r2.js';
@@ -109,6 +110,12 @@ const CreateAgentSessionRequestSchema = z.object({
   // validated to be an owned profile before dispatch; its DEK rides the
   // SessionAssign.profile block.
   profile_id: z.string().optional(),
+  // ARC A — per-session customer proxy. When supplied, the dispatched session
+  // browses through this account proxy instead of the operator default.
+  // Validated to be an owned proxy before dispatch; a cross-account/unknown id
+  // returns 404 (never confirm another account's proxy exists). Bare uuid (the
+  // id the proxies API returns). Optional → operator-default egress (unchanged).
+  proxy_id: z.string().uuid().optional(),
 });
 
 const RunTurnRequestSchema = z.object({
@@ -357,6 +364,13 @@ export interface AgentSessionsRoutesDeps {
    */
   profilesService?: ProfilesService;
   /**
+   * ARC A — per-account customer proxies service. When wired + a create carries
+   * a `proxy_id`, the route validates ownership and the dispatch resolves it
+   * (owner-scoped unwrap + SSRF re-guard) into the inlineProxyConfig. Absent →
+   * proxy_id is rejected as unsupported (no service to validate against).
+   */
+  accountProxiesService?: AccountProxiesService;
+  /**
    * Strict-FK (2026-06-16) — driver SessionsRepo. When wired + a create carries
    * `driftstack_session_id`, the route validates the referenced session is owned
    * by the same (owner) account before storing the uuid, closing the latent
@@ -416,6 +430,11 @@ export async function dispatchSessionAssignOnCreate(args: {
   profilesService?: ProfilesService;
   /** Private R2 — when present, the profile block carries restore/save-back URLs. */
   r2?: R2;
+  // ARC A — per-session customer proxy. When a validated proxy_id rode the
+  // create, the dispatch resolves it (owner-scoped unwrap + SSRF re-guard) and
+  // injects it as the inlineProxyConfig instead of the operator default.
+  proxyId?: string;
+  accountProxiesService?: AccountProxiesService;
 }): Promise<void> {
   const {
     sessionId,
@@ -428,6 +447,8 @@ export async function dispatchSessionAssignOnCreate(args: {
     profileId,
     profilesService,
     r2,
+    proxyId,
+    accountProxiesService,
   } = args;
   if (
     fleetControlRegistry === undefined ||
@@ -496,12 +517,22 @@ export async function dispatchSessionAssignOnCreate(args: {
         }
       }
     }
+    // ARC A — when the create carried a validated proxy_id, dispatch through the
+    // customer's proxy (owner-scoped unwrap + SSRF re-guard) instead of the
+    // operator default. resolveForDispatch throws UnsafeProxyHostError on an
+    // internal-reachable host → caught by the outer best-effort wrapper, which
+    // skips the dispatch (fail-closed: never run through an unsafe proxy).
+    let inlineProxyConfig = sessionDispatch.proxy;
+    if (proxyId !== undefined && accountId !== undefined && accountProxiesService !== undefined) {
+      const resolved = await accountProxiesService.resolveForDispatch({ proxyId, accountId });
+      if (resolved !== null) inlineProxyConfig = resolved;
+    }
     const assign = serializeSessionAssign({
       sessionId,
       archetype: sessionDispatch.archetype,
       behaviorProfile: sessionDispatch.behaviorProfile,
       initialUrl: sessionDispatch.initialUrl,
-      inlineProxyConfig: sessionDispatch.proxy,
+      inlineProxyConfig,
       livekit: {
         room: sessionId,
         token,
@@ -646,6 +677,7 @@ export function registerAgentSessionsRoutes(
     sessionPageStateStore,
     sessionDispatch,
     profilesService,
+    accountProxiesService,
     driverSessionsRepo,
     r2,
   } = deps;
@@ -757,6 +789,21 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`Profile ${parsed.data.profile_id} not found.`);
         }
         await profilesService.get({ id: profileBareId, accountId: ownerAccountId });
+      }
+
+      // ARC A — a supplied proxy_id MUST reference an owned proxy; validate
+      // before dispatch so an unknown/foreign id is a clean 404 (never confirm
+      // another account's proxy exists), owner-scoped exactly like profile_id.
+      let proxyId: string | undefined;
+      if (parsed.data.proxy_id !== undefined) {
+        proxyId = parsed.data.proxy_id;
+        if (accountProxiesService === undefined) {
+          throw new NotFoundError(`Proxy ${proxyId} not found.`);
+        }
+        const owned = await accountProxiesService.findOwned(proxyId, ownerAccountId);
+        if (owned === null) {
+          throw new NotFoundError(`Proxy ${proxyId} not found.`);
+        }
       }
 
       // Strict-FK (2026-06-16) — normalize the optional driftstack_session_id
@@ -876,6 +923,10 @@ export function registerAgentSessionsRoutes(
         accountId: ownerAccountId,
         ...(profileBareId !== undefined ? { profileId: profileBareId } : {}),
         profilesService,
+        // ARC A — thread the validated proxy_id + service so the dispatch
+        // resolves the customer proxy (owner-scoped) into the inlineProxyConfig.
+        ...(proxyId !== undefined ? { proxyId } : {}),
+        ...(accountProxiesService !== undefined ? { accountProxiesService } : {}),
         ...(r2 !== undefined ? { r2 } : {}),
       });
       // Slice 6 follow-up 2026-05-20 — agent-session create audit. Best-

@@ -66,6 +66,7 @@ import type { SessionPageStateStore } from '../services/session-page-state-store
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import type { AccountProxiesRepo } from '../db/account-proxies-repo.js';
+import type { AccountProxiesService } from '../services/account-proxies.js';
 import { registerAccountMeRoutes } from '../routes/account-me.js';
 import { registerAccountWebSessionsRoutes } from '../routes/account-web-sessions.js';
 import { registerAccountMfaRoutes } from '../routes/account-mfa.js';
@@ -512,6 +513,9 @@ export interface AppDeps {
   profilesRepo?: ProfilesRepo;
   /** ARC A: per-account customer proxies repo — powers /v1/account/me/proxies. */
   accountProxiesRepo?: AccountProxiesRepo | null;
+  /** ARC A: proxies service — validates proxy_id on agent-session create +
+   *  resolves it (owner-scoped unwrap + SSRF re-guard) into the dispatch. */
+  accountProxiesService?: AccountProxiesService;
   /** ARC A: decoded PROFILE_MASTER_KEY — wraps proxy passwords under the account
    *  TMK. Null → proxy passwords can't be stored (create/update with a password
    *  → 503). */
@@ -1317,6 +1321,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // create + ship its DEK in the dispatch. Wired unconditionally (the
       // validation runs even without the fleet CP).
       ...(deps.profilesService !== undefined ? { profilesService: deps.profilesService } : {}),
+      // ARC A: validate an owned proxy_id on create + resolve it (owner-scoped
+      // unwrap + SSRF re-guard) into the dispatch's inlineProxyConfig.
+      ...(deps.accountProxiesService !== undefined
+        ? { accountProxiesService: deps.accountProxiesService }
+        : {}),
       // Strict-FK: validate an owned driftstack_session_id on create (closes the
       // latent cross-account pointer gap). The driver SessionRepo is the same
       // one /v1/sessions uses.

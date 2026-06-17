@@ -148,6 +148,40 @@ describe('DELETE /v1/account/me/proxies/:id', () => {
   });
 });
 
+describe('SSRF host guard', () => {
+  it('rejects a private/loopback/metadata host on create (400)', async () => {
+    fx = await buildTestApp();
+    for (const host of ['127.0.0.1', '169.254.169.254', '10.0.0.5', 'localhost']) {
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/account/me/proxies',
+        headers: { ...auth(fx), 'content-type': 'application/json' },
+        payload: { label: 'bad', host, port: 1080 },
+      });
+      expect(res.statusCode, host).toBe(400);
+    }
+  });
+
+  it('rejects an unsafe host on update (400)', async () => {
+    fx = await buildTestApp();
+    const created = (
+      await fx.app.inject({
+        method: 'POST',
+        url: '/v1/account/me/proxies',
+        headers: { ...auth(fx), 'content-type': 'application/json' },
+        payload: { label: 'ok', host: '203.0.113.5', port: 1080 },
+      })
+    ).json<ProxyMeta>();
+    const res = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/account/me/proxies/${created.id}`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { host: '192.168.1.1' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
 describe('account_owner scope', () => {
   it('403 when the key lacks account_owner scope', async () => {
     fx = await buildTestApp({ scopes: ['read', 'write'] });

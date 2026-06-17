@@ -105,6 +105,7 @@ import { InMemoryMfaChallengeStore } from '../../../src/services/mfa-challenge-s
 import { InMemoryStripeWebhooksRepo } from './in-memory-stripe-webhooks-repo.js';
 import { InMemoryProfilesRepo } from './in-memory-profiles-repo.js';
 import { InMemoryAccountProxiesRepo } from '../../../src/db/account-proxies-repo.js';
+import { AccountProxiesService } from '../../../src/services/account-proxies.js';
 import { InMemoryProfileSnapshotsRepo } from './in-memory-profile-snapshots-repo.js';
 import { InMemoryBillingProvider, InMemoryBillingRepo } from './in-memory-billing.js';
 import { BillingService } from '../../../src/services/billing.js';
@@ -1169,6 +1170,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // /v1/account/me/proxies routes are live and password-wrapping is exercised.
   const accountProxiesRepo = new InMemoryAccountProxiesRepo();
   const proxyMasterKey = Buffer.alloc(32, 7);
+  const accountProxiesService = new AccountProxiesService(accountProxiesRepo, proxyMasterKey);
   // V-225 — accountAudit wired for profile.{created,deleted}.
   const profilesService = new ProfilesService(profilesRepo, accountAuditService);
   // V-312 — profile snapshots service shares the profiles repo for
@@ -1405,6 +1407,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     apiKeysRepo,
     profilesRepo,
     accountProxiesRepo,
+    accountProxiesService,
     profileMasterKey: proxyMasterKey,
     // V-352b — fake R2 public bucket so /v1/account/me/avatar can be
     // exercised in integration tests without touching real Cloudflare.

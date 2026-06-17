@@ -71,6 +71,7 @@ import { OAuthClientServiceImpl } from '../services/oauth-client-service.js';
 import { DrizzleStripeWebhooksRepo } from '../db/stripe-webhooks-repo.js';
 import { DrizzleProfilesRepo } from '../db/profiles-repo.js';
 import { DrizzleAccountProxiesRepo } from '../db/account-proxies-repo.js';
+import { AccountProxiesService } from '../services/account-proxies.js';
 import { SessionsService } from '../services/sessions.js';
 import { ApiKeysService } from '../services/api-keys.js';
 import { MfaService } from '../services/mfa.js';
@@ -1042,6 +1043,9 @@ export async function createProductionDeps(
   // when PROFILE_MASTER_KEY unset → profiles created without a DEK; feature inert).
   const profileMasterKeyBuf =
     config.profileMasterKey !== undefined ? decodeMasterKey(config.profileMasterKey) : null;
+  // ARC A — proxies service (owner-scoped resolve + unwrap + SSRF guard) shares
+  // the same master key as the profile DEK.
+  const accountProxiesService = new AccountProxiesService(accountProxiesRepo, profileMasterKeyBuf);
   const profilesService = new ProfilesService(
     profilesRepo,
     accountAuditService,
@@ -1406,6 +1410,7 @@ export async function createProductionDeps(
     // ARC A — per-account customer proxies repo + the decoded master key for
     // wrapping proxy passwords; both feed /v1/account/me/proxies.
     accountProxiesRepo,
+    accountProxiesService,
     profileMasterKey: profileMasterKeyBuf,
     // V-352b — public-bucket R2 client used by avatar upload + the
     // presigned-GET URL on /v1/account/me. Same client the V-295c2

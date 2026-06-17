@@ -223,6 +223,36 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.statusCode).toBe(201);
   });
 
+  it('ARC A: create with an unknown/unowned proxy_id → 404 (never confirms a foreign proxy)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, proxy_id: '00000000-0000-4000-8000-000000000099' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('ARC A: create with the caller’s OWN proxy_id → 201', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const proxy = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { label: 'mine', host: '203.0.113.7', port: 1080, password: 'pw' },
+    });
+    expect(proxy.statusCode).toBe(201);
+    const proxyId = proxy.json<{ id: string }>().id;
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, proxy_id: proxyId },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
   it('W393 POST /:id/resume → 202 for an owned active session; 404 unknown; 409 terminal', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({

@@ -33,6 +33,7 @@ import type {
   AccountProxyRowUpdates,
 } from '../db/account-proxies-repo.js';
 import { wrapAccountSecret } from '../lib/profile-key-hierarchy.js';
+import { classifyUnsafeHost } from '../lib/webhook-target-guard.js';
 import { avatarKey, type R2 } from '../lib/r2.js';
 import {
   BadRequestError,
@@ -331,6 +332,19 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
     };
   }
 
+  // SSRF guard — reject a proxy host that resolves to an internal-reachable
+  // address (loopback / RFC-1918 / link-local / cloud metadata / numeric-IP
+  // encoding) before it's ever stored or dispatched through. Reuses the shared
+  // host classifier (same one the webhook + SOCKS5 egress guards use).
+  function assertSafeProxyHost(host: string): void {
+    const unsafe = classifyUnsafeHost(host);
+    if (unsafe !== null) {
+      throw new BadRequestError(
+        'Proxy host must not target a private, loopback, link-local, or metadata address.',
+      );
+    }
+  }
+
   // Wrap a plaintext proxy password under the account TMK for storage. Empty /
   // null → null (no secret). A non-empty password with no master key configured
   // is a 503 — we NEVER store a proxy password in the clear.
@@ -367,6 +381,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       if (!parsed.success) {
         throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid proxy.');
       }
+      assertSafeProxyHost(parsed.data.host);
       const wrappedPassword = wrapProxyPassword(ctx.account.id, parsed.data.password);
       const row = await accountProxiesRepo.create(ctx.account.id, {
         label: parsed.data.label,
@@ -394,6 +409,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       if (!parsed.success) {
         throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid proxy.');
       }
+      if (parsed.data.host !== undefined) assertSafeProxyHost(parsed.data.host);
       const updates: AccountProxyRowUpdates = {};
       if (parsed.data.label !== undefined) updates.label = parsed.data.label;
       if (parsed.data.scheme !== undefined) updates.scheme = parsed.data.scheme;
