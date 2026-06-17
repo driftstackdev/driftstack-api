@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { execSync } from 'node:child_process';
 
 const ConfigSchema = z.object({
   nodeEnv: z.enum(['development', 'test', 'production']).default('development'),
@@ -550,6 +551,46 @@ function coerceTrustProxy(raw: string | undefined): boolean | number | string {
   return raw;
 }
 
+/**
+ * Resolve the profile master key. Provider-agnostic KMS hardening: when
+ * `PROFILE_MASTER_KEY_CMD` is set, run it at boot and use its stdout as the
+ * base64 key — so operators can keep the key OUT of `.env` and source it from
+ * any secret store (`aws kms decrypt …`, `vault read …`, `sops -d …`, `gcloud
+ * kms decrypt …`) without the server depending on any KMS SDK. A `.env` leak
+ * alone then can't recover the key. FAIL-CLOSED: if the command is set but
+ * fails or returns empty, throw (the server refuses to start) rather than
+ * silently falling back to the plaintext var or to an unset key. When the
+ * command is unset, fall back to plaintext `PROFILE_MASTER_KEY` (today's
+ * behavior, unchanged — so prod is inert until an operator opts in). The
+ * returned string is validated as a base64 32-byte key by the schema refine.
+ */
+function resolveProfileMasterKey(env: NodeJS.ProcessEnv): string | undefined {
+  const cmd = env.PROFILE_MASTER_KEY_CMD;
+  if (cmd !== undefined && cmd.trim().length > 0) {
+    let out: string;
+    try {
+      out = execSync(cmd, {
+        encoding: 'utf8',
+        timeout: 10_000,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim();
+    } catch (err) {
+      throw new Error(
+        `PROFILE_MASTER_KEY_CMD failed to produce the master key: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+    if (out.length === 0) {
+      throw new Error(
+        'PROFILE_MASTER_KEY_CMD produced empty output (expected a base64-encoded 32-byte key).',
+      );
+    }
+    return out;
+  }
+  return env.PROFILE_MASTER_KEY;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return ConfigSchema.parse({
     nodeEnv: env.NODE_ENV,
@@ -626,7 +667,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     authFlowUrls: deriveAuthFlowUrls(env),
     dashboardOrigin: env.DASHBOARD_ORIGIN,
     mfaEncryptionKey: env.MFA_ENCRYPTION_KEY,
-    profileMasterKey: env.PROFILE_MASTER_KEY,
+    profileMasterKey: resolveProfileMasterKey(env),
     metricsScrapeToken: env.METRICS_SCRAPE_TOKEN,
     fleetInternalToken: env.DRIFTSTACK_FLEET_INTERNAL_TOKEN,
     // V-820 — fleet control-plane activation. Boolean via `=== 'true'`

@@ -1,9 +1,31 @@
 # Profile master-key hardening — KMS-backed envelope (design)
 
-Status: **DESIGN — awaiting founder go + the KMS-provider decision in §5.** Not a
-v1.0 blocker (the static key works); this is the next security-maturity step for
-the cross-account DEK boundary the founder repeatedly flags.
+Status: **✅ PROVIDER-AGNOSTIC PATH SHIPPED (the generic enabler) — see §3a.** The
+cloud-KMS-SDK-native variants (§5) remain an optional founder follow-on. Not a
+v1.0 blocker (the static key works); this hardens the cross-account DEK boundary
+the founder repeatedly flags.
 Author: Driftstack · 2026-06-17 · Scope: Agent 2 (server).
+
+## 3a. ✅ SHIPPED — `PROFILE_MASTER_KEY_CMD` (provider-agnostic, no SDK, opt-in)
+
+Rather than commit to one cloud KMS SDK, the server now supports
+`PROFILE_MASTER_KEY_CMD` (`apps/server/src/lib/config.ts` `resolveProfileMasterKey`):
+when set, the command is run **once at boot** and its stdout is used as the base64
+master key. Operators wire ANY secret source via a command —
+`aws kms decrypt …`, `vault read …`, `sops -d …`, `gcloud kms decrypt …` — so the
+plaintext key never lives in `.env` (only the decrypt command + the KMS ciphertext
+do), and a `.env` leak alone can't recover it. **Fail-closed:** a configured
+command that fails or returns empty makes the server refuse to start (no silent
+fallback). **Backward-compat:** unset → plaintext `PROFILE_MASTER_KEY` (today's
+behavior) → **prod is inert until an operator opts in (zero deploy risk).** The
+command's output flows through the existing 32-byte base64 schema refine. Tests:
+`config-profile-master-key-cmd.test.ts` (CMD stdout used / trim / fail-closed on
+non-zero + empty / bad-key refine / plaintext fallback / inert when both unset).
+
+This is the generalized form of §5-option-4 and _enables_ §5-option-1 (AWS KMS)
+too — `PROFILE_MASTER_KEY_CMD="aws kms decrypt --ciphertext-blob fileb://… --query
+Plaintext --output text"`. A native-SDK integration (§5) is now optional, not
+required, to get the hardening.
 
 ## 1. Current state (verified in code + prod)
 
