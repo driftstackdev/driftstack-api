@@ -236,29 +236,34 @@ export function ProxiesView(): JSX.Element {
         data-component="proxies-hero"
         className="flex flex-wrap items-start gap-4 border-b border-surface-divider pb-3"
       >
-        <div className="min-w-0">
-          <span className="section-label">Network</span>
-          <h2 className="mt-0.5 text-[19px] font-semibold tracking-tight text-ink-primary">
-            SOCKS5 proxies
-            <span className="mono ml-2 text-base font-normal text-ink-muted">
-              {state.proxies.length}
-            </span>
-          </h2>
-          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-secondary">
-            {tested.length > 0 ? (
-              <>
-                <b className="font-semibold text-status-ready">{healthy.length}</b> healthy
-                <span className="text-surface-divider">·</span>
-                <b className="font-semibold text-ink-primary">{udpCapable.length}</b> full-stack
-                <span className="text-surface-divider">·</span>
-                <span className="text-ink-muted">stored locally — never uploaded</span>
-              </>
-            ) : (
-              <span className="text-ink-muted">
-                Stored locally on this device — never uploaded to the control plane.
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/15 text-lg text-accent ring-1 ring-accent/25">
+            🌍
+          </span>
+          <div className="min-w-0">
+            <span className="section-label text-accent">Network egress</span>
+            <h2 className="mt-0.5 text-[19px] font-semibold tracking-tight text-ink-primary">
+              Egress proxies
+              <span className="mono ml-2 text-base font-normal text-ink-muted">
+                {state.proxies.length}
               </span>
-            )}
-          </p>
+            </h2>
+            <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-secondary">
+              {tested.length > 0 ? (
+                <>
+                  <b className="font-semibold text-status-ready">{healthy.length}</b> healthy
+                  <span className="text-surface-divider">·</span>
+                  <b className="font-semibold text-ink-primary">{udpCapable.length}</b> full-stack
+                  <span className="text-surface-divider">·</span>
+                  <span className="text-ink-muted">stored locally — never uploaded</span>
+                </>
+              ) : (
+                <span className="text-ink-muted">
+                  Stored locally on this device — never uploaded to the control plane.
+                </span>
+              )}
+            </p>
+          </div>
         </div>
         <div className="ml-auto flex items-center gap-2">
           {state.proxies.length > 0 && (
@@ -290,49 +295,54 @@ export function ProxiesView(): JSX.Element {
         </div>
       </div>
 
-      {/* Pool summary — capability-board port. Counts are over TESTED
+      {/* Scrollable content region — the hero stays pinned while the stats,
+          proxy list, and (tall) add/edit form scroll, so the form's buttons +
+          the stats are always reachable instead of clipped off-screen. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+        {/* Pool summary — capability-board port. Counts are over TESTED
           proxies only (no fabricated health for never-probed entries). */}
-      {tested.length > 0 && (
-        <div
-          data-component="proxy-pool-stats"
-          className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-surface-divider bg-surface-divider"
-        >
-          <PoolStat k="Tested" v={`${String(tested.length)} / ${String(state.proxies.length)}`} />
-          <PoolStat k="Healthy" v={String(healthy.length)} tone="ok" />
-          <PoolStat k="WebRTC + QUIC" v={String(udpCapable.length)} tone="ok" />
-        </div>
-      )}
+        {tested.length > 0 && (
+          <div
+            data-component="proxy-pool-stats"
+            className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-surface-divider bg-surface-divider"
+          >
+            <PoolStat k="Tested" v={`${String(tested.length)} / ${String(state.proxies.length)}`} />
+            <PoolStat k="Healthy" v={String(healthy.length)} tone="ok" />
+            <PoolStat k="WebRTC + QUIC" v={String(udpCapable.length)} tone="ok" />
+          </div>
+        )}
 
-      {state.error !== null && (
-        <ErrorBanner
-          message={state.error}
-          onDismiss={() => setState((s) => ({ ...s, error: null }))}
-        />
-      )}
+        {state.error !== null && (
+          <ErrorBanner
+            message={state.error}
+            onDismiss={() => setState((s) => ({ ...s, error: null }))}
+          />
+        )}
 
-      {state.proxies.length === 0 ? (
-        <Empty loading={state.loading} onAdd={() => setEditor({ kind: 'add' })} />
-      ) : (
-        <ProxyList
-          proxies={state.proxies}
-          busyId={busyId}
-          testingId={testingId}
-          testResults={testResults}
-          exitResults={exitResults}
-          onEdit={(id) => setEditor({ kind: 'edit', id })}
-          onRemove={(id) => void handleRemove(id)}
-          onTest={(p) => void handleTest(p)}
-        />
-      )}
+        {state.proxies.length === 0 ? (
+          <Empty loading={state.loading} onAdd={() => setEditor({ kind: 'add' })} />
+        ) : (
+          <ProxyList
+            proxies={state.proxies}
+            busyId={busyId}
+            testingId={testingId}
+            testResults={testResults}
+            exitResults={exitResults}
+            onEdit={(id) => setEditor({ kind: 'edit', id })}
+            onRemove={(id) => void handleRemove(id)}
+            onTest={(p) => void handleTest(p)}
+          />
+        )}
 
-      {(editor.kind === 'add' || editor.kind === 'edit') && (
-        <ProxyForm
-          initial={editing !== null ? toDraft(editing) : EMPTY_DRAFT}
-          mode={editor.kind}
-          onCancel={() => setEditor({ kind: 'idle' })}
-          onSave={(d) => void handleSave(d)}
-        />
-      )}
+        {(editor.kind === 'add' || editor.kind === 'edit') && (
+          <ProxyForm
+            initial={editing !== null ? toDraft(editing) : EMPTY_DRAFT}
+            mode={editor.kind}
+            onCancel={() => setEditor({ kind: 'idle' })}
+            onSave={(d) => void handleSave(d)}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -1096,10 +1106,12 @@ function Field({
 
 function PoolStat({ k, v, tone }: { k: string; v: string; tone?: 'ok' }): JSX.Element {
   return (
-    <div className="bg-surface-raised px-3 py-2.5">
-      <p className="section-label">{k}</p>
+    <div
+      className={`px-3 py-2.5 ${tone === 'ok' ? 'bg-status-ready/[0.07]' : 'bg-surface-elevated'}`}
+    >
+      <p className={`section-label ${tone === 'ok' ? 'text-status-ready/80' : ''}`}>{k}</p>
       <p
-        className={`mono mt-0.5 text-lg font-semibold tracking-tight ${
+        className={`mono mt-0.5 text-2xl font-bold tracking-tight ${
           tone === 'ok' ? 'text-status-ready' : 'text-ink-primary'
         }`}
       >
