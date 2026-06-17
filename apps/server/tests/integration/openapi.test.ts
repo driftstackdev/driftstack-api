@@ -191,6 +191,10 @@ describe('OpenAPI spec generation', () => {
         '/v1/profiles/import',
         // V-666 profile ownership transfer
         '/v1/profiles/{id}/transfer',
+        // L4b recycle bin (soft delete → trash → restore / purge)
+        '/v1/profiles/trash',
+        '/v1/profiles/{id}/restore',
+        '/v1/profiles/{id}/purge',
         // V-312 profile snapshots
         '/v1/profiles/{id}/snapshots',
         '/v1/profile-snapshots',

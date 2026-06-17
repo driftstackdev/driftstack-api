@@ -5308,6 +5308,71 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // ── L4b recycle bin (soft delete → trash → restore / purge) ────────────
+  const TrashedProfileOpenApi = ProfileResponseOpenApi.extend({
+    // Set for a trashed profile (the moment it was soft-deleted); null on a
+    // live profile. The trash list only ever returns non-null values.
+    deleted_at: z.string().nullable(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/profiles/trash',
+    operationId: 'listTrashedProfiles',
+    summary: 'List trashed (soft-deleted) profiles, newest-deleted first',
+    tags: ['profiles'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Trashed profiles. Each carries a non-null deleted_at.',
+        content: {
+          'application/json': { schema: z.object({ data: z.array(TrashedProfileOpenApi) }) },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/profiles/{id}/restore',
+    operationId: 'restoreProfile',
+    summary: 'Restore a trashed profile (clears deleted_at; returns it to the live list)',
+    tags: ['profiles'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      200: {
+        description: 'The restored profile.',
+        content: { 'application/json': { schema: ProfileResponseOpenApi } },
+      },
+      404: {
+        description: 'No trashed profile with that id (or owned by another account).',
+        content: problemContent,
+      },
+      409: {
+        description: 'A live profile already holds the name — rename it, then retry.',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/profiles/{id}/purge',
+    operationId: 'purgeProfile',
+    summary: 'Permanently delete a trashed profile, freeing its tier-cap slot (irreversible)',
+    tags: ['profiles'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      204: { description: 'Trashed profile permanently deleted.' },
+      404: {
+        description: 'No trashed profile with that id (or owned by another account).',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+
   // ── V-480 profile export / import (data portability) ───────────────────
   registerRoute(r, {
     method: 'get',
