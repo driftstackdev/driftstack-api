@@ -111,7 +111,7 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
       /function toDraft\(p: ProxyConfig\): ProxyDraft \{\s*\n?\s*return \{\s*\n?\s*label: p\.label,\s*\n?\s*host: p\.host,\s*\n?\s*port: p\.port,\s*\n?\s*username: p\.username,\s*\n?\s*password: p\.password,\s*\n?\s*\};\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /<span className="section-label">\{mode === 'add' \? 'Add proxy' : 'Edit proxy'\}<\/span>/,
+      /<span className="section-label text-accent">\s*\n?\s*\{mode === 'add' \? 'Add proxy' : 'Edit proxy'\}\s*\n?\s*<\/span>/,
     );
     expect(body).toMatch(/\{mode === 'add' \? 'Add proxy' : 'Save changes'\}/);
   });

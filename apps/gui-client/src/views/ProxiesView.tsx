@@ -823,12 +823,33 @@ export function ProxyForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col gap-3 rounded-lg border border-surface-divider bg-surface-raised p-4 shadow-sm"
+      className="relative flex flex-col gap-3 overflow-hidden rounded-xl border border-surface-divider bg-surface-elevated p-4 shadow-lg"
     >
-      <div className="flex items-center justify-between border-b border-surface-divider pb-2">
-        <span className="section-label">{mode === 'add' ? 'Add proxy' : 'Edit proxy'}</span>
-        <span className="mono text-2xs text-ink-muted">{scheme.toUpperCase()}</span>
-      </div>
+      {/* Soft accent glow (matches the Command Center hero) so the form reads as
+          a premium surface rather than a flat dark box. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-10 -top-16 h-36 w-36 rounded-full opacity-40"
+        style={{
+          background: 'radial-gradient(circle, rgb(var(--accent-rgb)/0.45), transparent 70%)',
+        }}
+      />
+      <header className="flex items-start gap-3 border-b border-surface-divider pb-3">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent/15 text-base text-accent ring-1 ring-accent/25">
+          🌍
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className="section-label text-accent">
+            {mode === 'add' ? 'Add proxy' : 'Edit proxy'}
+          </span>
+          <p className="mt-0.5 text-xs text-ink-muted">
+            Route sessions through your own egress — SOCKS5, OpenVPN or WireGuard.
+          </p>
+        </div>
+        <span className="mono shrink-0 rounded-full border border-surface-divider bg-surface-inset px-2 py-0.5 text-2xs font-semibold text-ink-secondary">
+          {scheme.toUpperCase()}
+        </span>
+      </header>
       <Field label="Type">
         <select
           className="form-input"
