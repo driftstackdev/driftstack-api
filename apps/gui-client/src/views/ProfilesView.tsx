@@ -256,6 +256,7 @@ export function ProfilesView({
   const [bulkTag, setBulkTag] = useState('');
   const [bulkExporting, setBulkExporting] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkLaunching, setBulkLaunching] = useState(false);
   // L4b recycle bin — Trash view: a rail entry flips trashView on, which swaps
   // the grid/table for a list of soft-deleted profiles with Restore actions.
   const [trashView, setTrashView] = useState(false);
@@ -1022,6 +1023,36 @@ export function ProfilesView({
     }
   }
 
+  // Bulk launch — start a session for each selected profile, sequentially (so
+  // the fleet sees distinct launches + we don't blast the concurrency cap).
+  // Confirms first since each launch spawns a billed session; best-effort per
+  // profile (a gated/failed one is skipped, the rest still launch).
+  async function handleBulkLaunch(): Promise<void> {
+    if (!client || selectedIds.size === 0 || bulkLaunching) return;
+    const targets = state.profiles.filter((p) => selectedIds.has(p.id));
+    if (targets.length === 0) return;
+    const ok = await confirm(
+      `Launch ${targets.length.toString()} session${
+        targets.length === 1 ? '' : 's'
+      }? Each selected profile opens its own browser session.`,
+      { confirmLabel: 'Launch' },
+    );
+    if (!ok) return;
+    setBulkLaunching(true);
+    try {
+      for (const p of targets) {
+        try {
+          await handleLaunch(p);
+        } catch {
+          /* skip one that failed/was gated — keep launching the rest */
+        }
+      }
+      setSelectedIds(new Set());
+    } finally {
+      setBulkLaunching(false);
+    }
+  }
+
   // Bulk delete — destructive, so it goes through the in-app confirm (native
   // confirm() is flaky in the Tauri WKWebView). Best-effort per id (a running
   // profile's delete fails server-side and is skipped, not fatal); bindings are
@@ -1454,9 +1485,22 @@ export function ProfilesView({
           data-component="bulk-bar"
           className="animate-view-in fixed bottom-5 left-1/2 z-40 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center gap-2 rounded-full border border-surface-divider bg-surface-elevated px-4 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.4)]"
         >
-          <span className="text-xs font-medium text-ink-primary">
+          <span className="text-xs font-semibold text-ink-primary">
             {selectedIds.size.toString()} selected
           </span>
+          <button
+            type="button"
+            className="btn-primary flex items-center gap-1.5 px-3 py-1 text-xs disabled:opacity-50"
+            onClick={() => void handleBulkLaunch()}
+            disabled={bulkLaunching}
+            title="Open a browser session for each selected profile"
+          >
+            <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
+              <path d="M5 3.5v9l7-4.5z" fill="currentColor" />
+            </svg>
+            {bulkLaunching ? 'Launching…' : 'Launch'}
+          </button>
+          <span aria-hidden className="h-5 w-px bg-surface-divider" />
           <FolderPicker
             ariaLabel="Bulk folder"
             noneLabel="Move to folder…"
@@ -1506,6 +1550,7 @@ export function ProfilesView({
           >
             {bulkExporting ? 'Exporting…' : 'Export'}
           </button>
+          <span aria-hidden className="h-5 w-px bg-surface-divider" />
           <button
             type="button"
             className="rounded px-2.5 py-1 text-xs font-medium text-status-error transition-colors hover:bg-status-error/10 disabled:opacity-50"
