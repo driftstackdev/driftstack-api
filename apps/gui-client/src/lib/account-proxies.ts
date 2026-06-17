@@ -9,9 +9,25 @@
 // widening for a GUI feature. The local Tauri proxy store stays as the OFFLINE
 // cache; ProfilesView/ProxiesView reconcile (server wins on a successful load).
 
-export type AccountProxyScheme = 'socks5' | 'http';
+export type AccountProxyScheme = 'socks5' | 'http' | 'openvpn' | 'wireguard';
 
-/** Server view — never carries the password (has_password instead). */
+/** OVPN/WG — VPN config blocks on the create/update body. The secret-bearing
+ *  parts (config_blob/password, private_key) are write-only; the server wraps
+ *  them under the account TMK and never echoes them (has_secret instead). */
+export interface OpenVpnConfigInput {
+  config_blob: string;
+  username?: string;
+  password?: string;
+}
+export interface WireGuardConfigInput {
+  private_key: string;
+  peer_public_key: string;
+  endpoint: string;
+  allowed_ips: string;
+  dns?: string;
+}
+
+/** Server view — never carries the password/secret (has_password/has_secret instead). */
 export interface AccountProxyMeta {
   id: string;
   label: string;
@@ -20,11 +36,15 @@ export interface AccountProxyMeta {
   port: number;
   username: string | null;
   has_password: boolean;
+  /** True when a VPN secret (openvpn config_blob / wireguard private_key) is stored. */
+  has_secret?: boolean;
   created_at: string;
   updated_at: string;
 }
 
-/** Create body. `password` is write-only; omit (or null) for no password. */
+/** Create body. `password` is write-only; omit (or null) for no password. VPN
+ *  schemes carry the matching `openvpn`/`wireguard` block; host/port are the
+ *  (display) endpoint. */
 export interface AccountProxyInput {
   label: string;
   scheme?: AccountProxyScheme;
@@ -32,6 +52,8 @@ export interface AccountProxyInput {
   port: number;
   username?: string | null;
   password?: string | null;
+  openvpn?: OpenVpnConfigInput;
+  wireguard?: WireGuardConfigInput;
 }
 
 /** Update body — every field optional; password omitted keeps the stored one,
@@ -93,4 +115,58 @@ export async function deleteProxy(baseUrl: string, apiKey: string, id: string): 
   if (!res.ok && res.status !== 404) {
     throw new Error(`proxy delete failed: ${res.status.toString()}`);
   }
+}
+
+// OVPN/WG arc — glue from a pasted VPN config to the create body. The VPN
+// editor parses the paste with lib/parse-wireguard + lib/parse-openvpn (which
+// extract the endpoint) and calls these to build the AccountProxyInput. host/
+// port are set to the endpoint so the proxy renders meaningfully in the list.
+// Pure + total (no throws): a bad paste → an `error` so the form can surface it.
+
+/** Split an `host:port` endpoint (last colon, so IPv6 hosts survive). */
+function splitEndpoint(endpoint: string): { host: string; port: number } | null {
+  const at = endpoint.lastIndexOf(':');
+  if (at <= 0) return null;
+  const host = endpoint.slice(0, at);
+  const port = Number.parseInt(endpoint.slice(at + 1), 10);
+  if (host === '' || !Number.isInteger(port) || port < 1 || port > 65535) return null;
+  return { host, port };
+}
+
+/** Parsed wg0.conf → create body. Returns `{ error }` when the paste is unusable. */
+export function buildWireGuardProxyInput(
+  label: string,
+  parsed: WireGuardConfigInput | null,
+): AccountProxyInput | { error: string } {
+  if (parsed === null) return { error: 'Not a valid wg0.conf (missing keys or endpoint).' };
+  const ep = splitEndpoint(parsed.endpoint);
+  if (ep === null) return { error: 'WireGuard endpoint must be host:port.' };
+  return {
+    label,
+    scheme: 'wireguard',
+    host: ep.host,
+    port: ep.port,
+    wireguard: parsed,
+  };
+}
+
+/** .ovpn paste + extracted remote → create body. */
+export function buildOpenVpnProxyInput(
+  label: string,
+  configBlob: string,
+  remote: { host: string; port: number } | null,
+  creds?: { username?: string; password?: string },
+): AccountProxyInput | { error: string } {
+  if (remote === null) return { error: 'Not a valid .ovpn (missing client/remote directive).' };
+  return {
+    label,
+    scheme: 'openvpn',
+    host: remote.host,
+    port: remote.port,
+    openvpn: {
+      config_blob: configBlob,
+      ...(creds?.username ? { username: creds.username } : {}),
+      ...(creds?.password ? { password: creds.password } : {}),
+    },
+  };
 }
