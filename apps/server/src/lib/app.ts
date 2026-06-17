@@ -65,6 +65,7 @@ import type { FleetControlRegistry } from '../services/fleet-control-registry.js
 import type { SessionPageStateStore } from '../services/session-page-state-store.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
+import type { AccountProxiesRepo } from '../db/account-proxies-repo.js';
 import { registerAccountMeRoutes } from '../routes/account-me.js';
 import { registerAccountWebSessionsRoutes } from '../routes/account-web-sessions.js';
 import { registerAccountMfaRoutes } from '../routes/account-mfa.js';
@@ -509,6 +510,12 @@ export interface AppDeps {
   driver?: Driver;
   /** V-237: profiles repo — feeds /v1/account/me profile counts. */
   profilesRepo?: ProfilesRepo;
+  /** ARC A: per-account customer proxies repo — powers /v1/account/me/proxies. */
+  accountProxiesRepo?: AccountProxiesRepo | null;
+  /** ARC A: decoded PROFILE_MASTER_KEY — wraps proxy passwords under the account
+   *  TMK. Null → proxy passwords can't be stored (create/update with a password
+   *  → 503). */
+  profileMasterKey?: Buffer | null;
   /**
    * V-352b — public R2 bucket client used by avatar upload + the
    * presigned-GET URL surfaced on /v1/account/me. When omitted, the
@@ -1014,6 +1021,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       authCache: deps.authCache,
       r2Public: deps.r2Public ?? null,
       mfaService: deps.mfaService ?? null,
+      accountProxiesRepo: deps.accountProxiesRepo ?? null,
+      profileMasterKey: deps.profileMasterKey ?? null,
       // 2026-05-19 — OAuth-IDP avatar fallback for the avatar_url
       // response field. When the account has no R2-uploaded avatar
       // BUT has an OAuth link with a provider_avatar_url, return that

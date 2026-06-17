@@ -1668,6 +1668,93 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
     },
   });
+  // ARC A — per-account customer proxies. The password is write-only (accepted
+  // on create/update, never returned); responses expose has_password.
+  const AccountProxyInputOpenApi = z
+    .object({
+      label: z.string(),
+      scheme: z.enum(['socks5', 'http']).optional(),
+      host: z.string(),
+      port: z.number().int(),
+      username: z.string().nullable().optional(),
+      password: z.string().nullable().optional(),
+    })
+    .openapi('AccountProxyInput');
+  const AccountProxyMetadataOpenApi = z
+    .object({
+      id: z.string(),
+      label: z.string(),
+      scheme: z.enum(['socks5', 'http']),
+      host: z.string(),
+      port: z.number().int(),
+      username: z.string().nullable(),
+      has_password: z.boolean(),
+      created_at: z.string(),
+      updated_at: z.string(),
+    })
+    .openapi('AccountProxyMetadata');
+  const AccountProxyListOpenApi = z
+    .object({ data: z.array(AccountProxyMetadataOpenApi) })
+    .openapi('AccountProxyList');
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/account/me/proxies',
+    summary: 'List the account’s customer proxies (account_owner; no secrets)',
+    tags: ['account'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'The account’s proxies (metadata only — has_password, never the password).',
+        content: { 'application/json': { schema: AccountProxyListOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/account/me/proxies',
+    summary: 'Create a customer proxy (account_owner)',
+    tags: ['account'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: AccountProxyInputOpenApi } } },
+    },
+    responses: {
+      201: {
+        description: 'The created proxy (metadata only).',
+        content: { 'application/json': { schema: AccountProxyMetadataOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'put',
+    path: '/v1/account/me/proxies/{id}',
+    summary: 'Update a customer proxy (account_owner; omit password to keep it)',
+    tags: ['account'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: AccountProxyInputOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'The updated proxy (metadata only).',
+        content: { 'application/json': { schema: AccountProxyMetadataOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/account/me/proxies/{id}',
+    summary: 'Delete a customer proxy (account_owner)',
+    tags: ['account'],
+    security: auth,
+    responses: {
+      204: { description: 'Deleted.' },
+      ...errors4xx,
+    },
+  });
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/me/bundled-llm-status',

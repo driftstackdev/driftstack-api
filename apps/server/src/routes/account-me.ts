@@ -12,11 +12,14 @@
 import type { FastifyInstance } from 'fastify';
 import {
   AccountOrganizationSchema,
+  AccountProxyInputSchema,
+  AccountProxyUpdateSchema,
   AVATAR_MAX_BYTES,
   PROFILES_PER_TIER,
   TIER_CONCURRENT_SESSION_LIMITS,
   UpdateAccountMeRequestSchema,
   UploadAvatarRequestSchema,
+  type AccountProxyMetadata,
   type AccountTier,
 } from '@driftstack/api-types';
 import type { AccountAuthRepo } from '../services/auth.js';
@@ -24,6 +27,12 @@ import type { AuthCache } from '../services/auth-cache.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import type { MfaService } from '../services/mfa.js';
+import type {
+  AccountProxiesRepo,
+  AccountProxyRow,
+  AccountProxyRowUpdates,
+} from '../db/account-proxies-repo.js';
+import { wrapAccountSecret } from '../lib/profile-key-hierarchy.js';
 import { avatarKey, type R2 } from '../lib/r2.js';
 import {
   BadRequestError,
@@ -63,6 +72,14 @@ export interface AccountMeRoutesOptions {
   oauthLinksRepo?: {
     listForAccount(accountId: string): Promise<readonly { providerAvatarUrl: string | null }[]>;
   };
+  /** ARC A — per-account customer proxies repo. When wired, the
+   *  /v1/account/me/proxies CRUD surface is live. Null/omitted → the routes
+   *  return 503 (feature not configured). */
+  accountProxiesRepo?: AccountProxiesRepo | null;
+  /** ARC A — PROFILE_MASTER_KEY (decoded). Needed to wrap proxy passwords under
+   *  the account TMK. Null → passwords can't be stored; a create/update that
+   *  carries a password is rejected (503) rather than stored in the clear. */
+  profileMasterKey?: Buffer | null;
 }
 
 /**
@@ -82,6 +99,8 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   const r2Public = opts.r2Public ?? null;
   const mfaService = opts.mfaService ?? null;
   const oauthLinksRepo = opts.oauthLinksRepo ?? null;
+  const accountProxiesRepo = opts.accountProxiesRepo ?? null;
+  const proxyMasterKey = opts.profileMasterKey ?? null;
 
   // 2026-05-19 — first non-null providerAvatarUrl from the
   // account's OAuth links, used as fallback when avatar_r2_key is
@@ -287,6 +306,122 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       }
       await authRepo.setOrganization(ctx.account.id, parsed.data);
       return parsed.data;
+    },
+  );
+
+  // ARC A — per-account customer proxies (CRUD). The customer registers their
+  // own SOCKS5/HTTP proxies so a session can be dispatched through one (the
+  // session-dispatch wiring lands in a later slice). All routes are
+  // account_owner-scoped; the password is WRITE-ONLY — wrapped under the account
+  // TMK on write, NEVER returned (responses expose has_password). 503 when the
+  // feature isn't wired. The connection-test endpoint is deliberately deferred
+  // to the slice that ships the SSRF host-guard (testing a customer-controlled
+  // host is an SSRF vector — don't expose it before the guard exists).
+  function proxyToMetadata(r: AccountProxyRow): AccountProxyMetadata {
+    return {
+      id: r.id,
+      label: r.label,
+      scheme: r.scheme as AccountProxyMetadata['scheme'],
+      host: r.host,
+      port: r.port,
+      username: r.username,
+      has_password: r.wrappedPassword !== null,
+      created_at: r.createdAt.toISOString(),
+      updated_at: r.updatedAt.toISOString(),
+    };
+  }
+
+  // Wrap a plaintext proxy password under the account TMK for storage. Empty /
+  // null → null (no secret). A non-empty password with no master key configured
+  // is a 503 — we NEVER store a proxy password in the clear.
+  function wrapProxyPassword(accountId: string, password: string | null): string | null {
+    if (password === null || password.length === 0) return null;
+    if (proxyMasterKey === null) {
+      throw new FeatureUnavailableError(
+        'Proxy passwords are unavailable (encryption not configured).',
+      );
+    }
+    return wrapAccountSecret(proxyMasterKey, accountId, Buffer.from(password, 'utf8'));
+  }
+
+  app.get(
+    '/v1/account/me/proxies',
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      if (!accountProxiesRepo) throw new FeatureUnavailableError('Proxies are not configured.');
+      const rows = await accountProxiesRepo.list(ctx.account.id);
+      return { data: rows.map(proxyToMetadata) };
+    },
+  );
+
+  app.post(
+    '/v1/account/me/proxies',
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
+    async (request, reply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      if (!accountProxiesRepo) throw new FeatureUnavailableError('Proxies are not configured.');
+      const parsed = AccountProxyInputSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid proxy.');
+      }
+      const wrappedPassword = wrapProxyPassword(ctx.account.id, parsed.data.password);
+      const row = await accountProxiesRepo.create(ctx.account.id, {
+        label: parsed.data.label,
+        scheme: parsed.data.scheme,
+        host: parsed.data.host,
+        port: parsed.data.port,
+        username: parsed.data.username,
+        wrappedPassword,
+      });
+      reply.code(201);
+      return proxyToMetadata(row);
+    },
+  );
+
+  app.put(
+    '/v1/account/me/proxies/:id',
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      if (!accountProxiesRepo) throw new FeatureUnavailableError('Proxies are not configured.');
+      const { id } = request.params as { id: string };
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const parsed = AccountProxyUpdateSchema.safeParse(body);
+      if (!parsed.success) {
+        throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid proxy.');
+      }
+      const updates: AccountProxyRowUpdates = {};
+      if (parsed.data.label !== undefined) updates.label = parsed.data.label;
+      if (parsed.data.scheme !== undefined) updates.scheme = parsed.data.scheme;
+      if (parsed.data.host !== undefined) updates.host = parsed.data.host;
+      if (parsed.data.port !== undefined) updates.port = parsed.data.port;
+      if (parsed.data.username !== undefined) updates.username = parsed.data.username;
+      // password: key absent = keep existing; null = clear; string = (re)wrap.
+      if ('password' in body) {
+        updates.wrappedPassword = wrapProxyPassword(ctx.account.id, parsed.data.password ?? null);
+      }
+      const row = await accountProxiesRepo.update({ id, accountId: ctx.account.id, updates });
+      if (row === null) throw new NotFoundError('Proxy not found.');
+      return proxyToMetadata(row);
+    },
+  );
+
+  app.delete(
+    '/v1/account/me/proxies/:id',
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
+    async (request, reply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      if (!accountProxiesRepo) throw new FeatureUnavailableError('Proxies are not configured.');
+      const { id } = request.params as { id: string };
+      const ok = await accountProxiesRepo.delete({ id, accountId: ctx.account.id });
+      if (!ok) throw new NotFoundError('Proxy not found.');
+      reply.code(204);
+      return null;
     },
   );
 

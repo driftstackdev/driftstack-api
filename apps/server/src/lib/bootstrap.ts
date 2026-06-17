@@ -70,6 +70,7 @@ import { DrizzleOAuthLinksRepo, DrizzleOAuthPendingLinksRepo } from '../db/oauth
 import { OAuthClientServiceImpl } from '../services/oauth-client-service.js';
 import { DrizzleStripeWebhooksRepo } from '../db/stripe-webhooks-repo.js';
 import { DrizzleProfilesRepo } from '../db/profiles-repo.js';
+import { DrizzleAccountProxiesRepo } from '../db/account-proxies-repo.js';
 import { SessionsService } from '../services/sessions.js';
 import { ApiKeysService } from '../services/api-keys.js';
 import { MfaService } from '../services/mfa.js';
@@ -1026,6 +1027,7 @@ export async function createProductionDeps(
   // V-081: Profiles service.
   // V-225 — accountAudit wired for profile.{created,deleted}.
   const profilesRepo = new DrizzleProfilesRepo(dbHandle);
+  const accountProxiesRepo = new DrizzleAccountProxiesRepo(dbHandle);
   // L4b Step 4 — recycle-bin retention purge. Daily 04:00 UTC sweep that
   // hard-deletes trashed profiles (+ their wrapped DEK) older than 30 days;
   // re-arms after each run. Without it, soft-deleted rows accumulate forever.
@@ -1401,6 +1403,10 @@ export async function createProductionDeps(
     apiKeysRepo,
     driver,
     profilesRepo,
+    // ARC A — per-account customer proxies repo + the decoded master key for
+    // wrapping proxy passwords; both feed /v1/account/me/proxies.
+    accountProxiesRepo,
+    profileMasterKey: profileMasterKeyBuf,
     // V-352b — public-bucket R2 client used by avatar upload + the
     // presigned-GET URL on /v1/account/me. Same client the V-295c2
     // status-snapshot writer uses; null when R2_BUCKET_PUBLIC isn't

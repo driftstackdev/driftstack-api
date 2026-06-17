@@ -61,6 +61,54 @@ export const AccountOrganizationSchema = z.object({
 });
 export type AccountOrganization = z.infer<typeof AccountOrganizationSchema>;
 
+// ARC A — per-account customer proxies. A customer registers their own
+// SOCKS5/HTTP proxies so a session can be dispatched through one. The password
+// is WRITE-ONLY: accepted on create/update, wrapped server-side under the
+// account TMK, and NEVER returned — responses expose `has_password` instead.
+export const AccountProxySchemeSchema = z.enum(['socks5', 'http']);
+
+export const AccountProxyInputSchema = z.object({
+  label: z.string().min(1).max(80),
+  scheme: AccountProxySchemeSchema.default('socks5'),
+  host: z.string().min(1).max(255),
+  port: z.number().int().min(1).max(65535),
+  username: z.string().max(255).nullable().default(null),
+  // Write-only — wrapped server-side, never echoed back.
+  password: z.string().max(1024).nullable().default(null),
+});
+export type AccountProxyInput = z.infer<typeof AccountProxyInputSchema>;
+
+// PUT body — every field optional. `password` omitted = keep existing,
+// `password: null` = clear, `password: "..."` = set (no defaults, so the
+// omit-vs-null distinction the handler relies on is preserved).
+export const AccountProxyUpdateSchema = z.object({
+  label: z.string().min(1).max(80).optional(),
+  scheme: AccountProxySchemeSchema.optional(),
+  host: z.string().min(1).max(255).optional(),
+  port: z.number().int().min(1).max(65535).optional(),
+  username: z.string().max(255).nullable().optional(),
+  password: z.string().max(1024).nullable().optional(),
+});
+export type AccountProxyUpdate = z.infer<typeof AccountProxyUpdateSchema>;
+
+export const AccountProxyMetadataSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  scheme: AccountProxySchemeSchema,
+  host: z.string(),
+  port: z.number().int(),
+  username: z.string().nullable(),
+  has_password: z.boolean(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export type AccountProxyMetadata = z.infer<typeof AccountProxyMetadataSchema>;
+
+export const AccountProxyListSchema = z.object({
+  data: z.array(AccountProxyMetadataSchema),
+});
+export type AccountProxyList = z.infer<typeof AccountProxyListSchema>;
+
 export const ProfileSchema = z.object({
   id: ProfileIdSchema,
   name: z.string(),
