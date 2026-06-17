@@ -38,6 +38,23 @@ const RegisterBodySchema = z.object({
   }),
 });
 
+// V-820 fleet-node IDENTITY registration body. Distinct from the LiveKit-creds
+// RegisterBodySchema above: this CREATES the fleet_nodes row (mints the uuid) by
+// the node's Ed25519 public key, so the CP can auth the node's WSS handshake
+// (FleetNodeAuth.getPublicKey lookup). public_key_base64url is the base64url
+// (no-padding) 32-byte Ed25519 public key — 43 chars; bounded loosely so a valid
+// key is never rejected on a strict length assumption.
+const RegisterNodeBodySchema = z.object({
+  public_key_base64url: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]+$/, 'public_key_base64url must be base64url (no padding)')
+    .min(42)
+    .max(48),
+  display_name: z.string().min(1).max(128),
+  region: z.string().min(1).max(64),
+  hardware_class: z.string().min(1).max(64),
+});
+
 export interface RegisterMacNodesRoutesDeps {
   repo: DrizzleFleetNodesRepo;
   /** MFA_ENCRYPTION_KEY (base64-encoded 32-byte AES-256 key). */
@@ -162,6 +179,66 @@ export function registerMacNodesRoutes(
         mac_node_id: updated.id,
         livekit_registered_at: updated.livekit?.registeredAt.toISOString() ?? now().toISOString(),
         ws_url: updated.livekit?.wsUrl ?? body.livekit.ws_url,
+      });
+    },
+  );
+
+  // V-820 fleet-node IDENTITY registration — the prod path the
+  // worker-cp-connect-readiness §2 blocker calls for (was: only a local seed
+  // script / raw SQL). Admin-scoped: an operator POSTs the box's Ed25519 public
+  // key + metadata, this mints the fleet_nodes row, and the response returns the
+  // minted uuid → set it as DRIFTSTACK_MAC_NODE_ID on the daemon (its JWT
+  // iss/sub must equal this uuid for the FleetNodeAuth.getPublicKey lookup; the
+  // human display_name is NOT the node id — see A2-A3-BUS W2203b). LiveKit creds
+  // are set separately via POST /v1/mac-nodes/register once identity exists.
+  app.post(
+    '/v1/mac-nodes',
+    {
+      preHandler: [
+        app.requireAuth,
+        app.requireScope('driftstack_internal_admin'),
+        app.rateLimit('global'),
+      ],
+    },
+    async (req, reply) => {
+      const parsed = RegisterNodeBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError(parsed.error.flatten());
+      }
+      const b = parsed.data;
+      let node;
+      try {
+        node = await repo.register({
+          publicKeyBase64Url: b.public_key_base64url,
+          displayName: b.display_name,
+          region: b.region,
+          hardwareClass: b.hardware_class,
+          registeredAt: now(),
+        });
+      } catch (err) {
+        // Unique-violation on public_key_base64url → this key is already
+        // registered (fleet_nodes_public_key_unique). Surface as a 400 rather
+        // than a 500 so a re-run is a clear client error, not a server fault.
+        if (
+          err !== null &&
+          typeof err === 'object' &&
+          'code' in err &&
+          (err as { code?: string }).code === '23505'
+        ) {
+          throw new BadRequestError('A fleet node with this public key is already registered.');
+        }
+        throw err;
+      }
+      // Response carries the minted uuid (the node id) + the stored metadata.
+      // The public key is echoed back (it is public, not a secret) for
+      // operator confirmation.
+      return reply.code(201).send({
+        mac_node_id: node.id,
+        public_key_base64url: node.publicKeyBase64Url,
+        display_name: node.displayName,
+        region: node.region,
+        hardware_class: node.hardwareClass,
+        registered_at: node.registeredAt.toISOString(),
       });
     },
   );
