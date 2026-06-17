@@ -346,6 +346,31 @@ export const ResumeSessionSchema = z
   })
   .strict();
 export type ResumeSession = z.infer<typeof ResumeSessionSchema>;
+
+// ── ControlInbound.controlCommand (server → harness; fleet-admin §A5 control) ──
+// NODE-level operator control for the admin Fleet panel (drain/cordon/restart).
+// Unlike the session-scoped frames above, this targets the NODE — it's sent over
+// that node's own authenticated WSS connection (the connection IS the node), so
+// no node id rides the frame. A2's chosen control-signal path (A2-A3-BUS W2203:
+// a command frame over the existing WSS, NOT an out-of-band SSH hook — keeps
+// control on the one authenticated channel). The harness routes each command:
+//   cordon   → refuse new assigns, keep active sessions (sets the cordoned bit)
+//   uncordon → resume accepting assigns
+//   drain    → cordon + shed: let active sessions finish, then idle (beginDrain)
+//   restart  → drain then exit so launchd respawns a fresh daemon
+// `reason` is operator-supplied free text for the node's logs + the audit trail.
+// The enum is extensible (additive) as the control set grows.
+export const CONTROL_COMMANDS = ['cordon', 'uncordon', 'drain', 'restart'] as const;
+export type ControlCommandKind = (typeof CONTROL_COMMANDS)[number];
+export const ControlCommandSchema = z
+  .object({
+    type: z.literal('controlCommand'),
+    command: z.enum(CONTROL_COMMANDS),
+    reason: z.string().min(1).max(512).optional(),
+  })
+  .strict();
+export type ControlCommand = z.infer<typeof ControlCommandSchema>;
+
 export const SESSION_ASSIGN_TRANSPORT_MODES = ['h2-only', 'h2-and-h3'] as const;
 export type SessionAssignTransportMode = (typeof SESSION_ASSIGN_TRANSPORT_MODES)[number];
 

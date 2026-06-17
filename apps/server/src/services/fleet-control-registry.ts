@@ -24,6 +24,7 @@ import {
   type SessionEnd,
   type PauseSession,
   type ResumeSession,
+  type ControlCommand,
   type ProfileSaved,
   type ProfileSaveFailed,
   type ChallengeDetected,
@@ -103,6 +104,17 @@ export class FleetControlConnection {
 
   sendResumeSession(resume: ResumeSession): void {
     this.send(JSON.stringify(resume));
+  }
+
+  /**
+   * Fleet-admin (§A5) — push a node-level `controlCommand` (cordon / uncordon /
+   * drain / restart) to THIS node (fire-and-forget, same framing as the others).
+   * The connection IS the node, so the command needs no node id. Build the
+   * envelope with serializeControlCommand; the harness routes it to
+   * beginDrain/cordon/restart (A2-A3-BUS W2203; harness receiver per W2197).
+   */
+  sendControlCommand(command: ControlCommand): void {
+    this.send(JSON.stringify(command));
   }
 
   /**

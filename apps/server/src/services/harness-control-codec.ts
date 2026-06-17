@@ -23,6 +23,7 @@ import {
   SessionEndSchema,
   PauseSessionSchema,
   ResumeSessionSchema,
+  ControlCommandSchema,
   HARNESS_INTENT_PARAM_SCHEMAS,
   type IntentDispatch,
   type IntentResultEnvelope,
@@ -30,6 +31,8 @@ import {
   type SessionEnd,
   type PauseSession,
   type ResumeSession,
+  type ControlCommand,
+  type ControlCommandKind,
   type SessionAssignTransportMode,
   type HarnessIntentName,
   type HarnessErrorCode,
@@ -250,6 +253,25 @@ export function serializeResumeSession(args: {
     type: 'resumeSession',
     sessionId: args.sessionId,
     ...(args.challengeId !== undefined ? { challengeId: args.challengeId } : {}),
+  });
+}
+
+/**
+ * Fleet-admin (§A5) — build a wire-ready `controlCommand` ControlInbound for a
+ * node-level operator action (cordon / uncordon / drain / restart), sent over
+ * that node's own WSS connection. `reason` is operator free text for the node's
+ * logs + the audit trail. Re-validated so a malformed envelope never leaves the
+ * server. (A2-A3-BUS W2203: command-frame control-signal path; harness builds
+ * the matching receiver per W2197.)
+ */
+export function serializeControlCommand(args: {
+  command: ControlCommandKind;
+  reason?: string;
+}): ControlCommand {
+  return ControlCommandSchema.parse({
+    type: 'controlCommand',
+    command: args.command,
+    ...(args.reason !== undefined ? { reason: args.reason } : {}),
   });
 }
 
