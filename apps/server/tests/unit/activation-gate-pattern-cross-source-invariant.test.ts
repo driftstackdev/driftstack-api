@@ -62,13 +62,6 @@ const FEATURES: GatedFeature[] = [
     depsField: 'sessionEgressService',
   },
   {
-    name: 'saved-proxies (EGRESS reusable library)',
-    routesFile: 'apps/server/src/routes/saved-proxies.ts',
-    wiredFn: 'registerSavedProxiesRoutes',
-    disabledFn: 'registerSavedProxiesDisabledRoutes',
-    depsField: 'sessionEgressService',
-  },
-  {
     name: 'agent-sessions (AI chat)',
     routesFile: 'apps/server/src/routes/agent-sessions.ts',
     wiredFn: 'registerAgentSessionsRoutes',

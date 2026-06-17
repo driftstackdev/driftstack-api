@@ -19,7 +19,6 @@ const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const ROUTES = [
   { file: 'billing.ts', registrar: 'registerBillingDisabledRoutes' },
   { file: 'session-proxy.ts', registrar: 'registerSessionProxyDisabledRoutes' },
-  { file: 'saved-proxies.ts', registrar: 'registerSavedProxiesDisabledRoutes' },
   { file: 'agent-sessions.ts', registrar: 'registerAgentSessionsDisabledRoutes' },
   { file: 'fleet-events.ts', registrar: 'registerFleetEventsDisabledRoutes' },
   {

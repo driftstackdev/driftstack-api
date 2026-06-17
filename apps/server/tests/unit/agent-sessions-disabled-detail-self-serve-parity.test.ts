@@ -105,21 +105,11 @@ describe('recipes disabled-stub 503 detail — customer-facing, no internal-hand
   });
 });
 
-describe('saved-proxies + session-proxy disabled-stub 503 detail — no internal "planning file 133" jargon', () => {
-  const SAVED = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes/saved-proxies.ts'), 'utf8');
+describe('session-proxy disabled-stub 503 detail — no internal "planning file 133" jargon', () => {
   const SESSION = readFileSync(
     resolve(REPO_ROOT, 'apps/server/src/routes/session-proxy.ts'),
     'utf8',
   );
-
-  it('saved-proxies does NOT reference internal "planning file 133" in the customer-facing 503 detail', () => {
-    const fnIdx = SAVED.indexOf('registerSavedProxiesDisabledRoutes');
-    expect(fnIdx).toBeGreaterThan(-1);
-    const tail = SAVED.slice(fnIdx);
-    const fnEnd = tail.indexOf('export function', 10);
-    const fnBody = fnEnd > 0 ? tail.slice(0, fnEnd) : tail;
-    expect(fnBody).not.toMatch(/planning file 133/);
-  });
 
   it('session-proxy does NOT reference internal "planning file 133" in the customer-facing 503 detail', () => {
     const fnIdx = SESSION.indexOf('registerSessionProxyDisabledRoutes');
@@ -130,15 +120,10 @@ describe('saved-proxies + session-proxy disabled-stub 503 detail — no internal
     expect(fnBody).not.toMatch(/planning file 133/);
   });
 
-  it('both proxy disabled-stubs surface the same customer-readable "Phase 1 SOCKS5 on the roadmap" framing', () => {
-    expect(SAVED).toMatch(/Phase 1 SOCKS5 support is on the roadmap/);
+  it('the session-proxy disabled-stub surfaces the customer-readable Phase-1-SOCKS5-on-the-roadmap framing + the default-egress impact', () => {
+    // Customers reading the 503 need to know the impact: their sessions
+    // still work, just not via their custom proxy yet.
     expect(SESSION).toMatch(/Phase 1 SOCKS5 support is on the roadmap/);
-  });
-
-  it("both proxy disabled-stubs tell customers that sessions route through Driftstack's default egress until activation", () => {
-    // Customers reading the 503 need to know the impact: their
-    // sessions still work, just not via their custom proxy yet.
-    expect(SAVED).toMatch(/route through Driftstack's default egress/);
     expect(SESSION).toMatch(/route through Driftstack's default egress/);
   });
 });

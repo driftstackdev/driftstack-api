@@ -135,10 +135,6 @@ import {
   registerSessionProxyRoutes,
 } from '../routes/session-proxy.js';
 import {
-  registerSavedProxiesDisabledRoutes,
-  registerSavedProxiesRoutes,
-} from '../routes/saved-proxies.js';
-import {
   registerAgentSessionsDisabledRoutes,
   registerAgentSessionsRoutes,
   type SessionDispatchConfig,
@@ -1230,16 +1226,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // the dashboard get a machine-readable "not yet shipped" signal.
   if (deps.sessionEgressService !== undefined) {
     registerSessionProxyRoutes(app, { service: deps.sessionEgressService });
-    registerSavedProxiesRoutes(app, {
-      service: deps.sessionEgressService,
-      // 2026-05-20 — audit emit on POST + DELETE (currently stubbed
-      // until EG-API-1.6 wires the storage backend; emit point is
-      // pre-positioned in the route handler).
-      ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
-    });
   } else {
     registerSessionProxyDisabledRoutes(app);
-    registerSavedProxiesDisabledRoutes(app);
   }
 
   // AI-D — /v1/agent-sessions/* route surface. Same activation gate
