@@ -75,9 +75,9 @@ describe('W463.A apps/docs/src/data/nav.ts content parity', () => {
     expect(body).toMatch(/\{ href: '\/guides\/live-video\/', label: 'Live video' \}/);
   });
 
-  it('API reference section: 9 entries pinned (api-keys + team + mfa + usage + audit-log + profiles + sessions + 2 overview entries)', () => {
+  it('API reference section: pinned entries (api-keys + team + mfa + usage + audit-log + profiles + proxies + sessions + 2 overview entries); ARC A added Account proxies between Profiles and Sessions', () => {
     expect(body).toMatch(
-      /\{\s*\n?\s*label: 'API reference',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/api\/', label: 'API overview' \},\s*\n?\s*\{ href: '\/api\/versioning\/', label: 'Versioning policy' \},\s*\n?\s*\{ href: '\/api\/api-keys\/', label: 'API keys' \},\s*\n?\s*\{ href: '\/api\/team\/', label: 'Team RBAC' \},\s*\n?\s*\{ href: '\/api\/mfa\/', label: 'Two-factor auth \(MFA\)' \},\s*\n?\s*\{ href: '\/api\/usage\/', label: 'Usage \+ quotas' \},\s*\n?\s*\{ href: '\/api\/audit-log\/', label: 'Audit log' \},\s*\n?\s*\{ href: '\/api\/profiles\/', label: 'Profiles' \},\s*\n?\s*\{ href: '\/api\/sessions\/', label: 'Sessions' \},/,
+      /\{\s*\n?\s*label: 'API reference',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/api\/', label: 'API overview' \},\s*\n?\s*\{ href: '\/api\/versioning\/', label: 'Versioning policy' \},\s*\n?\s*\{ href: '\/api\/api-keys\/', label: 'API keys' \},\s*\n?\s*\{ href: '\/api\/team\/', label: 'Team RBAC' \},\s*\n?\s*\{ href: '\/api\/mfa\/', label: 'Two-factor auth \(MFA\)' \},\s*\n?\s*\{ href: '\/api\/usage\/', label: 'Usage \+ quotas' \},\s*\n?\s*\{ href: '\/api\/audit-log\/', label: 'Audit log' \},\s*\n?\s*\{ href: '\/api\/profiles\/', label: 'Profiles' \},\s*\n?\s*\{ href: '\/api\/proxies\/', label: 'Account proxies' \},\s*\n?\s*\{ href: '\/api\/sessions\/', label: 'Sessions' \},/,
     );
   });
 

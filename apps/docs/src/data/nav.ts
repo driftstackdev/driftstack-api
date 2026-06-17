@@ -58,6 +58,7 @@ export const DOC_NAV: DocNavSection[] = [
       { href: '/api/usage/', label: 'Usage + quotas' },
       { href: '/api/audit-log/', label: 'Audit log' },
       { href: '/api/profiles/', label: 'Profiles' },
+      { href: '/api/proxies/', label: 'Account proxies' },
       { href: '/api/sessions/', label: 'Sessions' },
       { href: '/api/agent-sessions/', label: 'Agent sessions' },
       { href: '/api/bundled-llm/', label: 'Bundled LLM' },
