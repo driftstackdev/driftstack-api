@@ -1203,9 +1203,10 @@ const apiBaseUrl = resolveApiBaseUrl();
         hydrateProxyPicker();
       }
 
-      // 2026-05-24 — proxy-picker hydration + test-button wiring for the
-      // create-profile form. Pulls saved configs from /v1/proxies; falls
-      // back gracefully when the saved-proxy endpoint isn't wired yet.
+      // Proxy-picker hydration + test-button wiring for the create-profile
+      // form. Pulls the customer's saved configs from the LIVE account-proxies
+      // API (/v1/account/me/proxies) — the same source the /proxies page and
+      // the desktop app use. Falls back gracefully (leaves "none") on error.
       const proxyPicker = root.querySelector('[data-create-proxy-picker]');
       const proxyTestBtn = root.querySelector('[data-create-proxy-test]');
       const proxyResult = root.querySelector('[data-create-proxy-result]');
@@ -1214,11 +1215,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       async function hydrateProxyPicker() {
         if (proxyPickerHydrated || !proxyPicker) return;
         try {
-          const res = await fetch(apiBaseUrl + '/v1/proxies', {
+          const res = await fetch(apiBaseUrl + '/v1/account/me/proxies', {
             headers: { authorization: 'Bearer ' + token },
           });
           if (!res.ok) {
-            // 503 / not-wired → leave the "none" option; surface a hint.
+            // Unauthed / error → leave the "none" option.
             return;
           }
           const body = await res.json();
@@ -1233,7 +1234,10 @@ const apiBaseUrl = resolveApiBaseUrl();
           for (const p of items) {
             const opt = document.createElement('option');
             opt.value = p.id;
-            opt.textContent = (p.label || p.id) + (p.type ? ' · ' + p.type : '');
+            opt.textContent =
+              (p.label || p.id) +
+              (p.scheme ? ' · ' + p.scheme : '') +
+              (p.host ? ' · ' + p.host + ':' + p.port : '');
             proxyPicker.appendChild(opt);
           }
           proxyPickerHydrated = true;
@@ -1256,29 +1260,29 @@ const apiBaseUrl = resolveApiBaseUrl();
           proxyTestBtn.disabled = true;
           proxyResult.classList.remove('hidden');
           proxyResult.className = 'mt-2 text-xs text-tk-ink-3';
-          proxyResult.textContent = 'Testing reachability from a Mac-fleet node…';
-          // EG-API-1.7 — POST /v1/proxies/:id/test. Runs DNS + UDP-ASSOCIATE
-          // + latency from a Mac-fleet node (authentic egress path). Pre-
-          // backend the endpoint 503s; surface that as a clear "scheduled"
-          // message rather than a raw error.
+          proxyResult.textContent = 'Testing reachability…';
+          // POST /v1/account/me/proxies/:id/test — server-side TCP-reachability
+          // probe (SSRF-guarded). 200 with { ok, latency_ms } on success, or
+          // { ok:false, reason } when the proxy is unreachable.
           try {
             const res = await fetch(
-              apiBaseUrl + '/v1/proxies/' + encodeURIComponent(proxyPicker.value) + '/test',
+              apiBaseUrl +
+                '/v1/account/me/proxies/' +
+                encodeURIComponent(proxyPicker.value) +
+                '/test',
               { method: 'POST', headers: { authorization: 'Bearer ' + token } },
             );
-            if (res.ok) {
-              const body = await res.json().catch(() => ({}));
+            const body = await res.json().catch(() => ({}));
+            if (res.ok && body.ok) {
               proxyResult.className = 'mt-2 text-xs text-emerald-300';
               proxyResult.textContent =
                 'Reachable' +
-                (body.udp_associate ? ' · UDP-ASSOCIATE ok' : '') +
                 (typeof body.latency_ms === 'number' ? ' · ' + body.latency_ms + 'ms' : '');
             } else {
-              const err = await res.json().catch(() => ({}));
               proxyResult.className = 'mt-2 text-xs text-tk-ink-3';
               proxyResult.textContent =
-                err.detail ||
-                'Reachability testing runs from a Mac-fleet node and is not yet wired on this server.';
+                'Unreachable' +
+                (body.reason ? ' · ' + body.reason : body.detail ? ' · ' + body.detail : '');
             }
           } catch (_e) {
             proxyResult.className = 'mt-2 text-xs text-tk-accent-soft';
