@@ -146,12 +146,15 @@ describe('W782 docs /guides/profile-management content parity', () => {
     );
   });
 
-  it('CRITICAL profile-delete idempotent framing pinned. The retracted W763 force=false/409 contract (the route never implemented it — 2026-05-31 founder decision) is replaced by the immediate-idempotent-204 wording the code actually delivers.', () => {
+  it('CRITICAL profile-delete framing pinned (L4b recycle bin): soft-delete → recycle bin → 30-day restore → purge; idempotent 204; still no `force` flag (the route never implemented one). Stale "Permanent — storage state is wiped" framing removed.', () => {
     const p = read(PAGE);
 
+    expect(p).toMatch(/Soft-delete — the profile moves to a \*\*recycle bin\*\*/);
+    expect(p).toMatch(/restorable for 30 days/);
     expect(p).toMatch(
-      /Deletion is immediate and idempotent — there's no `force` flag, and re-deleting an already-removed profile still returns `204`\./,
+      /there's no `force` flag, and re-deleting an already-trashed profile still returns `204`/,
     );
+    expect(p).not.toMatch(/Permanent — storage state is wiped/);
   });
 
   it("CRITICAL clone-not-cloning-storage framing pinned. The 'Underlying storage state is NOT cloned — the new profile starts with a fresh state slot under the same archetype' wording matches W763 /api/profiles clone-fresh-state.", () => {

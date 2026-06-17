@@ -128,13 +128,13 @@ Profile-bound sessions inherit the profile's storage state on launch and write n
 
 ## Delete a profile
 
-`DELETE /v1/profiles/:id`. Permanent — storage state is wiped.
+`DELETE /v1/profiles/:id`. Soft-delete — the profile moves to a **recycle bin**: hidden from your list, its name freed for reuse, but restorable for 30 days (after which it's permanently purged).
 
 ```ts
 await client.profiles.delete('prof_01HV...');
 ```
 
-Deletion is immediate and idempotent — there's no `force` flag, and re-deleting an already-removed profile still returns `204`.
+Idempotent — there's no `force` flag, and re-deleting an already-trashed profile still returns `204`. To recover, list `GET /v1/profiles/trash` then `POST /v1/profiles/:id/restore` (see the [API reference](/api/profiles/#delete-recycle-bin)).
 
 ## Clone a profile
 
