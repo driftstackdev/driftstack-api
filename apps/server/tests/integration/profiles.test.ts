@@ -4,6 +4,41 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import { seedProfiles } from './_helpers/scenarios.js';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
+import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../../src/lib/api-keys.js';
+
+/** Mint a second, independent account + write-scoped API key directly in the
+ *  fixture's in-memory auth repo so cross-account requests authenticate (and so
+ *  resolve a *different* accountId) rather than 401-ing as an unknown key. */
+async function seedSecondAccount(fx: TestAppFixture): Promise<string> {
+  const accountId = 'acct_00000000-0000-4000-8000-0000000000b2';
+  fx.authRepo.upsertAccount({
+    id: accountId,
+    email: 'other@driftstack.local',
+    name: 'Other',
+    tier: 'api_builder',
+    status: 'active',
+    timezone: null,
+    avatarR2Key: null,
+    slug: null,
+    region: null,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    updatedAt: new Date('2026-01-01T00:00:00Z'),
+  });
+  const plaintext = generateApiKey('test');
+  fx.authRepo.upsertApiKey({
+    id: 'key_00000000-0000-4000-8000-0000000000b2',
+    accountId,
+    name: 'other-key',
+    keyPrefix: keyPrefixFromPlaintext(plaintext),
+    keyHash: await hashApiKey(plaintext),
+    scopes: ['read', 'write'],
+    lastUsedAt: null,
+    revokedAt: null,
+    expiresAt: null,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+  });
+  return plaintext;
+}
 
 interface ProfileResponse {
   id: string;
@@ -830,6 +865,141 @@ describe('L4b recycle bin — GET /v1/profiles/trash + POST /v1/profiles/:id/res
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/profiles/prof_00000000-0000-4000-8000-000000000099/restore',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});
+
+describe('L4b anti-abuse — trashed profiles count toward the cap + manual purge', () => {
+  let fx: Awaited<ReturnType<typeof buildTestApp>>;
+  afterEach(async () => {
+    await fx.cleanup();
+  });
+
+  it('trashing a profile does NOT free a cap slot — trash-then-create stays 429', async () => {
+    // free tier permits 1 profile. Create it, trash it, then attempt to create
+    // another: the trashed row still occupies the slot, so the cap holds.
+    fx = await buildTestApp({ tier: 'free' });
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'one' },
+    });
+    expect(first.statusCode).toBe(200);
+    const firstId = first.json<ProfileResponse>().id;
+
+    const del = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/profiles/${firstId}`,
+      headers: auth,
+    });
+    expect(del.statusCode).toBe(204);
+
+    const second = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'two' },
+    });
+    expect(second.statusCode).toBe(429);
+    const body = second.json<{ type: string; limit: number; current: number }>();
+    expect(body.type).toBe(PROBLEM_TYPES.TierLimit);
+    expect(body.current).toBe(1);
+  });
+
+  it('purging a trashed profile frees the slot — create then succeeds (200)', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'one' },
+    });
+    const firstId = first.json<ProfileResponse>().id;
+    await fx.app.inject({ method: 'DELETE', url: `/v1/profiles/${firstId}`, headers: auth });
+
+    const purge = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/profiles/${firstId}/purge`,
+      headers: auth,
+    });
+    expect(purge.statusCode).toBe(204);
+
+    // slot is freed: the trashed row is gone and the cap admits a new profile
+    const second = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'two' },
+    });
+    expect(second.statusCode).toBe(200);
+
+    // and the purged profile is no longer in the trash
+    const trash = await fx.app.inject({ method: 'GET', url: '/v1/profiles/trash', headers: auth });
+    expect(trash.json<{ data: ProfileResponse[] }>().data).toHaveLength(0);
+  });
+
+  it('purge 404s on a live (not-trashed) profile and on an unknown id', async () => {
+    fx = await buildTestApp();
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const live = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'live' },
+    });
+    const liveId = live.json<ProfileResponse>().id;
+
+    const purgeLive = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/profiles/${liveId}/purge`,
+      headers: auth,
+    });
+    expect(purgeLive.statusCode).toBe(404);
+
+    const purgeUnknown = await fx.app.inject({
+      method: 'DELETE',
+      url: '/v1/profiles/prof_00000000-0000-4000-8000-000000000099/purge',
+      headers: auth,
+    });
+    expect(purgeUnknown.statusCode).toBe(404);
+  });
+
+  it('purge is account-scoped — another account cannot purge a trashed profile (404)', async () => {
+    fx = await buildTestApp();
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'mine' },
+    });
+    const id = created.json<ProfileResponse>().id;
+    await fx.app.inject({ method: 'DELETE', url: `/v1/profiles/${id}`, headers: auth });
+
+    // a second, independent account (same app, distinct accountId + key)
+    const otherKey = await seedSecondAccount(fx);
+    const purge = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/profiles/${id}/purge`,
+      headers: { authorization: `Bearer ${otherKey}` },
+    });
+    expect(purge.statusCode).toBe(404);
+
+    // the owner can still see it in their trash (it was not purged)
+    const trash = await fx.app.inject({ method: 'GET', url: '/v1/profiles/trash', headers: auth });
+    expect(trash.json<{ data: ProfileResponse[] }>().data).toHaveLength(1);
+  });
+
+  it('purge requires write:profiles scope (read-only key → 403)', async () => {
+    fx = await buildTestApp({ scopes: ['read'] });
+    const res = await fx.app.inject({
+      method: 'DELETE',
+      url: '/v1/profiles/prof_00000000-0000-4000-8000-000000000099/purge',
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
     expect(res.statusCode).toBe(403);

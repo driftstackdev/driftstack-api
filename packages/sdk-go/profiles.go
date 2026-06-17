@@ -151,6 +151,17 @@ func (r *ProfilesResource) Restore(ctx context.Context, profileID string) (*Prof
 	return &out, nil
 }
 
+// Purge permanently deletes a trashed profile, freeing its cap slot
+// immediately (trashed profiles otherwise count toward the tier limit
+// until the 30-day auto-purge). Returns a 404 error if there's no trashed
+// profile with that id. Irreversible. L4b recycle bin.
+func (r *ProfilesResource) Purge(ctx context.Context, profileID string) error {
+	return r.client.do(ctx, requestOptions{
+		method: "DELETE",
+		path:   "/v1/profiles/" + url.PathEscape(profileID) + "/purge",
+	})
+}
+
 // LaunchProfileRequest — 2026-05-20 antidetect-browser-style one-shot
 // launch. Both fields are optional overrides; everything else flows
 // from the profile (archetype + metadata + last_used_at bumped

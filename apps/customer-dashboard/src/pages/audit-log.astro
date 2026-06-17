@@ -26,6 +26,8 @@ const ACTION_LABEL: Record<string, string> = {
   'profile.deleted': 'Profile deleted',
   // L4b recycle bin — a trashed profile was restored.
   'profile.restored': 'Profile restored',
+  // L4b anti-abuse — a trashed profile was permanently deleted (cap slot freed).
+  'profile.purged': 'Profile permanently deleted',
   // V-480 — profile import/export audit entries.
   'profile.exported': 'Profile exported',
   'profile.imported': 'Profile imported',
@@ -107,6 +109,7 @@ const FILTER_OPTIONS = [
   { value: 'profile.created', label: 'Profiles created (incl. clones / snapshot restores)' },
   { value: 'profile.deleted', label: 'Profiles deleted' },
   { value: 'profile.restored', label: 'Profiles restored (recycle bin)' },
+  { value: 'profile.purged', label: 'Profiles permanently deleted (recycle bin)' },
   // V-480 — profile import/export audit entries.
   { value: 'profile.exported', label: 'Profiles exported' },
   { value: 'profile.imported', label: 'Profiles imported' },

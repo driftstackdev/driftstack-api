@@ -80,6 +80,14 @@ class ProfilesResource:
         """
         return self._http.request("POST", f"/v1/profiles/{quote(profile_id, safe='')}/restore")
 
+    def purge(self, profile_id: str) -> None:
+        """L4b recycle bin — permanently delete a trashed profile, freeing its
+        cap slot immediately (trashed profiles otherwise count toward the tier
+        limit until the 30-day auto-purge). 404 if no trashed profile has that
+        id. Irreversible.
+        """
+        self._http.request("DELETE", f"/v1/profiles/{quote(profile_id, safe='')}/purge")
+
     def launch(self, profile_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         """2026-05-20 — antidetect-browser-style one-shot launch. Creates a
         session bound to this profile (archetype + metadata inherited).

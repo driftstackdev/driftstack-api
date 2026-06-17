@@ -135,6 +135,9 @@ export interface ProfilesRepo {
    * number of rows purged. Driven by the daily profile-trash-purge sweep.
    */
   purgeTrashedBefore(cutoff: Date): Promise<number>;
+  /** Anti-abuse — user-initiated permanent delete of ONE trashed profile (frees
+   *  a cap slot immediately). Owner-scoped + trashed-only; true if purged. */
+  purgeTrashed(args: { id: string; accountId: string }): Promise<boolean>;
   /** Mark `last_used_at` — fire-and-forget from sessions service. */
   touch(args: { id: string; accountId: string; at: Date }): Promise<void>;
   /**
@@ -207,6 +210,7 @@ export class ProfilesService {
       | 'profile.created'
       | 'profile.deleted'
       | 'profile.restored'
+      | 'profile.purged'
       | 'profile.exported'
       | 'profile.imported',
     targetResourceId: string,
@@ -423,6 +427,18 @@ export class ProfilesService {
       name: row.name,
     });
     return row;
+  }
+
+  /**
+   * Anti-abuse (2026-06-17) — permanently delete ONE trashed profile so a user
+   * at their cap can free a slot immediately (trashed profiles now count toward
+   * the cap). Owner-scoped + trashed-only in the repo; 404 if no trashed row
+   * matches. Best-effort profile.purged audit.
+   */
+  async purge(args: { id: string; accountId: string }): Promise<void> {
+    const purged = await this.repo.purgeTrashed(args);
+    if (!purged) throw new NotFoundError('Trashed profile not found.');
+    await this.emitAuditBestEffort(args.accountId, 'profile.purged', `profile_${args.id}`, {});
   }
 
   /**

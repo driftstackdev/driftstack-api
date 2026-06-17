@@ -170,6 +170,7 @@ function makeRepos(
       Promise.resolve(profiles.filter((p) => p.accountId === accountId && p.deletedAt !== null)),
     restore: () => Promise.resolve('not_found' as const),
     purgeTrashedBefore: () => Promise.resolve(0),
+    purgeTrashed: () => Promise.resolve(false),
     touch: () => Promise.resolve(),
     getWrappedDek: () => Promise.resolve(null),
   };

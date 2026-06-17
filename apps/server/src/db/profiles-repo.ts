@@ -94,10 +94,17 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
           .where(eq(accounts.id, input.accountId))
           .for('update')
           .limit(1);
+        // Anti-abuse (2026-06-17): count LIVE + TRASHED against the cap (no
+        // notDeleted filter). Trashed profiles still hold a row + DEK + sealed
+        // blob until purge, so excluding them let a low-tier user trash+recreate
+        // to hoard unbounded recoverable profiles past their limit. The cap now
+        // bounds TOTAL stored profiles; the user frees space via the manual purge
+        // (DELETE /:id/purge) or the 30-day auto-purge. Read/list paths stay
+        // notDeleted (trashed remain hidden from the live grid).
         const [c] = await tx
           .select({ n: count() })
           .from(profiles)
-          .where(and(eq(profiles.accountId, input.accountId), notDeleted));
+          .where(eq(profiles.accountId, input.accountId));
         const current = c?.n ?? 0;
         if (current >= limit) {
           return { limitExceeded: true as const, current };
@@ -307,5 +314,24 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
       .where(and(isNotNull(profiles.deletedAt), lt(profiles.deletedAt, cutoff)))
       .returning({ id: profiles.id });
     return result.length;
+  }
+
+  // Anti-abuse companion (2026-06-17) — user-initiated permanent delete of ONE
+  // trashed profile, so a user at their cap can free a slot immediately (the cap
+  // now counts trashed). Owner-scoped + trashed-only (isNotNull(deletedAt)) so a
+  // LIVE profile or another account's row can never be hard-deleted here. Returns
+  // true when a row was purged, false otherwise (not found / live / wrong owner).
+  async purgeTrashed(args: { id: string; accountId: string }): Promise<boolean> {
+    const result = await this.database.db
+      .delete(profiles)
+      .where(
+        and(
+          eq(profiles.id, args.id),
+          eq(profiles.accountId, args.accountId),
+          isNotNull(profiles.deletedAt),
+        ),
+      )
+      .returning({ id: profiles.id });
+    return result.length > 0;
   }
 }

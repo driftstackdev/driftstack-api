@@ -298,10 +298,15 @@ state remain restorable.
 `DELETE /v1/profiles/:id`
 
 **Soft-deletes** the profile — it moves to the **recycle bin** rather than
-being destroyed. A trashed profile is hidden from `GET /v1/profiles`, doesn't
-count against your tier's profile cap, and can't be launched or looked up by id,
-but it's **recoverable** (see Restore below). Deleting also **frees the name**
-immediately, so you can create a new profile with the same name right away.
+being destroyed. A trashed profile is hidden from `GET /v1/profiles` and can't
+be launched or looked up by id, but it's **recoverable** (see Restore below).
+Deleting also **frees the name** immediately, so you can create a new profile
+with the same name right away.
+
+A trashed profile **still counts against your tier's profile cap** until it's
+purged — soft-delete preserves the underlying encrypted state, so it occupies a
+slot. Free the slot immediately with Purge (below), or wait for the 30-day
+auto-purge.
 
 Returns `204 No Content`, and is idempotent — re-deleting an already-trashed
 profile (or an id that was never yours) also returns `204`.
@@ -328,7 +333,17 @@ same as delete). Returns:
 - `409 Conflict` if a **live** profile has since taken the trashed profile's
   name — rename the live one (or the restored profile) first, then retry.
 
-## Auth + scoping
+## Purge (permanent delete)
+
+`DELETE /v1/profiles/:id/purge` → `204 No Content`
+
+Permanently deletes a **trashed** profile and **frees its cap slot
+immediately** — use it to reclaim a slot without waiting for the 30-day
+auto-purge. The underlying encrypted state is hard-deleted; this is
+**irreversible** (no restore afterward). Write scope (admin-only on a team
+workspace, same as delete). Returns `404` if the id isn't one of your trashed
+profiles — purge only acts on the recycle bin, never on a live profile (delete
+it first).
 
 Read endpoints (GET) accept any valid bearer with `read` scope;
 write endpoints (POST, PATCH, DELETE) require the `write:profiles`

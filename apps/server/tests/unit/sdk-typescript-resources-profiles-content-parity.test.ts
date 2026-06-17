@@ -124,14 +124,14 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
     );
   });
 
-  it('encodeURIComponent invariant — :id escaped EXACTLY 8 times (get + update + delete + launch + clone + export + transfer + L4b restore). import() + listTrash() take no :id. 2026-05-31 — export/transfer (V-480/V-666); 2026-06-16 — restore (L4b).', () => {
+  it('encodeURIComponent invariant — :id escaped EXACTLY 9 times (get + update + delete + launch + clone + export + transfer + L4b restore + L4b purge). import() + listTrash() take no :id. 2026-05-31 — export/transfer (V-480/V-666); 2026-06-16 — restore (L4b); 2026-06-17 — purge (L4b).', () => {
     const matches = body.match(/encodeURIComponent\(id\)/g) ?? [];
-    expect(matches.length, 'expected encodeURIComponent(id) 8 times').toBe(8);
+    expect(matches.length, 'expected encodeURIComponent(id) 9 times').toBe(9);
   });
 
-  it('13-verb inventory + verb-mix invariants — exactly 13 method declarations (create + list + iterate + get + update + launch + delete + listTrash + restore + clone + export + import + transfer). Verb mix: 6 POSTs (create + launch + restore + clone + import + transfer) + 4 GETs (list + get + listTrash + export) + 1 PATCH (update) + 1 DELETE (delete) = 12 wire-call verbs (iterate is delegation). NO PUT — partial updates use PATCH.', () => {
+  it('14-verb inventory + verb-mix invariants — exactly 14 method declarations (create + list + iterate + get + update + launch + delete + listTrash + restore + purge + clone + export + import + transfer). Verb mix: 6 POSTs (create + launch + restore + clone + import + transfer) + 4 GETs (list + get + listTrash + export) + 1 PATCH (update) + 2 DELETEs (delete + L4b purge) = 13 wire-call verbs (iterate is delegation). NO PUT — partial updates use PATCH.', () => {
     const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
-    expect(methods.length, 'expected 13 verb declarations').toBe(13);
+    expect(methods.length, 'expected 14 verb declarations').toBe(14);
     const posts = (body.match(/method: 'POST'/g) ?? []).length;
     expect(posts, 'expected 6 POSTs (create + launch + restore + clone + import + transfer)').toBe(
       6,
@@ -141,7 +141,7 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
     const patches = (body.match(/method: 'PATCH'/g) ?? []).length;
     expect(patches, 'expected 1 PATCH (update)').toBe(1);
     const deletes = (body.match(/method: 'DELETE'/g) ?? []).length;
-    expect(deletes, 'expected 1 DELETE (delete)').toBe(1);
+    expect(deletes, 'expected 2 DELETEs (delete + L4b purge)').toBe(2);
     expect(body).not.toMatch(/method: 'PUT'/);
   });
 

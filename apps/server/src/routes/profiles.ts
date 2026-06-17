@@ -248,6 +248,24 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
     },
   );
 
+  // ── DELETE /v1/profiles/:id/purge (recycle bin — permanent delete) ───
+  // Anti-abuse companion: permanently removes ONE trashed profile so a user at
+  // their cap can free a slot immediately (trashed now counts toward the cap).
+  // Owner-scoped + trashed-only in the service/repo (a live profile is never
+  // reachable here) — 404 if no trashed row matches. Same write-scope gate.
+  app.delete<{ Params: { id: string } }>(
+    '/v1/profiles/:id/purge',
+    { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
+    async (req, reply) => {
+      const ctx = requireCtx(req);
+      const id = uuidFromProfileId(req.params.id);
+      const eff = effectiveAccountIdForWrite(req, ctx);
+      const accountId = eff ?? ctx.account.id;
+      await service.purge({ id, accountId });
+      reply.code(204);
+    },
+  );
+
   // ── POST /v1/profiles/:id/clone (V-313) ──────────────────────────────
   // Same admin-only-on-team gate as create. Tier cap is checked
   // server-side (matches the create path); 402 / TierLimit on

@@ -314,24 +314,39 @@ describe('POST /v1/profiles/import — per-cycle import cap', () => {
     });
   }
 
-  it('429 TierLimit on the (2×cap+1)th import even after deleting prior imports', async () => {
+  it('429 TierLimit on the (2×cap+1)th import even after purging prior imports', async () => {
     fx = await buildTestApp({ tier: 'free' }); // profile cap 1 → import cap 2/cycle
 
-    // Import #1, then delete to free the profile-cap slot.
+    // Import #1, then delete + purge to truly free the profile-cap slot.
+    // (L4b anti-abuse: a soft-deleted profile still holds a slot until purged,
+    // so we purge here to isolate the per-cycle IMPORT cap as the wall under
+    // test rather than the profile cap.)
     const first = await importOne('churn-1');
     expect(first.statusCode).toBe(200);
+    const firstId = first.json<ProfileResponse>().id;
     await fx.app.inject({
       method: 'DELETE',
-      url: `/v1/profiles/${first.json<ProfileResponse>().id}`,
+      url: `/v1/profiles/${firstId}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/profiles/${firstId}/purge`,
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
 
-    // Import #2, then delete again — now 2 imports recorded this cycle.
+    // Import #2, then delete + purge again — now 2 imports recorded this cycle.
     const second = await importOne('churn-2');
     expect(second.statusCode).toBe(200);
+    const secondId = second.json<ProfileResponse>().id;
     await fx.app.inject({
       method: 'DELETE',
-      url: `/v1/profiles/${second.json<ProfileResponse>().id}`,
+      url: `/v1/profiles/${secondId}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/profiles/${secondId}/purge`,
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
 

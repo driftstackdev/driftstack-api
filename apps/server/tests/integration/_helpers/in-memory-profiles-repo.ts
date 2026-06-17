@@ -55,8 +55,9 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
   ): Promise<{ record: ProfileRecord } | { limitExceeded: true; current: number }> {
     if (limit !== null) {
       let current = 0;
-      for (const r of this.rows.values())
-        if (r.accountId === input.accountId && r.deletedAt === null) current += 1;
+      // Anti-abuse: count LIVE + TRASHED against the cap (mirrors prod
+      // insertWithLimit — trashed rows still occupy a slot until purged).
+      for (const r of this.rows.values()) if (r.accountId === input.accountId) current += 1;
       if (current >= limit) {
         return Promise.resolve({ limitExceeded: true as const, current });
       }
@@ -199,5 +200,12 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
       }
     }
     return Promise.resolve(purged);
+  }
+
+  purgeTrashed(args: { id: string; accountId: string }): Promise<boolean> {
+    const r = this.rows.get(args.id);
+    if (!r || r.accountId !== args.accountId || r.deletedAt === null) return Promise.resolve(false);
+    this.rows.delete(args.id);
+    return Promise.resolve(true);
   }
 }

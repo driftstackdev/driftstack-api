@@ -210,9 +210,21 @@ describe('W763 docs /api/profiles content parity', () => {
     expect(p).toMatch(
       /Returns `204 No Content`, and is idempotent — re-deleting an already-trashed\s*\n?profile \(or an id that was never yours\) also returns `204`\./,
     );
-    // Trash + restore endpoints documented.
+    // Trash + restore + purge endpoints documented.
     expect(p).toMatch(/`GET \/v1\/profiles\/trash`/);
     expect(p).toMatch(/`POST \/v1\/profiles\/:id\/restore`/);
+    expect(p).toMatch(/`DELETE \/v1\/profiles\/:id\/purge`/);
+  });
+
+  it('CRITICAL anti-abuse cap framing pinned — trashed profiles STILL count against the cap until purged (2026-06-17); purge frees the slot immediately. The stale "doesn\'t count against your tier\'s profile cap" claim must be gone.', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(/still counts against your tier's profile cap.*until it's\s*\n?purged/s);
+    expect(p).not.toMatch(/doesn't\s*\n?count against your tier's profile cap/);
+    // Purge section: permanent + frees the slot + irreversible.
+    expect(p).toMatch(/## Purge \(permanent delete\)/);
+    expect(p).toMatch(/frees its cap slot\s*\n?immediately/);
+    expect(p).toMatch(/\*\*irreversible\*\*/);
   });
 
   it('CRITICAL 6-endpoint canonical action set pinned — POST + GET-list + GET-one + PATCH + POST-clone + DELETE.', () => {

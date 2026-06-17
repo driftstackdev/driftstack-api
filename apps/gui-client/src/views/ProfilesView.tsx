@@ -263,6 +263,7 @@ export function ProfilesView({
   const [trashed, setTrashed] = useState<Profile[]>([]);
   const [trashLoading, setTrashLoading] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [purgingId, setPurgingId] = useState<string | null>(null);
   const confirm = useConfirm();
   // Onboarding checklist dismissal — webview localStorage persists per
   // install. Guarded: some embeddings/test environments stub storage out.
@@ -449,6 +450,30 @@ export function ProfilesView({
         );
       } finally {
         setRestoringId(null);
+      }
+    },
+    [client, loadTrash, refresh, confirm, settings.baseUrl],
+  );
+
+  // L4b anti-abuse — permanently delete a trashed profile (frees its cap slot
+  // immediately; trashed profiles otherwise hold a slot until the 30-day
+  // auto-purge). Irreversible, so we gate it behind a destructive confirm.
+  const handlePurge = useCallback(
+    async (id: string, name: string): Promise<void> => {
+      if (!client || typeof client.profiles.purge !== 'function') return;
+      const ok = await confirm(
+        `Permanently delete “${name}”? This frees a profile slot but can’t be undone — the profile is gone for good.`,
+        { confirmLabel: 'Delete permanently' },
+      );
+      if (!ok) return;
+      setPurgingId(id);
+      try {
+        await client.profiles.purge(id);
+        await Promise.all([loadTrash(), refresh(false)]);
+      } catch (err) {
+        await confirm(friendlyError(err, settings.baseUrl), { confirmLabel: 'OK' });
+      } finally {
+        setPurgingId(null);
       }
     },
     [client, loadTrash, refresh, confirm, settings.baseUrl],
@@ -1844,7 +1869,9 @@ export function ProfilesView({
                   trashed={trashed}
                   loading={trashLoading}
                   restoringId={restoringId}
+                  purgingId={purgingId}
                   onRestore={(id) => void handleRestore(id)}
+                  onPurge={(id, name) => void handlePurge(id, name)}
                   onBack={() => setTrashView(false)}
                 />
               ) : viewMode === 'grid' ? (
@@ -3216,13 +3243,17 @@ function TrashPanel({
   trashed,
   loading,
   restoringId,
+  purgingId,
   onRestore,
+  onPurge,
   onBack,
 }: {
   trashed: Profile[];
   loading: boolean;
   restoringId: string | null;
+  purgingId: string | null;
   onRestore: (id: string) => void;
+  onPurge: (id: string, name: string) => void;
   onBack: () => void;
 }): JSX.Element {
   return (
@@ -3232,7 +3263,8 @@ function TrashPanel({
           <h3 className="text-sm font-semibold text-ink-primary">Recycle bin</h3>
           <p className="mt-0.5 text-[11px] text-ink-secondary">
             Deleted profiles are kept here so you can restore them. Restoring returns a profile to
-            your list; its name must be free.
+            your list; its name must be free. Trashed profiles still use a slot toward your plan —
+            delete one permanently to free it now, or it’s purged automatically after 30 days.
           </p>
         </div>
         <button
@@ -3254,6 +3286,8 @@ function TrashPanel({
           {trashed.map((p) => {
             const id = p.id.replace(/^prof_/, '');
             const restoring = restoringId === id || restoringId === p.id;
+            const purging = purgingId === id || purgingId === p.id;
+            const busy = restoring || purging;
             return (
               <div
                 key={p.id}
@@ -3271,14 +3305,25 @@ function TrashPanel({
                     ) : null}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onRestore(p.id)}
-                  disabled={restoring}
-                  className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
-                >
-                  {restoring ? 'Restoring…' : 'Restore'}
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onPurge(p.id, p.name)}
+                    disabled={busy}
+                    title="Permanently delete — frees a profile slot, can’t be undone"
+                    className="rounded-lg border border-status-error/40 px-2.5 py-1.5 text-xs font-medium text-status-error transition-colors hover:bg-status-error/15 disabled:opacity-50"
+                  >
+                    {purging ? 'Deleting…' : 'Delete permanently'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRestore(p.id)}
+                    disabled={busy}
+                    className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+                  >
+                    {restoring ? 'Restoring…' : 'Restore'}
+                  </button>
+                </div>
               </div>
             );
           })}

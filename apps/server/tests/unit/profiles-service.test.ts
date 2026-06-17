@@ -156,6 +156,14 @@ function makeRepo(
       }
       return Promise.resolve(before - rows.length);
     },
+    purgeTrashed: ({ id, accountId }) => {
+      const i = rows.findIndex(
+        (r) => r.id === id && r.accountId === accountId && r.deletedAt !== null,
+      );
+      if (i < 0) return Promise.resolve(false);
+      rows.splice(i, 1);
+      return Promise.resolve(true);
+    },
     touch: () => Promise.resolve(),
     getWrappedDek: () => Promise.resolve(null),
   };

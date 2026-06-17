@@ -145,6 +145,19 @@ export class ProfilesResource {
   }
 
   /**
+   * L4b recycle bin — permanently delete a trashed profile, freeing its cap
+   * slot immediately (trashed profiles otherwise count toward the tier limit
+   * until the 30-day auto-purge). 404 if there's no trashed profile with that
+   * id. Irreversible.
+   */
+  purge(id: string): Promise<void> {
+    return this.http.request<void>({
+      method: 'DELETE',
+      path: `/v1/profiles/${encodeURIComponent(id)}/purge`,
+    });
+  }
+
+  /**
    * V-313 — duplicate a profile. Server auto-derives a "(copy)" /
    * "(copy 2)" / ... name when `body.name` is omitted. Tier-cap +
    * name-conflict checked the same as create.
