@@ -71,6 +71,7 @@ function makeMac(
     hardwareClass: 'mac-mini-m4',
     registeredAt: new Date('2026-05-18T00:00:00Z'),
     lastSeenAt: null,
+    lastHeartbeat: null,
     revokedAt: null,
     revocationReason: null,
     livekit: {

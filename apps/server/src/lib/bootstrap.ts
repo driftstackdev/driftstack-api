@@ -1350,19 +1350,44 @@ export async function createProductionDeps(
             // A3 W1364: a profileSaveFailed frame (save-back failed at teardown)
             // → relay as the customer-facing session.profile_save_failed webhook.
             makeProfileSaveFailedRelay(agentSessionsRepo, webhooksService, logger),
-            // Fleet-admin Phase 0 (file-48 §A5): a heartbeat (macNodeId already
+            // Fleet-admin panel (file-48 §A5): a heartbeat (macNodeId already
             // cross-checked against the JWT nodeId in the connection) → bump
-            // fleet_nodes.last_seen_at so the admin panel's "Last seen" stops
-            // being NULL. Best-effort + fire-and-forget off the receive loop;
-            // touchLastSeen is an UPDATE-by-id (no-op for an unregistered node),
-            // so a self-seeded/unknown node is harmless. A failed write just
-            // leaves last_seen stale until the next 10s beat — never throws into
-            // the socket loop.
+            // fleet_nodes.last_seen_at AND persist the latest telemetry snapshot
+            // (migration 0083) for the panel's resource/capacity/uptime/drain
+            // columns. Best-effort + fire-and-forget off the receive loop;
+            // recordHeartbeat is an UPDATE-by-id (no-op for an unregistered
+            // node), so a self-seeded/unknown node is harmless. A failed write
+            // just leaves the snapshot stale until the next 10s beat — never
+            // throws into the socket loop. Optional fields are omitted when the
+            // node doesn't emit them (jsonb drops undefined keys).
             (frame) => {
-              void drizzleFleetNodesRepo.touchLastSeen(frame.macNodeId).catch((err) => {
+              const snapshot = {
+                beatAt: frame.timestamp,
+                cpuPercent: frame.cpuPercent,
+                memoryPercent: frame.memoryPercent,
+                activeSessionCount: frame.activeSessionCount,
+                ...(frame.maxConcurrent !== undefined && { maxConcurrent: frame.maxConcurrent }),
+                ...(frame.uptimeSeconds !== undefined && { uptimeSeconds: frame.uptimeSeconds }),
+                ...(frame.drainState !== undefined && { drainState: frame.drainState }),
+                ...(frame.sessionOutcomeCounts !== undefined && {
+                  sessionOutcomeCounts: frame.sessionOutcomeCounts,
+                }),
+                ...(frame.thermalState !== undefined && { thermalState: frame.thermalState }),
+                ...(frame.memoryPressureLevel !== undefined && {
+                  memoryPressureLevel: frame.memoryPressureLevel,
+                }),
+                ...(frame.busiestCorePercent !== undefined && {
+                  busiestCorePercent: frame.busiestCorePercent,
+                }),
+                ...(frame.diskFreePercent !== undefined && {
+                  diskFreePercent: frame.diskFreePercent,
+                }),
+                ...(frame.harnessVersion !== undefined && { harnessVersion: frame.harnessVersion }),
+              };
+              void drizzleFleetNodesRepo.recordHeartbeat(frame.macNodeId, snapshot).catch((err) => {
                 logger.warn(
                   { component: 'fleet-heartbeat', nodeId: frame.macNodeId, err: String(err) },
-                  'touchLastSeen failed (last_seen stays stale until next beat)',
+                  'recordHeartbeat failed (snapshot stays stale until next beat)',
                 );
               });
             },

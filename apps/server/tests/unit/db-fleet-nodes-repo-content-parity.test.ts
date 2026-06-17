@@ -43,10 +43,15 @@ describe('db/fleet-nodes-repo content parity', () => {
     );
   });
 
-  it("FleetNodeDetail 10-field interface shape pinned: id + publicKeyBase64Url + displayName + region + hardwareClass + registeredAt + lastSeenAt (nullable) + revokedAt (nullable) + revocationReason (nullable) + livekit (nullable union). + LK.1 'per-Mac LiveKit credentials. All four fields are set together (CHECK constraint) or all four are NULL (pre-LK.2).' — pinned so the 10-field shape + LK.1 all-or-none CHECK constraint contract all stay documented (drift to allowing partial LK fields would diverge from the DB CHECK constraint)", () => {
-    expect(body).toMatch(
-      /export interface FleetNodeDetail \{\s*\n?\s*id: string;\s*\n?\s*publicKeyBase64Url: string;\s*\n?\s*displayName: string;\s*\n?\s*region: string;\s*\n?\s*hardwareClass: string;\s*\n?\s*registeredAt: Date;\s*\n?\s*lastSeenAt: Date \| null;\s*\n?\s*revokedAt: Date \| null;\s*\n?\s*revocationReason: string \| null;/,
-    );
+  it("FleetNodeDetail 11-field interface shape pinned: id + publicKeyBase64Url + displayName + region + hardwareClass + registeredAt + lastSeenAt (nullable) + lastHeartbeat (FleetNodeHeartbeatSnapshot|null, migration 0083) + revokedAt (nullable) + revocationReason (nullable) + livekit (nullable union). + LK.1 'per-Mac LiveKit credentials. All four fields are set together (CHECK constraint) or all four are NULL (pre-LK.2).' — pinned so the shape + LK.1 all-or-none CHECK constraint contract stay documented (drift to allowing partial LK fields would diverge from the DB CHECK constraint)", () => {
+    // toContain fragments (not a closed multi-line regex) so field additions +
+    // prettier reflow don't brittle-break the pin.
+    expect(body).toContain('export interface FleetNodeDetail {');
+    expect(body).toContain('publicKeyBase64Url: string;');
+    expect(body).toContain('lastSeenAt: Date | null;');
+    expect(body).toContain('lastHeartbeat: FleetNodeHeartbeatSnapshot | null;');
+    expect(body).toContain('revokedAt: Date | null;');
+    expect(body).toContain('revocationReason: string | null;');
     expect(body).toMatch(
       /\/\*\* LK\.1 — per-Mac LiveKit credentials\. All four fields are set\s*\n?\s*\*\s+together \(CHECK constraint\) or all four are NULL \(pre-LK\.2\)\. \*\//,
     );

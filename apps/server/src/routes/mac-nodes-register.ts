@@ -193,6 +193,10 @@ export function registerMacNodesRoutes(
           hardware_class: n.hardwareClass,
           registered_at: n.registeredAt.toISOString(),
           last_seen_at: n.lastSeenAt?.toISOString() ?? null,
+          // Latest telemetry snapshot (migration 0083) for the admin Fleet
+          // panel's resource/capacity/uptime/drain columns; null until the node
+          // has sent its first heartbeat.
+          last_heartbeat: n.lastHeartbeat ?? null,
           has_livekit: n.livekit !== null,
           // null when the control registry isn't wired (the server can't
           // know connection state); else whether a live control-plane

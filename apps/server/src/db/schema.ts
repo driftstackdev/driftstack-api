@@ -2004,6 +2004,12 @@ export const fleetNodes = pgTable(
     livekitApiSecretCiphertext: text('livekit_api_secret_ciphertext'),
     livekitWsUrl: text('livekit_ws_url'),
     livekitRegisteredAt: timestamp('livekit_registered_at', { withTimezone: true }),
+    // Fleet-admin panel (file-48 §A5; migration 0083): latest per-node
+    // telemetry snapshot from the heartbeat (host-health + capacity + uptime +
+    // drain + session-outcome tally), overwritten each beat. jsonb (not ~12
+    // typed columns) so A3's evolving heartbeat shape needs no migration per
+    // field; NULL until the first beat is recorded.
+    lastHeartbeat: jsonb('last_heartbeat'),
   },
   (t) => [
     uniqueIndex('fleet_nodes_public_key_unique').on(t.publicKeyBase64Url),

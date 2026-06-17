@@ -16,6 +16,29 @@ import type { Database } from './client.js';
 import { fleetNodes } from './schema.js';
 import type { FleetNodePublicKey, FleetNodesRepo } from '../services/fleet-node-auth.js';
 
+/**
+ * Latest per-node telemetry snapshot (migration 0083), persisted from the
+ * heartbeat and overwritten each beat for the admin Fleet panel (file-48 §A5).
+ * Stored as jsonb on fleet_nodes.last_heartbeat. Mirrors the harness Heartbeat
+ * telemetry fields (optional ones absent when the node doesn't emit them).
+ */
+export interface FleetNodeHeartbeatSnapshot {
+  /** The node's own beat timestamp (ISO) — distinct from last_seen_at (CP receipt). */
+  beatAt: string;
+  cpuPercent: number;
+  memoryPercent: number;
+  activeSessionCount: number;
+  maxConcurrent?: number;
+  uptimeSeconds?: number;
+  drainState?: string;
+  sessionOutcomeCounts?: Record<string, number>;
+  thermalState?: string;
+  memoryPressureLevel?: string;
+  busiestCorePercent?: number;
+  diskFreePercent?: number;
+  harnessVersion?: string;
+}
+
 export interface FleetNodeDetail {
   id: string;
   publicKeyBase64Url: string;
@@ -24,6 +47,8 @@ export interface FleetNodeDetail {
   hardwareClass: string;
   registeredAt: Date;
   lastSeenAt: Date | null;
+  /** Latest telemetry snapshot (migration 0083); null until the first beat. */
+  lastHeartbeat: FleetNodeHeartbeatSnapshot | null;
   revokedAt: Date | null;
   revocationReason: string | null;
   /** LK.1 — per-Mac LiveKit credentials. All four fields are set
@@ -112,6 +137,23 @@ export class DrizzleFleetNodesRepo implements FleetNodesRepo {
       .where(eq(fleetNodes.id, nodeId));
   }
 
+  /**
+   * Fleet-admin panel (migration 0083): bump last_seen_at AND store the latest
+   * telemetry snapshot in one UPDATE-by-id (no-op for an unregistered node, so a
+   * self-seeded/unknown beat is harmless). Called per heartbeat from the
+   * fleet-control-registry consumer (the macNodeId↔JWT check runs first).
+   */
+  async recordHeartbeat(
+    nodeId: string,
+    snapshot: FleetNodeHeartbeatSnapshot,
+    now: Date = new Date(),
+  ): Promise<void> {
+    await this.database.db
+      .update(fleetNodes)
+      .set({ lastSeenAt: now, lastHeartbeat: snapshot })
+      .where(eq(fleetNodes.id, nodeId));
+  }
+
   /** LK.2 — set / rotate per-Mac LiveKit credentials on an existing
    *  fleet_node row. Returns the updated detail, or null when the
    *  nodeId doesn't match a row (caller maps to 404). */
@@ -197,6 +239,7 @@ function rowToDetail(row: typeof fleetNodes.$inferSelect): FleetNodeDetail {
     hardwareClass: row.hardwareClass,
     registeredAt: row.registeredAt,
     lastSeenAt: row.lastSeenAt,
+    lastHeartbeat: (row.lastHeartbeat as FleetNodeHeartbeatSnapshot | null) ?? null,
     revokedAt: row.revokedAt,
     revocationReason: row.revocationReason,
     livekit:

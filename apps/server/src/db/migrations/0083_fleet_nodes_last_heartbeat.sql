@@ -1,0 +1,17 @@
+-- 2026-06-17 — fleet-admin panel Phase 1: persist the latest per-node telemetry.
+-- fleet_nodes (0007/LK.1) held only identity + LiveKit creds + lifecycle
+-- timestamps; heartbeats were parsed-then-dropped, so the admin panel (file-48
+-- §A5) had nothing but "Last seen" (wired in cad2bd93) to show. The harness now
+-- emits rich per-node telemetry on the heartbeat (A3 W2189/W2197/W2199*:
+-- cpu/memory/activeSessionCount, maxConcurrent, uptimeSeconds, drainState,
+-- sessionOutcomeCounts, thermalState/memoryPressureLevel/busiestCorePercent/
+-- diskFreePercent, harnessVersion).
+--
+-- Stored as ONE jsonb "latest snapshot" column rather than ~12 typed columns:
+-- the panel renders the current values (no per-field SQL/indexing at fleet
+-- scale), and a jsonb absorbs A3's still-evolving heartbeat shape without a
+-- migration per new field. NULL = no heartbeat heard yet. A per-tick metrics
+-- HISTORY table (for graphs) is a later slice; this is the latest-snapshot only.
+-- Additive + idempotent + behavior-identical until the heartbeat upsert
+-- populates it; no backfill.
+ALTER TABLE "fleet_nodes" ADD COLUMN IF NOT EXISTS "last_heartbeat" jsonb;
