@@ -58,6 +58,16 @@ const SENTRY_SENSITIVE_KEYS = new Set<string>([
   'mfasecret',
   'client_secret',
   'clientsecret',
+  // Account-proxy VPN secrets (ARC A) — mirror of the lib/logger.ts
+  // body.openvpn.config_blob / body.wireguard.private_key redaction.
+  // The OpenVPN config_blob embeds certs + private keys; the WireGuard
+  // private_key is the tunnel key. Bare-key match scrubs them wherever
+  // a captured request body surfaces them (request.data / breadcrumbs).
+  // (The nested openvpn.password is already covered by 'password'.)
+  'config_blob',
+  'configblob',
+  'private_key',
+  'privatekey',
   // Arc 7 obs.2.b — v2-#8 BYOK + gui_control_key Sentry mirror of
   // the lib/logger.ts redact-paths extension. Match keys are
   // lowercase + hyphen/underscore variants (the

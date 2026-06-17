@@ -57,6 +57,28 @@ describe('V-494 — Sentry scrub: top-level keys', () => {
     expect(e.api_key).toBe('[redacted]');
   });
 
+  it('redacts account-proxy VPN secrets — config_blob + private_key (a captured POST /v1/account/me/proxies body)', () => {
+    // The OpenVPN config_blob embeds certs/keys; the WireGuard private_key is the
+    // tunnel key; the nested openvpn.password rides the existing `password` key.
+    const e = {
+      request: {
+        data: {
+          label: 'home',
+          scheme: 'openvpn',
+          openvpn: { config_blob: '-----BEGIN PRIVATE KEY-----xxx', password: 'p' },
+          wireguard: { private_key: 'aGVsbG8=' },
+        },
+      },
+    };
+    scrubInPlace(e);
+    expect(e.request.data.openvpn.config_blob).toBe('[redacted]');
+    expect(e.request.data.openvpn.password).toBe('[redacted]');
+    expect(e.request.data.wireguard.private_key).toBe('[redacted]');
+    // Non-secret fields survive.
+    expect(e.request.data.label).toBe('home');
+    expect(e.request.data.scheme).toBe('openvpn');
+  });
+
   it('redacts OAuth token fields — token + access_token + refresh_token (introspect/revoke body + token-endpoint response)', () => {
     const e = { token: 'tok_x', access_token: 'at_x', refresh_token: 'rt_x', client_id: 'public' };
     scrubInPlace(e);

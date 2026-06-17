@@ -82,6 +82,19 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
         'body.recovery_codes',
         'body.signing_secret',
         'body.secret',
+        // Account-proxy VPN secrets (ARC A). The POST/PUT
+        // /v1/account/me/proxies body carries the customer's VPN
+        // credentials NESTED under the scheme block — the OpenVPN
+        // config_blob embeds certs + private keys, the WireGuard
+        // private_key is the tunnel key, and OpenVPN auth rides a
+        // nested password (the top-level body.password path above
+        // only reaches the socks5/http form). Path-based pino redaction
+        // doesn't recurse, so each nested location is listed explicitly;
+        // the bare keys (config_blob / private_key) are mirrored in
+        // lib/sentry.ts so a captured request body can't leak there.
+        'body.openvpn.config_blob',
+        'body.openvpn.password',
+        'body.wireguard.private_key',
         // Arc 7 obs.2 — v2-#8 BYOK PUT body field. The PUT
         // /v1/account/me/byok-anthropic-key route accepts the key
         // as { api_key: 'sk-ant-...' }. Same defense-in-depth as
