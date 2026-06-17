@@ -323,10 +323,29 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
   });
 
   it('all 6 HarnessOutbound payloads pinned to A3 W124 field-sets (heartbeat/errorEvent/capabilityReport typed, not passthrough)', () => {
-    // heartbeat
-    expect(body).toMatch(
-      /export const HeartbeatSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('heartbeat'\),\s*\n?\s*macNodeId: z\.string\(\),\s*\n?\s*timestamp: z\.string\(\),\s*\n?\s*cpuPercent: z\.number\(\),\s*\n?\s*memoryPercent: z\.number\(\),\s*\n?\s*activeSessionCount: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*\}\);/,
+    // heartbeat — the A3 W124 base field-set (toContain fragments, not a
+    // closed multi-line regex, so prettier reflow + the optional fleet
+    // additions below don't break the pin).
+    expect(body).toContain('export const HeartbeatSchema = z.object({');
+    expect(body).toContain("type: z.literal('heartbeat'),");
+    expect(body).toContain('macNodeId: z.string(),');
+    expect(body).toContain('cpuPercent: z.number(),');
+    expect(body).toContain('memoryPercent: z.number(),');
+    expect(body).toContain('activeSessionCount: z.number().int().nonnegative(),');
+    // …extended with the fleet-admin-panel telemetry (file-48 §A5; A3
+    // W2189/W2197/W2199*), all OPTIONAL so an older node's beat still decodes;
+    // field names mirror the Swift Codable Heartbeat 1:1 (else stripped).
+    expect(body).toContain('maxConcurrent: z.number().int().nonnegative().optional(),');
+    expect(body).toContain('uptimeSeconds: z.number().nonnegative().optional(),');
+    expect(body).toContain('drainState: z.string().optional(),');
+    expect(body).toContain(
+      'sessionOutcomeCounts: z.record(z.string(), z.number().int().nonnegative()).optional(),',
     );
+    expect(body).toContain('thermalState: z.string().optional(),');
+    expect(body).toContain('memoryPressureLevel: z.string().optional(),');
+    expect(body).toContain('busiestCorePercent: z.number().optional(),');
+    expect(body).toContain('diskFreePercent: z.number().optional(),');
+    expect(body).toContain('harnessVersion: z.string().optional(),');
     // errorEvent
     expect(body).toMatch(/export const ErrorEventSchema = z\.object\(\{/);
     expect(body).toMatch(/customerActionable: z\.boolean\(\),\s*\n?\s*retryable: z\.boolean\(\),/);
@@ -351,6 +370,49 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     ).toBe(true);
     // missing required fields → rejected (was accepted under passthrough).
     expect(HarnessOutboundSchema.safeParse({ type: 'heartbeat' }).success).toBe(false);
+  });
+
+  it('fleet-admin telemetry fields decode through (no longer stripped) — file-48 §A5 / A3 W2189-W2199', () => {
+    const parsed = HarnessOutboundSchema.safeParse({
+      type: 'heartbeat',
+      macNodeId: 'n1',
+      timestamp: 't',
+      cpuPercent: 12.5,
+      memoryPercent: 40,
+      activeSessionCount: 3,
+      maxConcurrent: 8,
+      uptimeSeconds: 1234.5,
+      drainState: 'draining',
+      sessionOutcomeCounts: { idle_timeout: 5, browser_crashed: 2 },
+      thermalState: 'fair',
+      memoryPressureLevel: 'normal',
+      busiestCorePercent: 73.2,
+      diskFreePercent: 41.8,
+      harnessVersion: 'abc1234',
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success && parsed.data.type === 'heartbeat') {
+      // The previously-stripped fields now survive decode.
+      expect(parsed.data.maxConcurrent).toBe(8);
+      expect(parsed.data.uptimeSeconds).toBe(1234.5);
+      expect(parsed.data.drainState).toBe('draining');
+      expect(parsed.data.sessionOutcomeCounts).toEqual({ idle_timeout: 5, browser_crashed: 2 });
+      expect(parsed.data.thermalState).toBe('fair');
+      expect(parsed.data.busiestCorePercent).toBe(73.2);
+      expect(parsed.data.diskFreePercent).toBe(41.8);
+      expect(parsed.data.harnessVersion).toBe('abc1234');
+    }
+    // A quiet/older node (none of the optionals) still decodes — byte-identical contract.
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'heartbeat',
+        macNodeId: 'n1',
+        timestamp: 't',
+        cpuPercent: 1,
+        memoryPercent: 1,
+        activeSessionCount: 0,
+      }).success,
+    ).toBe(true);
   });
 
   it('6 error codes pinned in canonical order (runtime exact-order — comment-agnostic; intent_invalid_parameter added A3 W135)', () => {

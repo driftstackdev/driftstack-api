@@ -415,6 +415,32 @@ export const HeartbeatSchema = z.object({
   cpuPercent: z.number(),
   memoryPercent: z.number(),
   activeSessionCount: z.number().int().nonnegative(),
+  // Fleet-admin-panel telemetry (file-48 §A5; A3 W2189/W2197/W2199*). All
+  // OPTIONAL + omit-when-nil on the producer (ControlClient.swift Heartbeat),
+  // so an older/quieter node's beat is byte-identical and these are simply
+  // absent. DECLARED here (was silently .strip()ped) so the values survive
+  // decode for the panel's resource columns, scheduler placement, and
+  // staleness/uptime/drain signals. Field names mirror the Swift Codable 1:1.
+  /** Configured session capacity — the running/max denominator (A3-1). */
+  maxConcurrent: z.number().int().nonnegative().optional(),
+  /** Daemon uptime (s, monotonic from process start) — uptime + silent-restart detection (A3-3). */
+  uptimeSeconds: z.number().nonnegative().optional(),
+  /** "draining" when shedding (SIGUSR1 / scheduled restart), else absent = serving (A3-2). */
+  drainState: z.string().optional(),
+  /** Rolling-1h session-outcome tally (reason→count); A2 owns success/crash categorization (A3-5). */
+  sessionOutcomeCounts: z.record(z.string(), z.number().int().nonnegative()).optional(),
+  // Host-health (A3-4) — proactive-placement signals; gated on the worker via
+  // DRIFTSTACK_HEARTBEAT_HOST_HEALTH (flipped on, W2197).
+  /** nominal | fair | serious | critical. */
+  thermalState: z.string().optional(),
+  /** normal | warn | critical. */
+  memoryPressureLevel: z.string().optional(),
+  /** Per-core max % (single-core saturation the box-wide cpuPercent hides). */
+  busiestCorePercent: z.number().optional(),
+  /** Session-storage volume free % (disk-full drift / data-dir write-failure tell). */
+  diskFreePercent: z.number().optional(),
+  /** Harness build identity (e.g. git sha) — "Harness version" column (A3 W2189). */
+  harnessVersion: z.string().optional(),
 });
 
 export const ErrorEventSchema = z.object({
