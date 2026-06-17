@@ -253,6 +253,71 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.statusCode).toBe(201);
   });
 
+  // Teams member-launch (898cb5f) — the SECURITY-SENSITIVE positive + RBAC
+  // paths, exercised against a REAL seeded membership (the fail-closed
+  // non-member / malformed cases are covered above). These pin the three
+  // properties that matter for the cross-account boundary: an ADMIN member may
+  // launch under the owner, a plain MEMBER may not, and owner-scoping holds so
+  // an admin can never reach (hence never DEK-unwrap) a profile the owner does
+  // not own. DEK owner-only is structurally guaranteed downstream — the DEK
+  // lookup is keyed to ownerAccountId AND the unwrap is HKDF-bound to it — but
+  // the route never reaches the DEK for an unowned profile because the
+  // owner-scoped profile validation 404s first; that is what we pin here.
+  const TEAM_OWNER_ID = '00000000-0000-4000-8000-000000000b01';
+  const TEAM_MEMBERSHIP_ID = '00000000-0000-4000-8000-000000000b02';
+
+  it('Teams member-launch: an ADMIN team member launching under the owner (X-Driftstack-Account=owner) → 201 (session scoped to the owner)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      { membershipId: TEAM_MEMBERSHIP_ID, ownerAccountId: TEAM_OWNER_ID, role: 'admin' },
+    ]);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${TEAM_OWNER_ID}`,
+      },
+      payload: { token_budget: 50_000 },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('Teams member-launch: a NON-admin (role=member) launching under the owner → 403 (never 201) — only admins launch on the team', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      { membershipId: TEAM_MEMBERSHIP_ID, ownerAccountId: TEAM_OWNER_ID, role: 'member' },
+    ]);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${TEAM_OWNER_ID}`,
+      },
+      payload: { token_budget: 50_000 },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).not.toBe(201);
+  });
+
+  it('Teams member-launch (DEK owner-only boundary): an admin launching under the owner with a well-formed profile_id the OWNER does NOT own → 404 (owner-scoped profile validation rejects before any DEK reach)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      { membershipId: TEAM_MEMBERSHIP_ID, ownerAccountId: TEAM_OWNER_ID, role: 'admin' },
+    ]);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${TEAM_OWNER_ID}`,
+      },
+      payload: { token_budget: 50_000, profile_id: 'prof_00000000-0000-4000-8000-0000000000ff' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
   it('W393 POST /:id/resume → 202 for an owned active session; 404 unknown; 409 terminal', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({
