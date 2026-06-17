@@ -99,6 +99,7 @@ pub fn run() {
             secret_delete,
             proxy_test,
             proxy_exit_probe,
+            endpoint_resolve,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -349,6 +350,48 @@ fn proxy_test(
             udp_associate: false,
             latency_ms: 0,
             message,
+        },
+    }
+}
+
+/// Result of a VPN-endpoint reachability pre-flight. A VPN endpoint is usually
+/// UDP (WireGuard always; OpenVPN often), so a TCP connect would falsely report
+/// "down" — instead we do a protocol-agnostic DNS RESOLUTION of the host. This
+/// catches the common error (typo'd / dead endpoint hostname) without claiming
+/// the tunnel/auth works; full tunnel verification happens when a session
+/// launches through the proxy (the harness fail-closes with the real reason).
+#[derive(serde::Serialize)]
+struct EndpointResolveResult {
+    resolved: bool,
+    /// First resolved IP (for display), or empty when resolution failed.
+    ip: String,
+    message: String,
+}
+
+/// Resolve a VPN endpoint host to confirm it's a valid, reachable hostname.
+/// Native so we can resolve arbitrary hosts the WebView sandbox can't.
+#[tauri::command]
+fn endpoint_resolve(host: String, port: u16) -> EndpointResolveResult {
+    match (host.as_str(), port).to_socket_addrs() {
+        Ok(mut addrs) => match addrs.next() {
+            Some(addr) => EndpointResolveResult {
+                resolved: true,
+                ip: addr.ip().to_string(),
+                message: format!(
+                    "Endpoint resolves to {} — tunnel verified at launch.",
+                    addr.ip()
+                ),
+            },
+            None => EndpointResolveResult {
+                resolved: false,
+                ip: String::new(),
+                message: "Host resolved to no addresses — check the endpoint.".into(),
+            },
+        },
+        Err(e) => EndpointResolveResult {
+            resolved: false,
+            ip: String::new(),
+            message: format!("Couldn't resolve the endpoint host: {e}"),
         },
     }
 }

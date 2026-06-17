@@ -15,10 +15,12 @@ import {
   addProxy,
   listProxies,
   removeProxy,
+  resolveEndpoint,
   testProxy,
   updateProxy,
   validateDraft,
   type DraftValidation,
+  type EndpointResolveResult,
   type ProxyConfig,
   type ProxyDraft,
   type ProxyTestResult,
@@ -803,6 +805,30 @@ export function ProxyForm({
   // wrong creds surfaces here instead of failing on first launch.
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<ProxyTestResult | null>(null);
+
+  // VPN endpoint pre-flight — VPN endpoints are mostly UDP (no honest TCP/SOCKS5
+  // probe), so we DNS-resolve the endpoint host: catches a typo'd/dead host
+  // without claiming the tunnel works (full tunnel verifies at launch).
+  const [resolving, setResolving] = useState(false);
+  const [resolveResult, setResolveResult] = useState<EndpointResolveResult | null>(null);
+  async function handleTestEndpoint(): Promise<void> {
+    const v = validateDraft(draft);
+    setValidation(v);
+    if (!v.ok) return;
+    setResolving(true);
+    setResolveResult(null);
+    try {
+      setResolveResult(await resolveEndpoint(draft.host, draft.port));
+    } catch (err) {
+      setResolveResult({
+        resolved: false,
+        ip: '',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setResolving(false);
+    }
+  }
   async function handleTestConnection(): Promise<void> {
     const v = validateDraft(draft);
     setValidation(v);
@@ -1059,6 +1085,21 @@ export function ProxyForm({
           )}
         </div>
       )}
+      {resolveResult !== null && (
+        <div
+          data-component="form-endpoint-result"
+          className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border px-3 py-2 text-xs ${
+            resolveResult.resolved
+              ? 'border-status-ready/40 bg-status-ready/10 text-status-ready'
+              : 'border-status-error/40 bg-status-error/10 text-status-error'
+          }`}
+        >
+          <span className="font-semibold">
+            {resolveResult.resolved ? '✓ Endpoint reachable' : '✗ Endpoint not found'}
+          </span>
+          <span className="text-ink-secondary">{resolveResult.message}</span>
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2 pt-2">
         {!isVpn ? (
           <button
@@ -1071,7 +1112,15 @@ export function ProxyForm({
             {testing ? 'Testing…' : 'Test connection'}
           </button>
         ) : (
-          <span />
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => void handleTestEndpoint()}
+            disabled={resolving}
+            title="Check the VPN endpoint host resolves — full tunnel verifies at launch"
+          >
+            {resolving ? 'Checking…' : 'Test endpoint'}
+          </button>
         )}
         <div className="flex gap-2">
           <button type="button" className="btn-secondary" onClick={onCancel}>

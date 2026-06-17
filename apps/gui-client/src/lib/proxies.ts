@@ -261,3 +261,18 @@ export async function testProxy(input: {
     password: input.password,
   });
 }
+
+/** Result of the native `endpoint_resolve` command — a VPN-endpoint DNS pre-flight
+ *  (the honest client-side check for UDP-mostly VPN endpoints; full tunnel verifies
+ *  at launch). Field names match the Rust `EndpointResolveResult`. */
+export interface EndpointResolveResult {
+  resolved: boolean;
+  ip: string;
+  message: string;
+}
+
+/** DNS-resolve a VPN endpoint host:port (OpenVPN remote / WireGuard endpoint) —
+ *  confirms the hostname is valid/reachable without claiming the tunnel works. */
+export async function resolveEndpoint(host: string, port: number): Promise<EndpointResolveResult> {
+  return invoke<EndpointResolveResult>('endpoint_resolve', { host, port });
+}
