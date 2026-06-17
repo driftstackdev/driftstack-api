@@ -798,11 +798,15 @@ export function ProfilesView({
     if (apiKey === null || apiKey.length === 0) return undefined;
     const input = {
       label: p.label,
-      scheme: 'socks5' as const,
+      scheme: p.scheme ?? ('socks5' as const),
       host: p.host,
       port: p.port,
       username: p.username,
       password: p.password,
+      // OVPN/WG — forward the VPN config block when present so the server wraps
+      // the secret (config_blob / private_key) under the account TMK.
+      ...(p.openvpn !== undefined ? { openvpn: p.openvpn } : {}),
+      ...(p.wireguard !== undefined ? { wireguard: p.wireguard } : {}),
     };
     if (p.serverId !== undefined) {
       await updateAccountProxy(settings.baseUrl, apiKey, p.serverId, input);

@@ -86,10 +86,13 @@ describe('W467.B apps/gui-client/src/lib/proxies.ts content parity', () => {
     expect(body).toMatch(/serverId\?: string;/);
   });
 
-  it('ProxyDraft 5-field (label + host + port + username + password — no id or createdAt; minted by addProxy)', () => {
+  it('ProxyDraft (label + host + port + username + password — no id or createdAt; minted by addProxy) + OVPN/WG optional scheme/openvpn/wireguard', () => {
     expect(body).toMatch(
-      /export interface ProxyDraft \{\s*\n?\s*label: string;\s*\n?\s*host: string;\s*\n?\s*port: number;\s*\n?\s*username: string \| null;\s*\n?\s*password: string \| null;\s*\n?\s*\}/,
+      /export interface ProxyDraft \{\s*\n?\s*label: string;\s*\n?\s*host: string;\s*\n?\s*port: number;\s*\n?\s*username: string \| null;\s*\n?\s*password: string \| null;\s*\n?\s*scheme\?: AccountProxyScheme;/,
     );
+    // OVPN/WG arc — the draft carries the VPN config blocks for the matching scheme.
+    expect(body).toContain('openvpn?: OpenVpnConfigInput;');
+    expect(body).toContain('wireguard?: WireGuardConfigInput;');
   });
 
   it("Storage constants: STORE_FILE = 'settings.json' (shared with settings.ts) + PROXIES_KEY = 'proxies'; LazyStore from @tauri-apps/plugin-store + lazy getStore() singleton", () => {
@@ -109,8 +112,11 @@ describe('W467.B apps/gui-client/src/lib/proxies.ts content parity', () => {
 
   it('addProxy: mintId() + new Date().toISOString() + persist([...all, next]); updateProxy: findIndex; idx < 0 → null; spread merge + persist; removeProxy: filter !== id + persist', () => {
     expect(body).toMatch(
-      /export async function addProxy\(draft: ProxyDraft\): Promise<ProxyConfig> \{\s*\n?\s*const all = await listProxies\(\);\s*\n?\s*const next: ProxyConfig = \{\s*\n?\s*id: mintId\(\),\s*\n?\s*label: draft\.label,\s*\n?\s*host: draft\.host,\s*\n?\s*port: draft\.port,\s*\n?\s*username: draft\.username,\s*\n?\s*password: draft\.password,\s*\n?\s*createdAt: new Date\(\)\.toISOString\(\),\s*\n?\s*\};\s*\n?\s*await persist\(\[\.\.\.all, next\]\);/,
+      /export async function addProxy\(draft: ProxyDraft\): Promise<ProxyConfig> \{\s*\n?\s*const all = await listProxies\(\);\s*\n?\s*const next: ProxyConfig = \{\s*\n?\s*id: mintId\(\),\s*\n?\s*label: draft\.label,\s*\n?\s*host: draft\.host,\s*\n?\s*port: draft\.port,\s*\n?\s*username: draft\.username,\s*\n?\s*password: draft\.password,\s*\n?\s*createdAt: new Date\(\)\.toISOString\(\),/,
     );
+    // OVPN/WG arc — addProxy carries the optional scheme + VPN blocks through.
+    expect(body).toContain('await persist([...all, next]);');
+    expect(body).toContain('? { scheme: draft.scheme }');
     expect(body).toMatch(
       /export async function updateProxy\(id: string, patch: ProxyDraft\): Promise<ProxyConfig \| null> \{\s*\n?\s*const all = await listProxies\(\);\s*\n?\s*const idx = all\.findIndex\(\(p\) => p\.id === id\);\s*\n?\s*if \(idx < 0\) return null;/,
     );

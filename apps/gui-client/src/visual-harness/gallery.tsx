@@ -11,6 +11,7 @@ import { ProfilePhoneCard, type ProfilePhoneCardProps } from '../components/Prof
 import { ProfilesTable, type ProfileTableRow } from '../components/ProfilesTable';
 import { CostPanel } from '../components/CostPanel';
 import { SkeletonRows } from '../components/Skeleton';
+import { ProxyForm } from '../views/ProxiesView';
 
 const noop = (): void => undefined;
 
@@ -197,6 +198,60 @@ export function Gallery(): JSX.Element {
             billingCycle="2026-06"
           />
         </BillingWrapperShell>
+      </div>
+
+      <h1 className="mb-3 mt-10 text-lg font-semibold text-ink-primary">
+        ProxyForm — proxy type editor (socks5 / wireguard / openvpn)
+      </h1>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(360px,1fr))] gap-4">
+        <div className="flex flex-col gap-1">
+          <span className="text-2xs uppercase tracking-wide text-ink-muted">socks5</span>
+          <ProxyForm
+            mode="add"
+            initial={{
+              label: '',
+              scheme: 'socks5',
+              host: '',
+              port: 1080,
+              username: null,
+              password: null,
+            }}
+            onCancel={noop}
+            onSave={noop}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-2xs uppercase tracking-wide text-ink-muted">wireguard</span>
+          <ProxyForm
+            mode="add"
+            initial={{
+              label: '',
+              scheme: 'wireguard',
+              host: '',
+              port: 51820,
+              username: null,
+              password: null,
+            }}
+            onCancel={noop}
+            onSave={noop}
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-2xs uppercase tracking-wide text-ink-muted">openvpn</span>
+          <ProxyForm
+            mode="add"
+            initial={{
+              label: '',
+              scheme: 'openvpn',
+              host: '',
+              port: 1194,
+              username: null,
+              password: null,
+            }}
+            onCancel={noop}
+            onSave={noop}
+          />
+        </div>
       </div>
     </div>
   );

@@ -142,4 +142,37 @@ describe('validateDraft (gui-client/lib/proxies)', () => {
       expect(Object.keys(result.errors)).toEqual([]);
     });
   });
+
+  // OVPN/WG arc — VPN schemes require their parsed config block (the form fills
+  // it from the wg0.conf/.ovpn paste); host/port are the endpoint, still validated.
+  describe('VPN schemes', () => {
+    it('wireguard WITHOUT a block → not ok (errors.wireguard)', () => {
+      const r = validateDraft(draft({ scheme: 'wireguard', host: 'vpn.example.com', port: 51820 }));
+      expect(r.ok).toBe(false);
+      expect(r.errors.wireguard).toBeDefined();
+    });
+
+    it('openvpn WITHOUT a block → not ok (errors.openvpn)', () => {
+      const r = validateDraft(draft({ scheme: 'openvpn', host: 'vpn.example.com', port: 1194 }));
+      expect(r.ok).toBe(false);
+      expect(r.errors.openvpn).toBeDefined();
+    });
+
+    it('wireguard WITH a block + valid host/port → ok', () => {
+      const r = validateDraft(
+        draft({
+          scheme: 'wireguard',
+          host: 'vpn.example.com',
+          port: 51820,
+          wireguard: {
+            private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
+            peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
+            endpoint: 'vpn.example.com:51820',
+            allowed_ips: '0.0.0.0/0',
+          },
+        }),
+      );
+      expect(r.ok).toBe(true);
+    });
+  });
 });

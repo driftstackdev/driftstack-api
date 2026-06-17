@@ -26,6 +26,9 @@ import {
 import { invalidateProbe, saveExitResult, saveProbeResult } from '../lib/proxy-probe-cache';
 import { probeProxyExit, type ProxyExitProbeResult } from '../lib/proxies';
 import { parseProxyString } from '../lib/parse-proxy';
+import { parseWireGuardConfig } from '../lib/parse-wireguard';
+import { validateOpenVpnConfig } from '../lib/parse-openvpn';
+import { buildWireGuardProxyInput, buildOpenVpnProxyInput } from '../lib/account-proxies';
 
 interface ListState {
   proxies: ProxyConfig[];
@@ -35,6 +38,7 @@ interface ListState {
 
 const EMPTY_DRAFT: ProxyDraft = {
   label: '',
+  scheme: 'socks5',
   host: '',
   port: 1080,
   username: null,
@@ -601,7 +605,7 @@ function HealthPill({
   );
 }
 
-function ProxyForm({
+export function ProxyForm({
   initial,
   mode,
   onCancel,
@@ -616,9 +620,93 @@ function ProxyForm({
   const [validation, setValidation] = useState<DraftValidation>({ ok: true, errors: {} });
   const [pasteVal, setPasteVal] = useState('');
   const [pasteHint, setPasteHint] = useState<string | null>(null);
+  // OVPN/WG — the wg0.conf textarea text (the parsed WG block doesn't retain
+  // the raw conf; OpenVPN keeps its blob in draft.openvpn.config_blob) + a
+  // parse-feedback hint.
+  const [wgText, setWgText] = useState(initial.wireguard ? '(saved WireGuard config)' : '');
+  const [vpnHint, setVpnHint] = useState<string | null>(null);
+
+  const scheme = draft.scheme ?? 'socks5';
+  const isVpn = scheme === 'openvpn' || scheme === 'wireguard';
 
   function setField<K extends keyof ProxyDraft>(key: K, value: ProxyDraft[K]): void {
     setDraft((d) => ({ ...d, [key]: value }));
+  }
+
+  // Switch proxy type — clear the now-irrelevant fields so a half-typed socks5
+  // password can't ride along on a VPN proxy (and vice versa).
+  function handleSchemeChange(next: NonNullable<ProxyDraft['scheme']>): void {
+    setVpnHint(null);
+    setWgText('');
+    setDraft((d) => ({
+      ...d,
+      scheme: next,
+      ...(next === 'openvpn' || next === 'wireguard'
+        ? { username: null, password: null }
+        : { openvpn: undefined, wireguard: undefined }),
+    }));
+  }
+
+  // wg0.conf paste → parse + build → fill host/port (endpoint) + the WG block.
+  function handleWgPaste(text: string): void {
+    setWgText(text);
+    if (text.trim() === '') {
+      setVpnHint(null);
+      setDraft((d) => ({ ...d, wireguard: undefined }));
+      return;
+    }
+    const built = buildWireGuardProxyInput(draft.label, parseWireGuardConfig(text));
+    if ('error' in built) {
+      setVpnHint(built.error);
+      setDraft((d) => ({ ...d, wireguard: undefined }));
+      return;
+    }
+    setDraft((d) => ({
+      ...d,
+      scheme: 'wireguard',
+      host: built.host,
+      port: built.port,
+      wireguard: built.wireguard,
+    }));
+    setVpnHint(`✓ endpoint ${built.host}:${built.port.toString()}`);
+  }
+
+  // .ovpn paste → validate + extract remote → fill host/port + the OVPN block
+  // (config_blob = the pasted text; optional username/password ride alongside).
+  function handleOvpnPaste(text: string): void {
+    if (text.trim() === '') {
+      setVpnHint(null);
+      setDraft((d) => ({ ...d, openvpn: undefined }));
+      return;
+    }
+    const v = validateOpenVpnConfig(text);
+    if (!v.ok) {
+      setVpnHint(v.reason);
+      // Keep the blob so the user can fix it, but don't mark it valid.
+      setDraft((d) => ({ ...d, openvpn: { config_blob: text, ...(d.openvpn ?? {}) } }));
+      return;
+    }
+    const built = buildOpenVpnProxyInput(
+      draft.label,
+      text,
+      { host: v.remoteHost, port: v.remotePort },
+      {
+        username: draft.openvpn?.username,
+        password: draft.openvpn?.password,
+      },
+    );
+    if ('error' in built) {
+      setVpnHint(built.error);
+      return;
+    }
+    setDraft((d) => ({
+      ...d,
+      scheme: 'openvpn',
+      host: built.host,
+      port: built.port,
+      openvpn: built.openvpn,
+    }));
+    setVpnHint(`✓ remote ${built.host}:${built.port.toString()}`);
   }
 
   // Quick-paste: accept a proxy in any common format and auto-fill the four
@@ -694,19 +782,19 @@ function ProxyForm({
     >
       <div className="flex items-center justify-between border-b border-surface-divider pb-2">
         <span className="section-label">{mode === 'add' ? 'Add proxy' : 'Edit proxy'}</span>
-        <span className="mono text-2xs text-ink-muted">SOCKS5</span>
+        <span className="mono text-2xs text-ink-muted">{scheme.toUpperCase()}</span>
       </div>
-      <Field label="Quick paste — host:port:user:pass or user:pass@host:port">
-        <input
-          type="text"
-          className="form-input mono"
-          value={pasteVal}
-          onChange={(e) => handlePaste(e.target.value)}
-          placeholder="paste a proxy line to auto-fill the fields below"
-          autoComplete="off"
-          spellCheck={false}
-        />
-        {pasteHint !== null && <span className="mt-1 text-2xs text-ink-muted">{pasteHint}</span>}
+      <Field label="Type">
+        <select
+          className="form-input"
+          value={scheme}
+          onChange={(e) => handleSchemeChange(e.target.value as NonNullable<ProxyDraft['scheme']>)}
+        >
+          <option value="socks5">SOCKS5</option>
+          <option value="http">HTTP</option>
+          <option value="openvpn">OpenVPN</option>
+          <option value="wireguard">WireGuard</option>
+        </select>
       </Field>
       <Field label="Label" error={validation.errors.label}>
         <input
@@ -717,53 +805,143 @@ function ProxyForm({
           placeholder="prod-eu-west"
         />
       </Field>
-      <div className="grid grid-cols-3 gap-3">
-        <div className="col-span-2">
-          <Field label="Host" error={validation.errors.host}>
+      {!isVpn && (
+        <>
+          <Field label="Quick paste — host:port:user:pass or user:pass@host:port">
             <input
               type="text"
               className="form-input mono"
-              value={draft.host}
-              onChange={(e) => setField('host', e.target.value)}
-              placeholder="proxy.example.com"
+              value={pasteVal}
+              onChange={(e) => handlePaste(e.target.value)}
+              placeholder="paste a proxy line to auto-fill the fields below"
+              autoComplete="off"
+              spellCheck={false}
             />
+            {pasteHint !== null && (
+              <span className="mt-1 text-2xs text-ink-muted">{pasteHint}</span>
+            )}
           </Field>
-        </div>
-        <Field label="Port" error={validation.errors.port}>
-          <input
-            type="number"
-            className="form-input mono"
-            min={1}
-            max={65535}
-            value={draft.port}
-            onChange={(e) => setField('port', Number(e.target.value))}
-          />
-        </Field>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Username (optional)">
-          <input
-            type="text"
-            className="form-input mono"
-            value={draft.username ?? ''}
-            onChange={(e) =>
-              setField('username', e.target.value.length > 0 ? e.target.value : null)
-            }
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <Field label="Host" error={validation.errors.host}>
+                <input
+                  type="text"
+                  className="form-input mono"
+                  value={draft.host}
+                  onChange={(e) => setField('host', e.target.value)}
+                  placeholder="proxy.example.com"
+                />
+              </Field>
+            </div>
+            <Field label="Port" error={validation.errors.port}>
+              <input
+                type="number"
+                className="form-input mono"
+                min={1}
+                max={65535}
+                value={draft.port}
+                onChange={(e) => setField('port', Number(e.target.value))}
+              />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Username (optional)">
+              <input
+                type="text"
+                className="form-input mono"
+                value={draft.username ?? ''}
+                onChange={(e) =>
+                  setField('username', e.target.value.length > 0 ? e.target.value : null)
+                }
+                autoComplete="off"
+              />
+            </Field>
+            <Field label="Password (optional)">
+              <input
+                type="password"
+                className="form-input mono"
+                value={draft.password ?? ''}
+                onChange={(e) =>
+                  setField('password', e.target.value.length > 0 ? e.target.value : null)
+                }
+                autoComplete="off"
+              />
+            </Field>
+          </div>
+        </>
+      )}
+      {scheme === 'wireguard' && (
+        <Field
+          label="Paste your wg0.conf — keys, endpoint + allowed IPs auto-fill"
+          error={validation.errors.wireguard}
+        >
+          <textarea
+            className="form-input mono min-h-[120px]"
+            value={wgText}
+            onChange={(e) => handleWgPaste(e.target.value)}
+            placeholder={'[Interface]\nPrivateKey = …\n[Peer]\nPublicKey = …\nEndpoint = host:port'}
             autoComplete="off"
+            spellCheck={false}
           />
+          {vpnHint !== null && <span className="mt-1 text-2xs text-ink-muted">{vpnHint}</span>}
         </Field>
-        <Field label="Password (optional)">
-          <input
-            type="password"
-            className="form-input mono"
-            value={draft.password ?? ''}
-            onChange={(e) =>
-              setField('password', e.target.value.length > 0 ? e.target.value : null)
-            }
-            autoComplete="off"
-          />
-        </Field>
-      </div>
+      )}
+      {scheme === 'openvpn' && (
+        <>
+          <Field
+            label="Paste your .ovpn — the remote endpoint auto-fills"
+            error={validation.errors.openvpn}
+          >
+            <textarea
+              className="form-input mono min-h-[120px]"
+              value={draft.openvpn?.config_blob ?? ''}
+              onChange={(e) => handleOvpnPaste(e.target.value)}
+              placeholder={'client\nremote vpn.example.com 1194 udp\ndev tun\n…'}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            {vpnHint !== null && <span className="mt-1 text-2xs text-ink-muted">{vpnHint}</span>}
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Auth username (optional)">
+              <input
+                type="text"
+                className="form-input mono"
+                value={draft.openvpn?.username ?? ''}
+                onChange={(e) =>
+                  setDraft((d) => ({
+                    ...d,
+                    openvpn: {
+                      config_blob: d.openvpn?.config_blob ?? '',
+                      ...(d.openvpn ?? {}),
+                      username: e.target.value.length > 0 ? e.target.value : undefined,
+                    },
+                  }))
+                }
+                autoComplete="off"
+              />
+            </Field>
+            <Field label="Auth password (optional)">
+              <input
+                type="password"
+                className="form-input mono"
+                value={draft.openvpn?.password ?? ''}
+                onChange={(e) =>
+                  setDraft((d) => ({
+                    ...d,
+                    openvpn: {
+                      config_blob: d.openvpn?.config_blob ?? '',
+                      ...(d.openvpn ?? {}),
+                      password: e.target.value.length > 0 ? e.target.value : undefined,
+                    },
+                  }))
+                }
+                autoComplete="off"
+              />
+            </Field>
+          </div>
+        </>
+      )}
       {testResult !== null && (
         <div
           data-component="form-test-result"
@@ -788,15 +966,19 @@ function ProxyForm({
         </div>
       )}
       <div className="flex items-center justify-between gap-2 pt-2">
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={() => void handleTestConnection()}
-          disabled={testing}
-          title="Probe this proxy — reachability, auth, latency, UDP — before saving"
-        >
-          {testing ? 'Testing…' : 'Test connection'}
-        </button>
+        {!isVpn ? (
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => void handleTestConnection()}
+            disabled={testing}
+            title="Probe this proxy — reachability, auth, latency, UDP — before saving"
+          >
+            {testing ? 'Testing…' : 'Test connection'}
+          </button>
+        ) : (
+          <span />
+        )}
         <div className="flex gap-2">
           <button type="button" className="btn-secondary" onClick={onCancel}>
             Cancel

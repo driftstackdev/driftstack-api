@@ -17,6 +17,11 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { LazyStore } from '@tauri-apps/plugin-store';
+import type {
+  AccountProxyScheme,
+  OpenVpnConfigInput,
+  WireGuardConfigInput,
+} from './account-proxies';
 
 export interface ProxyConfig {
   id: string;
@@ -31,6 +36,14 @@ export interface ProxyConfig {
    *  first time it's synced (on launch). Lets a session pass proxy_id so the
    *  server routes egress through it. Absent until first synced. */
   serverId?: string;
+  /** OVPN/WG — proxy type. Absent/undefined = socks5 (back-compat). host/port
+   *  are the (display) endpoint for VPN schemes too. */
+  scheme?: AccountProxyScheme;
+  /** OVPN/WG config blocks — present only for the matching scheme. The
+   *  secret-bearing parts ride here in the LOCAL cache (same on-disk posture as
+   *  the socks5 password); the server wraps them under the account TMK. */
+  openvpn?: OpenVpnConfigInput;
+  wireguard?: WireGuardConfigInput;
 }
 
 export interface ProxyDraft {
@@ -39,6 +52,9 @@ export interface ProxyDraft {
   port: number;
   username: string | null;
   password: string | null;
+  scheme?: AccountProxyScheme;
+  openvpn?: OpenVpnConfigInput;
+  wireguard?: WireGuardConfigInput;
 }
 
 const STORE_FILE = 'settings.json';
@@ -68,6 +84,9 @@ export async function addProxy(draft: ProxyDraft): Promise<ProxyConfig> {
     username: draft.username,
     password: draft.password,
     createdAt: new Date().toISOString(),
+    ...(draft.scheme !== undefined ? { scheme: draft.scheme } : {}),
+    ...(draft.openvpn !== undefined ? { openvpn: draft.openvpn } : {}),
+    ...(draft.wireguard !== undefined ? { wireguard: draft.wireguard } : {}),
   };
   await persist([...all, next]);
   return next;
@@ -84,6 +103,10 @@ export async function updateProxy(id: string, patch: ProxyDraft): Promise<ProxyC
     port: patch.port,
     username: patch.username,
     password: patch.password,
+    ...(patch.scheme !== undefined ? { scheme: patch.scheme } : {}),
+    // VPN blocks: a patch carrying one replaces it; absent leaves the stored one.
+    ...(patch.openvpn !== undefined ? { openvpn: patch.openvpn } : {}),
+    ...(patch.wireguard !== undefined ? { wireguard: patch.wireguard } : {}),
   };
   const next = [...all];
   next[idx] = updated;
@@ -153,6 +176,14 @@ export function validateDraft(d: ProxyDraft): DraftValidation {
   if (d.host.trim().length === 0) errors.host = 'Required.';
   if (!Number.isInteger(d.port) || d.port < 1 || d.port > 65535) {
     errors.port = 'Port must be 1–65535.';
+  }
+  // VPN schemes require their config block (the paste must have parsed); host/
+  // port are the endpoint, validated above.
+  if (d.scheme === 'openvpn' && d.openvpn === undefined) {
+    errors.openvpn = 'Paste a valid .ovpn configuration.';
+  }
+  if (d.scheme === 'wireguard' && d.wireguard === undefined) {
+    errors.wireguard = 'Paste a valid wg0.conf configuration.';
   }
   // username/password are optional; if one is set the other isn't required
   // (some SOCKS5 servers accept username-only auth).
