@@ -618,6 +618,16 @@ export const accountProxies = pgTable(
     // NULL = no password (or PROFILE_MASTER_KEY unset → feature inert). The
     // plaintext is never stored; it's unwrapped server-side only at dispatch.
     wrappedPassword: text('wrapped_password'),
+    // OVPN/WG arc (0082) — VPN proxies (scheme openvpn|wireguard). The SECRET
+    // payload (the .ovpn config_blob, or the WireGuard private_key) wrapped under
+    // the account TMK like wrappedPassword; NULL for socks5/http. Never returned.
+    wrappedSecret: text('wrapped_secret'),
+    // Non-secret structured VPN fields (WireGuard peer_public_key/endpoint/
+    // allowed_ips/dns, OpenVPN username). '{}' for socks5/http rows.
+    config: jsonb('config')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),

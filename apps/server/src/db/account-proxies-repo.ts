@@ -22,6 +22,10 @@ export interface AccountProxyRow {
   username: string | null;
   /** base64([iv|tag|ct]) wrapped under the account TMK, or null. Opaque here. */
   wrappedPassword: string | null;
+  /** OVPN/WG: wrapped secret payload (config_blob / private_key), or null. Opaque. */
+  wrappedSecret: string | null;
+  /** OVPN/WG: non-secret structured fields. `{}` for socks5/http rows. */
+  config: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +37,10 @@ export interface NewAccountProxyRow {
   port: number;
   username: string | null;
   wrappedPassword: string | null;
+  /** Optional — VPN secret payload; defaults to null (socks5/http rows). */
+  wrappedSecret?: string | null;
+  /** Optional — non-secret VPN fields; defaults to `{}` (socks5/http rows). */
+  config?: Record<string, unknown>;
 }
 
 export interface AccountProxyRowUpdates {
@@ -42,6 +50,8 @@ export interface AccountProxyRowUpdates {
   port?: number;
   username?: string | null;
   wrappedPassword?: string | null;
+  wrappedSecret?: string | null;
+  config?: Record<string, unknown>;
 }
 
 export interface AccountProxiesRepo {
@@ -67,6 +77,8 @@ function toRow(r: typeof accountProxies.$inferSelect): AccountProxyRow {
     port: r.port,
     username: r.username,
     wrappedPassword: r.wrappedPassword,
+    wrappedSecret: r.wrappedSecret,
+    config: r.config,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -105,6 +117,8 @@ export class DrizzleAccountProxiesRepo implements AccountProxiesRepo {
         port: input.port,
         username: input.username,
         wrappedPassword: input.wrappedPassword,
+        wrappedSecret: input.wrappedSecret ?? null,
+        config: input.config ?? {},
       })
       .returning();
     // insert-returning always yields the inserted row.
@@ -169,6 +183,8 @@ export class InMemoryAccountProxiesRepo implements AccountProxiesRepo {
       port: input.port,
       username: input.username,
       wrappedPassword: input.wrappedPassword,
+      wrappedSecret: input.wrappedSecret ?? null,
+      config: input.config ?? {},
       createdAt: now,
       updatedAt: now,
     };

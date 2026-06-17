@@ -575,6 +575,13 @@
       "when": 1780296000000,
       "tag": "0081_account_proxies",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1780299600000,
+      "tag": "0082_account_proxies_vpn_fields",
+      "breakpoints": true
     }
   ]
 }

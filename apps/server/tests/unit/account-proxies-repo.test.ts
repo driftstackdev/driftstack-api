@@ -82,3 +82,36 @@ describe('InMemoryAccountProxiesRepo — OWNER SCOPING (cross-account isolation)
     expect(await repo.list(ACCT_A)).toHaveLength(1);
   });
 });
+
+// OVPN/WG arc (0082) — the additive VPN-config columns. socks5/http rows are
+// behavior-identical (wrappedSecret null, config {}); VPN rows carry the secret
+// payload + non-secret structured fields. The secret stays opaque at this layer.
+describe('InMemoryAccountProxiesRepo — VPN config columns (wrappedSecret + config)', () => {
+  it('a socks5 proxy defaults to wrappedSecret=null + config={} (behavior-identical)', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const created = await repo.create(ACCT_A, newInput());
+    expect(created.wrappedSecret).toBeNull();
+    expect(created.config).toEqual({});
+  });
+
+  it('a wireguard proxy round-trips its wrappedSecret + config (non-secret fields)', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const created = await repo.create(
+      ACCT_A,
+      newInput({
+        scheme: 'wireguard',
+        wrappedPassword: null,
+        wrappedSecret: 'wrapped-private-key-blob',
+        config: {
+          peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
+          endpoint: 'vpn.example.com:51820',
+          allowed_ips: '0.0.0.0/0',
+        },
+      }),
+    );
+    const found = await repo.findById({ id: created.id, accountId: ACCT_A });
+    expect(found?.scheme).toBe('wireguard');
+    expect(found?.wrappedSecret).toBe('wrapped-private-key-blob');
+    expect(found?.config).toMatchObject({ endpoint: 'vpn.example.com:51820' });
+  });
+});
