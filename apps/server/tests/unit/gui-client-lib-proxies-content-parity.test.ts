@@ -78,10 +78,12 @@ describe('W467.B apps/gui-client/src/lib/proxies.ts content parity', () => {
     );
   });
 
-  it("ProxyConfig 7-field: id + label + host + port + username nullable + password nullable + createdAt 'ISO8601 created timestamp. Hand-set by the GUI; not server-authoritative.'", () => {
+  it('ProxyConfig 8-field: id + label + host + port + username nullable + password nullable + createdAt + serverId? (ARC A — server account_proxies id, set on first launch-sync)', () => {
     expect(body).toMatch(
-      /export interface ProxyConfig \{\s*\n?\s*id: string;\s*\n?\s*label: string;\s*\n?\s*host: string;\s*\n?\s*port: number;\s*\n?\s*username: string \| null;\s*\n?\s*password: string \| null;\s*\n?\s*\/\*\* ISO8601 created timestamp\. Hand-set by the GUI; not server-authoritative\. \*\/\s*\n?\s*createdAt: string;\s*\n?\s*\}/,
+      /export interface ProxyConfig \{\s*\n?\s*id: string;\s*\n?\s*label: string;\s*\n?\s*host: string;\s*\n?\s*port: number;\s*\n?\s*username: string \| null;\s*\n?\s*password: string \| null;\s*\n?\s*\/\*\* ISO8601 created timestamp\. Hand-set by the GUI; not server-authoritative\. \*\/\s*\n?\s*createdAt: string;/,
     );
+    // ARC A — serverId caches the server-side account_proxies id for launch.
+    expect(body).toMatch(/serverId\?: string;/);
   });
 
   it('ProxyDraft 5-field (label + host + port + username + password — no id or createdAt; minted by addProxy)', () => {
@@ -117,10 +119,15 @@ describe('W467.B apps/gui-client/src/lib/proxies.ts content parity', () => {
     );
   });
 
-  it('isProxyConfig runtime narrow: 7 type checks (typeof id/label/host/createdAt string + typeof port number + nullable username/password)', () => {
+  it('isProxyConfig runtime narrow: id/label/host/createdAt string + port number + nullable username/password + optional serverId string', () => {
     expect(body).toMatch(
-      /function isProxyConfig\(v: unknown\): v is ProxyConfig \{\s*\n?\s*if \(typeof v !== 'object' \|\| v === null\) return false;\s*\n?\s*const r = v as Record<string, unknown>;\s*\n?\s*return \(\s*\n?\s*typeof r\.id === 'string' &&\s*\n?\s*typeof r\.label === 'string' &&\s*\n?\s*typeof r\.host === 'string' &&\s*\n?\s*typeof r\.port === 'number' &&\s*\n?\s*\(r\.username === null \|\| typeof r\.username === 'string'\) &&\s*\n?\s*\(r\.password === null \|\| typeof r\.password === 'string'\) &&\s*\n?\s*typeof r\.createdAt === 'string'\s*\n?\s*\);\s*\n?\s*\}/,
+      /function isProxyConfig\(v: unknown\): v is ProxyConfig \{\s*\n?\s*if \(typeof v !== 'object' \|\| v === null\) return false;\s*\n?\s*const r = v as Record<string, unknown>;\s*\n?\s*return \(\s*\n?\s*typeof r\.id === 'string' &&\s*\n?\s*typeof r\.label === 'string' &&\s*\n?\s*typeof r\.host === 'string' &&\s*\n?\s*typeof r\.port === 'number' &&\s*\n?\s*\(r\.username === null \|\| typeof r\.username === 'string'\) &&\s*\n?\s*\(r\.password === null \|\| typeof r\.password === 'string'\) &&\s*\n?\s*typeof r\.createdAt === 'string' &&\s*\n?\s*\(r\.serverId === undefined \|\| typeof r\.serverId === 'string'\)\s*\n?\s*\);\s*\n?\s*\}/,
     );
+  });
+
+  it('setProxyServerId: caches the server account_proxies id on the local proxy (ARC A launch-sync mapping)', () => {
+    expect(body).toContain('export async function setProxyServerId(');
+    expect(body).toContain('serverId: string): Promise<ProxyConfig | null>');
   });
 
   it("mintId framing pinned: 'crypto.randomUUID is in WebCrypto in every Tauri WebView we ship.' preferred + 'Cheap fallback: 16 random hex chars. Good enough for local IDs.' loop fallback", () => {

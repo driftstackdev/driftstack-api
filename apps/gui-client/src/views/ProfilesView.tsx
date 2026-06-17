@@ -65,11 +65,16 @@ import {
 import {
   addProxy,
   listProxies,
+  setProxyServerId,
   testProxy,
   probeProxyExit,
   type ProxyConfig as LocalProxyConfig,
   type ProxyTestResult,
 } from '../lib/proxies';
+import {
+  createProxy as createAccountProxy,
+  updateProxy as updateAccountProxy,
+} from '../lib/account-proxies';
 
 // LAZY-LOADED: AgentSessionPanel pulls in livekit-client (a heavy WebRTC
 // dependency). Loading it at the top level dragged livekit-client into the
@@ -782,6 +787,33 @@ export function ProfilesView({
     return proxies[0] ?? null;
   }
 
+  // ARC A — ensure the picked local proxy has a server-side account_proxies row
+  // (encrypted under the account TMK, owner-scoped) and return its id to pass as
+  // proxy_id at launch. Creates on first use (caching the id on the local proxy),
+  // refreshes on later launches so an edited host/credential stays current
+  // server-side. Returns undefined when there's no API key (caller launches
+  // without proxy_id → operator-default egress).
+  async function ensureServerProxy(p: LocalProxyConfig): Promise<string | undefined> {
+    const apiKey = settings.apiKey;
+    if (apiKey === null || apiKey.length === 0) return undefined;
+    const input = {
+      label: p.label,
+      scheme: 'socks5' as const,
+      host: p.host,
+      port: p.port,
+      username: p.username,
+      password: p.password,
+    };
+    if (p.serverId !== undefined) {
+      await updateAccountProxy(settings.baseUrl, apiKey, p.serverId, input);
+      return p.serverId;
+    }
+    const created = await createAccountProxy(settings.baseUrl, apiKey, input);
+    await setProxyServerId(p.id, created.id);
+    setProxies(await listProxies());
+    return created.id;
+  }
+
   async function handleLaunch(profile: Profile): Promise<void> {
     if (!client) return;
     setBusyId(profile.id);
@@ -809,17 +841,27 @@ export function ProfilesView({
         );
         if (!proceed) return; // finally resets busyId
       }
-      // Create a STREAMING agent-session: this dispatches the session to the
-      // fleet harness (which spawns the browser + captures + publishes) and
-      // returns a `livekit` block we subscribe to immediately — no timing lag.
-      // The selected proxy gates launch (this deployment requires one); the
-      // server injects the egress proxy into the dispatched session.
-      void proxy;
+      // ARC A — sync the picked proxy to the account (server-side, encrypted)
+      // so the dispatch routes egress through it. ensureServerProxy creates or
+      // refreshes the account_proxies row + caches its id locally; we pass that
+      // id as proxy_id. Best-effort: a sync failure (offline / SSRF-rejected
+      // host / unauth) falls back to launching without proxy_id rather than
+      // blocking — the session still runs (operator-default egress).
+      let proxyIdForLaunch: string | undefined;
+      try {
+        proxyIdForLaunch = await ensureServerProxy(proxy);
+      } catch (err) {
+        console.warn('proxy account-sync failed; launching without proxy_id', err);
+      }
       // Attach THIS profile so the session restores/persists its saved browser
       // identity (file 57). Pass the canonical prof_<uuid> id as-is — the create
       // API accepts it (W335/W336 made both session routes normalize prof_<uuid>
       // or a bare uuid server-side).
-      const created = await client.agentSessions.create({ profile_id: profile.id });
+      const created = await client.agentSessions.create(
+        proxyIdForLaunch !== undefined
+          ? { profile_id: profile.id, proxy_id: proxyIdForLaunch }
+          : { profile_id: profile.id },
+      );
       await markLaunched(profile.id, created.id);
       if (created.livekit) {
         // W617 — remember which profile/agent-session backs the stream so

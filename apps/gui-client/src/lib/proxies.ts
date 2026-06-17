@@ -27,6 +27,10 @@ export interface ProxyConfig {
   password: string | null;
   /** ISO8601 created timestamp. Hand-set by the GUI; not server-authoritative. */
   createdAt: string;
+  /** ARC A — the id of this proxy's server-side account_proxies row, set the
+   *  first time it's synced (on launch). Lets a session pass proxy_id so the
+   *  server routes egress through it. Absent until first synced. */
+  serverId?: string;
 }
 
 export interface ProxyDraft {
@@ -92,6 +96,19 @@ export async function removeProxy(id: string): Promise<void> {
   await persist(all.filter((p) => p.id !== id));
 }
 
+/** Record the server-side account_proxies id for a local proxy (set on first
+ *  launch-sync). No-op if the local proxy is gone. Returns the updated row. */
+export async function setProxyServerId(id: string, serverId: string): Promise<ProxyConfig | null> {
+  const all = await listProxies();
+  const idx = all.findIndex((p) => p.id === id);
+  if (idx < 0) return null;
+  const updated: ProxyConfig = { ...(all[idx] as ProxyConfig), serverId };
+  const next = [...all];
+  next[idx] = updated;
+  await persist(next);
+  return updated;
+}
+
 async function persist(proxies: ProxyConfig[]): Promise<void> {
   await getStore().set(PROXIES_KEY, proxies);
   await getStore().save();
@@ -107,7 +124,8 @@ function isProxyConfig(v: unknown): v is ProxyConfig {
     typeof r.port === 'number' &&
     (r.username === null || typeof r.username === 'string') &&
     (r.password === null || typeof r.password === 'string') &&
-    typeof r.createdAt === 'string'
+    typeof r.createdAt === 'string' &&
+    (r.serverId === undefined || typeof r.serverId === 'string')
   );
 }
 
