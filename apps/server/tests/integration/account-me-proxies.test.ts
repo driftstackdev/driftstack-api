@@ -395,4 +395,30 @@ describe('proxy audit emit — egress-config changes land in the account audit l
     const entries = log.json<{ data: AuditEntry[] }>().data;
     expect(entries.some((e) => e.target_resource_id === `proxy_${id}`)).toBe(true);
   });
+
+  it('PUT emits proxy.updated for the edited proxy', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'before', host: '9.9.9.9', port: 1080 },
+    });
+    const id = create.json<ProxyMeta>().id;
+    const put = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/account/me/proxies/${id}`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'after' },
+    });
+    expect(put.statusCode).toBe(200);
+
+    const log = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=proxy.updated&limit=10',
+      headers: auth(fx),
+    });
+    const entries = log.json<{ data: AuditEntry[] }>().data;
+    expect(entries.some((e) => e.target_resource_id === `proxy_${id}`)).toBe(true);
+  });
 });

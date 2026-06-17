@@ -330,6 +330,7 @@ export const AccountAuditActionSchema = z.enum([
   // / .ovpn config). Enum values land NOW so the emit point is ready
   // when EG-API-1.6 wires the storage backend.
   'proxy.created',
+  'proxy.updated',
   'proxy.deleted',
   // 2026-05-20 — bundled-LLM consent toggle (audit-coverage Tier 2
   // polish per audit doc 2026-05-19). Customer's consent state is

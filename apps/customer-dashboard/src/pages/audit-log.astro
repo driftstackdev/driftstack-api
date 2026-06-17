@@ -73,6 +73,7 @@ const ACTION_LABEL: Record<string, string> = {
   // Saved-proxy lifecycle — emitted by the live account-proxies API
   // (POST/DELETE /v1/account/me/proxies) on egress-config changes.
   'proxy.created': 'Saved proxy created',
+  'proxy.updated': 'Saved proxy updated',
   'proxy.deleted': 'Saved proxy deleted',
   // 2026-05-20 — bundled-LLM consent toggle.
   'account.bundled_llm_consent_changed': 'Bundled-LLM consent changed',
@@ -143,6 +144,7 @@ const FILTER_OPTIONS = [
   { value: 'account.byok_anthropic_key_tested', label: 'BYOK Anthropic key tested' },
   // Saved-proxy lifecycle — emitted by the live account-proxies API.
   { value: 'proxy.created', label: 'Saved proxies created' },
+  { value: 'proxy.updated', label: 'Saved proxies updated' },
   { value: 'proxy.deleted', label: 'Saved proxies deleted' },
   // 2026-05-20 — bundled-LLM consent toggle.
   { value: 'account.bundled_llm_consent_changed', label: 'Bundled-LLM consent changes' },

@@ -122,7 +122,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   async function emitProxyAudit(
     request: FastifyRequest,
     accountId: string,
-    action: 'proxy.created' | 'proxy.deleted',
+    action: 'proxy.created' | 'proxy.updated' | 'proxy.deleted',
     proxy: { id: string; label: string; scheme: string },
   ): Promise<void> {
     if (!accountAudit) return;
@@ -539,6 +539,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       }
       const row = await accountProxiesRepo.update({ id, accountId: ctx.account.id, updates });
       if (row === null) throw new NotFoundError('Proxy not found.');
+      await emitProxyAudit(request, ctx.account.id, 'proxy.updated', row);
       return proxyToMetadata(row);
     },
   );
