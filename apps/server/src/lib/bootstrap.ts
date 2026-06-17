@@ -1337,7 +1337,12 @@ export async function createProductionDeps(
           // customer-facing `session.challenge_detected` webhook (resolves the
           // owning account from the session id).
           fleetControlRegistry: new FleetControlRegistry(
-            r2 !== null ? makeProfileSavedPersister(r2, logger) : undefined,
+            r2 !== null
+              ? makeProfileSavedPersister(r2, logger, {
+                  agentSessions: agentSessionsRepo,
+                  profiles: profilesRepo,
+                })
+              : undefined,
             makeChallengeRelay(agentSessionsRepo, webhooksService, logger),
             // W650/A3-W1254: a pageState frame (agent-initiated navigate) → store
             // the latest per agent session for GET /v1/agent-sessions/:id/page-state.

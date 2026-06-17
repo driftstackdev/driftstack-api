@@ -22,28 +22,77 @@ import { profileSealedBlobKey, type R2 } from '../lib/r2.js';
 import type { Logger } from '../lib/logger.js';
 
 /**
+ * Cross-account ownership guard for the profileSaved persist (defense-in-depth).
+ * A `profileSaved` frame carries a NODE-supplied `profile_id`; without this guard
+ * an authenticated fleet node could emit `{ sessionId: <own session>, profile_id:
+ * <ANY profile> }` and overwrite another account's sealed blob. These two
+ * structural lookups bind the write to the session's owner: the session's account
+ * (by `frame.sessionId`) must own `frame.profile_id`. Satisfied by the real
+ * AgentSessionsRepo (`get`) + ProfilesRepo (`findById`).
+ */
+export interface ProfileSavedOwnershipDeps {
+  agentSessions: { get(id: string): Promise<{ accountId: string } | null> };
+  profiles: { findById(args: { id: string; accountId: string }): Promise<unknown> };
+}
+
+/**
  * Build the `onProfileSaved` handler wired into FleetControlRegistry. When R2 is
  * not configured the caller passes `undefined` instead (no-op); this factory is
  * only called when an R2 client exists.
+ *
+ * When `ownership` is provided, the write is REFUSED (fail-closed, logged) unless
+ * the account owning `frame.sessionId` also owns `frame.profile_id` — blocking a
+ * compromised node from overwriting another account's profile blob. When omitted
+ * (legacy wiring), behavior is unchanged.
  */
-export function makeProfileSavedPersister(r2: R2, logger: Logger): (frame: ProfileSaved) => void {
+export function makeProfileSavedPersister(
+  r2: R2,
+  logger: Logger,
+  ownership?: ProfileSavedOwnershipDeps,
+): (frame: ProfileSaved) => void {
   return (frame: ProfileSaved): void => {
     // Large path: the harness already PUT to the presigned URL; nothing to store.
-    if (frame.sealed_blob === undefined) return;
-    const key = profileSealedBlobKey(frame.profile_id);
-    void r2
-      .putObject({
-        key,
-        body: Buffer.from(frame.sealed_blob, 'base64'),
-        contentType: 'application/octet-stream',
-      })
-      .then(() => {
+    const sealedBlob = frame.sealed_blob;
+    if (sealedBlob === undefined) return;
+    void (async () => {
+      if (ownership !== undefined) {
+        const session = await ownership.agentSessions.get(frame.sessionId);
+        if (session === null) {
+          logger.warn(
+            { component: 'profile-store', sessionId: frame.sessionId, profileId: frame.profile_id },
+            'profileSaved refused: unknown session for profile-blob write',
+          );
+          return;
+        }
+        const owned = await ownership.profiles.findById({
+          id: frame.profile_id,
+          accountId: session.accountId,
+        });
+        if (owned === null) {
+          logger.warn(
+            {
+              component: 'profile-store',
+              sessionId: frame.sessionId,
+              profileId: frame.profile_id,
+              accountId: session.accountId,
+            },
+            'profileSaved refused: profile not owned by the session account (cross-account write blocked)',
+          );
+          return;
+        }
+      }
+      const key = profileSealedBlobKey(frame.profile_id);
+      try {
+        await r2.putObject({
+          key,
+          body: Buffer.from(sealedBlob, 'base64'),
+          contentType: 'application/octet-stream',
+        });
         logger.info(
           { component: 'profile-store', profileId: frame.profile_id, sessionId: frame.sessionId },
           'persisted profile sealed-blob to R2',
         );
-      })
-      .catch((err: unknown) => {
+      } catch (err) {
         logger.error(
           {
             component: 'profile-store',
@@ -53,7 +102,8 @@ export function makeProfileSavedPersister(r2: R2, logger: Logger): (frame: Profi
           },
           'failed to persist profile sealed-blob to R2',
         );
-      });
+      }
+    })();
   };
 }
 

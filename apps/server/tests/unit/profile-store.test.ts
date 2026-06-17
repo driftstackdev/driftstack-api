@@ -119,6 +119,51 @@ describe('makeProfileSavedPersister', () => {
   });
 });
 
+describe('makeProfileSavedPersister — cross-account ownership guard', () => {
+  const frame: ProfileSaved = {
+    type: 'profileSaved',
+    sessionId: 'ses_x',
+    profile_id: 'p1',
+    sealed_blob: Buffer.from('opaque').toString('base64'),
+  };
+
+  it('writes when the session account owns the profile', async () => {
+    const putObject = vi.fn().mockResolvedValue(undefined);
+    const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger(), {
+      agentSessions: { get: vi.fn().mockResolvedValue({ accountId: 'acc_owner' }) },
+      profiles: { findById: vi.fn().mockResolvedValue({ id: 'p1', accountId: 'acc_owner' }) },
+    });
+    persist(frame);
+    await vi.waitFor(() => expect(putObject).toHaveBeenCalledTimes(1));
+  });
+
+  it('REFUSES the write when the profile is not owned by the session account (cross-account block)', async () => {
+    const putObject = vi.fn().mockResolvedValue(undefined);
+    const logger = fakeLogger();
+    const findById = vi.fn().mockResolvedValue(null); // profile not owned by this account
+    const persist = makeProfileSavedPersister(fakeR2(putObject), logger, {
+      agentSessions: { get: vi.fn().mockResolvedValue({ accountId: 'acc_attacker' }) },
+      profiles: { findById },
+    });
+    persist(frame);
+    await vi.waitFor(() => expect(findById).toHaveBeenCalledTimes(1));
+    expect(putObject).not.toHaveBeenCalled();
+    expect((logger as unknown as { warn: ReturnType<typeof vi.fn> }).warn).toHaveBeenCalled();
+  });
+
+  it('REFUSES the write when the session is unknown', async () => {
+    const putObject = vi.fn().mockResolvedValue(undefined);
+    const get = vi.fn().mockResolvedValue(null);
+    const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger(), {
+      agentSessions: { get },
+      profiles: { findById: vi.fn() },
+    });
+    persist(frame);
+    await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+    expect(putObject).not.toHaveBeenCalled();
+  });
+});
+
 describe('buildAssignProfileBlock (step (e) restore side — crypto-free R2 half)', () => {
   function r2For(exists: boolean) {
     const headObject = vi.fn().mockResolvedValue({ exists });

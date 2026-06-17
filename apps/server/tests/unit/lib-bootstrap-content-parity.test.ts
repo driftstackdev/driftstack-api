@@ -327,8 +327,17 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     // Registry takes the profileSaved→R2 persister when R2 is configured, else
     // undefined (frame accepted + ignored). Pinned so the persistence wiring
     // can't be silently dropped (a profile-backed session would lose its store).
-    expect(body).toMatch(
-      /fleetControlRegistry: new FleetControlRegistry\(\s*\n?\s*r2 !== null \? makeProfileSavedPersister\(r2, logger\) : undefined,\s*\n?\s*makeChallengeRelay\(agentSessionsRepo, webhooksService, logger\),[\s\S]*?\(frame\) => sessionPageStateStore\.set\(frame\),[\s\S]*?makeProfileSaveFailedRelay\(agentSessionsRepo, webhooksService, logger\),\s*\n?\s*\),/,
+    expect(body).toContain('fleetControlRegistry: new FleetControlRegistry(');
+    // ARC-A-followup: the persister now takes a cross-account ownership guard
+    // (session→account + profile-ownership) so a node can't overwrite another
+    // account's profile blob. Pinned via fragments (prettier-reflow-robust).
+    expect(body).toContain('makeProfileSavedPersister(r2, logger, {');
+    expect(body).toContain('agentSessions: agentSessionsRepo,');
+    expect(body).toContain('profiles: profilesRepo,');
+    expect(body).toContain('makeChallengeRelay(agentSessionsRepo, webhooksService, logger)');
+    expect(body).toContain('(frame) => sessionPageStateStore.set(frame)');
+    expect(body).toContain(
+      'makeProfileSaveFailedRelay(agentSessionsRepo, webhooksService, logger)',
     );
     // W650/A3-W1254 — the pageState store is constructed alongside the registry
     // (behind the same flag) + wired as the registry's onPageState consumer.
