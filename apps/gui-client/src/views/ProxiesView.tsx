@@ -23,7 +23,12 @@ import {
   type ProxyDraft,
   type ProxyTestResult,
 } from '../lib/proxies';
-import { invalidateProbe, saveExitResult, saveProbeResult } from '../lib/proxy-probe-cache';
+import {
+  invalidateProbe,
+  loadProbeCache,
+  saveExitResult,
+  saveProbeResult,
+} from '../lib/proxy-probe-cache';
 import { probeProxyExit, type ProxyExitProbeResult } from '../lib/proxies';
 import { parseProxyString } from '../lib/parse-proxy';
 import { parseWireGuardConfig } from '../lib/parse-wireguard';
@@ -64,6 +69,28 @@ export function ProxiesView(): JSX.Element {
     try {
       const proxies = await listProxies();
       setState({ proxies, loading: false, error: null });
+      // Hydrate the LAST persisted probe result per proxy so a tested proxy
+      // keeps showing its reachability / UDP / exit-geo across visits instead
+      // of reverting to "untested" + needing a re-test every time (the cache
+      // was written by saveProbeResult/saveExitResult but never read back here).
+      const cache = await loadProbeCache();
+      const tr: Record<string, ProxyTestResult> = {};
+      const er: Record<string, ProxyExitProbeResult | null> = {};
+      for (const [id, c] of Object.entries(cache)) {
+        tr[id] = c.result;
+        if (c.exitIp !== undefined) {
+          er[id] = {
+            ip: c.exitIp,
+            country: c.exitCountry ?? null,
+            ...(c.exitCity !== undefined ? { city: c.exitCity } : {}),
+            ...(c.exitRegion !== undefined ? { region: c.exitRegion } : {}),
+            ...(c.exitTimezone !== undefined ? { timezone: c.exitTimezone } : {}),
+            ...(c.exitAsnOrg !== undefined ? { asn_org: c.exitAsnOrg } : {}),
+          };
+        }
+      }
+      setTestResults(tr);
+      setExitResults(er);
     } catch (err) {
       setState((s) => ({ ...s, loading: false, error: friendlyError(err) }));
     }
@@ -709,6 +736,24 @@ export function ProxyForm({
     setVpnHint(`✓ remote ${built.host}:${built.port.toString()}`);
   }
 
+  // Upload a .ovpn / wg0.conf file instead of pasting — reads it as text and
+  // routes through the same parse handler. Resets the input so re-picking the
+  // same file fires onChange again.
+  function handleVpnFile(
+    e: React.ChangeEvent<HTMLInputElement>,
+    apply: (text: string) => void,
+  ): void {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') apply(reader.result);
+    };
+    reader.onerror = () => setVpnHint('Could not read that file.');
+    reader.readAsText(file);
+  }
+
   // Quick-paste: accept a proxy in any common format and auto-fill the four
   // fields. Clears itself on a successful parse so a pasted password doesn't
   // linger in a visible field.
@@ -883,6 +928,15 @@ export function ProxyForm({
             autoComplete="off"
             spellCheck={false}
           />
+          <label className="mt-1 inline-flex cursor-pointer items-center gap-1 text-2xs text-accent hover:underline">
+            <span aria-hidden>⤓</span> or upload a wg0.conf file
+            <input
+              type="file"
+              accept=".conf,.txt,text/plain"
+              className="sr-only"
+              onChange={(e) => handleVpnFile(e, handleWgPaste)}
+            />
+          </label>
           {vpnHint !== null && <span className="mt-1 text-2xs text-ink-muted">{vpnHint}</span>}
         </Field>
       )}
@@ -900,6 +954,15 @@ export function ProxyForm({
               autoComplete="off"
               spellCheck={false}
             />
+            <label className="mt-1 inline-flex cursor-pointer items-center gap-1 text-2xs text-accent hover:underline">
+              <span aria-hidden>⤓</span> or upload a .ovpn file
+              <input
+                type="file"
+                accept=".ovpn,.conf,.txt,text/plain"
+                className="sr-only"
+                onChange={(e) => handleVpnFile(e, handleOvpnPaste)}
+              />
+            </label>
             {vpnHint !== null && <span className="mt-1 text-2xs text-ink-muted">{vpnHint}</span>}
           </Field>
           <div className="grid grid-cols-2 gap-3">
