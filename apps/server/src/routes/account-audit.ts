@@ -24,7 +24,35 @@ import { z } from 'zod';
 // cast (500). Validate at the boundary so a bad cursor is a clean 400.
 const CURSOR_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function publicEntry(row: AccountAuditEntryRow): Record<string, unknown> {
+// Payload keys that carry the acting customer's network identity (IP /
+// user-agent) — emitted by the auth-flow events (login / logout /
+// password-change / MFA). The OWNER reading their OWN audit log keeps them
+// (GDPR Art-15 right of access to own data; effectively a "devices that
+// signed in" view). But a TEAM MEMBER reading the owner's log via
+// X-Driftstack-Account must NOT see the owner's IP/UA — scrub them on that
+// cross-actor read path. Doing it at serialization fixes BOTH new and
+// historical rows with no data backfill.
+const ACTOR_PRIVACY_PAYLOAD_KEYS = new Set([
+  'issued_from_ip',
+  'source_ip',
+  'ip_address',
+  'user_agent',
+  'issued_user_agent',
+]);
+
+function scrubActorPrivacy(payload: unknown): unknown {
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
+    if (!ACTOR_PRIVACY_PAYLOAD_KEYS.has(k)) out[k] = v;
+  }
+  return out;
+}
+
+function publicEntry(
+  row: AccountAuditEntryRow,
+  redactActorPrivacy = false,
+): Record<string, unknown> {
   return {
     id: row.id,
     account_id: `acc_${row.accountId}`,
@@ -33,9 +61,9 @@ function publicEntry(row: AccountAuditEntryRow): Record<string, unknown> {
     actor_key_id: row.actorKeyId ? `key_${row.actorKeyId}` : null,
     action: row.action,
     target_resource_id: row.targetResourceId,
-    payload: row.payload,
-    ip_address: row.ipAddress,
-    user_agent: row.userAgent,
+    payload: redactActorPrivacy ? scrubActorPrivacy(row.payload) : row.payload,
+    ip_address: redactActorPrivacy ? null : row.ipAddress,
+    user_agent: redactActorPrivacy ? null : row.userAgent,
     timestamp: row.timestamp.toISOString(),
   };
 }
@@ -81,8 +109,11 @@ export function registerAccountAuditRoutes(
         ...(effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {}),
       });
 
+      // Cross-actor read (team member viewing the owner's log) → scrub the
+      // owner's IP/UA from auth-flow payloads; self-view keeps them (Art-15).
+      const redactActorPrivacy = effective.kind === 'team';
       return {
-        data: page.items.map(publicEntry),
+        data: page.items.map((row) => publicEntry(row, redactActorPrivacy)),
         next_cursor: page.nextCursor,
       };
     },
@@ -125,6 +156,9 @@ export function registerAccountAuditRoutes(
         cursor = page.nextCursor;
       }
       const truncated = all.length >= EXPORT_MAX_ROWS;
+      // Same cross-actor scrub as the read endpoint (a team member exporting
+      // the owner's log must not receive the owner's IP/UA).
+      const redactActorPrivacy = effective.kind === 'team';
 
       const filenameBase = `driftstack-audit-log-${new Date().toISOString().slice(0, 10)}`;
 
@@ -140,17 +174,20 @@ export function registerAccountAuditRoutes(
           'user_agent',
           'payload',
         ];
-        const rows = all.map((row) => [
-          row.timestamp.toISOString(),
-          row.action,
-          row.actorType,
-          row.actorAccountId ? `acc_${row.actorAccountId}` : '',
-          row.actorKeyId ? `key_${row.actorKeyId}` : '',
-          row.targetResourceId ?? '',
-          row.ipAddress ?? '',
-          row.userAgent ?? '',
-          row.payload === null ? '' : JSON.stringify(row.payload),
-        ]);
+        const rows = all.map((row) => {
+          const payload = redactActorPrivacy ? scrubActorPrivacy(row.payload) : row.payload;
+          return [
+            row.timestamp.toISOString(),
+            row.action,
+            row.actorType,
+            row.actorAccountId ? `acc_${row.actorAccountId}` : '',
+            row.actorKeyId ? `key_${row.actorKeyId}` : '',
+            row.targetResourceId ?? '',
+            redactActorPrivacy ? '' : (row.ipAddress ?? ''),
+            redactActorPrivacy ? '' : (row.userAgent ?? ''),
+            payload === null || payload === undefined ? '' : JSON.stringify(payload),
+          ];
+        });
         // buildCsv applies the shared CSV formula-injection guard
         // (CWE-1236) — audit rows carry client-controlled free text
         // (user_agent especially) that a spreadsheet would otherwise
@@ -173,7 +210,7 @@ export function registerAccountAuditRoutes(
           account_id: `acc_${ctx.account.id}`,
           row_count: all.length,
           truncated,
-          data: all.map(publicEntry),
+          data: all.map((row) => publicEntry(row, redactActorPrivacy)),
         });
     },
   );

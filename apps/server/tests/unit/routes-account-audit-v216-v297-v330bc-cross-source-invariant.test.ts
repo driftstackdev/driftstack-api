@@ -120,10 +120,15 @@ describe('W1037 routes/account-audit V-216 + V-297 + V-330b/c + V-484 cross-sour
     expect(p).toMatch(/actor_key_id: row\.actorKeyId \? `key_\$\{row\.actorKeyId\}` : null,/);
     expect(p).toMatch(/action: row\.action,/);
     expect(p).toMatch(/target_resource_id: row\.targetResourceId,/);
-    expect(p).toMatch(/payload: row\.payload,/);
-    expect(p).toMatch(/ip_address: row\.ipAddress,/);
-    expect(p).toMatch(/user_agent: row\.userAgent,/);
+    // ip/ua + payload conditionally scrubbed for cross-actor (team-member)
+    // reads; the owner's own view keeps them (GDPR Art-15 self-access).
+    expect(p).toMatch(
+      /payload: redactActorPrivacy \? scrubActorPrivacy\(row\.payload\) : row\.payload,/,
+    );
+    expect(p).toMatch(/ip_address: redactActorPrivacy \? null : row\.ipAddress,/);
+    expect(p).toMatch(/user_agent: redactActorPrivacy \? null : row\.userAgent,/);
     expect(p).toMatch(/timestamp: row\.timestamp\.toISOString\(\),/);
+    expect(p).toMatch(/const redactActorPrivacy = effective\.kind === 'team';/);
   });
 
   it('CRITICAL CSV header 9 columns — timestamp + action + actor_type + actor_account_id + actor_key_id + target_resource_id + ip_address + user_agent + payload.', () => {
@@ -167,7 +172,7 @@ describe('W1037 routes/account-audit V-216 + V-297 + V-330b/c + V-484 cross-sour
     expect(p).toMatch(/account_id: `acc_\$\{ctx\.account\.id\}`,/);
     expect(p).toMatch(/row_count: all\.length,/);
     expect(p).toMatch(/truncated,/);
-    expect(p).toMatch(/data: all\.map\(publicEntry\),/);
+    expect(p).toMatch(/data: all\.map\(\(row\) => publicEntry\(row, redactActorPrivacy\)\),/);
   });
 
   it("CRITICAL ExportQuerySchema — z.enum(['csv', 'json']).default('json').", () => {

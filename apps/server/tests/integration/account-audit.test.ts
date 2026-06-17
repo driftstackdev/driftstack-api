@@ -433,3 +433,53 @@ describe('GET /v1/account/audit-log — V-484 filters', () => {
     expect(body.data[0]!.actor_type).toBe('customer');
   });
 });
+
+describe('GET /v1/account/audit-log — actor-privacy scrub (TD-audit-payload-scrub)', () => {
+  const TEAM_OWNER_ID = '00000000-0000-4000-8000-000000000c01';
+  const TEAM_MEMBERSHIP_ID = '00000000-0000-4000-8000-000000000c02';
+
+  it('owner self-view KEEPS issued_from_ip/user_agent in an auth-flow payload (GDPR Art-15 access to own data)', async () => {
+    fx = await buildTestApp();
+    await fx.accountAuditRepo.insert({
+      accountId: fx.accountId,
+      actorType: 'customer',
+      action: 'account.login',
+      payload: { method: 'password', issued_from_ip: '203.0.113.7', user_agent: 'Mozilla/5.0' },
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=account.login',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const entry = res.json<ListResponse>().data[0]!;
+    expect(entry.payload?.issued_from_ip).toBe('203.0.113.7');
+    expect(entry.payload?.method).toBe('password');
+  });
+
+  it('team-member cross-view SCRUBS the owner IP/UA from the auth-flow payload (keeps non-sensitive fields)', async () => {
+    fx = await buildTestApp();
+    // The caller is an admin member of TEAM_OWNER_ID's team.
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      { membershipId: TEAM_MEMBERSHIP_ID, ownerAccountId: TEAM_OWNER_ID, role: 'admin' },
+    ]);
+    // An auth event on the OWNER's log carries the owner's IP/UA in payload.
+    await fx.accountAuditRepo.insert({
+      accountId: TEAM_OWNER_ID,
+      actorType: 'customer',
+      action: 'account.login',
+      payload: { method: 'password', issued_from_ip: '203.0.113.7', user_agent: 'Mozilla/5.0' },
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=account.login',
+      headers: { ...auth(fx), 'x-driftstack-account': `acc_${TEAM_OWNER_ID}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const entry = res.json<ListResponse>().data[0]!;
+    expect(entry.payload?.method).toBe('password'); // non-sensitive field kept
+    expect(entry.payload).not.toHaveProperty('issued_from_ip'); // scrubbed
+    expect(entry.payload).not.toHaveProperty('user_agent');
+    expect(res.body).not.toContain('203.0.113.7');
+  });
+});

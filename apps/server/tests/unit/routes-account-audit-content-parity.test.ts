@@ -75,9 +75,9 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
     );
   });
 
-  it('publicEntry: 10-field shape with account_id=acc_ + actor_account_id/actor_key_id nullable prefixed + ip_address/user_agent/payload pass-through + ISO timestamp', () => {
+  it('publicEntry: 10-field shape with account_id=acc_ + actor_account_id/actor_key_id nullable prefixed + ISO timestamp; payload/ip/ua conditionally scrubbed for cross-actor (team-member) views', () => {
     expect(body).toMatch(
-      /function publicEntry\(row: AccountAuditEntryRow\): Record<string, unknown> \{/,
+      /function publicEntry\(\s*\n?\s*row: AccountAuditEntryRow,\s*\n?\s*redactActorPrivacy = false,?\s*\n?\s*\): Record<string, unknown> \{/,
     );
     expect(body).toMatch(/id: row\.id,/);
     expect(body).toMatch(/account_id: `acc_\$\{row\.accountId\}`,/);
@@ -88,10 +88,17 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
     expect(body).toMatch(/actor_key_id: row\.actorKeyId \? `key_\$\{row\.actorKeyId\}` : null,/);
     expect(body).toMatch(/action: row\.action,/);
     expect(body).toMatch(/target_resource_id: row\.targetResourceId,/);
-    expect(body).toMatch(/payload: row\.payload,/);
-    expect(body).toMatch(/ip_address: row\.ipAddress,/);
-    expect(body).toMatch(/user_agent: row\.userAgent,/);
+    // Privacy scrub: a team-member cross-actor view nulls ip/ua + strips the
+    // IP/UA payload keys; the owner's own view keeps them (GDPR Art-15).
+    expect(body).toMatch(
+      /payload: redactActorPrivacy \? scrubActorPrivacy\(row\.payload\) : row\.payload,/,
+    );
+    expect(body).toMatch(/ip_address: redactActorPrivacy \? null : row\.ipAddress,/);
+    expect(body).toMatch(/user_agent: redactActorPrivacy \? null : row\.userAgent,/);
     expect(body).toMatch(/timestamp: row\.timestamp\.toISOString\(\),/);
+    // The scrub fires on the team (cross-actor) read + export paths only.
+    expect(body).toMatch(/const redactActorPrivacy = effective\.kind === 'team';/);
+    expect(body).toMatch(/const ACTOR_PRIVACY_PAYLOAD_KEYS = new Set\(\[/);
   });
 
   it('List dispatch: spread-conditional cursor + action + from + to + actor_type → actorType + target_resource_id → targetResourceId + effectiveAccountId on team', () => {
@@ -147,7 +154,11 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
     );
     expect(body).toMatch(/row\.actorAccountId \? `acc_\$\{row\.actorAccountId\}` : '',/);
     expect(body).toMatch(/row\.actorKeyId \? `key_\$\{row\.actorKeyId\}` : '',/);
-    expect(body).toMatch(/row\.payload === null \? '' : JSON\.stringify\(row\.payload\)/);
+    // ip/ua + payload conditionally scrubbed for a cross-actor (team) export.
+    expect(body).toMatch(/redactActorPrivacy \? '' : \(row\.ipAddress \?\? ''\)/);
+    expect(body).toMatch(
+      /const payload = redactActorPrivacy \? scrubActorPrivacy\(row\.payload\) : row\.payload;/,
+    );
     expect(body).toMatch(/const csv = buildCsv\(\{ header, rows \}\);/);
   });
 
@@ -163,7 +174,7 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
 
   it('Export JSON envelope: generated_at ISO + account_id=acc_ + row_count + truncated boolean + data: all.map(publicEntry); attachment .json + truncated header', () => {
     expect(body).toMatch(
-      /\.send\(\{\s*\n?\s*generated_at: new Date\(\)\.toISOString\(\),\s*\n?\s*account_id: `acc_\$\{ctx\.account\.id\}`,\s*\n?\s*row_count: all\.length,\s*\n?\s*truncated,\s*\n?\s*data: all\.map\(publicEntry\),\s*\n?\s*\}\);/,
+      /\.send\(\{\s*\n?\s*generated_at: new Date\(\)\.toISOString\(\),\s*\n?\s*account_id: `acc_\$\{ctx\.account\.id\}`,\s*\n?\s*row_count: all\.length,\s*\n?\s*truncated,\s*\n?\s*data: all\.map\(\(row\) => publicEntry\(row, redactActorPrivacy\)\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(/\.header\('content-type', 'application\/json; charset=utf-8'\)/);
     expect(body).toMatch(

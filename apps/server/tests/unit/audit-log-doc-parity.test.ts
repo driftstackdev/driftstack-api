@@ -34,7 +34,9 @@ describe('W218.A audit-log doc parity', () => {
   });
 
   it('response envelope is {data, next_cursor}, not {items, …}', () => {
-    expect(route).toMatch(/data: page\.items\.map\(publicEntry\)/);
+    expect(route).toMatch(
+      /data: page\.items\.map\(\(row\) => publicEntry\(row, redactActorPrivacy\)\)/,
+    );
     expect(doc).toMatch(/"data":/);
     expect(doc).not.toMatch(/"items":\s*\[/);
   });
