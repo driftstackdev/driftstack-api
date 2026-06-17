@@ -6,6 +6,7 @@
 
 import { useMemo, useState } from 'react';
 import { CostPanel } from '../components/CostPanel';
+import { SkeletonRows } from '../components/Skeleton';
 import { useAccountCost } from '../lib/use-account-cost';
 
 /**
@@ -36,14 +37,20 @@ export function BillingCostView(props: BillingCostViewProps = {}): JSX.Element {
   const { state, refetch } = useAccountCost({ billingCycle: selectedCycle });
 
   return (
-    <section className="space-y-4 p-4" aria-labelledby="billing-cost-heading">
-      <header className="flex items-center justify-between gap-3">
-        <h2
-          id="billing-cost-heading"
-          className="text-lg font-semibold tracking-tight text-ink-primary"
-        >
-          Usage & cost
-        </h2>
+    <div className="flex h-full flex-col gap-4 p-6" aria-labelledby="billing-cost-heading">
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <span className="section-label">Billing</span>
+          <h2
+            id="billing-cost-heading"
+            className="mt-1 text-lg font-medium tracking-tight text-ink-primary"
+          >
+            Usage & cost
+          </h2>
+          <p className="mt-1 text-xs text-ink-muted">
+            Metered usage and spend for the selected billing cycle.
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <label htmlFor="billing-cycle-picker" className="text-sm text-ink-secondary">
             Billing cycle
@@ -62,19 +69,16 @@ export function BillingCostView(props: BillingCostViewProps = {}): JSX.Element {
           </select>
           <button
             type="button"
+            className="btn-secondary"
             onClick={() => void refetch()}
-            className="rounded border border-surface-divider px-2 py-1 text-sm text-ink-primary hover:bg-surface-hover"
+            disabled={state.kind === 'loading'}
           >
-            Refresh
+            {state.kind === 'loading' ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
       </header>
 
-      {state.kind === 'loading' && (
-        <p className="text-sm text-ink-secondary" role="status">
-          Loading cost breakdown…
-        </p>
-      )}
+      {state.kind === 'loading' && <SkeletonRows rows={4} label="Loading cost breakdown…" />}
       {state.kind === 'idle' && (
         <p className="text-sm text-ink-secondary">Select a billing cycle to load the breakdown.</p>
       )}
@@ -89,6 +93,6 @@ export function BillingCostView(props: BillingCostViewProps = {}): JSX.Element {
       {state.kind === 'ready' && (
         <CostPanel breakdown={state.data.breakdown} billingCycle={state.data.billing_cycle} />
       )}
-    </section>
+    </div>
   );
 }

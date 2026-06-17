@@ -9,6 +9,8 @@
 import type { JSX } from 'react';
 import { ProfilePhoneCard, type ProfilePhoneCardProps } from '../components/ProfilePhoneCard';
 import { ProfilesTable, type ProfileTableRow } from '../components/ProfilesTable';
+import { CostPanel } from '../components/CostPanel';
+import { SkeletonRows } from '../components/Skeleton';
 
 const noop = (): void => undefined;
 
@@ -169,6 +171,65 @@ export function Gallery(): JSX.Element {
         onDelete={noop}
         onSaveNote={noop}
       />
+
+      <h1 className="mb-3 mt-10 text-lg font-semibold text-ink-primary">
+        BillingCostView — wrapper states (header / skeleton / ready)
+      </h1>
+      <div className="flex flex-col gap-1">
+        <span className="text-2xs uppercase tracking-wide text-ink-muted">loading (skeleton)</span>
+        <BillingWrapperShell>
+          <SkeletonRows rows={4} label="Loading cost breakdown…" />
+        </BillingWrapperShell>
+      </div>
+      <div className="mt-4 flex flex-col gap-1">
+        <span className="text-2xs uppercase tracking-wide text-ink-muted">ready</span>
+        <BillingWrapperShell>
+          <CostPanel
+            breakdown={{
+              computeCents: 1840,
+              storageCents: 120,
+              egressCents: 640,
+              emailCents: 15,
+              llmCents: 2310,
+              totalCents: 4925,
+              thresholdState: 'between-soft-and-hard',
+            }}
+            billingCycle="2026-06"
+          />
+        </BillingWrapperShell>
+      </div>
+    </div>
+  );
+}
+
+// Mirrors BillingCostView's header + layout chrome so the screenshot review
+// matches the shipped wrapper (the view itself needs SettingsContext + the
+// cost hook, which don't render headless). Keep in sync with BillingCostView.
+function BillingWrapperShell({ children }: { children: JSX.Element }): JSX.Element {
+  return (
+    <div className="flex flex-col gap-4 rounded border border-surface-divider bg-surface-base p-6">
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <span className="section-label">Billing</span>
+          <h2 className="mt-1 text-lg font-medium tracking-tight text-ink-primary">Usage & cost</h2>
+          <p className="mt-1 text-xs text-ink-muted">
+            Metered usage and spend for the selected billing cycle.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-ink-secondary">Billing cycle</label>
+          <select
+            className="rounded border border-surface-divider bg-surface-input px-2 py-1 text-sm text-ink-primary"
+            defaultValue="2026-06"
+          >
+            <option>2026-06</option>
+          </select>
+          <button type="button" className="btn-secondary">
+            Refresh
+          </button>
+        </div>
+      </header>
+      {children}
     </div>
   );
 }
