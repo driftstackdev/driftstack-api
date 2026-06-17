@@ -89,6 +89,9 @@ export const AccountProxyInputSchema = z.object({
   wireguard: WireGuardProxyConfigSchema.optional(),
 });
 export type AccountProxyInput = z.infer<typeof AccountProxyInputSchema>;
+// Create-body shape (the INPUT side of the schema): the defaulted fields
+// (scheme / username / password) are optional for callers. SDKs accept this.
+export type AccountProxyCreate = z.input<typeof AccountProxyInputSchema>;
 
 // PUT body — every field optional. `password` omitted = keep existing,
 // `password: null` = clear, `password: "..."` = set (no defaults, so the

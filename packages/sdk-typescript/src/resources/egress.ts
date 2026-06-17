@@ -1,26 +1,26 @@
-// EgressResource — typed methods for /v1/sessions/{id}/proxy +
-// /v1/proxies (planning 133 / Wave 1119 EGRESS Phase 1 onwards).
+// EgressResource — typed methods for the customer egress surface:
+//   1. Per-session proxy attach — set the proxy config THIS session's
+//      browser routes through (/v1/sessions/{id}/proxy).
+//   2. Saved proxy library — CRUD + a reachability test over the
+//      account's reusable proxy configs (/v1/account/me/proxies). This
+//      is the LIVE account-proxies API (shipped) — the same backend the
+//      desktop app + dashboard use, replacing the older /v1/proxies stub.
 //
-// Two surfaces:
-//   1. Per-session proxy attach — set the SOCKS5/OpenVPN/WireGuard
-//      config that THIS session's browser routes through.
-//   2. Saved proxy library — store reusable proxy configs by label
-//      so the dashboard + SDK can attach them by id without
-//      re-entering credentials each time.
-//
-// SECURITY: list/get responses return ONLY `{ id, label, type }`
-// (or `{ type, safeguards }` for the per-session read) — the raw
-// proxy secrets (SOCKS5 password / OpenVPN .ovpn / WireGuard
-// private_key) are NEVER readable after save (planning 133 §
-// "Cross-agent split" SECURITY note). Customers re-enter to update.
-//
-// Activation gate: the server registers these endpoints as 503
-// FeatureUnavailable stubs until a concrete SOCKS5 backend lands
-// (EG-API-1.6 propagation slice). The SDK surface is stable now so
-// consumers can compile against it without waiting for the runtime
-// backend.
+// SECURITY: the secret-bearing fields (SOCKS5 `password`, OpenVPN
+// `config_blob`, WireGuard `private_key`) are WRITE-ONLY — wrapped
+// server-side under the account key, never echoed back. List/get
+// responses return only metadata (+ `has_password` / `has_secret`
+// flags). Re-send to update a secret.
 
-import type { ProxyType, SavedProxyConfig, SessionEgressConfig } from '@driftstack/api-types';
+import type {
+  AccountProxyCreate,
+  AccountProxyList,
+  AccountProxyMetadata,
+  AccountProxyTestResult,
+  AccountProxyUpdate,
+  ProxyType,
+  SessionEgressConfig,
+} from '@driftstack/api-types';
 import type { HttpClient } from '../http.js';
 
 export interface SessionProxyAttachResponse {
@@ -30,16 +30,6 @@ export interface SessionProxyAttachResponse {
     block_unproxied_dns: boolean;
     block_webrtc_stun_leakage: boolean;
   };
-}
-
-export interface SavedProxySummary {
-  id: string;
-  label: string;
-  type: ProxyType;
-}
-
-export interface ListSavedProxiesResponse {
-  data: ReadonlyArray<SavedProxySummary>;
 }
 
 export class EgressResource {
@@ -67,9 +57,7 @@ export class EgressResource {
   /**
    * Read the session's current proxy summary. Returns 404 if no
    * proxy has been attached yet — callers should treat that as
-   * "the session is currently running unproxied" (the API-layer
-   * safeguard refuses session-create without proxy when the backend
-   * is wired, but pre-wire deployments don't enforce that).
+   * "the session is currently running unproxied".
    */
   getSessionProxy(sessionId: string): Promise<SessionProxyAttachResponse> {
     return this.http.request<SessionProxyAttachResponse>({
@@ -78,32 +66,56 @@ export class EgressResource {
     });
   }
 
+  /** List the calling account's saved proxies (metadata only). */
+  listProxies(): Promise<AccountProxyList> {
+    return this.http.request<AccountProxyList>({
+      method: 'GET',
+      path: '/v1/account/me/proxies',
+    });
+  }
+
   /**
-   * Save a reusable proxy config. Returns the saved summary —
-   * `id` is the surrogate the dashboard + the future
-   * `attachSavedToSession` slice will use to reference this config.
+   * Create a saved proxy. `password` / the VPN `config_blob` /
+   * `private_key` are write-only — wrapped server-side, never echoed.
+   * Returns the stored metadata (with `has_password` / `has_secret`).
    */
-  saveProxy(body: SavedProxyConfig): Promise<SavedProxySummary> {
-    return this.http.request<SavedProxySummary>({
+  createProxy(body: AccountProxyCreate): Promise<AccountProxyMetadata> {
+    return this.http.request<AccountProxyMetadata>({
       method: 'POST',
-      path: '/v1/proxies',
+      path: '/v1/account/me/proxies',
       body,
     });
   }
 
-  /** List the calling account's saved proxy summaries. */
-  listSavedProxies(): Promise<ListSavedProxiesResponse> {
-    return this.http.request<ListSavedProxiesResponse>({
-      method: 'GET',
-      path: '/v1/proxies',
+  /**
+   * Update a saved proxy. Omitted fields stay unchanged; a secret field
+   * set to `null` clears it, a string (re)wraps it.
+   */
+  updateProxy(id: string, body: AccountProxyUpdate): Promise<AccountProxyMetadata> {
+    return this.http.request<AccountProxyMetadata>({
+      method: 'PUT',
+      path: `/v1/account/me/proxies/${encodeURIComponent(id)}`,
+      body,
     });
   }
 
-  /** Delete a saved proxy by id. Returns 204; throws on 404 / 503. */
-  deleteSavedProxy(id: string): Promise<void> {
+  /** Delete a saved proxy by id. Returns 204; throws on 404. */
+  deleteProxy(id: string): Promise<void> {
     return this.http.request<void>({
       method: 'DELETE',
-      path: `/v1/proxies/${encodeURIComponent(id)}`,
+      path: `/v1/account/me/proxies/${encodeURIComponent(id)}`,
+    });
+  }
+
+  /**
+   * Server-side reachability probe of a saved proxy's host:port
+   * (SSRF-guarded). 200 either way: `{ ok: true, latency_ms }` when
+   * reachable, `{ ok: false, reason }` when not.
+   */
+  testProxy(id: string): Promise<AccountProxyTestResult> {
+    return this.http.request<AccountProxyTestResult>({
+      method: 'POST',
+      path: `/v1/account/me/proxies/${encodeURIComponent(id)}/test`,
     });
   }
 }

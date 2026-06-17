@@ -34,11 +34,7 @@ export type {
   AuditLogQuery,
   AuditLogExportResponse,
 } from './resources/audit-log.js';
-export type {
-  SessionProxyAttachResponse,
-  SavedProxySummary,
-  ListSavedProxiesResponse,
-} from './resources/egress.js';
+export type { SessionProxyAttachResponse } from './resources/egress.js';
 export type {
   AgentSession,
   AgentSessionsListPage,
@@ -249,4 +245,11 @@ export type {
   SessionEgressConfig,
   SocksProxyConfig,
   WireGuardProxyConfig,
+  // Live account-proxies API (the egress resource's saved-proxy surface)
+  AccountProxyInput,
+  AccountProxyCreate,
+  AccountProxyUpdate,
+  AccountProxyMetadata,
+  AccountProxyList,
+  AccountProxyTestResult,
 } from '@driftstack/api-types';

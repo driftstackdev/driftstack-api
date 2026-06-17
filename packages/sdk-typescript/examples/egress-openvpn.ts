@@ -57,11 +57,24 @@ const proxy = { type: 'openvpn' as const, openvpn };
 
 const label = 'openvpn-' + basename(ovpnPath, extname(ovpnPath));
 
+// The live account-proxies API stores the VPN endpoint as host:port, parsed
+// from the `remote <host> <port>` directive (defaults to 1194).
+const remoteMatch = /^[ \t]*remote[ \t]+(\S+)(?:[ \t]+(\d+))?/m.exec(configBlob);
+const ovpnHost = remoteMatch?.[1] ?? 'vpn.example.com';
+const ovpnPort = remoteMatch?.[2] ? Number(remoteMatch[2]) : 1194;
+
 async function main(): Promise<void> {
   try {
-    // 1. Save the OpenVPN config.
-    const saved = await client.egress.saveProxy({ label, proxy });
-    console.log(`Saved OpenVPN config id=${saved.id} label=${saved.label} type=${saved.type}`);
+    // 1. Save the OpenVPN config to the customer's reusable library (the live
+    //    account-proxies API). The .ovpn config_blob is write-only.
+    const saved = await client.egress.createProxy({
+      label,
+      scheme: 'openvpn',
+      host: ovpnHost,
+      port: ovpnPort,
+      openvpn,
+    });
+    console.log(`Saved OpenVPN config id=${saved.id} label=${saved.label} scheme=${saved.scheme}`);
 
     // 2. Attach to the session.
     const attached = await client.egress.attachToSession(sessionId!, {

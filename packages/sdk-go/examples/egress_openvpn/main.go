@@ -21,11 +21,12 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	driftstack "github.com/driftstackdev/driftstack-api/packages/sdk-go"
@@ -63,30 +64,35 @@ func main() {
 
 	label := "openvpn-" + strings.TrimSuffix(filepath.Base(ovpnPath), filepath.Ext(ovpnPath))
 
-	// 1. Save the OpenVPN config.
-	saved, err := client.Egress.SaveProxy(ctx, &driftstack.SavedProxyConfig{
-		Label: label,
-		Proxy: proxy,
+	// The live account-proxies API stores the VPN endpoint as host:port, parsed
+	// from the `remote <host> <port>` directive (defaults to 1194).
+	ovpnHost, ovpnPort := "vpn.example.com", 1194
+	if m := regexp.MustCompile(`(?m)^[ \t]*remote[ \t]+(\S+)(?:[ \t]+(\d+))?`).FindStringSubmatch(string(blob)); m != nil {
+		ovpnHost = m[1]
+		if m[2] != "" {
+			if p, perr := strconv.Atoi(m[2]); perr == nil {
+				ovpnPort = p
+			}
+		}
+	}
+
+	// 1. Save the OpenVPN config to the customer's reusable library (the live
+	// account-proxies API). The .ovpn config_blob is write-only.
+	saved, err := client.Egress.CreateProxy(ctx, &driftstack.AccountProxyInput{
+		Label:   label,
+		Scheme:  "openvpn",
+		Host:    ovpnHost,
+		Port:    ovpnPort,
+		OpenVPN: openvpn,
 	})
 	if err != nil {
-		var validationErr *driftstack.ValidationError
-		if errors.As(err, &validationErr) {
-			fmt.Fprintf(os.Stderr,
-				"OpenVPN config rejected by server validation: %v\n"+
-					"Check that the config has `client` + `remote <host> <port>` directives.\n",
-				err)
-			os.Exit(3)
-		}
-		if errors.Is(err, driftstack.ErrFeatureUnavailable) {
-			fmt.Fprintf(os.Stderr,
-				"Egress not yet enabled on this deployment: %v\n"+
-					"Pre-launch posture; comes online when the OpenVPN VM harness ships.\n",
-				err)
-			os.Exit(2)
-		}
-		log.Fatalf("SaveProxy: %v", err)
+		fmt.Fprintf(os.Stderr,
+			"CreateProxy rejected: %v\n"+
+				"Check that the config has `client` + `remote <host> <port>` directives.\n",
+			err)
+		os.Exit(3)
 	}
-	fmt.Printf("Saved OpenVPN config id=%s label=%s type=%s\n", saved.ID, saved.Label, saved.Type)
+	fmt.Printf("Saved OpenVPN config id=%s label=%s scheme=%s\n", saved.ID, saved.Label, saved.Scheme)
 
 	// 2. Attach the proxy to the session.
 	attached, err := client.Egress.AttachToSession(ctx, sessionID, &driftstack.SessionEgressConfig{

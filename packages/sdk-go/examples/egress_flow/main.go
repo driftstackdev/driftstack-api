@@ -20,7 +20,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -59,19 +58,21 @@ func main() {
 		},
 	}
 
-	// 1. Save the proxy config.
-	saved, err := client.Egress.SaveProxy(ctx, &driftstack.SavedProxyConfig{
-		Label: fmt.Sprintf("example %s", proxyHost),
-		Proxy: proxy,
+	// 1. Save the proxy config to the customer's reusable library (the live
+	// account-proxies API — flat body; password write-only). Then probe it.
+	saved, err := client.Egress.CreateProxy(ctx, &driftstack.AccountProxyInput{
+		Label:  fmt.Sprintf("example %s", proxyHost),
+		Scheme: "socks5",
+		Host:   proxyHost,
+		Port:   proxyPort,
 	})
 	if err != nil {
-		if errors.Is(err, driftstack.ErrFeatureUnavailable) {
-			fmt.Fprintf(os.Stderr, "Egress not yet enabled on this deployment: %v\nPre-launch posture; comes online when the SOCKS5 backend wires up.\n", err)
-			os.Exit(2)
-		}
-		log.Fatalf("SaveProxy: %v", err)
+		log.Fatalf("CreateProxy: %v", err)
 	}
-	fmt.Printf("Saved proxy id=%s label=%s type=%s\n", saved.ID, saved.Label, saved.Type)
+	fmt.Printf("Saved proxy id=%s label=%s scheme=%s\n", saved.ID, saved.Label, saved.Scheme)
+	if probe, perr := client.Egress.TestProxy(ctx, saved.ID); perr == nil {
+		fmt.Printf("Reachability: ok=%v latency_ms=%d reason=%s\n", probe.Ok, probe.LatencyMs, probe.Reason)
+	}
 
 	// 2. Attach the proxy to the existing session.
 	attached, err := client.Egress.AttachToSession(ctx, sessionID, &driftstack.SessionEgressConfig{

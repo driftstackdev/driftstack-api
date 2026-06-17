@@ -22,6 +22,7 @@ Run::
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -67,12 +68,25 @@ def main() -> int:
     if ovpn_pass:
         proxy_block["openvpn"]["password"] = ovpn_pass
 
+    # The live account-proxies API stores the VPN endpoint as host:port, parsed
+    # from the `remote <host> <port>` directive (defaults to 1194).
+    remote_match = re.search(r"^[ \t]*remote[ \t]+(\S+)(?:[ \t]+(\d+))?", config_blob, re.MULTILINE)
+    ovpn_host = remote_match.group(1) if remote_match else "vpn.example.com"
+    ovpn_port = int(remote_match.group(2)) if (remote_match and remote_match.group(2)) else 1194
+
     try:
-        # 1. Save the OpenVPN config to the customer's reusable library.
-        saved = client.egress.save_proxy(
-            {"label": f"openvpn-{ovpn_path.stem}", "proxy": proxy_block},
+        # 1. Save the OpenVPN config to the customer's reusable library (the live
+        #    account-proxies API). The .ovpn config_blob is write-only.
+        saved = client.egress.create_proxy(
+            {
+                "label": f"openvpn-{ovpn_path.stem}",
+                "scheme": "openvpn",
+                "host": ovpn_host,
+                "port": ovpn_port,
+                "openvpn": proxy_block["openvpn"],
+            },
         )
-        print(f"Saved OpenVPN config id={saved['id']} label={saved['label']} type={saved['type']}")
+        print(f"Saved OpenVPN id={saved['id']} label={saved['label']} scheme={saved['scheme']}")
 
         # 2. Attach to the session.
         attached = client.egress.attach_to_session(

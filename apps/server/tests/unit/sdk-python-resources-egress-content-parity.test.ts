@@ -1,7 +1,7 @@
 // Drift guard for packages/sdk-python/src/driftstack/resources/egress.py.
-// Pins the planning 133 EGRESS Python surface — sync/async mirror +
-// the 'raw secrets NEVER readable after save' SECURITY contract +
-// 5-method shape + cross-SDK uniformity with TS commit 041ef7a9.
+// Pins the egress surface: per-session attach + the saved-proxy library on
+// the LIVE account-proxies API (/v1/account/me/proxies), sync + async mirror,
+// + the write-only-secret contract. Cross-SDK uniformity with TS + Go.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -23,62 +23,49 @@ describe('sdk-python resources/egress content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("Module-level docstring planning 133 anchor framing pinned: 'Egress resource — /v1/sessions/{id}/proxy + /v1/proxies (planning 133). Customer-configurable egress (SOCKS5 / OpenVPN / WireGuard). Mirrors the TypeScript EgressResource (commit 041ef7a9).' — pinned so the planning 133 anchor + 3-proxy-type taxonomy + TS-commit-mirror reference all survive", () => {
-    expect(body).toMatch(
-      /"""Egress resource — \/v1\/sessions\/\{id\}\/proxy \+ \/v1\/proxies \(planning 133\)\.\s*\n?\s*Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\)\. Mirrors\s*\n?\s*the TypeScript ``EgressResource`` \(commit 041ef7a9\)\./,
-    );
+  it('docstring documents the LIVE account-proxies API + write-only secrets; no stale 503-stub framing', () => {
+    expect(body).toMatch(/\/v1\/account\/me\/proxies/);
+    expect(body).toMatch(/the same backend the desktop app \+\s*\n?\s*dashboard use/);
+    expect(body).toMatch(/write-only/);
+    expect(body).not.toMatch(/returns 503 ``FeatureUnavailable``/);
   });
 
-  it("503 activation-gate framing pinned: 'Activation gate on the server returns 503 FeatureUnavailable until a concrete backend is wired; the SDK surface is stable so consumers compile ahead of time.' — pinned so the stable-now-stub-mode contract stays uniform across all 3 SDKs", () => {
-    expect(body).toMatch(
-      /Activation gate\s*\n?\s*on the server returns 503 ``FeatureUnavailable`` until a concrete\s*\n?\s*backend is wired; the SDK surface is stable so consumers compile\s*\n?\s*ahead of time\./,
-    );
-  });
-
-  it("SECURITY 'raw secrets NEVER echoed' framing pinned: 'list/get responses NEVER echo raw secret material (SOCKS5 password, OpenVPN .ovpn body, WireGuard private_key); re-enter to update.' — pinned so the write-only secret contract stays explicit on the Python side. Drift on one SDK would silently diverge the documented privacy contract from its peers (TS + Go) and open a path to inconsistent server enforcement", () => {
-    expect(body).toMatch(
-      /SECURITY: list\/get responses NEVER echo raw secret material\s*\n?\s*\(SOCKS5 password, OpenVPN \.ovpn body, WireGuard private_key\);\s*\n?\s*re-enter to update\./,
-    );
-  });
-
-  it('attach_to_session SessionEgressConfig + session_id-MUST-match framing pinned: \'config MUST conform to SessionEgressConfig: {"session_id": "...", "proxy": {"type": "...", ...}, "egress_safeguard": {...}}. The body\'s session_id MUST match the URL session_id or the server rejects with 400.\' — pinned so the 3-key config shape + the match-or-400 contract stay explicit (drift to a different config shape would mismatch the server validation)', () => {
-    expect(body).toMatch(
-      /``config`` MUST conform to ``SessionEgressConfig``:\s*\n?\s*``\{"session_id": "\.\.\.", "proxy": \{"type": "\.\.\.", \.\.\.\},\s*\n?\s*"egress_safeguard": \{\.\.\.\}\}``\. The body's ``session_id`` MUST\s*\n?\s*match the URL ``session_id`` or the server rejects with 400\./,
-    );
-  });
-
-  it("save_proxy 'reusable proxy config' framing pinned + 2-key body shape ({label, proxy}). Drift to dropping label would break the dashboard's saved-proxy list (no human-meaningful identifier)", () => {
-    expect(body).toMatch(
-      /Save a reusable proxy config\.\s*\n?\s*\s*\n?\s*Body shape: ``\{"label": "\.\.\.", "proxy": \{\.\.\.\}\}``\./,
-    );
-  });
-
-  it('Sync EgressResource 5-method surface pinned: attach_to_session + get_session_proxy + save_proxy + list_saved_proxies + delete_saved_proxy. Drift to dropping a method would break Python customers; drift to adding get_saved_proxy(id) would re-introduce the raw-secret-leak path that the SECURITY note forbids', () => {
+  it('Sync EgressResource 7-method surface: attach_to_session + get_session_proxy + list_proxies + create_proxy + update_proxy + delete_proxy + test_proxy', () => {
     expect(body).toMatch(/class EgressResource:/);
     expect(body).toMatch(
-      /def attach_to_session\(self, session_id: str, config: dict\[str, Any\]\) -> dict\[str, Any\]:/,
+      /def attach_to_session\(self, session_id: str, config: dict\[str, Any\]\)/,
     );
     expect(body).toMatch(/def get_session_proxy\(self, session_id: str\) -> dict\[str, Any\]:/);
-    expect(body).toMatch(/def save_proxy\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/);
-    expect(body).toMatch(/def list_saved_proxies\(self\) -> dict\[str, Any\]:/);
-    expect(body).toMatch(/def delete_saved_proxy\(self, proxy_id: str\) -> None:/);
+    expect(body).toMatch(/def list_proxies\(self\) -> dict\[str, Any\]:/);
+    expect(body).toMatch(/def create_proxy\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/);
+    expect(body).toMatch(
+      /def update_proxy\(self, proxy_id: str, body: dict\[str, Any\]\) -> dict\[str, Any\]:/,
+    );
+    expect(body).toMatch(/def delete_proxy\(self, proxy_id: str\) -> None:/);
+    expect(body).toMatch(/def test_proxy\(self, proxy_id: str\) -> dict\[str, Any\]:/);
+    expect(body).not.toMatch(/save_proxy|list_saved_proxies|delete_saved_proxy/);
   });
 
-  it('Async AsyncEgressResource 5-method mirror pinned. Drift would break asyncio/FastAPI consumers OR break the sync/async parity', () => {
+  it('Async AsyncEgressResource 7-method mirror pinned', () => {
     expect(body).toMatch(/class AsyncEgressResource:/);
     expect(body).toMatch(/async def attach_to_session\(/);
     expect(body).toMatch(/async def get_session_proxy\(/);
-    expect(body).toMatch(/async def save_proxy\(/);
-    expect(body).toMatch(/async def list_saved_proxies\(self\) -> dict\[str, Any\]:/);
-    expect(body).toMatch(/async def delete_saved_proxy\(self, proxy_id: str\) -> None:/);
+    expect(body).toMatch(/async def list_proxies\(self\) -> dict\[str, Any\]:/);
+    expect(body).toMatch(/async def create_proxy\(/);
+    expect(body).toMatch(/async def update_proxy\(/);
+    expect(body).toMatch(/async def delete_proxy\(self, proxy_id: str\) -> None:/);
+    expect(body).toMatch(/async def test_proxy\(/);
   });
 
-  it("quote(...,safe='') on all id-bearing routes for BOTH sync + async (attach_to_session/get_session_proxy/delete_saved_proxy). Parity with TS encodeURIComponent + Go url.PathEscape", () => {
+  it('account-proxies routes pinned: /v1/account/me/proxies + /:id (quote-escaped) + /:id/test', () => {
+    expect(body).toMatch(/"\/v1\/account\/me\/proxies"/);
+    expect(body).toMatch(/f"\/v1\/account\/me\/proxies\/\{quote\(proxy_id, safe=''\)\}"/);
+    expect(body).toMatch(/f"\/v1\/account\/me\/proxies\/\{quote\(proxy_id, safe=''\)\}\/test"/);
+    expect(body).not.toMatch(/"\/v1\/proxies"/);
+  });
+
+  it("quote(...,safe='') on the session route + coerce_body() on create/update/attach bodies", () => {
     expect(body).toMatch(/f"\/v1\/sessions\/\{quote\(session_id, safe=''\)\}\/proxy"/);
-    expect(body).toMatch(/f"\/v1\/proxies\/\{quote\(proxy_id, safe=''\)\}"/);
-  });
-
-  it('coerce_body() on all non-empty bodies (attach_to_session config + save_proxy body) for sync + async. Drift would break the cross-SDK Decimal/datetime handling helper', () => {
     expect(body).toMatch(/json_body=coerce_body\(config\)/);
     expect(body).toMatch(/json_body=coerce_body\(body\)/);
   });

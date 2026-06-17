@@ -1,17 +1,18 @@
-// EG-API-1.2/1.3 SDK — unit tests for EgressResource.
+// SDK unit tests for EgressResource.
 //
 // Covers the contract surface:
 // - attachToSession sends POST /v1/sessions/{id}/proxy with the
 //   SessionEgressConfig body verbatim (URL-encoded id).
 // - getSessionProxy reads GET on the same path.
-// - saveProxy sends POST /v1/proxies with the SavedProxyConfig body.
-// - listSavedProxies reads GET /v1/proxies.
-// - deleteSavedProxy sends DELETE /v1/proxies/{id} (URL-encoded).
+// - the saved-proxy library CRUD + test rides the LIVE account-proxies
+//   API: createProxy/listProxies POST/GET /v1/account/me/proxies,
+//   updateProxy PUT + deleteProxy DELETE /v1/account/me/proxies/{id},
+//   testProxy POST /v1/account/me/proxies/{id}/test.
 
 import { describe, expect, it } from 'vitest';
 import { EgressResource } from '../../src/resources/egress.js';
 import type { HttpClient } from '../../src/http.js';
-import type { SessionEgressConfig, SavedProxyConfig } from '@driftstack/api-types';
+import type { SessionEgressConfig, AccountProxyInput } from '@driftstack/api-types';
 
 interface RecordedRequest {
   method: string;
@@ -80,37 +81,66 @@ describe('EgressResource', () => {
     expect(calls).toEqual([{ method: 'GET', path: '/v1/sessions/ses_abc/proxy' }]);
   });
 
-  it('saveProxy POSTs /v1/proxies with SavedProxyConfig body', async () => {
-    const body: SavedProxyConfig = {
+  it('createProxy POSTs /v1/account/me/proxies with the flat AccountProxyInput body', async () => {
+    const body: AccountProxyInput = {
       label: 'team SOCKS5',
-      proxy: {
-        type: 'socks5',
-        socks5: { host: 'x.example', port: 1080, udp_associate: true, require_remote_dns: false },
-      },
+      scheme: 'socks5',
+      host: 'x.example',
+      port: 1080,
+      username: null,
+      password: 'secret',
     };
-    const reply = { id: 'proxy_1', label: 'team SOCKS5', type: 'socks5' as const };
+    const reply = {
+      id: 'apx_1',
+      label: 'team SOCKS5',
+      scheme: 'socks5' as const,
+      host: 'x.example',
+      port: 1080,
+      username: null,
+      has_password: true,
+      has_secret: false,
+      created_at: '2026-06-17T00:00:00Z',
+      updated_at: '2026-06-17T00:00:00Z',
+    };
     const { http, calls } = makeFakeHttp(reply);
     const res = new EgressResource(http);
-    const result = await res.saveProxy(body);
-    expect(calls).toEqual([{ method: 'POST', path: '/v1/proxies', body }]);
+    const result = await res.createProxy(body);
+    expect(calls).toEqual([{ method: 'POST', path: '/v1/account/me/proxies', body }]);
     expect(result).toEqual(reply);
   });
 
-  it('listSavedProxies GETs /v1/proxies', async () => {
-    const reply = {
-      data: [{ id: 'proxy_1', label: 'l', type: 'socks5' as const }],
-    };
+  it('listProxies GETs /v1/account/me/proxies', async () => {
+    const reply = { data: [{ id: 'apx_1', label: 'l', scheme: 'socks5' as const }] };
     const { http, calls } = makeFakeHttp(reply);
     const res = new EgressResource(http);
-    const result = await res.listSavedProxies();
-    expect(calls).toEqual([{ method: 'GET', path: '/v1/proxies' }]);
+    const result = await res.listProxies();
+    expect(calls).toEqual([{ method: 'GET', path: '/v1/account/me/proxies' }]);
     expect(result.data).toHaveLength(1);
   });
 
-  it('deleteSavedProxy DELETEs /v1/proxies/{id} (URL-encoded)', async () => {
+  it('updateProxy PUTs /v1/account/me/proxies/{id} (URL-encoded)', async () => {
+    const { http, calls } = makeFakeHttp({ id: 'p 1' });
+    const res = new EgressResource(http);
+    await res.updateProxy('p 1', { label: 'renamed' });
+    expect(calls).toEqual([
+      { method: 'PUT', path: '/v1/account/me/proxies/p%201', body: { label: 'renamed' } },
+    ]);
+  });
+
+  it('deleteProxy DELETEs /v1/account/me/proxies/{id} (URL-encoded)', async () => {
     const { http, calls } = makeFakeHttp(undefined as unknown as void);
     const res = new EgressResource(http);
-    await res.deleteSavedProxy('proxy with space');
-    expect(calls).toEqual([{ method: 'DELETE', path: '/v1/proxies/proxy%20with%20space' }]);
+    await res.deleteProxy('proxy with space');
+    expect(calls).toEqual([
+      { method: 'DELETE', path: '/v1/account/me/proxies/proxy%20with%20space' },
+    ]);
+  });
+
+  it('testProxy POSTs /v1/account/me/proxies/{id}/test', async () => {
+    const { http, calls } = makeFakeHttp({ ok: true, latency_ms: 42 });
+    const res = new EgressResource(http);
+    const result = await res.testProxy('apx_1');
+    expect(calls).toEqual([{ method: 'POST', path: '/v1/account/me/proxies/apx_1/test' }]);
+    expect(result).toEqual({ ok: true, latency_ms: 42 });
   });
 });

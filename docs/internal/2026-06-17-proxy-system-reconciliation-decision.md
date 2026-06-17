@@ -83,7 +83,19 @@ at rest, same as the dashboard):
 
 - Frontend migration: **DONE + prod-verified** (commits 0c0d2310, 7904ce15,
   d88aa078 — dashboard proxies.astro all 3 schemes + the create-profile picker).
-- This reconciliation: **needs the A-vs-B call** (public SDK contract). Founder
-  greenlit "do all as recommended" 2026-06-17 → Option A is the default to
-  execute unless directed to B. Sequence as the slices above across focused
-  fires; do NOT bundle a breaking contract change into a routine wave.
+- This reconciliation: **DONE via Option B (clean replace)**. Founder clarified
+  2026-06-17 that the product is pre-release with **no SDK consumers yet** ("fine
+  to override anything, no deprecated"), which removes the only reason to prefer
+  the additive Option A. So instead of adding a parallel resource, the SDK
+  `EgressResource` saved-proxy methods were **repurposed in place** onto the live
+  account-proxies API across all three SDKs:
+  - TS/Go/Python `EgressResource`: `saveProxy`/`listSavedProxies`/`deleteSavedProxy`
+    → `listProxies` / `createProxy` / `updateProxy` / `deleteProxy` / `testProxy`
+    on `/v1/account/me/proxies` (+ `:id/test`). Session-proxy methods
+    (`attachToSession`/`getSessionProxy`) unchanged.
+  - Flat `AccountProxyInput` body (new `AccountProxyCreate` = `z.input` alias in
+    api-types so defaulted fields stay optional for callers); secrets write-only.
+  - SDK unit + integration tests, the 6 egress examples, and the 3 server
+    content-parity guards all updated in lockstep.
+  - The `/v1/proxies` saved-proxies stub routes (`saved-proxies.ts`) are now fully
+    unreferenced → a clean follow-up can delete them (left mounted for now).

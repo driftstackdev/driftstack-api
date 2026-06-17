@@ -49,9 +49,20 @@ async function main(): Promise<void> {
   };
 
   try {
-    // 1. Save the proxy config to the customer's reusable library.
-    const saved = await client.egress.saveProxy({ label: `example ${proxyHost!}`, proxy });
-    console.log(`Saved proxy id=${saved.id} label=${saved.label} type=${saved.type}`);
+    // 1. Save the proxy config to the customer's reusable library (the live
+    //    account-proxies API — flat body; password write-only). Then probe it.
+    const saved = await client.egress.createProxy({
+      label: `example ${proxyHost!}`,
+      scheme: 'socks5',
+      host: proxyHost!,
+      port: proxyPort,
+    });
+    console.log(`Saved proxy id=${saved.id} label=${saved.label} scheme=${saved.scheme}`);
+    const probe = await client.egress.testProxy(saved.id);
+    console.log(
+      'Reachability:',
+      probe.ok ? `ok (${probe.latency_ms}ms)` : `unreachable (${probe.reason})`,
+    );
 
     // 2. Attach the proxy to the existing session.
     const attached = await client.egress.attachToSession(sessionId!, {

@@ -1,14 +1,17 @@
-"""Egress resource — /v1/sessions/{id}/proxy + /v1/proxies (planning 133).
+"""Egress resource — customer egress surface.
 
-Customer-configurable egress (SOCKS5 / OpenVPN / WireGuard). Mirrors
-the TypeScript ``EgressResource`` (commit 041ef7a9). Activation gate
-on the server returns 503 ``FeatureUnavailable`` until a concrete
-backend is wired; the SDK surface is stable so consumers compile
-ahead of time.
+1. Per-session proxy attach (/v1/sessions/{id}/proxy).
+2. Saved proxy library — CRUD + a reachability test over the account's
+   reusable proxy configs (/v1/account/me/proxies). This is the LIVE
+   account-proxies API (shipped) — the same backend the desktop app +
+   dashboard use, replacing the older /v1/proxies stub.
 
-SECURITY: list/get responses NEVER echo raw secret material
-(SOCKS5 password, OpenVPN .ovpn body, WireGuard private_key);
-re-enter to update.
+Mirrors the TypeScript ``EgressResource``.
+
+SECURITY: the secret-bearing fields (SOCKS5 ``password``, OpenVPN
+``config_blob``, WireGuard ``private_key``) are write-only — wrapped
+server-side under the account key, never echoed back. List/get return
+metadata only (+ ``has_password`` / ``has_secret``).
 """
 
 from __future__ import annotations
@@ -44,20 +47,36 @@ class EgressResource:
         """Read the session's current proxy summary (type + safeguards)."""
         return self._http.request("GET", f"/v1/sessions/{quote(session_id, safe='')}/proxy")
 
-    def save_proxy(self, body: dict[str, Any]) -> dict[str, Any]:
-        """Save a reusable proxy config.
+    def list_proxies(self) -> dict[str, Any]:
+        """List the calling account's saved proxies (metadata only)."""
+        return self._http.request("GET", "/v1/account/me/proxies")
 
-        Body shape: ``{"label": "...", "proxy": {...}}``.
+    def create_proxy(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Create a saved proxy.
+
+        Flat body: ``{"label", "scheme", "host", "port", "username"?,
+        "password"?, "openvpn"?, "wireguard"?}``. The ``password`` / VPN
+        secret fields are write-only (wrapped server-side, never echoed).
         """
-        return self._http.request("POST", "/v1/proxies", json_body=coerce_body(body))
+        return self._http.request("POST", "/v1/account/me/proxies", json_body=coerce_body(body))
 
-    def list_saved_proxies(self) -> dict[str, Any]:
-        """List the calling account's saved proxy summaries."""
-        return self._http.request("GET", "/v1/proxies")
+    def update_proxy(self, proxy_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Update a saved proxy. Omitted fields stay; a secret set to
+        ``None`` clears it, a string (re)wraps it."""
+        return self._http.request(
+            "PUT",
+            f"/v1/account/me/proxies/{quote(proxy_id, safe='')}",
+            json_body=coerce_body(body),
+        )
 
-    def delete_saved_proxy(self, proxy_id: str) -> None:
+    def delete_proxy(self, proxy_id: str) -> None:
         """Delete a saved proxy by id."""
-        self._http.request("DELETE", f"/v1/proxies/{quote(proxy_id, safe='')}")
+        self._http.request("DELETE", f"/v1/account/me/proxies/{quote(proxy_id, safe='')}")
+
+    def test_proxy(self, proxy_id: str) -> dict[str, Any]:
+        """Server-side reachability probe (SSRF-guarded). 200 either way:
+        ``{"ok": true, "latency_ms"}`` or ``{"ok": false, "reason"}``."""
+        return self._http.request("POST", f"/v1/account/me/proxies/{quote(proxy_id, safe='')}/test")
 
 
 class AsyncEgressResource:
@@ -76,11 +95,25 @@ class AsyncEgressResource:
     async def get_session_proxy(self, session_id: str) -> dict[str, Any]:
         return await self._http.request("GET", f"/v1/sessions/{quote(session_id, safe='')}/proxy")
 
-    async def save_proxy(self, body: dict[str, Any]) -> dict[str, Any]:
-        return await self._http.request("POST", "/v1/proxies", json_body=coerce_body(body))
+    async def list_proxies(self) -> dict[str, Any]:
+        return await self._http.request("GET", "/v1/account/me/proxies")
 
-    async def list_saved_proxies(self) -> dict[str, Any]:
-        return await self._http.request("GET", "/v1/proxies")
+    async def create_proxy(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._http.request(
+            "POST", "/v1/account/me/proxies", json_body=coerce_body(body)
+        )
 
-    async def delete_saved_proxy(self, proxy_id: str) -> None:
-        await self._http.request("DELETE", f"/v1/proxies/{quote(proxy_id, safe='')}")
+    async def update_proxy(self, proxy_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._http.request(
+            "PUT",
+            f"/v1/account/me/proxies/{quote(proxy_id, safe='')}",
+            json_body=coerce_body(body),
+        )
+
+    async def delete_proxy(self, proxy_id: str) -> None:
+        await self._http.request("DELETE", f"/v1/account/me/proxies/{quote(proxy_id, safe='')}")
+
+    async def test_proxy(self, proxy_id: str) -> dict[str, Any]:
+        return await self._http.request(
+            "POST", f"/v1/account/me/proxies/{quote(proxy_id, safe='')}/test"
+        )

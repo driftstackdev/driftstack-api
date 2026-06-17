@@ -59,9 +59,19 @@ def main() -> int:
     }
 
     try:
-        # 1. Save the proxy config to the customer's reusable library.
-        saved = client.egress.save_proxy({"label": f"example {proxy_host}", "proxy": proxy_block})
-        print(f"Saved proxy id={saved['id']} label={saved['label']} type={saved['type']}")
+        # 1. Save the proxy config to the customer's reusable library (the live
+        #    account-proxies API — flat body, password write-only). Then probe it.
+        saved = client.egress.create_proxy(
+            {
+                "label": f"example {proxy_host}",
+                "scheme": "socks5",
+                "host": proxy_host,
+                "port": proxy_port,
+            }
+        )
+        print(f"Saved proxy id={saved['id']} label={saved['label']} scheme={saved['scheme']}")
+        probe = client.egress.test_proxy(saved["id"])
+        print(f"Reachability: {probe}")
 
         # 2. Attach the proxy to the existing session.
         attached = client.egress.attach_to_session(

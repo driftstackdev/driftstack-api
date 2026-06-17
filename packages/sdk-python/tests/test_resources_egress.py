@@ -72,31 +72,57 @@ def test_sync_get_session_proxy() -> None:
         assert route.called
 
 
-def test_sync_save_proxy_posts_body() -> None:
-    body = {"label": "team SOCKS5", "proxy": CONFIG["proxy"]}
-    saved = {"id": "proxy_1", "label": "team SOCKS5", "type": "socks5"}
+def test_sync_create_proxy_posts_flat_body() -> None:
+    body = {"label": "team SOCKS5", "scheme": "socks5", "host": "x.example", "port": 1080}
+    saved = {"id": "apx_1", "label": "team SOCKS5", "scheme": "socks5", "has_password": False}
     with respx.mock(base_url=BASE) as mock:
-        route = mock.post("/v1/proxies").mock(return_value=httpx.Response(201, json=saved))
+        route = mock.post("/v1/account/me/proxies").mock(
+            return_value=httpx.Response(201, json=saved),
+        )
         with Driftstack(api_key=API_KEY, base_url=BASE) as client:
-            out = client.egress.save_proxy(body)
+            out = client.egress.create_proxy(body)
         assert out == saved
         assert route.called
 
 
-def test_sync_list_saved_proxies_returns_empty_list() -> None:
+def test_sync_list_proxies_returns_empty_list() -> None:
     with respx.mock(base_url=BASE) as mock:
-        mock.get("/v1/proxies").mock(return_value=httpx.Response(200, json={"data": []}))
+        mock.get("/v1/account/me/proxies").mock(
+            return_value=httpx.Response(200, json={"data": []}),
+        )
         with Driftstack(api_key=API_KEY, base_url=BASE) as client:
-            out = client.egress.list_saved_proxies()
+            out = client.egress.list_proxies()
         assert out == {"data": []}
 
 
-def test_sync_delete_saved_proxy() -> None:
+def test_sync_update_proxy_puts_body() -> None:
     with respx.mock(base_url=BASE) as mock:
-        route = mock.delete("/v1/proxies/proxy_1").mock(return_value=httpx.Response(204))
+        route = mock.put("/v1/account/me/proxies/apx_1").mock(
+            return_value=httpx.Response(200, json={"id": "apx_1", "label": "renamed"}),
+        )
         with Driftstack(api_key=API_KEY, base_url=BASE) as client:
-            client.egress.delete_saved_proxy("proxy_1")
+            client.egress.update_proxy("apx_1", {"label": "renamed"})
         assert route.called
+
+
+def test_sync_delete_proxy() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.delete("/v1/account/me/proxies/apx_1").mock(
+            return_value=httpx.Response(204),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.egress.delete_proxy("apx_1")
+        assert route.called
+
+
+def test_sync_test_proxy_posts() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/account/me/proxies/apx_1/test").mock(
+            return_value=httpx.Response(200, json={"ok": True, "latency_ms": 42}),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = client.egress.test_proxy("apx_1")
+        assert out == {"ok": True, "latency_ms": 42}
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -117,9 +143,11 @@ async def test_async_attach_to_session_posts_config() -> None:
 
 
 @pytest.mark.asyncio
-async def test_async_list_saved_proxies() -> None:
+async def test_async_list_proxies() -> None:
     with respx.mock(base_url=BASE) as mock:
-        mock.get("/v1/proxies").mock(return_value=httpx.Response(200, json={"data": []}))
+        mock.get("/v1/account/me/proxies").mock(
+            return_value=httpx.Response(200, json={"data": []}),
+        )
         async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
-            out = await client.egress.list_saved_proxies()
+            out = await client.egress.list_proxies()
         assert out == {"data": []}
