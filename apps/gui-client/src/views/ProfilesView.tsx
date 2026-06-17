@@ -2075,6 +2075,8 @@ export function ProfilesView({
           // When the user is viewing a specific folder, a new profile inherits it
           // (founder: "created inside a folder → add it to that folder, not unfiled").
           initialFolder={folderFilter !== 'all' && folderFilter !== 'unfiled' ? folderFilter : ''}
+          // Likewise, a profile created while filtered to a tag inherits that tag.
+          initialTag={tagFilter ?? ''}
           onClose={() => setCreateOpen(false)}
           onCreated={() => {
             setCreateOpen(false);
@@ -2107,6 +2109,7 @@ function CreateProfileModal({
   onCreated,
   existingFolders,
   initialFolder,
+  initialTag,
 }: {
   onClose: () => void;
   onCreated: () => void;
@@ -2115,6 +2118,9 @@ function CreateProfileModal({
   /** Pre-selected folder — the one the user is currently viewing, so a profile
    *  created from inside a folder lands there. Empty = unfiled. */
   initialFolder?: string;
+  /** Pre-filled tag — the tag the user is currently filtered to, so a profile
+   *  created from inside a tag view carries it. Empty = no tag. */
+  initialTag?: string;
 }): JSX.Element {
   const { client, settings } = useSettings();
   const [name, setName] = useState('');
@@ -2134,7 +2140,7 @@ function CreateProfileModal({
   );
   // Organization metadata at create (backend columns, migration 0076).
   const [folder, setFolder] = useState(initialFolder ?? '');
-  const [tags, setTags] = useState('');
+  const [tags, setTags] = useState(initialTag ?? '');
   // Night-arc H: named create-presets (demo's From-template / Save-as-
   // template) — client-side store; loading one fills the form fields.
   const [templates, setTemplates] = useState<ProfileTemplate[]>([]);
