@@ -115,9 +115,10 @@ describe('OpenAPI spec generation', () => {
         '/v1/account/me/bundled-llm-settings',
         '/v1/account/me/bundled-llm-status',
         '/v1/account/me/organization',
-        // ARC A — per-account customer proxies (slice 2)
+        // ARC A — per-account customer proxies (slice 2 + 4b test)
         '/v1/account/me/proxies',
         '/v1/account/me/proxies/{id}',
+        '/v1/account/me/proxies/{id}/test',
         '/v1/account/me/byok-anthropic-key',
         '/v1/account/me/byok-anthropic-key/test',
         // Arc 7 docs.openapi — OAuth-client IDP signin (V-667.C)

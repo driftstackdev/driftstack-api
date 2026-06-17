@@ -109,6 +109,16 @@ export const AccountProxyListSchema = z.object({
 });
 export type AccountProxyList = z.infer<typeof AccountProxyListSchema>;
 
+// ARC A slice 4b — server-side proxy connection test. A TCP-reachability probe
+// to the proxy host:port (the SSRF host-guard runs first); `ok:true` carries the
+// handshake latency, `ok:false` a human-readable reason. (SOCKS5 auth-level
+// verification is a future enhancement — this confirms the port is reachable.)
+export const AccountProxyTestResultSchema = z.discriminatedUnion('ok', [
+  z.object({ ok: z.literal(true), latency_ms: z.number().int().nonnegative() }),
+  z.object({ ok: z.literal(false), reason: z.string() }),
+]);
+export type AccountProxyTestResult = z.infer<typeof AccountProxyTestResultSchema>;
+
 export const ProfileSchema = z.object({
   id: ProfileIdSchema,
   name: z.string(),

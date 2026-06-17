@@ -1409,6 +1409,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     accountProxiesRepo,
     accountProxiesService,
     profileMasterKey: proxyMasterKey,
+    // ARC A slice 4b — deterministic probe so the proxy test endpoint doesn't
+    // open real sockets: TEST-NET hosts (203.0.113.x) resolve, anything else
+    // rejects (unreachable).
+    proxyTcpProbe: (host: string) =>
+      host.startsWith('203.0.113.') ? Promise.resolve() : Promise.reject(new Error('unreachable')),
     // V-352b — fake R2 public bucket so /v1/account/me/avatar can be
     // exercised in integration tests without touching real Cloudflare.
     r2Public: r2PublicFake,

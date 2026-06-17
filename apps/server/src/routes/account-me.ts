@@ -34,6 +34,7 @@ import type {
 } from '../db/account-proxies-repo.js';
 import { wrapAccountSecret } from '../lib/profile-key-hierarchy.js';
 import { classifyUnsafeHost } from '../lib/webhook-target-guard.js';
+import { defaultTcpProbe } from '../services/proxy-backends/socks5.js';
 import { avatarKey, type R2 } from '../lib/r2.js';
 import {
   BadRequestError,
@@ -81,6 +82,10 @@ export interface AccountMeRoutesOptions {
    *  the account TMK. Null → passwords can't be stored; a create/update that
    *  carries a password is rejected (503) rather than stored in the clear. */
   profileMasterKey?: Buffer | null;
+  /** ARC A slice 4b — injectable TCP-reachability probe for the proxy test
+   *  endpoint (resolves on connect, rejects on timeout/refused). Defaults to the
+   *  SOCKS5 backend's defaultTcpProbe; tests inject a deterministic stub. */
+  proxyTcpProbe?: (host: string, port: number, timeoutMs: number) => Promise<void>;
 }
 
 /**
@@ -102,6 +107,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   const oauthLinksRepo = opts.oauthLinksRepo ?? null;
   const accountProxiesRepo = opts.accountProxiesRepo ?? null;
   const proxyMasterKey = opts.profileMasterKey ?? null;
+  const proxyTcpProbe = opts.proxyTcpProbe ?? defaultTcpProbe;
 
   // 2026-05-19 — first non-null providerAvatarUrl from the
   // account's OAuth links, used as fallback when avatar_r2_key is
@@ -438,6 +444,36 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       if (!ok) throw new NotFoundError('Proxy not found.');
       reply.code(204);
       return null;
+    },
+  );
+
+  // ARC A slice 4b — server-side connection test. TCP-reachability probe to the
+  // owned proxy's host:port (SSRF host-guard runs first, fail-closed). Returns a
+  // discriminated result (ok=true+latency_ms | ok=false+reason), 200 either way —
+  // an unreachable proxy is a result, not an error. 404 for an unknown/foreign id.
+  app.post(
+    '/v1/account/me/proxies/:id/test',
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      if (!accountProxiesRepo) throw new FeatureUnavailableError('Proxies are not configured.');
+      const { id } = request.params as { id: string };
+      const row = await accountProxiesRepo.findById({ id, accountId: ctx.account.id });
+      if (row === null) throw new NotFoundError('Proxy not found.');
+      if (classifyUnsafeHost(row.host) !== null) {
+        return {
+          ok: false as const,
+          reason: 'Proxy host is not allowed (private/reserved address).',
+        };
+      }
+      const startedAt = Date.now();
+      try {
+        await proxyTcpProbe(row.host, row.port, 8_000);
+        return { ok: true as const, latency_ms: Date.now() - startedAt };
+      } catch (err) {
+        return { ok: false as const, reason: err instanceof Error ? err.message : 'unreachable' };
+      }
     },
   );
 

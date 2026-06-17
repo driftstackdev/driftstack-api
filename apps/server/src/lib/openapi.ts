@@ -1755,6 +1755,26 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
     },
   });
+  const AccountProxyTestResultOpenApi = z
+    .union([
+      z.object({ ok: z.literal(true), latency_ms: z.number().int() }),
+      z.object({ ok: z.literal(false), reason: z.string() }),
+    ])
+    .openapi('AccountProxyTestResult');
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/account/me/proxies/{id}/test',
+    summary: 'Test reachability of a customer proxy (account_owner)',
+    tags: ['account'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Reachability result (ok=true + latency_ms, or ok=false + reason).',
+        content: { 'application/json': { schema: AccountProxyTestResultOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/me/bundled-llm-status',

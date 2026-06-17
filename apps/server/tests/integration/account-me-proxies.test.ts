@@ -182,6 +182,55 @@ describe('SSRF host guard', () => {
   });
 });
 
+describe('POST /v1/account/me/proxies/:id/test', () => {
+  async function makeProxy(host: string): Promise<string> {
+    return (
+      await fx.app.inject({
+        method: 'POST',
+        url: '/v1/account/me/proxies',
+        headers: { ...auth(fx), 'content-type': 'application/json' },
+        payload: { label: 't', host, port: 1080 },
+      })
+    ).json<ProxyMeta>().id;
+  }
+
+  it('ok:true + latency_ms for a reachable proxy', async () => {
+    fx = await buildTestApp();
+    const id = await makeProxy('203.0.113.9'); // harness stub resolves these
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ ok: boolean; latency_ms?: number }>();
+    expect(body.ok).toBe(true);
+    expect(typeof body.latency_ms).toBe('number');
+  });
+
+  it('ok:false + reason for an unreachable proxy (200, not an error)', async () => {
+    fx = await buildTestApp();
+    const id = await makeProxy('198.51.100.9'); // harness stub rejects these
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ ok: boolean }>().ok).toBe(false);
+  });
+
+  it('404 testing an unknown id', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies/00000000-0000-0000-0000-000000000000/test',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+});
+
 describe('account_owner scope', () => {
   it('403 when the key lacks account_owner scope', async () => {
     fx = await buildTestApp({ scopes: ['read', 'write'] });

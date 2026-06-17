@@ -2959,6 +2959,36 @@
         },
         "required": ["label", "host", "port"]
       },
+      "AccountProxyTestResult": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "ok": {
+                "type": "boolean",
+                "enum": [true]
+              },
+              "latency_ms": {
+                "type": "integer"
+              }
+            },
+            "required": ["ok", "latency_ms"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "ok": {
+                "type": "boolean",
+                "enum": [false]
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": ["ok", "reason"]
+          }
+        ]
+      },
       "BundledLlmStatus": {
         "type": "object",
         "properties": {
@@ -10364,6 +10394,69 @@
         "responses": {
           "204": {
             "description": "Deleted."
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/account/me/proxies/{id}/test": {
+      "post": {
+        "summary": "Test reachability of a customer proxy (account_owner)",
+        "tags": ["account"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reachability result (ok=true + latency_ms, or ok=false + reason).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountProxyTestResult"
+                }
+              }
+            }
           },
           "400": {
             "description": "Validation failed.",

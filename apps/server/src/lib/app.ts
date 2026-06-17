@@ -516,6 +516,9 @@ export interface AppDeps {
   /** ARC A: proxies service — validates proxy_id on agent-session create +
    *  resolves it (owner-scoped unwrap + SSRF re-guard) into the dispatch. */
   accountProxiesService?: AccountProxiesService;
+  /** ARC A slice 4b: injectable TCP-reachability probe for the proxy test
+   *  endpoint (tests inject a deterministic stub; prod uses the default). */
+  proxyTcpProbe?: (host: string, port: number, timeoutMs: number) => Promise<void>;
   /** ARC A: decoded PROFILE_MASTER_KEY — wraps proxy passwords under the account
    *  TMK. Null → proxy passwords can't be stored (create/update with a password
    *  → 503). */
@@ -1027,6 +1030,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       mfaService: deps.mfaService ?? null,
       accountProxiesRepo: deps.accountProxiesRepo ?? null,
       profileMasterKey: deps.profileMasterKey ?? null,
+      ...(deps.proxyTcpProbe !== undefined ? { proxyTcpProbe: deps.proxyTcpProbe } : {}),
       // 2026-05-19 — OAuth-IDP avatar fallback for the avatar_url
       // response field. When the account has no R2-uploaded avatar
       // BUT has an OAuth link with a provider_avatar_url, return that
