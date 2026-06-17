@@ -16,6 +16,7 @@
 // window URL query — the opener encodes them when creating the window.
 
 import { useEffect, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import type { Room } from '../lib/livekit';
@@ -510,6 +511,28 @@ export function SimulatorWindow(): JSX.Element {
   // Expandable control panel — collapsed by default so the window is phone-only
   // (founder 2026-06-17); the chevron reveals the labelled control rows.
   const [toolbarExpanded, setToolbarExpanded] = useState(false);
+
+  // iOS TAP cursor (founder 2026-06-17: "standard is full control + iOS TAP
+  // cursor"): a short-lived ring at the tap point, so a click on the screen
+  // reads as a deliberate iOS touch. Capture-phase + purely visual (never
+  // preventDefault/stopPropagation) so the real tap still reaches the device's
+  // input-capture untouched.
+  const screenHostRef = useRef<HTMLDivElement | null>(null);
+  const tapIdRef = useRef(0);
+  const [taps, setTaps] = useState<{ id: number; x: number; y: number }[]>([]);
+  const showTap = (e: ReactPointerEvent<HTMLDivElement>): void => {
+    const host = screenHostRef.current;
+    if (host === null) return;
+    const r = host.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    if (r.width === 0 || x < 0 || y < 0 || x > r.width || y > r.height) return;
+    const id = (tapIdRef.current += 1);
+    setTaps((cur) => [...cur, { id, x, y }]);
+    window.setTimeout(() => {
+      setTaps((cur) => cur.filter((t) => t.id !== id));
+    }, 480);
+  };
   const togglePinned = (): void => {
     const next = !pinned;
     setPinned(next);
@@ -635,7 +658,12 @@ export function SimulatorWindow(): JSX.Element {
                   </div>
                 </div>
               )}
-              <div className="relative min-h-0 flex-1">
+              <div
+                ref={screenHostRef}
+                data-component="simulator-screen-host"
+                className="relative min-h-0 flex-1"
+                onPointerDownCapture={showTap}
+              >
                 <AgentSessionPanel
                   info={info}
                   interactive
@@ -646,6 +674,17 @@ export function SimulatorWindow(): JSX.Element {
                     if (el !== null) armFpsCounter(el);
                   }}
                 />
+                {/* iOS tap cursor — a ring that blooms at each tap point then
+                    fades. pointer-events-none so it never intercepts the tap. */}
+                {taps.map((t) => (
+                  <span
+                    key={t.id}
+                    data-component="tap-ripple"
+                    aria-hidden="true"
+                    className="ds-tap-ring pointer-events-none absolute z-20 h-9 w-9 rounded-full border-2 border-white/80"
+                    style={{ left: t.x, top: t.y }}
+                  />
+                ))}
               </div>
             </div>
           </div>

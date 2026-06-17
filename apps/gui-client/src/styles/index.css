@@ -132,6 +132,23 @@
   animation: ds-view-in 150ms ease-out;
 }
 
+/* iOS tap cursor (SimulatorWindow) — a ring that blooms from the tap point and
+   fades. One-shot (forwards) so it disappears after a single tap. Centered on
+   its left/top anchor via the translate. */
+@keyframes ds-tap {
+  from {
+    transform: translate(-50%, -50%) scale(0.35);
+    opacity: 0.85;
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1.7);
+    opacity: 0;
+  }
+}
+.ds-tap-ring {
+  animation: ds-tap 0.46s ease-out forwards;
+}
+
 /* ─── Fleet design-system token layer (2026-06-12 rework) ─────────────
    Contract: docs/internal/2026-06-12-design-system-spec.md. Two axes on
    <html>: data-mode (light|dark) × data-accent (violet|oxblood|teal).

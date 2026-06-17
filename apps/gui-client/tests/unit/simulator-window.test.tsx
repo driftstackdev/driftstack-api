@@ -158,6 +158,32 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(toolbar?.textContent).not.toContain('·');
   });
 
+  it('iOS tap cursor: a pointer-down on the screen blooms a tap-ripple ring (purely visual — never intercepts the tap)', () => {
+    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    const host = container.querySelector('[data-component="simulator-screen-host"]');
+    expect(host).not.toBeNull();
+    // jsdom gives a zero-rect by default; the handler guards on width===0, so
+    // stub a real rect to exercise the in-bounds path.
+    (host as HTMLElement).getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 300, height: 600 }) as DOMRect;
+    // No ripple before any tap.
+    expect(container.querySelector('[data-component="tap-ripple"]')).toBeNull();
+    fireEvent.pointerDown(host as Element, { clientX: 120, clientY: 240 });
+    const ripple = container.querySelector('[data-component="tap-ripple"]');
+    expect(ripple).not.toBeNull();
+    // The ring renders inside the screen host and never intercepts the tap
+    // (the one-shot bloom animation + exact anchor are CSS / live-event detail
+    // jsdom can't carry — the pointer coords don't survive its PointerEvent).
+    expect(host?.contains(ripple as Node)).toBe(true);
+    expect(ripple?.className).toContain('pointer-events-none');
+    expect(ripple?.className).toContain('ds-tap-ring');
+  });
+
   it('shows a no-session hint (no device frame) when the query lacks ws/token', () => {
     window.history.pushState({}, '', '/?window=simulator');
     const { container } = render(
