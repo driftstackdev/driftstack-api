@@ -95,6 +95,26 @@ describe('ProfilePhoneCard', () => {
     cleanup();
   });
 
+  it('the ⋯ menu opens on toggle and dismisses on an outside pointer-down (and Escape)', () => {
+    const { container } = render(<ProfilePhoneCard {...props()} />);
+    const menu = container.querySelector('[data-component="card-actions-menu"]');
+    const toggle = screen.getByRole('button', { name: 'More actions' });
+    // classList membership (not substring) — the static class also carries a
+    // `group-hover:opacity-100` token that a substring check would match.
+    expect(menu?.classList.contains('opacity-0')).toBe(true);
+    fireEvent.click(toggle);
+    expect(menu?.classList.contains('opacity-100')).toBe(true);
+    // A pointer-down anywhere outside the card footer closes it.
+    fireEvent.pointerDown(document.body);
+    expect(menu?.classList.contains('opacity-0')).toBe(true);
+    // Re-open, then Escape closes it.
+    fireEvent.click(toggle);
+    expect(menu?.classList.contains('opacity-100')).toBe(true);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(menu?.classList.contains('opacity-0')).toBe(true);
+    cleanup();
+  });
+
   it('renders folder + tag pills', () => {
     render(<ProfilePhoneCard {...props({ folder: 'Shopping', tags: ['aged'] })} />);
     expect(screen.getByText('📁 Shopping')).toBeTruthy();

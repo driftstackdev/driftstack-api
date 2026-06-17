@@ -158,6 +158,21 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(toolbar?.textContent).not.toContain('·');
   });
 
+  it('the expanded control panel dismisses on an outside pointer-down', () => {
+    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    const wrap = container.querySelector('[data-component="simulator-toolbar-wrap"]');
+    fireEvent.click(wrap?.querySelector('[aria-label="Show controls"]') as Element);
+    expect(wrap?.querySelector('[data-component="simulator-controls"]')).not.toBeNull();
+    // A pointer-down outside the toolbar wrap collapses the panel.
+    fireEvent.pointerDown(document.body);
+    expect(wrap?.querySelector('[data-component="simulator-controls"]')).toBeNull();
+  });
+
   it('iOS tap cursor: a pointer-down on the screen blooms a tap-ripple ring (purely visual — never intercepts the tap)', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
     const { container } = render(

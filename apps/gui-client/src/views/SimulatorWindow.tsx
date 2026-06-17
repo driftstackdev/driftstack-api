@@ -143,8 +143,29 @@ export function DeviceToolbar({
   recording: boolean;
   onToggleRecord: () => void;
 }): JSX.Element {
+  // Dismiss the expanded control panel on an outside pointer-down or Escape, so
+  // it doesn't linger over the screen after you've picked (or skipped) a control.
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!expanded) return;
+    const onPointerDown = (e: PointerEvent): void => {
+      if (wrapRef.current !== null && !wrapRef.current.contains(e.target as Node)) {
+        onToggleExpanded();
+      }
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onToggleExpanded();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [expanded, onToggleExpanded]);
   return (
     <div
+      ref={wrapRef}
       data-tauri-drag-region
       data-component="simulator-toolbar-wrap"
       className="relative w-full shrink-0"

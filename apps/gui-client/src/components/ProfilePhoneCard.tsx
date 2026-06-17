@@ -9,7 +9,7 @@
 // organize slot. flag covers every ISO country via flagEmoji (regional-indicator
 // transform — no hardcoded list).
 
-import { useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import { proxyCapabilities } from './ProxyCapabilities';
 import { RelativeTime } from './RelativeTime';
 import type { ProxyTestResult } from '../lib/proxies';
@@ -60,6 +60,26 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   // they're tap-discoverable on a trackpad, not hover-only (founder 2026-06-16,
   // matching the visual-demo dock). Mouse hover still reveals them too.
   const [actionsOpen, setActionsOpen] = useState(false);
+  // Dismiss the tap-opened ⋯ menu on an outside pointer-down or Escape — a
+  // toggle-opened dropdown that can only be re-toggled shut reads as stuck.
+  const footerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!actionsOpen) return;
+    const onPointerDown = (e: PointerEvent): void => {
+      if (footerRef.current !== null && !footerRef.current.contains(e.target as Node)) {
+        setActionsOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setActionsOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [actionsOpen]);
   // UDP badge state + the WebRTC/QUIC detail shown on hover. proxyCapabilities
   // gates WebRTC/QUIC on reachable+auth+udp_associate (they ride UDP).
   const caps = p.capabilities !== null ? proxyCapabilities(p.capabilities) : null;
@@ -293,7 +313,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
 
         {/* footer: the Launch dock + a hover action strip that floats ABOVE it
             (bottom-full) so the secondary actions never overlap Launch. */}
-        <div className="relative z-10">
+        <div ref={footerRef} className="relative z-10">
           {/* action menu — a clean VERTICAL DROPDOWN of labelled rows (founder
               2026-06-17), anchored above the dock so it never collides with
               Launch/Open. Revealed on hover (mouse) OR by the ⋯ toggle
