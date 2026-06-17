@@ -858,7 +858,7 @@ export function ProxyForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="relative flex flex-col gap-3 overflow-hidden rounded-xl border border-surface-divider bg-surface-elevated p-4 shadow-lg"
+      className="relative flex flex-col gap-3 overflow-hidden rounded-xl border border-surface-divider bg-surface-raised p-4 shadow-lg"
     >
       {/* Soft accent glow (matches the Command Center hero) so the form reads as
           a premium surface rather than a flat dark box. */}
@@ -1153,10 +1153,11 @@ function Field({
 }
 
 function PoolStat({ k, v, tone }: { k: string; v: string; tone?: 'ok' }): JSX.Element {
+  // Opaque surface-raised on every cell (matches the status-site card surface
+  // the founder asked us to mirror); the "healthy" signal comes from the green
+  // label + value, not a translucent tint that washes out over the grid divider.
   return (
-    <div
-      className={`px-3 py-2.5 ${tone === 'ok' ? 'bg-status-ready/[0.07]' : 'bg-surface-elevated'}`}
-    >
+    <div className="bg-surface-raised px-3 py-2.5">
       <p className={`section-label ${tone === 'ok' ? 'text-status-ready/80' : ''}`}>{k}</p>
       <p
         className={`mono mt-0.5 text-2xl font-bold tracking-tight ${
