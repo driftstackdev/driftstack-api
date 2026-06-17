@@ -121,10 +121,121 @@ export function screenTaskForRefusal(
 }
 
 /**
+ * W2162/W2167 — conservative detector for the dominant catastrophic-backtracking
+ * (ReDoS) structures, mirrored from the canonical agent-service detector so the
+ * loader skips a hostile/badly-authored pattern BEFORE it reaches the per-task
+ * `re.test` hot path. Two classes:
+ *   - W2162 NESTED: an UNBOUNDED quantifier (`+`, `*`, or open-ended `{n,}`)
+ *     applied to a GROUP whose body itself contains an unbounded quantifier —
+ *     `(a+)+`, `(a*)*`, `(.*)+`, `(\d+){2,}`, `((a+))+`.
+ *   - W2167 OVERLAPPING ALTERNATION: an unbounded quantifier on a group whose
+ *     body has a top-level `|` — `(a|a)+`, `(a|aa)*`, `((a|a))+`.
+ * Both compile fine but take EXPONENTIAL time on a short crafted input, blocking
+ * the single-threaded event loop + stalling every co-resident run; the
+ * MAX_SCREEN_CHARS cap bounds input LENGTH, not backtracking COST. Refusal
+ * patterns are operator/founder-authored (the DRIFTSTACK_TASK_REFUSAL_PATTERNS
+ * env / Tier-3 list), so the threat is a bad pattern + a hostile customer task —
+ * this is defense-in-depth, fail-safe like the uncompilable-regex skip.
+ *
+ * Char-class `[...]` contents + `\`-escaped metachars are skipped (a `+`/`(`/`)`
+ * there is a literal). A child group's unbounded-ness AND alternation propagate
+ * to its parent so `((a+))+` / `((a|a))+` are caught. Conservative by design: it
+ * may flag a benign nested/alternation pattern (→ that one rule is skipped +
+ * logged), but never lets the exponential structure through.
+ */
+export function hasNestedQuantifier(src: string): boolean {
+  const stack: Array<{ hasUnbounded: boolean; hasTopLevelAlt: boolean }> = [];
+  let inClass = false;
+  let lastClosedHadUnbounded = false; // did the token just before this position close an unbounded group?
+  let lastClosedHadAlt = false; // …or a group with a top-level alternation (overlapping-alt ReDoS)?
+  let i = 0;
+  while (i < src.length) {
+    const ch = src[i];
+    if (ch === '\\') {
+      i += 2; // escaped → literal; skip the metachar
+      lastClosedHadUnbounded = false;
+      lastClosedHadAlt = false;
+      continue;
+    }
+    if (inClass) {
+      if (ch === ']') inClass = false;
+      i++;
+      lastClosedHadUnbounded = false;
+      lastClosedHadAlt = false;
+      continue;
+    }
+    if (ch === '[') {
+      inClass = true;
+      i++;
+      lastClosedHadUnbounded = false;
+      lastClosedHadAlt = false;
+      continue;
+    }
+    if (ch === '(') {
+      stack.push({ hasUnbounded: false, hasTopLevelAlt: false });
+      i++;
+      lastClosedHadUnbounded = false;
+      lastClosedHadAlt = false;
+      continue;
+    }
+    if (ch === '|') {
+      // A top-level `|` INSIDE the current group makes it an alternation; if it
+      // is then quantified unbounded, the run can be partitioned 2^n ways
+      // (catastrophic). A `|` at the regex ROOT (no open group) can't be
+      // quantified as a unit → harmless, so only mark when in a group.
+      const top = stack[stack.length - 1];
+      if (top) top.hasTopLevelAlt = true;
+      i++;
+      lastClosedHadUnbounded = false;
+      lastClosedHadAlt = false;
+      continue;
+    }
+    if (ch === ')') {
+      const g = stack.pop();
+      const hadU = g ? g.hasUnbounded : false;
+      const hadA = g ? g.hasTopLevelAlt : false;
+      const parent = stack[stack.length - 1];
+      if (parent) {
+        if (hadU) parent.hasUnbounded = true; // propagate so `((a+))+` is caught
+        if (hadA) parent.hasTopLevelAlt = true; // …and `((a|a))+`
+      }
+      lastClosedHadUnbounded = hadU;
+      lastClosedHadAlt = hadA;
+      i++;
+      continue;
+    }
+    // Unbounded-quantifier token? `+` `*` or an open-ended `{n,}` (bounded `{n}`/`{n,m}` are safe).
+    let isUnbounded = false;
+    let advance = 1;
+    if (ch === '+' || ch === '*') {
+      isUnbounded = true;
+    } else if (ch === '{') {
+      const close = src.indexOf('}', i);
+      if (close > i) {
+        if (/^\d*,$/.test(src.slice(i + 1, close))) isUnbounded = true; // "n," / "," → open-ended
+        advance = close - i + 1;
+      }
+    }
+    if (isUnbounded) {
+      // Unbounded quantifier on a group that already held a quantifier (nested)
+      // OR a top-level alternation (overlapping-alt) — both catastrophic.
+      if (lastClosedHadUnbounded || lastClosedHadAlt) return true;
+      const top = stack[stack.length - 1];
+      if (top) top.hasUnbounded = true;
+    }
+    lastClosedHadUnbounded = false;
+    lastClosedHadAlt = false;
+    i += advance;
+  }
+  return false;
+}
+
+/**
  * Compile policy-authored RefusalPatternData[] into runtime RefusalPattern[].
  * BIAS-SAFE / FAIL-OPEN per entry: a malformed entry (missing field /
- * uncompilable regex) is SKIPPED, never thrown, and reported in `skipped` so a
- * silently-dead refusal rule can be alerted on rather than voiding the list.
+ * uncompilable regex / catastrophic-backtracking structure) is SKIPPED, never
+ * thrown, and reported in `skipped` so a silently-dead refusal rule can be
+ * alerted on rather than voiding the list.
  */
 export function loadRefusalPatterns(data: unknown): {
   patterns: RefusalPattern[];
@@ -166,6 +277,18 @@ export function loadRefusalPatterns(data: unknown): {
       match = new RegExp(pattern, flags);
     } catch {
       skipped.push({ index, reason: 'uncompilable regex (bad source or flags)' });
+      return;
+    }
+    // W2162/W2167: reject catastrophic-backtracking (ReDoS) patterns before they
+    // reach the per-task `re.test` hot path — a nested unbounded quantifier or a
+    // quantified overlapping alternation can hang the event loop + stall every
+    // co-resident run (the MAX_SCREEN_CHARS cap bounds input length, not cost).
+    if (hasNestedQuantifier(pattern)) {
+      skipped.push({
+        index,
+        reason:
+          'redos_complexity (nested unbounded quantifier — rewrite to avoid catastrophic backtracking)',
+      });
       return;
     }
     patterns.push({ id, category, match, reason });

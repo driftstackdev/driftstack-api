@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  hasNestedQuantifier,
   loadRefusalPatterns,
   normalizeTaskForScreening,
   screenTaskForRefusal,
@@ -156,6 +157,43 @@ describe('W582 task-refusal contract mirror', () => {
         },
       ]);
       expect(screenTaskForRefusal("steal someone's password", patterns).refuse).toBe(true);
+    });
+
+    it('W2162/W2167: skips catastrophic-backtracking (ReDoS) patterns with redos_complexity', () => {
+      const { patterns, skipped } = loadRefusalPatterns([
+        { id: 'nested', category: 'c', pattern: '(a+)+', reason: 'r' },
+        { id: 'star', category: 'c', pattern: '(a*)*', reason: 'r' },
+        { id: 'dotstar', category: 'c', pattern: '(.*)+', reason: 'r' },
+        { id: 'doublegrp', category: 'c', pattern: '((a+))+', reason: 'r' },
+        { id: 'openbrace', category: 'c', pattern: '(\\d+){2,}', reason: 'r' },
+        { id: 'alt', category: 'c', pattern: '(a|a)+', reason: 'r' },
+        { id: 'altgrp', category: 'c', pattern: '((a|a))+', reason: 'r' },
+        { id: 'ok', category: 'c', pattern: 'steal password', reason: 'r' },
+      ]);
+      // Only the benign literal compiles into the active set.
+      expect(patterns.map((p) => p.id)).toEqual(['ok']);
+      expect(skipped).toHaveLength(7);
+      expect(skipped.every((s) => s.reason.startsWith('redos_complexity'))).toBe(true);
+    });
+
+    it('hasNestedQuantifier flags both ReDoS classes but not safe forms', () => {
+      // Catastrophic (nested + overlapping-alternation).
+      for (const bad of [
+        '(a+)+',
+        '(a*)*',
+        '(.*)+',
+        '((a+))+',
+        '(\\d+){2,}',
+        '(a|a)+',
+        '((a|a))+',
+      ]) {
+        expect(hasNestedQuantifier(bad)).toBe(true);
+      }
+      // Safe: bounded quantifier on a group, escaped parens, char-class `+`,
+      // root-level alternation (not a quantified unit), single quantifier.
+      for (const ok of ['(a+){2}', '\\(a+\\)+', '[a+]+', 'a|b', 'a+', 'steal password']) {
+        expect(hasNestedQuantifier(ok)).toBe(false);
+      }
     });
   });
 
