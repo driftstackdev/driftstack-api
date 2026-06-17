@@ -210,7 +210,7 @@ describe('W573.B /docs/gui-client/audit-current-state.md content parity', () => 
     expect(body).toMatch(
       /\*\*Current:\*\* \*\*LOCKED \+ COMPLIANT\.\*\* All tokens aligned with the Driftstack brand:/,
     );
-    expect(body).toMatch(/- \*\*Oxblood accent\*\* — `#722f37` \(`tailwind\.config\.ts:37`\)/);
+    expect(body).toMatch(/- \*\*Oxblood accent\*\* — `#a83b4d` \(`tailwind\.config\.ts:37`\)/);
     expect(body).toMatch(
       /- \*\*Geist Sans body font\*\* — `tailwind\.config\.ts:54–62` with system-ui fallback\./,
     );

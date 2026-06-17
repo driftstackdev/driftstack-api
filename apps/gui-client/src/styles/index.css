@@ -148,12 +148,15 @@
   --accent-ring: rgba(109, 94, 252, 0.4);
 }
 [data-accent='oxblood'] {
-  --accent-rgb: 114 47 55;
-  --accent-hover-rgb: 130 57 66;
-  --accent-active-rgb: 94 37 44;
-  --accent-subtle-rgb: 114 47 55;
-  --accent: #722f37;
-  --accent-ring: rgba(114, 47, 55, 0.4);
+  /* 2026-06-17 — founder "more red, like the status page": brightened the dark
+     oxblood-700 (#722f37) to oxblood-500 (#a83b4d) so the accent + logo read as a
+     vivid red (closer to the status site's red) while staying in the oxblood family. */
+  --accent-rgb: 168 59 77; /* oxblood-500 #a83b4d */
+  --accent-hover-rgb: 200 96 110; /* oxblood-400 #c8606e */
+  --accent-active-rgb: 141 44 62; /* oxblood-600 #8d2c3e */
+  --accent-subtle-rgb: 168 59 77;
+  --accent: #a83b4d;
+  --accent-ring: rgba(168, 59, 77, 0.4);
 }
 [data-accent='teal'] {
   --accent-rgb: 16 154 130;
@@ -183,18 +186,19 @@
 }
 [data-mode='dark'] {
   color-scheme: dark;
-  /* 2026-06-15 — founder "too dark": lifted the whole dark surface scale ~6–8
-     points (less oppressive background) while keeping inset < base < raised <
-     elevated so cards still separate from the canvas. */
-  --surface-base-rgb: 18 23 31;
-  --surface-raised-rgb: 26 33 44;
-  --surface-elevated-rgb: 36 45 60;
-  --surface-inset-rgb: 12 16 22;
-  --surface-divider-rgb: 40 50 65;
-  --ink-primary-rgb: 229 231 235;
-  --ink-secondary-rgb: 156 163 175;
-  --ink-muted-rgb: 107 114 128;
-  --ink-inverted-rgb: 11 15 20;
+  /* 2026-06-17 — founder "too dark; adapt to the status-page look (status.driftstack.dev)".
+     Matched the GUI dark surfaces to the status site's SLATE scale (slate-900/800/
+     700/950/600) — a lighter blue-grey that reads far less oppressive than the old
+     near-black, while keeping inset < base < raised < elevated for card separation. */
+  --surface-base-rgb: 15 23 42; /* slate-900 #0f172a */
+  --surface-raised-rgb: 30 41 59; /* slate-800 #1e293b */
+  --surface-elevated-rgb: 51 65 85; /* slate-700 #334155 */
+  --surface-inset-rgb: 2 6 23; /* slate-950 #020617 */
+  --surface-divider-rgb: 71 85 105; /* slate-600 #475569 */
+  --ink-primary-rgb: 241 245 249; /* slate-100 — crisp on the lighter slate */
+  --ink-secondary-rgb: 148 163 184; /* slate-400 */
+  --ink-muted-rgb: 100 116 139; /* slate-500 */
+  --ink-inverted-rgb: 15 23 42;
   --status-ready-rgb: 52 211 153;
   --status-busy-rgb: 251 191 36;
   --status-error-rgb: 248 113 113;

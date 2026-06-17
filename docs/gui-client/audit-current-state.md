@@ -135,7 +135,7 @@ Surface for founder verdict before implementing.
 
 **Current:** **LOCKED + COMPLIANT.** All tokens aligned with the Driftstack brand:
 
-- **Oxblood accent** — `#722f37` (`tailwind.config.ts:37`) for `.btn-primary`, live indicators, focus rings. Single saturated colour.
+- **Oxblood accent** — `#a83b4d` (`tailwind.config.ts:37`) for `.btn-primary`, live indicators, focus rings. Single saturated colour.
 - **Geist Sans body font** — `tailwind.config.ts:54–62` with system-ui fallback. Applied to all body text.
 - **Berkeley Mono technical accents** — `tailwind.config.ts:67–75` via `.mono` class. Used for session IDs, endpoints, command output.
 - **Lowercase "driftstack" wordmark** — `App.tsx:141` renders sentence-case in titlebar.

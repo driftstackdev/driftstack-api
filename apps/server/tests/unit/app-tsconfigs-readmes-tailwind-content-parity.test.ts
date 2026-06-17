@@ -126,11 +126,11 @@ describe('W624 app tsconfigs + READMEs + tailwind content parity', () => {
     expect(body).toMatch(/^npm run tauri:build$/m);
     expect(body).toMatch(/^## Layout$/m);
     expect(body).toMatch(/^## Brand identity \(locked per file 128\)$/m);
-    expect(body).toMatch(/`surface-base`\s+\| `#0b0f14`/);
-    expect(body).toMatch(/`surface-raised`\s+\| `#111722`/);
-    expect(body).toMatch(/`surface-elevated` \| `#1a2230`/);
-    expect(body).toMatch(/`accent` \(oxblood\) \| `#722f37`/);
-    expect(body).toMatch(/`ink-primary`\s+\| `#e5e7eb`/);
+    expect(body).toMatch(/`surface-base`\s+\| `#0f172a`/);
+    expect(body).toMatch(/`surface-raised`\s+\| `#1e293b`/);
+    expect(body).toMatch(/`surface-elevated` \| `#334155`/);
+    expect(body).toMatch(/`accent` \(oxblood\) \| `#a83b4d`/);
+    expect(body).toMatch(/`ink-primary`\s+\| `#f1f5f9`/);
     expect(body).toMatch(/`font-sans`\s+\| Geist Sans → system-ui fallback/);
     expect(body).toMatch(/`font-mono`\s+\| Berkeley Mono → JetBrains Mono fb/);
     expect(body).toMatch(/^## What's NOT in GUI1$/m);

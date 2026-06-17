@@ -71,11 +71,11 @@ apps/gui-client/
 
 | Token              | Value                             | Use                                   |
 | ------------------ | --------------------------------- | ------------------------------------- |
-| `surface-base`     | `#0b0f14` (slate-950-ish)         | Primary background                    |
-| `surface-raised`   | `#111722`                         | Panels, sidebars, footers             |
-| `surface-elevated` | `#1a2230`                         | Popovers, dropdowns, hover states     |
-| `accent` (oxblood) | `#722f37`                         | Primary buttons, live indicators only |
-| `ink-primary`      | `#e5e7eb`                         | Body text                             |
+| `surface-base`     | `#0f172a` (slate-900)             | Primary background                    |
+| `surface-raised`   | `#1e293b` (slate-800)             | Panels, sidebars, footers             |
+| `surface-elevated` | `#334155` (slate-700)             | Popovers, dropdowns, hover states     |
+| `accent` (oxblood) | `#a83b4d`                         | Primary buttons, live indicators only |
+| `ink-primary`      | `#f1f5f9`                         | Body text                             |
 | `font-sans`        | Geist Sans → system-ui fallback   | UI / body                             |
 | `font-mono`        | Berkeley Mono → JetBrains Mono fb | Session ids, command output, IPs      |
 
