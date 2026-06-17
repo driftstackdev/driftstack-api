@@ -91,6 +91,10 @@ type CreateAgentSessionRequest struct {
 	// resumes its stored state + saves back on end. Must be an owned profile id
 	// (unknown/not-owned → 404). Empty string omits it (stateless session).
 	ProfileID string `json:"profile_id,omitempty"`
+	// Route the session through one of your account proxies (manage them at
+	// /v1/account/me/proxies). Must be an owned proxy id (unknown/not-owned →
+	// 404). Empty string omits it (default egress).
+	ProxyID string `json:"proxy_id,omitempty"`
 }
 
 // AgentMessageResponse is the discriminated turn-result. Branch on

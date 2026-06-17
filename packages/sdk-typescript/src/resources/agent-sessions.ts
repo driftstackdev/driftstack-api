@@ -156,6 +156,12 @@ export interface CreateAgentSessionRequest {
    * (an unknown or not-owned id returns 404). Omit for a stateless session.
    */
   profile_id?: string;
+  /**
+   * Route the session through one of your account proxies (manage them at
+   * `/v1/account/me/proxies`). Must reference a proxy your account owns (an
+   * unknown or not-owned id returns 404). Omit for the default egress.
+   */
+  proxy_id?: string;
 }
 
 export type AgentIntent =
