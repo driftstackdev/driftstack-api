@@ -145,6 +145,26 @@ describe('hasScope (V-481 predicate)', () => {
       expect(hasScope(ctxWithScopes(['write']), 'admin:profiles')).toBe(false);
     });
   });
+
+  // account_owner is the customer's full-account-control superscope: it MUST
+  // satisfy the BARE read/write verbs (not just granular ones). Regression guard
+  // for the desktop device-login key, which cli-authorize mints as
+  // scopes:['account_owner'] — without this it could not launch sessions
+  // (POST /v1/agent-sessions requireScope('write') 403'd).
+  describe('account_owner satisfies bare read/write (superscope), NOT staff gates', () => {
+    it('account_owner satisfies bare write', () => {
+      expect(hasScope(ctxWithScopes(['account_owner']), 'write')).toBe(true);
+    });
+    it('account_owner satisfies bare read', () => {
+      expect(hasScope(ctxWithScopes(['account_owner']), 'read')).toBe(true);
+    });
+    it('account_owner does NOT satisfy bare admin (staff gate)', () => {
+      expect(hasScope(ctxWithScopes(['account_owner']), 'admin')).toBe(false);
+    });
+    it('account_owner does NOT satisfy driftstack_internal_admin (staff gate)', () => {
+      expect(hasScope(ctxWithScopes(['account_owner']), 'driftstack_internal_admin')).toBe(false);
+    });
+  });
 });
 
 describe('requireScope — both call sites evaluate the same predicate', () => {
@@ -161,6 +181,11 @@ describe('requireScope — both call sites evaluate the same predicate', () => {
     { keyScopes: ['read:sessions'], required: 'read:profiles', pass: false },
     { keyScopes: ['read:sessions'], required: 'read:sessions', pass: true },
     { keyScopes: ['admin'], required: 'driftstack_internal_admin', pass: true },
+    // account_owner superscope → bare read/write pass; staff gates fail.
+    { keyScopes: ['account_owner'], required: 'write', pass: true },
+    { keyScopes: ['account_owner'], required: 'read', pass: true },
+    { keyScopes: ['account_owner'], required: 'admin', pass: false },
+    { keyScopes: ['account_owner'], required: 'driftstack_internal_admin', pass: false },
   ];
 
   for (const { keyScopes, required, pass } of matrix) {

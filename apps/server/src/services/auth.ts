@@ -508,6 +508,16 @@ export function requireScope(ctx: AccountContext, required: ApiKeyScope): void {
     return;
   }
 
+  // account_owner is the customer's full-account-control superscope — it
+  // satisfies the BARE `read`/`write` verbs, not just the granular ones below.
+  // Without this, an account_owner-ONLY key (what cli-authorize mints for the
+  // desktop device-login, scopes:['account_owner']) failed requireScope('write')
+  // → every session launch 403'd. account_owner does NOT satisfy the bare
+  // `admin`/`driftstack_internal_admin` STAFF gates (handled above / below).
+  if ((required === 'read' || required === 'write') && scopes.includes('account_owner')) {
+    return;
+  }
+
   // V-481 broad-satisfies-granular.
   const idx = required.indexOf(':');
   if (idx !== -1) {

@@ -128,7 +128,7 @@ describe('W909 requireScope + EffectiveAccount cross-source invariant', () => {
 
   // ─── 3-tier scope precedence cardinality ─────────────────────
 
-  it('CRITICAL requireScope = EXACTLY 3 acceptance paths: direct match + V-174 alias + V-481 verb-prefix. Drift to a 4th path without coordinated update would let unforeseen scopes pass through.', () => {
+  it('CRITICAL requireScope = EXACTLY 4 acceptance paths: direct match + V-174 alias + account_owner-bare-read/write superscope + V-481 verb-prefix. Drift to a 5th path without coordinated update would let unforeseen scopes pass through.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/auth.ts'));
     // Capture requireScope body up to the closing `}` of the function.
     const m = p.match(/export function requireScope\([\s\S]+?\n\}\s*\n\n/);
@@ -136,7 +136,10 @@ describe('W909 requireScope + EffectiveAccount cross-source invariant', () => {
     const body = m![0];
     // Count both bare `return;` and `return; }` on same line.
     const returnCount = (body.match(/\breturn;/g) || []).length;
-    expect(returnCount).toBe(3);
+    // 4th path (2026-06-18): account_owner satisfies the BARE read/write verbs
+    // (the desktop device-login key is account_owner-only). account_owner still
+    // does NOT satisfy bare admin/driftstack_internal_admin (staff gates).
+    expect(returnCount).toBe(4);
   });
 
   it('test file metadata — file exists at canonical path', () => {

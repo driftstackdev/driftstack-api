@@ -55,6 +55,15 @@ export function hasScope(ctx: AccountContext, required: ApiKeyScope): boolean {
     return true;
   }
 
+  // account_owner (full customer-account control) satisfies the BARE `read`/
+  // `write` verbs — mirrors requireScope in services/auth.ts. Without this an
+  // account_owner-only key (the desktop device-login key) failed a bare
+  // requireScope('write'). account_owner does NOT satisfy the bare admin /
+  // driftstack_internal_admin staff gates.
+  if ((required === 'read' || required === 'write') && scopes.includes('account_owner')) {
+    return true;
+  }
+
   // V-481 broad satisfies granular on the same verb.
   const granular = parseGranularScope(required);
   if (granular === null) return false;
