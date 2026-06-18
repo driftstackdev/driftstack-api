@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
 import { RelativeTime } from '../components/RelativeTime';
+import { LiveElapsed } from '../components/LiveElapsed';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSettings } from '../lib/SettingsContext';
 import { useToasts } from '../lib/toasts';
@@ -443,7 +444,9 @@ function SessionCard({
             : 'border-surface-divider hover:border-ink-muted/60'
       }`}
     >
-      {/* Header: status pill + device/archetype, with duration on the right. */}
+      {/* Header: status pill + device/archetype; a live worktimer on the
+          right for running sessions (ticking elapsed since created_at),
+          else the static "created X ago". */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col gap-1.5">
           <StatusPill status={session.status} />
@@ -453,7 +456,11 @@ function SessionCard({
           className="shrink-0 whitespace-nowrap text-[10px] text-ink-muted"
           title={`Created ${new Date(session.created_at).toLocaleString()}`}
         >
-          <RelativeTime iso={session.created_at} tooltipPrefix="Created" />
+          {live ? (
+            <LiveElapsed iso={session.created_at} tooltipPrefix="Started" />
+          ) : (
+            <RelativeTime iso={session.created_at} tooltipPrefix="Created" />
+          )}
         </span>
       </div>
 
