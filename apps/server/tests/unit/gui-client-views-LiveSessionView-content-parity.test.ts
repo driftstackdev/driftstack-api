@@ -245,6 +245,20 @@ describe('W485.B apps/gui-client/src/views/LiveSessionView.tsx content parity', 
     expect(body).toMatch(/aria-label="Forward"/);
   });
 
+  it('stops polling on a gone session (410/404): isSessionGone gates a clearInterval + ended terminal panel, instead of hammering capture/state — founder 2026-06-18 logs flooded with "410 Gone" for minutes after a session was destroyed', () => {
+    expect(body).toContain('function isSessionGone(err: unknown): boolean {');
+    expect(body).toContain(
+      'err instanceof DriftstackError && (err.status === 410 || err.status === 404)',
+    );
+    // The capture catch stops the poll on a gone session.
+    expect(body).toContain('if (isSessionGone(err)) {');
+    expect(body).toContain('window.clearInterval(intervalIdRef.current);');
+    expect(body).toContain('ended: true');
+    // A terminal panel replaces the polling viewport.
+    expect(body).toContain('if (state.ended) {');
+    expect(body).toContain('Session ended');
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

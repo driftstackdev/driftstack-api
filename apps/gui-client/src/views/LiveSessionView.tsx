@@ -89,6 +89,10 @@ interface ViewportState {
   lastTap: { x: number; y: number; at: number } | null;
   /** W616 — null until the driver/harness reports a lifecycle event. */
   pageState: PageStateInfo | null;
+  /** The session is gone (destroyed/expired, HTTP 410/404) — stop polling and
+   *  show a terminal panel instead of spamming the capture/state endpoints
+   *  (founder 2026-06-18: logs flooded with "410 Gone" after a session ended). */
+  ended: boolean;
 }
 
 export interface LiveSessionViewProps {
@@ -122,6 +126,7 @@ export function LiveSessionView({
     manualControl: false,
     lastTap: null,
     pageState: null,
+    ended: false,
   });
   // W608 — device-frame bezel preference, persisted so power users who turn
   // it off for debugging keep the bare image across app restarts.
@@ -185,6 +190,17 @@ export function LiveSessionView({
         addFrame(recId, { at: now, dataUrl, bytes: cap.byte_size });
       }
     } catch (err) {
+      // Session gone (410 Gone / 404): STOP the poll + show a terminal panel
+      // instead of hammering capture/state forever (founder 2026-06-18: logs
+      // flooded with "410 Gone" for minutes after a session was destroyed).
+      if (isSessionGone(err)) {
+        if (intervalIdRef.current !== null) {
+          window.clearInterval(intervalIdRef.current);
+          intervalIdRef.current = null;
+        }
+        setState((s) => ({ ...s, loading: false, error: null, ended: true }));
+        return;
+      }
       setState((s) => ({
         ...s,
         loading: false,
@@ -193,7 +209,7 @@ export function LiveSessionView({
     } finally {
       fetchInFlightRef.current = false;
     }
-  }, [client, sessionId, addFrame]);
+  }, [client, sessionId, addFrame, settings.baseUrl]);
 
   const fetchSessionMeta = useCallback(async (): Promise<void> => {
     if (!client) return;
@@ -208,8 +224,17 @@ export function LiveSessionView({
         // servers don't send it; treat absent as null.
         pageState: (st as { page_state?: PageStateInfo | null }).page_state ?? null,
       }));
-    } catch {
-      // Swallow — we still render frames even without state metadata.
+    } catch (err) {
+      // Session gone → stop polling here too, so an early meta poll (it runs
+      // before the first frame on mount) doesn't keep firing on a dead session.
+      if (isSessionGone(err)) {
+        if (intervalIdRef.current !== null) {
+          window.clearInterval(intervalIdRef.current);
+          intervalIdRef.current = null;
+        }
+        setState((s) => ({ ...s, ended: true }));
+      }
+      // else: swallow — we still render frames even without state metadata.
     }
   }, [client, sessionId]);
 
@@ -453,6 +478,28 @@ export function LiveSessionView({
     );
   }
 
+  // Session destroyed/expired (410/404): a clean terminal panel — NOT the
+  // polling viewport spamming a dead session (founder 2026-06-18 410-flood).
+  if (state.ended) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
+        <span className="section-label">Session ended</span>
+        <p className="max-w-md text-sm text-ink-secondary">
+          This session has finished (destroyed or idle-timed-out). The live view stopped — start a
+          new session to keep browsing.
+        </p>
+        <div className="flex items-center gap-3">
+          <button type="button" className="btn-primary" onClick={onNewTab}>
+            New session
+          </button>
+          <button type="button" className="btn-secondary" onClick={onBack}>
+            Back to sessions
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       ref={wrapperRef}
@@ -671,6 +718,12 @@ function pageErrorCopy(err: NonNullable<PageStateInfo['error']>): string {
     case 'net':
       return 'Network error while loading the page.';
   }
+}
+
+/** A destroyed/expired session: the server returns 410 Gone (session_destroyed)
+ *  or 404 Not Found. Terminal — the caller stops polling capture/state. */
+function isSessionGone(err: unknown): boolean {
+  return err instanceof DriftstackError && (err.status === 410 || err.status === 404);
 }
 
 function Viewport({
