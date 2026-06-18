@@ -29,6 +29,7 @@ import {
   takeoverSession,
   handbackSession,
   sendAgentMessage,
+  endAgentSession,
   AgentSessionControlError,
   type SessionMode,
 } from '../lib/agent-session-control';
@@ -100,25 +101,27 @@ function useStatusClock(): string {
  * screenshot + rotate actions on the right. The bar is a drag-region (drag the
  * window by it); the button clusters opt out so clicks land.
  */
-/** The Drift mark — three offset drift strokes (layers sliding past each
- *  other), in the brand accent. Minimal enough to read at 14px. */
+/** The Driftstack brand mark — the stacked "drift" cards (a muted card behind,
+ *  the accent card in front) with the device dot, matching the app icon/logo.
+ *  Replaces the older abstract strokes (founder 2026-06-18: "use our own logo").
+ *  Reads cleanly at 14px. */
 function DriftMark(): JSX.Element {
   return (
     <svg
       data-component="drift-mark"
-      width="14"
-      height="14"
+      width="15"
+      height="15"
       viewBox="0 0 24 24"
       fill="none"
-      stroke="currentColor"
-      strokeWidth="3"
-      strokeLinecap="round"
-      className="text-accent [filter:drop-shadow(0_0_3px_currentColor)]"
+      className="text-accent"
       aria-hidden="true"
     >
-      <path d="M4 6h13" />
-      <path d="M7 12h13" />
-      <path d="M4 18h10" />
+      {/* Back card — the drift/stack layer, the accent dimmed. */}
+      <rect x="3.5" y="5" width="10" height="14.5" rx="3" fill="currentColor" opacity="0.3" />
+      {/* Front card — the brand accent, offset like the logo. */}
+      <rect x="9" y="3.5" width="11" height="16" rx="3.2" fill="currentColor" />
+      {/* Device dot. */}
+      <circle cx="14.5" cy="15.2" r="1.2" fill="#fff" opacity="0.85" />
     </svg>
   );
 }
@@ -190,15 +193,20 @@ export function DeviceToolbar({
       document.removeEventListener('keydown', onKey);
     };
   }, [expanded, onToggleExpanded]);
+  // Robust window drag: data-tauri-drag-region is flaky on macOS over a
+  // borderless toolbar (founder 2026-06-18: "not the whole topbar drags").
+  // Start a real OS drag on primary-button press anywhere on the bar EXCEPT
+  // interactive controls — so the entire toolbar is a grab handle.
+  const startToolbarDrag = (e: { button: number; target: EventTarget | null }): void => {
+    if (e.button !== 0) return;
+    const el = e.target as HTMLElement | null;
+    if (el?.closest('button, input, textarea, a, select, [data-no-drag]')) return;
+    void withCurrentWindow((w) => w.startDragging());
+  };
   return (
-    <div
-      ref={wrapRef}
-      data-tauri-drag-region
-      data-component="simulator-toolbar-wrap"
-      className="relative w-full shrink-0"
-    >
+    <div ref={wrapRef} data-component="simulator-toolbar-wrap" className="relative w-full shrink-0">
       <div
-        data-tauri-drag-region
+        onPointerDown={startToolbarDrag}
         data-component="simulator-toolbar"
         className="flex h-[34px] w-full items-center justify-between rounded-t-[16px] bg-[#1d1e24]/80 px-3 ring-1 ring-white/[0.12] backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_-1px_0_rgba(0,0,0,0.45)]"
       >
@@ -625,6 +633,39 @@ export function SimulatorWindow(): JSX.Element {
       if (recordTimerRef.current !== null) window.clearInterval(recordTimerRef.current);
     };
   }, []);
+  // Closing the simulator window ENDS the session so the worker tears down the
+  // browser/fork — "close the phone → it really stops, not stay up" (founder
+  // 2026-06-18). Covers the toolbar close button (window.close fires this) AND
+  // the OS close. preventDefault + a 2s race so a slow/failed end can never
+  // wedge the window open; destroy() then closes without re-firing.
+  useEffect(() => {
+    if (sessionId === '' || typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
+      return;
+    }
+    let unlisten: (() => void) | undefined;
+    let closing = false;
+    void (async () => {
+      const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+      const win = getCurrentWebviewWindow();
+      unlisten = await win.onCloseRequested(async (event) => {
+        if (closing) return;
+        closing = true;
+        event.preventDefault();
+        try {
+          await Promise.race([
+            endAgentSession(sessionId),
+            new Promise((resolve) => setTimeout(resolve, 2000)),
+          ]);
+        } catch {
+          // Best-effort — the window must close even if the end call fails.
+        }
+        await win.destroy();
+      });
+    })();
+    return () => {
+      unlisten?.();
+    };
+  }, [sessionId]);
   // Night-arc C cockpit: live room handle (from the panel) drives the
   // previously-dormant LK.6.e latency ping; rendered in the overlay.
   const [room, setRoom] = useState<Room | null>(null);
@@ -690,7 +731,9 @@ export function SimulatorWindow(): JSX.Element {
   // doesn't hover over other apps) — the strongest separate-window identity
   // macOS allows inside one app (a per-window Dock icon needs a helper app
   // bundle — scoped as a post-launch item).
-  const [pinned, setPinned] = useState(true);
+  // Matches the window's alwaysOnTop:false at create (a normal, switchable
+  // window by default; the pin toggle floats it on top on demand).
+  const [pinned, setPinned] = useState(false);
   // Cockpit info overlay (demo-concepts arc): session facts at a glance.
   const [infoOpen, setInfoOpen] = useState(false);
   // Expandable control panel — collapsed by default so the window is phone-only

@@ -91,9 +91,13 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(
       wrap?.querySelector('[aria-label="Rotate to landscape"], [aria-label="Rotate to portrait"]'),
     ).toBeNull();
-    // The toolbar is a drag-region (drag the window by it); the button clusters
-    // opt out so clicks land.
-    expect(toolbar?.getAttribute('data-tauri-drag-region')).toBe('true');
+    // The toolbar is the window drag handle via a real OS startDragging on
+    // pointer-down (data-tauri-drag-region was flaky on the borderless macOS
+    // toolbar — founder 2026-06-18 "not the whole topbar drags"); the device
+    // bezel remains an explicit drag region so the phone body drags too.
+    expect(toolbar).not.toBeNull();
+    const device = container.querySelector('[data-component="simulator-device"]');
+    expect(device?.getAttribute('data-tauri-drag-region')).toBe('true');
     // The toolbar is wrapped (so the absolute control panel can anchor to it);
     // the WRAP is what sits directly above the device in the shell.
     const shell = container.querySelector('[data-component="simulator-shell"]');
@@ -126,7 +130,10 @@ describe('SimulatorWindow — floating iPhone', () => {
       panel?.querySelector('[aria-label="Rotate to landscape"], [aria-label="Rotate to portrait"]'),
     ).not.toBeNull();
     // Pin toggle (always-on-top) — defaults pinned (the floating-iPhone vision).
-    expect(panel?.querySelector('[aria-label="Unpin from top"]')).not.toBeNull();
+    // The window opens NOT always-on-top by default now (a normal, switchable,
+    // minimizable window — founder 2026-06-18 "should show in the taskbar"), so
+    // the pin control reads "Pin on top"; the toggle floats it on demand.
+    expect(panel?.querySelector('[aria-label="Pin on top"]')).not.toBeNull();
     expect(panel?.querySelector('[aria-label="Session info"]')).not.toBeNull();
   });
 

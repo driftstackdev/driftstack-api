@@ -14,6 +14,7 @@ import {
   takeoverSession,
   handbackSession,
   sendAgentMessage,
+  endAgentSession,
   AgentSessionControlError,
 } from '../../src/lib/agent-session-control';
 
@@ -68,6 +69,19 @@ describe('agent-session-control transport', () => {
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toContain('/message');
     expect(JSON.parse(init.body as string)).toEqual({ user_message: 'go to checkout' });
+  });
+
+  it('endAgentSession DELETEs /v1/agent-sessions/:id (closing the phone stops the session)', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 204,
+      json: () => Promise.reject(new Error('no body')),
+    });
+    await endAgentSession('agt_42');
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.test/v1/agent-sessions/agt_42');
+    expect(init.method).toBe('DELETE');
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer ds_test');
   });
 
   it('getAgentSession GETs /:id + parses mode + pair kind', async () => {

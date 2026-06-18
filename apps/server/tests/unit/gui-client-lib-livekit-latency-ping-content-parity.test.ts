@@ -62,9 +62,13 @@ describe('gui-client/lib/livekit-latency-ping content parity', () => {
     expect(body).toMatch(
       /\/\/ Drop stale samples \(the harness was slow \/ network-jittered\)\.\s*\n?\s*if \(rttMs > LIVEKIT_PING_FRESH_WINDOW_MS\) return;/,
     );
-    expect(body).toMatch(
-      /void sendInputEvent\(room, \{ type: 'ping', timestamp \}, \{ reliable: false \}\);/,
+    expect(body).toContain(
+      "sendInputEvent(room, { type: 'ping', timestamp }, { reliable: false })",
     );
+    // The fire-and-forget ping is .catch-guarded (and Promise.resolve-wrapped) so a
+    // publish landing after room teardown ("PC manager is closed") can't escalate
+    // to the global unhandledrejection handler and blank the app.
+    expect(body).toContain('.catch(() => undefined)');
   });
 
   it("formatRtt stable-string framing pinned: 'Format an RTT in ms for the dev-mode chrome. Returns a stable string the badge can render.' + null → '— ms' + rttMs → `${state.rttMs.toString()} ms`. Drift to dropping the null branch would surface NaN/null in the dev badge", () => {

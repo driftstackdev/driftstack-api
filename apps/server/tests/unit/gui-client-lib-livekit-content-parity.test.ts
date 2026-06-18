@@ -69,8 +69,14 @@ describe('gui-client/lib/livekit content parity', () => {
   });
 
   it("sendInputEvent reliable=true default framing pinned: 'lossy: false (TCP-style; mouse/key events MUST arrive in order). For high-frequency mouseMove streams, callers can opt-in to lossy: true to drop intermediate frames if the link congests — acceptable trade for cursor-tracking only.' + opts.reliable ?? true + JSON.stringify(event) → publishData. Drift to reliable=false default would let click/keypress events drop silently", () => {
-    expect(body).toMatch(
-      /const reliable = opts\.reliable \?\? true;\s*\n?\s*const data = new TextEncoder\(\)\.encode\(JSON\.stringify\(event\)\);\s*\n?\s*await room\.localParticipant\.publishData\(data, \{ reliable \}\);/,
-    );
+    expect(body).toContain('const reliable = opts.reliable ?? true;');
+    expect(body).toContain('const data = new TextEncoder().encode(JSON.stringify(event));');
+    expect(body).toContain('await room.localParticipant.publishData(data, { reliable });');
+  });
+
+  it("sendInputEvent swallows benign LiveKit teardown errors (PC manager closed) so a fire-and-forget publish after room teardown can't blank the app, and re-throws genuine failures", () => {
+    expect(body).toContain('if (isBenignTeardownError(err)) return;');
+    expect(body).toContain('export function isBenignTeardownError(');
+    expect(body).toContain('PC manager is closed');
   });
 });

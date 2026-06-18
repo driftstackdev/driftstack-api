@@ -105,13 +105,22 @@ export async function openSimulatorWindow({
   const buildWindow = (): InstanceType<typeof WebviewWindow> =>
     new WebviewWindow(label, {
       url: `index.html?${params.toString()}`,
-      title: deviceName ?? 'iPhone',
+      // Title shows in the macOS Window menu + Mission Control so the floating
+      // phone is a discoverable, switchable window (founder 2026-06-18: "should
+      // show up in the taskbar").
+      title: `${deviceName ?? 'iPhone'}${profileName !== undefined && profileName !== '' ? ` — ${profileName}` : ''}`,
       width: SIM_WIDTH,
       height: SIM_HEIGHT,
       resizable: true,
       decorations: false,
       transparent: true,
-      alwaysOnTop: true,
+      // NOT always-on-top by default — a floating panel doesn't behave like a
+      // normal, minimizable, switchable window. The toolbar "pin" toggle still
+      // lets the user float it on top when they want. minimizable + a taskbar
+      // entry make it a first-class window.
+      alwaysOnTop: false,
+      minimizable: true,
+      skipTaskbar: false,
       ...(position !== null ? { x: position.x, y: position.y } : { center: true }),
       shadow: false,
     });

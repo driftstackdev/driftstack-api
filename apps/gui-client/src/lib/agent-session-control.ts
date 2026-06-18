@@ -124,3 +124,11 @@ export async function sendAgentMessage(id: string, userMessage: string): Promise
     body: JSON.stringify({ user_message: userMessage }),
   });
 }
+
+/** End (delete) the agent session so the worker tears down the browser/fork.
+ *  Wired to the simulator window's close so closing the phone REALLY stops the
+ *  session (founder 2026-06-18: "close the window → the phone should stop, not
+ *  stay up"). Best-effort at the call site — a failure must not block the close. */
+export async function endAgentSession(id: string): Promise<void> {
+  await authedFetch(`/v1/agent-sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}

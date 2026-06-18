@@ -102,9 +102,11 @@ export function useLatencyPing(opts: UseLatencyPingOpts): LatencyState {
       // rejects with "PC manager is closed". sendInputEvent already swallows
       // benign teardown errors, but keep an explicit guard here so NOTHING from
       // this loop can ever reach the global unhandledrejection handler.
-      void sendInputEvent(room, { type: 'ping', timestamp }, { reliable: false }).catch(
-        () => undefined,
-      );
+      // Promise.resolve(...) wraps the call so .catch is safe even if a caller/
+      // mock returns a non-Promise.
+      void Promise.resolve(
+        sendInputEvent(room, { type: 'ping', timestamp }, { reliable: false }),
+      ).catch(() => undefined);
     };
 
     // Fire one immediately + every LIVEKIT_PING_INTERVAL_MS after.
