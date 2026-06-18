@@ -570,11 +570,11 @@ export function ProfilesView({
           : {}),
       });
       if (!sim.opened) {
-        setWatchInfo(info);
-        // Founder-visible: WHY the separate window fell back in-app.
+        // No in-app full-page fallback (founder 2026-06-18: it looked bad,
+        // scaled). The simulator is ONLY the separate window now.
         setState((s) => ({
           ...s,
-          error: `Simulator window could not open (showing in-app view instead): ${sim.reason ?? 'unknown'}`,
+          error: `Couldn't reopen the simulator window: ${sim.reason ?? 'unknown'}. If one is already open for this session, close it and relaunch.`,
         }));
       }
     } catch (err) {
@@ -912,10 +912,12 @@ export function ProfilesView({
             : {}),
         });
         if (!sim.opened) {
-          setWatchInfo(created.livekit);
+          // No in-app full-page fallback — founder 2026-06-18: the in-app view
+          // looked bad (a phone scaled into the full GUI page). The simulator is
+          // ONLY ever the separate window now; surface why it didn't open.
           setState((s) => ({
             ...s,
-            error: `Simulator window could not open (showing in-app view instead): ${sim.reason ?? 'unknown'}`,
+            error: `Couldn't open the simulator window: ${sim.reason ?? 'unknown'}. If one is already open for this session, close it and relaunch.`,
           }));
         }
       } else {
