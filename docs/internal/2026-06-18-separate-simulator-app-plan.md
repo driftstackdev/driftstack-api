@@ -54,6 +54,13 @@ empty state. The main app must launch it AND hand off the live session.
   `dev.driftstack.simulator` (use it for the re-sign, NOT the main app's id).
 - The main app launches `/Applications/Driftstack Simulator.app` (fixed path) —
   or fall back to a bundled copy if not installed.
+- **Distinct Dock icon (prep, founder design-input):** the sim config currently
+  reuses `icons/` → the two Dock icons would be IDENTICAL. Before the dual-install,
+  give the sim app a distinct icon: render a variant via `scripts/render-gui-icon.mjs`
+  (the brand "Drift Layers" mark is founder-picked — keep it; vary the squircle
+  backing or add a subtle "live" accent), `tauri icon` into `icons-simulator/`, then
+  point `tauri.simulator.conf.json` `bundle.icon` at it. The exact look is a
+  founder-taste call (don't guess-and-churn) — confirm the variant when installing.
 
 ## Risks / notes
 
