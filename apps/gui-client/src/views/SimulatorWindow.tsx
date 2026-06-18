@@ -15,7 +15,7 @@
 // Session join info (LiveKit ws_url + token) + the device label arrive via the
 // window URL query — the opener encodes them when creating the window.
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
@@ -23,6 +23,15 @@ import type { Room } from '../lib/livekit';
 import { useLatencyPing } from '../lib/livekit-latency-ping';
 import { useRecordings } from '../lib/recordings';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
+import {
+  getAgentSession,
+  setSessionMode,
+  takeoverSession,
+  handbackSession,
+  sendAgentMessage,
+  AgentSessionControlError,
+  type SessionMode,
+} from '../lib/agent-session-control';
 
 /** Frame chrome heights (px) used to derive the window size from the device's
  *  real screen aspect: toolbar above the bezel, the bezel's p-[10px] padding,
@@ -128,6 +137,15 @@ export function DeviceToolbar({
   onSnapshot,
   recording,
   onToggleRecord,
+  mode,
+  pairKind,
+  controlBusy,
+  composerText,
+  onSetMode,
+  onTakeover,
+  onHandback,
+  onComposerChange,
+  onSendMessage,
 }: {
   deviceName: string;
   profileName: string;
@@ -142,6 +160,15 @@ export function DeviceToolbar({
   onSnapshot: () => void;
   recording: boolean;
   onToggleRecord: () => void;
+  mode: SessionMode | null;
+  pairKind: string | null;
+  controlBusy: boolean;
+  composerText: string;
+  onSetMode: (m: SessionMode) => void;
+  onTakeover: () => void;
+  onHandback: () => void;
+  onComposerChange: (v: string) => void;
+  onSendMessage: () => void;
 }): JSX.Element {
   // Dismiss the expanded control panel on an outside pointer-down or Escape, so
   // it doesn't linger over the screen after you've picked (or skipped) a control.
@@ -259,14 +286,17 @@ export function DeviceToolbar({
           data-component="simulator-controls"
           className="absolute right-2 top-full z-30 mt-1 w-56 overflow-hidden rounded-xl border border-white/[0.12] bg-[#1d1e24]/92 py-1 shadow-[0_8px_16px_rgba(0,0,0,0.3),0_18px_40px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
         >
-          <div className="flex items-center gap-2 px-3 py-2 text-[11px]">
-            <span className="text-accent" aria-hidden="true">
-              ◉
-            </span>
-            <span className="font-semibold text-ink-primary">Full control</span>
-            <span className="text-ink-muted">· tap the screen to interact</span>
-          </div>
-          <div className="mx-3 mb-1 h-px bg-white/10" aria-hidden="true" />
+          <SessionControlSection
+            mode={mode}
+            pairKind={pairKind}
+            busy={controlBusy}
+            composerText={composerText}
+            onSetMode={onSetMode}
+            onTakeover={onTakeover}
+            onHandback={onHandback}
+            onComposerChange={onComposerChange}
+            onSendMessage={onSendMessage}
+          />
           <LabeledControl
             label="Save snapshot"
             hint="Save a PNG of the current frame"
@@ -358,6 +388,140 @@ function LabeledControl({
       </span>
       <span className="leading-none">{label}</span>
     </button>
+  );
+}
+
+/** The session-control block at the TOP of the expandable panel — an iOS-style
+ *  segmented Mode switch (Agent · Pair · Manual) as the hero, a mode-aware
+ *  caption, the contextual Take-over/Hand-back row (pair only), and a panel-only
+ *  "tell the agent" composer (ai/pair). Replaces the old static "Full control"
+ *  line; the window-chrome rows render below it, unchanged. */
+const MODE_OPTIONS: { value: SessionMode; label: string }[] = [
+  { value: 'ai', label: 'Agent' },
+  { value: 'pair', label: 'Pair' },
+  { value: 'manual', label: 'Manual' },
+];
+
+export function SessionControlSection({
+  mode,
+  pairKind,
+  busy,
+  composerText,
+  onSetMode,
+  onTakeover,
+  onHandback,
+  onComposerChange,
+  onSendMessage,
+}: {
+  mode: SessionMode | null;
+  pairKind: string | null;
+  busy: boolean;
+  composerText: string;
+  onSetMode: (m: SessionMode) => void;
+  onTakeover: () => void;
+  onHandback: () => void;
+  onComposerChange: (v: string) => void;
+  onSendMessage: () => void;
+}): JSX.Element {
+  // One source of truth for the caption + the take-over/hand-back verb: the
+  // pair_mode_state.kind carries 'human' when the human holds the pair lock.
+  const humanDriving = pairKind !== null && /human/i.test(pairKind);
+  const caption =
+    mode === null
+      ? 'Connecting…'
+      : mode === 'manual'
+        ? 'Manual — tap the screen to drive'
+        : mode === 'pair'
+          ? humanDriving
+            ? "You're driving — agent is paused"
+            : 'Pair — agent drives, tap to take over'
+          : 'Agent is driving — watching live';
+  return (
+    <div data-component="simulator-control-section">
+      <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+        Mode
+      </div>
+      {/* Segmented Mode switch — the hero control. */}
+      <div
+        role="group"
+        aria-label="Session control mode"
+        className="mx-3 flex gap-0.5 rounded-lg bg-black/40 p-0.5 ring-1 ring-white/10"
+      >
+        {MODE_OPTIONS.map((opt) => {
+          const active = mode === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              aria-label={`${opt.label} mode`}
+              disabled={busy || mode === null}
+              onClick={() => onSetMode(opt.value)}
+              className={`flex-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                active
+                  ? 'bg-white/10 text-accent ring-1 ring-white/10'
+                  : 'text-ink-secondary hover:bg-white/[0.06] hover:text-ink-primary'
+              }`}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-1.5 px-3 pt-1.5 text-[10.5px] text-ink-muted">
+        <span aria-hidden="true" className={`text-accent ${mode === 'ai' ? 'animate-pulse' : ''}`}>
+          ◉
+        </span>
+        <span>{caption}</span>
+      </div>
+      {/* Contextual take-over / hand-back — only meaningful in pair mode. */}
+      {mode === 'pair' && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={humanDriving ? onHandback : onTakeover}
+          className="mt-1.5 flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11.5px] text-ink-secondary transition-colors hover:bg-white/10 hover:text-ink-primary disabled:opacity-50"
+        >
+          <span className="w-4 shrink-0 text-center leading-none" aria-hidden="true">
+            {humanDriving ? '⤺' : '⤿'}
+          </span>
+          <span className="leading-none">
+            {humanDriving ? 'Hand back to agent' : 'Take control'}
+          </span>
+        </button>
+      )}
+      {/* "Tell the agent" composer — only when the agent is in the loop (ai/pair),
+          panel-only so it never collides with the on-screen keyboard. */}
+      {(mode === 'ai' || mode === 'pair') && (
+        <form
+          className="mx-3 mt-1.5 flex items-center gap-1 rounded-lg bg-black/40 px-2 py-1 ring-1 ring-white/10"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSendMessage();
+          }}
+        >
+          <input
+            type="text"
+            value={composerText}
+            disabled={busy}
+            onChange={(e) => onComposerChange(e.target.value)}
+            placeholder="Tell the agent…"
+            aria-label="Tell the agent"
+            className="min-w-0 flex-1 bg-transparent text-[11.5px] text-ink-primary placeholder:text-ink-muted focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={busy || composerText.trim() === ''}
+            aria-label="Send to agent"
+            className="shrink-0 rounded p-1 text-accent transition hover:bg-white/10 disabled:opacity-40"
+          >
+            ➤
+          </button>
+        </form>
+      )}
+      <div className="mx-3 my-1.5 h-px bg-white/10" aria-hidden="true" />
+    </div>
   );
 }
 
@@ -582,6 +746,93 @@ export function SimulatorWindow(): JSX.Element {
     setTouchPoint(null);
     setTouchPressed(false);
   };
+  // Session control (founder 2026-06-18): Mode segmented control + contextual
+  // takeover/handback + a "tell the agent" composer in the expandable panel.
+  // SimulatorWindow has no SDK client → lib/agent-session-control raw-fetches
+  // (reads {apiKey,baseUrl} via loadSettings). null mode = not loaded yet.
+  const [controlMode, setControlMode] = useState<SessionMode | null>(null);
+  const [pairKind, setPairKind] = useState<string | null>(null);
+  const [controlBusy, setControlBusy] = useState(false);
+  const [composerText, setComposerText] = useState('');
+  const clientIdRef = useRef<string>(
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `sim-${profileName || deviceName}`,
+  );
+  const noticeControlError = (err: unknown): void => {
+    const msg =
+      err instanceof AgentSessionControlError
+        ? err.kind === 'forbidden'
+          ? "Your key can't control this session"
+          : err.kind === 'conflict'
+            ? 'Session is no longer active'
+            : err.kind === 'auth_missing'
+              ? 'Sign in to control the session'
+              : err.message
+        : 'Control request failed';
+    setSnapshotNotice(msg);
+    window.setTimeout(() => setSnapshotNotice(null), 4000);
+  };
+  const refreshControl = useCallback((): void => {
+    if (sessionId === '') return;
+    void getAgentSession(sessionId)
+      .then((s) => {
+        setControlMode(s.mode);
+        setPairKind(s.pairKind);
+      })
+      .catch(() => {
+        // Leave mode null — the panel shows a gentle "controls unavailable" state.
+      });
+  }, [sessionId]);
+  // Seed on mount + re-read whenever the panel opens (cheap, no idle polling).
+  useEffect(() => {
+    refreshControl();
+  }, [refreshControl, toolbarExpanded]);
+  const onSetMode = (target: SessionMode): void => {
+    if (sessionId === '' || target === controlMode) return;
+    const prev = controlMode;
+    setControlMode(target); // optimistic
+    setControlBusy(true);
+    void setSessionMode(sessionId, target)
+      .then((s) => {
+        setControlMode(s.mode);
+        setPairKind(s.pairKind);
+      })
+      .catch((err: unknown) => {
+        setControlMode(prev); // revert on rejection
+        noticeControlError(err);
+      })
+      .finally(() => setControlBusy(false));
+  };
+  const onTakeover = (): void => {
+    if (sessionId === '') return;
+    setControlBusy(true);
+    void takeoverSession(sessionId, clientIdRef.current)
+      .then((kind) => setPairKind(kind))
+      .catch(noticeControlError)
+      .finally(() => setControlBusy(false));
+  };
+  const onHandback = (): void => {
+    if (sessionId === '') return;
+    setControlBusy(true);
+    void handbackSession(sessionId)
+      .then((kind) => setPairKind(kind))
+      .catch(noticeControlError)
+      .finally(() => setControlBusy(false));
+  };
+  const onSendMessage = (): void => {
+    const text = composerText.trim();
+    if (sessionId === '' || text === '') return;
+    setControlBusy(true);
+    void sendAgentMessage(sessionId, text)
+      .then(() => {
+        setComposerText('');
+        setSnapshotNotice('Sent to agent');
+        window.setTimeout(() => setSnapshotNotice(null), 3000);
+      })
+      .catch(noticeControlError)
+      .finally(() => setControlBusy(false));
+  };
   const togglePinned = (): void => {
     const next = !pinned;
     setPinned(next);
@@ -651,6 +902,15 @@ export function SimulatorWindow(): JSX.Element {
             onSnapshot={() => void handleSnapshot()}
             recording={recordingId !== null}
             onToggleRecord={toggleRecord}
+            mode={controlMode}
+            pairKind={pairKind}
+            controlBusy={controlBusy}
+            composerText={composerText}
+            onSetMode={onSetMode}
+            onTakeover={onTakeover}
+            onHandback={onHandback}
+            onComposerChange={setComposerText}
+            onSendMessage={onSendMessage}
           />
           {/* Device body — the bezel. data-tauri-drag-region makes the frame a
               window-drag handle; the inner screen overrides it so taps reach the
@@ -710,7 +970,7 @@ export function SimulatorWindow(): JSX.Element {
               <div
                 ref={screenHostRef}
                 data-component="simulator-screen-host"
-                className="relative min-h-0 flex-1 cursor-none"
+                className={`relative min-h-0 flex-1 ${controlMode === 'ai' ? '' : 'cursor-none'}`}
                 onPointerDownCapture={showTap}
                 onPointerMove={moveTouchPoint}
                 onPointerEnter={moveTouchPoint}
@@ -731,7 +991,7 @@ export function SimulatorWindow(): JSX.Element {
                     pointer over the screen (the PC arrow is hidden via cursor-none
                     on the host). Shrinks + brightens on press. pointer-events-none
                     so it never intercepts the real tap. */}
-                {touchPoint !== null && (
+                {touchPoint !== null && controlMode !== 'ai' && (
                   <span
                     data-component="touch-cursor"
                     aria-hidden="true"

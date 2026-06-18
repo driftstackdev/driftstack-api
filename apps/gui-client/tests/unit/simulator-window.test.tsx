@@ -101,7 +101,7 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(wrap?.querySelector('[data-component="simulator-toolbar"]')).toBe(toolbar);
   });
 
-  it('the expand chevron reveals a labelled control panel — Full-control mode + snapshot / rotate / pin / info', () => {
+  it('the expand chevron reveals the control panel — the Mode segmented control (Agent/Pair/Manual) + snapshot / rotate / pin / info', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
     const { container } = render(
       <RecordingsProvider>
@@ -114,8 +114,12 @@ describe('SimulatorWindow — floating iPhone', () => {
     fireEvent.click(chevron as Element);
     const panel = wrap?.querySelector('[data-component="simulator-controls"]');
     expect(panel).not.toBeNull();
-    // The control-mode line makes "full control + tap to interact" explicit.
-    expect(panel?.textContent).toContain('Full control');
+    // The Mode segmented control is the hero (replaces the old static "Full
+    // control" line) — the three modes are present as a radio group.
+    expect(panel?.querySelector('[data-component="simulator-control-section"]')).not.toBeNull();
+    expect(panel?.querySelector('[aria-label="Agent mode"]')).not.toBeNull();
+    expect(panel?.querySelector('[aria-label="Pair mode"]')).not.toBeNull();
+    expect(panel?.querySelector('[aria-label="Manual mode"]')).not.toBeNull();
     // The labelled controls now live here (clearer than the old icon-only bar).
     expect(panel?.querySelector('[aria-label="Save snapshot"]')).not.toBeNull();
     expect(

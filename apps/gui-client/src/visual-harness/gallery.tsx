@@ -225,6 +225,15 @@ export function Gallery(): JSX.Element {
             onSnapshot={noop}
             recording={false}
             onToggleRecord={noop}
+            mode="pair"
+            pairKind={null}
+            controlBusy={false}
+            composerText=""
+            onSetMode={noop}
+            onTakeover={noop}
+            onHandback={noop}
+            onComposerChange={noop}
+            onSendMessage={noop}
           />
         </div>
         <div className="w-72 pb-48">
@@ -245,6 +254,15 @@ export function Gallery(): JSX.Element {
             onSnapshot={noop}
             recording={false}
             onToggleRecord={noop}
+            mode="pair"
+            pairKind={null}
+            controlBusy={false}
+            composerText=""
+            onSetMode={noop}
+            onTakeover={noop}
+            onHandback={noop}
+            onComposerChange={noop}
+            onSendMessage={noop}
           />
         </div>
       </div>
