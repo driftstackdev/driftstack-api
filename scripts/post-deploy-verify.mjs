@@ -34,6 +34,7 @@ const jsonOut = args.json === 'true';
 // `bash scripts/deploy-bridge.sh staging` for the scheduled-jobs fix
 // (1b2001c8) tripped this twice before being root-caused.
 const FEATURE_UNAVAILABLE_TYPE = 'https://errors.driftstack.dev/feature-unavailable';
+const UNAUTHORIZED_TYPE = 'https://errors.driftstack.dev/unauthorized';
 
 // Deploy-verify transient-retry tuning. Hoisted here (not beside the
 // fetch helpers further down) for the SAME temporal-dead-zone reason as
@@ -466,22 +467,24 @@ async function checkByokAnthropicGateStub() {
 // gate is no longer stubbed.
 
 async function checkFleetEventsGateStub() {
-  // V-820 /v1/fleet/events is a GET (WebSocket upgrade in the wired
-  // posture; plain GET in the stub posture). Body irrelevant; we
-  // just need to provoke the route handler.
+  // V-820 /v1/fleet/events has TWO valid postures depending on
+  // FLEET_CONTROL_PLANE_ENABLED on the target env:
+  //   - flag OFF (stub):  plain GET → 503 FeatureUnavailable.
+  //   - flag ON  (live):  the WS-upgrade auth preHandler rejects an
+  //     unauthenticated GET with 401 Unauthorized (problem+json) BEFORE
+  //     the socket opens.
+  // Both prove the route is correctly wired; only a different status is a
+  // regression. Prod flipped the flag on 2026-06-18 (worker CP-connect) —
+  // this check was a HARD 503 assert, so post-deploy-verify then failed on
+  // EVERY deploy and the deploy-bridge auto-reverted to the last-good SHA
+  // (the activation commit must update its gate-stub assertion, per the
+  // checks-list comment above). Accept either posture so deploys land.
   const url = `${baseUrl}/v1/fleet/events`;
   let res;
   try {
     res = await fetchWithRetry(url, { method: 'GET' });
   } catch (err) {
     return { ok: false, name: 'V-820 fleet-events gate', detail: `fetch failed: ${err.message}` };
-  }
-  if (res.status !== 503) {
-    return {
-      ok: false,
-      name: 'V-820 fleet-events gate',
-      detail: `expected 503 (FeatureUnavailable stub); got ${res.status}`,
-    };
   }
   let parsed;
   try {
@@ -490,27 +493,48 @@ async function checkFleetEventsGateStub() {
     return {
       ok: false,
       name: 'V-820 fleet-events gate',
-      detail: `non-JSON 503 body: ${err.message}`,
+      detail: `non-JSON body (status ${res.status}): ${err.message}`,
     };
   }
-  if (parsed?.type !== FEATURE_UNAVAILABLE_TYPE) {
+  if (res.status === 503) {
+    if (parsed?.type !== FEATURE_UNAVAILABLE_TYPE) {
+      return {
+        ok: false,
+        name: 'V-820 fleet-events gate',
+        detail: `503 but expected type=${FEATURE_UNAVAILABLE_TYPE}, got ${JSON.stringify(parsed?.type)}`,
+      };
+    }
+    if (typeof parsed?.detail !== 'string' || parsed.detail.length < 8) {
+      return {
+        ok: false,
+        name: 'V-820 fleet-events gate',
+        detail: `503 body has empty/short detail (got ${JSON.stringify(parsed?.detail)})`,
+      };
+    }
     return {
-      ok: false,
+      ok: true,
       name: 'V-820 fleet-events gate',
-      detail: `expected type=${FEATURE_UNAVAILABLE_TYPE}, got ${JSON.stringify(parsed?.type)}`,
+      detail: 'stub posture: 503 + FeatureUnavailable + populated detail as expected',
     };
   }
-  if (typeof parsed?.detail !== 'string' || parsed.detail.length < 8) {
+  if (res.status === 401) {
+    if (parsed?.type !== UNAUTHORIZED_TYPE) {
+      return {
+        ok: false,
+        name: 'V-820 fleet-events gate',
+        detail: `401 but expected type=${UNAUTHORIZED_TYPE}, got ${JSON.stringify(parsed?.type)}`,
+      };
+    }
     return {
-      ok: false,
+      ok: true,
       name: 'V-820 fleet-events gate',
-      detail: `503 body has empty/short detail (got ${JSON.stringify(parsed?.detail)})`,
+      detail: 'live posture: 401 Unauthorized (auth preHandler rejects unauthenticated upgrade)',
     };
   }
   return {
-    ok: true,
+    ok: false,
     name: 'V-820 fleet-events gate',
-    detail: '503 + problem-type FeatureUnavailable + populated detail as expected',
+    detail: `expected 503 (stub) or 401 (live auth-gate); got ${res.status}`,
   };
 }
 
