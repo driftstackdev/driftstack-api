@@ -199,6 +199,30 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(ripple?.className).toContain('ds-tap-ring');
   });
 
+  it('iOS touch-point cursor: the screen host hides the PC arrow (cursor-none) and a pointer-move over the screen shows a fingertip dot that never intercepts the tap', () => {
+    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    const host = container.querySelector('[data-component="simulator-screen-host"]');
+    expect(host).not.toBeNull();
+    // The PC cursor is hidden over the device screen (the fingertip replaces it).
+    expect(host?.className).toContain('cursor-none');
+    // No fingertip until the pointer is over the screen.
+    expect(container.querySelector('[data-component="touch-cursor"]')).toBeNull();
+    (host as HTMLElement).getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 300, height: 600 }) as DOMRect;
+    fireEvent.pointerMove(host as Element, { clientX: 120, clientY: 240 });
+    const dot = container.querySelector('[data-component="touch-cursor"]');
+    expect(dot).not.toBeNull();
+    expect(dot?.className).toContain('pointer-events-none');
+    // Leaving the screen hides the fingertip again.
+    fireEvent.pointerLeave(host as Element);
+    expect(container.querySelector('[data-component="touch-cursor"]')).toBeNull();
+  });
+
   it('shows a no-session hint (no device frame) when the query lacks ws/token', () => {
     window.history.pushState({}, '', '/?window=simulator');
     const { container } = render(

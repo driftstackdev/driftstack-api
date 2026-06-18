@@ -104,7 +104,7 @@ function DriftMark(): JSX.Element {
       stroke="currentColor"
       strokeWidth="3"
       strokeLinecap="round"
-      className="text-accent"
+      className="text-accent [filter:drop-shadow(0_0_3px_currentColor)]"
       aria-hidden="true"
     >
       <path d="M4 6h13" />
@@ -173,7 +173,7 @@ export function DeviceToolbar({
       <div
         data-tauri-drag-region
         data-component="simulator-toolbar"
-        className="flex h-[34px] w-full items-center justify-between rounded-t-[14px] bg-[#161618] px-3 ring-1 ring-white/10"
+        className="flex h-[34px] w-full items-center justify-between rounded-t-[16px] bg-[#1d1e24]/80 px-3 ring-1 ring-white/[0.12] backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_-1px_0_rgba(0,0,0,0.45)]"
       >
         {/* Left — window controls (the window is borderless, so these ARE the
             only way to close/minimize it). */}
@@ -183,14 +183,14 @@ export function DeviceToolbar({
             aria-label="Close"
             title="Close"
             onClick={() => void withCurrentWindow((w) => w.close())}
-            className="h-3 w-3 rounded-full bg-[#ff5f57] ring-1 ring-black/20 transition hover:brightness-110"
+            className="h-3 w-3 rounded-full bg-[#ff5f57] shadow-[inset_0_0.5px_0_rgba(255,255,255,0.4)] ring-1 ring-black/20 transition hover:brightness-110"
           />
           <button
             type="button"
             aria-label="Minimize"
             title="Minimize"
             onClick={() => void withCurrentWindow((w) => w.minimize())}
-            className="h-3 w-3 rounded-full bg-[#febc2e] ring-1 ring-black/20 transition hover:brightness-110"
+            className="h-3 w-3 rounded-full bg-[#febc2e] shadow-[inset_0_0.5px_0_rgba(255,255,255,0.4)] ring-1 ring-black/20 transition hover:brightness-110"
           />
         </div>
         {/* Center — Drift mark + identity: the profile this phone runs as
@@ -200,18 +200,18 @@ export function DeviceToolbar({
           className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5"
         >
           <DriftMark />
-          <span className="max-w-[140px] truncate text-2xs font-semibold tracking-tight text-ink-secondary">
+          <span className="max-w-[140px] truncate text-[11px] font-semibold tracking-tight text-white/85">
             {profileName !== '' ? profileName : deviceName}
           </span>
           {profileName !== '' && (
-            <span className="text-2xs tracking-tight text-ink-muted">· {deviceName}</span>
+            <span className="text-[11px] tracking-tight text-white/45">· {deviceName}</span>
           )}
         </div>
         {/* Right — quick Record + the expand chevron. The window-controls
             (snapshot / rotate / pin / info) live in the expandable panel below
             so the default chrome stays minimal (founder 2026-06-17: "phone
             showing only" by default, a clean expandable row for the controls). */}
-        <div data-tauri-drag-region="false" className="flex items-center gap-1 text-ink-muted">
+        <div data-tauri-drag-region="false" className="flex items-center gap-1 text-white/55">
           <button
             type="button"
             aria-label={recording ? 'Stop recording' : 'Start recording'}
@@ -257,7 +257,7 @@ export function DeviceToolbar({
         <div
           data-tauri-drag-region="false"
           data-component="simulator-controls"
-          className="absolute right-2 top-full z-30 mt-1 w-56 overflow-hidden rounded-xl border border-white/10 bg-[#161618] py-1 shadow-[0_14px_34px_rgba(0,0,0,0.6)]"
+          className="absolute right-2 top-full z-30 mt-1 w-56 overflow-hidden rounded-xl border border-white/[0.12] bg-[#1d1e24]/92 py-1 shadow-[0_8px_16px_rgba(0,0,0,0.3),0_18px_40px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
         >
           <div className="flex items-center gap-2 px-3 py-2 text-[11px]">
             <span className="text-accent" aria-hidden="true">
@@ -383,7 +383,7 @@ function IosStatusBar(): JSX.Element {
           strip is reserved space rather than an overlay). */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-1/2 h-[26px] w-[88px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#060607] ring-1 ring-white/10"
+        className="pointer-events-none absolute left-1/2 top-1/2 h-[26px] w-[92px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black shadow-[inset_0_1px_1px_rgba(255,255,255,0.04)]"
       />
       <span className="pointer-events-none text-[14px] font-semibold tracking-tight tabular-nums">
         {time}
@@ -548,11 +548,39 @@ export function SimulatorWindow(): JSX.Element {
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
     if (r.width === 0 || x < 0 || y < 0 || x > r.width || y > r.height) return;
+    // Press feedback for the touch-point cursor — it shrinks/brightens on press,
+    // alongside the bloom ring below (resets on pointer up / leave).
+    setTouchPoint({ x, y });
+    setTouchPressed(true);
     const id = (tapIdRef.current += 1);
     setTaps((cur) => [...cur, { id, x, y }]);
     window.setTimeout(() => {
       setTaps((cur) => cur.filter((t) => t.id !== id));
     }, 480);
+  };
+  // iOS touch-point cursor (founder 2026-06-18): over the SCREEN, hide the PC
+  // arrow (cursor-none on the host) and show a soft fingertip dot that tracks the
+  // pointer — so you read the device as a touchscreen, not a desktop window. It's
+  // pointer-events-none (never intercepts the real tap) and pairs with the
+  // press-time tap ripple above. The toolbar/bezel keep the normal arrow (you
+  // need it for the window controls + dragging).
+  const [touchPoint, setTouchPoint] = useState<{ x: number; y: number } | null>(null);
+  const [touchPressed, setTouchPressed] = useState(false);
+  const moveTouchPoint = (e: ReactPointerEvent<HTMLDivElement>): void => {
+    const host = screenHostRef.current;
+    if (host === null) return;
+    const r = host.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    if (r.width === 0 || x < 0 || y < 0 || x > r.width || y > r.height) {
+      setTouchPoint(null);
+      return;
+    }
+    setTouchPoint({ x, y });
+  };
+  const hideTouchPoint = (): void => {
+    setTouchPoint(null);
+    setTouchPressed(false);
   };
   const togglePinned = (): void => {
     const next = !pinned;
@@ -630,7 +658,7 @@ export function SimulatorWindow(): JSX.Element {
           <div
             data-tauri-drag-region
             data-component="simulator-device"
-            className="relative flex min-h-0 flex-1 w-full flex-col rounded-b-[2.75rem] bg-[#0b0b0d] p-[10px] shadow-2xl ring-1 ring-white/10"
+            className="relative flex min-h-0 flex-1 w-full flex-col rounded-b-[2.75rem] bg-gradient-to-b from-[#1b1c20] via-[#0d0e11] to-[#08090b] p-[10px] shadow-2xl ring-1 ring-white/[0.12]"
           >
             {/* Screen — status strip on top (with the dynamic island), the live
                 video BELOW it (never overlapped). NOT a drag region except the
@@ -638,7 +666,7 @@ export function SimulatorWindow(): JSX.Element {
             <div
               data-tauri-drag-region="false"
               data-component="simulator-screen"
-              className="relative flex flex-1 flex-col overflow-hidden rounded-[2.1rem] bg-black"
+              className="relative flex flex-1 flex-col overflow-hidden rounded-[2.1rem] bg-black shadow-[inset_0_0_0_1px_rgba(0,0,0,0.9),inset_0_0_12px_rgba(0,0,0,0.55)]"
             >
               <IosStatusBar />
               {snapshotNotice !== null && (
@@ -682,8 +710,12 @@ export function SimulatorWindow(): JSX.Element {
               <div
                 ref={screenHostRef}
                 data-component="simulator-screen-host"
-                className="relative min-h-0 flex-1"
+                className="relative min-h-0 flex-1 cursor-none"
                 onPointerDownCapture={showTap}
+                onPointerMove={moveTouchPoint}
+                onPointerEnter={moveTouchPoint}
+                onPointerLeave={hideTouchPoint}
+                onPointerUp={() => setTouchPressed(false)}
               >
                 <AgentSessionPanel
                   info={info}
@@ -695,6 +727,20 @@ export function SimulatorWindow(): JSX.Element {
                     if (el !== null) armFpsCounter(el);
                   }}
                 />
+                {/* iOS touch-point cursor — a soft fingertip dot that tracks the
+                    pointer over the screen (the PC arrow is hidden via cursor-none
+                    on the host). Shrinks + brightens on press. pointer-events-none
+                    so it never intercepts the real tap. */}
+                {touchPoint !== null && (
+                  <span
+                    data-component="touch-cursor"
+                    aria-hidden="true"
+                    className={`pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/60 bg-white/15 shadow-[0_0_10px_rgba(255,255,255,0.25)] backdrop-blur-[1px] transition-[width,height,background-color] duration-100 ${
+                      touchPressed ? 'h-7 w-7 bg-white/30' : 'h-10 w-10'
+                    }`}
+                    style={{ left: touchPoint.x, top: touchPoint.y }}
+                  />
+                )}
                 {/* iOS tap cursor — a ring that blooms at each tap point then
                     fades. pointer-events-none so it never intercepts the tap. */}
                 {taps.map((t) => (
