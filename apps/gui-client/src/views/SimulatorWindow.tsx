@@ -73,8 +73,29 @@ function infoFromQuery(): {
  *  Tauri) never load the native module. No-op outside Tauri. */
 async function withCurrentWindow(fn: (w: WebviewWindow) => Promise<void>): Promise<void> {
   if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return;
-  const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-  await fn(getCurrentWebviewWindow());
+  try {
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+    await fn(getCurrentWebviewWindow());
+  } catch (err) {
+    // A failed window op (pin / drag / close / minimize / rotate / resize) must
+    // NEVER reach the global unhandledrejection handler — in the BORDERLESS
+    // simulator window that paints the fatal overlay → an undraggable black box
+    // → force-quit (the exact crash class the founder hit 2026-06-18, just via a
+    // Tauri call). Swallow + log; the op simply no-ops. Every `void
+    // withCurrentWindow(...)` caller is protected by this single guard.
+    console.warn('[simulator] window operation failed (ignored):', err);
+  }
+}
+
+/** Host of a ws URL for the info overlay — guarded so a malformed ws value in
+ *  the window query degrades to a label instead of throwing in render (which
+ *  would drop the whole simulator into the error boundary). */
+function wsHost(wsUrl: string): string {
+  try {
+    return new URL(wsUrl).host;
+  } catch {
+    return wsUrl.length > 0 ? wsUrl : 'not connected';
+  }
 }
 
 /** iOS-style h:mm (12-hour, no leading zero, no AM/PM — matches the iOS status
@@ -989,7 +1010,7 @@ export function SimulatorWindow(): JSX.Element {
                   {profileName !== '' && <div className="truncate">profile {profileName}</div>}
                   <div className="truncate">device {deviceName}</div>
                   <div className="truncate">
-                    link {info ? new URL(info.ws_url).host : 'not connected'}
+                    link {info ? wsHost(info.ws_url) : 'not connected'}
                   </div>
                   {proxyLabel !== '' && <div className="truncate">egress 🌍 {proxyLabel}</div>}
                   <div className="truncate">

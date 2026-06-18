@@ -202,7 +202,10 @@ export function AgentSessionPanel({
       if (noPublisherTimer !== null) clearTimeout(noPublisherTimer);
       setRoom(null);
       onRoom?.(null);
-      void (room as any).disconnect();
+      // .catch the teardown: disconnect() can reject on a teardown race with a
+      // message OUTSIDE main.tsx's benign allowlist (aborted reconnect / signal
+      // socket error), which would otherwise blank the app via the fatal overlay.
+      void (room as any).disconnect()?.catch?.(() => undefined);
     };
     // Reconnect only when the connection identity (ws_url + token) changes, NOT
     // on every new `info` object ref — info is stable per session, and a fresh

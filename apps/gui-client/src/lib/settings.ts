@@ -137,7 +137,16 @@ async function keychainLoad(name: string): Promise<string | null> {
 }
 
 async function keychainSave(name: string, value: string): Promise<void> {
-  await invoke('secret_save', { key: name, value });
+  try {
+    await invoke('secret_save', { key: name, value });
+  } catch (err) {
+    // Soft-fail like keychainLoad/keychainDelete: a save failure (locked
+    // keychain, user dismissed the prompt) must NOT throw — it propagates
+    // through saveSettings → SettingsContext.update → a `void update(...)`
+    // caller → the global unhandledrejection handler → the fatal overlay. The
+    // in-memory key still works for the session; only persistence is lost.
+    console.warn('[settings] keychain save failed (key kept in-memory only):', err);
+  }
 }
 
 async function keychainDelete(name: string): Promise<void> {

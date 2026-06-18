@@ -41,12 +41,23 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
 
   useEffect(() => {
     let cancelled = false;
-    void loadSettings().then((s) => {
-      if (!cancelled) {
-        setSettings(s);
-        setLoading(false);
-      }
-    });
+    void loadSettings()
+      .then((s) => {
+        if (!cancelled) {
+          setSettings(s);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        // A keychain/store read failure must NOT blank the app via the global
+        // handler — degrade to defaults so the GUI boots (the user can re-enter
+        // their key in Settings).
+        console.warn('[settings] load failed; using defaults:', err);
+        if (!cancelled) {
+          setSettings(DEFAULT_SETTINGS);
+          setLoading(false);
+        }
+      });
     return () => {
       cancelled = true;
     };

@@ -45,6 +45,9 @@ export function FleetView(): JSX.Element {
   // A failed registry read must not leave the view stuck on a blank
   // perpetual-loading screen — surface it with a retry instead.
   const [loadError, setLoadError] = useState<string | null>(null);
+  // A failed add/update/remove (registry write) must surface here, not escape as
+  // an unhandled rejection (which would blank the whole app via the fatal overlay).
+  const [actionError, setActionError] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>({
     draft: EMPTY_DRAFT,
     errors: {},
@@ -111,25 +114,39 @@ export function FleetView(): JSX.Element {
       setForm({ ...form, errors: v.errors });
       return;
     }
-    if (form.editingId) {
-      await updateFleetMember(form.editingId, form.draft);
-    } else {
-      await addFleetMember(form.draft);
+    try {
+      setActionError(null);
+      if (form.editingId) {
+        await updateFleetMember(form.editingId, form.draft);
+      } else {
+        await addFleetMember(form.draft);
+      }
+      setForm({ ...EMPTY_DRAFT_FORM });
+      await refresh();
+    } catch (err) {
+      setActionError(
+        `Could not save the fleet member: ${err instanceof Error ? err.message : 'unknown error'}. Try again.`,
+      );
     }
-    setForm({ ...EMPTY_DRAFT_FORM });
-    await refresh();
   }
 
   async function destroy(member: FleetMember): Promise<void> {
     if (!(await confirm(`Remove "${member.label}" from the fleet?`, { confirmLabel: 'Remove' })))
       return;
-    await removeFleetMember(member.id);
-    setPings((prev) => {
-      const next = { ...prev };
-      delete next[member.id];
-      return next;
-    });
-    await refresh();
+    try {
+      setActionError(null);
+      await removeFleetMember(member.id);
+      setPings((prev) => {
+        const next = { ...prev };
+        delete next[member.id];
+        return next;
+      });
+      await refresh();
+    } catch (err) {
+      setActionError(
+        `Could not remove "${member.label}": ${err instanceof Error ? err.message : 'unknown error'}. Try again.`,
+      );
+    }
   }
 
   const sorted = useMemo(
@@ -166,6 +183,23 @@ export function FleetView(): JSX.Element {
           </button>
         </div>
       </header>
+
+      {actionError !== null && (
+        <div
+          role="alert"
+          className="flex items-start justify-between gap-3 rounded-lg border border-status-error/40 bg-status-error/10 px-3 py-2 text-sm text-status-error"
+        >
+          <span>{actionError}</span>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            className="shrink-0 text-status-error/70 transition hover:text-status-error"
+            onClick={() => setActionError(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {form.visible && (
         <form

@@ -954,6 +954,10 @@ export function ProfilesView({
       // same contract the empty-state copy documents).
       const driverSession = await client.sessions.create({ label: 'quick-session' });
       onOpenSession(driverSession.id);
+    } catch (err) {
+      // Surface the failure in the banner instead of letting the rejection reach
+      // the global handler (which would blank the app with the fatal overlay).
+      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
     } finally {
       setQuickBusy(false);
     }

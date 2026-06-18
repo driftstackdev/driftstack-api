@@ -210,11 +210,18 @@ function Shell(): JSX.Element {
   // earning anything. One-click is the reliable shape.
   const handleSignOut = async (): Promise<void> => {
     if (kbSettings.apiKey === null) return;
-    await kbUpdate({
-      apiKey: null,
-      baseUrl: kbSettings.baseUrl,
-      telemetryOptIn: kbSettings.telemetryOptIn,
-    });
+    try {
+      await kbUpdate({
+        apiKey: null,
+        baseUrl: kbSettings.baseUrl,
+        telemetryOptIn: kbSettings.telemetryOptIn,
+      });
+    } catch (err) {
+      // A failed clear (keychain hiccup) must not reach the global handler and
+      // blank the app. Still drop the in-memory key + return to the wizard so
+      // the user is signed out for this session.
+      console.warn('[app] sign-out persist failed (cleared in-memory anyway):', err);
+    }
     setWizardDismissed(false);
     setView({ kind: 'profiles' });
   };
