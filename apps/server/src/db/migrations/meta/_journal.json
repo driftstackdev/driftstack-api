@@ -589,6 +589,13 @@
       "when": 1780303200000,
       "tag": "0083_fleet_nodes_last_heartbeat",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1780306800000,
+      "tag": "0084_admin_audit_mac_node_control",
+      "breakpoints": true
     }
   ]
 }

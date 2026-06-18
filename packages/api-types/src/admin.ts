@@ -197,6 +197,9 @@ export const AdminAuditActionSchema = z.enum([
   'status_subscriber.force_subscribed',
   // LK.2: per-Mac LiveKit credential registration (migration 0057).
   'mac_node.livekit_registered',
+  // Fleet-admin (§A5): node-level control action (cordon/uncordon/drain/
+  // restart) via POST /v1/mac-nodes/:id/control (migration 0084).
+  'mac_node.control',
   // owner price edit — pricing-as-data master-owner cockpit (migration 0068).
   'pricing.updated',
   // Admin-cockpit secrets Phase A slice 2 (migration 0075).

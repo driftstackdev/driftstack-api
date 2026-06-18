@@ -74,6 +74,7 @@ const ADMIN_AUDIT_ACTIONS = [
   'status_subscriber.purged',
   'status_subscriber.force_subscribed',
   'mac_node.livekit_registered',
+  'mac_node.control',
   'pricing.updated',
   'secret.created',
   'secret.updated',
@@ -84,7 +85,7 @@ const ADMIN_AUDIT_ACTIONS = [
 describe('W862 AdminAuditAction cross-source invariant', () => {
   // ─── api-types canonical source ──────────────────────────────
 
-  it('CRITICAL packages/api-types/src/admin.ts AdminAuditActionSchema = z.enum([25 values]). The 25-value closed-roster is the contract every admin audit-log gate pivots on.', () => {
+  it('CRITICAL packages/api-types/src/admin.ts AdminAuditActionSchema = z.enum([26 values]). The 26-value closed-roster is the contract every admin audit-log gate pivots on.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/admin.ts'));
     expect(p).toMatch(/export const AdminAuditActionSchema = z\.enum\(\[/);
     // EXACT canonical pin: .options must EQUAL the 16-value set, not merely
@@ -109,7 +110,7 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
 
   // ─── DB pgEnum lockstep ──────────────────────────────────────
 
-  it("CRITICAL apps/server/src/db/schema.ts adminAuditAction = pgEnum('admin_audit_action', [25 values]). Postgres rejects INSERTs of unknown values — drift would silently DROP the audit row (compliance/forensics gap).", () => {
+  it("CRITICAL apps/server/src/db/schema.ts adminAuditAction = pgEnum('admin_audit_action', [26 values]). Postgres rejects INSERTs of unknown values — drift would silently DROP the audit row (compliance/forensics gap).", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/schema.ts'));
     expect(p).toMatch(/adminAuditAction = pgEnum\('admin_audit_action', \[/);
     const m = p.match(/adminAuditAction = pgEnum\('admin_audit_action', \[([\s\S]+?)\]\);/);
@@ -158,8 +159,8 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
 
   // ─── 16-value cardinality + 6-category split ─────────────────
 
-  it('CRITICAL AdminAuditAction = EXACTLY 25 values across 9 categories — 3 lifecycle + 5 operational + 2 V-100 force + 2 V-281 support + 4 V-295a incident + 3 V-295c3 subscriber + 1 LK.2 mac-node + 1 pricing + 4 secrets. The 3/5/2/2/4/3/1/1/4 split is what the audit-log filter dropdown groups by. (2026-06-05: +pricing.updated, migration 0068. 2026-06-12: +secret.created/updated/deleted/revealed for the owner secrets manager, migration 0075 — see [[project_admin_full_control_cockpit_buildout]].)', () => {
-    expect(ADMIN_AUDIT_ACTIONS.length).toBe(25);
+  it('CRITICAL AdminAuditAction = EXACTLY 26 values across 9 categories — 3 lifecycle + 5 operational + 2 V-100 force + 2 V-281 support + 4 V-295a incident + 3 V-295c3 subscriber + 2 mac-node + 1 pricing + 4 secrets. The 3/5/2/2/4/3/2/1/4 split is what the audit-log filter dropdown groups by. (2026-06-05: +pricing.updated, migration 0068. 2026-06-12: +secret.created/updated/deleted/revealed, migration 0075. 2026-06-18: +mac_node.control for the fleet-admin node-control panel, migration 0084.)', () => {
+    expect(ADMIN_AUDIT_ACTIONS.length).toBe(26);
     const lifecycle = ADMIN_AUDIT_ACTIONS.filter((a) => a.startsWith('account.'));
     const operational = ADMIN_AUDIT_ACTIONS.filter(
       (a) => a.startsWith('webhook_delivery.') || a.startsWith('rate_limit_override.'),
@@ -178,7 +179,7 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
     expect(support.length).toBe(2);
     expect(incident.length).toBe(4);
     expect(subscriber.length).toBe(3);
-    expect(macNode.length).toBe(1);
+    expect(macNode.length).toBe(2);
     expect(pricing.length).toBe(1);
   });
 

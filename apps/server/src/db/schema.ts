@@ -194,6 +194,8 @@ export const adminAuditAction = pgEnum('admin_audit_action', [
   'status_subscriber.force_subscribed',
   // LK.2: per-Mac LiveKit credential registration (migration 0057).
   'mac_node.livekit_registered',
+  // Fleet-admin (§A5) node control: cordon/uncordon/drain/restart (migration 0084).
+  'mac_node.control',
   // owner price edit — pricing-as-data master-owner cockpit (migration 0068).
   'pricing.updated',
   // Admin-cockpit secrets Phase A slice 2 (migration 0075): owner

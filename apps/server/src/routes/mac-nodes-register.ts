@@ -353,6 +353,32 @@ export function registerMacNodesRoutes(
           ...(parsed.data.reason !== undefined ? { reason: parsed.data.reason } : {}),
         }),
       );
+      // Audit: a node-control action changes a production worker's
+      // availability, so record WHO issued WHICH command against WHICH node.
+      // Best-effort (mirrors the LK.2 emit) — a failed audit insert must not
+      // revert the already-sent command nor 5xx the route. Payload carries
+      // only non-sensitive metadata (command + reason); never a secret.
+      if (deps.adminAudit !== undefined) {
+        const ctx = req.account;
+        if (ctx) {
+          try {
+            await deps.adminAudit.record({
+              adminAccountId: ctx.account.id,
+              adminKeyId: ctx.apiKey.id,
+              action: 'mac_node.control',
+              targetResourceId: `mac_node_${nodeId}`,
+              inputPayload: {
+                command: parsed.data.command,
+                ...(parsed.data.reason !== undefined ? { reason: parsed.data.reason } : {}),
+              },
+              result: 'success',
+              ipAddress: readClientIp(req),
+            });
+          } catch {
+            // Swallow — best-effort. The command was already delivered.
+          }
+        }
+      }
       return reply.code(202).send({
         mac_node_id: nodeId,
         command: parsed.data.command,
