@@ -89,7 +89,7 @@ export async function registerFleetEventsRoutes(
         const { nodeId } = await authenticateFleetUpgrade(
           req.headers,
           (req.query ?? {}) as Record<string, unknown>,
-          { auth: deps.auth },
+          { auth: deps.auth, logger: req.log },
         );
         (req as AuthedUpgradeRequest).fleetNodeId = nodeId;
       },

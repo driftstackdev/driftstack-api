@@ -63,7 +63,7 @@ describe('routes/fleet-events content parity', () => {
     expect(body).toContain('const { nodeId } = await authenticateFleetUpgrade(');
     expect(body).toContain('req.headers,');
     expect(body).toContain('as Record<string, unknown>,');
-    expect(body).toContain('{ auth: deps.auth },');
+    expect(body).toContain('{ auth: deps.auth, logger: req.log },');
   });
 
   it('handler wiring pinned: register the verified node by nodeId; route inbound messages to the connection; unregister on close + error', () => {

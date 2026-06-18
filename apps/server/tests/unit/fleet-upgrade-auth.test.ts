@@ -142,4 +142,37 @@ describe('authenticateFleetUpgrade', () => {
       authenticateFleetUpgrade(headers(undefined, NODE_ID), {}, { auth: okAuth() }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
   });
+
+  // Diagnostic: the verify reason / node-id mismatch is logged SERVER-SIDE
+  // (the box-connect bring-up needed this) while the thrown 401 stays uniform.
+  it('logs the verify reason server-side on a verify failure (client message still uniform)', async () => {
+    const logged: Array<Record<string, unknown>> = [];
+    const logger = { warn: (obj: Record<string, unknown>) => void logged.push(obj) };
+    await authenticateFleetUpgrade(
+      headers('jwt', NODE_ID),
+      {},
+      {
+        auth: failAuth('replayed_nonce'),
+        logger,
+      },
+    ).catch(() => undefined);
+    expect(logged).toHaveLength(1);
+    expect(logged[0]?.reason).toBe('replayed_nonce');
+  });
+
+  it('logs a node_id_mismatch (verify ok, declared id wrong) distinctly from a verify failure', async () => {
+    const logged: Array<Record<string, unknown>> = [];
+    const logger = { warn: (obj: Record<string, unknown>) => void logged.push(obj) };
+    await authenticateFleetUpgrade(
+      headers('jwt', 'some-other-node'),
+      {},
+      {
+        auth: okAuth(NODE_ID),
+        logger,
+      },
+    ).catch(() => undefined);
+    expect(logged).toHaveLength(1);
+    expect(logged[0]?.reason).toBe('node_id_mismatch');
+    expect(logged[0]?.claimIss).toBe(NODE_ID);
+  });
 });

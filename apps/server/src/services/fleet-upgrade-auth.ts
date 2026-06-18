@@ -30,6 +30,11 @@ export interface FleetUpgradeAuthDeps {
   auth: FleetNodeAuth;
   /** Injectable clock for deterministic tests (defaults to now in verify()). */
   now?: Date;
+  /** Optional server-side logger. The CLIENT 401 stays uniform (anti-
+   *  enumeration), but ops needs to see WHY a fleet-node auth failed —
+   *  the verify() reason / node-id mismatch — to diagnose a node that
+   *  can't connect. Logged at warn; never returned to the caller. */
+  logger?: { warn: (obj: Record<string, unknown>, msg?: string) => void };
 }
 
 /**
@@ -64,7 +69,18 @@ export async function authenticateFleetUpgrade(
 
   const result = await deps.auth.verify(token, deps.now);
   if (!result.ok) {
-    // Uniform 401 — never echo the FleetJwtVerifyError reason (anti-enumeration).
+    // Uniform 401 to the CLIENT — never echo the FleetJwtVerifyError reason
+    // (anti-enumeration). But log the reason SERVER-SIDE so ops can tell an
+    // unknown_node from a replayed_nonce / signature_invalid / expired when a
+    // node can't connect (the diagnostic A3 needed for the box bring-up).
+    deps.logger?.warn(
+      {
+        component: 'fleet-upgrade-auth',
+        reason: result.reason,
+        tokenSource: queryToken ? 'query' : 'header',
+      },
+      'fleet-node JWT verify rejected',
+    );
     throw new UnauthorizedError('Fleet-node authentication failed.');
   }
 
@@ -78,6 +94,19 @@ export async function authenticateFleetUpgrade(
   // The declared id MUST match the signed JWT iss so a node can't claim a
   // different id than it authenticated.
   if (nodeId === undefined || nodeId !== result.claims.iss) {
+    // Verify PASSED but the declared node-id is absent / doesn't match the
+    // signed iss. Log server-side (distinct from a verify failure) — a node
+    // dialing with a bad/missing ?node_id= lands here, not in the block above.
+    deps.logger?.warn(
+      {
+        component: 'fleet-upgrade-auth',
+        reason: 'node_id_mismatch',
+        declaredNodeId: nodeId ?? null,
+        nodeIdSource: queryNodeId !== undefined && headerNodeId === undefined ? 'query' : 'header',
+        claimIss: result.claims.iss,
+      },
+      'fleet-node id mismatch (verify ok)',
+    );
     throw new UnauthorizedError('Fleet-node authentication failed.');
   }
 
