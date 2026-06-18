@@ -5,7 +5,10 @@
 // `::ffff:/96` trap that blocks all IPv4) is caught.
 
 import { describe, expect, it } from 'vitest';
-import { unsafeWebhookTargetReason as reason } from '../../src/lib/webhook-target-guard.js';
+import {
+  unsafeWebhookTargetReason as reason,
+  classifyUnsafeHost,
+} from '../../src/lib/webhook-target-guard.js';
 
 describe('unsafeWebhookTargetReason — rejects internal/reserved targets', () => {
   it('rejects non-https', () => {
@@ -117,5 +120,33 @@ describe('unsafeWebhookTargetReason — allows legit public targets (NO false po
   it('returns a reason (not throw) for a malformed URL', () => {
     expect(reason('not a url')).toBeTruthy();
     expect(reason('')).toBeTruthy();
+  });
+});
+
+// classifyUnsafeHost is called on the RAW customer host by the SOCKS5 egress
+// backend + account-proxies (NOT URL-normalised, unlike the webhook path). A
+// non-canonical IPv6 literal must not slip the mapped/embedded-IPv4 checks.
+describe('classifyUnsafeHost — raw-host SSRF (proxy/egress path, no URL normalization)', () => {
+  it('blocks fully-expanded IPv4-mapped IPv6 (metadata-exfil bypass)', () => {
+    for (const h of [
+      '0:0:0:0:0:ffff:169.254.169.254', // expanded ::ffff:169.254.169.254 (metadata)
+      '0:0:0:0:0:ffff:127.0.0.1', // expanded ::ffff:127.0.0.1 (loopback)
+      '::ffff:169.254.169.254', // compressed form (already covered)
+      '::ffff:10.0.0.5',
+    ]) {
+      expect(classifyUnsafeHost(h), h).toBe('private');
+    }
+  });
+
+  it('blocks NAT64 + 6to4 IPv4-embedding forms', () => {
+    expect(classifyUnsafeHost('64:ff9b::7f00:1'), 'NAT64→127.0.0.1').toBe('private');
+    expect(classifyUnsafeHost('64:ff9b::a9fe:a9fe'), 'NAT64→169.254.169.254').toBe('private');
+    expect(classifyUnsafeHost('2002:7f00:1::'), '6to4→127.0.0.1').toBe('private');
+  });
+
+  it('does NOT false-positive on public IPv6 / IPv4 / hostnames', () => {
+    expect(classifyUnsafeHost('2606:4700:4700::1111')).toBeNull(); // Cloudflare public IPv6
+    expect(classifyUnsafeHost('8.8.8.8')).toBeNull(); // public IPv4 (no all-IPv4 quirk)
+    expect(classifyUnsafeHost('hooks.example.com')).toBeNull();
   });
 });

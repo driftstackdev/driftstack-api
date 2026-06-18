@@ -41,6 +41,12 @@ BLOCK.addAddress('::', 'ipv6'); // unspecified
 BLOCK.addSubnet('fc00::', 7, 'ipv6'); // unique local (ULA)
 BLOCK.addSubnet('fe80::', 10, 'ipv6'); // link-local
 BLOCK.addSubnet('ff00::', 8, 'ipv6'); // multicast
+// IPv4-embedding transitional prefixes — these wrap an IPv4 address that the OS
+// can route to (so the embedded IPv4 could be a private/metadata target). No
+// legit webhook/proxy target uses them (NAT64 is client-synthesized; 6to4 is
+// deprecated per RFC 7526). Distinct ranges — no all-IPv4 BlockList quirk.
+BLOCK.addSubnet('64:ff9b::', 96, 'ipv6'); // NAT64 well-known prefix (RFC6052)
+BLOCK.addSubnet('2002::', 16, 'ipv6'); // 6to4 (embeds IPv4 in 2nd/3rd hextets)
 
 const PRIVATE_TARGET = 'Webhook URL must not target a private, loopback, or reserved address.';
 // Length cap — every other customer-write string field is `.max()`-bounded, but
@@ -80,6 +86,23 @@ export function classifyUnsafeHost(
   if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
   if (host.endsWith('.')) host = host.slice(0, -1);
   if (host === 'localhost' || host.endsWith('.localhost')) return 'localhost';
+  // CANONICALISE IPv6 literals FIRST. The `::ffff:` mapped-address check below is
+  // a string-prefix test, and the BlockList match is form-sensitive — so a
+  // NON-canonical literal (e.g. the fully-expanded IPv4-mapped
+  // `0:0:0:0:0:ffff:169.254.169.254`) would slip BOTH yet the OS still routes it
+  // to the embedded IPv4 (169.254.169.254 = cloud metadata). The webhook caller
+  // URL-parses (which normalises), but the RAW-host callers (SOCKS5 egress proxy
+  // host / account-proxies) do NOT — so canonicalise here to close that bypass.
+  if (isIP(host) === 6) {
+    try {
+      const canon = new URL(`http://[${host}]/`).hostname;
+      host = (
+        canon.startsWith('[') && canon.endsWith(']') ? canon.slice(1, -1) : canon
+      ).toLowerCase();
+    } catch {
+      /* keep the already-normalised host if it isn't bracket-parseable */
+    }
+  }
   // IPv4-mapped IPv6 (e.g. ::ffff:10.0.0.5) — a private-IPv4 smuggling vector.
   if (host.startsWith('::ffff:')) return 'private';
   const family = isIP(host); // 0 = DNS name, 4, or 6
