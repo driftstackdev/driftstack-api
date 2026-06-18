@@ -155,7 +155,16 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).toMatch(
       /function boundSession\(profileId: string\): \{ id: string; kind: 'agent' \| 'driver' \} \| null \{/,
     );
-    expect(body).toMatch(/if \(sid\.startsWith\('agt_'\)\) return \{ id: sid, kind: 'agent' \};/);
+    // agt_ resolves to agent kind, but the binding now SELF-HEALS (founder
+    // 2026-06-18 "always says open session even on long-expired/failed"): once
+    // the live agent-session list has loaded, a bound session counts as running
+    // only if it's still present AND not closed; before load it trusts the
+    // binding so a transient fetch miss doesn't flip a live profile to idle.
+    expect(body).toContain("if (sid.startsWith('agt_')) {");
+    expect(body).toContain("if (!agentSessionsLoaded) return { id: sid, kind: 'agent' };");
+    expect(body).toContain(
+      "return live !== undefined && live.status !== 'closed' ? { id: sid, kind: 'agent' } : null;",
+    );
     expect(body).toMatch(
       /return activeSessions\.some\(\(s\) => s\.id === sid\) \? \{ id: sid, kind: 'driver' \} : null;/,
     );

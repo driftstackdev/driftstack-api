@@ -126,21 +126,18 @@ export async function openSimulatorWindow({
       width: SIM_WIDTH,
       height: SIM_HEIGHT,
       resizable: true,
-      // DECORATED (real macOS title bar) — founder requested "a separate window
-      // selectable in the taskbar" multiple times. A borderless + transparent
-      // window is a panel-like surface that does NOT appear in Mission Control /
-      // the Window menu / Cmd-` / minimizable to the Dock, no matter what
-      // skipTaskbar/alwaysOnTop say. A decorated window IS a first-class macOS
-      // window: selectable, switchable, minimizable — the Xcode-Simulator model
-      // (title bar + device). The OS title bar provides close/minimize, so the
-      // in-content toolbar drops its custom traffic-lights.
-      decorations: true,
-      transparent: false,
-      backgroundColor: '#0b0f14',
+      // BORDERLESS + transparent — the iPhone IS the window (founder 2026-06-18:
+      // "back like it was", no macOS title-bar chrome ON the phone). The
+      // separate/selectable part comes from the standalone Driftstack Simulator
+      // APP's own Dock icon, NOT a title bar. The in-content toolbar provides
+      // close/minimize (a borderless window has no OS chrome).
+      decorations: false,
+      transparent: true,
       alwaysOnTop: false,
       minimizable: true,
       skipTaskbar: false,
       ...(position !== null ? { x: position.x, y: position.y } : { center: true }),
+      shadow: false,
     });
 
   interface Attempt {

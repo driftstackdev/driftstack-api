@@ -77,15 +77,13 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(toolbar).not.toBeNull();
     // Device name (from the ?name= query) shows in the toolbar.
     expect(toolbar?.textContent).toContain('iPhone 17');
-    // The quick record + the expand chevron live in the slim bar. Close/minimize
-    // are NO LONGER here — the window is now DECORATED (real macOS title bar) so
-    // the OS provides them + the taskbar/Mission-Control entry (founder 2026-06-18
-    // "a separate window selectable in the taskbar"). aria-labels are the contract.
-    for (const label of ['Start recording', 'Show controls']) {
+    // Window controls + the quick record + the expand chevron live in the slim
+    // bar. The window is BORDERLESS (the iPhone look, founder 2026-06-18 "back
+    // like it was"), so close/minimize live here — the separate Dock icon comes
+    // from the standalone app, not a title bar. aria-labels are the contract.
+    for (const label of ['Close', 'Minimize', 'Start recording', 'Show controls']) {
       expect(toolbar?.querySelector(`[aria-label="${label}"]`), label).not.toBeNull();
     }
-    // The custom traffic-light close/minimize were removed (OS title bar owns them).
-    expect(toolbar?.querySelector('[aria-label="Close"]')).toBeNull();
     // Founder 2026-06-17: the snapshot / rotate / pin / info controls moved into
     // the EXPANDABLE panel, so the default (collapsed) chrome stays minimal —
     // they are NOT in the DOM until the panel is expanded.

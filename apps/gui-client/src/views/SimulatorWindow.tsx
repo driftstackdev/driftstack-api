@@ -231,10 +231,24 @@ export function DeviceToolbar({
         data-component="simulator-toolbar"
         className="flex h-[34px] w-full items-center justify-between rounded-t-[16px] bg-[#1d1e24]/80 px-3 ring-1 ring-white/[0.12] backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_-1px_0_rgba(0,0,0,0.45)]"
       >
-        {/* Left — spacer. The window is now DECORATED (real macOS title bar), so
-            the OS provides close/minimize + dragging + the taskbar/Mission-Control
-            entry; this toolbar is just the device-control strip. */}
-        <div className="w-6" aria-hidden="true" />
+        {/* Left — window controls. The window is BORDERLESS (the iPhone look),
+            so these ARE the only close/minimize affordance. */}
+        <div data-tauri-drag-region="false" className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-label="Close"
+            title="Close"
+            onClick={() => void withCurrentWindow((w) => w.close())}
+            className="h-3 w-3 rounded-full bg-[#ff5f57] shadow-[inset_0_0.5px_0_rgba(255,255,255,0.4)] ring-1 ring-black/20 transition hover:brightness-110"
+          />
+          <button
+            type="button"
+            aria-label="Minimize"
+            title="Minimize"
+            onClick={() => void withCurrentWindow((w) => w.minimize())}
+            className="h-3 w-3 rounded-full bg-[#febc2e] shadow-[inset_0_0.5px_0_rgba(255,255,255,0.4)] ring-1 ring-black/20 transition hover:brightness-110"
+          />
+        </div>
         {/* Center — Drift mark + identity: the profile this phone runs as
             (primary) and the device (muted). Profile-less → device only. */}
         <div

@@ -157,7 +157,13 @@ export function ProfilesView({
   // Worktimer (2026-06-16) — agent sessions (id + created_at) for the running-
   // row live-elapsed timer; agent sessions aren't in activeSessions (driver-
   // only), so we fetch them separately. Empty when the runtime isn't wired.
-  const [agentSessions, setAgentSessions] = useState<Array<{ id: string; created_at: string }>>([]);
+  const [agentSessions, setAgentSessions] = useState<
+    Array<{ id: string; created_at: string; status: string }>
+  >([]);
+  // True once the live agent-session list has been fetched at least once. Until
+  // then boundSession TRUSTS the binding — a transient list-fetch miss must not
+  // flip a genuinely-running profile to idle.
+  const [agentSessionsLoaded, setAgentSessionsLoaded] = useState(false);
   const [bindings, setBindings] = useState<ProfileBinding[]>([]);
   const [proxies, setProxies] = useState<LocalProxyConfig[]>([]);
   // V-239 — gate the New profile button at the tier cap (skip when
@@ -352,9 +358,12 @@ export function ProfilesView({
         if (typeof client.agentSessions.list === 'function') {
           void client.agentSessions
             .list()
-            .then((page) =>
-              setAgentSessions(page.data.map((s) => ({ id: s.id, created_at: s.created_at }))),
-            )
+            .then((page) => {
+              setAgentSessions(
+                page.data.map((s) => ({ id: s.id, created_at: s.created_at, status: s.status })),
+              );
+              setAgentSessionsLoaded(true);
+            })
             .catch(() => undefined);
         }
         setState((s) => ({
@@ -511,7 +520,17 @@ export function ProfilesView({
     const binding = bindings.find((b) => b.profileId === profileId);
     const sid = binding?.currentSessionId ?? null;
     if (sid === null) return null;
-    if (sid.startsWith('agt_')) return { id: sid, kind: 'agent' };
+    if (sid.startsWith('agt_')) {
+      // Self-heal stale agent bindings to idle (founder 2026-06-18: "always says
+      // open session even on long-expired/failed sessions"). Once the live
+      // agent-session list has loaded, a bound session reads as running ONLY if
+      // it's still present AND not closed (expired/failed → closed or gone).
+      // Before the first successful list fetch, trust the binding so a transient
+      // fetch miss doesn't flip a genuinely-live session to idle.
+      if (!agentSessionsLoaded) return { id: sid, kind: 'agent' };
+      const live = agentSessions.find((s) => s.id === sid);
+      return live !== undefined && live.status !== 'closed' ? { id: sid, kind: 'agent' } : null;
+    }
     return activeSessions.some((s) => s.id === sid) ? { id: sid, kind: 'driver' } : null;
   }
 
