@@ -49,8 +49,10 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
   });
 
   it("W637 KNOWN_ARCHETYPES derived from ARCHETYPE_REGISTRY filtered to verified statuses (launch + available) — pinned so the GUI archetype catalog is the single-source registry (not a hardcoded list) and EXCLUDES reference/planned (e.g. iPhone 17, still per-value verified) so an unverified fingerprint can't ship; new devices appear automatically when A1 flips their status", () => {
+    // LiveKitInfo dropped 2026-06-18 when the dead in-app overlay (watchInfo)
+    // was removed — the launch flow only opens the separate simulator window now.
     expect(body).toMatch(
-      /import \{ ARCHETYPE_REGISTRY, type ArchetypeStatus, type LiveKitInfo \} from '@driftstack\/sdk';/,
+      /import \{ ARCHETYPE_REGISTRY, type ArchetypeStatus \} from '@driftstack\/sdk';/,
     );
     expect(body).toMatch(
       /const SELECTABLE_STATUSES = new Set<ArchetypeStatus>\(\['launch', 'available'\]\);/,

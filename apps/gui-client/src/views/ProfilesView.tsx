@@ -8,7 +8,7 @@
 // Mirrors SessionsView shape: 5-second poll, inline error banner, busy
 // state per row.
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   folderList,
   aggregateTags,
@@ -34,7 +34,6 @@ import { loadTemplates, saveTemplate, type ProfileTemplate } from '../lib/profil
 import { PROFILE_ICONS } from '../lib/profile-icons';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
 import { ErrorBanner } from '../components/ErrorBanner';
-import { ErrorBoundary } from '../components/ErrorBoundary';
 import { EmptyState } from '../components/EmptyState';
 import {
   ProfilesActionBar,
@@ -49,7 +48,7 @@ import {
   type ProfileTableRow,
   type ProfilesTableSortKey,
 } from '../components/ProfilesTable';
-import { ARCHETYPE_REGISTRY, type ArchetypeStatus, type LiveKitInfo } from '@driftstack/sdk';
+import { ARCHETYPE_REGISTRY, type ArchetypeStatus } from '@driftstack/sdk';
 import { openSimulatorWindow } from '../lib/open-simulator';
 import { useSettings } from '../lib/SettingsContext';
 import { useConnectionStatus } from '../lib/use-connection-status';
@@ -76,16 +75,6 @@ import {
   createProxy as createAccountProxy,
   updateProxy as updateAccountProxy,
 } from '../lib/account-proxies';
-
-// LAZY-LOADED: AgentSessionPanel pulls in livekit-client (a heavy WebRTC
-// dependency). Loading it at the top level dragged livekit-client into the
-// main bundle, which broke the minified production mount (the whole app failed
-// to render → flicker). Deferring it behind React.lazy keeps the dashboard
-// mount free of livekit-client; the panel + its deps load only when a session
-// is actually being watched (watchInfo set).
-const AgentSessionPanel = lazy(() =>
-  import('../components/AgentSessionPanel').then((m) => ({ default: m.AgentSessionPanel })),
-);
 
 // 2026-05-20 — match SessionsView: slow background poll + skip the
 // visible loading flicker on tick refreshes so the panel doesn't
@@ -195,15 +184,6 @@ export function ProfilesView({
     error: null,
   });
   const [busyId, setBusyId] = useState<string | null>(null);
-  // Live-stream viewer: set when a launched session returns a LiveKit block;
-  // renders an overlay with the AgentSessionPanel (subscribes immediately).
-  const [watchInfo, setWatchInfo] = useState<LiveKitInfo | null>(null);
-  // W617 — the profile + agent-session behind the active stream overlay, so
-  // the empty-room fallback can re-launch the same profile in the viewer.
-  const [watchSource, setWatchSource] = useState<{
-    profileId: string;
-    agentSessionId: string;
-  } | null>(null);
   // V-238 — create-form modal state. Lives here (not lifted to App.tsx)
   // because every other ProfilesView interaction is local; the modal
   // is a transient overlay scoped to this view's lifecycle.
@@ -555,9 +535,7 @@ export function ProfilesView({
     setBusyId(profileId);
     try {
       const info = await client.agentSessions.livekitToken(agentSessionId);
-      setWatchSource({ profileId, agentSessionId });
-      // Open the floating-iPhone simulator window (the standard experience).
-      // Falls back to the in-app overlay when not under Tauri (browser preview).
+      // Open the floating-iPhone simulator window (the only experience now).
       const reopened = state.profiles.find((p) => p.id === profileId);
       const reopenProxy = pickProxy(profileId);
       const sim = await openSimulatorWindow({
@@ -895,11 +873,7 @@ export function ProfilesView({
       );
       await markLaunched(profile.id, created.id);
       if (created.livekit) {
-        // W617 — remember which profile/agent-session backs the stream so
-        // the no-publisher fallback can re-launch as a direct session.
-        setWatchSource({ profileId: profile.id, agentSessionId: created.id });
-        // Open the floating-iPhone simulator window (the standard experience).
-        // Falls back to the in-app overlay when not under Tauri (browser preview).
+        // Open the floating-iPhone simulator window (the only experience now).
         const sim = await openSimulatorWindow({
           sessionId: created.id,
           info: created.livekit,
@@ -1142,16 +1116,11 @@ export function ProfilesView({
       // W624 — close by KIND so an agent-backed profile actually stops
       // (was the founder-hit "destroy keeps running"): agent → close the
       // agent session (which tears down its dispatched browser); driver →
-      // destroy the session. If the live overlay is showing this session,
-      // dismiss it too.
+      // destroy the session.
       if (bound.kind === 'agent') {
         await client.agentSessions.close(bound.id);
       } else {
         await client.sessions.destroy(bound.id);
-      }
-      if (watchSource?.profileId === profile.id) {
-        setWatchInfo(null);
-        setWatchSource(null);
       }
       await clearProfileSession(profile.id);
       await refresh(false);
@@ -1165,64 +1134,6 @@ export function ProfilesView({
 
   if (!client) {
     return <EmptyConnect baseUrl={settings.baseUrl} onGoToSettings={onGoToSettings} />;
-  }
-
-  if (watchInfo) {
-    return (
-      <div className="flex h-full flex-col bg-black">
-        <div className="flex items-center gap-3 p-3 text-sm text-ink-secondary">
-          <span className="section-label">Live session</span>
-          <span className="mono">{watchInfo.room}</span>
-          <button
-            type="button"
-            className="btn ml-auto"
-            onClick={() => {
-              setWatchInfo(null);
-              setWatchSource(null);
-            }}
-          >
-            Close
-          </button>
-        </div>
-        <div className="flex flex-1 items-center justify-center overflow-hidden">
-          <ErrorBoundary
-            fallback={(retry) => (
-              <div className="flex flex-col items-center gap-3 px-8 text-center">
-                <span className="section-label text-status-error">Couldn't load the viewer</span>
-                <p className="max-w-sm text-xs text-ink-secondary">
-                  The live viewer failed to load (you may be offline, or the app updated). Retry, or
-                  close and relaunch the session.
-                </p>
-                <button type="button" className="btn-secondary" onClick={retry}>
-                  Retry
-                </button>
-              </div>
-            )}
-          >
-            <Suspense fallback={<div className="text-sm text-ink-secondary">Loading viewer…</div>}>
-              <AgentSessionPanel
-                info={watchInfo}
-                // W617 — empty-room fallback: room connected but no browser
-                // worker published video → offer the polling viewer instead.
-                onNoPublisher={() => {
-                  const src = watchSource;
-                  setWatchInfo(null);
-                  setWatchSource(null);
-                  if (src !== null) {
-                    void openPollingFallback(src.profileId, src.agentSessionId).catch(() => {
-                      setState((s) => ({
-                        ...s,
-                        error: 'Could not open the direct viewer — try launching again.',
-                      }));
-                    });
-                  }
-                }}
-              />
-            </Suspense>
-          </ErrorBoundary>
-        </div>
-      </div>
-    );
   }
 
   return (
