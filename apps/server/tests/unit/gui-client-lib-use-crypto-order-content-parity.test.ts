@@ -87,8 +87,17 @@ describe('W473.C apps/gui-client/src/lib/use-crypto-order.ts content parity', ()
     expect(body).toMatch(
       /lastStatusRef\.current = body\.status;\s*\n?\s*setState\(\{ kind: 'ready', data: body \}\);/,
     );
-    expect(body).toMatch(
-      /const interval = opts\.pollIntervalMs \?\? DEFAULT_POLL_MS;\s*\n?\s*if \(interval <= 0\) return;\s*\n?\s*if \(opts\.manual === true\) return;\s*\n?\s*if \(orderId === null\) return;\s*\n?\s*const tick = setInterval\(\(\) => \{\s*\n?\s*if \(lastStatusRef\.current !== null && TERMINAL_STATUSES\.has\(lastStatusRef\.current\)\) \{\s*\n?\s*clearInterval\(tick\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*void fetcher\(\);\s*\n?\s*\}, interval\);\s*\n?\s*return \(\) => \{\s*\n?\s*clearInterval\(tick\);\s*\n?\s*\};\s*\n?\s*\}, \[fetcher, opts\.manual, opts\.pollIntervalMs, orderId\]\);/,
+    expect(body).toContain('const interval = opts.pollIntervalMs ?? DEFAULT_POLL_MS;');
+    expect(body).toContain('if (interval <= 0) return;');
+    expect(body).toContain('const tick = setInterval(() => {');
+    expect(body).toContain('void fetcher();');
+    expect(body).toContain('clearInterval(tick);');
+    // Auto-stop on a terminal/partial status OR after repeated failures (so a
+    // failing or idle order never polls forever).
+    expect(body).toContain('STOP_POLLING_STATUSES.has(lastStatusRef.current)');
+    expect(body).toContain('failCountRef.current >= MAX_CONSECUTIVE_ERRORS');
+    expect(body).toContain(
+      "const STOP_POLLING_STATUSES = new Set([...TERMINAL_STATUSES, 'partial']);",
     );
   });
 

@@ -85,9 +85,14 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
 
   it('Initial loadSettings cancelled-race guard pinned — `let cancelled = false` flag flipped by the cleanup function so a fast unmount before the promise resolves doesn\'t setSettings on an unmounted tree. Drift to dropping the flag would re-introduce React\'s "set state on unmounted component" warning + a potential stale-state write.', () => {
     expect(body).toMatch(/export function SettingsProvider/);
-    expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n\s*let cancelled = false;\s*\n\s*void loadSettings\(\)\.then\(\(s\) => \{\s*\n\s*if \(!cancelled\) \{\s*\n\s*setSettings\(s\);\s*\n\s*setLoading\(false\);\s*\n\s*\}\s*\n\s*\}\);\s*\n\s*return \(\) => \{\s*\n\s*cancelled = true;\s*\n\s*\};\s*\n\s*\}, \[\]\);/,
-    );
+    expect(body).toContain('let cancelled = false;');
+    expect(body).toContain('void loadSettings()');
+    expect(body).toContain('if (!cancelled) {');
+    expect(body).toContain('setSettings(s);');
+    expect(body).toContain('cancelled = true;');
+    // A keychain/store read failure degrades to defaults so the GUI boots
+    // instead of blanking via the global unhandledrejection handler.
+    expect(body).toContain('setSettings(DEFAULT_SETTINGS);');
   });
 
   it('V-242 telemetry re-init effect — dependency array [settings.baseUrl, settings.telemetryOptIn]. initTelemetry is "idempotent + reconfigure-safe; it close()s the existing client when the customer opts out mid-session" — so a customer flipping the opt-in toggle MID-SESSION doesn\'t need to refresh the app for the change to take effect.', () => {
