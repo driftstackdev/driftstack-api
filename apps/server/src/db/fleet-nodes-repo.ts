@@ -41,6 +41,10 @@ export interface FleetNodeHeartbeatSnapshot {
 
 export interface FleetNodeDetail {
   id: string;
+  /** Human node identity (migration 0085) — the harness JWT `iss`
+   *  (DRIFTSTACK_MAC_NODE_ID). Auth + heartbeat key by this. Null for
+   *  identity-less rows (pre-0085). */
+  nodeId: string | null;
   publicKeyBase64Url: string;
   displayName: string;
   region: string;
@@ -66,6 +70,9 @@ export interface RegisterFleetNodeArgs {
   displayName: string;
   region: string;
   hardwareClass: string;
+  /** Human node identity (migration 0085) — the harness JWT `iss`. Optional for
+   *  back-compat with identity-less callers; required for a CP-connecting node. */
+  nodeId?: string;
   registeredAt?: Date;
 }
 
@@ -84,6 +91,11 @@ export class DrizzleFleetNodesRepo implements FleetNodesRepo {
   constructor(private readonly database: Database) {}
 
   async getPublicKey(nodeId: string): Promise<FleetNodePublicKey | null> {
+    // migration 0085 — `nodeId` here is the harness JWT `iss` = the human
+    // DRIFTSTACK_MAC_NODE_ID (e.g. "mac-macstadium-us-001"), so resolve by the
+    // `node_id` column, NOT the uuid `id` (a non-uuid iss would error against
+    // the uuid column — the W2203b mismatch). The uuid `id` stays the internal
+    // pk used by getDetail / setLivekitCredentials.
     const rows = await this.database.db
       .select({
         publicKeyBase64Url: fleetNodes.publicKeyBase64Url,
@@ -91,7 +103,7 @@ export class DrizzleFleetNodesRepo implements FleetNodesRepo {
         revokedAt: fleetNodes.revokedAt,
       })
       .from(fleetNodes)
-      .where(eq(fleetNodes.id, nodeId))
+      .where(eq(fleetNodes.nodeId, nodeId))
       .limit(1);
     const row = rows[0];
     if (!row) return null;
@@ -110,6 +122,7 @@ export class DrizzleFleetNodesRepo implements FleetNodesRepo {
         displayName: args.displayName,
         region: args.region,
         hardwareClass: args.hardwareClass,
+        ...(args.nodeId !== undefined ? { nodeId: args.nodeId } : {}),
         ...(args.registeredAt !== undefined ? { registeredAt: args.registeredAt } : {}),
       })
       .returning();
@@ -148,10 +161,14 @@ export class DrizzleFleetNodesRepo implements FleetNodesRepo {
     snapshot: FleetNodeHeartbeatSnapshot,
     now: Date = new Date(),
   ): Promise<void> {
+    // migration 0085 — `nodeId` is the heartbeat's macNodeId = the human
+    // DRIFTSTACK_MAC_NODE_ID (== the JWT iss the connection authed with), so
+    // update by the `node_id` column (no-op for an unregistered/identity-less
+    // node — a self-seeded/unknown beat is harmless).
     await this.database.db
       .update(fleetNodes)
       .set({ lastSeenAt: now, lastHeartbeat: snapshot })
-      .where(eq(fleetNodes.id, nodeId));
+      .where(eq(fleetNodes.nodeId, nodeId));
   }
 
   /** LK.2 — set / rotate per-Mac LiveKit credentials on an existing
@@ -233,6 +250,7 @@ export class DrizzleFleetNodesRepo implements FleetNodesRepo {
 function rowToDetail(row: typeof fleetNodes.$inferSelect): FleetNodeDetail {
   return {
     id: row.id,
+    nodeId: row.nodeId,
     publicKeyBase64Url: row.publicKeyBase64Url,
     displayName: row.displayName,
     region: row.region,

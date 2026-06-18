@@ -116,11 +116,11 @@ describe('routes/mac-nodes-register content parity', () => {
     // Secret-safe DTO: livekit collapsed to a boolean, never the credentials.
     expect(body).toMatch(/has_livekit: n\.livekit !== null,/);
     expect(body).not.toMatch(/api_secret: n\.|apiSecretCiphertextBase64: n\.|api_key: n\.livekit/);
-    // connected derived from the control registry; null when unwired
-    // (prettier may wrap the ternary across lines).
-    expect(body).toMatch(
-      /connected:[\s\S]{0,80}?deps\.controlRegistry === undefined[\s\S]{0,40}?\? null[\s\S]{0,60}?: deps\.controlRegistry\.get\(n\.id\) !== undefined,/,
-    );
+    // connected derived from the control registry (keyed by the human node_id,
+    // migration 0085), null when unwired. toContain fragments (prettier may wrap
+    // the ternary; the key facts are the undefined-guard + the node_id lookup).
+    expect(body).toContain('deps.controlRegistry === undefined');
+    expect(body).toContain('deps.controlRegistry.get(n.nodeId) !== undefined');
     // controlRegistry is an optional dep (gated on FLEET_CONTROL_PLANE_ENABLED).
     expect(body).toMatch(/controlRegistry\?: FleetControlRegistry;/);
   });

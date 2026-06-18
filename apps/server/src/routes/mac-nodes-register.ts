@@ -53,6 +53,10 @@ const RegisterBodySchema = z.object({
 // (no-padding) 32-byte Ed25519 public key — 43 chars; bounded loosely so a valid
 // key is never rejected on a strict length assumption.
 const RegisterNodeBodySchema = z.object({
+  // node_id (migration 0085) — the human identity the harness signs its JWT as
+  // (DRIFTSTACK_MAC_NODE_ID, e.g. "mac-macstadium-us-001"). Auth resolves the
+  // node by this, so it MUST equal the daemon's DRIFTSTACK_MAC_NODE_ID.
+  node_id: z.string().min(1).max(128),
   public_key_base64url: z
     .string()
     .regex(/^[A-Za-z0-9_-]+$/, 'public_key_base64url must be base64url (no padding)')
@@ -226,6 +230,7 @@ export function registerMacNodesRoutes(
       let node;
       try {
         node = await repo.register({
+          nodeId: b.node_id,
           publicKeyBase64Url: b.public_key_base64url,
           displayName: b.display_name,
           region: b.region,
@@ -233,24 +238,27 @@ export function registerMacNodesRoutes(
           registeredAt: now(),
         });
       } catch (err) {
-        // Unique-violation on public_key_base64url → this key is already
-        // registered (fleet_nodes_public_key_unique). Surface as a 400 rather
-        // than a 500 so a re-run is a clear client error, not a server fault.
+        // Unique-violation → this node_id (fleet_nodes_node_id_unique) or
+        // public key (fleet_nodes_public_key_unique) is already registered.
+        // Surface as a 400 so a re-run is a clear client error, not a 500.
         if (
           err !== null &&
           typeof err === 'object' &&
           'code' in err &&
           (err as { code?: string }).code === '23505'
         ) {
-          throw new BadRequestError('A fleet node with this public key is already registered.');
+          throw new BadRequestError(
+            'A fleet node with this node_id or public key is already registered.',
+          );
         }
         throw err;
       }
-      // Response carries the minted uuid (the node id) + the stored metadata.
+      // Response carries the uuid pk + the human node_id + the stored metadata.
       // The public key is echoed back (it is public, not a secret) for
       // operator confirmation.
       return reply.code(201).send({
         mac_node_id: node.id,
+        node_id: node.nodeId,
         public_key_base64url: node.publicKeyBase64Url,
         display_name: node.displayName,
         region: node.region,
@@ -298,7 +306,7 @@ export function registerMacNodesRoutes(
           connected:
             deps.controlRegistry === undefined
               ? null
-              : deps.controlRegistry.get(n.id) !== undefined,
+              : n.nodeId !== null && deps.controlRegistry.get(n.nodeId) !== undefined,
         })),
       });
     },
@@ -341,7 +349,10 @@ export function registerMacNodesRoutes(
       if (detail === null) {
         throw new NotFoundError(`Fleet node ${nodeId} not found.`);
       }
-      const conn = deps.controlRegistry.get(nodeId);
+      // The registry is keyed by the node's human node_id (migration 0085 — the
+      // JWT iss the connection authed with), NOT the uuid pk. Resolve the
+      // connection by detail.nodeId; a node with no node_id can't be connected.
+      const conn = detail.nodeId !== null ? deps.controlRegistry.get(detail.nodeId) : undefined;
       if (conn === undefined) {
         throw new ConflictError(
           `Fleet node ${nodeId} has no live control-plane connection — cannot deliver the command.`,

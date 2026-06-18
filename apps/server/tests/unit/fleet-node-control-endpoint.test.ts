@@ -17,7 +17,7 @@ const ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
 function fakeRepo(opts?: { unknownNode?: boolean }): DrizzleFleetNodesRepo {
   return {
     getDetail: (nodeId: string) =>
-      Promise.resolve(opts?.unknownNode === true ? null : { id: nodeId }),
+      Promise.resolve(opts?.unknownNode === true ? null : { id: nodeId, nodeId: 'mac-node-01' }),
   } as unknown as DrizzleFleetNodesRepo;
 }
 

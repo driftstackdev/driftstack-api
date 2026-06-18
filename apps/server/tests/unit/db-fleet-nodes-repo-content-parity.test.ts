@@ -47,6 +47,7 @@ describe('db/fleet-nodes-repo content parity', () => {
     // toContain fragments (not a closed multi-line regex) so field additions +
     // prettier reflow don't brittle-break the pin.
     expect(body).toContain('export interface FleetNodeDetail {');
+    expect(body).toContain('nodeId: string | null;');
     expect(body).toContain('publicKeyBase64Url: string;');
     expect(body).toContain('lastSeenAt: Date | null;');
     expect(body).toContain('lastHeartbeat: FleetNodeHeartbeatSnapshot | null;');
@@ -60,10 +61,13 @@ describe('db/fleet-nodes-repo content parity', () => {
     );
   });
 
-  it('RegisterFleetNodeArgs 5-field interface pinned: publicKeyBase64Url + displayName + region + hardwareClass + optional registeredAt (test-injectable for fixture freezing). Drift to dropping the optional registeredAt would make fixture tests need a wall-clock-time freeze', () => {
-    expect(body).toMatch(
-      /export interface RegisterFleetNodeArgs \{\s*\n?\s*publicKeyBase64Url: string;\s*\n?\s*displayName: string;\s*\n?\s*region: string;\s*\n?\s*hardwareClass: string;\s*\n?\s*registeredAt\?: Date;\s*\n?\s*\}/,
-    );
+  it('RegisterFleetNodeArgs interface pinned: publicKeyBase64Url + displayName + region + hardwareClass + optional nodeId (migration 0085 human identity) + optional registeredAt (test-injectable). toContain fragments (not a closed regex) so field additions + prettier reflow do not brittle-break the pin.', () => {
+    expect(body).toContain('export interface RegisterFleetNodeArgs {');
+    expect(body).toContain('publicKeyBase64Url: string;');
+    expect(body).toContain('displayName: string;');
+    expect(body).toContain('hardwareClass: string;');
+    expect(body).toContain('nodeId?: string;');
+    expect(body).toContain('registeredAt?: Date;');
   });
 
   it("LK.2 SetFleetNodeLivekitArgs framing pinned + apiSecretCiphertextBase64 envelope spec: 'credentials the Mac harness POSTs to the control plane on boot. apiSecretCiphertextBase64 is the base64-encoded [IV | tag | ciphertext] blob produced by encryptLivekitSecret().' — pinned so the LK.2 anchor + Mac-harness-POSTs-on-boot + base64-encoded envelope + encryptLivekitSecret cross-reference contract all stay documented", () => {

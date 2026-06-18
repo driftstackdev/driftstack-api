@@ -2012,9 +2012,19 @@ export const fleetNodes = pgTable(
     // typed columns) so A3's evolving heartbeat shape needs no migration per
     // field; NULL until the first beat is recorded.
     lastHeartbeat: jsonb('last_heartbeat'),
+    // Human-readable node identity (migration 0085) — the harness daemon's JWT
+    // `iss` (DRIFTSTACK_MAC_NODE_ID, e.g. "mac-macstadium-us-001"). Auth +
+    // heartbeat key by this, not the uuid `id`, so a node connects with its
+    // natural config.env NODE_ID. NULL for pre-0085 / identity-less rows.
+    nodeId: text('node_id'),
   },
   (t) => [
     uniqueIndex('fleet_nodes_public_key_unique').on(t.publicKeyBase64Url),
+    // Partial unique (migration 0085): two real nodes can't share a node_id,
+    // but identity-less rows (node_id NULL) don't collide.
+    uniqueIndex('fleet_nodes_node_id_unique')
+      .on(t.nodeId)
+      .where(sql`${t.nodeId} IS NOT NULL`),
     // Partial indexes mirror the migration's WHERE revoked_at IS NULL
     // — Drizzle's `.where()` on `index()` produces the partial clause.
     index('fleet_nodes_region_idx')

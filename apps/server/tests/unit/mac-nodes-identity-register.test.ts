@@ -24,6 +24,7 @@ function fakeRepo(opts?: { duplicate?: boolean }): {
   const mintedId = randomUUID();
   const repo = {
     register: (args: {
+      nodeId?: string;
       publicKeyBase64Url: string;
       displayName: string;
       region: string;
@@ -38,6 +39,7 @@ function fakeRepo(opts?: { duplicate?: boolean }): {
       }
       return Promise.resolve({
         id: mintedId,
+        nodeId: args.nodeId ?? null,
         publicKeyBase64Url: args.publicKeyBase64Url,
         displayName: args.displayName,
         region: args.region,
@@ -81,6 +83,7 @@ describe('V-820 POST /v1/mac-nodes — fleet-node identity registration', () => 
       url: '/v1/mac-nodes',
       headers: { authorization: 'Bearer ds_live_test', 'content-type': 'application/json' },
       payload: {
+        node_id: 'mac-macstadium-us-001',
         public_key_base64url: VALID_PUBKEY,
         display_name: 'mac-macstadium-us-001',
         region: 'us-east-1',
@@ -90,6 +93,7 @@ describe('V-820 POST /v1/mac-nodes — fleet-node identity registration', () => 
     expect(res.statusCode).toBe(201);
     const body = res.json<{
       mac_node_id: string;
+      node_id: string;
       public_key_base64url: string;
       display_name: string;
       region: string;
@@ -97,6 +101,7 @@ describe('V-820 POST /v1/mac-nodes — fleet-node identity registration', () => 
       registered_at: string;
     }>();
     expect(body.mac_node_id).toBe(mintedId);
+    expect(body.node_id).toBe('mac-macstadium-us-001');
     expect(body.public_key_base64url).toBe(VALID_PUBKEY);
     expect(body.display_name).toBe('mac-macstadium-us-001');
     expect(body.region).toBe('us-east-1');
@@ -113,6 +118,7 @@ describe('V-820 POST /v1/mac-nodes — fleet-node identity registration', () => 
       url: '/v1/mac-nodes',
       headers: { authorization: 'Bearer ds_live_test', 'content-type': 'application/json' },
       payload: {
+        node_id: 'mac-macstadium-us-001',
         public_key_base64url: VALID_PUBKEY,
         display_name: 'dup',
         region: 'us-east-1',
@@ -133,6 +139,7 @@ describe('V-820 POST /v1/mac-nodes — fleet-node identity registration', () => 
       url: '/v1/mac-nodes',
       headers: { authorization: 'Bearer ds_live_test', 'content-type': 'application/json' },
       payload: {
+        node_id: 'mac-macstadium-us-001',
         public_key_base64url: 'not valid base64url!!',
         display_name: 'x',
         region: 'us-east-1',

@@ -65,6 +65,7 @@ function makeMac(
   const apiSecret = args.apiSecret ?? 'lk_secret_macmac_macmac_macmac_macmac';
   return {
     id: 'fleet_mac_test',
+    nodeId: 'mac-test-01',
     publicKeyBase64Url: 'A'.repeat(43) + '=',
     displayName: 'mac-test-01',
     region: 'eu-central-1',
