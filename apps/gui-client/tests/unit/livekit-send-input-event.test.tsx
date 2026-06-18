@@ -16,7 +16,12 @@
 // Pure-function-ish tests; we mock just the publishData call site.
 
 import { describe, expect, it, vi } from 'vitest';
-import { sendInputEvent, type InputEvent, type Room } from '../../src/lib/livekit';
+import {
+  isBenignTeardownError,
+  sendInputEvent,
+  type InputEvent,
+  type Room,
+} from '../../src/lib/livekit';
 
 interface MinimalRoom {
   localParticipant: {
@@ -138,5 +143,63 @@ describe('sendInputEvent', () => {
     const { room } = makeRoom();
     const result = await sendInputEvent(room, { type: 'mouseMove', x: 0, y: 0 });
     expect(result).toBeUndefined();
+  });
+});
+
+// Teardown-race safety: a publish that lands after the LiveKit RTCEngine is
+// closed rejects with "PC manager is closed". sendInputEvent must SWALLOW that
+// (and similar teardown errors) so a fire-and-forget caller can't escalate it
+// to the global unhandledrejection handler and blank the whole window
+// (founder-hit 2026-06-18: the fatal overlay replaced the draggable simulator).
+describe('sendInputEvent — benign teardown errors', () => {
+  function makeRejectingRoom(message: string): Room {
+    const minimal: MinimalRoom = {
+      localParticipant: { publishData: () => Promise.reject(new Error(message)) },
+    };
+    return minimal as unknown as Room;
+  }
+
+  it('swallows a "PC manager is closed" rejection (does not throw)', async () => {
+    const room = makeRejectingRoom('PC manager is closed');
+    await expect(
+      sendInputEvent(room, { type: 'ping', timestamp: 1 }, { reliable: false }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('swallows a "client initiated disconnect" rejection', async () => {
+    const room = makeRejectingRoom('Client initiated disconnect');
+    await expect(sendInputEvent(room, { type: 'mouseMove', x: 0, y: 0 })).resolves.toBeUndefined();
+  });
+
+  it('RE-THROWS a genuine publish failure (not a teardown race)', async () => {
+    const room = makeRejectingRoom('DataChannel buffer is full');
+    await expect(sendInputEvent(room, { type: 'mouseMove', x: 0, y: 0 })).rejects.toThrow(
+      /buffer is full/,
+    );
+  });
+});
+
+describe('isBenignTeardownError', () => {
+  it('classifies LiveKit teardown errors as benign', () => {
+    for (const m of [
+      'PC manager is closed',
+      'Client initiated disconnect',
+      'engine is closed',
+      'engine closed',
+      'not connected',
+    ]) {
+      expect(isBenignTeardownError(new Error(m))).toBe(true);
+    }
+  });
+
+  it('does NOT classify real errors as benign', () => {
+    for (const m of ['DataChannel buffer is full', 'unauthorized', 'network error', '']) {
+      expect(isBenignTeardownError(new Error(m))).toBe(false);
+    }
+  });
+
+  it('handles non-Error rejection values', () => {
+    expect(isBenignTeardownError('PC manager is closed')).toBe(true);
+    expect(isBenignTeardownError(null)).toBe(false);
   });
 });

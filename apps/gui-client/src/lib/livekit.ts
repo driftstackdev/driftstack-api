@@ -82,7 +82,30 @@ export async function sendInputEvent(
 ): Promise<void> {
   const reliable = opts.reliable ?? true;
   const data = new TextEncoder().encode(JSON.stringify(event));
-  await room.localParticipant.publishData(data, { reliable });
+  try {
+    await room.localParticipant.publishData(data, { reliable });
+  } catch (err) {
+    // A publish that runs after the room/engine has been torn down rejects with
+    // "PC manager is closed" (livekit UnexpectedConnectionState) or a
+    // client-initiated-disconnect error. These are benign teardown races (window
+    // close, unmount, connect/disconnect). Swallow them here so a fire-and-forget
+    // caller can't escalate one to the global unhandledrejection handler and blank
+    // the whole window (founder-hit 2026-06-18: the fatal overlay replaced the
+    // draggable simulator → undraggable black box → force-quit). Re-throw anything
+    // else so genuine publish failures still surface.
+    if (isBenignTeardownError(err)) return;
+    throw err;
+  }
+}
+
+/** True for the LiveKit errors thrown when an operation runs after the Room's
+ *  RTCEngine has been closed (teardown races) — safe to ignore on a
+ *  fire-and-forget send and never worth blanking the app over. */
+export function isBenignTeardownError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /PC manager is closed|client initiated disconnect|engine (is )?closed|not connected/i.test(
+    message,
+  );
 }
 
 /** Re-export the public surface gui-client AgentSessionPanel

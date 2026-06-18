@@ -102,28 +102,53 @@ export async function openSimulatorWindow({
     position = null;
   }
 
-  const win = new WebviewWindow(label, {
-    url: `index.html?${params.toString()}`,
-    title: deviceName ?? 'iPhone',
-    width: SIM_WIDTH,
-    height: SIM_HEIGHT,
-    resizable: true,
-    decorations: false,
-    transparent: true,
-    alwaysOnTop: true,
-    ...(position !== null ? { x: position.x, y: position.y } : { center: true }),
-    shadow: false,
-  });
-
-  return await new Promise<OpenSimulatorResult>((resolve) => {
-    // created/error are the Tauri v2 lifecycle signals for runtime windows.
-    void win.once('tauri://created', () => resolve({ opened: true }));
-    void win.once('tauri://error', (e) => {
-      // Surfaced ALL THE WAY TO THE UI, not just the console: a silent
-      // fallback caused the founder's "still the same window" saga.
-      const reason = typeof e?.payload === 'string' ? e.payload : JSON.stringify(e?.payload ?? e);
-      console.warn('[simulator] separate window creation failed; falling back in-app:', reason);
-      resolve({ opened: false, reason });
+  const buildWindow = (): InstanceType<typeof WebviewWindow> =>
+    new WebviewWindow(label, {
+      url: `index.html?${params.toString()}`,
+      title: deviceName ?? 'iPhone',
+      width: SIM_WIDTH,
+      height: SIM_HEIGHT,
+      resizable: true,
+      decorations: false,
+      transparent: true,
+      alwaysOnTop: true,
+      ...(position !== null ? { x: position.x, y: position.y } : { center: true }),
+      shadow: false,
     });
-  });
+
+  interface Attempt {
+    opened: boolean;
+    reason?: string;
+    /** True when the backend rejected because the label is still registered
+     *  (a window we couldn't see via getByLabel) — recoverable by closing it. */
+    labelCollision?: boolean;
+  }
+
+  const attempt = (win: InstanceType<typeof WebviewWindow>): Promise<Attempt> =>
+    new Promise<Attempt>((resolve) => {
+      // created/error are the Tauri v2 lifecycle signals for runtime windows.
+      void win.once('tauri://created', () => resolve({ opened: true }));
+      void win.once('tauri://error', (e) => {
+        const reason = typeof e?.payload === 'string' ? e.payload : JSON.stringify(e?.payload ?? e);
+        resolve({ opened: false, reason, labelCollision: /already exists|label/i.test(reason) });
+      });
+    });
+
+  let result = await attempt(buildWindow());
+
+  // The up-front getByLabel guard misses the case where the Rust backend still
+  // holds the label but the JS side can't see the handle (e.g. the prior window
+  // was closed from its toolbar, or a relaunch of the same session). Close the
+  // lingering window and recreate ONCE before falling back in-app.
+  if (!result.opened && result.labelCollision === true) {
+    const stale = await WebviewWindow.getByLabel(label).catch(() => null);
+    await stale?.close().catch(() => undefined);
+    result = await attempt(buildWindow());
+  }
+
+  if (result.opened) return { opened: true };
+  // Surfaced ALL THE WAY TO THE UI, not just the console: a silent fallback
+  // caused the founder's "still the same window" saga.
+  console.warn('[simulator] separate window creation failed; falling back in-app:', result.reason);
+  return { opened: false, ...(result.reason !== undefined ? { reason: result.reason } : {}) };
 }

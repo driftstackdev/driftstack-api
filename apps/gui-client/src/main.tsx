@@ -41,6 +41,11 @@ function renderFatalError(code: string, err: unknown): void {
   try {
     const box = document.createElement('div');
     box.setAttribute('data-fatal-error', code);
+    // Drag-region so that if a fatal overlay ever paints in the BORDERLESS
+    // simulator window (no title bar), the user can still move it instead of
+    // being stuck with an unmovable box (founder-hit 2026-06-18). The Reload
+    // button opts out below so it stays clickable.
+    box.setAttribute('data-tauri-drag-region', '');
     box.style.cssText =
       'position:fixed;inset:0;z-index:2147483647;background:#0b0b0b;color:#eee;' +
       'font:13px/1.55 -apple-system,system-ui,sans-serif;padding:28px;overflow:auto;';
@@ -58,7 +63,7 @@ function renderFatalError(code: string, err: unknown): void {
           escapeHtml(stack) +
           '</pre>'
         : '') +
-      '<button id="ds-fatal-reload" style="margin-top:16px;background:#2a2a2a;color:#eee;border:1px solid #444;border-radius:6px;padding:8px 16px;cursor:pointer">Reload</button>' +
+      '<button id="ds-fatal-reload" data-tauri-drag-region="false" style="margin-top:16px;background:#2a2a2a;color:#eee;border:1px solid #444;border-radius:6px;padding:8px 16px;cursor:pointer">Reload</button>' +
       '</div>';
     document.body.appendChild(box);
     document
@@ -73,9 +78,20 @@ function renderFatalError(code: string, err: unknown): void {
 // Catch async errors + unhandled promise rejections (e.g. a failed API/keychain
 // call that nothing awaited) so they surface instead of leaving a dead UI.
 window.addEventListener('error', (e) => renderFatalError('WINDOW_ERROR', e.error ?? e.message));
-window.addEventListener('unhandledrejection', (e) =>
-  renderFatalError('UNHANDLED_REJECTION', e.reason),
-);
+window.addEventListener('unhandledrejection', (e) => {
+  // Benign LiveKit/WebRTC teardown races — a publish or connect that resolves
+  // AFTER the Room's RTCEngine closed rejects with "PC manager is closed" (and
+  // similar). These are harmless and must NOT blank the app: founder-hit
+  // 2026-06-18, an un-caught latency-ping publish in the borderless simulator
+  // window painted the fatal overlay over the iPhone → an undraggable black box
+  // → force-quit. Swallow them; everything else stays fatal.
+  const reasonMessage = e.reason instanceof Error ? e.reason.message : String(e.reason ?? '');
+  if (/PC manager is closed|client initiated disconnect|engine (is )?closed/i.test(reasonMessage)) {
+    e.preventDefault();
+    return;
+  }
+  renderFatalError('UNHANDLED_REJECTION', e.reason);
+});
 
 // Catch render-tree errors so a broken component shows the error, not a blank.
 class RootErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {

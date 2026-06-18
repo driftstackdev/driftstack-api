@@ -89,6 +89,7 @@ export function useLatencyPing(opts: UseLatencyPingOpts): LatencyState {
     (room as any).on(RoomEvent.DataReceived, onData);
 
     const sendPing = (): void => {
+      if (cancelled) return;
       const timestamp = Date.now();
       outstanding.set(timestamp, true);
       // Garbage-collect outstanding entries older than the
@@ -96,7 +97,14 @@ export function useLatencyPing(opts: UseLatencyPingOpts): LatencyState {
       for (const ts of outstanding.keys()) {
         if (timestamp - ts > LIVEKIT_PING_FRESH_WINDOW_MS) outstanding.delete(ts);
       }
-      void sendInputEvent(room, { type: 'ping', timestamp }, { reliable: false });
+      // Fire-and-forget, but .catch the publish: a ping that lands after the
+      // room/engine is torn down (window close, unmount, connect/disconnect race)
+      // rejects with "PC manager is closed". sendInputEvent already swallows
+      // benign teardown errors, but keep an explicit guard here so NOTHING from
+      // this loop can ever reach the global unhandledrejection handler.
+      void sendInputEvent(room, { type: 'ping', timestamp }, { reliable: false }).catch(
+        () => undefined,
+      );
     };
 
     // Fire one immediately + every LIVEKIT_PING_INTERVAL_MS after.
