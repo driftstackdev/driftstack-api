@@ -13,6 +13,23 @@ import { useConfirm } from '../components/ConfirmProvider';
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
+/** Map a raw team API error to customer-friendly copy (the notice showed raw
+ *  err.message — status codes / scope jargon a user can't act on). */
+function friendlyTeamError(err: unknown, fallback: string): string {
+  const status = (err as { status?: number } | null)?.status;
+  const msg = err instanceof Error ? err.message : '';
+  if (status === 403 || /forbidden|owner|scope|not allowed/i.test(msg)) {
+    return 'Only the account owner can manage the team.';
+  }
+  if (status === 402 || /seat|limit|quota|upgrade/i.test(msg)) {
+    return "You've reached your team's seat limit — upgrade your plan to add more members.";
+  }
+  if (/load failed|network|fetch|ECONN|getaddrinfo|timeout|unreachable/i.test(msg)) {
+    return "Couldn't reach the server — check your connection and try again.";
+  }
+  return msg.length > 0 ? msg : fallback;
+}
+
 export function TeamView(): JSX.Element {
   const { client } = useSettings();
   const confirm = useConfirm();
@@ -59,7 +76,7 @@ export function TeamView(): JSX.Element {
       setNotice(`Invite sent to ${trimmed}.`);
       await refresh();
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : 'Could not send the invite.');
+      setNotice(friendlyTeamError(err, 'Could not send the invite.'));
     } finally {
       setBusy(false);
     }
@@ -77,7 +94,7 @@ export function TeamView(): JSX.Element {
         await client.team.removeMember(m.id);
         await refresh();
       } catch (err) {
-        setNotice(err instanceof Error ? err.message : 'Could not remove the member.');
+        setNotice(friendlyTeamError(err, 'Could not remove the member.'));
       } finally {
         setRemovingId(null);
       }

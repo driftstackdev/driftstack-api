@@ -23,6 +23,23 @@ import type {
 } from '@driftstack/sdk';
 import { useSettings } from './SettingsContext';
 
+/** Map a raw agent-request error to customer-friendly copy (the chat error
+ *  banner showed raw err.message — auth/network jargon a user can't act on). */
+function friendlyChatError(err: unknown): string {
+  const status = (err as { status?: number } | null)?.status;
+  const msg = err instanceof Error ? err.message : '';
+  if (status === 401 || status === 403 || /unauthorized|forbidden|api key|scope/i.test(msg)) {
+    return 'Your API key was rejected — check it in Settings.';
+  }
+  if (status === 429 || /rate.?limit|too many/i.test(msg)) {
+    return 'Rate limited — wait a moment, then try again.';
+  }
+  if (/load failed|network|fetch|ECONN|getaddrinfo|timeout|unreachable/i.test(msg)) {
+    return "Couldn't reach the server — check your connection and try again.";
+  }
+  return msg.length > 0 ? msg : 'The agent request failed — try again.';
+}
+
 export type ChatModel = 'claude-opus-4-7' | 'claude-sonnet-4-6' | 'claude-haiku-4-5';
 
 export interface ChatTurn {
@@ -146,7 +163,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         setSession(response.session);
         setTurns((t) => [...t, { id: nextId(), role: 'agent', response }]);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Agent request failed.');
+        setError(friendlyChatError(err));
       } finally {
         setSending(false);
       }
