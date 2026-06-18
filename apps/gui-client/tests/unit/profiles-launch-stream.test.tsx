@@ -14,6 +14,13 @@ const agentClose = vi.fn<(id: string) => Promise<unknown>>(() => Promise.resolve
 const sessionCreate = vi.fn<(b: unknown) => Promise<unknown>>(() =>
   Promise.resolve({ id: 'ses_fallback' }),
 );
+// Configurable per-test (default = empty) so the session-tracking self-heal can be
+// exercised: a profile bound to an agt_ session reads "running" only if that session
+// is in the live agentSessions list AND not closed.
+const agentSessionsList = vi.fn<() => Promise<{ data: unknown[] }>>(() =>
+  Promise.resolve({ data: [] }),
+);
+const listBindingsMock = vi.fn<() => Promise<unknown[]>>(() => Promise.resolve([]));
 
 function profile() {
   return {
@@ -46,9 +53,9 @@ vi.mock('../../src/lib/SettingsContext', () => {
         close: (id: string) => agentClose(id),
         // W624 — Live-view re-open path for an already-running agent session.
         livekitToken: () => Promise.resolve(LIVEKIT),
-        // Worktimer — the refresh loop lists agent sessions (best-effort) for
-        // the running-row elapsed timer.
-        list: () => Promise.resolve({ data: [] }),
+        // Worktimer + W624 staleness cross-check — the refresh loop lists agent
+        // sessions (best-effort) for the running-row timer + the self-heal.
+        list: () => agentSessionsList(),
       },
     },
     settings: { apiKey: 'ds_test_x', baseUrl: 'http://localhost:3000' },
@@ -71,7 +78,7 @@ vi.mock('../../src/lib/SettingsContext', () => {
 });
 
 vi.mock('../../src/lib/profile-bindings', () => ({
-  listBindings: () => Promise.resolve([]),
+  listBindings: () => listBindingsMock(),
   getBinding: () => Promise.resolve(null),
   setDefaultProxy: vi.fn(() => Promise.resolve()),
   markLaunched: vi.fn(() => Promise.resolve()),
@@ -143,5 +150,34 @@ describe('ProfilesView launch → stream', () => {
     expect(sessionCreate).toHaveBeenCalledWith({ profile_id: 'prof_1' });
     // The old dead-end message is gone — the launch opens a working viewer.
     expect(screen.queryByText(/no live stream was returned/i)).toBeNull();
+  });
+
+  // Session-tracking self-heal (founder 2026-06-18: "always says open session even
+  // on long-expired/failed sessions"). boundSession reads a bound agent session as
+  // running ONLY if it's in the live list AND not closed.
+  const STALE_BINDING = {
+    profileId: 'prof_1',
+    defaultProxyId: null,
+    currentSessionId: 'agt_bound',
+    lastLaunchedAt: '2026-06-18T00:00:00Z',
+  };
+
+  it('self-heals a CLOSED agent binding to idle: the profile shows Launch, not Open session', async () => {
+    listBindingsMock.mockResolvedValueOnce([STALE_BINDING]);
+    agentSessionsList.mockResolvedValueOnce({
+      data: [{ id: 'agt_bound', created_at: '2026-06-18T00:00:00Z', status: 'closed' }],
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    expect(await screen.findByRole('button', { name: 'Launch' })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Open session' })).toBeNull());
+  });
+
+  it('shows Open session for an ACTIVE agent binding present in the live list', async () => {
+    listBindingsMock.mockResolvedValueOnce([STALE_BINDING]);
+    agentSessionsList.mockResolvedValueOnce({
+      data: [{ id: 'agt_bound', created_at: '2026-06-18T00:00:00Z', status: 'active' }],
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    expect(await screen.findByRole('button', { name: 'Open session' })).toBeTruthy();
   });
 });
