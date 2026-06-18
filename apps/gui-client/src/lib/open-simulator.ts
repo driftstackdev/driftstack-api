@@ -112,17 +112,21 @@ export async function openSimulatorWindow({
       width: SIM_WIDTH,
       height: SIM_HEIGHT,
       resizable: true,
-      decorations: false,
-      transparent: true,
-      // NOT always-on-top by default — a floating panel doesn't behave like a
-      // normal, minimizable, switchable window. The toolbar "pin" toggle still
-      // lets the user float it on top when they want. minimizable + a taskbar
-      // entry make it a first-class window.
+      // DECORATED (real macOS title bar) — founder requested "a separate window
+      // selectable in the taskbar" multiple times. A borderless + transparent
+      // window is a panel-like surface that does NOT appear in Mission Control /
+      // the Window menu / Cmd-` / minimizable to the Dock, no matter what
+      // skipTaskbar/alwaysOnTop say. A decorated window IS a first-class macOS
+      // window: selectable, switchable, minimizable — the Xcode-Simulator model
+      // (title bar + device). The OS title bar provides close/minimize, so the
+      // in-content toolbar drops its custom traffic-lights.
+      decorations: true,
+      transparent: false,
+      backgroundColor: '#0b0f14',
       alwaysOnTop: false,
       minimizable: true,
       skipTaskbar: false,
       ...(position !== null ? { x: position.x, y: position.y } : { center: true }),
-      shadow: false,
     });
 
   interface Attempt {
