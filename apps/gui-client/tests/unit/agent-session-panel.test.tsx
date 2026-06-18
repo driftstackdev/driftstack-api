@@ -5,7 +5,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/react';
-import { AgentSessionPanel } from '../../src/components/AgentSessionPanel';
+import { AgentSessionPanel, friendlyConnectError } from '../../src/components/AgentSessionPanel';
 
 const connectMock = vi.fn();
 
@@ -21,6 +21,31 @@ vi.mock('../../src/lib/livekit', () => ({
 }));
 
 const INFO = { ws_url: 'wss://lk', token: 'tok' } as never;
+
+describe('friendlyConnectError — raw LiveKit errors → customer copy', () => {
+  it('maps an invalid/expired token to a friendly Reconnect message', () => {
+    const m = friendlyConnectError(
+      new Error('could not establish signal connection: invalid authorization token'),
+    );
+    expect(m).toMatch(/video link is no longer valid/i);
+    expect(m).not.toMatch(/authorization token/i); // raw jargon hidden
+  });
+  it('maps a transport/signal failure to a connection-check message', () => {
+    expect(friendlyConnectError(new Error('could not establish signal connection'))).toMatch(
+      /reach the live-stream server/i,
+    );
+    expect(friendlyConnectError(new Error('WebSocket connection timeout'))).toMatch(
+      /reach the live-stream server/i,
+    );
+  });
+  it('maps a closed/disconnect to a close-or-reconnect message', () => {
+    expect(friendlyConnectError(new Error('room closed'))).toMatch(/connection closed/i);
+  });
+  it('falls back to the raw text for unrecognized errors, else a generic line', () => {
+    expect(friendlyConnectError(new Error('weird thing'))).toBe('weird thing');
+    expect(friendlyConnectError(null)).toMatch(/could not connect/i);
+  });
+});
 
 describe('AgentSessionPanel overlay UX', () => {
   it('shows a connecting spinner (no Reconnect button) before connect resolves', () => {

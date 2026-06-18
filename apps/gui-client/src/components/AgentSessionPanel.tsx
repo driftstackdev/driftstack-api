@@ -74,6 +74,26 @@ export interface AgentSessionPanelProps {
  *  spinner + reassuring copy keep it from feeling stuck in the meantime. */
 export const NO_PUBLISHER_TIMEOUT_MS = 30_000;
 
+/** Map raw livekit-client connection errors to customer-friendly copy. The raw
+ *  messages leak transport jargon into the overlay — e.g. "could not establish
+ *  signal connection: invalid authorization token" (founder saw it 2026-06-18).
+ *  Keeps the raw text as a fallback for anything unrecognized. */
+export function friendlyConnectError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+  if (/authorization token|permission|unauthorized|\b401\b|expired/i.test(raw)) {
+    return "This session's video link is no longer valid — Reconnect to get a fresh one.";
+  }
+  if (
+    /signal connection|could not connect|websocket|network|timeout|ECONN|getaddrinfo|dns/i.test(raw)
+  ) {
+    return "Couldn't reach the live-stream server — check your connection, then Reconnect.";
+  }
+  if (/closed|disconnect/i.test(raw)) {
+    return 'The live connection closed — Reconnect, or close this window if the session ended.';
+  }
+  return raw.length > 0 ? raw : 'Could not connect to the live stream.';
+}
+
 const IPHONE_16_PRO_ASPECT_RATIO = 1206 / 2622; // ≈ 0.46
 
 export function AgentSessionPanel({
@@ -174,8 +194,7 @@ export function AgentSessionPanel({
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : 'unknown connection error';
-        setS({ kind: 'error', message });
+        setS({ kind: 'error', message: friendlyConnectError(err) });
       });
 
     return () => {
