@@ -66,9 +66,13 @@ export interface AgentSessionPanelProps {
 }
 
 /** W617 — how long a connected-but-videoless room waits before the panel
- *  declares "no publisher" (a real worker publishes within ~2-5s; 10s is
- *  comfortably past that without feeling stuck). */
-export const NO_PUBLISHER_TIMEOUT_MS = 10_000;
+ *  declares "no publisher". A WARM worker publishes in ~2-5s, but a COLD
+ *  session spawn (the worker launches a fresh browser fork → loads the page →
+ *  joins LiveKit → first frame) routinely takes longer — 10s flipped to a
+ *  discouraging "no video" right as the stream was about to appear (founder's
+ *  first real launch, 2026-06-18). 30s comfortably covers a cold spawn; the
+ *  spinner + reassuring copy keep it from feeling stuck in the meantime. */
+export const NO_PUBLISHER_TIMEOUT_MS = 30_000;
 
 const IPHONE_16_PRO_ASPECT_RATIO = 1206 / 2622; // ≈ 0.46
 
@@ -240,7 +244,7 @@ export function AgentSessionPanel({
                 className="h-7 w-7 animate-spin rounded-full border-2 border-white/25 border-t-white/90"
                 aria-hidden="true"
               />
-              <span>Connected — waiting for the browser to start streaming…</span>
+              <span>Connected — starting the browser… a cold start can take a few seconds.</span>
             </>
           ) : (
             <>

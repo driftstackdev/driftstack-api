@@ -103,8 +103,8 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).toMatch(/onStateChangeRef\.current\?\.\(next\);/);
   });
 
-  it("W617 no-publisher detection: NO_PUBLISHER_TIMEOUT_MS = 10_000 module export; publisher tri-state ('waiting' → 'publishing' on TrackSubscribed video, 'waiting' → 'none' on post-connect timeout); the 'none' overlay offers the parent's onNoPublisher fallback (open-polling-viewer button) — pinned for the founder-hit connected-but-empty-room black screen (no browser worker publishing)", () => {
-    expect(body).toMatch(/export const NO_PUBLISHER_TIMEOUT_MS = 10_000;/);
+  it("W617 no-publisher detection: NO_PUBLISHER_TIMEOUT_MS = 30_000 module export (raised from 10s so a COLD worker spawn — fresh browser fork → page load → LiveKit join — doesn't prematurely flip to the 'no video' message right as the stream appears, founder's first real launch 2026-06-18); publisher tri-state ('waiting' → 'publishing' on TrackSubscribed video, 'waiting' → 'none' on post-connect timeout); the 'none' overlay offers the parent's onNoPublisher fallback (open-polling-viewer button) — pinned for the founder-hit connected-but-empty-room black screen (no browser worker publishing)", () => {
+    expect(body).toMatch(/export const NO_PUBLISHER_TIMEOUT_MS = 30_000;/);
     expect(body).toMatch(
       /const \[publisher, setPublisher\] = useState<'waiting' \| 'publishing' \| 'none'>\('waiting'\);/,
     );
