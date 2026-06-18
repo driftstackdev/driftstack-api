@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "tauri:build:simulator": "tauri build --config src-tauri/tauri.simulator.conf.json"
   },
   "dependencies": {
     "@driftstack/sdk": "*",
