@@ -57,9 +57,13 @@ describe('routes/fleet-events content parity', () => {
     );
     expect(body).toMatch(/'\/v1\/fleet\/events',/);
     expect(body).toMatch(/websocket: true,/);
-    expect(body).toMatch(
-      /const \{ nodeId \} = await authenticateFleetUpgrade\(req\.headers, \{ auth: deps\.auth \}\);/,
-    );
+    // authenticateFleetUpgrade now also takes the query (the ?ds_token=/?node_id=
+    // fallback for URLSession, which strips the Authorization header on WS).
+    // toContain fragments (prettier wraps the multi-line call).
+    expect(body).toContain('const { nodeId } = await authenticateFleetUpgrade(');
+    expect(body).toContain('req.headers,');
+    expect(body).toContain('as Record<string, unknown>,');
+    expect(body).toContain('{ auth: deps.auth },');
   });
 
   it('handler wiring pinned: register the verified node by nodeId; route inbound messages to the connection; unregister on close + error', () => {

@@ -43,13 +43,13 @@ function headers(
 
 describe('authenticateFleetUpgrade', () => {
   it('valid JWT + matching node-id header → resolves the nodeId', async () => {
-    const r = await authenticateFleetUpgrade(headers('jwt', NODE_ID), { auth: okAuth() });
+    const r = await authenticateFleetUpgrade(headers('jwt', NODE_ID), {}, { auth: okAuth() });
     expect(r).toEqual({ nodeId: NODE_ID });
   });
 
   it('missing Authorization header → 401', async () => {
     await expect(
-      authenticateFleetUpgrade(headers(undefined, NODE_ID), { auth: okAuth() }),
+      authenticateFleetUpgrade(headers(undefined, NODE_ID), {}, { auth: okAuth() }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
@@ -57,6 +57,7 @@ describe('authenticateFleetUpgrade', () => {
     await expect(
       authenticateFleetUpgrade(
         { authorization: 'Basic abc', [FLEET_NODE_ID_HEADER]: NODE_ID },
+        {},
         {
           auth: okAuth(),
         },
@@ -77,9 +78,13 @@ describe('authenticateFleetUpgrade', () => {
     ];
     const messages = new Set<string>();
     for (const reason of reasons) {
-      const err = await authenticateFleetUpgrade(headers('jwt', NODE_ID), {
-        auth: failAuth(reason),
-      }).then(
+      const err = await authenticateFleetUpgrade(
+        headers('jwt', NODE_ID),
+        {},
+        {
+          auth: failAuth(reason),
+        },
+      ).then(
         () => null,
         (e: unknown) => e,
       );
@@ -95,19 +100,46 @@ describe('authenticateFleetUpgrade', () => {
 
   it('node-id header absent → 401 (even with a valid JWT)', async () => {
     await expect(
-      authenticateFleetUpgrade(headers('jwt', undefined), { auth: okAuth() }),
+      authenticateFleetUpgrade(headers('jwt', undefined), {}, { auth: okAuth() }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it('node-id header that does not match the JWT iss → 401', async () => {
     await expect(
-      authenticateFleetUpgrade(headers('jwt', 'some-other-node'), { auth: okAuth(NODE_ID) }),
+      authenticateFleetUpgrade(headers('jwt', 'some-other-node'), {}, { auth: okAuth(NODE_ID) }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
   it('node-id header as an array (duplicate header) → 401 (not treated as a valid id)', async () => {
     await expect(
-      authenticateFleetUpgrade(headers('jwt', [NODE_ID, NODE_ID]), { auth: okAuth() }),
+      authenticateFleetUpgrade(headers('jwt', [NODE_ID, NODE_ID]), {}, { auth: okAuth() }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+
+  // URLSessionWebSocketTask (the Mac harness daemon) strips the reserved
+  // Authorization header on the WS upgrade, so the token + node-id fall back to
+  // ?ds_token= / ?node_id= query params (verified against the live box, W2206).
+  it('token via ?ds_token query param (no Authorization header) + node-id header → resolves', async () => {
+    const r = await authenticateFleetUpgrade(
+      headers(undefined, NODE_ID),
+      { ds_token: 'jwt' },
+      { auth: okAuth() },
+    );
+    expect(r).toEqual({ nodeId: NODE_ID });
+  });
+
+  it('token + node-id BOTH via query (the full no-header URLSession path) → resolves', async () => {
+    const r = await authenticateFleetUpgrade(
+      {},
+      { ds_token: 'jwt', node_id: NODE_ID },
+      { auth: okAuth() },
+    );
+    expect(r).toEqual({ nodeId: NODE_ID });
+  });
+
+  it('no token in header OR query → 401', async () => {
+    await expect(
+      authenticateFleetUpgrade(headers(undefined, NODE_ID), {}, { auth: okAuth() }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 });

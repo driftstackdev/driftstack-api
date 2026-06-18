@@ -42,10 +42,25 @@ export interface FleetUpgradeAuthDeps {
  */
 export async function authenticateFleetUpgrade(
   headers: Record<string, string | string[] | undefined>,
+  query: Record<string, unknown>,
   deps: FleetUpgradeAuthDeps,
 ): Promise<{ nodeId: string }> {
+  // Token from `Authorization: Bearer <jwt>` OR the `?ds_token=<jwt>` query param.
+  // The query fallback exists because URLSessionWebSocketTask (the Mac harness
+  // daemon) STRIPS the reserved `Authorization` header on the WS upgrade —
+  // verified 2026-06-18 against the live box: its upgrades hit "Missing
+  // Authorization header" while a raw curl carrying the header reached the
+  // verifier. Mirrors the SSE `?ds_token=` pattern; the JWT is short-lived
+  // (exp-iat ≤ 300s) + single-use (Redis nonce), and `?ds_token=` is redacted
+  // from logs (redactUrlQueryTokens). A malformed Authorization header still
+  // surfaces its format error (safe — not node-existence-revealing).
   const authHeader = headers.authorization;
-  const token = extractBearerToken(typeof authHeader === 'string' ? authHeader : undefined);
+  const headerToken = typeof authHeader === 'string' ? extractBearerToken(authHeader) : undefined;
+  const queryToken = typeof query.ds_token === 'string' ? query.ds_token : undefined;
+  const token = headerToken ?? queryToken;
+  if (token === undefined || token.length === 0) {
+    throw new UnauthorizedError('Missing fleet-node token (Authorization: Bearer or ?ds_token=).');
+  }
 
   const result = await deps.auth.verify(token, deps.now);
   if (!result.ok) {
@@ -53,10 +68,15 @@ export async function authenticateFleetUpgrade(
     throw new UnauthorizedError('Fleet-node authentication failed.');
   }
 
+  // node id from the X-Driftstack-Mac-Node-Id header OR the `?node_id=` query
+  // param (same URLSession-strips-reserved-headers robustness; X- headers
+  // normally survive, but the query form gives the daemon one guaranteed path).
   const rawNodeId = headers[FLEET_NODE_ID_HEADER];
-  const nodeId = typeof rawNodeId === 'string' ? rawNodeId : undefined;
-  // The header is what the route keys the connection on pre-frame; it MUST match
-  // the signed JWT iss so a node can't claim a different id than it authenticated.
+  const headerNodeId = typeof rawNodeId === 'string' ? rawNodeId : undefined;
+  const queryNodeId = typeof query.node_id === 'string' ? query.node_id : undefined;
+  const nodeId = headerNodeId ?? queryNodeId;
+  // The declared id MUST match the signed JWT iss so a node can't claim a
+  // different id than it authenticated.
   if (nodeId === undefined || nodeId !== result.claims.iss) {
     throw new UnauthorizedError('Fleet-node authentication failed.');
   }

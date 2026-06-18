@@ -86,7 +86,11 @@ export async function registerFleetEventsRoutes(
       // Authenticate at the HTTP-upgrade phase: a bad token throws
       // UnauthorizedError → 401 and the socket never opens.
       preHandler: async (req: FastifyRequest) => {
-        const { nodeId } = await authenticateFleetUpgrade(req.headers, { auth: deps.auth });
+        const { nodeId } = await authenticateFleetUpgrade(
+          req.headers,
+          (req.query ?? {}) as Record<string, unknown>,
+          { auth: deps.auth },
+        );
         (req as AuthedUpgradeRequest).fleetNodeId = nodeId;
       },
     },
