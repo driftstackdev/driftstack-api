@@ -933,8 +933,15 @@ export function SimulatorWindow(): JSX.Element {
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-transparent">
       {info === null ? (
-        <div className="rounded-xl bg-black/80 px-4 py-3 text-sm text-ink-primary">
-          No session — open this window from a launched profile.
+        // Standalone empty state — shown when this window opens without a
+        // session (e.g. the separate Driftstack Simulator app launched from the
+        // Dock with nothing streaming yet). Branded + actionable, not a bare line.
+        <div className="flex flex-col items-center gap-3 px-8 text-center">
+          <DriftMark />
+          <p className="text-sm font-medium text-white/85">No session yet</p>
+          <p className="max-w-[16rem] text-xs leading-relaxed text-white/45">
+            Launch a profile in Driftstack to stream a real iPhone here.
+          </p>
         </div>
       ) : (
         <div data-component="simulator-shell" className="flex h-full w-full flex-col">
