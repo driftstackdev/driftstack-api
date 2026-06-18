@@ -7,6 +7,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { openSimulatorWindow } from '../../src/lib/open-simulator';
 
 const agentCreate = vi.fn<(b: unknown) => Promise<unknown>>();
 const agentClose = vi.fn<(id: string) => Promise<unknown>>(() => Promise.resolve({}));
@@ -88,9 +89,16 @@ vi.mock('../../src/lib/proxies', () => ({
   testProxy: vi.fn(() => Promise.resolve({ reachable: true })),
 }));
 
-// Stub the LiveKit-connecting panel so the overlay renders without a real WS.
+// Stub the LiveKit-connecting panel (used by the separate simulator window).
 vi.mock('../../src/components/AgentSessionPanel', () => ({
   AgentSessionPanel: () => <div data-testid="agent-session-panel" />,
+}));
+
+// Founder 2026-06-18: the in-app full-page overlay was removed — launch now ONLY
+// opens the SEPARATE simulator window. Mock the opener so we can assert the
+// hand-off (jsdom isn't Tauri, so the real opener would no-op as opened:false).
+vi.mock('../../src/lib/open-simulator', () => ({
+  openSimulatorWindow: vi.fn(() => Promise.resolve({ opened: true })),
 }));
 
 const { ProfilesView } = await import('../../src/views/ProfilesView');
@@ -104,20 +112,23 @@ const LIVEKIT = {
 };
 
 describe('ProfilesView launch → stream', () => {
-  it('Launch creates an agent session and shows the live-watch overlay when livekit is returned', async () => {
+  it('Launch creates an agent session and hands the session to the SEPARATE simulator window when livekit is returned', async () => {
     agentCreate.mockResolvedValueOnce({ id: 'agt_1', livekit: LIVEKIT });
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
-    // The overlay shows "Live session" + the room id once watchInfo is set.
-    expect(await screen.findByText('agt_demo_room')).toBeTruthy();
-    // AgentSessionPanel is lazy()-loaded (Suspense), so it resolves a microtask
-    // after the room-id text — use findByTestId (async) not getByTestId, else
-    // this races the lazy mount + flakes under full-suite load.
-    expect(await screen.findByTestId('agent-session-panel')).toBeTruthy();
-    expect(agentCreate).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(agentCreate).toHaveBeenCalledTimes(1));
     // Launch attaches THIS profile (file 57) — the canonical prof_<uuid> id is
     // passed as-is (the API normalizes it server-side, W335/W336).
     expect(agentCreate).toHaveBeenCalledWith({ profile_id: 'prof_1' });
+    // The simulator is ONLY the separate window now (founder 2026-06-18: the
+    // scaled in-app overlay was removed). Launch hands the session + livekit
+    // join info to the opener; no in-app overlay renders.
+    await waitFor(() => expect(vi.mocked(openSimulatorWindow)).toHaveBeenCalled());
+    expect(vi.mocked(openSimulatorWindow).mock.calls[0]?.[0]).toMatchObject({
+      sessionId: 'agt_1',
+      info: LIVEKIT,
+    });
+    expect(screen.queryByText('agt_demo_room')).toBeNull();
   });
 
   it('W611/W613: no livekit block → closes the unused agent session, creates a PLAIN driver session with the same profile, and opens THAT in the polling viewer (agt_ ids 400 on /v1/sessions routes — founder-hit)', async () => {

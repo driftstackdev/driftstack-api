@@ -42,9 +42,17 @@ pub fn run() {
         // first plugin registered (tauri requirement). On a second launch,
         // focus + unminimize the existing main window instead of spawning a
         // duplicate.
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             use tauri::Manager;
             if let Some(win) = app.get_webview_window("main") {
+                // Stage 2 (separate Driftstack Simulator app): a relaunch carrying
+                // a new `--ds-session=<b64 query string>` re-points the already-open
+                // window at that session. No-op for the main GUI (never launched
+                // with this arg). See docs/internal/2026-06-18-separate-simulator-app-plan.md.
+                if let Some(arg) = argv.iter().find(|a| a.starts_with("--ds-session=")) {
+                    let b64 = arg.trim_start_matches("--ds-session=");
+                    let _ = win.eval(&format!("window.location.search = atob('{b64}')"));
+                }
                 let _ = win.unminimize();
                 let _ = win.show();
                 let _ = win.set_focus();
@@ -80,9 +88,21 @@ pub fn run() {
         // lowest-risk fix from docs/internal/2026-06-10-gui-release-paint-bug-diagnosis.md
         // (#2). Needs the release `.app` observed to confirm it composites.
         .setup(|app| {
+            use tauri::Manager;
+            // Stage 2 (separate Driftstack Simulator app): on FIRST launch the
+            // main app passes the live session as `--ds-session=<b64 query string>`;
+            // decode it into the window's location.search so the existing
+            // SimulatorWindow (which reads window.location.search) connects. b64 is
+            // an injection-safe charset inside the JS string literal. No-op for the
+            // main GUI (never launched with this arg).
+            if let Some(arg) = std::env::args().find(|a| a.starts_with("--ds-session=")) {
+                let b64 = arg.trim_start_matches("--ds-session=").to_string();
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.eval(&format!("window.location.search = atob('{b64}')"));
+                }
+            }
             #[cfg(target_os = "macos")]
             {
-                use tauri::Manager;
                 if let Some(win) = app.get_webview_window("main") {
                     if let Ok(size) = win.outer_size() {
                         let _ = win.set_size(tauri::PhysicalSize::new(size.width + 1, size.height));
@@ -100,6 +120,7 @@ pub fn run() {
             proxy_test,
             proxy_exit_probe,
             endpoint_resolve,
+            launch_simulator,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -110,6 +131,40 @@ pub fn run() {
 #[tauri::command]
 fn ping() -> &'static str {
     "pong"
+}
+
+/// Stage 2 — launch the separate "Driftstack Simulator" app (its own Dock icon)
+/// and hand off the live session via `--ds-session=<b64 query string>`. macOS
+/// only; returns `Err` when the app isn't installed so the caller falls back to
+/// the in-process simulator window. The API key is NOT passed here (it would be
+/// visible in `ps`) — the sim app reads it from the shared OS keychain
+/// (`KEYRING_SERVICE`) with a one-time macOS allow prompt. `payload` is the
+/// base64 of the simulator query string (window=simulator&ws=…&token=…).
+#[tauri::command]
+fn launch_simulator(payload: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let app_path = "/Applications/Driftstack Simulator.app";
+        if !std::path::Path::new(app_path).exists() {
+            return Err("Driftstack Simulator.app is not installed".to_string());
+        }
+        std::process::Command::new("open")
+            .args([
+                "-n",
+                "-a",
+                app_path,
+                "--args",
+                &format!("--ds-session={payload}"),
+            ])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = payload;
+        Err("the separate simulator app is macOS-only".to_string())
+    }
 }
 
 /// Save a secret (typically the API key) to the OS keychain under the

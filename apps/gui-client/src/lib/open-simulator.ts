@@ -82,6 +82,20 @@ export async function openSimulatorWindow({
     session: sessionId,
   });
 
+  // Stage 2 — prefer the SEPARATE "Driftstack Simulator" app (its own Dock icon,
+  // founder 2026-06-18) when it's installed: hand off the session via a launch
+  // arg (NOT the API key — the sim app reads that from the shared keychain). The
+  // Rust `launch_simulator` command returns Err when the app isn't installed
+  // (or off-macOS), so we fall back to the in-process window below. See
+  // docs/internal/2026-06-18-separate-simulator-app-plan.md.
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('launch_simulator', { payload: btoa(params.toString()) });
+    return { opened: true };
+  } catch {
+    // not installed / non-macOS / spawn failed → in-process window fallback.
+  }
+
   // Spawn BESIDE the main window, not centered over it — a borderless
   // always-on-top window centered on the main GUI reads as embedded
   // (founder-hit: "still in the same window as the main GUI"). Best-effort:
