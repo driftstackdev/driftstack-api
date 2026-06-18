@@ -52,6 +52,12 @@ export interface UseCryptoOrderResult {
 }
 
 const TERMINAL_STATUSES = new Set(['paid', 'failed', 'cancelled']);
+// Stop polling on a terminal status OR 'partial' — a partial payment needs
+// customer action (pay the rest), so polling won't progress it.
+const STOP_POLLING_STATUSES = new Set([...TERMINAL_STATUSES, 'partial']);
+// Stop the poll after this many consecutive fetch failures so a persistently
+// failing endpoint (offline / 500s / rate-limit) doesn't hammer it forever.
+const MAX_CONSECUTIVE_ERRORS = 5;
 const DEFAULT_POLL_MS = 5_000;
 
 export function useCryptoOrder(
@@ -63,6 +69,7 @@ export function useCryptoOrder(
     opts.manual === true || orderId === null ? { kind: 'idle' } : { kind: 'loading' },
   );
   const lastStatusRef = useRef<string | null>(null);
+  const failCountRef = useRef(0);
 
   const fetcher = useCallback(async (): Promise<void> => {
     if (orderId === null) {
@@ -83,13 +90,16 @@ export function useCryptoOrder(
         },
       });
       if (!res.ok) {
+        failCountRef.current += 1;
         setState({ kind: 'error', message: await readApiErrorMessage(res) });
         return;
       }
       const body = (await res.json()) as CryptoOrderData;
+      failCountRef.current = 0;
       lastStatusRef.current = body.status;
       setState({ kind: 'ready', data: body });
     } catch (err) {
+      failCountRef.current += 1;
       setState({
         kind: 'error',
         message: err instanceof Error ? err.message : String(err),
@@ -109,7 +119,10 @@ export function useCryptoOrder(
     if (opts.manual === true) return;
     if (orderId === null) return;
     const tick = setInterval(() => {
-      if (lastStatusRef.current !== null && TERMINAL_STATUSES.has(lastStatusRef.current)) {
+      if (
+        (lastStatusRef.current !== null && STOP_POLLING_STATUSES.has(lastStatusRef.current)) ||
+        failCountRef.current >= MAX_CONSECUTIVE_ERRORS
+      ) {
         clearInterval(tick);
         return;
       }

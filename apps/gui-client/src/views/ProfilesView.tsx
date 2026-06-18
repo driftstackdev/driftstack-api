@@ -34,6 +34,7 @@ import { loadTemplates, saveTemplate, type ProfileTemplate } from '../lib/profil
 import { PROFILE_ICONS } from '../lib/profile-icons';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { EmptyState } from '../components/EmptyState';
 import {
   ProfilesActionBar,
@@ -1182,26 +1183,41 @@ export function ProfilesView({
           </button>
         </div>
         <div className="flex flex-1 items-center justify-center overflow-hidden">
-          <Suspense fallback={<div className="text-sm text-ink-secondary">Loading viewer…</div>}>
-            <AgentSessionPanel
-              info={watchInfo}
-              // W617 — empty-room fallback: room connected but no browser
-              // worker published video → offer the polling viewer instead.
-              onNoPublisher={() => {
-                const src = watchSource;
-                setWatchInfo(null);
-                setWatchSource(null);
-                if (src !== null) {
-                  void openPollingFallback(src.profileId, src.agentSessionId).catch(() => {
-                    setState((s) => ({
-                      ...s,
-                      error: 'Could not open the direct viewer — try launching again.',
-                    }));
-                  });
-                }
-              }}
-            />
-          </Suspense>
+          <ErrorBoundary
+            fallback={(retry) => (
+              <div className="flex flex-col items-center gap-3 px-8 text-center">
+                <span className="section-label text-status-error">Couldn't load the viewer</span>
+                <p className="max-w-sm text-xs text-ink-secondary">
+                  The live viewer failed to load (you may be offline, or the app updated). Retry, or
+                  close and relaunch the session.
+                </p>
+                <button type="button" className="btn-secondary" onClick={retry}>
+                  Retry
+                </button>
+              </div>
+            )}
+          >
+            <Suspense fallback={<div className="text-sm text-ink-secondary">Loading viewer…</div>}>
+              <AgentSessionPanel
+                info={watchInfo}
+                // W617 — empty-room fallback: room connected but no browser
+                // worker published video → offer the polling viewer instead.
+                onNoPublisher={() => {
+                  const src = watchSource;
+                  setWatchInfo(null);
+                  setWatchSource(null);
+                  if (src !== null) {
+                    void openPollingFallback(src.profileId, src.agentSessionId).catch(() => {
+                      setState((s) => ({
+                        ...s,
+                        error: 'Could not open the direct viewer — try launching again.',
+                      }));
+                    });
+                  }
+                }}
+              />
+            </Suspense>
+          </ErrorBoundary>
         </div>
       </div>
     );
