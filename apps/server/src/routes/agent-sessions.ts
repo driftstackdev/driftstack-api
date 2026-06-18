@@ -461,10 +461,13 @@ export async function dispatchSessionAssignOnCreate(args: {
   try {
     const mac = await fleetNodesRepo.findAnyWithLivekit();
     if (mac === null || mac.livekit === null) return;
-    const conn = fleetControlRegistry.get(mac.id);
+    // The registry is keyed by the authed node_id (the JWT iss), NOT the
+    // fleet_nodes uuid PK — so resolve the live connection by nodeId (migration
+    // 0085 / Path C). Fall back to the uuid for any legacy uuid-keyed node.
+    const conn = fleetControlRegistry.get(mac.nodeId ?? mac.id);
     if (conn === undefined) {
       logger?.info(
-        { component: 'fleet-session-dispatch', sessionId, nodeId: mac.id },
+        { component: 'fleet-session-dispatch', sessionId, nodeId: mac.nodeId ?? mac.id },
         'fleet node not connected; session created but sessionAssign not dispatched',
       );
       return;
@@ -545,7 +548,7 @@ export async function dispatchSessionAssignOnCreate(args: {
     });
     conn.sendSessionAssign(assign);
     logger?.info(
-      { component: 'fleet-session-dispatch', sessionId, nodeId: mac.id },
+      { component: 'fleet-session-dispatch', sessionId, nodeId: mac.nodeId ?? mac.id },
       'dispatched sessionAssign to fleet node',
     );
   } catch (err) {
@@ -585,11 +588,14 @@ export async function dispatchSessionEndOnClose(args: {
   try {
     const mac = await fleetNodesRepo.findAnyWithLivekit();
     if (mac === null) return;
-    const conn = fleetControlRegistry.get(mac.id);
+    // The registry is keyed by the authed node_id (the JWT iss), NOT the
+    // fleet_nodes uuid PK — so resolve the live connection by nodeId (migration
+    // 0085 / Path C). Fall back to the uuid for any legacy uuid-keyed node.
+    const conn = fleetControlRegistry.get(mac.nodeId ?? mac.id);
     if (conn === undefined) return; // node not connected → nothing to tear down server-side
     conn.sendSessionEnd(serializeSessionEnd(sessionId));
     logger?.info(
-      { component: 'fleet-session-dispatch', sessionId, nodeId: mac.id },
+      { component: 'fleet-session-dispatch', sessionId, nodeId: mac.nodeId ?? mac.id },
       'dispatched sessionEnd to fleet node',
     );
   } catch (err) {
@@ -627,7 +633,10 @@ export async function dispatchResumeSession(args: {
   try {
     const mac = await fleetNodesRepo.findAnyWithLivekit();
     if (mac === null) return;
-    const conn = fleetControlRegistry.get(mac.id);
+    // The registry is keyed by the authed node_id (the JWT iss), NOT the
+    // fleet_nodes uuid PK — so resolve the live connection by nodeId (migration
+    // 0085 / Path C). Fall back to the uuid for any legacy uuid-keyed node.
+    const conn = fleetControlRegistry.get(mac.nodeId ?? mac.id);
     if (conn === undefined) return; // node not connected → nothing to resume server-side
     conn.sendResumeSession(
       serializeResumeSession({

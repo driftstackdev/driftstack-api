@@ -95,6 +95,30 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
+  it('resolves the live connection by node_id (the registry key), NOT the fleet_nodes uuid (migration 0085 / Path C)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    // Prod reality: the WS registry is keyed by the authed node_id (the JWT iss),
+    // and the fleet_nodes uuid PK is a DIFFERENT value. The old code looked up by
+    // mac.id (the uuid) → would MISS this connection → session created blank.
+    registry.register('mac-macstadium-us-001', (d) => sent.push(d));
+    const mac = {
+      ...macWithLivekit(),
+      id: '3c80787f-95d6-40cf-uuid-pk',
+      nodeId: 'mac-macstadium-us-001',
+    };
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_byid',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(mac),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      logger: logger(),
+    });
+    // Dispatched → found via node_id. (Would be 0 if it keyed by mac.id.)
+    expect(sent).toHaveLength(1);
+  });
+
   it('attaches the profile block (profile_id + base64 DEK) for a profile-backed dispatch (file 57)', async () => {
     const sent: string[] = [];
     const registry = new FleetControlRegistry();
