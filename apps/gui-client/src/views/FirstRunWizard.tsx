@@ -558,6 +558,12 @@ const PROFILE_ARCHETYPE_OPTIONS = [
     description:
       'The v1.0 launch archetype — the device profile verified bit-for-bit against a real iPhone 17. Additional models are coming soon.',
   },
+  {
+    value: 'iphone17_ios18_7_safari26_5',
+    label: 'iPhone 17 · iOS 18.7 · Safari 26.5',
+    description:
+      'iPhone 17 on the Safari 26.5 point release — verified bit-for-bit against a real device. Pick this to match visitors on the latest Safari.',
+  },
 ] as const;
 
 type ProfileArchetype = (typeof PROFILE_ARCHETYPE_OPTIONS)[number]['value'];

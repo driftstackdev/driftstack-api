@@ -561,7 +561,11 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     iosVersion: '18.7',
     safariVersion: '26.5',
     canvasFamily: 'B',
-    status: 'planned',
+    // Customer-selectable (Agent-1 archetype-availability 2026-06-18: meets the
+    // live-launch-band bar — glyphHash c587ed44, audio byte-exact, voices/WebGL/
+    // WebGPU/media all verified == the 26.4 launch band). NOT the default; 26.4
+    // stays status:'launch'. The 18.6 Family-A band is held until its 2 gaps close.
+    status: 'available',
   },
   // Broader launch-family device matrix (founder 2026-05-30: "we will have
   // iphone 17, pro, pro max, iphone 16, pro max ... perhaps even iPads").

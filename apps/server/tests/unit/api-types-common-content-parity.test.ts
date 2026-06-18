@@ -308,11 +308,11 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     expect(body).toMatch(/status: 'launch',/);
     expect(body).toMatch(/status: 'reference',/);
     expect(body).toMatch(/status: 'planned',/);
-    // Post-cutover the registry has exactly ONE selectable entry (iphone17 =
-    // launch); the prior launch (iphone16pro) + iphone15pro are demoted to
-    // 'reference' (non-selectable), so no entry currently carries 'available'
-    // — the enum still defines it (pinned above) for future selectable siblings.
-    expect(body).not.toMatch(/status: 'available',/);
+    // iphone17 (26.4) is the sole launch DEFAULT; the 26.5 point-release band is
+    // 'available' (customer-selectable, not default) per Agent-1's 2026-06-18
+    // archetype-availability assessment (meets the live-launch-band bar). The
+    // prior launch (iphone16pro) + iphone15pro stay 'reference' (non-selectable).
+    expect(body).toMatch(/status: 'available',/);
     expect(body).toMatch(/id: 'iphone15pro_ios17_5_safari17_5',/);
   });
 
