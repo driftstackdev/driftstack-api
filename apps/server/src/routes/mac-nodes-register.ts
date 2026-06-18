@@ -57,11 +57,15 @@ const RegisterNodeBodySchema = z.object({
   // (DRIFTSTACK_MAC_NODE_ID, e.g. "mac-macstadium-us-001"). Auth resolves the
   // node by this, so it MUST equal the daemon's DRIFTSTACK_MAC_NODE_ID.
   node_id: z.string().min(1).max(128),
+  // 43 base64url chars + a single '=' — the form the fleet_nodes
+  // `fleet_nodes_public_key_format` CHECK requires (32-byte Ed25519 key). The
+  // node mints standard base64 (node.pub.b64); convert +/→-_ and KEEP the '='.
   public_key_base64url: z
     .string()
-    .regex(/^[A-Za-z0-9_-]+$/, 'public_key_base64url must be base64url (no padding)')
-    .min(42)
-    .max(48),
+    .regex(
+      /^[A-Za-z0-9_-]{43}=$/,
+      'public_key_base64url must be 43 base64url chars + "=" (a 32-byte Ed25519 key)',
+    ),
   display_name: z.string().min(1).max(128),
   region: z.string().min(1).max(64),
   hardware_class: z.string().min(1).max(64),

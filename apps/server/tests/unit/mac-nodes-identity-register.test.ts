@@ -15,7 +15,7 @@ import type { DrizzleFleetNodesRepo } from '../../src/db/fleet-nodes-repo.js';
 import { registerErrorHandler } from '../../src/middleware/error-handler.js';
 
 const ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
-const VALID_PUBKEY = 'A'.repeat(43); // 32-byte Ed25519 → 43 base64url chars
+const VALID_PUBKEY = 'A'.repeat(43) + '='; // 43 base64url chars + '=' (matches the DB CHECK)
 
 function fakeRepo(opts?: { duplicate?: boolean }): {
   repo: DrizzleFleetNodesRepo;
