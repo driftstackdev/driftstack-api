@@ -172,6 +172,8 @@ export function Gallery(): JSX.Element {
         onWatch={noop}
         onStop={noop}
         onTest={noop}
+        onEdit={noop}
+        onClone={noop}
         onDelete={noop}
         onSaveNote={noop}
       />

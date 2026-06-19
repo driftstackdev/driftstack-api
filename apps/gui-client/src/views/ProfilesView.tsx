@@ -17,6 +17,7 @@ import {
   saveProfileMeta,
   seedMetaFromServer,
   saveProfilesMetaBulk,
+  type ProfileMeta,
   type ProfilesMetaMap,
 } from '../lib/profiles-meta';
 import { loadFolders, addFolder, loadFolderIcons, replaceAllFolders } from '../lib/folders-store';
@@ -47,7 +48,11 @@ import {
   type ProfileTableRow,
   type ProfilesTableSortKey,
 } from '../components/ProfilesTable';
-import { ARCHETYPE_REGISTRY, type ArchetypeStatus } from '@driftstack/sdk';
+import {
+  ARCHETYPE_REGISTRY,
+  type ArchetypeStatus,
+  type UpdateProfileRequest,
+} from '@driftstack/sdk';
 import { openSimulatorWindow } from '../lib/open-simulator';
 import { mintGuiControlKey } from '../lib/agent-session-control';
 import { useSettings } from '../lib/SettingsContext';
@@ -197,6 +202,10 @@ export function ProfilesView({
   const profileCap = accountMe?.profile_cap ?? null;
   const profileCount = accountMe?.profile_count ?? null;
   const atProfileCap = profileCap !== null && profileCount !== null && profileCount >= profileCap;
+  // Shared cap-reached tooltip for the New / Duplicate / Import affordances.
+  const profileCapReason = `Profile cap reached (${(profileCap ?? 0).toString()} for ${
+    accountMe?.tier ?? 'this tier'
+  }). Delete a profile or upgrade to add more.`;
   // Teams (2026-06-16) — the server now lets a team ADMIN launch the owner's
   // profiles (agent-sessions create honors X-Driftstack-Account for admins;
   // the client already ships that header for the active workspace). So launch
@@ -221,6 +230,13 @@ export function ProfilesView({
   // because every other ProfilesView interaction is local; the modal
   // is a transient overlay scoped to this view's lifecycle.
   const [createOpen, setCreateOpen] = useState(false);
+  // Edit-profile modal target (null = closed). Holds the Profile being edited so
+  // the modal can seed name/description from it + icon/folder/tags/note from
+  // profilesMeta. Archetype is immutable post-create so it isn't editable.
+  const [editTarget, setEditTarget] = useState<Profile | null>(null);
+  // Import-profile modal state (V-480) — drop/paste an export envelope (single
+  // object or a bulk array) to mint fresh profiles in this account.
+  const [importOpen, setImportOpen] = useState(false);
   // 2026-05-21 — header action cluster (operator-UI polish wave).
   // Pure-local filter/sort over `state.profiles`; no API change. Defaults
   // mirror the "what did I touch last" mental model that dominates
@@ -1180,6 +1196,87 @@ export function ProfilesView({
     }
   }
 
+  // Duplicate — V-313 server clone. Mints a copy with a server-derived
+  // "(copy)" name (archetype + description + folder/tags + icon/note ride
+  // along server-side). Seeds the local organization cache from the source so
+  // the new card shows the same folder/tags/icon/note immediately + offline,
+  // then refreshes the list + the cap counter (a clone consumes a slot).
+  async function handleClone(id: string): Promise<void> {
+    if (!client || busyId !== null) return;
+    setBusyId(id);
+    try {
+      const clone = await client.profiles.clone(id);
+      // Seed local meta from the source so the clone's card matches at once.
+      const sourceMeta = profilesMeta[id];
+      if (sourceMeta) {
+        const next = await saveProfileMeta(clone.id, sourceMeta, [
+          ...state.profiles.map((p) => p.id),
+          clone.id,
+        ]);
+        setProfilesMeta(next);
+      }
+      await refresh(false);
+      // A clone consumes a cap slot — refresh the counter so the gate flips.
+      await refreshAccountMe();
+      setState((s) => ({ ...s, notice: `Duplicated as "${clone.name}".` }));
+    } catch (err) {
+      // friendlyError surfaces 402 TierLimit / 409 Conflict via DriftstackError.
+      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // Import — V-480. Parse an exported JSON file (a single envelope object OR a
+  // bulk array of them), import each via profiles.import, then refresh. The
+  // optional name-override only applies to a single-envelope import.
+  async function handleImport(text: string, nameOverride: string): Promise<void> {
+    if (!client) return;
+    type ImportBody = Parameters<typeof client.profiles.import>[0];
+    type Envelope = ImportBody['envelope'];
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      setState((s) => ({ ...s, error: 'That file is not valid JSON.' }));
+      return;
+    }
+    // A single export file is one envelope object; a bulk file is an array. The
+    // shape is validated server-side on import — here we just split it.
+    const envelopes: Envelope[] = Array.isArray(parsed)
+      ? (parsed as Envelope[])
+      : [parsed as Envelope];
+    if (envelopes.length === 0) {
+      setState((s) => ({ ...s, error: 'No profiles found in that file.' }));
+      return;
+    }
+    const override = nameOverride.trim();
+    // name_override only makes sense for a single profile (a bulk array would
+    // collide on the second). Apply it solely to a one-envelope import.
+    const applyOverride = override.length > 0 && envelopes.length === 1;
+    try {
+      let imported = 0;
+      for (const envelope of envelopes) {
+        await client.profiles.import({
+          envelope,
+          ...(applyOverride ? { name_override: override } : {}),
+        });
+        imported += 1;
+      }
+      setImportOpen(false);
+      await refresh(false);
+      // Imports consume cap slots — refresh the counter so the gate flips.
+      await refreshAccountMe();
+      setState((s) => ({
+        ...s,
+        notice: `Imported ${imported.toString()} profile${imported === 1 ? '' : 's'}.`,
+      }));
+    } catch (err) {
+      // friendlyError surfaces 400 version-mismatch / 402 TierLimit / 409 Conflict.
+      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
+    }
+  }
+
   // Bulk launch — start a session for each selected profile, sequentially (so
   // the fleet sees distinct launches + we don't blast the concurrency cap).
   // Confirms first since each launch spawns a billed session; best-effort per
@@ -1495,17 +1592,22 @@ export function ProfilesView({
             </button>
             <button
               type="button"
+              className="btn-secondary flex items-center gap-1.5"
+              onClick={() => setImportOpen(true)}
+              disabled={state.loading || atProfileCap}
+              aria-disabled={state.loading || atProfileCap}
+              title={atProfileCap ? profileCapReason : 'Import profiles from an exported JSON file'}
+            >
+              <span aria-hidden="true">⤒</span>
+              <span>Import</span>
+            </button>
+            <button
+              type="button"
               className="btn-primary flex items-center gap-1.5"
               onClick={() => setCreateOpen(true)}
               disabled={state.loading || atProfileCap}
               aria-disabled={state.loading || atProfileCap}
-              title={
-                atProfileCap
-                  ? `Profile cap reached (${(profileCap ?? 0).toString()} for ${
-                      accountMe?.tier ?? 'this tier'
-                    }). Delete a profile or upgrade to add more.`
-                  : undefined
-              }
+              title={atProfileCap ? profileCapReason : undefined}
             >
               <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
                 <path
@@ -2040,6 +2142,10 @@ export function ProfilesView({
                         }}
                         onStop={running ? () => void handleStop(profile) : undefined}
                         onAssist={onAssist ? () => onAssist(profile.id) : undefined}
+                        onEdit={() => setEditTarget(profile)}
+                        onClone={() => void handleClone(profile.id)}
+                        cloneDisabled={atProfileCap}
+                        cloneDisabledReason={profileCapReason}
                         onExport={() => void handleExport(profile.id)}
                         onDelete={() => void handleDelete(profile.id)}
                       />
@@ -2177,6 +2283,13 @@ export function ProfilesView({
                         const px = pickProxy(id);
                         if (px !== null) void handleTestProxy(px);
                       }}
+                      onEdit={(id) => {
+                        const profile = resolve(id);
+                        if (profile !== null) setEditTarget(profile);
+                      }}
+                      onClone={(id) => void handleClone(id)}
+                      cloneDisabled={atProfileCap}
+                      cloneDisabledReason={profileCapReason}
                       onDelete={(id) => void handleDelete(id)}
                       onSaveNote={(id, note) => {
                         void saveProfileMeta(
@@ -2224,6 +2337,33 @@ export function ProfilesView({
               void handleTestProxy(firstProxy);
             }
           }}
+        />
+      )}
+
+      {editTarget !== null && (
+        <EditProfileModal
+          profile={editTarget}
+          meta={profilesMeta[editTarget.id]}
+          existingFolders={allFolders}
+          onClose={() => setEditTarget(null)}
+          onSaved={(updatedMeta) => {
+            // Mirror the edited organization metadata into the local cache so the
+            // hub reflects it immediately + offline (server already PATCHed).
+            void saveProfileMeta(
+              editTarget.id,
+              updatedMeta,
+              state.profiles.map((pr) => pr.id),
+            ).then(setProfilesMeta);
+            setEditTarget(null);
+            void refresh(false);
+          }}
+        />
+      )}
+
+      {importOpen && (
+        <ImportProfileModal
+          onClose={() => setImportOpen(false)}
+          onImport={(text, nameOverride) => void handleImport(text, nameOverride)}
         />
       )}
     </div>
@@ -3165,6 +3305,360 @@ function FolderPicker({
         </>
       )}
     </span>
+  );
+}
+
+// Edit-profile modal — mirrors the Create modal's identity/notes fields but for
+// an EXISTING profile. Seeds name/description from the Profile + icon/folder/
+// tags/note from the local meta. On submit it builds a partial diff (only the
+// changed fields) and PATCHes via client.profiles.update; archetype is immutable
+// post-create so it's shown read-only and never sent. Returns the saved
+// organization metadata to the parent so it can mirror it into the local cache.
+function EditProfileModal({
+  profile,
+  meta,
+  existingFolders,
+  onClose,
+  onSaved,
+}: {
+  profile: Profile;
+  /** Local organization metadata for this profile (icon/folder/tags/note). */
+  meta: ProfileMeta | undefined;
+  existingFolders: string[];
+  onClose: () => void;
+  /** Called with the (cleaned) organization metadata after a successful PATCH. */
+  onSaved: (meta: Partial<ProfileMeta>) => void;
+}): JSX.Element {
+  const { client, settings } = useSettings();
+  const [name, setName] = useState(profile.name);
+  const [description, setDescription] = useState(profile.description ?? '');
+  const [icon, setIcon] = useState(meta?.icon ?? '');
+  const [folder, setFolder] = useState(meta?.folder ?? '');
+  const [tags, setTags] = useState((meta?.tags ?? []).join(', '));
+  const [note, setNote] = useState(meta?.note ?? '');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent): Promise<void> {
+    e.preventDefault();
+    if (!client || submitting) return;
+    const trimmedName = name.trim();
+    if (trimmedName.length === 0) {
+      setError('Name is required.');
+      return;
+    }
+    setError(null);
+    setSubmitting(true);
+    // Build a minimal PATCH diff — only the fields that actually changed (mirror
+    // the create-form clamping for tags/folder so an over-long entry doesn't 400).
+    const tagList = [
+      ...new Set(
+        tags
+          .split(',')
+          .map((t) => t.trim().slice(0, 24))
+          .filter((t) => t.length > 0)
+          .slice(0, 12),
+      ),
+    ];
+    const nextFolder = folder.trim().slice(0, 32);
+    const nextNote = note.trim().slice(0, 280);
+    const nextDescription = description.trim();
+    const diff: UpdateProfileRequest = {};
+    if (trimmedName !== profile.name) diff.name = trimmedName;
+    if (nextDescription !== (profile.description ?? '')) {
+      diff.description = nextDescription.length > 0 ? nextDescription : null;
+    }
+    if (nextFolder !== (meta?.folder ?? ''))
+      diff.folder = nextFolder.length > 0 ? nextFolder : null;
+    const prevTags = meta?.tags ?? [];
+    const tagsChanged =
+      tagList.length !== prevTags.length || tagList.some((t, i) => t !== prevTags[i]);
+    if (tagsChanged) diff.tags = tagList;
+    if (icon !== (meta?.icon ?? '')) diff.icon = icon.length > 0 ? icon : null;
+    if (nextNote !== (meta?.note ?? '')) diff.note = nextNote.length > 0 ? nextNote : null;
+    try {
+      // Skip the round-trip when nothing changed — still mirror meta so the
+      // local cache stays the source of truth for the hub render.
+      if (Object.keys(diff).length > 0) {
+        await client.profiles.update(profile.id, diff);
+      }
+      onSaved({ icon, folder: nextFolder, tags: tagList, note: nextNote });
+    } catch (err) {
+      setError(friendlyError(err, settings.baseUrl));
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="edit-profile-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !submitting) onClose();
+      }}
+    >
+      <form
+        onSubmit={(e) => void handleSubmit(e)}
+        className="flex max-h-[90vh] w-full max-w-md flex-col gap-3 overflow-y-auto rounded-md border border-surface-divider bg-surface-raised p-5 shadow-lg"
+      >
+        <header className="flex items-center justify-between">
+          <h3 id="edit-profile-title" className="text-base font-medium text-ink-primary">
+            Edit profile
+          </h3>
+          <button
+            type="button"
+            className="btn-secondary text-xs"
+            onClick={onClose}
+            disabled={submitting}
+            aria-label="Close"
+          >
+            Close
+          </button>
+        </header>
+        {error !== null && (
+          <p className="rounded-sm border border-status-error/40 bg-status-error/10 px-2 py-1 text-xs text-status-error">
+            {error}
+          </p>
+        )}
+        <label className="flex flex-col gap-1">
+          <span className="section-label">Name</span>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={120}
+            minLength={1}
+            required
+            autoFocus
+            disabled={submitting}
+            className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="section-label">Device (locked)</span>
+          <input
+            type="text"
+            value={formatDeviceName(profile.archetype)}
+            readOnly
+            disabled
+            className="rounded-sm border border-surface-divider bg-surface-base/40 px-2 py-1 text-sm text-ink-muted"
+          />
+          <span className="text-2xs text-ink-muted">
+            The device fingerprint is fixed when a profile is created and can’t be changed.
+          </span>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="section-label">Icon (optional)</span>
+          <select
+            value={icon}
+            onChange={(e) => setIcon(e.target.value)}
+            disabled={submitting}
+            className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+            aria-label="Profile icon"
+          >
+            <option value="">— No icon —</option>
+            {PROFILE_ICONS.map((i) => (
+              <option key={i.emoji} value={i.emoji}>
+                {i.emoji} {i.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="section-label">Description (optional)</span>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            maxLength={500}
+            rows={2}
+            disabled={submitting}
+            className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="section-label">Folder (optional)</span>
+          <FolderPicker
+            ariaLabel="Profile folder"
+            noneLabel="No folder"
+            folders={existingFolders}
+            value={folder}
+            onChange={setFolder}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="section-label">Tags (optional, comma-separated)</span>
+          <input
+            type="text"
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
+            disabled={submitting}
+            className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+            placeholder="retail, warmup"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="section-label">Note (optional)</span>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={280}
+            rows={2}
+            disabled={submitting}
+            className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+          />
+        </label>
+        <div className="mt-1 flex justify-end gap-2">
+          <button
+            type="button"
+            className="btn-secondary text-xs"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </button>
+          <button type="submit" className="btn-primary text-xs" disabled={submitting}>
+            {submitting ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// Import-profile modal (V-480) — drop or paste an exported JSON file (a single
+// envelope object OR a bulk array) and optionally rename a single import. The
+// actual parse + import loop lives in ProfilesView.handleImport so it can drive
+// the cap refresh + success notice; this modal just collects the text.
+function ImportProfileModal({
+  onClose,
+  onImport,
+}: {
+  onClose: () => void;
+  onImport: (text: string, nameOverride: string) => void;
+}): JSX.Element {
+  const [text, setText] = useState('');
+  const [nameOverride, setNameOverride] = useState('');
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  function readFile(file: File): void {
+    const reader = new FileReader();
+    reader.onload = () => {
+      setText(typeof reader.result === 'string' ? reader.result : '');
+      setFileName(file.name);
+    };
+    reader.readAsText(file);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="import-profile-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="flex max-h-[90vh] w-full max-w-md flex-col gap-3 overflow-y-auto rounded-md border border-surface-divider bg-surface-raised p-5 shadow-lg">
+        <header className="flex items-center justify-between">
+          <h3 id="import-profile-title" className="text-base font-medium text-ink-primary">
+            Import profiles
+          </h3>
+          <button
+            type="button"
+            className="btn-secondary text-xs"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            Close
+          </button>
+        </header>
+        <p className="text-xs text-ink-secondary">
+          Drop or paste a profile JSON file exported from Driftstack. A single export or a bulk
+          array of exports are both supported.
+        </p>
+        <label
+          className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed px-3 py-6 text-center text-xs transition-colors ${
+            dragOver
+              ? 'border-accent bg-accent-subtle text-ink-primary'
+              : 'border-surface-divider text-ink-muted hover:border-accent'
+          }`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            const file = e.dataTransfer.files[0];
+            if (file) readFile(file);
+          }}
+        >
+          <span aria-hidden="true" className="text-lg">
+            ⤒
+          </span>
+          <span>
+            {fileName !== null
+              ? `Loaded ${fileName}`
+              : 'Drop a .json file here, or click to choose'}
+          </span>
+          <input
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) readFile(file);
+            }}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="section-label">Or paste JSON</span>
+          <textarea
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              setFileName(null);
+            }}
+            rows={5}
+            className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 font-mono text-xs text-ink-primary"
+            placeholder='{ "version": 1, "profile": { … } }'
+            aria-label="Profile JSON"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="section-label">Rename on import (optional)</span>
+          <input
+            type="text"
+            value={nameOverride}
+            onChange={(e) => setNameOverride(e.target.value)}
+            maxLength={120}
+            className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+            placeholder="Leave blank to keep the exported name"
+          />
+          <span className="text-2xs text-ink-muted">
+            Applies only when importing a single profile.
+          </span>
+        </label>
+        <div className="mt-1 flex justify-end gap-2">
+          <button type="button" className="btn-secondary text-xs" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn-primary text-xs"
+            disabled={text.trim().length === 0}
+            onClick={() => onImport(text, nameOverride)}
+          >
+            Import
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

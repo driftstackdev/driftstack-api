@@ -54,8 +54,15 @@ export interface ProfilePhoneCardProps {
    *  when the profile is running AND this handler is provided (idle cards never
    *  show Stop); guarded by `busy` so a double-click can't double-close. */
   onStop?: () => void;
-  /** Management actions in the ⋯ menu (grid view) — export a portable copy,
-   *  delete the profile. Omitted → that action isn't offered. */
+  /** Management actions in the ⋯ menu (grid view) — edit metadata, duplicate,
+   *  export a portable copy, delete the profile. Omitted → that action isn't
+   *  offered. */
+  onEdit?: () => void;
+  /** Duplicate this profile into a fresh one (server clone). Disabled at the
+   *  tier cap (the caller passes `cloneDisabled` + a reason). */
+  onClone?: () => void;
+  cloneDisabled?: boolean;
+  cloneDisabledReason?: string;
   onExport?: () => void;
   onDelete?: () => void;
 }
@@ -378,6 +385,30 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                   p.onTest();
                 }}
                 disabled={p.testDisabled}
+              />
+            ) : null}
+            {p.onEdit ? (
+              <MenuRow
+                glyph="✎"
+                caption="Edit"
+                label={`Edit ${p.name}`}
+                onClick={() => {
+                  setActionsOpen(false);
+                  p.onEdit?.();
+                }}
+              />
+            ) : null}
+            {p.onClone ? (
+              <MenuRow
+                glyph="⧉"
+                caption="Duplicate"
+                label={`Duplicate ${p.name}`}
+                title={p.cloneDisabled ? p.cloneDisabledReason : undefined}
+                disabled={p.cloneDisabled}
+                onClick={() => {
+                  setActionsOpen(false);
+                  p.onClone?.();
+                }}
               />
             ) : null}
             {p.onExport ? (

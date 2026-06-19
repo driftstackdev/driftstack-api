@@ -435,6 +435,32 @@ describe('V-553.B-21 ProfilesService.clone', () => {
     expect(row.archetype).toBe('mobile_ios');
   });
 
+  it('copies the source icon + note into the clone insert (organization metadata rides along)', async () => {
+    const { repo } = makeRepo([
+      makeProfile({
+        id: 'p1',
+        accountId: 'acc_1',
+        name: 'src',
+        folder: 'Work',
+        tags: ['a', 'b'],
+        icon: '🦊',
+        note: 'keep me',
+      }),
+    ]);
+    let captured: NewProfileInput | undefined;
+    const inner = repo.insertWithLimit.bind(repo);
+    repo.insertWithLimit = (input: NewProfileInput, limit: number | null) => {
+      captured = input;
+      return inner(input, limit);
+    };
+    const svc = new ProfilesService(repo);
+    await svc.clone({ id: 'p1', accountId: 'acc_1', tier: TEAM });
+    expect(captured?.icon).toBe('🦊');
+    expect(captured?.note).toBe('keep me');
+    expect(captured?.folder).toBe('Work');
+    expect(captured?.tags).toEqual(['a', 'b']);
+  });
+
   it('translates a concurrent explicit-name 23505 (race loser) into ConflictError', async () => {
     // findByAccountAndName('fresh') misses, but a sibling took it before the
     // insert commits → profiles_account_name_unique fires.

@@ -52,7 +52,7 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     // LiveKitInfo dropped 2026-06-18 when the dead in-app overlay (watchInfo)
     // was removed — the launch flow only opens the separate simulator window now.
     expect(body).toMatch(
-      /import \{ ARCHETYPE_REGISTRY, type ArchetypeStatus \} from '@driftstack\/sdk';/,
+      /import \{[^}]*ARCHETYPE_REGISTRY[^}]*type ArchetypeStatus[^}]*\} from '@driftstack\/sdk';/,
     );
     expect(body).toMatch(
       /const SELECTABLE_STATUSES = new Set<ArchetypeStatus>\(\['launch', 'available'\]\);/,
@@ -114,8 +114,14 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
   });
 
   it("New profile button: disabled={state.loading || atProfileCap} + aria-disabled={state.loading || atProfileCap}; title tooltip 'Profile cap reached ({cap} for {tier}). Delete a profile or upgrade to add more.' when atProfileCap else undefined — pinned so both screen readers + hover surface the cap explanation", () => {
+    expect(body).toMatch(/disabled=\{state\.loading \|\| atProfileCap\}/);
+    expect(body).toMatch(/aria-disabled=\{state\.loading \|\| atProfileCap\}/);
+    // 2026-06-19 — the New-profile button's cap tooltip now flows through the
+    // shared `profileCapReason` const (DRY across New/Import/Clone buttons). The
+    // button references it; the const below pins the exact contract text.
+    expect(body).toMatch(/title=\{atProfileCap \? profileCapReason : undefined\}/);
     expect(body).toMatch(
-      /disabled=\{state\.loading \|\| atProfileCap\}\s*\n?\s*aria-disabled=\{state\.loading \|\| atProfileCap\}\s*\n?\s*title=\{\s*\n?\s*atProfileCap\s*\n?\s*\? `Profile cap reached \(\$\{\(profileCap \?\? 0\)\.toString\(\)\} for \$\{\s*\n?\s*accountMe\?\.tier \?\? 'this tier'\s*\n?\s*\}\)\. Delete a profile or upgrade to add more\.`\s*\n?\s*: undefined\s*\n?\s*\}/,
+      /const profileCapReason = `Profile cap reached \(\$\{\(profileCap \?\? 0\)\.toString\(\)\} for \$\{[\s\S]*?accountMe\?\.tier \?\? 'this tier'[\s\S]*?\}\)\. Delete a profile or upgrade to add more\.`;/,
     );
   });
 

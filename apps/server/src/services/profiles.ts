@@ -502,9 +502,12 @@ export class ProfilesService {
           description: source.description,
           // Clone is an in-account copy — organization metadata rides along
           // (unlike V-480 import / V-666 transfer, which cross accounts and
-          // deliberately leave folder/tags at their defaults).
+          // deliberately leave folder/tags at their defaults). icon + note are
+          // organization metadata too, so they copy with the rest.
           folder: source.folder,
           tags: source.tags,
+          icon: source.icon,
+          note: source.note,
         },
         limit,
       );

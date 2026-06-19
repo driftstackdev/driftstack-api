@@ -62,6 +62,11 @@ export interface ProfilesTableProps {
   onWatch: (id: string) => void;
   onStop: (id: string) => void;
   onTest: (id: string) => void;
+  onEdit: (id: string) => void;
+  /** Duplicate a profile (server clone). Disabled at the tier cap. */
+  onClone: (id: string) => void;
+  cloneDisabled?: boolean;
+  cloneDisabledReason?: string;
   onDelete: (id: string) => void;
   // Inline note editing (founder batch #2 "Add note"). Called with the trimmed
   // note on commit (Enter / blur); empty string clears the note.
@@ -390,6 +395,23 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               {r.busy ? 'Launching…' : 'Launch'}
             </button>
           )}
+          <button
+            type="button"
+            className="text-[11px] text-ink-muted hover:text-ink-primary disabled:opacity-50"
+            onClick={stop(() => p.onEdit(r.id))}
+            disabled={r.busy}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            className="text-[11px] text-ink-muted hover:text-ink-primary disabled:opacity-50"
+            onClick={stop(() => p.onClone(r.id))}
+            disabled={r.busy || p.cloneDisabled}
+            title={p.cloneDisabled ? p.cloneDisabledReason : undefined}
+          >
+            Duplicate
+          </button>
           <button
             type="button"
             className="text-[11px] text-ink-muted hover:text-status-error disabled:opacity-50"
