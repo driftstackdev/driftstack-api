@@ -4,6 +4,32 @@ Founder ran a live-video test of the desktop GUI simulator. Three issues are
 **worker-side (the fork / WebDriver harness on the Mac fleet node)** — A2 has
 verified the control plane + GUI client are correct, so these are A3's:
 
+## ⚡ TAPS ESCALATION — 2026-06-19 (founder asked A2 to escalate to A3)
+
+Taps from the desktop GUI still do not land. **A2's side is DONE + verified — the
+remaining work is entirely worker-side (A3).** A2 has shipped + e2e-verified the
+full GUI/control-plane tap path:
+
+- GUI sends each tap as a UTF-8 JSON `InputEvent` over the **LiveKit DataChannel**
+  (`localParticipant.publishData(bytes, { reliable: true })`, **no topic**),
+  `InputEventSchema` union (touchStart/Move/End, key, scroll). Schema-matched.
+- GUI input fixes shipped: forwarded only in manual/pair (not AI), composer
+  `activeElement` guard, window-level end-gesture fallback (no stuck finger),
+  stable effect deps (no dropped in-flight gesture).
+- The HTTP `POST /v1/agent-sessions/:id/input-event` route is **503 / harness-gated**
+  — NOT the transport. The data channel is the only live path and bypasses the server.
+
+**The single A3 ask:** get the fork worker to (1) **join the LiveKit room** (named =
+the agent-session id) and publish, and (2) **consume the untopiced DataChannel
+`InputEvent`s** via `RoomDataDispatcher` → `WebDriverManualTouchInjector`. If a topic
+is required, name it and A2 sets it GUI-side in one line. A worker **ack of the first
+input** would let the GUI show a live "control reaching the device" badge (hook
+already added).
+
+Evidence: session `agt_a076bb5e…` dispatched to `mac-macstadium-us-001` but published
+**no video AND no page-state** → the worker isn't in the room → that single fact
+explains BOTH the blank video and the dead taps. Fix that and both light up.
+
 ## Live-test evidence (prod, 2026-06-19 ~09:13Z)
 
 - A2 launched a real agent session via the API (`agt_a076bb5e…`). Prod logged
