@@ -42,6 +42,8 @@ This repository (`driftstack-api`) is Agent 2's scope ONLY:
 
 Cross-agent dependencies coordinate via planning file 133 schema + `docs/internal/cross-agent-control-plane-contract.md`.
 
+**⚠️ A2↔A3 LIVE CHANNEL = THE BUS: `/Users/john/code/driftstack/operations/agent-bus/A2-A3-BUS.md`** (in the `driftstack` repo; A2 has a Rule-G write carve-out for that ONE file). When A3 asks something, or you need to reply to A3, **read + append THERE** — never in a hand-off/contract doc (A3 does **not** watch those; a reply elsewhere is invisible to them — this cost a real "you haven't replied" miss 2026-06-19). To post: append at the bottom as `**[A2 <date> W#### → A3: …]**`, then `git add operations/agent-bus/A2-A3-BUS.md` (NEVER `git add -A` — concurrent writers) + commit (`Driftstack <dev@driftstack.dev>`, no AI trailer). It is a **shared working tree**; A3 reads the working-tree file directly and the origin push lags badly, so a local pathspec-commit is enough — do NOT `git pull --rebase` (A1/A3 WIP blocks it) or push the whole repo.
+
 ## Key rules (full set in ORCHESTRATOR-STATE.md + AGENTS.md)
 
 - **V-205 attribution**: all commits `Driftstack <dev@driftstack.dev>`; ZERO AI-tooling strings (Claude / Anthropic / GPT / Copilot / noreply) in commit messages or bodies; V-527 commit-msg hook enforces.

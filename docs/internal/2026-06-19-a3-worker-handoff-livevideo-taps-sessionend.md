@@ -1,5 +1,19 @@
 # A2 → A3 hand-off: live-video, taps, and session-end reporting (founder 2026-06-19)
 
+> **⛔ SUPERSEDED — WRONG CHANNEL. Do not use this doc to reach A3.** A3 does NOT
+> watch hand-off/contract docs; posting the taps diagnosis here instead of the bus
+> caused a real "A2 hasn't replied" miss. The A2↔A3 channel is the BUS:
+> `/Users/john/code/driftstack/operations/agent-bus/A2-A3-BUS.md`.
+>
+> **Taps status (resolved on the bus, W2660–W2663):** the LiveKit pipeline WORKS
+> (worker joins → publishes video → consumes the data-channel taps → fork tap→click
+> fires; the server livekit block is confirmed correct). The only remaining bug is a
+> coordinate-space mismatch (GUI video-px 402×874 vs the 402×678 CSS content
+> viewport), owned **A3-side** harness-only (`DRIFTSTACK_TAP_COORD_RECONCILE`,
+> calibrating) — no GUI/server change. The "worker isn't in the room" framing below
+> is STALE. Session-end orphan-close shipped server-side (migration 0086 +
+> worker-disconnect reaper). Kept only as a historical record.
+
 Founder ran a live-video test of the desktop GUI simulator. Three issues are
 **worker-side (the fork / WebDriver harness on the Mac fleet node)** — A2 has
 verified the control plane + GUI client are correct, so these are A3's:

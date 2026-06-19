@@ -5,6 +5,13 @@ Agent-1 (driftstack + webkit-driftstack) ↔ Agent-2 (driftstack-api) ↔ Harnes
 boundary so neither side has to read the other's code to understand the
 contract. Update when a new cross-agent surface ships.
 
+> **⚠️ This is the STATIC interface contract — NOT a message channel.** For LIVE
+> A2↔A3 coordination (questions, replies, hand-offs), use the **BUS**:
+> `/Users/john/code/driftstack/operations/agent-bus/A2-A3-BUS.md`. A3 watches the
+> bus, **not** this doc and **not** any dated hand-off doc — a reply anywhere else
+> is invisible to them (cost a real "you haven't replied" miss 2026-06-19). See
+> the driftstack-api CLAUDE.md "A2↔A3 LIVE CHANNEL" note for the post recipe.
+
 **Sources of truth (read first):**
 
 - `/Users/john/code/driftstack/docs/planning/133-egress-architecture-cross-agent.md`
