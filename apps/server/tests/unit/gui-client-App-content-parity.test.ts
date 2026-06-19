@@ -48,9 +48,9 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     );
   });
 
-  it("View 14-variant union: home / ai / recipes / sessions / live-session{sessionId} / sessions-history / profiles / recordings / recording-player{recordingId} / proxies / connectivity / fleet / team / settings — pinned so the kind-tag taxonomy doesn't drift (e.g. a removed variant + a switch fall-through silently routes to the wrong view). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice; 'team' by the Teams-management slice (2026-06-16); 'logs' removed when the client-buffer nav surface was retired (2026-06-19).", () => {
+  it("View 15-variant union: home / ai / recipes / sessions / live-session{sessionId} / sessions-history / profiles / recordings / recording-player{recordingId} / proxies / connectivity / fleet / team / billing / settings — pinned so the kind-tag taxonomy doesn't drift (e.g. a removed variant + a switch fall-through silently routes to the wrong view). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice; 'team' by the Teams-management slice (2026-06-16); 'logs' removed when the client-buffer nav surface was retired (2026-06-19); 'billing' added when the customer billing/crypto-checkout cluster was wired into nav (revenue path, 2026-06-19).", () => {
     expect(body).toMatch(
-      /type View =\s*\n?\s*\| \{ kind: 'home' \}\s*\n?\s*\| \{ kind: 'ai'; profileId\?: string \}\s*\n?\s*\| \{ kind: 'recipes' \}\s*\n?\s*\| \{ kind: 'sessions' \}\s*\n?\s*\| \{ kind: 'live-session'; sessionId: string \}\s*\n?\s*\| \{ kind: 'sessions-history' \}\s*\n?\s*\| \{ kind: 'profiles' \}\s*\n?\s*\| \{ kind: 'recordings' \}\s*\n?\s*\| \{ kind: 'recording-player'; recordingId: string \}\s*\n?\s*\| \{ kind: 'proxies' \}\s*\n?\s*\| \{ kind: 'connectivity' \}\s*\n?\s*\| \{ kind: 'fleet' \}\s*\n?\s*\| \{ kind: 'team' \}\s*\n?\s*\| \{ kind: 'settings' \};/,
+      /type View =\s*\n?\s*\| \{ kind: 'home' \}\s*\n?\s*\| \{ kind: 'ai'; profileId\?: string \}\s*\n?\s*\| \{ kind: 'recipes' \}\s*\n?\s*\| \{ kind: 'sessions' \}\s*\n?\s*\| \{ kind: 'live-session'; sessionId: string \}\s*\n?\s*\| \{ kind: 'sessions-history' \}\s*\n?\s*\| \{ kind: 'profiles' \}\s*\n?\s*\| \{ kind: 'recordings' \}\s*\n?\s*\| \{ kind: 'recording-player'; recordingId: string \}\s*\n?\s*\| \{ kind: 'proxies' \}\s*\n?\s*\| \{ kind: 'connectivity' \}\s*\n?\s*\| \{ kind: 'fleet' \}\s*\n?\s*\| \{ kind: 'team' \}\s*\n?\s*\| \{ kind: 'billing' \}\s*\n?\s*\| \{ kind: 'settings' \};/,
     );
     expect(body).not.toMatch(/\| \{ kind: 'logs' \}/);
     expect(body).not.toMatch(/case 'logs':/);
@@ -115,7 +115,7 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     expect(body).toMatch(/<span className="section-label text-ink-muted">Loading…<\/span>/);
   });
 
-  it("CurrentView switch covers all 10 View variants — pinned so a removed View variant + a missing case doesn't fall through to an exhaustiveness error (and so adding a new variant to the View union forces matching the new case here)", () => {
+  it("CurrentView switch covers all 15 View variants — pinned so a removed View variant + a missing case doesn't fall through to an exhaustiveness error (and so adding a new variant to the View union forces matching the new case here)", () => {
     expect(body).toMatch(/case 'sessions':/);
     expect(body).toMatch(/case 'live-session':/);
     expect(body).toMatch(/case 'sessions-history':/);
@@ -126,7 +126,14 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     expect(body).toMatch(/case 'connectivity':/);
     expect(body).toMatch(/case 'fleet':/);
     expect(body).toMatch(/case 'team':/);
+    expect(body).toMatch(/case 'billing':/);
     expect(body).toMatch(/case 'settings':/);
+  });
+
+  it("Billing route wired: BillingView imported, the 'billing' case returns <BillingView />, and the nav-billing command-palette action exists (revenue path — the customer crypto-checkout cluster was previously built but unreachable, 2026-06-19)", () => {
+    expect(body).toMatch(/import \{ BillingView \} from '\.\/views\/BillingView';/);
+    expect(body).toMatch(/case 'billing':\s*\n?\s*return <BillingView \/>;/);
+    expect(body).toMatch(/id: 'nav-billing'/);
   });
 
   it('file exists at canonical path', () => {

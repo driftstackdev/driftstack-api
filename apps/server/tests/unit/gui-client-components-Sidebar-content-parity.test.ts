@@ -41,9 +41,9 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
     expect(body).not.toMatch(/<SidebarSection label="Diagnostics">/);
   });
 
-  it("SidebarViewKind 12-variant union exported: home / ai / recipes / profiles / proxies / sessions-history / recordings / sessions / connectivity / fleet / team / settings — pinned so App.tsx + future callers stay tied to the canonical nav-key taxonomy (live-session + recording-player are not in this union — they are routed-to, not navigated-to). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice; 'team' by the Teams-management slice (2026-06-16); 'logs' removed when the client-buffer nav surface was retired (2026-06-19).", () => {
+  it("SidebarViewKind 13-variant union exported: home / ai / recipes / profiles / proxies / sessions-history / recordings / sessions / connectivity / fleet / team / billing / settings — pinned so App.tsx + future callers stay tied to the canonical nav-key taxonomy (live-session + recording-player are not in this union — they are routed-to, not navigated-to). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice; 'team' by the Teams-management slice (2026-06-16); 'logs' removed when the client-buffer nav surface was retired (2026-06-19); 'billing' added when the customer billing/crypto-checkout cluster was wired into nav (revenue path, 2026-06-19).", () => {
     expect(body).toMatch(
-      /export type SidebarViewKind =\s*\n?\s*\| 'home'\s*\n?\s*\| 'ai'\s*\n?\s*\| 'recipes'\s*\n?\s*\| 'profiles'\s*\n?\s*\| 'proxies'\s*\n?\s*\| 'sessions-history'\s*\n?\s*\| 'recordings'\s*\n?\s*\| 'sessions'\s*\n?\s*\| 'connectivity'\s*\n?\s*\| 'fleet'\s*\n?\s*\| 'team'\s*\n?\s*\| 'settings';/,
+      /export type SidebarViewKind =\s*\n?\s*\| 'home'\s*\n?\s*\| 'ai'\s*\n?\s*\| 'recipes'\s*\n?\s*\| 'profiles'\s*\n?\s*\| 'proxies'\s*\n?\s*\| 'sessions-history'\s*\n?\s*\| 'recordings'\s*\n?\s*\| 'sessions'\s*\n?\s*\| 'connectivity'\s*\n?\s*\| 'fleet'\s*\n?\s*\| 'team'\s*\n?\s*\| 'billing'\s*\n?\s*\| 'settings';/,
     );
     expect(body).not.toMatch(/\| 'logs'/);
   });

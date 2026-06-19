@@ -33,6 +33,7 @@ import { SessionsHistoryView } from './views/SessionsHistoryView';
 import { TeamView } from './views/TeamView';
 import { SessionsView } from './views/SessionsView';
 import { SettingsView } from './views/SettingsView';
+import { BillingView } from './views/BillingView';
 import { UpdateBanner } from './components/UpdateBanner';
 import { checkForUpdate, type AvailableUpdate } from './lib/updater';
 
@@ -50,6 +51,7 @@ type View =
   | { kind: 'connectivity' }
   | { kind: 'fleet' }
   | { kind: 'team' }
+  | { kind: 'billing' }
   | { kind: 'settings' };
 
 export function App(): JSX.Element {
@@ -157,6 +159,24 @@ function Shell(): JSX.Element {
       glyph: '⇄',
       keywords: ['nav'],
       run: () => setView({ kind: 'proxies' }),
+    },
+    {
+      id: 'nav-billing',
+      label: 'Go to Billing',
+      kind: 'view',
+      glyph: '◇',
+      keywords: [
+        'nav',
+        'billing',
+        'cost',
+        'usage',
+        'pay',
+        'crypto',
+        'top up',
+        'invoice',
+        'receipt',
+      ],
+      run: () => setView({ kind: 'billing' }),
     },
     {
       id: 'nav-settings',
@@ -379,6 +399,8 @@ function CurrentView({
       return <FleetView />;
     case 'team':
       return <TeamView />;
+    case 'billing':
+      return <BillingView />;
   }
 }
 

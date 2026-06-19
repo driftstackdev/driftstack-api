@@ -32,6 +32,7 @@ export type SidebarViewKind =
   | 'connectivity'
   | 'fleet'
   | 'team'
+  | 'billing'
   | 'settings';
 
 interface SidebarProps {
@@ -182,6 +183,15 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
               Team
             </SidebarItem>
           )}
+          {/* Billing is the revenue / upgrade path — always on, no
+              cloud/tier gate (a self-hosted customer pays + tops up too). */}
+          <SidebarItem
+            icon={<IconBilling />}
+            active={current === 'billing'}
+            onClick={() => onNavigate('billing')}
+          >
+            Billing
+          </SidebarItem>
           <SidebarItem
             icon={<IconCog />}
             active={current === 'settings'}
@@ -433,6 +443,16 @@ function IconCog(): JSX.Element {
     <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
       <circle cx="8" cy="8" r="2" />
       <path d="M8 1.75v1.5M8 12.75v1.5M3.75 3.75l1 1M11.25 11.25l1 1M1.75 8h1.5M12.75 8h1.5M3.75 12.25l1-1M11.25 4.75l1-1" />
+    </svg>
+  );
+}
+
+function IconBilling(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
+      <rect x="2" y="3.5" width="12" height="9" rx="1.25" />
+      <path d="M2 6.5h12" />
+      <path d="M4.5 10h3" />
     </svg>
   );
 }
