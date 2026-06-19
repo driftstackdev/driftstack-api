@@ -24,7 +24,6 @@ export type SidebarViewKind =
   | 'home'
   | 'ai'
   | 'recipes'
-  | 'logs'
   | 'profiles'
   | 'proxies'
   | 'sessions-history'
@@ -155,22 +154,10 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
         </SidebarItem>
       </SidebarSection>
 
-      {/* Diagnostics "Logs" is the app's client-side console/error buffer (not
-          session logs) — useful for a self-hosted operator triaging the app, but
-          noise for a cloud customer. Gated to self-hosted only (mirrors Cluster
-          below); the route + buffer stay for debugging. 2026-06-19. */}
-      {!isCloudBaseUrl(settings.baseUrl) && (
-        <SidebarSection label="Diagnostics">
-          <SidebarItem
-            icon={<IconTerminal />}
-            active={current === 'logs'}
-            onClick={() => onNavigate('logs')}
-          >
-            Logs
-          </SidebarItem>
-        </SidebarSection>
-      )}
-
+      {/* The client-side console/error buffer is no longer a full-screen nav
+          surface — it was a "Logs" page that looked like real session logs but
+          only showed captured console output + errors. The floating DevLogPanel
+          still exposes it for dev triage. 2026-06-19. */}
       {!isCloudBaseUrl(settings.baseUrl) && (
         <SidebarSection label="Cluster">
           <SidebarItem
@@ -373,15 +360,6 @@ function IconBook(): JSX.Element {
     <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
       <path d="M2.75 3.25A1.25 1.25 0 0 1 4 2h8.25v10.5H4a1.25 1.25 0 0 0-1.25 1.25Z" />
       <path d="M2.75 12.75A1.25 1.25 0 0 1 4 14h8.25" />
-    </svg>
-  );
-}
-
-function IconTerminal(): JSX.Element {
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
-      <rect x="2.25" y="3" width="11.5" height="10" rx="1.25" />
-      <path d="M4.75 6.25 7 8.5l-2.25 2.25M8.5 10.75h2.75" />
     </svg>
   );
 }

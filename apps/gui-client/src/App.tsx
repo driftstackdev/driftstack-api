@@ -23,7 +23,6 @@ import { CommandPalette, type PaletteAction } from './components/CommandPalette'
 import { ToastProvider } from './lib/toasts';
 import { AgentChatView } from './views/AgentChatView';
 import { CommandCenterView } from './views/CommandCenterView';
-import { LogsView } from './views/LogsView';
 import { RecipesView } from './views/RecipesView';
 import { ProfilesView } from './views/ProfilesView';
 import { ProxiesView } from './views/ProxiesView';
@@ -41,7 +40,6 @@ type View =
   | { kind: 'home' }
   | { kind: 'ai'; profileId?: string }
   | { kind: 'recipes' }
-  | { kind: 'logs' }
   | { kind: 'sessions' }
   | { kind: 'live-session'; sessionId: string }
   | { kind: 'sessions-history' }
@@ -127,14 +125,6 @@ function Shell(): JSX.Element {
       glyph: '❡',
       keywords: ['nav', 'recipes', 'automation', 'flows'],
       run: () => setView({ kind: 'recipes' }),
-    },
-    {
-      id: 'nav-logs',
-      label: 'Go to Logs',
-      kind: 'view',
-      glyph: '≣',
-      keywords: ['nav', 'logs', 'debug', 'diagnostics'],
-      run: () => setView({ kind: 'logs' }),
     },
     {
       id: 'nav-profiles',
@@ -337,8 +327,6 @@ function CurrentView({
       return <AgentChatView initialProfileId={view.profileId} />;
     case 'recipes':
       return <RecipesView />;
-    case 'logs':
-      return <LogsView />;
     case 'sessions':
       return (
         <SessionsView

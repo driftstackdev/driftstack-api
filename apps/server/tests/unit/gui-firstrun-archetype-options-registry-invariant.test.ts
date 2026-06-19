@@ -1,13 +1,15 @@
 // Cross-source invariant: the GUI FirstRunWizard's customer-facing archetype
 // picker (PROFILE_ARCHETYPE_OPTIONS) must stay in sync with the
 // customer-selectable set of ARCHETYPE_REGISTRY — i.e. the entries with
-// status 'launch' or 'available'. The wizard currently hardcodes its 2-option
-// catalog in a parallel list (apps/gui-client/src/views/FirstRunWizard.tsx);
-// this guard ensures it can't silently drift from the registry source of
-// truth. When Agent-1 populates a new device and it flips to 'available', this
-// guard fails until the wizard offers it too (or is wired to derive from the
-// registry directly). 'reference'/'planned' entries are intentionally NOT
-// customer-selectable, so they must NOT appear as wizard options.
+// status 'launch' or 'available'.
+//
+// 2026-06-19 de-dup: the wizard no longer hardcodes a parallel option list; it
+// DERIVES PROFILE_ARCHETYPE_OPTIONS directly from ARCHETYPE_REGISTRY filtered
+// by SELECTABLE_STATUSES ('launch' | 'available'), exactly as ProfilesView
+// does. That makes the in-sync property structural — a promoted archetype
+// lights up automatically. This guard now pins the derivation wiring (so a
+// future refactor can't quietly re-introduce a hardcoded/drifting list) +
+// asserts the resulting visible set still equals the registry-selectable set.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -19,12 +21,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const WIZARD = resolve(REPO_ROOT, 'apps/gui-client/src/views/FirstRunWizard.tsx');
 
-function wizardOptionValues(): string[] {
-  const body = readFileSync(WIZARD, 'utf8');
-  return (body.match(/value: '([a-z0-9_]+)'/g) || [])
-    .map((m) => m.replace(/value: '|'/g, ''))
-    .filter((v) => /^(iphone|ipad)/.test(v)); // archetype-shaped option values only
-}
+const wizardBody = readFileSync(WIZARD, 'utf8');
 
 const selectable = ARCHETYPE_REGISTRY.filter(
   (a) => a.status === 'launch' || a.status === 'available',
@@ -35,27 +32,34 @@ describe('GUI FirstRunWizard archetype options ↔ ARCHETYPE_REGISTRY selectable
     expect(selectable.length).toBeGreaterThan(0);
   });
 
-  it('FirstRunWizard offers EXACTLY the selectable archetypes — no stale/extra, none missing', () => {
-    expect([...wizardOptionValues()].sort()).toEqual([...selectable].sort());
-  });
-
-  it('every FirstRunWizard option is a REGISTERED archetype (catches a slug typo / unregistered device)', () => {
-    const allIds = new Set(ARCHETYPE_REGISTRY.map((a) => a.id));
-    for (const v of wizardOptionValues()) {
-      expect(allIds.has(v), `FirstRunWizard offers '${v}' which is not in ARCHETYPE_REGISTRY`).toBe(
-        true,
-      );
-    }
-  });
-
-  it('no internal-only (reference) or unpopulated (planned) archetype leaks into the wizard', () => {
-    const nonSelectable = new Set(
-      ARCHETYPE_REGISTRY.filter((a) => a.status === 'reference' || a.status === 'planned').map(
-        (a) => a.id,
-      ),
+  it('FirstRunWizard DERIVES its option list from ARCHETYPE_REGISTRY (no hardcoded parallel catalog)', () => {
+    // Imports the registry + the status type from the SDK barrel (prettier
+    // may reflow this import across lines, so match members flexibly).
+    expect(wizardBody).toMatch(/ARCHETYPE_REGISTRY,/);
+    expect(wizardBody).toMatch(/type ArchetypeStatus,?\s*\n?\s*\}? from '@driftstack\/sdk';/);
+    // Filters by the same launch|available selectable statuses ProfilesView uses.
+    expect(wizardBody).toMatch(
+      /const SELECTABLE_STATUSES = new Set<ArchetypeStatus>\(\['launch', 'available'\]\);/,
     );
-    for (const v of wizardOptionValues()) {
-      expect(nonSelectable.has(v), `wizard offers non-selectable archetype '${v}'`).toBe(false);
+    expect(wizardBody).toMatch(
+      /const PROFILE_ARCHETYPE_OPTIONS = ARCHETYPE_REGISTRY\.filter\(\(a\) =>\s*\n?\s*SELECTABLE_STATUSES\.has\(a\.status\),\s*\n?\s*\)\.map\(/,
+    );
+    // No hardcoded archetype-shaped option-object literals remain.
+    const literalValues = (wizardBody.match(/value: '([a-z0-9_]+)'/g) || [])
+      .map((m) => m.replace(/value: '|'/g, ''))
+      .filter((v) => /^(iphone|ipad)/.test(v));
+    expect(literalValues).toEqual([]);
+  });
+
+  it('no internal-only (reference) or unpopulated (planned) archetype is in the selectable set the wizard derives from', () => {
+    const nonSelectable = ARCHETYPE_REGISTRY.filter(
+      (a) => a.status === 'reference' || a.status === 'planned',
+    ).map((a) => a.id);
+    for (const id of nonSelectable) {
+      expect(
+        selectable.includes(id),
+        `non-selectable archetype '${id}' must not be selectable`,
+      ).toBe(false);
     }
   });
 });

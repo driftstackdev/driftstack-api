@@ -84,7 +84,7 @@ describe('SimulatorWindow — floating iPhone', () => {
     for (const label of ['Close', 'Minimize', 'Start recording', 'Show controls']) {
       expect(toolbar?.querySelector(`[aria-label="${label}"]`), label).not.toBeNull();
     }
-    // Founder 2026-06-17: the snapshot / rotate / pin / info controls moved into
+    // Founder 2026-06-17: the rotate / pin / info controls moved into
     // the EXPANDABLE panel, so the default (collapsed) chrome stays minimal —
     // they are NOT in the DOM until the panel is expanded.
     const wrap = container.querySelector('[data-component="simulator-toolbar-wrap"]');
@@ -106,7 +106,7 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(wrap?.querySelector('[data-component="simulator-toolbar"]')).toBe(toolbar);
   });
 
-  it('the expand chevron reveals the control panel — the Mode segmented control (Agent/Pair/Manual) + snapshot / rotate / pin / info', () => {
+  it('the expand chevron reveals the control panel — the Mode segmented control (Agent/Pair/Manual) + rotate / pin / info', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
     const { container } = render(
       <RecordingsProvider>
@@ -126,7 +126,6 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(panel?.querySelector('[aria-label="Pair mode"]')).not.toBeNull();
     expect(panel?.querySelector('[aria-label="Manual mode"]')).not.toBeNull();
     // The labelled controls now live here (clearer than the old icon-only bar).
-    expect(panel?.querySelector('[aria-label="Save snapshot"]')).not.toBeNull();
     expect(
       panel?.querySelector('[aria-label="Rotate to landscape"], [aria-label="Rotate to portrait"]'),
     ).not.toBeNull();

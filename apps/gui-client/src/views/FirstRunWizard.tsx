@@ -26,7 +26,12 @@
 // founder name; no AI / Anthropic references in any visible string.
 
 import { useEffect, useState } from 'react';
-import { Driftstack, DriftstackError } from '@driftstack/sdk';
+import {
+  Driftstack,
+  DriftstackError,
+  ARCHETYPE_REGISTRY,
+  type ArchetypeStatus,
+} from '@driftstack/sdk';
 import { TitleBar } from '../components/TitleBar';
 import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { useSettings } from '../lib/SettingsContext';
@@ -551,20 +556,37 @@ export function ApiKeyStep({
 // V-669 — archetype picker in the first-run wizard. Aligns with the
 // existing ARCHETYPES catalogue elsewhere in the GUI; selecting one
 // here pre-seeds the profile's archetype field.
-const PROFILE_ARCHETYPE_OPTIONS = [
-  {
-    value: 'iphone17_ios18_7_safari26_4',
-    label: 'iPhone 17 · iOS 18.7 · Safari 26.4',
-    description:
-      'The v1.0 launch archetype — the device profile verified bit-for-bit against a real iPhone 17. Additional models are coming soon.',
-  },
-  {
-    value: 'iphone17_ios18_7_safari26_5',
-    label: 'iPhone 17 · iOS 18.7 · Safari 26.5',
-    description:
-      'iPhone 17 on the Safari 26.5 point release — verified bit-for-bit against a real device. Pick this to match visitors on the latest Safari.',
-  },
-] as const;
+//
+// Derived from ARCHETYPE_REGISTRY (single source of truth) filtered to the
+// customer-selectable statuses — 'launch' (the locked reference) + 'available'
+// (fingerprint-atlas-ready) — exactly as ProfilesView does. 'reference' /
+// 'planned' entries are intentionally excluded; a newly-promoted archetype
+// lights up here automatically the moment A1 flips its status, with zero
+// wizard change. The customer-facing copy lives in a per-id lookup with a
+// generic fallback so a future archetype still renders a sensible blurb.
+const SELECTABLE_STATUSES = new Set<ArchetypeStatus>(['launch', 'available']);
+// Customer-facing copy per known archetype. A future promoted archetype with
+// no entry here falls back to the registry's displayLabel + a generic blurb,
+// so it still renders — the wizard never silently drops a selectable option.
+const ARCHETYPE_LABELS: Record<string, string> = {
+  iphone17_ios18_7_safari26_4: 'iPhone 17 · iOS 18.7 · Safari 26.4',
+  iphone17_ios18_7_safari26_5: 'iPhone 17 · iOS 18.7 · Safari 26.5',
+};
+const ARCHETYPE_DESCRIPTIONS: Record<string, string> = {
+  iphone17_ios18_7_safari26_4:
+    'The v1.0 launch archetype — the device profile verified bit-for-bit against a real iPhone 17. Additional models are coming soon.',
+  iphone17_ios18_7_safari26_5:
+    'iPhone 17 on the Safari 26.5 point release — verified bit-for-bit against a real device. Pick this to match visitors on the latest Safari.',
+};
+const PROFILE_ARCHETYPE_OPTIONS = ARCHETYPE_REGISTRY.filter((a) =>
+  SELECTABLE_STATUSES.has(a.status),
+).map((a) => ({
+  value: a.id,
+  label: ARCHETYPE_LABELS[a.id] ?? a.displayLabel,
+  description:
+    ARCHETYPE_DESCRIPTIONS[a.id] ??
+    `${a.displayLabel} — verified bit-for-bit against a real device.`,
+}));
 
 type ProfileArchetype = (typeof PROFILE_ARCHETYPE_OPTIONS)[number]['value'];
 

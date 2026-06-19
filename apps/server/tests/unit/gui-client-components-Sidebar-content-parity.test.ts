@@ -26,24 +26,26 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("section taxonomy pinned: 'Home' (Command Center) + 'Browse' (Profiles + Proxies) lead, then 'Automate' (AI chat + Saved tasks) + 'History' (Session log + Recordings) + 'Diagnostics' (Logs) + 'Cluster' (Mac mini fleet, cloud-customer-gated via isCloudBaseUrl) + 'Account' (Settings, Team conditional). 2026-06-15: Raw sessions removed (redundant with the profile View/Open) + Connectivity test moved into Settings, so Diagnostics keeps only Logs. Do not collapse / rename sections without updating the GUI snapshot tests + this pin.", () => {
+  it("section taxonomy pinned: 'Home' (Command Center) + 'Browse' (Profiles + Proxies) lead, then 'Automate' (AI chat + Saved tasks) + 'History' (Session log + Recordings) + 'Cluster' (Mac mini fleet, cloud-customer-gated via isCloudBaseUrl) + 'Account' (Settings, Team conditional). 2026-06-15: Raw sessions removed (redundant with the profile View/Open) + Connectivity test moved into Settings. 2026-06-19: the 'Diagnostics' (Logs) nav surface was removed — it was a client-side console/error buffer mislabeled as session logs; the floating DevLogPanel keeps it for dev triage. Do not collapse / rename sections without updating the GUI snapshot tests + this pin.", () => {
     expect(body).toMatch(/<SidebarSection label="Home">/);
     expect(body).toMatch(/<SidebarSection label="Automate">/);
     expect(body).toMatch(/<SidebarSection label="Browse">/);
     expect(body).toMatch(/<SidebarSection label="History">/);
-    expect(body).toMatch(/<SidebarSection label="Diagnostics">/);
     expect(body).toMatch(/<SidebarSection label="Cluster">/);
     expect(body).toMatch(/<SidebarSection label="Account">/);
     expect(body).toMatch(/Mac mini fleet/);
     // Connectivity test now lives in Settings, not the sidebar.
     expect(body).not.toMatch(/Connectivity test/);
     expect(body).not.toMatch(/Raw sessions/);
+    // 2026-06-19 — the full-screen "Logs" nav surface was removed.
+    expect(body).not.toMatch(/<SidebarSection label="Diagnostics">/);
   });
 
-  it("SidebarViewKind 13-variant union exported: home / ai / recipes / logs / profiles / proxies / sessions-history / recordings / sessions / connectivity / fleet / team / settings — pinned so App.tsx + future callers stay tied to the canonical nav-key taxonomy (live-session + recording-player are not in this union — they are routed-to, not navigated-to). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice; 'team' by the Teams-management slice (2026-06-16).", () => {
+  it("SidebarViewKind 12-variant union exported: home / ai / recipes / profiles / proxies / sessions-history / recordings / sessions / connectivity / fleet / team / settings — pinned so App.tsx + future callers stay tied to the canonical nav-key taxonomy (live-session + recording-player are not in this union — they are routed-to, not navigated-to). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice; 'team' by the Teams-management slice (2026-06-16); 'logs' removed when the client-buffer nav surface was retired (2026-06-19).", () => {
     expect(body).toMatch(
-      /export type SidebarViewKind =\s*\n?\s*\| 'home'\s*\n?\s*\| 'ai'\s*\n?\s*\| 'recipes'\s*\n?\s*\| 'logs'\s*\n?\s*\| 'profiles'\s*\n?\s*\| 'proxies'\s*\n?\s*\| 'sessions-history'\s*\n?\s*\| 'recordings'\s*\n?\s*\| 'sessions'\s*\n?\s*\| 'connectivity'\s*\n?\s*\| 'fleet'\s*\n?\s*\| 'team'\s*\n?\s*\| 'settings';/,
+      /export type SidebarViewKind =\s*\n?\s*\| 'home'\s*\n?\s*\| 'ai'\s*\n?\s*\| 'recipes'\s*\n?\s*\| 'profiles'\s*\n?\s*\| 'proxies'\s*\n?\s*\| 'sessions-history'\s*\n?\s*\| 'recordings'\s*\n?\s*\| 'sessions'\s*\n?\s*\| 'connectivity'\s*\n?\s*\| 'fleet'\s*\n?\s*\| 'team'\s*\n?\s*\| 'settings';/,
     );
+    expect(body).not.toMatch(/\| 'logs'/);
   });
 
   it('Count-badge data sources pinned: Profiles X/Y via accountMe.profile_count / .profile_cap, Team N via accountMe.teams.length, Recordings N via RecordingsContext map size — pin so a casual refactor cannot drop a counter without showing up in the diff. (Sessions badge dropped 2026-06-15 with the Raw sessions nav item.)', () => {

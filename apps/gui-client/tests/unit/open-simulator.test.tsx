@@ -2,12 +2,14 @@
 //
 // The opener prefers the SEPARATE "Driftstack Simulator" app: it base64-encodes
 // the simulator query string and hands it to the Rust `launch_simulator`
-// command (argv is `ps`-visible, so only the non-secret session fields ride
-// here; the control key goes via the 0600 temp file). This test pins exactly
-// which fields land in that payload — including the proxy exit `cc` (country
-// code) that drives the separate app's macOS Dock tile (founder 2026-06-18) —
-// so a future refactor can't silently drop one. The control key is asserted to
-// go via sim_key_write (NOT the query payload).
+// command. This test pins exactly which fields land in that payload — including
+// the proxy exit `cc` (country code) that drives the separate app's macOS Dock
+// tile (founder 2026-06-18) — so a future refactor can't silently drop one. The
+// per-session control key (a 24h session-scoped token) rides this payload as the
+// PRIMARY handoff (the SAME in-process location.search channel the LiveKit token
+// already uses) so the separate app authorizes on mount without racing the
+// temp-file read; sim_key_write stays as the secondary fallback (founder
+// 2026-06-18 — this fixed the permanent "Connecting…" stall).
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { LiveKitInfo } from '@driftstack/sdk';
@@ -80,30 +82,24 @@ describe('openSimulatorWindow — session handoff payload', () => {
     expect(launchedQuery().get('cc')).toBe('');
   });
 
-  it('hands the control key off via sim_key_write — never in the query payload', async () => {
+  it('hands the control key off in the query payload (primary, race-free on mount) AND via sim_key_write (secondary)', async () => {
     await openSimulatorWindow({
       sessionId: 'agt_k',
       info,
       countryCode: 'US',
       controlKey: 'gck_secret',
     });
-    // The control key is written to the 0600 temp file...
+    // SECONDARY: the 0600 temp file (belt-and-suspenders fallback).
     expect(invoke).toHaveBeenCalledWith('sim_key_write', {
       sessionId: 'agt_k',
       key: 'gck_secret',
     });
-    // ...and is NOT present anywhere in the ps-visible launch payload.
+    // PRIMARY: in the base64'd launch payload, which Rust applies to the separate
+    // app's window.location.search (the SAME in-process channel the LiveKit token
+    // already rides) so the simulator authorizes the control endpoints on mount
+    // without racing the temp-file read — the cause of the permanent "Connecting…"
+    // stall (founder 2026-06-18). The control key is a 24h session-scoped token.
     const q = launchedQuery();
-    expect(q.get('ck')).toBeNull();
-    expect(
-      atob(
-        (
-          invoke.mock.calls.find((c) => c[0] === 'launch_simulator') as [
-            string,
-            { payload: string },
-          ]
-        )[1].payload,
-      ),
-    ).not.toContain('gck_secret');
+    expect(q.get('ck')).toBe('gck_secret');
   });
 });

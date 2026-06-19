@@ -205,12 +205,19 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).toMatch(/await client\.agentSessions\.livekitToken\(agentSessionId\);/);
   });
 
-  it('W625 mock-driver heads-up: ProfilesView reads useConnectionStatus(settings.baseUrl).driver and renders a data-banner="mock-driver" notice only when driver===\'mock\'; the hook parses driver from /version (mock|webkit|playwright, else null) — pinned so a mock deployment sets launch expectations up front instead of the customer hitting an empty stream post-launch', () => {
+  it("W625 mock-driver heads-up: ProfilesView reads useConnectionStatus(settings.baseUrl).driver and renders a data-banner=\"mock-driver\" notice only when driver==='mock' AND a launch actually used the placeholder polling viewer (usedPollingFallback) — the /version driver is hard-'mock' in prod even on the LiveKit live path, so it can't gate alone; the hook parses driver from /version (mock|webkit|playwright, else null) — pinned so a mock deployment sets launch expectations up front without falsely warning when LiveKit streamed", () => {
     expect(body).toMatch(
       /import \{ useConnectionStatus \} from '\.\.\/lib\/use-connection-status';/,
     );
     expect(body).toMatch(/const serverDriver = useConnectionStatus\(settings\.baseUrl\)\.driver;/);
-    expect(body).toMatch(/\{serverDriver === 'mock' && \(/);
+    // BUG 8 — the banner only appears after openPollingFallback genuinely fell
+    // back to the placeholder viewer (usedPollingFallback), never on the LiveKit
+    // live path (the /version driver name is hard-'mock' in prod regardless).
+    expect(body).toMatch(
+      /const \[usedPollingFallback, setUsedPollingFallback\] = useState\(false\);/,
+    );
+    expect(body).toMatch(/setUsedPollingFallback\(true\);/);
+    expect(body).toMatch(/\{serverDriver === 'mock' && usedPollingFallback && \(/);
     expect(body).toMatch(/data-banner="mock-driver"/);
     // The hook actually surfaces driver from /version.
     const hook = read(resolve(REPO_ROOT, 'apps/gui-client/src/lib/use-connection-status.ts'));

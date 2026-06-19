@@ -984,8 +984,8 @@ export function ProxyForm({
             autoComplete="off"
             spellCheck={false}
           />
-          <label className="mt-1 inline-flex cursor-pointer items-center gap-1 text-2xs text-accent hover:underline">
-            <span aria-hidden>⤓</span> or upload a wg0.conf file
+          <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded border border-accent/40 bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent/20 focus-within:ring-2 focus-within:ring-accent-ring">
+            <span aria-hidden>⤓</span> Upload a wg0.conf file
             <input
               type="file"
               accept=".conf,.txt,text/plain"
@@ -1010,8 +1010,8 @@ export function ProxyForm({
               autoComplete="off"
               spellCheck={false}
             />
-            <label className="mt-1 inline-flex cursor-pointer items-center gap-1 text-2xs text-accent hover:underline">
-              <span aria-hidden>⤓</span> or upload a .ovpn file
+            <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded border border-accent/40 bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent/20 focus-within:ring-2 focus-within:ring-accent-ring">
+              <span aria-hidden>⤓</span> Upload a .ovpn file
               <input
                 type="file"
                 accept=".ovpn,.conf,.txt,text/plain"

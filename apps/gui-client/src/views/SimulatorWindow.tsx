@@ -52,10 +52,12 @@ interface SessionQuery {
    *  Drives the macOS Dock-tile country badge (founder 2026-06-18). Empty
    *  string → no country (the Dock tile shows no badge). */
   countryCode: string;
-  /** Per-session gui_control_key carried in the query as the SANDBOXED
-   *  fallback handoff (when /tmp isn't shared). Non-sandboxed builds
-   *  prefer the temp-file handoff (sim_key_take) and leave this empty.
-   *  Empty string → no key from the query. */
+  /** Per-session gui_control_key carried in the query as the PRIMARY,
+   *  race-free control handoff (the opener always appends it via `ck=` when a
+   *  key is available — see lib/open-simulator.ts). The 0600 temp-file handoff
+   *  (sim_key_take) is a secondary path. Read on mount so controlAuth is set
+   *  without waiting on the Rust location.search reload. Empty string → no key
+   *  from the query (in-app window → fall back to the account API key). */
   controlKey: string;
 }
 
@@ -203,13 +205,14 @@ export function DeviceToolbar({
   onTogglePinned,
   onToggleInfo,
   onToggleExpanded,
-  onSnapshot,
   recording,
   onToggleRecord,
   mode,
   pairKind,
   controlBusy,
   composerText,
+  controlError,
+  onRetryControl,
   onSetMode,
   onTakeover,
   onHandback,
@@ -226,13 +229,14 @@ export function DeviceToolbar({
   onTogglePinned: () => void;
   onToggleInfo: () => void;
   onToggleExpanded: () => void;
-  onSnapshot: () => void;
   recording: boolean;
   onToggleRecord: () => void;
   mode: SessionMode | null;
   pairKind: string | null;
   controlBusy: boolean;
   composerText: string;
+  controlError: string | null;
+  onRetryControl: () => void;
   onSetMode: (m: SessionMode) => void;
   onTakeover: () => void;
   onHandback: () => void;
@@ -309,9 +313,9 @@ export function DeviceToolbar({
           )}
         </div>
         {/* Right — quick Record + the expand chevron. The window-controls
-            (snapshot / rotate / pin / info) live in the expandable panel below
-            so the default chrome stays minimal (founder 2026-06-17: "phone
-            showing only" by default, a clean expandable row for the controls). */}
+            (rotate / pin / info) live in the expandable panel below so the
+            default chrome stays minimal (founder 2026-06-17: "phone showing
+            only" by default, a clean expandable row for the controls). */}
         <div data-tauri-drag-region="false" className="flex items-center gap-1 text-white/70">
           <button
             type="button"
@@ -365,17 +369,13 @@ export function DeviceToolbar({
             pairKind={pairKind}
             busy={controlBusy}
             composerText={composerText}
+            controlError={controlError}
+            onRetryControl={onRetryControl}
             onSetMode={onSetMode}
             onTakeover={onTakeover}
             onHandback={onHandback}
             onComposerChange={onComposerChange}
             onSendMessage={onSendMessage}
-          />
-          <LabeledControl
-            label="Save snapshot"
-            hint="Save a PNG of the current frame"
-            onClick={onSnapshot}
-            glyph={<span className="text-[13px] leading-none">⤓</span>}
           />
           <LabeledControl
             label={landscape ? 'Rotate to portrait' : 'Rotate to landscape'}
@@ -481,6 +481,8 @@ export function SessionControlSection({
   pairKind,
   busy,
   composerText,
+  controlError,
+  onRetryControl,
   onSetMode,
   onTakeover,
   onHandback,
@@ -491,6 +493,11 @@ export function SessionControlSection({
   pairKind: string | null;
   busy: boolean;
   composerText: string;
+  /** Last getAgentSession failure, classified — null when controls loaded /
+   *  loading. Drives the "controls unavailable — Retry" caption instead of a
+   *  permanent "Connecting…" (founder 2026-06-18). */
+  controlError: string | null;
+  onRetryControl: () => void;
   onSetMode: (m: SessionMode) => void;
   onTakeover: () => void;
   onHandback: () => void;
@@ -500,8 +507,13 @@ export function SessionControlSection({
   // One source of truth for the caption + the take-over/hand-back verb: the
   // pair_mode_state.kind carries 'human' when the human holds the pair lock.
   const humanDriving = pairKind !== null && /human/i.test(pairKind);
-  const caption =
-    mode === null
+  // Three control states: loaded (mode set) → mode caption; failed
+  // (controlError set, mode still null) → unavailable + Retry; genuine first
+  // load (mode null, no error) → "Connecting…".
+  const failed = mode === null && controlError !== null;
+  const caption = failed
+    ? controlError
+    : mode === null
       ? 'Connecting…'
       : mode === 'manual'
         ? 'Manual — tap the screen to drive'
@@ -544,10 +556,22 @@ export function SessionControlSection({
         })}
       </div>
       <div className="flex items-center gap-1.5 px-3 pt-1.5 text-[10.5px] text-ink-muted">
-        <span aria-hidden="true" className={`text-accent ${mode === 'ai' ? 'animate-pulse' : ''}`}>
+        <span
+          aria-hidden="true"
+          className={`${failed ? 'text-amber-400' : 'text-accent'} ${mode === 'ai' ? 'animate-pulse' : ''}`}
+        >
           ◉
         </span>
-        <span>{caption}</span>
+        <span className={failed ? 'text-amber-300' : undefined}>{caption}</span>
+        {failed && (
+          <button
+            type="button"
+            onClick={onRetryControl}
+            className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-medium text-accent transition-colors hover:bg-white/10"
+          >
+            Retry
+          </button>
+        )}
       </div>
       {/* Contextual take-over / hand-back — only meaningful in pair mode. */}
       {mode === 'pair' && (
@@ -670,11 +694,13 @@ export function SimulatorWindow(): JSX.Element {
   // Per-session control credential. The SEPARATE simulator app can't
   // read the main app's keychain, so it authorizes the control
   // endpoints with the per-session gui_control_key instead of the
-  // account API key. Resolution order: the 0600 temp-file handoff
-  // (sim_key_take, non-sandboxed) wins; the `?ck=` query param is the
-  // sandboxed fallback; null → use the API key (in-app window). Loaded
-  // async (sim_key_take is a Tauri command) and re-loaded when the
-  // session switches.
+  // account API key. Resolution: the `?ck=` query param is the PRIMARY,
+  // race-free handoff — seeded synchronously here so controlAuth is set
+  // on the very first render (no reload race → getAgentSession succeeds →
+  // mode resolves → the mode buttons enable). The 0600 temp-file handoff
+  // (sim_key_take, Tauri command) is checked async below as a secondary
+  // path and only OVERRIDES when it actually returns a key. null → use the
+  // API key (in-app window). Re-loaded when the session switches.
   const [controlAuth, setControlAuth] = useState<ControlAuth>(() =>
     controlKey !== '' ? { controlKey } : null,
   );
@@ -806,32 +832,6 @@ export function SimulatorWindow(): JSX.Element {
   // (the LiveKit data channel is effectively dead, so taps/keys aren't reaching
   // the device). Surfaced as a small badge rather than blocking the view.
   const [controlUnreachable, setControlUnreachable] = useState(false);
-  // Night-arc I (cockpit pills): Snapshot — draw the CURRENT live frame to
-  // a canvas and save a PNG into ~/Downloads via the fs plugin (no native
-  // screenshot API needed; the WebRTC frame IS the device screen).
-  async function handleSnapshot(): Promise<void> {
-    const el = videoElRef.current;
-    if (el === null || el.videoWidth === 0) {
-      setNotice('No frame yet');
-      return;
-    }
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = el.videoWidth;
-      canvas.height = el.videoHeight;
-      canvas.getContext('2d')?.drawImage(el, 0, 0);
-      const dataUrl = canvas.toDataURL('image/png');
-      const bytes = Uint8Array.from(atob(dataUrl.split(',')[1] ?? ''), (c) => c.charCodeAt(0));
-      const { writeFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
-      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const file = `driftstack-${profileName !== '' ? profileName : deviceName}-${stamp}.png`;
-      await writeFile(file, bytes, { baseDir: BaseDirectory.Download });
-      setNotice(`Saved ${file} to Downloads`);
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : 'Snapshot failed');
-    }
-    window.setTimeout(() => setNotice(null), 4000);
-  }
   const latency = useLatencyPing({ room, enabled: room !== null });
   const [landscape, setLandscape] = useState(false);
   // Pin = always-on-top (the floating-iPhone default). Unpinned the window
@@ -905,34 +905,47 @@ export function SimulatorWindow(): JSX.Element {
   const [pairKind, setPairKind] = useState<string | null>(null);
   const [controlBusy, setControlBusy] = useState(false);
   const [composerText, setComposerText] = useState('');
+  // Control-channel load state for the panel caption (founder 2026-06-18: the
+  // mode toggle was stuck "Connecting…" forever when getAgentSession failed and
+  // the error was swallowed). null = no error; a classified message = the last
+  // getAgentSession failed and the panel should show a "controls unavailable —
+  // Retry" state instead of a permanent "Connecting…".
+  const [controlError, setControlError] = useState<string | null>(null);
   const clientIdRef = useRef<string>(
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
       : `sim-${profileName || deviceName}`,
   );
+  // One place classifies a control error into a short, human caption — used by
+  // both the transient notice toast and the persistent panel "unavailable" state.
+  const controlErrorMessage = (err: unknown): string =>
+    err instanceof AgentSessionControlError
+      ? err.kind === 'forbidden'
+        ? "Your key can't control this session"
+        : err.kind === 'conflict'
+          ? 'Session is no longer active'
+          : err.kind === 'auth_missing'
+            ? 'Sign in to control the session'
+            : err.message
+      : 'Control request failed';
   const noticeControlError = (err: unknown): void => {
-    const msg =
-      err instanceof AgentSessionControlError
-        ? err.kind === 'forbidden'
-          ? "Your key can't control this session"
-          : err.kind === 'conflict'
-            ? 'Session is no longer active'
-            : err.kind === 'auth_missing'
-              ? 'Sign in to control the session'
-              : err.message
-        : 'Control request failed';
-    setNotice(msg);
+    setNotice(controlErrorMessage(err));
     window.setTimeout(() => setNotice(null), 4000);
   };
   const refreshControl = useCallback((): void => {
     if (sessionId === '') return;
+    setControlError(null); // clear any prior failure while this attempt is in flight
     void getAgentSession(sessionId, controlAuth)
       .then((s) => {
         setControlMode(s.mode);
         setPairKind(s.pairKind);
       })
-      .catch(() => {
-        // Leave mode null — the panel shows a gentle "controls unavailable" state.
+      .catch((err: unknown) => {
+        // Surface the failure instead of leaving the panel stuck on "Connecting…"
+        // forever — the panel shows a "controls unavailable — Retry" state and
+        // the Retry re-runs this fetch (founder 2026-06-18). Mode stays null so
+        // the optimistic mode UI isn't faked; controlError drives the caption.
+        setControlError(controlErrorMessage(err));
       });
   }, [sessionId, controlAuth]);
   // Seed on mount + re-read whenever the panel opens (cheap, no idle polling).
@@ -1135,13 +1148,14 @@ export function SimulatorWindow(): JSX.Element {
             onTogglePinned={togglePinned}
             onToggleInfo={() => setInfoOpen((v) => !v)}
             onToggleExpanded={() => setToolbarExpanded((v) => !v)}
-            onSnapshot={() => void handleSnapshot()}
             recording={recordingId !== null}
             onToggleRecord={toggleRecord}
             mode={controlMode}
             pairKind={pairKind}
             controlBusy={controlBusy}
             composerText={composerText}
+            controlError={controlError}
+            onRetryControl={refreshControl}
             onSetMode={onSetMode}
             onTakeover={onTakeover}
             onHandback={onHandback}

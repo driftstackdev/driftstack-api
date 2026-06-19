@@ -135,15 +135,27 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     );
   });
 
-  it("V-669 PROFILE_ARCHETYPE_OPTIONS single-option catalog (post-2026-06-11 cutover): iphone17_ios18_7_safari26_4 only — the one validator-PASS launch archetype. iphone16pro/iphone15pro were removed when the launch default moved to iphone17 (A1's catalog marks them coming_soon/scaffolded). Pinned so the wizard never offers a non-selectable/detectably-wrong archetype.", () => {
+  it("V-669 PROFILE_ARCHETYPE_OPTIONS derived from ARCHETYPE_REGISTRY (2026-06-19 de-dup): the catalog is no longer a hardcoded literal — it filters ARCHETYPE_REGISTRY by SELECTABLE_STATUSES ('launch' | 'available'), exactly as ProfilesView does, so a future promoted archetype appears automatically with zero wizard change. Per-id label + description lookups keep the customer-facing copy (launch-archetype iPhone 17 blurb) with a generic fallback for future entries. Pinned so the wizard stays registry-driven + never offers a non-selectable/detectably-wrong archetype.", () => {
     expect(body).toMatch(
       /\/\/ V-669 — archetype picker in the first-run wizard\. Aligns with the\s*\n?\s*\/\/ existing ARCHETYPES catalogue elsewhere in the GUI; selecting one\s*\n?\s*\/\/ here pre-seeds the profile's archetype field\./,
     );
+    // Derivation: import the registry + filter on the selectable statuses
+    // (prettier may reflow this import across lines, so match flexibly).
+    expect(body).toMatch(/ARCHETYPE_REGISTRY,/);
+    expect(body).toMatch(/type ArchetypeStatus,?\s*\n?\s*\}? from '@driftstack\/sdk';/);
     expect(body).toMatch(
-      /value: 'iphone17_ios18_7_safari26_4',\s*\n?\s*label: 'iPhone 17 · iOS 18\.7 · Safari 26\.4',\s*\n?\s*description:\s*\n?\s*'The v1.0 launch archetype — the device profile verified bit-for-bit against a real iPhone 17\. Additional models are coming soon\.',/,
+      /const SELECTABLE_STATUSES = new Set<ArchetypeStatus>\(\['launch', 'available'\]\);/,
     );
-    // The prior 2-option catalog (iphone16pro 'Most popular' + iphone15pro
-    // 'Legacy') is gone — neither is selectable post-cutover.
+    expect(body).toMatch(
+      /const PROFILE_ARCHETYPE_OPTIONS = ARCHETYPE_REGISTRY\.filter\(\(a\) =>\s*\n?\s*SELECTABLE_STATUSES\.has\(a\.status\),\s*\n?\s*\)\.map\(\(a\) => \(\{/,
+    );
+    // The launch-archetype customer copy survives in the per-id lookup.
+    expect(body).toMatch(
+      /'The v1.0 launch archetype — the device profile verified bit-for-bit against a real iPhone 17\. Additional models are coming soon\.',/,
+    );
+    // No hardcoded option-object literals remain (the source-of-truth is the
+    // registry now, not a parallel list).
+    expect(body).not.toMatch(/value: 'iphone17_ios18_7_safari26_4',/);
     expect(body).not.toMatch(/value: 'iphone16pro_ios18_7_safari26_4',/);
     expect(body).not.toMatch(/value: 'iphone15pro_ios17_5_safari17_5',/);
   });
@@ -174,8 +186,12 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     expect(body).toMatch(
       /Authentication failed \(401\)\. Double-check the key, or create a new one at\s*\n?\s*app\.driftstack\.dev\/api-keys\./,
     );
-    // DriftstackError must be imported for the instanceof check to be real.
-    expect(body).toMatch(/import \{ Driftstack, DriftstackError \} from '@driftstack\/sdk';/);
+    // DriftstackError must be imported for the instanceof check to be real
+    // (the SDK import also carries ARCHETYPE_REGISTRY since the 2026-06-19
+    // archetype-derivation de-dup — see the V-669 pin above). Prettier may
+    // reflow this import across lines, so match the members flexibly.
+    expect(body).toMatch(/import \{\s*\n?\s*Driftstack,\s*\n?\s*DriftstackError,/);
+    expect(body).toMatch(/type ArchetypeStatus,?\s*\n?\s*\}? from '@driftstack\/sdk';/);
   });
 
   it('file exists at canonical path', () => {

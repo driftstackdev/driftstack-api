@@ -30,7 +30,6 @@ import {
 } from '../lib/proxy-probe-cache';
 import { downloadJson, timestampedFilename } from '../lib/download';
 import { useConfirm } from '../components/ConfirmProvider';
-import { loadTemplates, saveTemplate, type ProfileTemplate } from '../lib/profile-templates';
 import { PROFILE_ICONS } from '../lib/profile-icons';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -70,12 +69,17 @@ import {
   testProxy,
   probeProxyExit,
   type ProxyConfig as LocalProxyConfig,
+  type ProxyDraft,
   type ProxyTestResult,
 } from '../lib/proxies';
 import {
   createProxy as createAccountProxy,
   updateProxy as updateAccountProxy,
+  buildWireGuardProxyInput,
+  buildOpenVpnProxyInput,
 } from '../lib/account-proxies';
+import { parseWireGuardConfig } from '../lib/parse-wireguard';
+import { validateOpenVpnConfig } from '../lib/parse-openvpn';
 
 // 2026-05-20 — match SessionsView: slow background poll + skip the
 // visible loading flicker on tick refreshes so the panel doesn't
@@ -161,6 +165,11 @@ export function ProfilesView({
   // (the recurring "I launched but nothing opened" confusion). Reuses the
   // 30s /version poll the title-bar pill already runs; null until first probe.
   const serverDriver = useConnectionStatus(settings.baseUrl).driver;
+  // The /version `driver` is hard-'mock' in prod even when launches stream
+  // live via LiveKit, so it can't gate the placeholder-viewer banner on its
+  // own. Track whether a launch ACTUALLY fell back to the polling/placeholder
+  // viewer (openPollingFallback) — the banner only makes sense then.
+  const [usedPollingFallback, setUsedPollingFallback] = useState(false);
   // 2026-05-20 — antidetect-browser-style hub: profiles are first-class,
   // sessions are an implementation detail of "this profile is running".
   // Track live sessions + GUI-local bindings so we can show per-profile
@@ -1077,6 +1086,9 @@ export function ProfilesView({
     await client.agentSessions.close(agentSessionId).catch(() => undefined);
     const driverSession = await client.sessions.create({ profile_id: profileId });
     await markLaunched(profileId, driverSession.id);
+    // This launch genuinely used the placeholder polling viewer (no LiveKit) —
+    // surface the heads-up banner. A LiveKit launch never reaches here.
+    setUsedPollingFallback(true);
     onOpenSession(driverSession.id);
   }
 
@@ -1325,9 +1337,11 @@ export function ProfilesView({
           frames. A live browser comes from a connected WebKit worker (the
           harness on a Mac), which self-hosted fully supports. So this is
           framed as "connect a worker to go live", NOT "self-hosted can't do
-          real browsers". Shown while driver==='mock' (a fair proxy for "no
-          real-driver/worker wired yet"). */}
-      {serverDriver === 'mock' && (
+          real browsers". Gated on driver==='mock' AND usedPollingFallback so
+          it only appears after a launch genuinely fell back to the placeholder
+          viewer — never when LiveKit streamed (the /version driver is hard-
+          'mock' in prod even on the live path, so it can't gate alone). */}
+      {serverDriver === 'mock' && usedPollingFallback && (
         <div
           data-banner="mock-driver"
           className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-2xs text-ink-secondary"
@@ -2266,52 +2280,35 @@ function CreateProfileModal({
   // Organization metadata at create (backend columns, migration 0076).
   const [folder, setFolder] = useState(initialFolder ?? '');
   const [tags, setTags] = useState(initialTag ?? '');
-  // Night-arc H: named create-presets (demo's From-template / Save-as-
-  // template) — client-side store; loading one fills the form fields.
-  const [templates, setTemplates] = useState<ProfileTemplate[]>([]);
-  const [templateNotice, setTemplateNotice] = useState<string | null>(null);
-  useEffect(() => {
-    void loadTemplates().then(setTemplates);
-  }, []);
-  function applyTemplate(t: ProfileTemplate): void {
-    if (t.archetype.length > 0 && ARCHETYPE_REGISTRY.some((a) => a.id === t.archetype)) {
-      setArchetype(t.archetype);
-    }
-    setDescription(t.description);
-    setFolder(t.folder);
-    setTags(t.tags);
-    setTemplateNotice(`Loaded template "${t.name}" — give the profile a name.`);
-  }
-  async function handleSaveTemplate(): Promise<void> {
-    const tplName =
-      name.trim().length > 0 ? name.trim() : `template-${String(templates.length + 1)}`;
-    const next = await saveTemplate({
-      name: tplName,
-      archetype,
-      description,
-      folder,
-      tags,
-      savedAt: Date.now(),
-    });
-    setTemplates(next);
-    setTemplateNotice(`Saved as template "${tplName}".`);
-  }
   // 2026-05-20 — antidetect-style advanced panel. Proxy is selected
   // up-front + bound to the profile via profile-bindings on create.
-  // 'create-new' opens an inline SOCKS5 mini-form so the customer can
-  // mint a proxy from inside this modal (no context-switch to Proxies
-  // tab). OpenVPN + WireGuard are surfaced as disabled placeholders
-  // to set expectations — the local proxy store is SOCKS5-only at
-  // v0.0.1; lib/proxies.ts grows when those land.
+  // 'create-new' opens an inline mini-form so the customer can mint a
+  // proxy from inside this modal (no context-switch to the Proxies tab):
+  // SOCKS5/HTTP host:port:user:pass, or paste/upload a .ovpn / wg0.conf
+  // for OpenVPN / WireGuard.
   const [proxies, setProxies] = useState<LocalProxyConfig[]>([]);
   const [proxyChoice, setProxyChoice] = useState<string>('first-available');
   const [newProxy, setNewProxy] = useState<{
+    scheme: NonNullable<ProxyDraft['scheme']>;
     label: string;
     host: string;
     port: string;
     username: string;
     password: string;
-  }>({ label: '', host: '', port: '1080', username: '', password: '' });
+    /** OpenVPN .ovpn / WireGuard wg0.conf paste — config_blob for the matching scheme. */
+    configBlob: string;
+  }>({
+    scheme: 'socks5',
+    label: '',
+    host: '',
+    port: '1080',
+    username: '',
+    password: '',
+    configBlob: '',
+  });
+  // VPN paste-parse feedback (✓ endpoint host:port, or the parse error).
+  const [newProxyVpnHint, setNewProxyVpnHint] = useState<string | null>(null);
+  const newProxyIsVpn = newProxy.scheme === 'openvpn' || newProxy.scheme === 'wireguard';
   // Native proxy probe (SOCKS5 reachability + UDP-associate detection).
   // Runs against the inline create-new draft so the customer can confirm
   // the proxy works — and whether UDP/QUIC/WebRTC will tunnel — before
@@ -2399,29 +2396,82 @@ function CreateProfileModal({
     setSubmitting(true);
     setError(null);
     try {
-      // 1. Optionally mint a new SOCKS5 proxy first (inline create
-      //    flow keyed by proxyChoice === 'create-new').
+      // 1. Optionally mint a new proxy first (inline create flow keyed by
+      //    proxyChoice === 'create-new'). SOCKS5/HTTP take host/port/user/pass
+      //    fields; OpenVPN/WireGuard take the pasted .ovpn / wg0.conf and parse
+      //    the endpoint out of it (host/port are the display endpoint).
       let resolvedProxyId: string | null = null;
       if (proxyChoice === 'create-new') {
-        const portNum = Number.parseInt(newProxy.port, 10);
-        if (
-          newProxy.label.trim().length === 0 ||
-          newProxy.host.trim().length === 0 ||
-          Number.isNaN(portNum) ||
-          portNum < 1 ||
-          portNum > 65535
-        ) {
-          setError('Proxy label, host, and a port between 1–65535 are all required.');
+        const label = newProxy.label.trim();
+        if (label.length === 0) {
+          setError('Proxy label is required.');
           setSubmitting(false);
           return;
         }
-        const created = await addProxy({
-          label: newProxy.label.trim(),
-          host: newProxy.host.trim(),
-          port: portNum,
-          username: newProxy.username.trim().length > 0 ? newProxy.username.trim() : null,
-          password: newProxy.password.length > 0 ? newProxy.password : null,
-        });
+        let draft: ProxyDraft;
+        if (newProxy.scheme === 'wireguard') {
+          const built = buildWireGuardProxyInput(label, parseWireGuardConfig(newProxy.configBlob));
+          if ('error' in built) {
+            setError(`WireGuard config: ${built.error}`);
+            setSubmitting(false);
+            return;
+          }
+          draft = {
+            label,
+            scheme: 'wireguard',
+            host: built.host,
+            port: built.port,
+            username: null,
+            password: null,
+            wireguard: built.wireguard,
+          };
+        } else if (newProxy.scheme === 'openvpn') {
+          const v = validateOpenVpnConfig(newProxy.configBlob);
+          if (!v.ok) {
+            setError(`OpenVPN config: ${v.reason}`);
+            setSubmitting(false);
+            return;
+          }
+          const built = buildOpenVpnProxyInput(label, newProxy.configBlob, {
+            host: v.remoteHost,
+            port: v.remotePort,
+          });
+          if ('error' in built) {
+            setError(`OpenVPN config: ${built.error}`);
+            setSubmitting(false);
+            return;
+          }
+          draft = {
+            label,
+            scheme: 'openvpn',
+            host: built.host,
+            port: built.port,
+            username: null,
+            password: null,
+            openvpn: built.openvpn,
+          };
+        } else {
+          const portNum = Number.parseInt(newProxy.port, 10);
+          if (
+            newProxy.host.trim().length === 0 ||
+            Number.isNaN(portNum) ||
+            portNum < 1 ||
+            portNum > 65535
+          ) {
+            setError('Proxy host and a port between 1–65535 are all required.');
+            setSubmitting(false);
+            return;
+          }
+          draft = {
+            label,
+            scheme: newProxy.scheme,
+            host: newProxy.host.trim(),
+            port: portNum,
+            username: newProxy.username.trim().length > 0 ? newProxy.username.trim() : null,
+            password: newProxy.password.length > 0 ? newProxy.password : null,
+          };
+        }
+        const created = await addProxy(draft);
         resolvedProxyId = created.id;
       } else if (proxyChoice !== 'first-available') {
         resolvedProxyId = proxyChoice;
@@ -2478,27 +2528,6 @@ function CreateProfileModal({
             New profile
           </h3>
           <div className="flex items-center gap-2">
-            {templates.length > 0 && (
-              <select
-                aria-label="From template"
-                className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-secondary"
-                value=""
-                disabled={submitting}
-                onChange={(e) => {
-                  const t = templates.find((x) => x.name === e.target.value);
-                  if (t) applyTemplate(t);
-                }}
-              >
-                <option value="" disabled>
-                  ⎘ From template…
-                </option>
-                {templates.map((t) => (
-                  <option key={t.name} value={t.name}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            )}
             <button
               type="button"
               className="btn-secondary text-xs"
@@ -2510,11 +2539,6 @@ function CreateProfileModal({
             </button>
           </div>
         </header>
-        {templateNotice !== null && (
-          <p role="status" className="mb-2 text-2xs text-accent">
-            {templateNotice}
-          </p>
-        )}
 
         {/* Configurator tabs (demo port). role=tablist keyboardable via the buttons. */}
         <div
@@ -2682,85 +2706,201 @@ function CreateProfileModal({
                         : `${p.host}:${p.port}`}
                     </option>
                   ))}
-                  <option value="create-new">+ Add new SOCKS5 proxy…</option>
+                  <option value="create-new">+ Add new proxy…</option>
                 </select>
-                <span className="mt-1 text-2xs text-ink-muted">
-                  OpenVPN / WireGuard: add it on the Proxies tab (paste or upload your .ovpn /
-                  wg0.conf), then pick it here.
-                </span>
                 {proxyChoice === 'create-new' && (
                   <div className="mt-2 flex flex-col gap-1.5 rounded-sm border border-dashed border-surface-divider bg-surface-base/60 p-2">
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <input
-                        type="text"
-                        value={newProxy.label}
-                        onChange={(e) => setNewProxy((p) => ({ ...p, label: e.target.value }))}
-                        placeholder="Label (e.g. shopify-us-east)"
-                        disabled={submitting}
-                        className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                      />
-                      <input
-                        type="text"
-                        value={newProxy.host}
-                        onChange={(e) => {
-                          setNewProxy((p) => ({ ...p, host: e.target.value }));
-                          setTestResult(null);
-                        }}
-                        placeholder="Host (e.g. proxy.example.com)"
-                        disabled={submitting}
-                        className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                      />
-                      <input
-                        type="number"
-                        min={1}
-                        max={65535}
-                        value={newProxy.port}
-                        onChange={(e) => {
-                          setNewProxy((p) => ({ ...p, port: e.target.value }));
-                          setTestResult(null);
-                        }}
-                        placeholder="Port"
-                        disabled={submitting}
-                        className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                      />
-                      <input
-                        type="text"
-                        value={newProxy.username}
-                        onChange={(e) => {
-                          setNewProxy((p) => ({ ...p, username: e.target.value }));
-                          setTestResult(null);
-                        }}
-                        placeholder="Username (optional)"
-                        disabled={submitting}
-                        className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                      />
-                      <input
-                        type="password"
-                        value={newProxy.password}
-                        onChange={(e) => {
-                          setNewProxy((p) => ({ ...p, password: e.target.value }));
-                          setTestResult(null);
-                        }}
-                        placeholder="Password (optional)"
-                        disabled={submitting}
-                        className="col-span-2 rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void handleTestDraftProxy()}
-                        disabled={submitting || testing || newProxy.host.trim().length === 0}
-                        className="btn-secondary text-xs"
-                      >
-                        {testing ? 'Testing…' : 'Test proxy'}
-                      </button>
-                      <span className="text-2xs text-ink-muted">
-                        Runs a SOCKS5 handshake from this Mac — checks reachability, auth, and UDP
-                        support.
-                      </span>
-                    </div>
-                    {testResult !== null && (
+                    <select
+                      aria-label="Proxy type"
+                      value={newProxy.scheme}
+                      onChange={(e) => {
+                        // Switch scheme — clear the now-irrelevant fields so a
+                        // half-typed socks5 password can't ride along on a VPN
+                        // proxy (and vice versa) + drop the stale test result.
+                        const scheme = e.target.value as NonNullable<ProxyDraft['scheme']>;
+                        setNewProxy((p) => ({
+                          ...p,
+                          scheme,
+                          configBlob: '',
+                          ...(scheme === 'openvpn' || scheme === 'wireguard'
+                            ? { username: '', password: '' }
+                            : {}),
+                        }));
+                        setNewProxyVpnHint(null);
+                        setTestResult(null);
+                      }}
+                      disabled={submitting}
+                      className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                    >
+                      <option value="socks5">SOCKS5</option>
+                      <option value="http">HTTP</option>
+                      <option value="openvpn">OpenVPN</option>
+                      <option value="wireguard">WireGuard</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={newProxy.label}
+                      onChange={(e) => setNewProxy((p) => ({ ...p, label: e.target.value }))}
+                      placeholder="Label (e.g. shopify-us-east)"
+                      disabled={submitting}
+                      className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                    />
+                    {!newProxyIsVpn && (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <input
+                          type="text"
+                          value={newProxy.host}
+                          onChange={(e) => {
+                            setNewProxy((p) => ({ ...p, host: e.target.value }));
+                            setTestResult(null);
+                          }}
+                          placeholder="Host (e.g. proxy.example.com)"
+                          disabled={submitting}
+                          className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                        />
+                        <input
+                          type="number"
+                          min={1}
+                          max={65535}
+                          value={newProxy.port}
+                          onChange={(e) => {
+                            setNewProxy((p) => ({ ...p, port: e.target.value }));
+                            setTestResult(null);
+                          }}
+                          placeholder="Port"
+                          disabled={submitting}
+                          className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                        />
+                        <input
+                          type="text"
+                          value={newProxy.username}
+                          onChange={(e) => {
+                            setNewProxy((p) => ({ ...p, username: e.target.value }));
+                            setTestResult(null);
+                          }}
+                          placeholder="Username (optional)"
+                          disabled={submitting}
+                          className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                        />
+                        <input
+                          type="password"
+                          value={newProxy.password}
+                          onChange={(e) => {
+                            setNewProxy((p) => ({ ...p, password: e.target.value }));
+                            setTestResult(null);
+                          }}
+                          placeholder="Password (optional)"
+                          disabled={submitting}
+                          className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                        />
+                      </div>
+                    )}
+                    {newProxyIsVpn && (
+                      <div className="flex flex-col gap-1">
+                        <textarea
+                          value={newProxy.configBlob}
+                          onChange={(e) => {
+                            const text = e.target.value;
+                            // Parse the paste so the customer sees the extracted
+                            // endpoint (or the error) before they hit Create.
+                            let hint: string | null = null;
+                            if (text.trim() === '') {
+                              hint = null;
+                            } else if (newProxy.scheme === 'wireguard') {
+                              const built = buildWireGuardProxyInput(
+                                newProxy.label.trim(),
+                                parseWireGuardConfig(text),
+                              );
+                              hint =
+                                'error' in built
+                                  ? built.error
+                                  : `✓ endpoint ${built.host}:${built.port.toString()}`;
+                            } else {
+                              const v = validateOpenVpnConfig(text);
+                              hint = v.ok
+                                ? `✓ remote ${v.remoteHost}:${v.remotePort.toString()}`
+                                : v.reason;
+                            }
+                            setNewProxy((p) => ({ ...p, configBlob: text }));
+                            setNewProxyVpnHint(hint);
+                          }}
+                          placeholder={
+                            newProxy.scheme === 'wireguard'
+                              ? '[Interface]\nPrivateKey = …\n[Peer]\nPublicKey = …\nEndpoint = host:port'
+                              : 'client\nremote vpn.example.com 1194 udp\ndev tun\n…'
+                          }
+                          disabled={submitting}
+                          autoComplete="off"
+                          spellCheck={false}
+                          className="mono min-h-[120px] rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                        />
+                        <label className="inline-flex cursor-pointer items-center gap-1 text-2xs text-accent hover:underline">
+                          <span aria-hidden>⤓</span> or upload your{' '}
+                          {newProxy.scheme === 'wireguard' ? 'wg0.conf' : '.ovpn'} file
+                          <input
+                            type="file"
+                            accept={
+                              newProxy.scheme === 'wireguard'
+                                ? '.conf,.txt,text/plain'
+                                : '.ovpn,.conf,.txt,text/plain'
+                            }
+                            className="sr-only"
+                            disabled={submitting}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              e.target.value = '';
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                if (typeof reader.result !== 'string') return;
+                                const text = reader.result;
+                                let hint: string | null = null;
+                                if (newProxy.scheme === 'wireguard') {
+                                  const built = buildWireGuardProxyInput(
+                                    newProxy.label.trim(),
+                                    parseWireGuardConfig(text),
+                                  );
+                                  hint =
+                                    'error' in built
+                                      ? built.error
+                                      : `✓ endpoint ${built.host}:${built.port.toString()}`;
+                                } else {
+                                  const v = validateOpenVpnConfig(text);
+                                  hint = v.ok
+                                    ? `✓ remote ${v.remoteHost}:${v.remotePort.toString()}`
+                                    : v.reason;
+                                }
+                                setNewProxy((p) => ({ ...p, configBlob: text }));
+                                setNewProxyVpnHint(hint);
+                              };
+                              reader.onerror = () =>
+                                setNewProxyVpnHint('Could not read that file.');
+                              reader.readAsText(file);
+                            }}
+                          />
+                        </label>
+                        {newProxyVpnHint !== null && (
+                          <span className="text-2xs text-ink-muted">{newProxyVpnHint}</span>
+                        )}
+                      </div>
+                    )}
+                    {!newProxyIsVpn && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleTestDraftProxy()}
+                          disabled={submitting || testing || newProxy.host.trim().length === 0}
+                          className="btn-secondary text-xs"
+                        >
+                          {testing ? 'Testing…' : 'Test proxy'}
+                        </button>
+                        <span className="text-2xs text-ink-muted">
+                          Runs a SOCKS5 handshake from this Mac — checks reachability, auth, and UDP
+                          support.
+                        </span>
+                      </div>
+                    )}
+                    {!newProxyIsVpn && testResult !== null && (
                       <div
                         role="status"
                         className={`flex flex-col gap-1 rounded-sm border px-2 py-1.5 text-2xs ${
@@ -2806,8 +2946,7 @@ function CreateProfileModal({
                   account's own key hierarchy; staff can't read it.
                 </p>
                 <p className="text-2xs text-ink-muted">
-                  Always on for profile-backed sessions — nothing to configure here yet. Snapshots
-                  (point-in-time copies) live on the profile's row actions after creation.
+                  Always on for profile-backed sessions — nothing to configure here yet.
                 </p>
               </div>
             )}
@@ -2947,14 +3086,6 @@ function CreateProfileModal({
                 disabled={submitting}
               >
                 Cancel
-              </button>
-              <button
-                type="button"
-                className="text-2xs text-ink-muted underline-offset-2 hover:text-ink-primary hover:underline"
-                onClick={() => void handleSaveTemplate()}
-                disabled={submitting}
-              >
-                ⎘ Save as template
               </button>
             </div>
           </aside>

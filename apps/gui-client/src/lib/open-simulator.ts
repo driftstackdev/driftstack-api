@@ -98,18 +98,31 @@ export async function openSimulatorWindow({
     // Session id — lets the simulator window attach recordings to the
     // session (night-arc I Record pill).
     session: sessionId,
+    // Per-session gui_control_key carried in the query as the PRIMARY,
+    // race-free handoff so the SEPARATE simulator app authorizes the
+    // control endpoints on mount (without it the temp-file handoff races
+    // the Rust location.search reload → getAgentSession 401s → mode stays
+    // null → "Connecting…" forever, founder-hit 2026-06-18). This rides the
+    // SAME in-process location.search channel as the LiveKit token above —
+    // it is NOT argv-exposed (the launch payload is base64'd, applied to
+    // window.location.search by Rust), so it is no less safe than the token.
+    // The 0600 temp-file handoff (sim_key_write/sim_key_take) is kept as a
+    // secondary path. Empty when no control key is available (in-app window).
+    ck: controlKey ?? '',
   });
 
   // Stage 2 — prefer the SEPARATE "Driftstack Simulator" app (its own Dock icon,
   // founder 2026-06-18) when it's installed: hand off the session via a launch
-  // arg. The session-control auth is handed off SEPARATELY (NOT in the launch
-  // arg / query — argv is `ps`-visible). The separate app can't read the main
-  // app's keychain, so it can't use the account API key; instead the main app
-  // mints a per-session gui_control_key (24h TTL) and hands it off via a 0600
-  // temp file (this build is NOT sandboxed — Entitlements.plist has no
-  // com.apple.security.app-sandbox — so /tmp is shared between the two apps).
-  // The simulator reads + unlinks it (sim_key_take). If the app were sandboxed
-  // we'd instead append `ck=<key>` to the query payload below. See
+  // arg. The separate app can't read the main app's keychain, so it can't use
+  // the account API key; instead the main app mints a per-session
+  // gui_control_key (24h TTL) and hands it off TWO ways: (1) PRIMARY — in the
+  // base64'd launch payload's `ck=` query field above, which Rust applies to
+  // window.location.search (in-process, NOT argv/`ps`-visible — same channel as
+  // the LiveKit token); SimulatorWindow reads it on mount with no reload race.
+  // (2) SECONDARY — a 0600 temp file (sim_key_write here / sim_key_take in the
+  // simulator), kept as a belt-and-suspenders fallback (this build is NOT
+  // sandboxed — Entitlements.plist has no com.apple.security.app-sandbox — so
+  // /tmp is shared between the two apps). See
   // docs/internal/2026-06-18-separate-simulator-app-plan.md.
   try {
     const { invoke } = await import('@tauri-apps/api/core');
