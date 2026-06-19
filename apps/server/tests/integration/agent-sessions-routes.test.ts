@@ -1223,3 +1223,262 @@ describe('AI-D /v1/agent-sessions — driftstack_session_id strict FK (2026-06-1
     expect(res.statusCode).toBe(400);
   });
 });
+
+// gui_control_key control-auth — the SEPARATE "Driftstack Simulator"
+// macOS app can't read the main app's keychain, so it can't present an
+// account API key. It presents the per-session gui_control_key in the
+// `x-driftstack-gui-control-key` header instead. These pin the auth
+// boundary the human reviewer reads line-by-line: a control key
+// authorizes ONLY the one session it was minted for, grants NO
+// account-wide access, and a missing/wrong/expired key 401s (never
+// falls through to account data).
+const GCK_HEADER = 'x-driftstack-gui-control-key';
+
+describe('AI-D /v1/agent-sessions/* gui_control_key control-auth', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  /** Create an agent session in the given mode and return its id. */
+  async function createSession(mode?: 'ai' | 'manual' | 'pair'): Promise<string> {
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, ...(mode !== undefined ? { mode } : {}) },
+    });
+    expect(res.statusCode).toBe(201);
+    return res.json<{ id: string }>().id;
+  }
+
+  /** Mint (account-auth) the per-session gui_control_key plaintext. */
+  async function mintKey(sessionId: string): Promise<string> {
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${sessionId}/gui-control-key`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    return res.json<{ gui_control_key: string }>().gui_control_key;
+  }
+
+  it('control key reads its OWN session (GET /:id) — NO account Authorization header', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession();
+    const key = await mintKey(id);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { [GCK_HEADER]: key },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ id: string }>().id).toBe(id);
+  });
+
+  it('control key sets the mode on its OWN session (POST /:id/mode) — NO account Authorization header', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession('ai');
+    const key = await mintKey(id);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/mode`,
+      headers: { [GCK_HEADER]: key },
+      payload: { mode: 'manual' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ mode: string }>().mode).toBe('manual');
+  });
+
+  it('control key drives takeover on its OWN pair session — NO account Authorization header', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession('pair');
+    const key = await mintKey(id);
+    const takeover = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/takeover`,
+      headers: { [GCK_HEADER]: key },
+      payload: { client_id: 'sim_client_1' },
+    });
+    expect(takeover.statusCode).toBe(200);
+  });
+
+  it('control key drives handback on its OWN pair session (seeded human-driving) — NO account Authorization header', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession('pair');
+    const key = await mintKey(id);
+    // handback is only valid from human-driving; that state is reached
+    // via a harness takeover-grant (not a customer route), so seed it
+    // directly on the repo to exercise the handback auth path.
+    const repo = fx.agentSessionsRepo;
+    expect(repo).toBeDefined();
+    await repo!.setPairModeState(id, {
+      kind: 'human-driving',
+      clientId: 'sim_client_1',
+      sinceAt: new Date().toISOString(),
+    });
+    const handback = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/handback`,
+      headers: { [GCK_HEADER]: key },
+      payload: {},
+    });
+    expect(handback.statusCode).toBe(200);
+  });
+
+  it('control key reaches the input-event route on its OWN session (auth passes; 503/409 is the harness/mode gate, NOT auth)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession('manual');
+    const key = await mintKey(id);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/input-event`,
+      headers: { [GCK_HEADER]: key },
+      payload: { event: { type: 'mouseMove', x: 10, y: 20 } },
+    });
+    // Auth + ownership cleared; the pre-harness stub returns 503
+    // FeatureUnavailable (NOT 401/404 — those would mean the control
+    // key failed auth or ownership).
+    expect(res.statusCode).not.toBe(401);
+    expect(res.statusCode).not.toBe(404);
+    expect(res.statusCode).toBe(503);
+  });
+
+  it('CRITICAL: a key minted for session A is REJECTED (401) on session B — the key authorizes ONLY its own session', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const idA = await createSession();
+    const idB = await createSession();
+    const keyA = await mintKey(idA);
+    // GET B's read with A's key → 401 (decrypt of B's stored key never
+    // equals A's plaintext). Never 200, never B's data.
+    const readB = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${idB}`,
+      headers: { [GCK_HEADER]: keyA },
+    });
+    expect(readB.statusCode).toBe(401);
+    // And A's key can't change B's mode either.
+    const modeB = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${idB}/mode`,
+      headers: { [GCK_HEADER]: keyA },
+      payload: { mode: 'manual' },
+    });
+    expect(modeB.statusCode).toBe(401);
+  });
+
+  it('CRITICAL: a WRONG control-key value → 401 (no fallthrough to account data)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession();
+    await mintKey(id); // mint so a real (different) key exists at rest
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { [GCK_HEADER]: 'gck_thisisnotthekeythisisnotthekey' },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('CRITICAL: a control key for a session whose key was NEVER minted → 401', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession(); // no mintKey → no key at rest
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { [GCK_HEADER]: 'gck_somethingsomethingsomethingxx' },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('CRITICAL: an EXPIRED control key → 401 (the 24h TTL is enforced)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession();
+    const key = await mintKey(id);
+    // Re-stamp the stored key's expiry into the PAST (the ciphertext
+    // still decrypts to `key`, but it's expired). Requires the repo
+    // handle the fixture exposes when the runtime is wired.
+    const repo = fx.agentSessionsRepo;
+    expect(repo).toBeDefined();
+    const rec = await repo!.get(id);
+    expect(rec?.guiControlKeyCiphertext).not.toBeNull();
+    await repo!.setGuiControlKey({
+      id,
+      ciphertext: rec!.guiControlKeyCiphertext!,
+      expiresAt: new Date(Date.now() - 60_000), // 1 minute ago
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { [GCK_HEADER]: key },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('CRITICAL: the control key grants NO account-wide access — the account-scoped list route ignores it and 401s', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession();
+    const key = await mintKey(id);
+    // GET /v1/agent-sessions (account list) is NOT a control endpoint;
+    // presenting the control key there must NOT authorize a
+    // account-wide list — it falls to requireAuth and 401s with no
+    // Authorization header.
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions',
+      headers: { [GCK_HEADER]: key },
+    });
+    expect(list.statusCode).toBe(401);
+  });
+
+  it('CROSS-ACCOUNT: a control key never authorizes against a DIFFERENT account’s session', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    // Account A session + key.
+    const idA = await createSession();
+    const keyA = await mintKey(idA);
+    // Seed a foreign session id directly in the repo under another
+    // account, mint+expire nothing — A's key must not validate.
+    const repo = fx.agentSessionsRepo;
+    expect(repo).toBeDefined();
+    const foreign = await repo!.create({
+      accountId: '00000000-0000-4000-8000-0000000000aa',
+      tokenBudgetTotal: 50_000,
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${foreign.id}`,
+      headers: { [GCK_HEADER]: keyA },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('the account path is UNCHANGED — account auth still reads/sets its own session', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession('ai');
+    // GET with account auth (no control key) → 200.
+    const read = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(read.statusCode).toBe(200);
+    // Mode set with account auth → 200.
+    const mode = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/mode`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'manual' },
+    });
+    expect(mode.statusCode).toBe(200);
+  });
+
+  it('the account path still 401s with NO credentials at all (no control key, no Authorization)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});

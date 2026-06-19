@@ -32,6 +32,7 @@ import {
   endAgentSession,
   AgentSessionControlError,
   type SessionMode,
+  type ControlAuth,
 } from '../lib/agent-session-control';
 
 /** Frame chrome heights (px) used to derive the window size from the device's
@@ -47,6 +48,11 @@ interface SessionQuery {
   profileName: string;
   proxyLabel: string;
   sessionId: string;
+  /** Per-session gui_control_key carried in the query as the SANDBOXED
+   *  fallback handoff (when /tmp isn't shared). Non-sandboxed builds
+   *  prefer the temp-file handoff (sim_key_take) and leave this empty.
+   *  Empty string → no key from the query. */
+  controlKey: string;
 }
 
 /** Parse the simulator session from a query string. Defaults to the window's
@@ -61,8 +67,11 @@ function infoFromQuery(search: string = window.location.search): SessionQuery {
   const profileName = q.get('profile') ?? '';
   const proxyLabel = q.get('proxy') ?? '';
   const sessionId = q.get('session') ?? '';
+  // Sandboxed-fallback control key (see SessionQuery.controlKey). The
+  // non-sandboxed handoff is the 0600 temp file, read via sim_key_take.
+  const controlKey = q.get('ck') ?? '';
   if (ws_url === null || token === null || ws_url === '' || token === '') {
-    return { info: null, deviceName, profileName, proxyLabel, sessionId };
+    return { info: null, deviceName, profileName, proxyLabel, sessionId, controlKey };
   }
   // LiveKitInfo carries ws_url + token (the only fields the panel/connect read);
   // room_name is informational. Cast is safe — the panel reads ws_url/token only.
@@ -72,6 +81,7 @@ function infoFromQuery(search: string = window.location.search): SessionQuery {
     profileName,
     proxyLabel,
     sessionId,
+    controlKey,
   };
 }
 
@@ -627,7 +637,48 @@ export function SimulatorWindow(): JSX.Element {
   // Room), and the listener below re-parses the payload exactly like the initial
   // location.search and updates this state.
   const [query, setQuery] = useState<SessionQuery>(() => infoFromQuery());
-  const { info, deviceName, profileName, proxyLabel, sessionId } = query;
+  const { info, deviceName, profileName, proxyLabel, sessionId, controlKey } = query;
+  // Per-session control credential. The SEPARATE simulator app can't
+  // read the main app's keychain, so it authorizes the control
+  // endpoints with the per-session gui_control_key instead of the
+  // account API key. Resolution order: the 0600 temp-file handoff
+  // (sim_key_take, non-sandboxed) wins; the `?ck=` query param is the
+  // sandboxed fallback; null → use the API key (in-app window). Loaded
+  // async (sim_key_take is a Tauri command) and re-loaded when the
+  // session switches.
+  const [controlAuth, setControlAuth] = useState<ControlAuth>(() =>
+    controlKey !== '' ? { controlKey } : null,
+  );
+  useEffect(() => {
+    if (sessionId === '') {
+      setControlAuth(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      // Try the temp-file handoff first (Tauri-only). A returned key is
+      // single-use — sim_key_take unlinks it — so we hold it in state.
+      if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+        try {
+          const { invoke } = await import('@tauri-apps/api/core');
+          const fromFile = await invoke<string | null>('sim_key_take', { sessionId });
+          if (!cancelled && typeof fromFile === 'string' && fromFile.length > 0) {
+            setControlAuth({ controlKey: fromFile });
+            return;
+          }
+        } catch {
+          // No handoff file / not Tauri / command failed → fall through
+          // to the query param (sandboxed) or API key (in-app).
+        }
+      }
+      if (!cancelled) {
+        setControlAuth(controlKey !== '' ? { controlKey } : null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, controlKey]);
   // Relaunch session-switch listener (Tauri-only). The Rust side validated the
   // b64 payload before emitting; decode it the same way the initial launch does
   // (atob → query string) and re-parse. Also sync window.history so a later
@@ -710,7 +761,7 @@ export function SimulatorWindow(): JSX.Element {
         event.preventDefault();
         try {
           await Promise.race([
-            endAgentSession(sessionId),
+            endAgentSession(sessionId, controlAuth),
             new Promise((resolve) => setTimeout(resolve, 2000)),
           ]);
         } catch {
@@ -722,7 +773,7 @@ export function SimulatorWindow(): JSX.Element {
     return () => {
       unlisten?.();
     };
-  }, [sessionId]);
+  }, [sessionId, controlAuth]);
   // Night-arc C cockpit: live room handle (from the panel) drives the
   // previously-dormant LK.6.e latency ping; rendered in the overlay.
   const [room, setRoom] = useState<Room | null>(null);
@@ -879,7 +930,7 @@ export function SimulatorWindow(): JSX.Element {
   };
   const refreshControl = useCallback((): void => {
     if (sessionId === '') return;
-    void getAgentSession(sessionId)
+    void getAgentSession(sessionId, controlAuth)
       .then((s) => {
         setControlMode(s.mode);
         setPairKind(s.pairKind);
@@ -887,7 +938,7 @@ export function SimulatorWindow(): JSX.Element {
       .catch(() => {
         // Leave mode null — the panel shows a gentle "controls unavailable" state.
       });
-  }, [sessionId]);
+  }, [sessionId, controlAuth]);
   // Seed on mount + re-read whenever the panel opens (cheap, no idle polling).
   useEffect(() => {
     refreshControl();
@@ -897,7 +948,7 @@ export function SimulatorWindow(): JSX.Element {
     const prev = controlMode;
     setControlMode(target); // optimistic
     setControlBusy(true);
-    void setSessionMode(sessionId, target)
+    void setSessionMode(sessionId, target, controlAuth)
       .then((s) => {
         setControlMode(s.mode);
         setPairKind(s.pairKind);
@@ -911,7 +962,7 @@ export function SimulatorWindow(): JSX.Element {
   const onTakeover = (): void => {
     if (sessionId === '') return;
     setControlBusy(true);
-    void takeoverSession(sessionId, clientIdRef.current)
+    void takeoverSession(sessionId, clientIdRef.current, controlAuth)
       .then((kind) => setPairKind(kind))
       .catch(noticeControlError)
       .finally(() => setControlBusy(false));
@@ -919,7 +970,7 @@ export function SimulatorWindow(): JSX.Element {
   const onHandback = (): void => {
     if (sessionId === '') return;
     setControlBusy(true);
-    void handbackSession(sessionId)
+    void handbackSession(sessionId, controlAuth)
       .then((kind) => setPairKind(kind))
       .catch(noticeControlError)
       .finally(() => setControlBusy(false));
@@ -928,7 +979,7 @@ export function SimulatorWindow(): JSX.Element {
     const text = composerText.trim();
     if (sessionId === '' || text === '') return;
     setControlBusy(true);
-    void sendAgentMessage(sessionId, text)
+    void sendAgentMessage(sessionId, text, controlAuth)
       .then(() => {
         setComposerText('');
         setNotice('Sent to agent');

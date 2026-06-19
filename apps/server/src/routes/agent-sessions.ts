@@ -17,7 +17,8 @@
 // v0 launch — tier-derived caps land in B3 (separate slice). Founder
 // reviews this constant before flipping the gate on.
 
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { timingSafeEqual } from 'node:crypto';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   AgentModelSchema,
@@ -79,6 +80,7 @@ import {
   NotFoundError,
   PairModeConflictError,
   PairModeStateInvalidTransitionRouteError,
+  UnauthorizedError,
   ValidationError,
 } from '../lib/errors.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
@@ -86,6 +88,43 @@ import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
 import { readClientIp } from '../lib/client-ip.js';
+
+// gui_control_key control-auth (separate-simulator-app support). The
+// stand-alone "Driftstack Simulator" macOS app can't read the main
+// app's keychain, so it can't present an account API key. Instead it
+// presents the per-session gui_control_key (auto-minted, AES-GCM at
+// rest, 24h TTL) in the `x-driftstack-gui-control-key` header. The
+// controlKeyAuthPreHandler below validates it against the SPECIFIC
+// `:id` session BEFORE the normal requireAuth/requireScope chain and,
+// on a match, marks the request control-authorized so the handler
+// skips the account-ownership check for THAT session only. It grants
+// NO account-wide access — only that one session's control/read. The
+// header value is a secret; it is added to the logger + Sentry
+// redaction lists.
+const GUI_CONTROL_KEY_HEADER = 'x-driftstack-gui-control-key';
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    /**
+     * Set to `true` by {@link controlKeyOrAccountAuth} ONLY when a
+     * valid (decrypt-matched, unexpired) gui_control_key for this
+     * request's `:id` session was presented. When true, the route
+     * handler skips the account-ownership check for that one session
+     * (the key is cryptographically bound to it). Never grants any
+     * cross-session or account-wide access. Defaults to `false`.
+     */
+    guiControlKeyAuthorized?: boolean;
+    /**
+     * The session's OWNING account id, stashed on the control-key
+     * auth path (where `request.account` is absent). The rate-limit
+     * middleware charges this account's bucket (at the conservative
+     * `free`-tier floor) so a per-session control key can't bypass
+     * rate limiting. Unset on the normal account path (rate-limit
+     * uses `request.account` there). Never used for authorization.
+     */
+    guiControlKeyRateLimitAccountId?: string;
+  }
+}
 
 const DEFAULT_TOKEN_BUDGET = 100_000;
 
@@ -750,6 +789,103 @@ export function registerAgentSessionsRoutes(
     }
   }
 
+  /**
+   * Validate the gui_control_key header against the `:id` session.
+   * Returns `true` ONLY when the header is present AND decrypts to a
+   * value byte-equal to the header (TIMING-SAFE compare) AND the
+   * stored key has not expired. Returns `false` when no header is
+   * present (the caller should fall through to account auth). Throws
+   * UnauthorizedError (401) when a header IS present but does NOT
+   * validate — a present-but-wrong/expired key must NOT silently fall
+   * through to the account path.
+   *
+   * The key is cryptographically bound to ONE session's stored
+   * ciphertext, so a key minted for session A can never validate
+   * against session B: B's ciphertext decrypts to B's plaintext, which
+   * never equals A's header. Equal-length-buffer + timingSafeEqual
+   * avoids a length/early-return side channel.
+   */
+  async function validateControlKey(
+    req: FastifyRequest,
+    sessionId: string,
+  ): Promise<{ authorized: false } | { authorized: true; ownerAccountId: string }> {
+    const headerRaw = req.headers[GUI_CONTROL_KEY_HEADER];
+    const header = Array.isArray(headerRaw) ? headerRaw[0] : headerRaw;
+    if (header === undefined || header.length === 0) {
+      // No control key offered → account-auth path decides.
+      return { authorized: false };
+    }
+    // A control key was presented; from here every failure is a hard
+    // 401 (never a fallthrough to account data).
+    if (guiControlKeyEncryptionKey === undefined) {
+      // Control-key auth isn't enabled on this deployment.
+      throw new UnauthorizedError('gui_control_key auth is not enabled on this deployment.');
+    }
+    const rec = await sessions.get(sessionId);
+    if (
+      rec === null ||
+      rec.guiControlKeyCiphertext === null ||
+      rec.guiControlKeyExpiresAt === null ||
+      rec.guiControlKeyExpiresAt.getTime() <= Date.now()
+    ) {
+      // Unknown session, never-minted key, or expired → reject. Never
+      // confirm whether the session exists for another account.
+      throw new UnauthorizedError('gui_control_key is missing, expired, or invalid.');
+    }
+    let expected: string;
+    try {
+      expected = decryptGuiControlKey(rec.guiControlKeyCiphertext, guiControlKeyEncryptionKey);
+    } catch {
+      // Ciphertext that won't decrypt (key rotation / corruption) is
+      // treated as no valid key — reject, don't 500.
+      throw new UnauthorizedError('gui_control_key is missing, expired, or invalid.');
+    }
+    const presented = Buffer.from(header, 'utf8');
+    const expectedBuf = Buffer.from(expected, 'utf8');
+    // timingSafeEqual requires equal-length buffers; the length check
+    // short-circuits before the constant-time compare. The plaintext
+    // format is fixed-length (`gck_` + 32 base32 chars), so a correct
+    // key always matches length; differing lengths are always wrong.
+    if (presented.length !== expectedBuf.length || !timingSafeEqual(presented, expectedBuf)) {
+      throw new UnauthorizedError('gui_control_key is missing, expired, or invalid.');
+    }
+    return { authorized: true, ownerAccountId: rec.accountId };
+  }
+
+  /**
+   * preHandler factory for the session-scoped CONTROL endpoints
+   * (mode read/set, input-event, takeover, handback). Authorizes via
+   * EITHER (a) the normal account path (requireAuth + requireScope)
+   * OR (b) a valid per-session gui_control_key. When the control key
+   * validates, requireAuth/requireScope are SKIPPED and the request is
+   * marked `guiControlKeyAuthorized` so the handler skips the
+   * account-ownership check for THAT session only. `rateLimit` is kept
+   * on every route's preHandler chain (not here).
+   */
+  function controlKeyOrAccountAuth(
+    requiredScope: 'read' | 'write',
+  ): (req: FastifyRequest, reply: FastifyReply) => Promise<void> {
+    return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      const sessionId = (req.params as { id?: string }).id ?? '';
+      // validateControlKey throws 401 on a present-but-invalid key, so
+      // a control-key caller can never silently fall through to the
+      // account path with attacker-controlled input.
+      const result = await validateControlKey(req, sessionId);
+      if (result.authorized) {
+        req.guiControlKeyAuthorized = true;
+        // The rate-limit middleware that follows in the preHandler
+        // chain keys off `request.account`, which is absent here.
+        // Stash the owning account so it charges that account's
+        // bucket (conservative `free`-tier floor) instead of 401ing.
+        req.guiControlKeyRateLimitAccountId = result.ownerAccountId;
+        return;
+      }
+      // No control key → normal account auth chain.
+      await app.requireAuth(req, reply);
+      await app.requireScope(requiredScope)(req, reply);
+    };
+  }
+
   app.post(
     '/v1/agent-sessions',
     { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
@@ -989,12 +1125,24 @@ export function registerAgentSessionsRoutes(
 
   app.get<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    // Control-auth path (b): a valid per-session gui_control_key reads
+    // ONLY this `:id` session (the route is already `/:id`-scoped). The
+    // 'read' scope is the floor for the account path here.
+    { preHandler: [controlKeyOrAccountAuth('read'), app.rateLimit('global')] },
     async (req) => {
-      const ctx = requireCtx(req);
       const rec = await sessions.get(req.params.id);
-      if (rec === null || rec.accountId !== ctx.account.id) {
+      if (rec === null) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      // Account path: enforce ownership. Control-key path: the key was
+      // already decrypt-matched against THIS session in the preHandler,
+      // so it is authorized for this one session and skips the
+      // account-ownership check (it never sees any other session).
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (rec.accountId !== ctx.account.id) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
       }
       return publicAgentSession(rec);
     },
@@ -1188,8 +1336,10 @@ export function registerAgentSessionsRoutes(
     '/v1/agent-sessions/:id/input-event',
     {
       preHandler: [
-        app.requireAuth,
-        app.requireScope('write'),
+        // Control-auth path (b): the separate simulator app forwards
+        // taps/keystrokes with the per-session gui_control_key. 'write'
+        // is the account-path scope floor.
+        controlKeyOrAccountAuth('write'),
         // Dedicated bucket — separate from the generic 'global' so
         // a customer's 120Hz input stream doesn't burn through their
         // generic-API quota. Tier-derived burst when B3 ships; today
@@ -1199,13 +1349,23 @@ export function registerAgentSessionsRoutes(
       ],
     },
     async (req, reply) => {
-      const ctx = requireCtx(req);
       const parsed = SendInputEventRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
       const rec = await sessions.get(req.params.id);
-      if (rec === null || rec.accountId !== ctx.account.id) {
+      if (rec === null) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
       }
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (rec.accountId !== ctx.account.id) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+      }
+      // Audit / breadcrumb attribution: the session's owning account.
+      // Identical to ctx.account.id on the account path, and the only
+      // meaningful account on the control-key path (which has no
+      // request-account context).
+      const auditAccountId = rec.accountId;
       if (rec.status !== 'active') {
         throw new ConflictError(
           `AgentSession ${req.params.id} is ${rec.status}; input-event requires an active session.`,
@@ -1264,7 +1424,7 @@ export function registerAgentSessionsRoutes(
               message: `input-event → takeover-request → ${nextState.kind}`,
               data: {
                 session_id: req.params.id,
-                account_id: ctx.account.id,
+                account_id: auditAccountId,
                 event_type: parsed.data.event.type,
                 from: currentState.kind,
                 to: nextState.kind,
@@ -1273,7 +1433,7 @@ export function registerAgentSessionsRoutes(
             });
             try {
               await accountAudit?.record({
-                accountId: ctx.account.id,
+                accountId: auditAccountId,
                 actorType: 'customer',
                 action: 'agent_session.pair_mode.takeover',
                 targetResourceId: `agent_session_${req.params.id}`,
@@ -1356,14 +1516,21 @@ export function registerAgentSessionsRoutes(
   // routes are the ones that fight over WITHIN-pair state).
   app.post<{ Params: { id: string }; Body: unknown }>(
     '/v1/agent-sessions/:id/mode',
-    { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
+    // Control-auth path (b): the separate simulator app's mode toggle
+    // (ai / manual / pair) presents the per-session gui_control_key.
+    { preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')] },
     async (req) => {
-      const ctx = requireCtx(req);
       const parsed = SetModeRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
       const rec = await sessions.get(req.params.id);
-      if (rec === null || rec.accountId !== ctx.account.id) {
+      if (rec === null) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (rec.accountId !== ctx.account.id) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
       }
       if (rec.status !== 'active') {
         throw new ConflictError(
@@ -1386,7 +1553,7 @@ export function registerAgentSessionsRoutes(
       // takeover/handback audit pattern at sub-slice 8.20.
       try {
         await accountAudit?.record({
-          accountId: ctx.account.id,
+          accountId: rec.accountId,
           actorType: 'customer',
           action: 'agent_session.mode.changed',
           targetResourceId: `agent_session_${req.params.id}`,
@@ -1414,14 +1581,21 @@ export function registerAgentSessionsRoutes(
     const TakeoverBodySchema = z.object({ client_id: z.string().min(1).max(128) });
     app.post<{ Params: { id: string } }>(
       '/v1/agent-sessions/:id/takeover',
-      { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
+      // Control-auth path (b): the separate simulator app's "grab
+      // control" button presents the per-session gui_control_key.
+      { preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')] },
       async (req, reply) => {
-        const ctx = requireCtx(req);
         const parsed = TakeoverBodySchema.safeParse(req.body);
         if (!parsed.success) throw new ValidationError(parsed.error.flatten());
         const rec = await sessions.get(req.params.id);
-        if (rec === null || rec.accountId !== ctx.account.id) {
+        if (rec === null) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+        if (req.guiControlKeyAuthorized !== true) {
+          const ctx = requireCtx(req);
+          if (rec.accountId !== ctx.account.id) {
+            throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+          }
         }
         if (rec.mode !== 'pair') {
           throw new ConflictError(
@@ -1452,7 +1626,7 @@ export function registerAgentSessionsRoutes(
             message: `takeover-request → ${nextState.kind}`,
             data: {
               session_id: req.params.id,
-              account_id: ctx.account.id,
+              account_id: rec.accountId,
               mode: rec.mode,
               from: currentState.kind,
               to: nextState.kind,
@@ -1464,7 +1638,7 @@ export function registerAgentSessionsRoutes(
           // transition (matches the v2-#5 Q.1.f decompose-audit pattern).
           try {
             await accountAudit?.record({
-              accountId: ctx.account.id,
+              accountId: rec.accountId,
               actorType: 'customer',
               action: 'agent_session.pair_mode.takeover',
               targetResourceId: `agent_session_${req.params.id}`,
@@ -1518,12 +1692,19 @@ export function registerAgentSessionsRoutes(
 
     app.post<{ Params: { id: string } }>(
       '/v1/agent-sessions/:id/handback',
-      { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
+      // Control-auth path (b): the separate simulator app's "return
+      // control to agent" button presents the per-session gui_control_key.
+      { preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')] },
       async (req, reply) => {
-        const ctx = requireCtx(req);
         const rec = await sessions.get(req.params.id);
-        if (rec === null || rec.accountId !== ctx.account.id) {
+        if (rec === null) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+        if (req.guiControlKeyAuthorized !== true) {
+          const ctx = requireCtx(req);
+          if (rec.accountId !== ctx.account.id) {
+            throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+          }
         }
         if (rec.mode !== 'pair') {
           throw new ConflictError(
@@ -1544,7 +1725,7 @@ export function registerAgentSessionsRoutes(
             message: `handback-request → ${nextState.kind}`,
             data: {
               session_id: req.params.id,
-              account_id: ctx.account.id,
+              account_id: rec.accountId,
               mode: rec.mode,
               from: currentState.kind,
               to: nextState.kind,
@@ -1552,7 +1733,7 @@ export function registerAgentSessionsRoutes(
           });
           try {
             await accountAudit?.record({
-              accountId: ctx.account.id,
+              accountId: rec.accountId,
               actorType: 'customer',
               action: 'agent_session.pair_mode.handback',
               targetResourceId: `agent_session_${req.params.id}`,

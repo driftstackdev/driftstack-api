@@ -15,6 +15,7 @@ import {
   handbackSession,
   sendAgentMessage,
   endAgentSession,
+  mintGuiControlKey,
   AgentSessionControlError,
 } from '../../src/lib/agent-session-control';
 
@@ -107,5 +108,55 @@ describe('agent-session-control transport', () => {
     });
     await expect(getAgentSession('agt_1')).rejects.toMatchObject({ kind: 'auth_missing' });
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  // gui_control_key control-auth (separate-simulator-app path).
+
+  it('sends the x-driftstack-gui-control-key header (NOT Authorization) when a control key is supplied', async () => {
+    mockFetch.mockResolvedValue(ok({ mode: 'manual', pair_mode_state: null }));
+    await setSessionMode('agt_1', 'manual', { controlKey: 'gck_abc123' });
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers['x-driftstack-gui-control-key']).toBe('gck_abc123');
+    // The control key REPLACES the bearer — never both.
+    expect(headers.Authorization).toBeUndefined();
+  });
+
+  it('the control key authorizes EVEN WHEN no apiKey is configured (the separate-app case)', async () => {
+    (loadSettings as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      apiKey: null,
+      baseUrl: 'https://api.test',
+    });
+    mockFetch.mockResolvedValue(ok({ mode: 'pair', pair_mode_state: { kind: 'ai-driving' } }));
+    const s = await getAgentSession('agt_1', { controlKey: 'gck_xyz' });
+    expect(s).toEqual({ mode: 'pair', pairKind: 'ai-driving' });
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)['x-driftstack-gui-control-key']).toBe(
+      'gck_xyz',
+    );
+  });
+
+  it('falls back to the bearer when controlKey is null (in-app window)', async () => {
+    mockFetch.mockResolvedValue(ok({ pair_mode_state: { kind: 'ai-driving' } }));
+    await handbackSession('agt_1', null);
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer ds_test');
+    expect(headers['x-driftstack-gui-control-key']).toBeUndefined();
+  });
+
+  it('mintGuiControlKey GETs /:id/gui-control-key with the bearer + returns the plaintext', async () => {
+    mockFetch.mockResolvedValue(ok({ gui_control_key: 'gck_minted', minted: true }));
+    const key = await mintGuiControlKey('https://api.test', 'ds_test', 'agt_7');
+    expect(key).toBe('gck_minted');
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.test/v1/agent-sessions/agt_7/gui-control-key');
+    expect(init.method).toBe('GET');
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer ds_test');
+  });
+
+  it('mintGuiControlKey returns null (never throws) on a non-2xx so the launch degrades gracefully', async () => {
+    mockFetch.mockResolvedValue(fail(404, 'https://errors.driftstack.dev/not-found', 'gone'));
+    expect(await mintGuiControlKey('https://api.test', 'ds_test', 'agt_7')).toBeNull();
   });
 });

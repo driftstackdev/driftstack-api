@@ -66,6 +66,14 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
         // refactor that adds a request-trace log would otherwise
         // leak the key).
         'req.headers["x-byok-anthropic-api-key"]',
+        // gui_control_key per-session control header. The separate
+        // simulator app presents the auto-minted per-session
+        // gui_control_key in this header to drive the session-scoped
+        // control endpoints (mode / takeover / handback / input-event)
+        // without the account API key. Same defense-in-depth as the
+        // BYOK header above — scrub it so no request-trace log can leak
+        // the live control key.
+        'req.headers["x-driftstack-gui-control-key"]',
         // Direct fields seen on objects logged inline
         'apiKey',
         'plaintext',

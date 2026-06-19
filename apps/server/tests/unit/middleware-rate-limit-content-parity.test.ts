@@ -65,10 +65,13 @@ describe('W394.C apps/server/src/middleware/rate-limit.ts content parity', () =>
     );
   });
 
-  it('rateLimitConsume args: accountId + tier + bucketKey + cost + overrides=ctx.rateLimitOverrides (W384 — wrapped in try/catch, fails open on store error)', () => {
-    expect(body).toMatch(
-      /result = await rateLimitConsume\(opts\.store, \{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*tier: ctx\.account\.tier,\s*\n?\s*bucketKey,\s*\n?\s*cost,\s*\n?\s*overrides: ctx\.rateLimitOverrides,\s*\n?\s*\}\);/,
-    );
+  it('rateLimitConsume args: accountId + tier + bucketKey + cost + overrides (account path from ctx; gui_control_key control-auth path charges the session-owner account at the free-tier floor with no overrides) (W384 — wrapped in try/catch, fails open on store error)', () => {
+    expect(body).toContain('result = await rateLimitConsume(opts.store, {');
+    expect(body).toContain('accountId: ctx ? ctx.account.id : controlKeyAccountId!,');
+    expect(body).toContain("tier: ctx ? ctx.account.tier : 'free',");
+    expect(body).toContain('bucketKey,');
+    expect(body).toContain('cost,');
+    expect(body).toContain('overrides: ctx ? ctx.rateLimitOverrides : {},');
   });
 
   it('W384 store-error fail-open: rateLimitConsume wrapped in try/catch; on error → warn log + return (request allowed, not a 500 that takes down the whole API). Only the store call is wrapped so a legit limit-hit RateLimitedError still propagates', () => {
@@ -122,15 +125,27 @@ describe('W394.C apps/server/src/middleware/rate-limit.ts content parity', () =>
     );
   });
 
-  it('V-092 log fields: component / account_id / tier / bucket_key / cost / tokens_remaining (floored) / allowed / retry_after_ms', () => {
-    expect(body).toMatch(
-      /const logFields = \{\s*\n?\s*component: 'rate-limit',\s*\n?\s*account_id: ctx\.account\.id,\s*\n?\s*tier: ctx\.account\.tier,\s*\n?\s*bucket_key: bucketKey,\s*\n?\s*cost,\s*\n?\s*tokens_remaining: Math\.floor\(result\.remaining\),\s*\n?\s*allowed: result\.allowed,\s*\n?\s*retry_after_ms: result\.retryAfterMs,\s*\n?\s*\};/,
-    );
+  it('V-092 log fields: component / account_id / tier / bucket_key / cost / tokens_remaining (floored) / allowed / retry_after_ms (account_id/tier come from the effective* locals so the control-auth path attributes to the session owner)', () => {
+    expect(body).toContain('const logFields = {');
+    expect(body).toContain("component: 'rate-limit',");
+    expect(body).toContain('account_id: effectiveAccountId,');
+    expect(body).toContain('tier: effectiveTier,');
+    expect(body).toContain('bucket_key: bucketKey,');
+    expect(body).toContain('cost,');
+    expect(body).toContain('tokens_remaining: Math.floor(result.remaining),');
+    expect(body).toContain('allowed: result.allowed,');
+    expect(body).toContain('retry_after_ms: result.retryAfterMs,');
   });
 
   it('Denied: warn-log + retry-after header (max(1, ceil(retryAfterMs/1000))) + RateLimitedError("for bucket exceeded for tier")', () => {
-    expect(body).toMatch(
-      /if \(!result\.allowed\) \{\s*\n?\s*request\.log\.warn\(logFields, 'rate-limit exceeded'\);\s*\n?\s*const retryAfterSec = Math\.max\(1, Math\.ceil\(result\.retryAfterMs \/ 1000\)\);\s*\n?\s*reply\.header\('retry-after', retryAfterSec\.toString\(\)\);\s*\n?\s*throw new RateLimitedError\(\s*\n?\s*retryAfterSec,\s*\n?\s*`Rate limit for "\$\{bucketKey\}" exceeded for tier "\$\{ctx\.account\.tier\}"\.`,\s*\n?\s*\);/,
+    expect(body).toContain("request.log.warn(logFields, 'rate-limit exceeded');");
+    expect(body).toContain(
+      'const retryAfterSec = Math.max(1, Math.ceil(result.retryAfterMs / 1000));',
+    );
+    expect(body).toContain("reply.header('retry-after', retryAfterSec.toString());");
+    expect(body).toContain('throw new RateLimitedError(');
+    expect(body).toContain(
+      '`Rate limit for "${bucketKey}" exceeded for tier "${effectiveTier}".`,',
     );
   });
 

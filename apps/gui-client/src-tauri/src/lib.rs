@@ -129,6 +129,8 @@ pub fn run() {
             proxy_exit_probe,
             endpoint_resolve,
             launch_simulator,
+            sim_key_write,
+            sim_key_take,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -185,6 +187,99 @@ fn launch_simulator(payload: String) -> Result<(), String> {
     {
         let _ = payload;
         Err("the separate simulator app is macOS-only".to_string())
+    }
+}
+
+/// Deterministic, collision-free temp path for a session's
+/// gui_control_key handoff file. The session id is sanitised to the
+/// `[A-Za-z0-9._-]` charset (everything else → `_`) so a hostile id
+/// can never escape the temp dir (no `/`, no `..`). Lives in the OS
+/// temp dir (shared between the main app and the separate simulator
+/// app since neither is sandboxed — see Entitlements.plist: no
+/// `com.apple.security.app-sandbox`).
+fn sim_key_path(session_id: &str) -> std::path::PathBuf {
+    let safe: String = session_id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    std::env::temp_dir().join(format!("driftstack-sim-{safe}.key"))
+}
+
+/// Write the per-session gui_control_key to a 0600 temp file the
+/// separate simulator app reads (then unlinks) on launch. This keeps
+/// the key OFF argv (`ps`-visible) and OFF the keychain (the separate
+/// app can't read the main app's keychain entry). The key is the
+/// per-session, 24h-TTL gui_control_key — NOT the account API key.
+///
+/// On macOS/Unix the file is created with mode 0600 (owner-only) so
+/// another local user can't read it. Best-effort caller: a failure
+/// just means the simulator falls back to (failing) keychain reads.
+#[tauri::command]
+fn sim_key_write(session_id: String, key: String) -> Result<(), String> {
+    if session_id.is_empty() {
+        return Err("session_id is empty".to_string());
+    }
+    if key.is_empty() {
+        return Err("key is empty".to_string());
+    }
+    let path = sim_key_path(&session_id);
+    #[cfg(unix)]
+    {
+        use std::io::Write as _;
+        use std::os::unix::fs::OpenOptionsExt as _;
+        // O_CREAT|O_TRUNC|O_WRONLY with mode 0600. create(true) +
+        // truncate(true) overwrites a stale file from a prior launch.
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&path)
+            .map_err(|e| e.to_string())?;
+        f.write_all(key.as_bytes()).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        // Non-Unix: best-effort plain write (the separate-app handoff
+        // is a macOS feature; this branch keeps the command compiling
+        // cross-platform). Windows ACLs already restrict the temp dir
+        // to the current user.
+        std::fs::write(&path, key.as_bytes()).map_err(|e| e.to_string())
+    }
+}
+
+/// Read AND delete (unlink) the per-session gui_control_key handoff
+/// file the main app wrote. Single-use: the simulator calls this once
+/// on launch; the unlink ensures the plaintext doesn't linger on disk.
+/// Returns `Ok(None)` when no file exists (in-process window case, or
+/// the handoff wasn't used) so the caller falls back to the API key.
+#[tauri::command]
+fn sim_key_take(session_id: String) -> Result<Option<String>, String> {
+    if session_id.is_empty() {
+        return Ok(None);
+    }
+    let path = sim_key_path(&session_id);
+    match std::fs::read_to_string(&path) {
+        Ok(contents) => {
+            // Unlink immediately (best-effort — a failed unlink must
+            // not lose the key we already read).
+            let _ = std::fs::remove_file(&path);
+            let trimmed = contents.trim();
+            if trimmed.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(trimmed.to_string()))
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.to_string()),
     }
 }
 
@@ -649,5 +744,65 @@ mod tests {
         // Spaces / control chars / quotes are not in the base64 alphabet.
         assert!(!is_valid_b64_payload("not valid"));
         assert!(!is_valid_b64_payload("'); alert(1) //"));
+    }
+
+    #[test]
+    fn sim_key_path_stays_in_temp_dir_for_normal_ids() {
+        // The canonical agent-session id (`agt_<uuid>`) maps to a clean
+        // file name directly under the temp dir.
+        let p = sim_key_path("agt_00000000-0000-4000-8000-000000000001");
+        assert_eq!(p.parent(), Some(std::env::temp_dir().as_path()));
+        assert_eq!(
+            p.file_name().and_then(|n| n.to_str()),
+            Some("driftstack-sim-agt_00000000-0000-4000-8000-000000000001.key"),
+        );
+    }
+
+    #[test]
+    fn sim_key_path_sanitises_traversal_and_separators() {
+        // A hostile id can never escape the temp dir: `/`, `\`, and the
+        // `.` in `..` survive only as the literal allowed `.` (no path
+        // SEPARATOR), so the result is still a single file in temp_dir.
+        let p = sim_key_path("../../etc/passwd");
+        assert_eq!(p.parent(), Some(std::env::temp_dir().as_path()));
+        // The slashes became underscores; no traversal component remains.
+        let name = p.file_name().and_then(|n| n.to_str()).unwrap();
+        assert!(!name.contains('/'));
+        assert!(!name.contains('\\'));
+        assert_eq!(name, "driftstack-sim-.._.._etc_passwd.key");
+    }
+
+    #[test]
+    fn sim_key_write_then_take_round_trips_and_unlinks() {
+        // Use a unique id so parallel test runs don't collide.
+        let id = format!("test-roundtrip-{}", std::process::id());
+        let key = "gck_testkeytestkeytestkeytestkey";
+        sim_key_write(id.clone(), key.to_string()).expect("write");
+        // First take returns the key and unlinks.
+        let got = sim_key_take(id.clone()).expect("take");
+        assert_eq!(got.as_deref(), Some(key));
+        // Second take finds no file → None (single-use).
+        let again = sim_key_take(id).expect("take again");
+        assert_eq!(again, None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sim_key_write_uses_owner_only_0600_mode() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let id = format!("test-perms-{}", std::process::id());
+        sim_key_write(id.clone(), "gck_perm".to_string()).expect("write");
+        let path = sim_key_path(&id);
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+        // Low 9 bits = rwx for owner/group/other; expect 0600.
+        assert_eq!(mode & 0o777, 0o600);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn sim_key_take_missing_is_none_not_error() {
+        let id = format!("test-missing-{}", std::process::id());
+        // No file written → Ok(None), never Err.
+        assert_eq!(sim_key_take(id).expect("take"), None);
     }
 }

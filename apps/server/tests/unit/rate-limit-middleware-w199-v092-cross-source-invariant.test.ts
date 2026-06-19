@@ -114,14 +114,14 @@ describe('W981 rate-limit middleware W199 + V-092 cross-source invariant', () =>
 
   // ─── rateLimitConsume call ───────────────────────────────────
 
-  it('CRITICAL rateLimitConsume invocation — passes 5 fields: accountId + tier + bucketKey + cost + overrides. The 5-field input is the V-216 rate-limit-service contract.', () => {
+  it('CRITICAL rateLimitConsume invocation — passes 5 fields: accountId + tier + bucketKey + cost + overrides. The 5-field input is the V-216 rate-limit-service contract. The account-path values come from ctx; the gui_control_key control-auth path (ctx absent) charges the session-owner account at the conservative free-tier floor with no overrides.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/middleware/rate-limit.ts'));
     expect(p).toMatch(/result = await rateLimitConsume\(opts\.store, \{/);
-    expect(p).toMatch(/accountId: ctx\.account\.id,/);
-    expect(p).toMatch(/tier: ctx\.account\.tier,/);
+    expect(p).toMatch(/accountId: ctx \? ctx\.account\.id : controlKeyAccountId!,/);
+    expect(p).toMatch(/tier: ctx \? ctx\.account\.tier : 'free',/);
     expect(p).toMatch(/bucketKey,/);
     expect(p).toMatch(/cost,/);
-    expect(p).toMatch(/overrides: ctx\.rateLimitOverrides,/);
+    expect(p).toMatch(/overrides: ctx \? ctx\.rateLimitOverrides : \{\},/);
   });
 
   // ─── W199 4-header set framing ───────────────────────────────
@@ -185,8 +185,8 @@ describe('W981 rate-limit middleware W199 + V-092 cross-source invariant', () =>
   it("CRITICAL log payload has 8 fields — component:'rate-limit' + account_id + tier + bucket_key + cost + tokens_remaining + allowed + retry_after_ms. The 8-field structured payload is what observability dashboards filter on.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/middleware/rate-limit.ts'));
     expect(p).toMatch(/component: 'rate-limit',/);
-    expect(p).toMatch(/account_id: ctx\.account\.id,/);
-    expect(p).toMatch(/tier: ctx\.account\.tier,/);
+    expect(p).toMatch(/account_id: effectiveAccountId,/);
+    expect(p).toMatch(/tier: effectiveTier,/);
     expect(p).toMatch(/bucket_key: bucketKey,/);
     expect(p).toMatch(/cost,/);
     expect(p).toMatch(/tokens_remaining: Math\.floor\(result\.remaining\),/);
@@ -217,7 +217,7 @@ describe('W981 rate-limit middleware W199 + V-092 cross-source invariant', () =>
     expect(p).toMatch(/throw new RateLimitedError\(/);
     expect(p).toMatch(/retryAfterSec,/);
     expect(p).toMatch(
-      /`Rate limit for "\$\{bucketKey\}" exceeded for tier "\$\{ctx\.account\.tier\}"\.`,/,
+      /`Rate limit for "\$\{bucketKey\}" exceeded for tier "\$\{effectiveTier\}"\.`,/,
     );
   });
 

@@ -50,6 +50,7 @@ import {
 } from '../components/ProfilesTable';
 import { ARCHETYPE_REGISTRY, type ArchetypeStatus } from '@driftstack/sdk';
 import { openSimulatorWindow } from '../lib/open-simulator';
+import { mintGuiControlKey } from '../lib/agent-session-control';
 import { useSettings } from '../lib/SettingsContext';
 import { useConnectionStatus } from '../lib/use-connection-status';
 import { DriftstackError, type Session } from '../lib/client';
@@ -852,8 +853,16 @@ export function ProfilesView({
       ...(p.wireguard !== undefined ? { wireguard: p.wireguard } : {}),
     };
     if (p.serverId !== undefined) {
-      await updateAccountProxy(settings.baseUrl, apiKey, p.serverId, input);
-      return p.serverId;
+      try {
+        await updateAccountProxy(settings.baseUrl, apiKey, p.serverId, input);
+        return p.serverId;
+      } catch (err) {
+        // Stale cached serverId: the account_proxies row was deleted server-side
+        // (e.g. during a DB recovery), so the PUT 404s. Self-heal by clearing the
+        // stale id and re-creating below, instead of failing the launch-sync
+        // forever. Any other error is real — re-throw it.
+        if ((err as { status?: number }).status !== 404) throw err;
+      }
     }
     const created = await createAccountProxy(settings.baseUrl, apiKey, input);
     await setProxyServerId(p.id, created.id);
@@ -904,19 +913,34 @@ export function ProfilesView({
       // identity (file 57). Pass the canonical prof_<uuid> id as-is — the create
       // API accepts it (W335/W336 made both session routes normalize prof_<uuid>
       // or a bare uuid server-side).
+      // Launch in manual mode: a GUI launch opens the simulator for the user to
+      // drive, so it should start under their control (not AI). They can switch
+      // via the mode toggle. (The agent-chat path creates with mode:'ai'.)
       const created = await client.agentSessions.create(
         proxyIdForLaunch !== undefined
-          ? { profile_id: profile.id, proxy_id: proxyIdForLaunch }
-          : { profile_id: profile.id },
+          ? { profile_id: profile.id, proxy_id: proxyIdForLaunch, mode: 'manual' }
+          : { profile_id: profile.id, mode: 'manual' },
       );
       await markLaunched(profile.id, created.id);
       if (created.livekit) {
+        // Mint the per-session gui_control_key so the SEPARATE simulator
+        // app (which can't read this app's keychain) can drive the
+        // control endpoints. Best-effort: minting in the MAIN app with
+        // the account API key; a failure leaves controlKey undefined and
+        // the simulator falls back to the in-app/keychain path. The key
+        // is session-scoped + 24h-TTL — NOT the account API key.
+        const apiKey = settings.apiKey;
+        const controlKey =
+          apiKey !== null && apiKey.length > 0
+            ? ((await mintGuiControlKey(settings.baseUrl, apiKey, created.id)) ?? undefined)
+            : undefined;
         // Open the floating-iPhone simulator window (the only experience now).
         const sim = await openSimulatorWindow({
           sessionId: created.id,
           info: created.livekit,
           deviceName: formatDeviceName(profile.archetype),
           profileName: profile.name,
+          ...(controlKey !== undefined ? { controlKey } : {}),
           ...(pickProxy(profile.id) !== null
             ? {
                 proxyLabel: `${pickProxy(profile.id)?.label ?? ''} · ${pickProxy(profile.id)?.host ?? ''}:${String(pickProxy(profile.id)?.port ?? '')}`,

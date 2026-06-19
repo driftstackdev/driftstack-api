@@ -125,8 +125,9 @@ describe('ProfilesView launch → stream', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
     await waitFor(() => expect(agentCreate).toHaveBeenCalledTimes(1));
     // Launch attaches THIS profile (file 57) — the canonical prof_<uuid> id is
-    // passed as-is (the API normalizes it server-side, W335/W336).
-    expect(agentCreate).toHaveBeenCalledWith({ profile_id: 'prof_1' });
+    // passed as-is (the API normalizes it server-side, W335/W336) — and starts in
+    // manual mode (a GUI launch opens the simulator for the user to drive).
+    expect(agentCreate).toHaveBeenCalledWith({ profile_id: 'prof_1', mode: 'manual' });
     // The simulator is ONLY the separate window now (founder 2026-06-18: the
     // scaled in-app overlay was removed). Launch hands the session + livekit
     // join info to the opener; no in-app overlay renders.

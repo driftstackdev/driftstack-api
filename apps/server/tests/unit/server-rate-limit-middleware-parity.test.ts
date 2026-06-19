@@ -65,12 +65,15 @@ describe('W713 server-side rate-limit middleware parity', () => {
     expect(src).toMatch(/Rate limit only applies to authenticated requests/);
   });
 
-  it('CRITICAL rateLimitConsume 5-arg call shape pinned — accountId + tier + bucketKey + cost + overrides. The 5-field input is what threads the account-context + per-account override into the token-bucket consumer. Drift to dropping `overrides` would let admin-issued rate-limit overrides silently stop applying.', () => {
+  it('CRITICAL rateLimitConsume 5-arg call shape pinned — accountId + tier + bucketKey + cost + overrides. The 5-field input is what threads the account-context + per-account override into the token-bucket consumer. Drift to dropping `overrides` would let admin-issued rate-limit overrides silently stop applying. On the gui_control_key control-auth path (ctx absent) the owner account is charged at the conservative free-tier floor with no overrides.', () => {
     const src = read(RATE_LIMIT_MIDDLEWARE);
 
-    expect(src).toMatch(
-      /await rateLimitConsume\(opts\.store, \{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*tier: ctx\.account\.tier,\s*\n?\s*bucketKey,\s*\n?\s*cost,\s*\n?\s*overrides: ctx\.rateLimitOverrides,\s*\n?\s*\}\)/,
-    );
+    expect(src).toContain('await rateLimitConsume(opts.store, {');
+    expect(src).toContain('accountId: ctx ? ctx.account.id : controlKeyAccountId!,');
+    expect(src).toContain("tier: ctx ? ctx.account.tier : 'free',");
+    expect(src).toContain('bucketKey,');
+    expect(src).toContain('cost,');
+    expect(src).toContain('overrides: ctx ? ctx.rateLimitOverrides : {},');
   });
 
   it('CRITICAL W199 4-header response set pinned — x-ratelimit-bucket / -limit / -remaining / -reset. The 4-header contract is what dashboards + clients render against. Drift to dropping any header would silently change customer dashboard behavior.', () => {
@@ -109,8 +112,8 @@ describe('W713 server-side rate-limit middleware parity', () => {
 
     // 8-field log shape.
     expect(src).toMatch(/component: 'rate-limit'/);
-    expect(src).toMatch(/account_id: ctx\.account\.id/);
-    expect(src).toMatch(/tier: ctx\.account\.tier/);
+    expect(src).toMatch(/account_id: effectiveAccountId/);
+    expect(src).toMatch(/tier: effectiveTier/);
     expect(src).toMatch(/bucket_key: bucketKey/);
     expect(src).toMatch(/cost,/);
     expect(src).toMatch(/tokens_remaining: Math\.floor\(result\.remaining\)/);
@@ -138,9 +141,9 @@ describe('W713 server-side rate-limit middleware parity', () => {
 
   it('CRITICAL RateLimitedError thrown with 2-arg shape — retryAfterSec + detail message. The 2-arg shape feeds W710 RateLimitedError constructor; drift to dropping retryAfterSec would lose the Retry-After-header propagation chain.', () => {
     const src = read(RATE_LIMIT_MIDDLEWARE);
-    expect(src).toMatch(
-      /throw new RateLimitedError\(\s*\n?\s*retryAfterSec,\s*\n?\s*`Rate limit for "\$\{bucketKey\}" exceeded for tier "\$\{ctx\.account\.tier\}"\.`,/,
-    );
+    expect(src).toContain('throw new RateLimitedError(');
+    expect(src).toContain('retryAfterSec,');
+    expect(src).toContain('`Rate limit for "${bucketKey}" exceeded for tier "${effectiveTier}".`,');
   });
 
   it("CRITICAL fastify-plugin dependencies pinned — `fp(rateLimitPlugin, { name: 'rate-limit', dependencies: ['auth'] })`. The `dependencies: ['auth']` is what guarantees the auth plugin loads first (so request.account is populated before rate-limit consumes it). Drift to dropping would let route registration succeed but fail at request time with undefined account.", () => {

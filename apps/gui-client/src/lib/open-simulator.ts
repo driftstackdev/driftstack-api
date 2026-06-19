@@ -29,6 +29,13 @@ export interface OpenSimulatorArgs {
   /** Night-arc C: egress label for the cockpit overlay — 'label · host:port'
    *  of the proxy the session launched through. Omitted → row hidden. */
   proxyLabel?: string;
+  /** Per-session gui_control_key (24h TTL) so the SEPARATE Driftstack
+   *  Simulator app can drive the control endpoints WITHOUT the main
+   *  app's keychain (which it can't read). Handed off securely (see
+   *  below); omitted → the simulator falls back to the account API key
+   *  (only works for the in-process window, which shares the keychain).
+   *  This is NOT the account API key. */
+  controlKey?: string;
 }
 
 export interface OpenSimulatorResult {
@@ -48,6 +55,7 @@ export async function openSimulatorWindow({
   deviceName,
   profileName,
   proxyLabel,
+  controlKey,
 }: OpenSimulatorArgs): Promise<OpenSimulatorResult> {
   // Tauri-only — guard so a browser preview doesn't throw on the dynamic import.
   if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
@@ -84,12 +92,28 @@ export async function openSimulatorWindow({
 
   // Stage 2 — prefer the SEPARATE "Driftstack Simulator" app (its own Dock icon,
   // founder 2026-06-18) when it's installed: hand off the session via a launch
-  // arg (NOT the API key — the sim app reads that from the shared keychain). The
-  // Rust `launch_simulator` command returns Err when the app isn't installed
-  // (or off-macOS), so we fall back to the in-process window below. See
+  // arg. The session-control auth is handed off SEPARATELY (NOT in the launch
+  // arg / query — argv is `ps`-visible). The separate app can't read the main
+  // app's keychain, so it can't use the account API key; instead the main app
+  // mints a per-session gui_control_key (24h TTL) and hands it off via a 0600
+  // temp file (this build is NOT sandboxed — Entitlements.plist has no
+  // com.apple.security.app-sandbox — so /tmp is shared between the two apps).
+  // The simulator reads + unlinks it (sim_key_take). If the app were sandboxed
+  // we'd instead append `ck=<key>` to the query payload below. See
   // docs/internal/2026-06-18-separate-simulator-app-plan.md.
   try {
     const { invoke } = await import('@tauri-apps/api/core');
+    if (controlKey !== undefined && controlKey.length > 0) {
+      // Write the control key to the shared 0600 temp file BEFORE the
+      // launch so the simulator finds it on startup. Best-effort: a
+      // failure just means the simulator falls back to the (failing)
+      // keychain read; we don't block the launch on it.
+      try {
+        await invoke('sim_key_write', { sessionId, key: controlKey });
+      } catch {
+        // ignore — non-fatal; the simulator degrades to API-key auth.
+      }
+    }
     await invoke('launch_simulator', { payload: btoa(params.toString()) });
     return { opened: true };
   } catch {

@@ -104,7 +104,15 @@ export async function updateProxy(
     headers: { ...authHeaders(apiKey), 'content-type': 'application/json' },
     body: JSON.stringify(patch),
   });
-  if (!res.ok) throw new Error(`proxy update failed: ${res.status.toString()}`);
+  if (!res.ok) {
+    // Attach the status so callers can distinguish a stale-id 404 (the row was
+    // deleted server-side) from other failures and self-heal by re-creating.
+    const err = new Error(`proxy update failed: ${res.status.toString()}`) as Error & {
+      status?: number;
+    };
+    err.status = res.status;
+    throw err;
+  }
   return (await res.json()) as AccountProxyMeta;
 }
 

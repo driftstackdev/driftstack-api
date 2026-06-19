@@ -38,7 +38,16 @@ function rateLimitPlugin(
   app.decorate('rateLimit', (bucketKey: string, cost = 1) => {
     return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
       const ctx = request.account;
-      if (!ctx) {
+      // gui_control_key control-auth path: `request.account` is absent
+      // (the per-session control key isn't an account credential), but
+      // the route's auth preHandler stashed the session's OWNING
+      // account id. Charge that account's bucket at the conservative
+      // `free`-tier floor so a per-session control key still consumes
+      // rate-limit budget (never bypasses it) — and never sees a tier
+      // larger than the smallest. Overrides are intentionally NOT
+      // applied here (they're a per-account-key concept).
+      const controlKeyAccountId = request.guiControlKeyRateLimitAccountId;
+      if (!ctx && controlKeyAccountId === undefined) {
         // Rate limit only applies to authenticated requests. If we ever wire
         // this on a public route, that's a misconfiguration — return 401.
         throw new UnauthorizedError('Rate limit requires an authenticated request.');
@@ -47,11 +56,11 @@ function rateLimitPlugin(
       let result: ConsumeResultWithBucket;
       try {
         result = await rateLimitConsume(opts.store, {
-          accountId: ctx.account.id,
-          tier: ctx.account.tier,
+          accountId: ctx ? ctx.account.id : controlKeyAccountId!,
+          tier: ctx ? ctx.account.tier : 'free',
           bucketKey,
           cost,
-          overrides: ctx.rateLimitOverrides,
+          overrides: ctx ? ctx.rateLimitOverrides : {},
         });
       } catch (err) {
         // W384 — fail OPEN on a store error (e.g. Redis down). A rate-limiter
@@ -101,10 +110,12 @@ function rateLimitPlugin(
       // Allowed → debug level (high-volume; avoid noise at default
       // info-level production logs). Exceeded → warn level (carries the
       // operational signal for capacity planning + abuse detection).
+      const effectiveAccountId = ctx ? ctx.account.id : controlKeyAccountId!;
+      const effectiveTier = ctx ? ctx.account.tier : 'free';
       const logFields = {
         component: 'rate-limit',
-        account_id: ctx.account.id,
-        tier: ctx.account.tier,
+        account_id: effectiveAccountId,
+        tier: effectiveTier,
         bucket_key: bucketKey,
         cost,
         tokens_remaining: Math.floor(result.remaining),
@@ -128,7 +139,7 @@ function rateLimitPlugin(
         reply.header('retry-after', retryAfterSec.toString());
         throw new RateLimitedError(
           retryAfterSec,
-          `Rate limit for "${bucketKey}" exceeded for tier "${ctx.account.tier}".`,
+          `Rate limit for "${bucketKey}" exceeded for tier "${effectiveTier}".`,
         );
       }
       request.log.debug(logFields, 'rate-limit consumed');

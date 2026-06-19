@@ -76,6 +76,11 @@ const SENTRY_SENSITIVE_KEYS = new Set<string>([
   'byokanthropicapikey',
   'gui_control_key',
   'guicontrolkey',
+  // gui_control_key per-session control header (mirror of the
+  // lib/logger.ts req.headers redaction). The separate simulator app
+  // presents the live control key here; scrub it from any captured
+  // request headers / breadcrumbs.
+  'x-driftstack-gui-control-key',
   // OAuth token fields — mirror of the lib/logger.ts token redaction.
   // OAuth introspect/revoke take `{ token }` in the request body; the
   // token endpoint returns `{ access_token, refresh_token }`. Bare

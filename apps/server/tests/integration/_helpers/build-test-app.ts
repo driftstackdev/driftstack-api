@@ -412,6 +412,11 @@ export interface TestAppFixture {
    *  the takeover route called recordHeartbeat and the handback
    *  route called forget. */
   pairModeHeartbeatTracker: InMemoryPairModeHeartbeatTracker;
+  /** gui_control_key control-auth tests — the in-memory agent-sessions
+   *  repo, present only when `enableAgentRuntime` is set (undefined
+   *  otherwise). Lets a test set/expire a session's gui_control_key
+   *  directly via `setGuiControlKey(...)`. */
+  agentSessionsRepo?: InMemoryAgentSessionsRepo;
   /** V-295a — exposed so tests can assert incident state. */
   incidentsRepo: InMemoryIncidentsRepo;
   /** V-295c3 — exposed so tests can assert subscriber state. */
@@ -852,6 +857,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // so AgentRuntime can publish; route registration is gated below
   // on enableAgentRuntime being on.
   const agentSessionEventBus = new AgentSessionEventBus();
+  // gui_control_key control-auth tests — exposed only when
+  // enableAgentRuntime wires the runtime + repo below. Lets a test
+  // directly set/expire a session's gui_control_key (e.g. assert the
+  // expired-key path 401s) without time-flaky waits. Stays undefined
+  // when the runtime isn't wired.
+  let agentSessionsRepoForTests: InMemoryAgentSessionsRepo | undefined;
   // Arc 2 sub-slice 8.8 (v2-#8) — in-memory takeover lock for tests.
   const pairModeLock = new InMemoryPairModeTakeoverLock();
   // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — heartbeat tracker for tests.
@@ -1326,6 +1337,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     ...(opts.enableAgentRuntime === true
       ? (() => {
           const agentSessionsRepo = new InMemoryAgentSessionsRepo();
+          agentSessionsRepoForTests = agentSessionsRepo;
           // v2-#18 — optional capturing usage recorder. When the test
           // passes `captureAgentDecomposerUsage: true`, AgentRuntime
           // wires a recorder that appends each .record() call into the
@@ -1454,6 +1466,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     accountAuditRepo,
     metricsRegistry,
     pairModeHeartbeatTracker,
+    ...(agentSessionsRepoForTests !== undefined
+      ? { agentSessionsRepo: agentSessionsRepoForTests }
+      : {}),
     incidentsRepo,
     statusSubscribersRepo,
     statusSubscribersService,
