@@ -1783,22 +1783,35 @@ export function registerAgentSessionsRoutes(
     // see TIER_RATE_LIMIT_DEFAULTS in @driftstack/api-types.
     {
       preHandler: [
-        app.requireAuth,
-        app.requireScope('write'),
+        // Control-auth path (b): the separate simulator app's "tell the
+        // agent" composer presents the per-session gui_control_key.
+        // 'write' is the account-path scope floor.
+        controlKeyOrAccountAuth('write'),
         app.rateLimit('agent_sessions:message'),
       ],
     },
     async (req) => {
-      const ctx = requireCtx(req);
       const parsed = RunTurnRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
       // Cross-account guard before runtime.runTurn — the runtime
       // throws on unknown ids, but we want 403/404 distinction over
       // "not found" generic.
       const pre = await sessions.get(req.params.id);
-      if (pre === null || pre.accountId !== ctx.account.id) {
+      if (pre === null) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
       }
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (pre.accountId !== ctx.account.id) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+      }
+      // Account attribution for the BYOK / bundled-LLM resolution chain
+      // and cost telemetry: the session's owning account. Identical to
+      // ctx.account.id on the account path, and the only meaningful
+      // account on the control-key path (which has no request-account
+      // context — validateControlKey resolves it from the session row).
+      const turnAccountId = pre.accountId;
       // Q.1.c + Q.1.d — BYOK Anthropic key resolution chain (founder
       // verdicts 2026-05-17 layering onto BYOK Tier-3 LOCKED 2026-05-16
       // — customer brings their own Anthropic key). Priority order:
@@ -1851,7 +1864,7 @@ export function registerAgentSessionsRoutes(
         bundledLlmService !== undefined &&
         deploymentFallbackKey !== undefined
       ) {
-        const settings = await bundledLlmService.findSettings(ctx.account.id);
+        const settings = await bundledLlmService.findSettings(turnAccountId);
         if (settings !== null && !settings.consent) {
           // Arc 1 sub-slice 6.8 (v2-#6) — flag for the post-resolution
           // gate. Deployment HAS bundled-LLM, customer just hasn't
@@ -1874,7 +1887,7 @@ export function registerAgentSessionsRoutes(
           // waiting for next calendar month.
           const now = new Date();
           const spent = await bundledLlmService.sumMonthlySpendCents({
-            accountId: ctx.account.id,
+            accountId: turnAccountId,
             now,
           });
           if (spent >= settings.monthlyCapUsdCents) {
@@ -2051,13 +2064,28 @@ export function registerAgentSessionsRoutes(
 
   app.delete<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id',
-    { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
+    // Control-auth path (b): the separate simulator app's window-close
+    // ends the session with the per-session gui_control_key. The key is
+    // cryptographically bound to THIS :id (validateControlKey), so a
+    // control-key caller can only ever DELETE the one session its key
+    // is bound to — never another account's session. 'write' is the
+    // account-path scope floor (destructive op).
+    { preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')] },
     async (req, reply) => {
-      const ctx = requireCtx(req);
       const pre = await sessions.get(req.params.id);
-      if (pre === null || pre.accountId !== ctx.account.id) {
+      if (pre === null) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
       }
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (pre.accountId !== ctx.account.id) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+      }
+      // Audit attribution: the session's owning account. Identical to
+      // ctx.account.id on the account path, and the only meaningful
+      // account on the control-key path (no request-account context).
+      const auditAccountId = pre.accountId;
       await sessions.closeWithReason(req.params.id, 'customer-closed');
       // Free the harness slot for a profile/fleet-backed session: tell the node
       // to tear the session down. Best-effort + gated (inert when the fleet
@@ -2085,7 +2113,7 @@ export function registerAgentSessionsRoutes(
       // pathway at the budget/timeout sweepers).
       try {
         await accountAudit?.record({
-          accountId: ctx.account.id,
+          accountId: auditAccountId,
           actorType: 'customer',
           action: 'agent_session.destroyed',
           targetResourceId: `agent_session_${req.params.id}`,

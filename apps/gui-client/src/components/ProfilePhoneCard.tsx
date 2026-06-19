@@ -108,9 +108,9 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
       }}
       className={`group relative cursor-pointer rounded-[24px] border p-1.5 transition-all hover:-translate-y-0.5 hover:shadow-xl ${
         p.selected
-          ? 'border-accent shadow-[0_0_0_2px_rgb(var(--accent-rgb)),0_10px_26px_rgba(0,0,0,0.5)]'
+          ? 'border-accent shadow-[0_0_0_1.5px_rgb(var(--accent-rgb)),0_10px_26px_rgba(0,0,0,0.5)]'
           : p.running
-            ? 'border-[#0a0d12] shadow-[0_0_0_1.5px_rgb(var(--accent-rgb)/0.5),0_0_18px_rgb(var(--accent-rgb)/0.3),0_10px_26px_rgba(0,0,0,0.45)]'
+            ? 'border-[#0a0d12] shadow-[0_10px_26px_rgba(0,0,0,0.5)]'
             : 'border-[#0a0d12] shadow-[0_8px_20px_rgba(0,0,0,0.38)]'
       }`}
       style={{ background: 'linear-gradient(160deg,#161b24,#0a0e14)' }}

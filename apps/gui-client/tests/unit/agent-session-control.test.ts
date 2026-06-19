@@ -122,6 +122,30 @@ describe('agent-session-control transport', () => {
     expect(headers.Authorization).toBeUndefined();
   });
 
+  it('endAgentSession + sendAgentMessage send the control-key header (NOT Authorization) when a control key is supplied', async () => {
+    // window-close DELETE with a control key.
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 204,
+      json: () => Promise.reject(new Error('no body')),
+    });
+    await endAgentSession('agt_1', { controlKey: 'gck_del' });
+    const delInit = (mockFetch.mock.calls[0] as [string, RequestInit])[1];
+    const delHeaders = delInit.headers as Record<string, string>;
+    expect(delInit.method).toBe('DELETE');
+    expect(delHeaders['x-driftstack-gui-control-key']).toBe('gck_del');
+    expect(delHeaders.Authorization).toBeUndefined();
+    // composer "tell the agent" POST /message with a control key.
+    mockFetch.mockResolvedValueOnce(ok({ ok: true }));
+    await sendAgentMessage('agt_1', 'go to checkout', { controlKey: 'gck_msg' });
+    const [msgUrl, msgInit] = mockFetch.mock.calls[1] as [string, RequestInit];
+    const msgHeaders = msgInit.headers as Record<string, string>;
+    expect(msgUrl).toContain('/message');
+    expect(msgInit.method).toBe('POST');
+    expect(msgHeaders['x-driftstack-gui-control-key']).toBe('gck_msg');
+    expect(msgHeaders.Authorization).toBeUndefined();
+  });
+
   it('the control key authorizes EVEN WHEN no apiKey is configured (the separate-app case)', async () => {
     (loadSettings as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       apiKey: null,

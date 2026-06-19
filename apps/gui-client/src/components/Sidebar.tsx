@@ -155,18 +155,21 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
         </SidebarItem>
       </SidebarSection>
 
-      {/* 2026-06-15 — the raw session-list item was dropped (redundant with the
-          profile View/Open) and the connectivity check moved into Settings, so
-          Diagnostics keeps only Logs. */}
-      <SidebarSection label="Diagnostics">
-        <SidebarItem
-          icon={<IconTerminal />}
-          active={current === 'logs'}
-          onClick={() => onNavigate('logs')}
-        >
-          Logs
-        </SidebarItem>
-      </SidebarSection>
+      {/* Diagnostics "Logs" is the app's client-side console/error buffer (not
+          session logs) — useful for a self-hosted operator triaging the app, but
+          noise for a cloud customer. Gated to self-hosted only (mirrors Cluster
+          below); the route + buffer stay for debugging. 2026-06-19. */}
+      {!isCloudBaseUrl(settings.baseUrl) && (
+        <SidebarSection label="Diagnostics">
+          <SidebarItem
+            icon={<IconTerminal />}
+            active={current === 'logs'}
+            onClick={() => onNavigate('logs')}
+          >
+            Logs
+          </SidebarItem>
+        </SidebarSection>
+      )}
 
       {!isCloudBaseUrl(settings.baseUrl) && (
         <SidebarSection label="Cluster">

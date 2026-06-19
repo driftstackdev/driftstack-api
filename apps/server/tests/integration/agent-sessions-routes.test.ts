@@ -1345,6 +1345,45 @@ describe('AI-D /v1/agent-sessions/* gui_control_key control-auth', () => {
     expect(res.statusCode).toBe(503);
   });
 
+  it('control key sends a message on its OWN session (POST /:id/message) — NO account Authorization header', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession('ai');
+    const key = await mintKey(id);
+    // Deterministic runtime: a short task resolves to kind:'clarify'
+    // (200) without any BYOK key. The point of this test is that the
+    // control key alone authorizes the "tell the agent" composer.
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { [GCK_HEADER]: key },
+      payload: { user_message: 'do stuff' },
+    });
+    expect(res.statusCode).not.toBe(401);
+    expect(res.statusCode).not.toBe(404);
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('control key ENDS (DELETE /:id) its OWN session — NO account Authorization header; the window-close tears down the session', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession();
+    const key = await mintKey(id);
+    const del = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { [GCK_HEADER]: key },
+    });
+    expect(del.statusCode).toBe(204);
+    // The session is now closed (account-auth read confirms the
+    // control-key DELETE really tore it down).
+    const read = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(read.statusCode).toBe(200);
+    expect(read.json<{ status: string }>().status).toBe('closed');
+  });
+
   it('CRITICAL: a key minted for session A is REJECTED (401) on session B — the key authorizes ONLY its own session', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const idA = await createSession();
@@ -1366,6 +1405,89 @@ describe('AI-D /v1/agent-sessions/* gui_control_key control-auth', () => {
       payload: { mode: 'manual' },
     });
     expect(modeB.statusCode).toBe(401);
+  });
+
+  it('CRITICAL (destructive): a key minted for session A can NOT DELETE session B — 401 (control-key DELETE is bound to its ONE session)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const idA = await createSession();
+    const idB = await createSession();
+    const keyA = await mintKey(idA);
+    // A's key on B's DELETE → 401. B must NOT be torn down by A's key.
+    const delB = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/agent-sessions/${idB}`,
+      headers: { [GCK_HEADER]: keyA },
+    });
+    expect(delB.statusCode).toBe(401);
+    // Confirm B is still alive (account-auth read → active, not closed).
+    const readB = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${idB}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(readB.statusCode).toBe(200);
+    expect(readB.json<{ status: string }>().status).toBe('active');
+  });
+
+  it('CRITICAL: a key minted for session A can NOT message session B — 401', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const idA = await createSession();
+    const idB = await createSession();
+    const keyA = await mintKey(idA);
+    const msgB = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${idB}/message`,
+      headers: { [GCK_HEADER]: keyA },
+      payload: { user_message: 'do stuff' },
+    });
+    expect(msgB.statusCode).toBe(401);
+  });
+
+  it('CRITICAL: a WRONG / never-minted control key → 401 on DELETE and message (no fallthrough to account data)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession();
+    await mintKey(id); // a real (different) key exists at rest
+    const badDel = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { [GCK_HEADER]: 'gck_thisisnotthekeythisisnotthekey' },
+    });
+    expect(badDel.statusCode).toBe(401);
+    const badMsg = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { [GCK_HEADER]: 'gck_thisisnotthekeythisisnotthekey' },
+      payload: { user_message: 'do stuff' },
+    });
+    expect(badMsg.statusCode).toBe(401);
+  });
+
+  it('CRITICAL: an EXPIRED control key → 401 on DELETE and message (24h TTL enforced on the destructive + composer routes too)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession();
+    const key = await mintKey(id);
+    const repo = fx.agentSessionsRepo;
+    expect(repo).toBeDefined();
+    const rec = await repo!.get(id);
+    expect(rec?.guiControlKeyCiphertext).not.toBeNull();
+    await repo!.setGuiControlKey({
+      id,
+      ciphertext: rec!.guiControlKeyCiphertext!,
+      expiresAt: new Date(Date.now() - 60_000), // 1 minute ago
+    });
+    const expDel = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { [GCK_HEADER]: key },
+    });
+    expect(expDel.statusCode).toBe(401);
+    const expMsg = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { [GCK_HEADER]: key },
+      payload: { user_message: 'do stuff' },
+    });
+    expect(expMsg.statusCode).toBe(401);
   });
 
   it('CRITICAL: a WRONG control-key value → 401 (no fallthrough to account data)', async () => {
@@ -1470,6 +1592,26 @@ describe('AI-D /v1/agent-sessions/* gui_control_key control-auth', () => {
       payload: { mode: 'manual' },
     });
     expect(mode.statusCode).toBe(200);
+  });
+
+  it('the account path is UNCHANGED for message + DELETE — account auth still messages then ends its own session', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession('ai');
+    // Message with account auth (no control key) → 200.
+    const msg = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { user_message: 'do stuff' },
+    });
+    expect(msg.statusCode).toBe(200);
+    // DELETE with account auth → 204.
+    const del = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(del.statusCode).toBe(204);
   });
 
   it('the account path still 401s with NO credentials at all (no control key, no Authorization)', async () => {
