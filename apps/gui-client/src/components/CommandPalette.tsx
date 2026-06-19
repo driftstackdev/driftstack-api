@@ -80,6 +80,9 @@ export function CommandPalette({
   return (
     <div
       data-component="command-palette"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Command palette"
       className="fixed inset-0 z-50 grid place-items-start justify-center bg-black/35 pt-[14vh] backdrop-blur-[2px]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();

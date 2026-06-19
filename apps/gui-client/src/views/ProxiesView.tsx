@@ -1180,12 +1180,21 @@ function flagEmoji(cc: string): string {
 }
 
 function toDraft(p: ProxyConfig): ProxyDraft {
+  // Carry the scheme + the VPN config block forward (only when present, matching
+  // addProxy/updateProxy's optional-field style). Without this an OpenVPN/
+  // WireGuard proxy editing through the form — even a label-only rename — saved
+  // back with scheme + config DROPPED, silently reverting a working VPN proxy
+  // into a broken SOCKS5 one (the editor then renders the SOCKS5 fields and
+  // updateProxy persists no scheme/openvpn/wireguard).
   return {
     label: p.label,
     host: p.host,
     port: p.port,
     username: p.username,
     password: p.password,
+    ...(p.scheme !== undefined ? { scheme: p.scheme } : {}),
+    ...(p.openvpn !== undefined ? { openvpn: p.openvpn } : {}),
+    ...(p.wireguard !== undefined ? { wireguard: p.wireguard } : {}),
   };
 }
 

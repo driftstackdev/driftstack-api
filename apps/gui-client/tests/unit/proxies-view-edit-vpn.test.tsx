@@ -1,0 +1,135 @@
+// Regression: editing a VPN (WireGuard / OpenVPN) proxy must preserve its
+// `scheme` + config block.
+//
+// toDraft() (the ProxyConfig → ProxyDraft seed for the edit form) historically
+// copied ONLY the socks5 fields (label/host/port/username/password), dropping
+// `scheme` and the `openvpn`/`wireguard` blocks. So editing a VPN proxy — even
+// a label-only rename — saved back with no scheme/config, silently reverting a
+// working OpenVPN/WireGuard proxy into a broken SOCKS5 one. These tests render
+// the view, open the edit form for a saved VPN proxy, change only the label,
+// save, and assert updateProxy receives the scheme + config intact.
+
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import type { ProxyConfig, ProxyDraft } from '../../src/lib/proxies';
+
+const updateProxy = vi.fn<(id: string, patch: ProxyDraft) => Promise<unknown>>();
+
+const WIREGUARD_PROXY: ProxyConfig = {
+  id: 'wg1',
+  label: 'wg-london',
+  host: 'wg.example.com',
+  port: 51820,
+  username: null,
+  password: null,
+  createdAt: '2026-05-20T00:00:00.000Z',
+  scheme: 'wireguard',
+  wireguard: {
+    private_key: 'PRIV_KEY_AAA',
+    peer_public_key: 'PEER_PUB_BBB',
+    endpoint: 'wg.example.com:51820',
+    allowed_ips: '0.0.0.0/0',
+    address: '10.7.0.2/32',
+  },
+};
+
+const OPENVPN_PROXY: ProxyConfig = {
+  id: 'ovpn1',
+  label: 'ovpn-paris',
+  host: 'vpn.example.com',
+  port: 1194,
+  username: null,
+  password: null,
+  createdAt: '2026-05-20T00:00:00.000Z',
+  scheme: 'openvpn',
+  openvpn: {
+    config_blob: 'client\nremote vpn.example.com 1194 udp\ndev tun\n',
+    username: 'ovpnuser',
+  },
+};
+
+let stored: ProxyConfig[] = [];
+
+vi.mock('../../src/lib/proxies', () => ({
+  listProxies: () => Promise.resolve(stored),
+  addProxy: vi.fn(() => Promise.resolve({})),
+  removeProxy: vi.fn(() => Promise.resolve()),
+  updateProxy: (id: string, patch: ProxyDraft) => updateProxy(id, patch),
+  validateDraft: () => ({ ok: true, errors: {} }),
+  testProxy: vi.fn(() => Promise.resolve({})),
+  probeProxyExit: () => Promise.resolve(null),
+  resolveEndpoint: vi.fn(() => Promise.resolve({ resolved: true, ip: '1.2.3.4', message: 'ok' })),
+}));
+
+// The probe-cache module is loaded by the view; stub it so the test doesn't hit
+// the real tauri store.
+vi.mock('../../src/lib/proxy-probe-cache', () => ({
+  invalidateProbe: vi.fn(() => Promise.resolve()),
+  loadProbeCache: () => Promise.resolve({}),
+  saveExitResult: vi.fn(() => Promise.resolve()),
+  saveProbeResult: vi.fn(() => Promise.resolve()),
+}));
+
+const { ProxiesView } = await import('../../src/views/ProxiesView');
+
+async function openEditAndRename(label: string, newLabel: string): Promise<void> {
+  // Wait for the card to load, then click its Edit button.
+  await screen.findByText(label);
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  // The label field is seeded with the existing label; change ONLY it.
+  const labelInput = await screen.findByDisplayValue(label);
+  fireEvent.change(labelInput, { target: { value: newLabel } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+}
+
+describe('ProxiesView — editing a VPN proxy preserves scheme + config', () => {
+  beforeEach(() => {
+    updateProxy.mockReset();
+    updateProxy.mockResolvedValue({});
+  });
+
+  it('renaming a WireGuard proxy keeps scheme:wireguard + the wireguard block', async () => {
+    stored = [WIREGUARD_PROXY];
+    render(<ProxiesView />);
+    await openEditAndRename('wg-london', 'wg-london-renamed');
+
+    await waitFor(() => expect(updateProxy).toHaveBeenCalledTimes(1));
+    const [id, patch] = updateProxy.mock.calls[0] as [string, ProxyDraft];
+    expect(id).toBe('wg1');
+    expect(patch.label).toBe('wg-london-renamed');
+    // The bug: these were dropped, reverting the proxy to a broken SOCKS5 one.
+    expect(patch.scheme).toBe('wireguard');
+    expect(patch.wireguard).toEqual(WIREGUARD_PROXY.wireguard);
+    expect(patch.openvpn).toBeUndefined();
+  });
+
+  it('renaming an OpenVPN proxy keeps scheme:openvpn + the openvpn block', async () => {
+    stored = [OPENVPN_PROXY];
+    render(<ProxiesView />);
+    await openEditAndRename('ovpn-paris', 'ovpn-paris-renamed');
+
+    await waitFor(() => expect(updateProxy).toHaveBeenCalledTimes(1));
+    const [id, patch] = updateProxy.mock.calls[0] as [string, ProxyDraft];
+    expect(id).toBe('ovpn1');
+    expect(patch.label).toBe('ovpn-paris-renamed');
+    expect(patch.scheme).toBe('openvpn');
+    expect(patch.openvpn).toEqual(OPENVPN_PROXY.openvpn);
+    expect(patch.wireguard).toBeUndefined();
+  });
+
+  it('renders the VPN scheme fields (not the SOCKS5 host/port) when editing a VPN proxy', async () => {
+    stored = [WIREGUARD_PROXY];
+    render(<ProxiesView />);
+    await screen.findByText('wg-london');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    // The scheme <select> reflects the saved scheme, so the form opens on the
+    // WireGuard editor (the wg0.conf textarea), not the SOCKS5 host/port grid.
+    // findByDisplayValue returns HTMLElement & { value } so .value is in scope.
+    const schemeSelect = await screen.findByDisplayValue<HTMLSelectElement>('WireGuard');
+    expect(schemeSelect.value).toBe('wireguard');
+    // The SOCKS5 quick-paste field is hidden for a VPN scheme.
+    expect(
+      screen.queryByPlaceholderText('paste a proxy line to auto-fill the fields below'),
+    ).toBeNull();
+  });
+});

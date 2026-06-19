@@ -394,11 +394,16 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             {p.onDelete ? (
               <>
                 <div className="my-1 h-px bg-surface-divider" aria-hidden="true" />
+                {/* Delete is rejected by the server for a RUNNING session, so
+                    disable it (matching ProfilesTable) and explain via the
+                    tooltip rather than letting the click 409. */}
                 <MenuRow
                   glyph="🗑"
                   caption="Delete"
                   label={`Delete ${p.name}`}
+                  title={p.running ? 'Stop the session first before deleting' : undefined}
                   tone="danger"
+                  disabled={p.running}
                   onClick={() => {
                     setActionsOpen(false);
                     p.onDelete?.();
@@ -466,6 +471,7 @@ function MenuRow({
   glyph,
   caption,
   label,
+  title,
   onClick,
   disabled,
   tone,
@@ -473,6 +479,8 @@ function MenuRow({
   glyph: ReactNode;
   caption: string;
   label: string;
+  /** Optional hover title; falls back to `label` (e.g. a disabled-reason). */
+  title?: string;
   onClick: () => void;
   disabled?: boolean;
   tone?: 'danger';
@@ -481,7 +489,7 @@ function MenuRow({
     <button
       type="button"
       aria-label={label}
-      title={label}
+      title={title ?? label}
       disabled={disabled}
       onClick={(e) => {
         e.stopPropagation();

@@ -81,4 +81,11 @@ describe('CommandPalette', () => {
     });
     expect(screen.getByText('No matches.')).toBeDefined();
   });
+
+  it('exposes the overlay as a modal dialog (role=dialog + aria-modal) for assistive tech', () => {
+    render(<CommandPalette open actions={actions()} onClose={() => {}} />);
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(dialog.getAttribute('data-component')).toBe('command-palette');
+  });
 });

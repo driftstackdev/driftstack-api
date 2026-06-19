@@ -117,12 +117,21 @@ export function AgentChatView({
     if (id === activeChatId) handleNewChat();
   }
 
+  // Close the save dialog AND clear its draft, so reopening starts fresh
+  // instead of showing the previous (un-saved or just-saved) name/description.
+  function closeSaveDialog(): void {
+    setSaveOpen(false);
+    setRecipeLabel('');
+    setRecipeDesc('');
+    setSaveError(null);
+  }
+
   // a11y: Escape closes the save dialog (matches ConfirmProvider / the create
   // modal). The backdrop already closes on click; keyboard users need a key path.
   useEffect(() => {
     if (!saveOpen) return undefined;
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && !saving) setSaveOpen(false);
+      if (e.key === 'Escape' && !saving) closeSaveDialog();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -397,7 +406,7 @@ export function AgentChatView({
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
           onClick={() => {
-            if (!saving) setSaveOpen(false);
+            if (!saving) closeSaveDialog();
           }}
         >
           <div
@@ -441,7 +450,7 @@ export function AgentChatView({
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setSaveOpen(false)}
+                onClick={closeSaveDialog}
                 disabled={saving}
                 className="btn-secondary px-3 py-1 text-xs disabled:opacity-50"
               >

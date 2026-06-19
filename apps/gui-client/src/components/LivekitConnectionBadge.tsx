@@ -35,19 +35,19 @@ function shapeFor(state: LivekitConnectionState): BadgeShape {
     case 'connecting':
       return {
         label: 'Connecting…',
-        className: 'bg-amber-500/20 text-amber-300',
+        className: 'bg-status-busy/20 text-status-busy',
         pulse: true,
       };
     case 'connected':
       return {
         label: 'Live',
-        className: 'bg-emerald-500/20 text-emerald-300',
+        className: 'bg-status-ready/20 text-status-ready',
         pulse: false,
       };
     case 'reconnecting':
       return {
         label: 'Reconnecting…',
-        className: 'bg-amber-500/20 text-amber-300',
+        className: 'bg-status-busy/20 text-status-busy',
         pulse: true,
       };
     case 'disconnected':
@@ -57,7 +57,7 @@ function shapeFor(state: LivekitConnectionState): BadgeShape {
         pulse: false,
       };
     case 'error':
-      return { label: 'Error', className: 'bg-rose-500/20 text-rose-300', pulse: false };
+      return { label: 'Error', className: 'bg-status-error/20 text-status-error', pulse: false };
   }
 }
 

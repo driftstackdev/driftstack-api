@@ -5,8 +5,8 @@
 // driver attaches them to a session when the session is created against
 // a profile.
 //
-// Mirrors SessionsView shape: 5-second poll, inline error banner, busy
-// state per row.
+// Mirrors SessionsView shape: 15-second poll (REFRESH_MS), inline error
+// banner, busy state per row.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -118,6 +118,9 @@ interface ProfilesState {
   refreshedAt: number | null;
   loading: boolean;
   error: string | null;
+  /** Transient success message (e.g. "Exported …") shown in a dismissible
+   *  banner; null when there's nothing to report. */
+  notice: string | null;
 }
 
 /** Friendly device label for the simulator toolbar, derived from the archetype
@@ -211,6 +214,7 @@ export function ProfilesView({
     refreshedAt: null,
     loading: false,
     error: null,
+    notice: null,
   });
   const [busyId, setBusyId] = useState<string | null>(null);
   // V-238 — create-form modal state. Lives here (not lifted to App.tsx)
@@ -352,7 +356,7 @@ export function ProfilesView({
   const refresh = useCallback(
     async (showLoading: boolean): Promise<void> => {
       if (!client) {
-        setState({ profiles: [], refreshedAt: null, loading: false, error: null });
+        setState({ profiles: [], refreshedAt: null, loading: false, error: null, notice: null });
         return;
       }
       if (showLoading) setState((s) => ({ ...s, loading: true }));
@@ -398,6 +402,7 @@ export function ProfilesView({
             .catch(() => undefined);
         }
         setState((s) => ({
+          ...s,
           profiles: profilesPage,
           refreshedAt: Date.now(),
           loading: false,
@@ -725,20 +730,27 @@ export function ProfilesView({
   }, [newFolderName, newFolderIcon, pushOrg, customFolderIcons, customTags]);
 
   // 2026-05-21 — derive the filtered/sorted view over state.profiles.
-  // Search matches name + description + archetype; status filter treats a
-  // profile as running when it's bound to a live driver session OR an agent
+  // Search matches name + description + archetype AND the org metadata the
+  // product syncs (folder name, tags, note) so a customer can find a profile
+  // by how THEY organised it, not just its server fields; status filter treats
+  // a profile as running when it's bound to a live driver session OR an agent
   // session (W624); sort is recency-by-default ("what did I touch last?"
   // beats alpha for the operator workflow).
   const filteredProfiles = useMemo(() => {
     let list = state.profiles;
     const q = searchQuery.trim().toLowerCase();
     if (q.length > 0) {
-      list = list.filter(
-        (p) =>
+      list = list.filter((p) => {
+        const meta = profilesMeta[p.id];
+        return (
           p.name.toLowerCase().includes(q) ||
           (p.description?.toLowerCase().includes(q) ?? false) ||
-          p.archetype.toLowerCase().includes(q),
-      );
+          p.archetype.toLowerCase().includes(q) ||
+          (meta?.folder.toLowerCase().includes(q) ?? false) ||
+          (meta?.tags.some((t) => t.toLowerCase().includes(q)) ?? false) ||
+          (meta?.note.toLowerCase().includes(q) ?? false)
+        );
+      });
     }
     if (folderFilter !== 'all') {
       list = list.filter((p) =>
@@ -1157,8 +1169,14 @@ export function ProfilesView({
     try {
       const envelope = await client.profiles.export(id);
       downloadJson(timestampedFilename('driftstack-profile', 'json', new Date()), envelope);
+      // Confirm the download fired — like every other handler, give feedback
+      // instead of silently completing.
+      const name = state.profiles.find((p) => p.id === id)?.name ?? 'profile';
+      setState((s) => ({ ...s, notice: `Exported "${name}" as a JSON file.` }));
     } catch (err) {
-      setState((s) => ({ ...s, error: friendlyError(err) }));
+      // Route through the same diagnostic-error path as the other handlers so a
+      // Tauri-WebKit "Load failed" surfaces the baseUrl-aware diagnostic.
+      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
     }
   }
 
@@ -1524,7 +1542,7 @@ export function ProfilesView({
                     ? new Date(state.refreshedAt).toLocaleTimeString()
                     : '—'}
                 </span>{' '}
-                · auto-refresh 5s
+                · auto-refresh {(REFRESH_MS / 1000).toString()}s
               </>
             )}
           </button>
@@ -1667,6 +1685,22 @@ export function ProfilesView({
           message={state.error}
           onDismiss={() => setState((s) => ({ ...s, error: null }))}
         />
+      )}
+      {state.notice !== null && (
+        <div
+          role="status"
+          data-component="profiles-notice"
+          className="flex items-start justify-between gap-3 rounded border border-status-ready/30 bg-status-ready/10 px-3 py-2"
+        >
+          <span className="text-sm text-ink-primary">{state.notice}</span>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setState((s) => ({ ...s, notice: null }))}
+          >
+            Dismiss
+          </button>
+        </div>
       )}
 
       {state.profiles.length === 0 ? (
@@ -1918,8 +1952,14 @@ export function ProfilesView({
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
             {/* min-h-0 + overflow-y-auto so the grid/table scrolls WITHIN the
                 view on small screens instead of overflowing off-screen
-                (founder: "profile list isn't fully in view, should auto-scale"). */}
-            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+                (founder: "profile list isn't fully in view, should auto-scale").
+                When the fixed bulk-action bar is shown, reserve bottom padding
+                so the last grid/table row can scroll clear of it. */}
+            <div
+              className={`min-h-0 min-w-0 flex-1 overflow-y-auto ${
+                selectedIds.size > 0 ? 'pb-20' : ''
+              }`}
+            >
               {trashView ? (
                 <TrashPanel
                   trashed={trashed}

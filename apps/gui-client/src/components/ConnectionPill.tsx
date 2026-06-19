@@ -12,8 +12,8 @@
 import type { ConnectionStatus } from '../lib/use-connection-status';
 
 const COLOR: Record<ConnectionStatus['state'], string> = {
-  connecting: 'bg-yellow-400',
-  connected: 'bg-emerald-500',
+  connecting: 'bg-status-busy',
+  connected: 'bg-status-ready',
   offline: 'bg-status-error',
 };
 

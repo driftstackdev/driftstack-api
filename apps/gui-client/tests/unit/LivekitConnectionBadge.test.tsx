@@ -42,7 +42,7 @@ describe('LK.6.c LivekitConnectionBadge', () => {
     render(<LivekitConnectionBadge state={{ kind: 'connected' }} />);
     const pill = screen.getByText('Live');
     expect(pill).toBeInTheDocument();
-    expect(pill.className).toContain('emerald'); // emerald colour family on connected
+    expect(pill.className).toContain('status-ready'); // ready (success) token on connected
     const dot = pill.querySelector('span:first-child');
     expect(dot?.className).not.toContain('animate-pulse');
   });

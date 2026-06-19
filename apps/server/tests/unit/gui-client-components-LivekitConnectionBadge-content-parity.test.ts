@@ -40,18 +40,18 @@ describe('gui-client/components/LivekitConnectionBadge content parity', () => {
     );
   });
 
-  it("6-shape badge state-to-label mapping pinned: 'idle' → 'Idle' / 'connecting' → 'Connecting…' (pulse) / 'connected' → 'Live' / 'reconnecting' → 'Reconnecting…' (pulse) / 'disconnected' → 'Disconnected' / 'error' → 'Error' (rose) — pinned so the 6-state→6-label contract stays documented. Drift to a different label (e.g. 'Online' instead of 'Live') would mismatch downstream e2e + customer expectations", () => {
+  it("6-shape badge state-to-label mapping pinned: 'idle' → 'Idle' / 'connecting' → 'Connecting…' (pulse) / 'connected' → 'Live' / 'reconnecting' → 'Reconnecting…' (pulse) / 'disconnected' → 'Disconnected' / 'error' → 'Error' (status-error) — pinned so the 6-state→6-label contract stays documented. Drift to a different label (e.g. 'Online' instead of 'Live') would mismatch downstream e2e + customer expectations", () => {
     expect(body).toMatch(
       /case 'idle':\s*\n?\s*return \{ label: 'Idle', className: 'bg-white\/10 text-ink-secondary', pulse: false \};/,
     );
     expect(body).toMatch(/label: 'Connecting…',/);
     expect(body).toMatch(
-      /label: 'Live',\s*\n?\s*className: 'bg-emerald-500\/20 text-emerald-300',/,
+      /label: 'Live',\s*\n?\s*className: 'bg-status-ready\/20 text-status-ready',/,
     );
     expect(body).toMatch(/label: 'Reconnecting…',/);
     expect(body).toMatch(/label: 'Disconnected',/);
     expect(body).toMatch(
-      /case 'error':\s*\n?\s*return \{ label: 'Error', className: 'bg-rose-500\/20 text-rose-300', pulse: false \};/,
+      /case 'error':\s*\n?\s*return \{ label: 'Error', className: 'bg-status-error\/20 text-status-error', pulse: false \};/,
     );
   });
 

@@ -82,7 +82,7 @@ export function NotificationToastStack(): JSX.Element | null {
       {connection === 'reconnecting' && (
         <div
           data-testid="notification-connection-banner"
-          className="pointer-events-auto rounded border border-amber-700/40 bg-amber-50/95 px-3 py-2 text-xs text-amber-900 shadow"
+          className="pointer-events-auto rounded border border-status-busy/40 bg-status-busy/10 px-3 py-2 text-xs text-status-busy shadow"
         >
           Notification stream reconnecting…
         </div>
@@ -90,7 +90,7 @@ export function NotificationToastStack(): JSX.Element | null {
       {connection === 'closed' && events.length > 0 && (
         <div
           data-testid="notification-connection-banner"
-          className="pointer-events-auto rounded border border-rose-700/40 bg-rose-50/95 px-3 py-2 text-xs text-rose-900 shadow"
+          className="pointer-events-auto rounded border border-status-error/40 bg-status-error/10 px-3 py-2 text-xs text-status-error shadow"
         >
           Notification stream closed — open Settings to reconnect.
         </div>

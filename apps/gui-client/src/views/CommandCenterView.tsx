@@ -392,7 +392,10 @@ export function CommandCenterView({
             all profiles
           </button>
         </div>
-        <RecentProfilesStrip state={recentProfiles} onOpen={() => onNavigate('profiles')} />
+        {/* aria-live so SR users hear the loading → ready/error/empty transition. */}
+        <div aria-live="polite">
+          <RecentProfilesStrip state={recentProfiles} onOpen={() => onNavigate('profiles')} />
+        </div>
       </section>
 
       {/* Fleet KPI strip — icon-led cards (moved here from Profiles). */}
@@ -425,13 +428,19 @@ export function CommandCenterView({
             view all
           </button>
         </div>
-        <SessionHealthStrip state={health} onViewLive={() => onNavigate('sessions')} />
+        {/* aria-live so SR users hear the loading → ready/error/empty transition. */}
+        <div aria-live="polite">
+          <SessionHealthStrip state={health} onViewLive={() => onNavigate('sessions')} />
+        </div>
       </section>
 
       {/* Recent activity from the audit log — loads independently. */}
       <section className="flex flex-col gap-2">
         <span className="section-label">Recent activity</span>
-        <ActivityFeed state={activity} />
+        {/* aria-live so SR users hear the loading → ready/error/empty transition. */}
+        <div aria-live="polite">
+          <ActivityFeed state={activity} />
+        </div>
       </section>
 
       {/* Quick links into the rest of the app. */}

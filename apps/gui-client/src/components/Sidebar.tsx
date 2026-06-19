@@ -87,108 +87,110 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
       className="flex w-56 flex-col border-r border-surface-divider
                  bg-surface-raised/95 backdrop-blur-sm"
     >
-      <SidebarSection label="Home">
-        <SidebarItem
-          icon={<IconHome />}
-          active={current === 'home'}
-          onClick={() => onNavigate('home')}
-        >
-          Command center
-        </SidebarItem>
-      </SidebarSection>
+      <nav aria-label="Primary" className="flex flex-col">
+        <SidebarSection label="Home">
+          <SidebarItem
+            icon={<IconHome />}
+            active={current === 'home'}
+            onClick={() => onNavigate('home')}
+          >
+            Command center
+          </SidebarItem>
+        </SidebarSection>
 
-      {/* 2026-06-15 — founder reversed the earlier "Automate above Browse"
+        {/* 2026-06-15 — founder reversed the earlier "Automate above Browse"
           call: Profiles is the core surface, so Browse sits directly under
           Home and Automate moves below it. */}
-      <SidebarSection label="Browse">
-        <SidebarItem
-          icon={<IconLayers />}
-          active={current === 'profiles'}
-          onClick={() => onNavigate('profiles')}
-          badge={fmtRatio(profileCount, profileCap)}
-        >
-          Profiles
-        </SidebarItem>
-        <SidebarItem
-          icon={<IconGlobe />}
-          active={current === 'proxies'}
-          onClick={() => onNavigate('proxies')}
-          badge={proxyCount === null ? null : String(proxyCount)}
-        >
-          Proxies
-        </SidebarItem>
-      </SidebarSection>
+        <SidebarSection label="Browse">
+          <SidebarItem
+            icon={<IconLayers />}
+            active={current === 'profiles'}
+            onClick={() => onNavigate('profiles')}
+            badge={fmtRatio(profileCount, profileCap)}
+          >
+            Profiles
+          </SidebarItem>
+          <SidebarItem
+            icon={<IconGlobe />}
+            active={current === 'proxies'}
+            onClick={() => onNavigate('proxies')}
+            badge={proxyCount === null ? null : String(proxyCount)}
+          >
+            Proxies
+          </SidebarItem>
+        </SidebarSection>
 
-      <SidebarSection label="Automate">
-        <SidebarItem
-          icon={<IconSparkle />}
-          active={current === 'ai'}
-          onClick={() => onNavigate('ai')}
-        >
-          AI chat
-        </SidebarItem>
-        <SidebarItem
-          icon={<IconBook />}
-          active={current === 'recipes'}
-          onClick={() => onNavigate('recipes')}
-        >
-          Saved tasks
-        </SidebarItem>
-      </SidebarSection>
+        <SidebarSection label="Automate">
+          <SidebarItem
+            icon={<IconSparkle />}
+            active={current === 'ai'}
+            onClick={() => onNavigate('ai')}
+          >
+            AI chat
+          </SidebarItem>
+          <SidebarItem
+            icon={<IconBook />}
+            active={current === 'recipes'}
+            onClick={() => onNavigate('recipes')}
+          >
+            Saved tasks
+          </SidebarItem>
+        </SidebarSection>
 
-      <SidebarSection label="History">
-        <SidebarItem
-          icon={<IconList />}
-          active={current === 'sessions-history'}
-          onClick={() => onNavigate('sessions-history')}
-        >
-          Session log
-        </SidebarItem>
-        <SidebarItem
-          icon={<IconFilm />}
-          active={current === 'recordings'}
-          onClick={() => onNavigate('recordings')}
-          badge={recordingsCount > 0 ? String(recordingsCount) : null}
-        >
-          Recordings
-        </SidebarItem>
-      </SidebarSection>
+        <SidebarSection label="History">
+          <SidebarItem
+            icon={<IconList />}
+            active={current === 'sessions-history'}
+            onClick={() => onNavigate('sessions-history')}
+          >
+            Session log
+          </SidebarItem>
+          <SidebarItem
+            icon={<IconFilm />}
+            active={current === 'recordings'}
+            onClick={() => onNavigate('recordings')}
+            badge={recordingsCount > 0 ? String(recordingsCount) : null}
+          >
+            Recordings
+          </SidebarItem>
+        </SidebarSection>
 
-      {/* The client-side console/error buffer is no longer a full-screen nav
+        {/* The client-side console/error buffer is no longer a full-screen nav
           surface — it was a "Logs" page that looked like real session logs but
           only showed captured console output + errors. The floating DevLogPanel
           still exposes it for dev triage. 2026-06-19. */}
-      {!isCloudBaseUrl(settings.baseUrl) && (
-        <SidebarSection label="Cluster">
+        {!isCloudBaseUrl(settings.baseUrl) && (
+          <SidebarSection label="Cluster">
+            <SidebarItem
+              icon={<IconServer />}
+              active={current === 'fleet'}
+              onClick={() => onNavigate('fleet')}
+            >
+              Mac mini fleet
+            </SidebarItem>
+          </SidebarSection>
+        )}
+
+        <SidebarSection label="Account">
+          {showTeam && (
+            <SidebarItem
+              icon={<IconUsers />}
+              badge={teamCount > 0 ? String(teamCount) : null}
+              active={current === 'team'}
+              onClick={() => onNavigate('team')}
+            >
+              Team
+            </SidebarItem>
+          )}
           <SidebarItem
-            icon={<IconServer />}
-            active={current === 'fleet'}
-            onClick={() => onNavigate('fleet')}
+            icon={<IconCog />}
+            active={current === 'settings'}
+            onClick={() => onNavigate('settings')}
           >
-            Mac mini fleet
+            Settings
           </SidebarItem>
         </SidebarSection>
-      )}
-
-      <SidebarSection label="Account">
-        {showTeam && (
-          <SidebarItem
-            icon={<IconUsers />}
-            badge={teamCount > 0 ? String(teamCount) : null}
-            active={current === 'team'}
-            onClick={() => onNavigate('team')}
-          >
-            Team
-          </SidebarItem>
-        )}
-        <SidebarItem
-          icon={<IconCog />}
-          active={current === 'settings'}
-          onClick={() => onNavigate('settings')}
-        >
-          Settings
-        </SidebarItem>
-      </SidebarSection>
+      </nav>
 
       {signedIn && (
         <div className="mt-auto flex flex-col gap-2 border-t border-surface-divider px-3 py-3">
@@ -251,6 +253,7 @@ function SidebarItem({ children, icon, badge, active, onClick }: SidebarItemProp
       data-tauri-no-drag
       onClick={onClick}
       disabled={!isInteractive}
+      aria-current={active === true ? 'page' : undefined}
       className={
         'group flex items-center gap-2 px-3 py-1 text-sm text-left transition-colors ' +
         (active === true

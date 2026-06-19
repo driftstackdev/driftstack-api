@@ -80,4 +80,30 @@ describe('TeamView', () => {
     expect(await screen.findByText('Enter a valid email address.')).toBeTruthy();
     expect(invite).not.toHaveBeenCalled();
   });
+
+  it('resets the role select back to member after a successful invite (no admin carry-over)', async () => {
+    invite.mockClear();
+    render(<TeamView />);
+    await screen.findByText('alice@co.com');
+    const roleSelect: HTMLSelectElement = screen.getByLabelText('Invitee role');
+    fireEvent.change(roleSelect, { target: { value: 'admin' } });
+    expect(roleSelect.value).toBe('admin');
+    fireEvent.change(screen.getByLabelText('Invitee email'), { target: { value: 'bob@co.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send invite' }));
+    await waitFor(() => expect(invite).toHaveBeenCalledWith('bob@co.com', { role: 'admin' }));
+    // After the invite resolves the select snaps back to the safe default.
+    await waitFor(() => expect(roleSelect.value).toBe('member'));
+  });
+
+  it('renders a failed invite as a distinct error alert (not a success status)', async () => {
+    invite.mockClear();
+    invite.mockRejectedValueOnce(Object.assign(new Error('seat limit reached'), { status: 402 }));
+    render(<TeamView />);
+    await screen.findByText('alice@co.com');
+    fireEvent.change(screen.getByLabelText('Invitee email'), { target: { value: 'carol@co.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send invite' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/seat limit/i);
+    expect(alert.className).toContain('text-status-error');
+  });
 });

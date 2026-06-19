@@ -72,10 +72,10 @@ describe('LK.6.c — LivekitConnectionBadge component', () => {
     expect(body).toMatch(/aria-live="polite"/);
   });
 
-  it('per-state color: connected=emerald, transient=amber, error=rose, idle/disconnected=neutral', () => {
-    expect(body).toMatch(/emerald/);
-    expect(body).toMatch(/amber/);
-    expect(body).toMatch(/rose/);
+  it('per-state color: connected=status-ready, transient=status-busy, error=status-error, idle/disconnected=neutral (theme-aware status tokens; resolve to emerald/amber/rose/neutral via CSS vars)', () => {
+    expect(body).toMatch(/status-ready/);
+    expect(body).toMatch(/status-busy/);
+    expect(body).toMatch(/status-error/);
   });
 
   it('exposes data-state attribute carrying the kind discriminator (test selectors)', () => {

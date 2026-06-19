@@ -146,6 +146,27 @@ describe('ProfilePhoneCard', () => {
     cleanup();
   });
 
+  it('Delete is enabled (and fires onDelete) when idle', () => {
+    const onDelete = vi.fn();
+    render(<ProfilePhoneCard {...props({ running: false, onDelete })} />);
+    const del = screen.getByLabelText('Delete amsterdam shopper');
+    expect((del as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(del);
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
+
+  it('Delete is disabled with a "stop the session first" tooltip while running (server rejects deleting a running profile)', () => {
+    const onDelete = vi.fn();
+    render(<ProfilePhoneCard {...props({ running: true, onDelete })} />);
+    const del = screen.getByLabelText('Delete amsterdam shopper');
+    expect((del as HTMLButtonElement).disabled).toBe(true);
+    expect(del.getAttribute('title')).toMatch(/stop the session first/i);
+    fireEvent.click(del);
+    expect(onDelete).not.toHaveBeenCalled();
+    cleanup();
+  });
+
   it('renders folder + tag pills', () => {
     render(<ProfilePhoneCard {...props({ folder: 'Shopping', tags: ['aged'] })} />);
     expect(screen.getByText('📁 Shopping')).toBeTruthy();

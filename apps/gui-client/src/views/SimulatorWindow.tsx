@@ -713,10 +713,31 @@ function NavigateAddressBar({
   onNavigate: (url: string) => void;
 }): JSX.Element {
   const [draftUrl, setDraftUrl] = useState('');
+  // While the control channel is still connecting (the room can take up to ~30s
+  // to come up), the bar is disabled — but a bare disabled field reads as
+  // BROKEN. Surface an explicit "connecting…" affordance (placeholder + tooltip
+  // + a caption) so the wait is legible and distinct from a real failure (which
+  // surfaces separately as a navigate-error notice toast).
+  const placeholder = canNavigate
+    ? 'example.com — type a URL, press Enter'
+    : 'connecting… — the address bar unlocks once the device is live';
+  const disabledTitle = 'Connecting to the device — the address bar unlocks once it is live';
   return (
     <div data-component="simulator-address" className="px-3 pb-1.5 pt-0.5">
-      <div className="px-0 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
-        Address
+      <div className="flex items-center justify-between px-0 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+        <span>Address</span>
+        {!canNavigate && (
+          <span
+            data-component="simulator-address-connecting"
+            className="inline-flex items-center gap-1 font-medium normal-case tracking-normal text-ink-secondary"
+          >
+            <span
+              aria-hidden="true"
+              className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400"
+            />
+            connecting…
+          </span>
+        )}
       </div>
       <form
         className="flex items-center gap-1 rounded-lg bg-black/40 px-2 py-1 ring-1 ring-white/10"
@@ -730,7 +751,7 @@ function NavigateAddressBar({
           type="button"
           disabled={!canNavigate}
           aria-label="Reload"
-          title="Reload the current page"
+          title={canNavigate ? 'Reload the current page' : disabledTitle}
           onClick={() => {
             if (canNavigate && draftUrl.trim() !== '') onNavigate(draftUrl);
           }}
@@ -743,7 +764,8 @@ function NavigateAddressBar({
           value={draftUrl}
           disabled={!canNavigate}
           onChange={(e) => setDraftUrl(e.target.value)}
-          placeholder="example.com — type a URL, press Enter"
+          placeholder={placeholder}
+          title={canNavigate ? undefined : disabledTitle}
           spellCheck={false}
           autoComplete="off"
           aria-label="Address bar"
@@ -753,6 +775,7 @@ function NavigateAddressBar({
           type="submit"
           disabled={!canNavigate || draftUrl.trim() === ''}
           aria-label="Go to URL"
+          title={canNavigate ? 'Go to URL' : disabledTitle}
           className="shrink-0 rounded p-1 text-accent transition hover:bg-white/10 disabled:opacity-40"
         >
           ⏎
@@ -844,6 +867,9 @@ export function SimulatorWindow(): JSX.Element {
     controlKey !== '' ? { controlKey } : null,
   );
   useEffect(() => {
+    // A new room/session starts with a clean control-health slate — never carry
+    // a latched controlUnreachable badge across a session switch.
+    setControlUnreachable(false);
     if (sessionId === '') {
       setControlAuth(null);
       return;
@@ -1071,6 +1097,15 @@ export function SimulatorWindow(): JSX.Element {
     setNotice(controlErrorMessage(err));
     window.setTimeout(() => setNotice(null), 4000);
   };
+  // The LiveKit room handle, surfaced by the panel after a (re)connect. Wrap
+  // setRoom so a fresh/reconnected room CLEARS the latched controlUnreachable
+  // badge — the data channel is live again, so a stale "control may not be
+  // reaching the device" warning from a prior failed publish must not persist
+  // (it was set but previously never reset on recovery).
+  const handleRoom = useCallback((r: Room | null): void => {
+    setRoom(r);
+    if (r !== null) setControlUnreachable(false);
+  }, []);
   const refreshControl = useCallback((): void => {
     if (sessionId === '') return;
     setControlError(null); // clear any prior failure while this attempt is in flight
@@ -1078,6 +1113,9 @@ export function SimulatorWindow(): JSX.Element {
       .then((s) => {
         setControlMode(s.mode);
         setPairKind(s.pairKind);
+        // A successful control round-trip proves the session is reachable —
+        // clear any stale "control may not be reaching the device" badge.
+        setControlUnreachable(false);
       })
       .catch((err: unknown) => {
         // Surface the failure instead of leaving the panel stuck on "Connecting…"
@@ -1423,7 +1461,7 @@ export function SimulatorWindow(): JSX.Element {
                   // fight it.
                   interactive={controlMode !== 'ai'}
                   onVideoDimensions={handleVideoDimensions}
-                  onRoom={setRoom}
+                  onRoom={handleRoom}
                   onPublishError={() => setControlUnreachable(true)}
                   onVideoEl={(el) => {
                     videoElRef.current = el;

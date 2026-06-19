@@ -10,6 +10,8 @@ import { useCallback, useEffect, useState, type JSX } from 'react';
 import type { TeamMember, TeamInvite, TeamRole } from '@driftstack/sdk';
 import { useSettings } from '../lib/SettingsContext';
 import { useConfirm } from '../components/ConfirmProvider';
+import { EmptyState } from '../components/EmptyState';
+import { SkeletonRows } from '../components/Skeleton';
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -39,7 +41,9 @@ export function TeamView(): JSX.Element {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<TeamRole>('member');
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  // Notices carry a tone so a failed invite reads distinctly from a success
+  // (both used to render as the same muted line — a failure looked like a win).
+  const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -65,7 +69,7 @@ export function TeamView(): JSX.Element {
     if (!client) return;
     const trimmed = email.trim();
     if (!EMAIL_RE.test(trimmed)) {
-      setNotice('Enter a valid email address.');
+      setNotice({ tone: 'error', text: 'Enter a valid email address.' });
       return;
     }
     setBusy(true);
@@ -73,10 +77,13 @@ export function TeamView(): JSX.Element {
     try {
       await client.team.invite(trimmed, { role });
       setEmail('');
-      setNotice(`Invite sent to ${trimmed}.`);
+      // Reset the role back to the safe default so the next invite doesn't
+      // silently over-grant admin to a member just because the last one was.
+      setRole('member');
+      setNotice({ tone: 'success', text: `Invite sent to ${trimmed}.` });
       await refresh();
     } catch (err) {
-      setNotice(friendlyTeamError(err, 'Could not send the invite.'));
+      setNotice({ tone: 'error', text: friendlyTeamError(err, 'Could not send the invite.') });
     } finally {
       setBusy(false);
     }
@@ -94,7 +101,7 @@ export function TeamView(): JSX.Element {
         await client.team.removeMember(m.id);
         await refresh();
       } catch (err) {
-        setNotice(friendlyTeamError(err, 'Could not remove the member.'));
+        setNotice({ tone: 'error', text: friendlyTeamError(err, 'Could not remove the member.') });
       } finally {
         setRemovingId(null);
       }
@@ -145,12 +152,23 @@ export function TeamView(): JSX.Element {
             {busy ? 'Sending…' : 'Send invite'}
           </button>
         </div>
-        {notice !== null ? <p className="mt-2 text-xs text-ink-secondary">{notice}</p> : null}
+        {notice !== null ? (
+          <p
+            role={notice.tone === 'error' ? 'alert' : 'status'}
+            className={`mt-2 rounded-md px-2.5 py-1.5 text-xs ${
+              notice.tone === 'error'
+                ? 'bg-status-error/10 text-status-error'
+                : 'bg-status-ready/10 text-status-ready'
+            }`}
+          >
+            {notice.text}
+          </p>
+        ) : null}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
-          <p className="py-8 text-center text-xs text-ink-muted">Loading…</p>
+          <SkeletonRows rows={3} label="Loading your team…" />
         ) : (
           <div className="flex flex-col gap-4">
             {invites.length > 0 ? (
@@ -179,10 +197,10 @@ export function TeamView(): JSX.Element {
                 Members
               </h3>
               {members.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-surface-divider py-8 text-center text-xs text-ink-muted">
-                  No teammates yet. Invite someone above — or if you're a member of someone else's
-                  team, ask the owner to manage it.
-                </p>
+                <EmptyState
+                  title="No teammates yet"
+                  description="Invite someone above — or if you're a member of someone else's team, ask the owner to manage it."
+                />
               ) : (
                 <div className="flex flex-col gap-2">
                   {members.map((m) => (

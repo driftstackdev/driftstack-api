@@ -6,7 +6,7 @@
 // account header) doesn't silently drop a customer-facing counter.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import type { AccountSelfProfile } from '@driftstack/sdk';
 import { Sidebar } from '../../src/components/Sidebar';
@@ -200,5 +200,18 @@ describe('Sidebar — count badges + section gates', () => {
     mockAccountMe = null;
     render(<Sidebar current="profiles" onNavigate={() => {}} onSignOut={() => {}} />);
     expect(screen.queryByRole('button', { name: /Sign out/ })).not.toBeInTheDocument();
+  });
+
+  it('wraps the primary nav in a <nav> landmark and marks the active item aria-current="page"', () => {
+    mockAccountMe = buildAccountMe();
+    render(<Sidebar current="profiles" onNavigate={() => {}} onSignOut={() => {}} />);
+    const nav = screen.getByRole('navigation', { name: /primary/i });
+    expect(nav).toBeInTheDocument();
+    // The active item (Profiles nav button) carries aria-current; inactive don't.
+    // Scope to the <nav> so the footer "Profiles" usage row isn't matched.
+    const active = within(nav).getByText('Profiles').closest('button');
+    expect(active?.getAttribute('aria-current')).toBe('page');
+    const inactive = within(nav).getByText('Settings').closest('button');
+    expect(inactive?.getAttribute('aria-current')).toBeNull();
   });
 });

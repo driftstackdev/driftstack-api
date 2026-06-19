@@ -116,6 +116,28 @@ describe('AgentChatView Save-as-recipe', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('clears the draft on Cancel so reopening the dialog starts fresh (no stale text)', async () => {
+    const planTurn: ChatTurn = { id: 2, role: 'agent', response: PLAN_EXECUTED };
+    chatState = baseChat({
+      session: SESSION,
+      turns: [{ id: 1, role: 'user', text: 'open example.com' }, planTurn],
+    });
+    render(<AgentChatView />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save as task' }));
+    const name = await screen.findByPlaceholderText('e.g. Add 3 items to cart');
+    fireEvent.change(name, { target: { value: 'half-typed name' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    // Reopen — the Name field is empty again, not the abandoned draft.
+    fireEvent.click(screen.getByRole('button', { name: 'Save as task' }));
+    const reopened: HTMLInputElement = await screen.findByPlaceholderText(
+      'e.g. Add 3 items to cart',
+    );
+    expect(reopened.value).toBe('');
+  });
+
   it('saves the chat as a recipe with the session id + trimmed label, then toasts', async () => {
     const planTurn: ChatTurn = { id: 2, role: 'agent', response: PLAN_EXECUTED };
     chatState = baseChat({
