@@ -63,6 +63,7 @@ import { registerAgentSessionsLivekitTokenRoute } from '../routes/agent-sessions
 import type { FleetNonceCache } from '../services/fleet-nonce-cache.js';
 import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
 import type { SessionPageStateStore } from '../services/session-page-state-store.js';
+import type { SessionLivenessStore } from '../services/session-liveness-store.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import type { AccountProxiesRepo } from '../db/account-proxies-repo.js';
@@ -466,6 +467,16 @@ export interface AppDeps {
    * it (the GUI loading-bar/error-overlay source for the agent/simulator view).
    */
   sessionPageStateStore?: SessionPageStateStore;
+  /**
+   * Latest-worker-liveness-per-agent-session store (A2 W2679 re-base). Present
+   * alongside the registry when the fleet control plane is enabled; the
+   * registry's onHeartbeat consumer feeds it Heartbeat.activeSessionStates +
+   * the agent-sessions `liveness` read-shape field reads it (so the GUI can tell
+   * a genuinely-running session from a status='active' row whose worker
+   * crashed/never-started). Absent in prod (no fleet CP) → the field is
+   * "unknown" (the client trusts the binding; never treated as dead).
+   */
+  sessionLivenessStore?: SessionLivenessStore;
   /**
    * Local fleet-demo session-dispatch config. Present only when the fleet
    * control plane is enabled (bootstrap assembles it alongside the registry);
@@ -1248,6 +1259,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // Present only when the fleet control plane wired the store.
       ...(deps.sessionPageStateStore !== undefined
         ? { sessionPageStateStore: deps.sessionPageStateStore }
+        : {}),
+      // A2 W2679 re-base — agent-session worker-liveness read (GUI re-bases
+      // open-session liveness onto this). Present only when the fleet control
+      // plane wired the store; absent → `liveness` defaults to "unknown".
+      ...(deps.sessionLivenessStore !== undefined
+        ? { sessionLivenessStore: deps.sessionLivenessStore }
         : {}),
       ...(deps.byokAnthropicService !== undefined
         ? { byokService: deps.byokAnthropicService }

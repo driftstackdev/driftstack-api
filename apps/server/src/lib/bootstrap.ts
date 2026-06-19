@@ -30,6 +30,7 @@ import { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import { FleetNodeAuthImpl } from '../services/fleet-node-auth.js';
 import { FleetControlRegistry } from '../services/fleet-control-registry.js';
 import { SessionPageStateStore } from '../services/session-page-state-store.js';
+import { SessionLivenessStore } from '../services/session-liveness-store.js';
 import { makeProfileSavedPersister } from '../services/profile-store.js';
 import { makeChallengeRelay } from '../services/challenge-relay.js';
 import { makeProfileSaveFailedRelay } from '../services/profile-save-failed-relay.js';
@@ -1347,6 +1348,16 @@ export async function createProductionDeps(
         // registry's onPageState consumer + read by GET /v1/agent-sessions/
         // :id/page-state (the GUI loading-bar/error-overlay source).
         const sessionPageStateStore = new SessionPageStateStore();
+        // A2 W2679 re-base — latest worker-liveness per AGENT session, written
+        // by the registry's onHeartbeat consumer (below, alongside
+        // recordHeartbeat) from Heartbeat.activeSessionStates + read by the
+        // agent-sessions `liveness` read-shape field. Lets the GUI tell a
+        // genuinely-running session from a status='active' row whose worker
+        // crashed/never-started (the "always says open session" bug), replacing
+        // the GUI's client-side page-state probe + 90s grace heuristic. Bounded
+        // + in-memory (same posture as sessionPageStateStore); absent in prod
+        // (no fleet control plane) → the read field defaults to "unknown".
+        const sessionLivenessStore = new SessionLivenessStore();
         // Worker-disconnect fix (2026-06-19) — close a node's active agent
         // sessions when its control-plane connection drops and doesn't
         // reconnect within DRIFTSTACK_WORKER_DISCONNECT_GRACE_SECONDS (default
@@ -1365,6 +1376,7 @@ export async function createProductionDeps(
           fleetNodeAuth: new FleetNodeAuthImpl(drizzleFleetNodesRepo, fleetNonceCache),
           fleetNonceCache,
           sessionPageStateStore,
+          sessionLivenessStore,
           // Profile-backed session persistence (A3 W417): when R2 is configured,
           // a `profileSaved` frame from a node writes the customer's sealed store
           // to R2; without R2 the frame is accepted + ignored (stateless).
@@ -1425,6 +1437,18 @@ export async function createProductionDeps(
                   'recordHeartbeat failed (snapshot stays stale until next beat)',
                 );
               });
+              // A2 W2679 re-base — feed the per-session liveness map into the
+              // store the agent-sessions `liveness` field reads. The macNodeId
+              // is already cross-checked against the JWT nodeId in the
+              // connection (anti-spoof), so passing it as the eviction scope is
+              // safe. Absent on a quiet/older node's beat → no-op.
+              if (frame.activeSessionStates) {
+                sessionLivenessStore.recordBeat(
+                  frame.macNodeId,
+                  frame.activeSessionStates,
+                  Date.parse(frame.timestamp) || Date.now(),
+                );
+              }
             },
             // Worker-disconnect fix (2026-06-19) — liveness hooks (positional
             // args 6 + 7): a (re)connect CANCELS the node's pending grace timer;

@@ -341,6 +341,12 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toContain(
       'sessionOutcomeCounts: z.record(z.string(), z.number().int().nonnegative()).optional(),',
     );
+    // Per-session liveness re-base (A2 W2679 / A3 driftstack f52699c37) — the
+    // {agentSessionId → state} map the SessionLivenessStore reads. OPTIONAL +
+    // omit-when-nil so an older node's beat still decodes byte-identically.
+    expect(body).toContain(
+      ".record(z.string(), z.enum(['active', 'provisioning', 'idle', 'terminating']))",
+    );
     expect(body).toContain('thermalState: z.string().optional(),');
     expect(body).toContain('memoryPressureLevel: z.string().optional(),');
     expect(body).toContain('busiestCorePercent: z.number().optional(),');
@@ -384,6 +390,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       uptimeSeconds: 1234.5,
       drainState: 'draining',
       sessionOutcomeCounts: { idle_timeout: 5, browser_crashed: 2 },
+      activeSessionStates: { agt_a: 'active', agt_b: 'provisioning', agt_c: 'terminating' },
       thermalState: 'fair',
       memoryPressureLevel: 'normal',
       busiestCorePercent: 73.2,
@@ -397,11 +404,31 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       expect(parsed.data.uptimeSeconds).toBe(1234.5);
       expect(parsed.data.drainState).toBe('draining');
       expect(parsed.data.sessionOutcomeCounts).toEqual({ idle_timeout: 5, browser_crashed: 2 });
+      // Per-session liveness map survives decode (was previously .strip()ped);
+      // activeSessionCount is the scalar count of these entries.
+      expect(parsed.data.activeSessionStates).toEqual({
+        agt_a: 'active',
+        agt_b: 'provisioning',
+        agt_c: 'terminating',
+      });
       expect(parsed.data.thermalState).toBe('fair');
       expect(parsed.data.busiestCorePercent).toBe(73.2);
       expect(parsed.data.diskFreePercent).toBe(41.8);
       expect(parsed.data.harnessVersion).toBe('abc1234');
     }
+    // An unrecognized liveness state is rejected (the enum is closed) so a
+    // producer drift surfaces instead of silently passing through.
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'heartbeat',
+        macNodeId: 'n1',
+        timestamp: 't',
+        cpuPercent: 1,
+        memoryPercent: 1,
+        activeSessionCount: 1,
+        activeSessionStates: { agt_a: 'bogus' },
+      }).success,
+    ).toBe(false);
     // A quiet/older node (none of the optionals) still decodes — byte-identical contract.
     expect(
       HarnessOutboundSchema.safeParse({

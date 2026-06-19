@@ -234,6 +234,46 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(container.querySelector('[data-component="touch-cursor"]')).toBeNull();
   });
 
+  it('shows a running indicator in the toolbar when a session is bound (founder Track A)', () => {
+    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&session=agt_1');
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    expect(
+      container.querySelector('[data-component="simulator-running-indicator"]'),
+    ).not.toBeNull();
+  });
+
+  it('the expanded control panel exposes an explicit End session control (the true Stop, distinct from the mode-aware window-close)', () => {
+    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&session=agt_1');
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    const wrap = container.querySelector('[data-component="simulator-toolbar-wrap"]');
+    fireEvent.click(wrap?.querySelector('[aria-label="Show controls"]') as Element);
+    const panel = wrap?.querySelector('[data-component="simulator-controls"]');
+    expect(panel?.querySelector('[aria-label="End session"]')).not.toBeNull();
+  });
+
+  it('no End session control when there is no bound session (the empty window)', () => {
+    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok');
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    // No `session=` in the query → running is false → no running cue + no End.
+    expect(container.querySelector('[data-component="simulator-running-indicator"]')).toBeNull();
+    const wrap = container.querySelector('[data-component="simulator-toolbar-wrap"]');
+    fireEvent.click(wrap?.querySelector('[aria-label="Show controls"]') as Element);
+    const panel = wrap?.querySelector('[data-component="simulator-controls"]');
+    expect(panel?.querySelector('[aria-label="End session"]')).toBeNull();
+  });
+
   it('shows a no-session hint (no device frame) when the query lacks ws/token', () => {
     window.history.pushState({}, '', '/?window=simulator');
     const { container } = render(

@@ -73,6 +73,22 @@ type AgentSession struct {
 	// or pre-Mac-registration. Fall back to LK.3 endpoint for an
 	// explicit mint.
 	LiveKit *LiveKitInfo `json:"livekit,omitempty"`
+	// W2679 — worker-reported per-session liveness, re-based onto the
+	// fleet heartbeat. Distinct from Status, which stays "active" until
+	// close even when the worker crashed. nil (field omitted) when the
+	// deployment has no fleet control plane OR no beat has reported the
+	// session — treat nil as "unknown, trust the binding", never "dead".
+	Liveness *SessionLiveness `json:"liveness,omitempty"`
+}
+
+// SessionLiveness is the worker-reported liveness for an agent session
+// (W2679). State is the latest worker state ("active" | "provisioning" |
+// "idle" | "terminating") or "" when the server reports null (seen but no
+// live state). Fresh is whether the owning node's beat is recent enough to
+// trust.
+type SessionLiveness struct {
+	State *string `json:"state"`
+	Fresh bool    `json:"fresh"`
 }
 
 // CreateAgentSessionRequest is the optional body for Create.

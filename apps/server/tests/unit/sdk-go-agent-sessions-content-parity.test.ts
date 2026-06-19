@@ -60,6 +60,12 @@ describe('sdk-go agent_sessions content parity', () => {
     // 6.c — per-session model picker field on the read shape.
     expect(body).toMatch(/Model\s+string\s+`json:"model"`/);
     expect(body).toMatch(/LiveKit\s+\*LiveKitInfo\s+`json:"livekit,omitempty"`/);
+    // W2679 — worker-reported per-session liveness (*SessionLiveness,omitempty
+    // so a no-fleet-CP deployment omits it rather than rendering 'liveness:null').
+    expect(body).toMatch(/Liveness\s+\*SessionLiveness\s+`json:"liveness,omitempty"`/);
+    expect(body).toMatch(
+      /type SessionLiveness struct \{\s*\n?\s*State \*string `json:"state"`\s*\n?\s*Fresh bool\s+`json:"fresh"`\s*\n?\s*\}/,
+    );
   });
 
   it("CreateAgentSessionRequest Mode-omitempty framing pinned: 'Empty string omits the field on the wire so the server applies its default (ai).' — pinned so the empty-string-as-omit pattern + the 'ai' server default survive (drift to a different default OR to sending the empty string literal would silently break server's default-mode behavior)", () => {

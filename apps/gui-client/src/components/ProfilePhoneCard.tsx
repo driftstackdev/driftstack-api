@@ -49,6 +49,11 @@ export interface ProfilePhoneCardProps {
   onWatch: () => void;
   onTest: () => void;
   onAssist?: () => void;
+  /** Stop the running session (founder Track A) — close the bound agent/driver
+   *  session so the card flips back to Launch. The Stop affordance renders ONLY
+   *  when the profile is running AND this handler is provided (idle cards never
+   *  show Stop); guarded by `busy` so a double-click can't double-close. */
+  onStop?: () => void;
   /** Management actions in the ⋯ menu (grid view) — export a portable copy,
    *  delete the profile. Omitted → that action isn't offered. */
   onExport?: () => void;
@@ -347,6 +352,22 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
               }}
               disabled={p.busy || (!p.running && p.launchDisabled)}
             />
+            {/* Stop — only for a RUNNING profile with a stop handler (idle cards
+                never show it). Reuses `busy` so a double-click can't double-close
+                (founder Track A). */}
+            {p.running && p.onStop ? (
+              <MenuRow
+                glyph={p.busy ? '…' : '◼'}
+                caption={p.busy ? 'Stopping…' : 'Stop session'}
+                label={`Stop ${p.name}'s running session`}
+                tone="danger"
+                onClick={() => {
+                  setActionsOpen(false);
+                  p.onStop?.();
+                }}
+                disabled={p.busy}
+              />
+            ) : null}
             {p.hasProxy ? (
               <MenuRow
                 glyph={p.testing ? '…' : '⟳'}

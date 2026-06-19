@@ -72,6 +72,37 @@ describe('ProfilePhoneCard', () => {
     cleanup();
   });
 
+  it('running + onStop → a Stop affordance in the ⋯ menu that fires onStop', () => {
+    const onStop = vi.fn();
+    render(<ProfilePhoneCard {...props({ running: true, onStop })} />);
+    // The Stop row is the labelled "Stop <name>'s running session" menu row.
+    fireEvent.click(screen.getByLabelText(/Stop .* running session/));
+    expect(onStop).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
+
+  it('idle cards never show Stop, even when onStop is provided', () => {
+    render(<ProfilePhoneCard {...props({ running: false, onStop: vi.fn() })} />);
+    expect(screen.queryByLabelText(/Stop .* running session/)).toBeNull();
+    cleanup();
+  });
+
+  it('running but no onStop → no Stop affordance', () => {
+    render(<ProfilePhoneCard {...props({ running: true, onStop: undefined })} />);
+    expect(screen.queryByLabelText(/Stop .* running session/)).toBeNull();
+    cleanup();
+  });
+
+  it('Stop is disabled while busy (double-close guard)', () => {
+    const onStop = vi.fn();
+    render(<ProfilePhoneCard {...props({ running: true, busy: true, onStop })} />);
+    const stop = screen.getByLabelText(/Stop .* running session/);
+    expect((stop as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(stop);
+    expect(onStop).not.toHaveBeenCalled();
+    cleanup();
+  });
+
   it('never-probed → "run Test"; probed-no-IP → "no exit IP"; no proxy → "no proxy bound"', () => {
     render(<ProfilePhoneCard {...props({ exitIp: null, probed: false })} />);
     expect(screen.getByText('run Test')).toBeTruthy();

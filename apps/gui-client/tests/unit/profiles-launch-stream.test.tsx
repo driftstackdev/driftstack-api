@@ -21,14 +21,6 @@ const agentSessionsList = vi.fn<() => Promise<{ data: unknown[] }>>(() =>
   Promise.resolve({ data: [] }),
 );
 const listBindingsMock = vi.fn<() => Promise<unknown[]>>(() => Promise.resolve([]));
-// Liveness probe (founder 2026-06-18) — boundSession demotes an active-but-DEAD
-// agent binding to idle when the worker page-state probe finds no worker driving
-// the page AND the session is past the cold-start grace. Default null = probe
-// failure → trust the binding (the best-effort fallback). Per-test overrides drive
-// present (running) / absent (dead) verdicts.
-const getPageStateMock = vi.fn<(b: string, k: string, id: string) => Promise<boolean | null>>(() =>
-  Promise.resolve(null),
-);
 
 function profile() {
   return {
@@ -110,10 +102,10 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
 }));
 
 // Control transport — mintGuiControlKey (launch hand-off) is a harmless no-op
-// here; getPageState is the liveness probe boundSession consults, driven per-test.
+// here. W2679: boundSession no longer probes page-state; liveness comes from the
+// server `liveness` field on the agent-session list entries (driven per-test).
 vi.mock('../../src/lib/agent-session-control', () => ({
   mintGuiControlKey: vi.fn(() => Promise.resolve(null)),
-  getPageState: (b: string, k: string, id: string) => getPageStateMock(b, k, id),
 }));
 
 // Founder 2026-06-18: the in-app full-page overlay was removed — launch now ONLY
@@ -197,49 +189,91 @@ describe('ProfilesView launch → stream', () => {
     expect(await screen.findByRole('button', { name: 'Open session' })).toBeTruthy();
   });
 
-  // Liveness check (founder 2026-06-18: "always says open session even on a
-  // dead/orphaned session"). An `active` session whose worker crashed / never
-  // came up stays `active` for up to the 12h reaper cap, so the live-list check
-  // isn't enough. boundSession consults the worker page-state probe.
+  // Liveness re-base (W2679, founder 2026-06-18: "always says open session even
+  // on a dead/orphaned session"). An `active` session whose worker crashed /
+  // never came up stays `active` for up to the 12h reaper cap, so the live-list
+  // status check isn't enough. The SERVER now re-bases the worker's liveness onto
+  // the fleet heartbeat and reports it inline on each list entry; boundSession
+  // reads that `liveness` field directly (no client-side page-state probe):
+  //   • liveness PRESENT && fresh === true → RUNNING (any state).
+  //   • liveness PRESENT && fresh === false → stale beat → IDLE (Launch).
+  //   • liveness ABSENT → unknown → trust the binding (RUNNING).
 
-  it('demotes an ACTIVE-but-DEAD agent binding (page_state null, older than the cold-start grace) to idle: shows Launch, not Open session', async () => {
+  it('demotes an agent binding with a STALE liveness beat (fresh: false) to idle: shows Launch, not Open session', async () => {
     listBindingsMock.mockResolvedValueOnce([STALE_BINDING]);
-    // active + present in the list, but its worker is publishing no page-state…
+    // active + present in the list, but the owning node's beat is stale (worker
+    // silent) → fresh: false → dead.
     agentSessionsList.mockResolvedValueOnce({
-      data: [{ id: 'agt_bound', created_at: '2026-06-18T00:00:00Z', status: 'active' }],
+      data: [
+        {
+          id: 'agt_bound',
+          created_at: '2026-06-18T00:00:00Z',
+          status: 'active',
+          liveness: { state: 'active', fresh: false },
+        },
+      ],
     });
-    // …and the session is well past the 90s cold-start grace (created yesterday)
-    // → no worker activity past startup → dead.
-    getPageStateMock.mockResolvedValue(false);
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     expect(await screen.findByRole('button', { name: 'Launch' })).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Open session' })).toBeNull());
-    getPageStateMock.mockResolvedValue(null); // restore the default for later tests
   });
 
-  it('keeps an ACTIVE agent binding with a LIVE worker (page_state present) reading running: shows Open session', async () => {
+  it('keeps an agent binding with a FRESH liveness beat (fresh: true) reading running: shows Open session', async () => {
     listBindingsMock.mockResolvedValueOnce([STALE_BINDING]);
+    // A recent beat trusts the worker state (any state) → running.
+    agentSessionsList.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'agt_bound',
+          created_at: '2026-06-18T00:00:00Z',
+          status: 'active',
+          liveness: { state: 'active', fresh: true },
+        },
+      ],
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    expect(await screen.findByRole('button', { name: 'Open session' })).toBeTruthy();
+  });
+
+  it('trusts the binding when liveness is ABSENT (no fleet CP / no beat yet): shows Open session — never treats absent as dead', async () => {
+    listBindingsMock.mockResolvedValueOnce([STALE_BINDING]);
+    // No `liveness` field at all (older deployment / no beat reported the
+    // session) → unknown → trust the binding → running.
     agentSessionsList.mockResolvedValueOnce({
       data: [{ id: 'agt_bound', created_at: '2026-06-18T00:00:00Z', status: 'active' }],
     });
-    // A worker is driving the page → running, even though it's an old session.
-    getPageStateMock.mockResolvedValue(true);
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     expect(await screen.findByRole('button', { name: 'Open session' })).toBeTruthy();
-    getPageStateMock.mockResolvedValue(null);
   });
 
-  it('does NOT flap a FRESH active launch (page_state null but within the cold-start grace) to idle: shows Open session', async () => {
-    const FRESH = { ...STALE_BINDING, currentSessionId: 'agt_fresh' };
-    listBindingsMock.mockResolvedValueOnce([FRESH]);
-    // Just launched (created now) — its worker is still spinning up so page_state
-    // is legitimately null; within the 90s grace it must stay running.
-    agentSessionsList.mockResolvedValueOnce({
-      data: [{ id: 'agt_fresh', created_at: new Date().toISOString(), status: 'active' }],
-    });
-    getPageStateMock.mockResolvedValue(false);
+  // Stop (founder Track A) — a running grid card exposes a Stop affordance in the
+  // ⋯ menu that closes the bound agent session (the SAME end path window-close
+  // uses: agentSessions.close(agt_)), then the card flips back to Launch.
+  it('the running grid card Stop closes the bound agent session via agentSessions.close', async () => {
+    listBindingsMock.mockResolvedValueOnce([STALE_BINDING]);
+    // First refresh: running (fresh beat) so the Stop affordance is present.
+    // After Stop closes the session, the post-stop refresh returns it CLOSED so
+    // the card self-heals back to Launch.
+    agentSessionsList
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 'agt_bound',
+            created_at: '2026-06-18T00:00:00Z',
+            status: 'active',
+            liveness: { state: 'active', fresh: true },
+          },
+        ],
+      })
+      .mockResolvedValue({
+        data: [{ id: 'agt_bound', created_at: '2026-06-18T00:00:00Z', status: 'closed' }],
+      });
     render(<ProfilesView onGoToSettings={vi.fn()} />);
-    expect(await screen.findByRole('button', { name: 'Open session' })).toBeTruthy();
-    getPageStateMock.mockResolvedValue(null);
+    // Wait until the card reads running.
+    await screen.findByRole('button', { name: 'Open session' });
+    // Open the ⋯ menu, then click the always-in-DOM Stop row (labelled).
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    fireEvent.click(screen.getByLabelText(/Stop .* running session/));
+    await waitFor(() => expect(agentClose).toHaveBeenCalledWith('agt_bound'));
   });
 });

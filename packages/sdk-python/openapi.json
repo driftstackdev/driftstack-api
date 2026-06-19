@@ -446,6 +446,19 @@
               }
             },
             "required": ["ws_url", "room", "token", "participant_identity", "expires_at"]
+          },
+          "liveness": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": ["string", "null"],
+                "enum": ["active", "provisioning", "idle", "terminating"]
+              },
+              "fresh": {
+                "type": "boolean"
+              }
+            },
+            "required": ["state", "fresh"]
           }
         },
         "required": [
@@ -15981,6 +15994,19 @@
                         }
                       },
                       "required": ["ws_url", "room", "token", "participant_identity", "expires_at"]
+                    },
+                    "liveness": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": ["string", "null"],
+                          "enum": ["active", "provisioning", "idle", "terminating"]
+                        },
+                        "fresh": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["state", "fresh"]
                     }
                   },
                   "required": [
@@ -16157,6 +16183,19 @@
                               "participant_identity",
                               "expires_at"
                             ]
+                          },
+                          "liveness": {
+                            "type": "object",
+                            "properties": {
+                              "state": {
+                                "type": ["string", "null"],
+                                "enum": ["active", "provisioning", "idle", "terminating"]
+                              },
+                              "fresh": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": ["state", "fresh"]
                           }
                         },
                         "required": [
@@ -16328,6 +16367,19 @@
                         }
                       },
                       "required": ["ws_url", "room", "token", "participant_identity", "expires_at"]
+                    },
+                    "liveness": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": ["string", "null"],
+                          "enum": ["active", "provisioning", "idle", "terminating"]
+                        },
+                        "fresh": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["state", "fresh"]
                     }
                   },
                   "required": [
@@ -16727,6 +16779,19 @@
                                 "participant_identity",
                                 "expires_at"
                               ]
+                            },
+                            "liveness": {
+                              "type": "object",
+                              "properties": {
+                                "state": {
+                                  "type": ["string", "null"],
+                                  "enum": ["active", "provisioning", "idle", "terminating"]
+                                },
+                                "fresh": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": ["state", "fresh"]
                             }
                           },
                           "required": [
@@ -17339,6 +17404,19 @@
                                 "participant_identity",
                                 "expires_at"
                               ]
+                            },
+                            "liveness": {
+                              "type": "object",
+                              "properties": {
+                                "state": {
+                                  "type": ["string", "null"],
+                                  "enum": ["active", "provisioning", "idle", "terminating"]
+                                },
+                                "fresh": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": ["state", "fresh"]
                             }
                           },
                           "required": [
@@ -17455,6 +17533,19 @@
                                 "participant_identity",
                                 "expires_at"
                               ]
+                            },
+                            "liveness": {
+                              "type": "object",
+                              "properties": {
+                                "state": {
+                                  "type": ["string", "null"],
+                                  "enum": ["active", "provisioning", "idle", "terminating"]
+                                },
+                                "fresh": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": ["state", "fresh"]
                             }
                           },
                           "required": [

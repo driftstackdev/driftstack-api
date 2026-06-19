@@ -454,6 +454,18 @@ export const HeartbeatSchema = z.object({
   drainState: z.string().optional(),
   /** Rolling-1h session-outcome tally (reason→count); A2 owns success/crash categorization (A3-5). */
   sessionOutcomeCounts: z.record(z.string(), z.number().int().nonnegative()).optional(),
+  /**
+   * Per-session worker-liveness map (agentSessionId → lifecycle state) — the
+   * re-base source for open-session liveness (A2 W2679, A3 driftstack f52699c37).
+   * OPTIONAL + omit-when-nil on the producer (ControlClient.swift Heartbeat), so
+   * an older/quieter node's beat is byte-identical and this is simply absent.
+   * DECLARED here (was silently .strip()ped) so the SessionLivenessStore can read
+   * the real worker state — `activeSessionCount` is the scalar count of these.
+   * Keyed by the sessionAssign.sessionId (== the agt_ agent-session id, A3 W1254).
+   */
+  activeSessionStates: z
+    .record(z.string(), z.enum(['active', 'provisioning', 'idle', 'terminating']))
+    .optional(),
   // Host-health (A3-4) — proactive-placement signals; gated on the worker via
   // DRIFTSTACK_HEARTBEAT_HOST_HEALTH (flipped on, W2197).
   /** nominal | fair | serious | critical. */

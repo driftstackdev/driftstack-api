@@ -36,6 +36,21 @@ export const AgentSessionSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   livekit: LiveKitInfoSchema.optional(),
+  // A2 W2679 — worker-reported per-session liveness, re-based onto the fleet
+  // Heartbeat.activeSessionStates map (NOT the `status` lifecycle, which stays
+  // 'active' until DELETE/sweep even when the worker crashed). `state` is the
+  // latest worker state (or null = "store wired + session seen but no live
+  // state"); `fresh` is whether the owning node's beat is recent enough to
+  // trust. OMITTED entirely when the liveness store isn't wired (prod has no
+  // fleet control plane) OR no beat has reported the session — meaning
+  // "unknown → trust the binding", NEVER "dead". Optional so older clients
+  // ignore it.
+  liveness: z
+    .object({
+      state: z.enum(['active', 'provisioning', 'idle', 'terminating']).nullable(),
+      fresh: z.boolean(),
+    })
+    .optional(),
 });
 
 export type AgentSession = z.infer<typeof AgentSessionSchema>;

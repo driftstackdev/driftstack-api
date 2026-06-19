@@ -47,7 +47,7 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     );
   });
 
-  it('AgentSession interface 16-field surface: id/account_id/driftstack_session_id/status/closed_reason/token_budget_total/token_budget_remaining/transcript_length/closed_at/created_by_user_id/mode/pair_mode_state/created_at/updated_at/livekit (optional). Drift to dropping a field would break customers reading that field; drift to making livekit required would break pre-LK deployments where the field is absent', () => {
+  it('AgentSession interface 17-field surface: id/account_id/driftstack_session_id/status/closed_reason/token_budget_total/token_budget_remaining/transcript_length/closed_at/created_by_user_id/mode/pair_mode_state/created_at/updated_at/livekit (optional)/liveness (optional, W2679). Drift to dropping a field would break customers reading that field; drift to making livekit/liveness required would break pre-LK / no-fleet-CP deployments where the field is absent', () => {
     expect(body).toMatch(/export interface AgentSession \{/);
     expect(body).toMatch(/id: string;/);
     expect(body).toMatch(/account_id: string;/);
@@ -64,6 +64,11 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     expect(body).toMatch(/model: 'claude-opus-4-7' \| 'claude-sonnet-4-6' \| 'claude-haiku-4-5';/);
     expect(body).toMatch(/pair_mode_state: \{ kind: string; \[k: string\]: unknown \} \| null;/);
     expect(body).toMatch(/livekit\?: LiveKitInfo;/);
+    // W2679 — worker-reported per-session liveness (optional; absent = unknown,
+    // trust the binding). state nullable; fresh = beat-staleness guard.
+    expect(body).toMatch(
+      /liveness\?: \{ state: 'active' \| 'provisioning' \| 'idle' \| 'terminating' \| null; fresh: boolean \};/,
+    );
   });
 
   it('Arc 2 v2-#8 mode framing on CreateAgentSessionRequest pinned: \'Defaults to "ai" (legacy decompose-driven runtime). "manual" makes runTurn a pass-through so the customer drives intents directly. "pair" enables the takeover state-machine (sub-slice 8.7).\' — pinned so the 3-mode semantics + default + pair-mode anchor stay documented (drift to a different default would silently change behavior for callers omitting mode)', () => {

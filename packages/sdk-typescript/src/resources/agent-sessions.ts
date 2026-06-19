@@ -126,6 +126,16 @@ export interface AgentSession {
    * /v1/agent-sessions/:id/livekit-token (LK.3).
    */
   livekit?: LiveKitInfo;
+  /**
+   * W2679 — worker-reported per-session liveness, re-based onto the fleet
+   * heartbeat. Distinct from `status`, which stays `'active'` until the session
+   * is closed even if the worker crashed/never-started. `state` is the latest
+   * worker state (or `null` = "seen but no live state"); `fresh` is whether the
+   * owning node's beat is recent enough to trust. Absent (field omitted) when
+   * the deployment has no fleet control plane OR no beat has reported the
+   * session — treat absent as "unknown, trust the binding", never as "dead".
+   */
+  liveness?: { state: 'active' | 'provisioning' | 'idle' | 'terminating' | null; fresh: boolean };
 }
 
 /** GET /v1/agent-sessions envelope — newest-first, server-capped at 100. */

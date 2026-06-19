@@ -136,40 +136,6 @@ export async function mintGuiControlKey(
   }
 }
 
-/** Probe whether a worker is actually driving an agent session's page.
- *  GET /v1/agent-sessions/:id/page-state → { page_state: <obj|null> }. The
- *  page_state is non-null only once a worker has driven the page; it stays
- *  null for a session no worker is publishing (crashed / never came up). Used
- *  GUI-side as a LIVENESS check so a stuck-active-but-dead binding reads idle
- *  (founder 2026-06-18: "always says open session even on long-expired/failed
- *  sessions" — the 12h server reaper + the closed/gone self-heal don't catch an
- *  active-but-dead session). Raw fetch with the explicit {baseUrl, apiKey} (the
- *  main app's account-authed path, mirrors mintGuiControlKey). Returns whether
- *  page_state is present, or null on ANY failure so the caller can fall back to
- *  trusting the binding (a transient probe error must never flip a genuinely-
- *  running profile to idle). */
-export async function getPageState(
-  baseUrl: string,
-  apiKey: string,
-  sessionId: string,
-): Promise<boolean | null> {
-  if (apiKey.length === 0 || sessionId.length === 0) return null;
-  try {
-    const url = `${baseUrl.replace(/\/+$/, '')}/v1/agent-sessions/${encodeURIComponent(
-      sessionId,
-    )}/page-state`;
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },
-    });
-    if (!res.ok) return null;
-    const body = (await res.json()) as { page_state?: unknown };
-    return body.page_state !== null && body.page_state !== undefined;
-  } catch {
-    return null;
-  }
-}
-
 /** GET the current mode + pair state (seed on mount, re-fetch on panel expand). */
 export async function getAgentSession(
   id: string,

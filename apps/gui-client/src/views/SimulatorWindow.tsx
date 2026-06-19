@@ -240,6 +240,8 @@ export function DeviceToolbar({
   onSendMessage,
   canNavigate,
   onNavigate,
+  running,
+  onEndSession,
 }: {
   deviceName: string;
   profileName: string;
@@ -269,6 +271,12 @@ export function DeviceToolbar({
   canNavigate: boolean;
   /** Submit an address-bar URL → the data-channel navigate. */
   onNavigate: (url: string) => void;
+  /** True when a live agent session is bound to this window — drives the running
+   *  indicator + enables the explicit End-session control (founder Track A). */
+  running: boolean;
+  /** End (DELETE) the agent session — the explicit Stop, distinct from the
+   *  mode-aware window-close (which only HIDES the window in ai/pair). */
+  onEndSession: () => void;
 }): JSX.Element {
   // Dismiss the expanded control panel on an outside pointer-down or Escape, so
   // it doesn't linger over the screen after you've picked (or skipped) a control.
@@ -344,6 +352,22 @@ export function DeviceToolbar({
             default chrome stays minimal (founder 2026-06-17: "phone showing
             only" by default, a clean expandable row for the controls). */}
         <div data-tauri-drag-region="false" className="flex items-center gap-1 text-white/70">
+          {/* Running indicator (founder Track A) — a live pulse so the window
+              reads as a RUNNING session at a glance (today only the per-mode
+              window-close existed; no inline running cue). */}
+          {running && (
+            <span
+              data-component="simulator-running-indicator"
+              title="Session is running"
+              className="mr-0.5 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-status-ready"
+            >
+              <span
+                aria-hidden="true"
+                className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-ready shadow-[0_0_6px_rgb(var(--status-ready-rgb))]"
+              />
+              Live
+            </span>
+          )}
           <button
             type="button"
             aria-label={recording ? 'Stop recording' : 'Start recording'}
@@ -452,6 +476,28 @@ export function DeviceToolbar({
             onClick={onToggleInfo}
             glyph={<span className="text-[13px] leading-none">ⓘ</span>}
           />
+          {/* Explicit Stop/End (founder Track A) — a true Stop for the agent
+              session, distinct from the mode-aware window-close (ai/pair close
+              only HIDES the window). Ends the session everywhere; danger-styled.
+              `controlBusy` gates it so a double-click can't double-DELETE. */}
+          {running && (
+            <>
+              <div className="mx-3 my-1 h-px bg-white/10" aria-hidden="true" />
+              <button
+                type="button"
+                aria-label="End session"
+                title="End the session — stops the worker and tears down the browser"
+                disabled={controlBusy}
+                onClick={onEndSession}
+                className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[11.5px] text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
+              >
+                <span className="w-4 shrink-0 text-center leading-none" aria-hidden="true">
+                  {controlBusy ? '…' : '◼'}
+                </span>
+                <span className="leading-none">{controlBusy ? 'Ending…' : 'End session'}</span>
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -1151,6 +1197,23 @@ export function SimulatorWindow(): JSX.Element {
       .catch(noticeControlError)
       .finally(() => setControlBusy(false));
   };
+  // Explicit Stop/End (founder Track A) — END the agent session no matter the
+  // mode (in ai/pair the OS-close only HIDES the window, leaving the session
+  // running with no in-window way to truly stop it). Same end-session path
+  // window-close uses (endAgentSession → DELETE /v1/agent-sessions/:id). On
+  // success the window closes (the session is gone — nothing left to show);
+  // a failure surfaces a notice and leaves the window open. `controlBusy`
+  // gates it so a double-click can't double-DELETE.
+  const onEndSession = (): void => {
+    if (sessionId === '' || controlBusy) return;
+    setControlBusy(true);
+    void endAgentSession(sessionId, controlAuth)
+      .then(() => {
+        void withCurrentWindow((w) => w.destroy());
+      })
+      .catch(noticeControlError)
+      .finally(() => setControlBusy(false));
+  };
   // Address-bar navigation (founder 2026-06-19: "can't press the URL bar"). The
   // fork's rendered URL bar is un-tappable chrome, so the GUI's own address bar
   // emits a `navigate` command on the SAME LiveKit data channel as taps (no
@@ -1276,6 +1339,8 @@ export function SimulatorWindow(): JSX.Element {
             onSendMessage={onSendMessage}
             canNavigate={room !== null}
             onNavigate={onNavigate}
+            running={sessionId !== ''}
+            onEndSession={onEndSession}
           />
           {/* Device body — the bezel. data-tauri-drag-region makes the frame a
               window-drag handle; the inner screen overrides it so taps reach the

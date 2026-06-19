@@ -237,6 +237,8 @@ export function Gallery(): JSX.Element {
             onSendMessage={noop}
             canNavigate={false}
             onNavigate={noop}
+            running={false}
+            onEndSession={noop}
           />
         </div>
         <div className="w-72 pb-48">
@@ -269,6 +271,8 @@ export function Gallery(): JSX.Element {
             onSendMessage={noop}
             canNavigate
             onNavigate={noop}
+            running
+            onEndSession={noop}
           />
         </div>
       </div>

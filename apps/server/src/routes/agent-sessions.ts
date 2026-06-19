@@ -64,6 +64,10 @@ import {
 } from '../services/harness-control-codec.js';
 import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
 import type { SessionPageStateStore } from '../services/session-page-state-store.js';
+import type {
+  SessionLivenessStore,
+  SessionLivenessState,
+} from '../services/session-liveness-store.js';
 import type { SocksProxyConfig, InlineVpnProxyWire } from '@driftstack/api-types';
 import {
   decryptGuiControlKey,
@@ -221,6 +225,17 @@ interface PublicAgentSession {
   // credentials is available. Optional so older SDKs ignore it and
   // pre-LK-Mac deployments skip the field entirely.
   livekit?: PublicLivekitInfo;
+  // A2 W2679 — worker-reported per-session liveness, re-based onto
+  // Heartbeat.activeSessionStates (NOT the server `status` lifecycle,
+  // which stays 'active' until DELETE/sweep even if the worker crashed).
+  // `state` is the latest worker state; `fresh` is whether the owning
+  // node's beat is recent enough to trust (staleness guard). OMITTED
+  // (field absent) when the liveness store isn't wired (prod has no fleet
+  // control plane) OR no beat has reported this session yet — meaning
+  // "unknown → trust the binding", NEVER "dead". `state: null` is the
+  // explicit "store wired, session seen, but worker reports no live
+  // state" signal. Optional so older SDKs ignore it.
+  liveness?: { state: SessionLivenessState | null; fresh: boolean };
 }
 
 /** LK.4 — LiveKit join info auto-populated on session-create + the
@@ -234,10 +249,30 @@ export interface PublicLivekitInfo {
   expires_at: string;
 }
 
+/**
+ * A2 W2679 — compute the optional `liveness` field for a session from the
+ * worker-liveness store. Returns undefined (= "unknown, trust the binding")
+ * when the store isn't wired (prod has no fleet control plane) OR no beat has
+ * reported this session yet — NEVER a "dead" default. When the session IS in
+ * the store, surface the worker state + whether the owning node's beat is fresh
+ * (a stale entry returns state with fresh:false so the GUI can de-trust it).
+ */
+function sessionLiveness(
+  rec: AgentSessionRecord,
+  store?: SessionLivenessStore,
+): PublicAgentSession['liveness'] {
+  if (store === undefined) return undefined;
+  const entry = store.get(rec.id);
+  if (entry === null) return undefined;
+  return { state: entry.state, fresh: store.isFresh(entry) };
+}
+
 function publicAgentSession(
   rec: AgentSessionRecord,
   livekit?: PublicLivekitInfo,
+  livenessStore?: SessionLivenessStore,
 ): PublicAgentSession {
+  const liveness = sessionLiveness(rec, livenessStore);
   const base: PublicAgentSession = {
     id: rec.id,
     account_id: rec.accountId,
@@ -263,7 +298,11 @@ function publicAgentSession(
     created_at: rec.createdAt.toISOString(),
     updated_at: rec.updatedAt.toISOString(),
   };
-  return livekit !== undefined ? { ...base, livekit } : base;
+  if (livekit !== undefined) base.livekit = livekit;
+  // Omit-when-unknown (field absent) so older SDKs + the prod no-fleet-CP path
+  // are byte-identical; only set it when the store reported a live state.
+  if (liveness !== undefined) base.liveness = liveness;
+  return base;
 }
 
 export interface AgentSessionsRoutesDeps {
@@ -389,6 +428,13 @@ export interface AgentSessionsRoutesDeps {
    * :id/page-state serves the stored pageState; absent → the route returns null.
    */
   sessionPageStateStore?: SessionPageStateStore;
+  /**
+   * A2 W2679 — latest-worker-liveness-per-agent-session store. When wired (with
+   * the registry, behind FLEET_CONTROL_PLANE_ENABLED), the agent-session read
+   * shape's `liveness` field is populated from it; absent → the field is omitted
+   * (= "unknown, trust the binding"; prod has no fleet control plane).
+   */
+  sessionLivenessStore?: SessionLivenessStore;
   /**
    * Local fleet-demo dispatch config: the archetype / behavior profile /
    * landing URL / SOCKS5 proxy the dispatched session browses with. Wired
@@ -754,6 +800,7 @@ export function registerAgentSessionsRoutes(
     livekitSecretEncryptionKey,
     fleetControlRegistry,
     sessionPageStateStore,
+    sessionLivenessStore,
     sessionDispatch,
     profilesService,
     accountProxiesService,
@@ -1021,7 +1068,7 @@ export function registerAgentSessionsRoutes(
             if (stored !== null) byokKeyCache.set(existing.id, stored);
           }
           const livekit = await maybeMintLivekit(existing.id, ownerAccountId);
-          return reply.code(201).send(publicAgentSession(existing, livekit));
+          return reply.code(201).send(publicAgentSession(existing, livekit, sessionLivenessStore));
         }
       }
       let created: AgentSessionRecord;
@@ -1062,7 +1109,7 @@ export function registerAgentSessionsRoutes(
               if (stored !== null) byokKeyCache.set(winner.id, stored);
             }
             const livekit = await maybeMintLivekit(winner.id, ownerAccountId);
-            return reply.code(201).send(publicAgentSession(winner, livekit));
+            return reply.code(201).send(publicAgentSession(winner, livekit, sessionLivenessStore));
           }
         }
         throw err;
@@ -1127,7 +1174,7 @@ export function registerAgentSessionsRoutes(
       } catch {
         /* swallow */
       }
-      return reply.code(201).send(publicAgentSession(created, livekit));
+      return reply.code(201).send(publicAgentSession(created, livekit, sessionLivenessStore));
     },
   );
 
@@ -1150,7 +1197,9 @@ export function registerAgentSessionsRoutes(
         return bT - aT;
       });
       return {
-        data: sorted.slice(0, 100).map((rec) => publicAgentSession(rec)),
+        data: sorted
+          .slice(0, 100)
+          .map((rec) => publicAgentSession(rec, undefined, sessionLivenessStore)),
       };
     },
   );
@@ -1176,7 +1225,7 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
-      return publicAgentSession(rec);
+      return publicAgentSession(rec, undefined, sessionLivenessStore);
     },
   );
 
@@ -1573,7 +1622,7 @@ export function registerAgentSessionsRoutes(
       if (rec.mode === target) {
         // Idempotent — no-op return preserves pair_mode_state when
         // the session is already in pair mode mid-takeover.
-        return publicAgentSession(rec);
+        return publicAgentSession(rec, undefined, sessionLivenessStore);
       }
       const nextPairModeState: PairModeState | null =
         target === 'pair' ? initialPairModeState() : null;
@@ -1595,7 +1644,7 @@ export function registerAgentSessionsRoutes(
       } catch {
         /* swallow */
       }
-      return publicAgentSession(updated);
+      return publicAgentSession(updated, undefined, sessionLivenessStore);
     },
   );
 
@@ -2024,7 +2073,7 @@ export function registerAgentSessionsRoutes(
       if (result.kind === 'logged-manual') {
         return {
           kind: result.kind,
-          session: publicAgentSession(result.session),
+          session: publicAgentSession(result.session, undefined, sessionLivenessStore),
         };
       }
       // 2026-05-22 — V-666.AI cost telemetry per turn. The decomposer
@@ -2067,7 +2116,7 @@ export function registerAgentSessionsRoutes(
         const usage = publicUsage(plan.usage);
         return {
           kind: result.kind,
-          session: publicAgentSession(result.session),
+          session: publicAgentSession(result.session, undefined, sessionLivenessStore),
           intents: plan.intents,
           results: result.executor.results,
           ok: result.executor.ok,
@@ -2078,7 +2127,7 @@ export function registerAgentSessionsRoutes(
         const usage = publicUsage(result.decomposer.usage);
         return {
           kind: result.kind,
-          session: publicAgentSession(result.session),
+          session: publicAgentSession(result.session, undefined, sessionLivenessStore),
           clarifying_question: result.decomposer.clarifyingQuestion,
           ...(usage !== undefined ? { usage } : {}),
         };
@@ -2087,7 +2136,7 @@ export function registerAgentSessionsRoutes(
       const usage = publicUsage(result.decomposer.usage);
       return {
         kind: result.kind,
-        session: publicAgentSession(result.session),
+        session: publicAgentSession(result.session, undefined, sessionLivenessStore),
         refuse_reason: result.decomposer.refuseReason,
         ...(usage !== undefined ? { usage } : {}),
       };

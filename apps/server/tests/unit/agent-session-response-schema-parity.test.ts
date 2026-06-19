@@ -30,7 +30,7 @@ describe('agent-session response schema parity', () => {
     const ifaceFields = [...ifaceBody.matchAll(/^\s+(\w+)\??:/gm)]
       .map((x) => x[1])
       .filter((f): f is string => f !== undefined);
-    expect(ifaceFields.length).toBe(16);
+    expect(ifaceFields.length).toBe(17);
     expect(new Set(Object.keys(AgentSessionSchema.shape))).toEqual(new Set(ifaceFields));
   });
 
