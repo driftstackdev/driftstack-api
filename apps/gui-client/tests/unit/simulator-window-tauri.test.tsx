@@ -101,7 +101,24 @@ describe('SimulatorWindow — Tauri close + Dock tile', () => {
     return invoke.mock.calls.find((c) => c[0] === cmd)?.[1];
   }
 
-  it('sets the Dock tile with the proxy country on mount when a session is live', async () => {
+  it('sets the Dock tile with the proxy country + profile name on mount when a session is live', async () => {
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=tok&session=agt_1&cc=US&profile=Amsterdam%20Shopper',
+    );
+    renderSim();
+    await waitFor(() => {
+      // The flag is derived from the country code; the profile name rides the
+      // icon as the caption (founder 2026-06-18).
+      expect(invokeArgs('set_dock_tile')).toEqual({
+        countryCode: 'US',
+        profileName: 'Amsterdam Shopper',
+      });
+    });
+  });
+
+  it('sets the Dock tile with an empty profile name when the session has none (flag only)', async () => {
     window.history.pushState(
       {},
       '',
@@ -109,7 +126,7 @@ describe('SimulatorWindow — Tauri close + Dock tile', () => {
     );
     renderSim();
     await waitFor(() => {
-      expect(invokeArgs('set_dock_tile')).toEqual({ countryCode: 'US' });
+      expect(invokeArgs('set_dock_tile')).toEqual({ countryCode: 'US', profileName: '' });
     });
   });
 

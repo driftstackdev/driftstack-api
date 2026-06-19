@@ -56,18 +56,45 @@ serde_json = "1.0"
 # stored secrets surface under the app's identity in OS-native UI.
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 
-# Dynamic Dock tile for the separate "Driftstack Simulator" app (founder
-# 2026-06-18: the running simulator's Dock should reflect the session — profile
-# name + proxy country). macOS-only; uses AppKit's NSApp.dockTile.badgeLabel to
-# show the proxy country code on the Dock icon (set_dock_tile / reset_dock_tile
-# in lib.rs). objc2 + objc2-app-kit are the modern, memory-safe Objective-C
+# Dynamic Dock icon for the separate "Driftstack Simulator" app (founder
+# 2026-06-18: the running simulator's Dock should reflect the session — the
+# proxy country FLAG as the icon + the profile name on it). macOS-only; uses
+# AppKit to draw the flag emoji (regional-indicator pair, which macOS renders as
+# the flag image) + the profile name into an NSImage and set it as the Dock icon
+# via NSApplication.setApplicationIconImage (set_dock_tile / reset_dock_tile in
+# lib.rs). objc2 + objc2-app-kit are the modern, memory-safe Objective-C
 # bindings and are ALREADY in the lockfile (transitive via Tauri 2's macOS
-# stack) at these exact versions, so no new resolution churn. Only the AppKit
-# features the commands actually call are enabled (NSApplication + NSDockTile).
+# stack) at these exact versions, so no new crate resolution churn — only extra
+# *features* of the same crates are enabled.
+#   • NSImage / NSGraphics / NSColor / NSFont — build + draw the icon image.
+#   • NSStringDrawing / NSAttributedString — draw the flag emoji + name string.
+#   • NSDockTile — clear the badge (the name rides the icon, not a text badge).
+# objc2-foundation gains NSDictionary/NSGeometry (the draw-attributes dict +
+# CGRect/CGSize) on top of the NSString it already used.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSString"] }
-objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSDockTile"] }
+# block2 powers the block-based +[NSImage imageWithSize:flipped:drawingHandler:]
+# (the resolution-independent, non-deprecated way to draw an off-screen image —
+# replaces the deprecated lockFocus/unlockFocus). Already in the lockfile
+# (transitive via objc2's stack).
+block2 = "0.6"
+objc2-foundation = { version = "0.3", features = [
+    "NSString",
+    "NSDictionary",
+    "NSGeometry",
+    "objc2-core-foundation",
+] }
+objc2-app-kit = { version = "0.3", features = [
+    "block2",
+    "NSApplication",
+    "NSDockTile",
+    "NSImage",
+    "NSGraphics",
+    "NSColor",
+    "NSFont",
+    "NSStringDrawing",
+    "NSAttributedString",
+] }
 
 [features]
 # Customer-facing build defaults to no devtools; opens up by passing

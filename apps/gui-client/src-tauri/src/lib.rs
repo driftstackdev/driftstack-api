@@ -118,6 +118,22 @@ pub fn run() {
                     }
                 }
             }
+            // Separate Driftstack Simulator app ONLY: it is single-window, so quit
+            // the process when its window is destroyed. Otherwise macOS keeps the
+            // app alive with no window and its Dock icon lingers (apps don't
+            // auto-quit on last-window-close). Gated on the simulator bundle id, so
+            // the main GUI (a different identifier) is never affected — if the id
+            // doesn't match we attach nothing and behaviour is unchanged.
+            if app.config().identifier == "dev.driftstack.simulator" {
+                if let Some(win) = app.get_webview_window("main") {
+                    let handle = app.handle().clone();
+                    win.on_window_event(move |event| {
+                        if matches!(event, tauri::WindowEvent::Destroyed) {
+                            handle.exit(0);
+                        }
+                    });
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -285,54 +301,62 @@ fn sim_key_take(session_id: String) -> Result<Option<String>, String> {
     }
 }
 
-/// Set the running app's macOS Dock tile to reflect the live session (founder
-/// 2026-06-18: "the Dock should show the profile name and the proxy's country").
-/// Used by the SEPARATE "Driftstack Simulator" app, whose own Dock icon is the
-/// whole point of the standalone build.
+/// Set the running app's macOS Dock ICON to reflect the live session (founder
+/// 2026-06-18: "the Dock should be the proxy country's FLAG, with the profile
+/// name on it — not a 'US' text badge"). Used by the SEPARATE "Driftstack
+/// Simulator" app, whose own Dock icon is the whole point of the standalone
+/// build.
 ///
-/// Implementation = the Dock-tile BADGE label (`NSApp.dockTile.badgeLabel`) set
-/// to the 2-letter proxy country code (e.g. "US") — a real, dynamic indicator
-/// painted as a red pill on the Dock icon. The profile name rides the window
-/// title (set on the JS side), which surfaces in the Dock right-click menu +
-/// the macOS Window menu + Mission Control. A full custom monogram IMAGE
-/// (drawn into NSImage via Core Graphics) was considered but is materially more
-/// code/risk for the same goal; the badge is the clean, well-documented path.
+/// Implementation = a freshly-drawn `NSImage` set via
+/// `NSApplication.setApplicationIconImage`. The image is the COUNTRY FLAG —
+/// derived by mapping the 2-letter ISO code to its regional-indicator emoji
+/// pair (e.g. "US" → 🇺🇸), which macOS renders as the flag artwork — with the
+/// PROFILE NAME composited as a caption strip across the bottom. Both founder
+/// asks (flag = the icon image; name = readable on the Dock) are satisfied in
+/// the one icon, so the Dock-tile text badge is cleared (`badgeLabel = None`).
+///
+/// `country_code` is normalised to an uppercase 2-letter ASCII code; anything
+/// else (Tor 'T1', 'XX', empty/None) means "no flag" → the icon resets to the
+/// bundle default. `profile_name` is trimmed; empty/None draws the flag with no
+/// caption.
 ///
 /// AppKit is main-thread-only, so the work is hopped onto the main thread via
 /// `AppHandle::run_on_main_thread`; `MainThreadMarker::new()` then succeeds
 /// (it returns `Some` only on the main thread). Best-effort + macOS-only: a
 /// failure is returned as `Err` and the caller (JS) ignores it.
 #[tauri::command]
-fn set_dock_tile(app: tauri::AppHandle, country_code: Option<String>) -> Result<(), String> {
+fn set_dock_tile(
+    app: tauri::AppHandle,
+    country_code: Option<String>,
+    profile_name: Option<String>,
+) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         // Normalise to an uppercase 2-letter ISO code; anything else (Tor 'T1',
-        // 'XX', empty) clears the badge rather than painting garbage on the Dock.
-        let badge: Option<String> = country_code.and_then(|c| {
-            let up = c.trim().to_uppercase();
-            if up.len() == 2 && up.bytes().all(|b| b.is_ascii_uppercase()) {
-                Some(up)
-            } else {
-                None
-            }
-        });
-        apply_dock_badge(&app, badge)
+        // 'XX', empty) yields no flag rather than painting garbage on the Dock.
+        let flag: Option<String> = country_code.and_then(|c| flag_emoji_for_code(&c));
+        let name: Option<String> = profile_name
+            .map(|n| n.trim().to_string())
+            .filter(|n| !n.is_empty());
+        apply_dock_icon(&app, flag, name)
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (app, country_code);
+        let _ = (app, country_code, profile_name);
         Ok(())
     }
 }
 
-/// Clear the Dock-tile badge back to the plain app icon (no session). Called
+/// Clear the Dock icon back to the plain bundle app icon (no session). Called
 /// from the simulator window's close path + when it has no session. macOS-only
 /// + best-effort, mirroring `set_dock_tile`.
 #[tauri::command]
 fn reset_dock_tile(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        apply_dock_badge(&app, None)
+        // No flag → apply_dock_icon resets the icon to the bundle default and
+        // clears the badge.
+        apply_dock_icon(&app, None, None)
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -341,31 +365,174 @@ fn reset_dock_tile(app: tauri::AppHandle) -> Result<(), String> {
     }
 }
 
-/// Set (or clear, when `badge` is `None`) the `NSApp.dockTile.badgeLabel` on the
-/// main thread. Factored out so `set_dock_tile` + `reset_dock_tile` share the
-/// one bit of AppKit interop. macOS-only.
+/// Map a 2-letter ISO-3166 alpha-2 country code to its flag EMOJI — the pair of
+/// Unicode regional-indicator symbols (U+1F1E6..U+1F1FF) macOS renders as the
+/// flag glyph (e.g. "us" → "🇺🇸"). Returns `None` for anything that isn't exactly
+/// two ASCII letters, so a non-country exit ('T1' for Tor, 'XX', empty) draws no
+/// flag. Each letter maps A..Z → its regional-indicator code point by adding the
+/// offset from ASCII 'A' to U+1F1E6.
 #[cfg(target_os = "macos")]
-fn apply_dock_badge(app: &tauri::AppHandle, badge: Option<String>) -> Result<(), String> {
+fn flag_emoji_for_code(code: &str) -> Option<String> {
+    let up = code.trim().to_uppercase();
+    let bytes = up.as_bytes();
+    if bytes.len() != 2 || !bytes.iter().all(|b| b.is_ascii_uppercase()) {
+        return None;
+    }
+    const REGIONAL_INDICATOR_A: u32 = 0x1F1E6;
+    let to_indicator =
+        |b: u8| -> Option<char> { char::from_u32(REGIONAL_INDICATOR_A + u32::from(b - b'A')) };
+    let first = to_indicator(bytes[0])?;
+    let second = to_indicator(bytes[1])?;
+    Some(format!("{first}{second}"))
+}
+
+/// Set (or reset, when `flag` is `None`) the macOS Dock ICON on the main thread,
+/// drawing the country-flag emoji + (optional) profile-name caption into a fresh
+/// `NSImage`. Factored out so `set_dock_tile` + `reset_dock_tile` share the one
+/// bit of AppKit interop. macOS-only.
+#[cfg(target_os = "macos")]
+fn apply_dock_icon(
+    app: &tauri::AppHandle,
+    flag: Option<String>,
+    name: Option<String>,
+) -> Result<(), String> {
     // Hop to the main thread — AppKit's NSApplication is main-thread-only.
     app.run_on_main_thread(move || {
         use objc2::MainThreadMarker;
         use objc2_app_kit::NSApplication;
-        use objc2_foundation::NSString;
         // We're now guaranteed on the main thread, so this returns Some.
         let Some(mtm) = MainThreadMarker::new() else {
             return;
         };
         let ns_app = NSApplication::sharedApplication(mtm);
-        let tile = ns_app.dockTile();
-        match &badge {
-            Some(text) => {
-                let label = NSString::from_str(text);
-                tile.setBadgeLabel(Some(&label));
+        // SAFETY: setApplicationIconImage just swaps the app's icon image; the
+        // image (when present) is a fresh, fully-built NSImage and we're on the
+        // main thread. Passing None reverts to the bundle icon (documented).
+        unsafe {
+            match &flag {
+                // A flag → draw the icon image and clear the (now-redundant) text
+                // badge; the profile name rides the icon itself.
+                Some(flag_emoji) => {
+                    let image = render_flag_icon(flag_emoji, name.as_deref());
+                    ns_app.setApplicationIconImage(Some(&image));
+                    ns_app.dockTile().setBadgeLabel(None);
+                }
+                // No flag → revert to the bundle icon (nil) + clear the badge.
+                None => {
+                    ns_app.setApplicationIconImage(None);
+                    ns_app.dockTile().setBadgeLabel(None);
+                }
             }
-            None => tile.setBadgeLabel(None),
         }
     })
     .map_err(|e| e.to_string())
+}
+
+/// Draw the country-flag emoji (+ optional profile-name caption) into a square
+/// `NSImage` sized for the Dock. The flag emoji is drawn large and centred in
+/// the upper area; when a name is given it's drawn as a single white line on a
+/// translucent dark strip across the bottom (truncated to keep one tidy line).
+/// macOS-only; MUST run on the main thread (the caller guarantees this).
+///
+/// Drawing goes through the modern, resolution-independent block API
+/// `+[NSImage imageWithSize:flipped:drawingHandler:]` (the documented
+/// replacement for the deprecated lockFocus/unlockFocus). AppKit calls the
+/// handler block with the active off-screen graphics context already set up, so
+/// the `NSString`/`NSColor` draw calls inside it land on the image.
+#[cfg(target_os = "macos")]
+fn render_flag_icon(
+    flag_emoji: &str,
+    name: Option<&str>,
+) -> objc2::rc::Retained<objc2_app_kit::NSImage> {
+    use block2::RcBlock;
+    use objc2::rc::Retained;
+    use objc2::runtime::{AnyObject, Bool};
+    use objc2_app_kit::{
+        NSColor, NSCompositingOperation, NSFont, NSFontAttributeName,
+        NSForegroundColorAttributeName, NSImage, NSRectFillUsingOperation, NSStringDrawing,
+    };
+    use objc2_foundation::{NSDictionary, NSPoint, NSRect, NSSize, NSString};
+
+    // 256pt square — macOS scales the Dock icon down; this is crisp at tile size.
+    const SIDE: f64 = 256.0;
+
+    // Truncate the caption to a sane single-line length BEFORE drawing so a long
+    // profile name can't smear across / overflow the strip. Char-based (not
+    // bytes) so multi-byte names truncate cleanly.
+    let caption: Option<String> = name.map(|n| {
+        const MAX_CHARS: usize = 18;
+        if n.chars().count() > MAX_CHARS {
+            let head: String = n.chars().take(MAX_CHARS - 1).collect();
+            format!("{head}…")
+        } else {
+            n.to_string()
+        }
+    });
+    // Build the two NSStrings outside the block (the block is `Fn`, called by
+    // AppKit; it borrows these by move). The flag emoji + (optional) caption.
+    let flag = NSString::from_str(flag_emoji);
+    let label: Option<Retained<NSString>> = caption.as_deref().map(NSString::from_str);
+
+    let handler = RcBlock::new(move |_rect: NSRect| -> Bool {
+        // SAFETY: the AppKit draw calls (`NSString` draw-with-attributes,
+        // `NSDictionary::from_slices` of attribute keys → freshly-built
+        // font/colour objects, NSRectFillUsingOperation) are `unsafe` extern
+        // methods. They're sound here: every argument is a correctly-typed,
+        // freshly-built Foundation/AppKit object, and AppKit invokes this block
+        // on the main thread with the image's graphics context already current.
+        unsafe {
+            // Flag emoji — a large system font renders the regional-indicator
+            // pair as the flag artwork. Sized to most of the tile; nudged up when
+            // a caption claims the bottom strip so the flag stays visually centred.
+            let flag_font = NSFont::systemFontOfSize(if label.is_some() { 150.0 } else { 172.0 });
+            // The attribute-value slice is typed as `&AnyObject` (the dictionary
+            // is heterogeneous: a font here, a font + colour below); each AppKit
+            // object up-casts to AnyObject through its deref chain (NSFont →
+            // NSObject → AnyObject).
+            let flag_font_obj: &AnyObject = &flag_font;
+            let flag_attrs = NSDictionary::<NSString, AnyObject>::from_slices(
+                &[NSFontAttributeName],
+                &[flag_font_obj],
+            );
+            let flag_size = flag.sizeWithAttributes(Some(&flag_attrs));
+            let flag_y = if label.is_some() {
+                (SIDE - flag_size.height) / 2.0 + 28.0
+            } else {
+                (SIDE - flag_size.height) / 2.0
+            };
+            let flag_origin = NSPoint::new((SIDE - flag_size.width) / 2.0, flag_y);
+            flag.drawAtPoint_withAttributes(flag_origin, Some(&flag_attrs));
+
+            // Profile-name caption — one centred white line on a translucent dark
+            // strip across the bottom, so the name is legible over any flag colour.
+            if let Some(text) = &label {
+                const STRIP_H: f64 = 62.0;
+                let strip = NSColor::colorWithWhite_alpha(0.0, 0.55);
+                strip.setFill();
+                NSRectFillUsingOperation(
+                    NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(SIDE, STRIP_H)),
+                    NSCompositingOperation::SourceOver,
+                );
+                let name_font = NSFont::boldSystemFontOfSize(34.0);
+                let name_color = NSColor::whiteColor();
+                let name_font_obj: &AnyObject = &name_font;
+                let name_color_obj: &AnyObject = &name_color;
+                let name_attrs = NSDictionary::<NSString, AnyObject>::from_slices(
+                    &[NSFontAttributeName, NSForegroundColorAttributeName],
+                    &[name_font_obj, name_color_obj],
+                );
+                let label_size = text.sizeWithAttributes(Some(&name_attrs));
+                let label_origin = NSPoint::new(
+                    ((SIDE - label_size.width) / 2.0).max(4.0),
+                    (STRIP_H - label_size.height) / 2.0,
+                );
+                text.drawAtPoint_withAttributes(label_origin, Some(&name_attrs));
+            }
+        }
+        Bool::YES
+    });
+
+    NSImage::imageWithSize_flipped_drawingHandler(NSSize::new(SIDE, SIDE), false, &handler)
 }
 
 /// Save a secret (typically the API key) to the OS keychain under the

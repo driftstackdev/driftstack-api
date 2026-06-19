@@ -111,17 +111,19 @@ async function withCurrentWindow(fn: (w: WebviewWindow) => Promise<void>): Promi
 }
 
 /** Set (or clear, when `countryCode` is null/empty) the running app's macOS
- *  Dock tile to reflect the session's proxy country (founder 2026-06-18). The
- *  Rust `set_dock_tile` / `reset_dock_tile` commands set NSApp.dockTile's badge;
- *  the profile name rides the window title (the Dock right-click menu shows it).
- *  Tauri + macOS only — a no-op elsewhere; failures are swallowed (best-effort
- *  cosmetic). */
-async function applyDockTile(countryCode: string | null): Promise<void> {
+ *  Dock icon to reflect the session (founder 2026-06-18). The Rust
+ *  `set_dock_tile` draws the proxy country's FLAG (from the 2-letter code) as
+ *  the Dock icon with the profile name captioned on it; `reset_dock_tile`
+ *  restores the bundle icon. Tauri + macOS only — a no-op elsewhere; failures
+ *  are swallowed (best-effort cosmetic). */
+async function applyDockTile(countryCode: string | null, profileName: string): Promise<void> {
   if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return;
   try {
     const { invoke } = await import('@tauri-apps/api/core');
     if (countryCode !== null && countryCode !== '') {
-      await invoke('set_dock_tile', { countryCode });
+      // profileName may be '' (device-only profile) — the Rust side treats an
+      // empty name as "flag only, no caption".
+      await invoke('set_dock_tile', { countryCode, profileName });
     } else {
       await invoke('reset_dock_tile');
     }
@@ -986,19 +988,18 @@ export function SimulatorWindow(): JSX.Element {
       unlisten?.();
     };
   }, [sessionId, controlAuth, controlMode]);
-  // Dynamic macOS Dock tile (founder 2026-06-18: "the Dock should reflect the
-  // session — profile name + proxy country"). With a live session, badge the
-  // Dock icon with the proxy's country code; with no session (the standalone
-  // app launched empty) clear it. The profile name itself rides the window
-  // title (set by the opener / the separate app's launch). Cleared on unmount
-  // so a closed simulator never leaves a stale badge on the Dock. No-op outside
-  // Tauri/macOS — applyDockTile guards + swallows.
+  // Dynamic macOS Dock icon (founder 2026-06-18: "the Dock should be the proxy
+  // country's FLAG, with the profile name on it"). With a live session, set the
+  // Dock icon to the proxy country's flag captioned with the profile name; with
+  // no session (the standalone app launched empty) reset to the bundle icon.
+  // Cleared on unmount so a closed simulator never leaves a stale icon on the
+  // Dock. No-op outside Tauri/macOS — applyDockTile guards + swallows.
   useEffect(() => {
-    void applyDockTile(sessionId !== '' ? countryCode : null);
+    void applyDockTile(sessionId !== '' ? countryCode : null, profileName);
     return () => {
-      void applyDockTile(null);
+      void applyDockTile(null, profileName);
     };
-  }, [sessionId, countryCode]);
+  }, [sessionId, countryCode, profileName]);
   const onSetMode = (target: SessionMode): void => {
     if (sessionId === '' || target === controlMode) return;
     const prev = controlMode;

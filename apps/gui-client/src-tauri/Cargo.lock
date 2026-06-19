@@ -863,6 +863,7 @@ dependencies = [
 name = "driftstack-gui"
 version = "0.0.1"
 dependencies = [
+ "block2",
  "keyring",
  "objc2",
  "objc2-app-kit",
