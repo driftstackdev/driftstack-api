@@ -50,7 +50,7 @@ import {
 } from '../components/ProfilesTable';
 import { ARCHETYPE_REGISTRY, type ArchetypeStatus } from '@driftstack/sdk';
 import { openSimulatorWindow } from '../lib/open-simulator';
-import { mintGuiControlKey } from '../lib/agent-session-control';
+import { mintGuiControlKey, getPageState } from '../lib/agent-session-control';
 import { useSettings } from '../lib/SettingsContext';
 import { useConnectionStatus } from '../lib/use-connection-status';
 import { DriftstackError, type Session } from '../lib/client';
@@ -81,6 +81,17 @@ import {
 // visible loading flicker on tick refreshes so the panel doesn't
 // constantly re-flash.
 const REFRESH_MS = 15_000;
+
+// Cold-start grace for the agent-session LIVENESS check (founder 2026-06-18:
+// "always says open session even on long-expired/failed sessions"). An active
+// agent session whose worker crashed / never came up stays `active` server-side
+// for up to the 12h reaper cap, so it falsely reads "running". We probe the
+// worker page-state: page_state non-null → a worker is driving it (running);
+// page_state null AND the session is older than this window → no worker activity
+// past startup, treat as dead (idle). Within the window a fresh launch's worker
+// may still be spinning up (page_state legitimately null), so we keep it running
+// to avoid flapping a just-launched profile to idle.
+const SESSION_LIVENESS_GRACE_MS = 90_000;
 
 // W637 — the selectable archetype catalog is now derived from the shared
 // ARCHETYPE_REGISTRY (single source of truth), filtered to the verified
@@ -165,6 +176,15 @@ export function ProfilesView({
   // then boundSession TRUSTS the binding — a transient list-fetch miss must not
   // flip a genuinely-running profile to idle.
   const [agentSessionsLoaded, setAgentSessionsLoaded] = useState(false);
+  // Liveness cache (founder 2026-06-18) — per agent session id, whether the last
+  // worker page-state probe found a worker driving the page. Probed only for the
+  // bounded set of agt_-bound sessions on the existing refresh cadence (no idle
+  // polling). boundSession consults this to demote an active-but-dead session to
+  // idle. A not-yet-probed id (absent here) → boundSession trusts the binding,
+  // same best-effort contract as agentSessionsLoaded.
+  const [sessionLiveness, setSessionLiveness] = useState<
+    Record<string, { pageStatePresent: boolean; checkedAt: number }>
+  >({});
   const [bindings, setBindings] = useState<ProfileBinding[]>([]);
   const [proxies, setProxies] = useState<LocalProxyConfig[]>([]);
   // V-239 — gate the New profile button at the tier cap (skip when
@@ -327,6 +347,41 @@ export function ProfilesView({
     [settings.apiKey, settings.baseUrl],
   );
 
+  // Liveness probe (founder 2026-06-18) — for each agt_-bound session that's
+  // still present in the live list AND not closed, GET its worker page-state and
+  // cache whether a worker is driving it. Scoped to the bounded set of bound
+  // sessions (NOT all profiles); runs on the existing refresh cadence only. The
+  // probes are best-effort + independent (one failure can't blank the others);
+  // getPageState returns null on failure, in which case we leave the cache entry
+  // untouched so boundSession falls back to trusting the binding.
+  const probeSessionLiveness = useCallback(
+    (
+      currentBindings: ProfileBinding[],
+      liveSessions: Array<{ id: string; status: string }>,
+    ): void => {
+      const apiKey = settings.apiKey;
+      if (apiKey === null || apiKey.length === 0) return;
+      const boundIds = new Set(
+        currentBindings
+          .map((b) => b.currentSessionId)
+          .filter(
+            (sid): sid is string => sid !== null && sid !== undefined && sid.startsWith('agt_'),
+          ),
+      );
+      const targets = liveSessions.filter((s) => boundIds.has(s.id) && s.status !== 'closed');
+      for (const s of targets) {
+        void getPageState(settings.baseUrl, apiKey, s.id).then((present) => {
+          if (present === null) return; // transient failure → keep prior verdict
+          setSessionLiveness((prev) => ({
+            ...prev,
+            [s.id]: { pageStatePresent: present, checkedAt: Date.now() },
+          }));
+        });
+      }
+    },
+    [settings.apiKey, settings.baseUrl],
+  );
+
   const refresh = useCallback(
     async (showLoading: boolean): Promise<void> => {
       if (!client) {
@@ -364,6 +419,14 @@ export function ProfilesView({
                 page.data.map((s) => ({ id: s.id, created_at: s.created_at, status: s.status })),
               );
               setAgentSessionsLoaded(true);
+              // Liveness probe (founder 2026-06-18) — for the BOUNDED set of
+              // agt_-bound sessions still present + not closed, probe the worker
+              // page-state so boundSession can demote an active-but-dead binding
+              // to idle. Probe on this existing refresh cadence only (no idle
+              // polling). Best-effort: getPageState returns null on any failure,
+              // and we only write a present/absent verdict (true/false) — a probe
+              // failure leaves the prior cache entry (or absent → trust binding).
+              void probeSessionLiveness(currentBindings, page.data);
             })
             .catch(() => undefined);
         }
@@ -400,7 +463,7 @@ export function ProfilesView({
         }));
       }
     },
-    [client, settings.baseUrl],
+    [client, settings.baseUrl, probeSessionLiveness],
   );
 
   // L4b — load the account's trashed profiles for the recycle-bin view.
@@ -478,6 +541,9 @@ export function ProfilesView({
   useEffect(() => {
     setAgentSessions([]);
     setAgentSessionsLoaded(false);
+    // Drop the liveness cache too — a stale page-state verdict from the prior
+    // account must not influence boundSession after a workspace switch.
+    setSessionLiveness({});
   }, [client, activeWorkspace]);
 
   useEffect(() => {
@@ -540,7 +606,25 @@ export function ProfilesView({
       // fetch miss doesn't flip a genuinely-live session to idle.
       if (!agentSessionsLoaded) return { id: sid, kind: 'agent' };
       const live = agentSessions.find((s) => s.id === sid);
-      return live !== undefined && live.status !== 'closed' ? { id: sid, kind: 'agent' } : null;
+      if (live === undefined || live.status === 'closed') return null;
+      // LIVENESS (founder 2026-06-18) — an `active`-but-DEAD session (worker
+      // crashed / never came up) stays `active` for up to the 12h reaper cap, so
+      // the list check above isn't enough. Consult the worker page-state probe:
+      //   • page_state present → a worker is driving the page → RUNNING.
+      //   • page_state absent AND the session is older than the cold-start grace
+      //     → no worker activity past startup → treat as IDLE (return null) so
+      //     the row shows Launch, not Open session.
+      //   • page_state absent but WITHIN the grace (just launched, worker still
+      //     spinning up) → keep RUNNING so a fresh launch doesn't flap to idle.
+      // Best-effort: a not-yet-probed session (no cache entry) trusts the binding
+      // (RUNNING), mirroring the agentSessionsLoaded trust pattern, so a transient
+      // probe miss never flips a genuinely-running profile to idle.
+      const liveness = sessionLiveness[sid];
+      if (liveness !== undefined && !liveness.pageStatePresent) {
+        const ageMs = Date.now() - new Date(live.created_at).getTime();
+        if (ageMs > SESSION_LIVENESS_GRACE_MS) return null;
+      }
+      return { id: sid, kind: 'agent' };
     }
     // A driver session reads as running only if it's live AND not in a terminal
     // state — an errored/destroyed session lingering in the list must read idle
@@ -739,9 +823,10 @@ export function ProfilesView({
     activeSessions,
     bindings,
     // boundSession (via the status filter) also reads the agent-session list +
-    // its loaded flag, so recompute when those change.
+    // its loaded flag + the liveness cache, so recompute when those change.
     agentSessions,
     agentSessionsLoaded,
+    sessionLiveness,
   ]);
 
   // Are any of the composing filters narrowing the grid? Drives the "clear
@@ -765,8 +850,9 @@ export function ProfilesView({
   // when nothing's been probed yet so we don't invent a number).
   const liveCount = useMemo(
     () => state.profiles.filter((p) => boundSession(p.id) !== null).length,
-    // boundSession reads bindings + activeSessions; recompute when those move.
-    [state.profiles, bindings, activeSessions],
+    // boundSession reads bindings + activeSessions + the agent-session list/loaded
+    // flag + the liveness cache; recompute when any of those move.
+    [state.profiles, bindings, activeSessions, agentSessions, agentSessionsLoaded, sessionLiveness],
   );
   const proxyHealthPct = useMemo<number | null>(() => {
     if (proxies.length === 0) return null;

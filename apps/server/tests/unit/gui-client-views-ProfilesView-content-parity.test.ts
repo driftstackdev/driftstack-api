@@ -162,8 +162,23 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     // binding so a transient fetch miss doesn't flip a live profile to idle.
     expect(body).toContain("if (sid.startsWith('agt_')) {");
     expect(body).toContain("if (!agentSessionsLoaded) return { id: sid, kind: 'agent' };");
-    expect(body).toContain(
-      "return live !== undefined && live.status !== 'closed' ? { id: sid, kind: 'agent' } : null;",
+    expect(body).toContain("if (live === undefined || live.status === 'closed') return null;");
+    // LIVENESS check (founder 2026-06-18): an active-but-DEAD session (worker
+    // crashed / never came up) stays `active` for up to the 12h reaper cap, so
+    // the list check alone isn't enough. boundSession consults the worker
+    // page-state probe cache: page_state absent + older than the cold-start grace
+    // → idle (null); page_state present, or within the grace, or not-yet-probed →
+    // running. The bounded probe runs on the existing refresh cadence.
+    expect(body).toMatch(/const SESSION_LIVENESS_GRACE_MS = 90_000;/);
+    expect(body).toContain('const liveness = sessionLiveness[sid];');
+    expect(body).toContain('if (liveness !== undefined && !liveness.pageStatePresent) {');
+    expect(body).toContain('const ageMs = Date.now() - new Date(live.created_at).getTime();');
+    expect(body).toContain('if (ageMs > SESSION_LIVENESS_GRACE_MS) return null;');
+    // The bounded probe is wired into the existing agent-sessions refresh + the
+    // raw-fetch getPageState transport lives alongside getAgentSession.
+    expect(body).toContain('void probeSessionLiveness(currentBindings, page.data);');
+    expect(body).toMatch(
+      /import \{ mintGuiControlKey, getPageState \} from '\.\.\/lib\/agent-session-control';/,
     );
     // The driver branch keeps the live-list cross-check but now also EXCLUDES
     // terminal driver sessions (destroyed/errored) so a dead session lingering

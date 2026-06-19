@@ -16,6 +16,7 @@ import {
   sendAgentMessage,
   endAgentSession,
   mintGuiControlKey,
+  getPageState,
   AgentSessionControlError,
 } from '../../src/lib/agent-session-control';
 
@@ -182,5 +183,27 @@ describe('agent-session-control transport', () => {
   it('mintGuiControlKey returns null (never throws) on a non-2xx so the launch degrades gracefully', async () => {
     mockFetch.mockResolvedValue(fail(404, 'https://errors.driftstack.dev/not-found', 'gone'));
     expect(await mintGuiControlKey('https://api.test', 'ds_test', 'agt_7')).toBeNull();
+  });
+
+  // getPageState — GUI-side liveness probe for boundSession (founder 2026-06-18).
+
+  it('getPageState GETs /:id/page-state with the bearer + returns TRUE when page_state is non-null (a worker is driving the page)', async () => {
+    mockFetch.mockResolvedValue(ok({ page_state: { state: 'loaded' } }));
+    const present = await getPageState('https://api.test', 'ds_test', 'agt_live');
+    expect(present).toBe(true);
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.test/v1/agent-sessions/agt_live/page-state');
+    expect(init.method).toBe('GET');
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer ds_test');
+  });
+
+  it('getPageState returns FALSE when page_state is null (no worker is publishing — active-but-dead session)', async () => {
+    mockFetch.mockResolvedValue(ok({ page_state: null }));
+    expect(await getPageState('https://api.test', 'ds_test', 'agt_dead')).toBe(false);
+  });
+
+  it('getPageState returns null (never throws) on a non-2xx so boundSession falls back to trusting the binding', async () => {
+    mockFetch.mockResolvedValue(fail(503, 'https://errors.driftstack.dev/unavailable', 'no fleet'));
+    expect(await getPageState('https://api.test', 'ds_test', 'agt_x')).toBeNull();
   });
 });
