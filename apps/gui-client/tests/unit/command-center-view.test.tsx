@@ -1,9 +1,11 @@
-// Command Center home (G4/G4b) — the Automate-led overview + live session-health
-// + recent-activity. Asserts the hero CTAs route to ai/recipes, the KPI strip
-// (from accountMe, "—" when null), the quick links, the pure summarizeSessions /
-// formatAuditAction helpers, and that both async strips (health + activity) load
-// and degrade gracefully. Controllable useSettings mock so it runs without the
-// Tauri/SDK chain.
+// Command Center home (G4/G4b) — the Automate-led launchpad + live session-health
+// + recent-activity + "Jump back in" recent profiles. Asserts the hero CTAs route
+// to ai/recipes, the KPI strip (from accountMe, "—" when null), the quick links,
+// the pure summarizeSessions / formatAuditAction / sortRecentProfiles /
+// profileMonogram helpers, the actionable Live-now KPI + Running tile (jump to
+// sessions), the recent-profiles strip, and that every async strip (health /
+// activity / recent profiles) loads and degrades gracefully. Controllable
+// useSettings mock so it runs without the Tauri/SDK chain.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
@@ -15,8 +17,14 @@ vi.mock('../../src/lib/SettingsContext', () => ({
   useSettings: () => ({ accountMe, client }),
 }));
 
-const { CommandCenterView, summarizeSessions, formatAuditAction, computeCapAlerts } =
-  await import('../../src/views/CommandCenterView');
+const {
+  CommandCenterView,
+  summarizeSessions,
+  formatAuditAction,
+  computeCapAlerts,
+  sortRecentProfiles,
+  profileMonogram,
+} = await import('../../src/views/CommandCenterView');
 
 const ACC = {
   concurrent_session_active: 0,
@@ -29,21 +37,18 @@ function nav() {
   return vi.fn<(k: HomeNavTarget) => void>();
 }
 
-// A client whose two strips resolve to empty unless overridden — so a test
-// exercising one strip doesn't crash on the other's effect.
+// A client whose strips resolve to empty unless overridden — so a test
+// exercising one strip doesn't crash on another's effect.
 function makeClient(over?: {
   sessions?: () => Promise<unknown>;
   auditLog?: () => Promise<unknown>;
+  profiles?: () => Promise<unknown>;
 }) {
+  const emptyPage = () => Promise.resolve({ data: [], has_more: false, next_cursor: null });
   return {
-    sessions: {
-      list:
-        over?.sessions ?? (() => Promise.resolve({ data: [], has_more: false, next_cursor: null })),
-    },
-    auditLog: {
-      list:
-        over?.auditLog ?? (() => Promise.resolve({ data: [], has_more: false, next_cursor: null })),
-    },
+    sessions: { list: over?.sessions ?? emptyPage },
+    auditLog: { list: over?.auditLog ?? emptyPage },
+    profiles: { list: over?.profiles ?? emptyPage },
   };
 }
 
@@ -101,6 +106,50 @@ describe('computeCapAlerts', () => {
   it('warns/errors on the profile cap; null profile_cap (unlimited) → no alert', () => {
     expect(computeCapAlerts({ ...ACC, profile_count: 10 })[0]?.tone).toBe('error');
     expect(computeCapAlerts({ ...ACC, profile_count: 999, profile_cap: null })).toEqual([]);
+  });
+});
+
+describe('sortRecentProfiles', () => {
+  it('orders by last_used_at desc, nulls (never used) last, and caps at the limit', () => {
+    const out = sortRecentProfiles(
+      [
+        { id: 'never', name: 'Never', last_used_at: null },
+        { id: 'old', name: 'Old', last_used_at: '2026-01-01T00:00:00Z' },
+        { id: 'new', name: 'New', last_used_at: '2026-06-01T00:00:00Z' },
+        { id: 'mid', name: 'Mid', last_used_at: '2026-03-01T00:00:00Z' },
+      ],
+      3,
+    );
+    expect(out.map((p) => p.id)).toEqual(['new', 'mid', 'old']);
+  });
+
+  it('keeps incoming order for ties / both-never-used (stable)', () => {
+    const out = sortRecentProfiles(
+      [
+        { id: 'a', name: 'A', last_used_at: null },
+        { id: 'b', name: 'B', last_used_at: null },
+        { id: 'c', name: 'C', last_used_at: '2026-06-01T00:00:00Z' },
+        { id: 'd', name: 'D', last_used_at: '2026-06-01T00:00:00Z' },
+      ],
+      10,
+    );
+    expect(out.map((p) => p.id)).toEqual(['c', 'd', 'a', 'b']);
+  });
+
+  it('empty input → empty; a non-positive limit → empty; never mutates the input', () => {
+    const input = [{ id: 'x', name: 'X', last_used_at: '2026-06-01T00:00:00Z' }];
+    expect(sortRecentProfiles([], 5)).toEqual([]);
+    expect(sortRecentProfiles(input, 0)).toEqual([]);
+    expect(input).toHaveLength(1); // input untouched
+  });
+});
+
+describe('profileMonogram', () => {
+  it('uppercases the first non-space character; blank → "?"', () => {
+    expect(profileMonogram('shopify scout')).toBe('S');
+    expect(profileMonogram('  ada')).toBe('A');
+    expect(profileMonogram('')).toBe('?');
+    expect(profileMonogram('   ')).toBe('?');
   });
 });
 
@@ -165,11 +214,42 @@ describe('CommandCenterView', () => {
     expect(onNavigate).toHaveBeenCalledWith('sessions');
   });
 
-  it('without a client, both strips prompt to connect', () => {
+  it('without a client, every strip prompts to connect', () => {
     client = null;
     render(<CommandCenterView onNavigate={nav()} />);
     expect(screen.getByText(/Connect your API key to see live session health/)).toBeTruthy();
     expect(screen.getByText(/Connect your API key to see recent account activity/)).toBeTruthy();
+    expect(screen.getByText(/Connect your API key to jump back into a profile/)).toBeTruthy();
+  });
+
+  it('"Jump back in": loads recent profiles (mru first) and a card navigates to profiles', async () => {
+    const onNavigate = nav();
+    client = makeClient({
+      profiles: () =>
+        Promise.resolve({
+          data: [
+            { id: 'p1', name: 'Old Scout', last_used_at: '2026-01-01T00:00:00Z' },
+            { id: 'p2', name: 'Fresh Lead', last_used_at: '2026-06-10T00:00:00Z' },
+          ],
+          has_more: false,
+          next_cursor: null,
+        }),
+    });
+    render(<CommandCenterView onNavigate={onNavigate} />);
+    await waitFor(() => expect(screen.getByText('Fresh Lead')).toBeTruthy());
+    expect(screen.getByText('Old Scout')).toBeTruthy();
+    // Cards are buttons titled by name; clicking jumps into the launch surface.
+    fireEvent.click(screen.getByRole('button', { name: /Fresh Lead/ }));
+    expect(onNavigate).toHaveBeenCalledWith('profiles');
+  });
+
+  it('"Jump back in": empty state when there are no profiles, and it navigates to profiles', async () => {
+    const onNavigate = nav();
+    client = makeClient(); // empty profiles
+    render(<CommandCenterView onNavigate={onNavigate} />);
+    const empty = await screen.findByText(/No profiles yet — create one to get started/);
+    fireEvent.click(empty);
+    expect(onNavigate).toHaveBeenCalledWith('profiles');
   });
 
   it('loads + renders the session-health rollup from client.sessions.list', async () => {
@@ -183,11 +263,53 @@ describe('CommandCenterView', () => {
     });
     render(<CommandCenterView onNavigate={nav()} />);
     await waitFor(() => expect(screen.getByText('Running')).toBeTruthy());
-    // running=2 (scope to the tile — "Live now" KPI also shows 2 once health loads)
-    const running = screen.getByText('Running').parentElement;
+    // running=2 (scope to the tile — "Live now" KPI also shows 2 once health
+    // loads). The Running tile is a button when running>0, so walk to the tile.
+    const running = screen.getByText('Running').closest('button, div');
     expect(running?.textContent).toContain('2');
-    const errored = screen.getByText('Errored').parentElement;
+    const errored = screen.getByText('Errored').closest('button, div');
     expect(errored?.textContent).toContain('1');
+  });
+
+  it('the running side is actionable: clicking the Running tile jumps to sessions', async () => {
+    const onNavigate = nav();
+    client = makeClient({
+      sessions: () =>
+        Promise.resolve({
+          data: [{ status: 'ready' }, { status: 'busy' }],
+          has_more: false,
+          next_cursor: null,
+        }),
+    });
+    render(<CommandCenterView onNavigate={onNavigate} />);
+    const running = await screen.findByRole('button', { name: /Running/ });
+    fireEvent.click(running);
+    expect(onNavigate).toHaveBeenCalledWith('sessions');
+  });
+
+  it('the "Live now" KPI is clickable only when there are running sessions', async () => {
+    const onNavigate = nav();
+    client = makeClient({
+      sessions: () =>
+        Promise.resolve({ data: [{ status: 'ready' }], has_more: false, next_cursor: null }),
+    });
+    render(<CommandCenterView onNavigate={onNavigate} />);
+    const live = await screen.findByRole('button', { name: /Live now/ });
+    fireEvent.click(live);
+    expect(onNavigate).toHaveBeenCalledWith('sessions');
+  });
+
+  it('with zero running sessions the "Live now" KPI + Running tile are passive (no button)', async () => {
+    client = makeClient({
+      // a destroyed session → the health strip renders tiles (total>0) with
+      // running 0, so we can assert neither the KPI nor the tile is a button.
+      sessions: () =>
+        Promise.resolve({ data: [{ status: 'destroyed' }], has_more: false, next_cursor: null }),
+    });
+    render(<CommandCenterView onNavigate={nav()} />);
+    await screen.findByText('Running'); // health loaded → liveNow resolved to 0
+    expect(screen.queryByRole('button', { name: /Live now/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Running/ })).toBeNull();
   });
 
   it('loads + renders the recent-activity feed from client.auditLog.list', async () => {
@@ -221,9 +343,11 @@ describe('CommandCenterView', () => {
     client = makeClient({
       sessions: () => Promise.reject(new Error('boom')),
       auditLog: () => Promise.reject(new Error('boom')),
+      profiles: () => Promise.reject(new Error('boom')),
     });
     render(<CommandCenterView onNavigate={nav()} />);
     await waitFor(() => expect(screen.getByText(/Couldn.t load sessions/)).toBeTruthy());
     expect(screen.getByText(/Couldn.t load recent activity/)).toBeTruthy();
+    expect(screen.getByText(/Couldn.t load your profiles/)).toBeTruthy();
   });
 });

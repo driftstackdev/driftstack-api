@@ -5,10 +5,17 @@
 // quick-link sections.
 //
 // Composes from the already-loaded accountMe (SettingsContext, no extra fetch)
-// plus three independent, gracefully-degrading loads (session health, recent
-// activity, proxy count) — a slow/failed load never blocks or breaks the
-// landing. Pure helpers (computeCapAlerts / summarizeSessions / formatAuditAction)
-// are exported + unit-tested independently of the fetches.
+// plus four independent, gracefully-degrading loads (recent profiles, session
+// health, recent activity, proxy count) — a slow/failed load never blocks or
+// breaks the landing. Pure helpers (computeCapAlerts / summarizeSessions /
+// formatAuditAction / sortRecentProfiles) are exported + unit-tested
+// independently of the fetches.
+//
+// Actionable launchpad (founder 2026-06-19: the passive overview was "pretty
+// useless"): a "Jump back in" recent-profiles strip sits right under the hero so
+// the core action (get into a profile to launch it) is one click away, and the
+// live "Running" affordances jump straight to the Sessions surface. Real launch
+// lives in Profiles — the home navigates there, it never duplicates that path.
 
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { useSettings } from '../lib/SettingsContext';
@@ -31,6 +38,46 @@ interface ActivityEntry {
   action: string;
   actorType: string;
   timestamp: string;
+}
+
+// A profile reduced to what the "Jump back in" strip renders — same shape the
+// SDK profiles.list() returns (id / name / last_used_at), trimmed to keep the
+// pure sorter testable without the full Profile type or the fetch.
+export interface RecentProfile {
+  id: string;
+  name: string;
+  last_used_at: string | null;
+}
+
+// Most-recently-used first for the "Jump back in" strip; profiles that have
+// never been used (last_used_at === null) sort last (a fresh profile is less
+// useful as a "jump back in" target than one mid-flow). Ties (same timestamp,
+// or both never-used) keep their incoming order via a stable sort. Pure +
+// exported so the ordering is unit-tested independently of the fetch.
+export function sortRecentProfiles(
+  profiles: ReadonlyArray<RecentProfile>,
+  limit: number,
+): RecentProfile[] {
+  const ranked = profiles
+    .map((p, index) => ({
+      p,
+      index,
+      ts: p.last_used_at !== null ? new Date(p.last_used_at).getTime() : Number.NaN,
+    }))
+    .sort((a, b) => {
+      const aUsed = !Number.isNaN(a.ts);
+      const bUsed = !Number.isNaN(b.ts);
+      if (aUsed !== bUsed) return aUsed ? -1 : 1; // never-used sinks below used
+      if (aUsed && bUsed && a.ts !== b.ts) return b.ts - a.ts; // newest first
+      return a.index - b.index; // stable for ties / both never-used
+    });
+  return ranked.slice(0, Math.max(0, limit)).map((r) => r.p);
+}
+
+// First letter of the profile name, for the monogram chip; '?' when blank.
+export function profileMonogram(name: string): string {
+  const ch = name.trim().charAt(0);
+  return ch === '' ? '?' : ch.toUpperCase();
 }
 
 // Proactive cap alerts from accountMe — warn at ≥80% of a cap, error at/over it,
@@ -131,6 +178,14 @@ type ActivityState =
   | { kind: 'ready'; entries: ActivityEntry[] }
   | { kind: 'error' };
 
+type RecentProfilesState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'ready'; profiles: RecentProfile[] }
+  | { kind: 'error' };
+
+const RECENT_PROFILES_LIMIT = 5;
+
 function greeting(hour: number): string {
   if (hour < 12) return 'Good morning';
   if (hour < 18) return 'Good afternoon';
@@ -201,6 +256,36 @@ export function CommandCenterView({
     };
   }, [client]);
 
+  // "Jump back in" — the account's profiles, most-recently-used first. Same
+  // independent-load contract as the other strips (a slow/failed fetch never
+  // blocks or breaks the landing). Placed high because launching a profile is
+  // the core action; the cards navigate into Profiles (the real launch surface).
+  const [recentProfiles, setRecentProfiles] = useState<RecentProfilesState>({ kind: 'idle' });
+  useEffect(() => {
+    if (!client) {
+      setRecentProfiles({ kind: 'idle' });
+      return;
+    }
+    let cancelled = false;
+    setRecentProfiles({ kind: 'loading' });
+    client.profiles
+      .list()
+      .then((page) => {
+        if (cancelled) return;
+        const profiles = sortRecentProfiles(
+          page.data.map((p) => ({ id: p.id, name: p.name, last_used_at: p.last_used_at })),
+          RECENT_PROFILES_LIMIT,
+        );
+        setRecentProfiles({ kind: 'ready', profiles });
+      })
+      .catch(() => {
+        if (!cancelled) setRecentProfiles({ kind: 'error' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
   // Local proxy count (Tauri store) — for the fleet KPI moved here from
   // Profiles. Best-effort; absent → '—'.
   const [proxyCount, setProxyCount] = useState<number | null>(null);
@@ -219,6 +304,9 @@ export function CommandCenterView({
   }, []);
 
   const liveNow = health.kind === 'ready' ? health.health.running : null;
+  // The "Live now" KPI is a jump-off to live runs only when there's something to
+  // jump to — a 0 (or unloaded) count stays a passive stat.
+  const liveNowAction = liveNow !== null && liveNow > 0 ? () => onNavigate('sessions') : undefined;
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
@@ -290,6 +378,23 @@ export function CommandCenterView({
         </div>
       </section>
 
+      {/* Jump back in — recent profiles, most-recently-used first. Placed high
+          because getting into a profile to launch it is the core action; each
+          card navigates into Profiles (the real launch surface). */}
+      <section className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <span className="section-label">Jump back in</span>
+          <button
+            type="button"
+            className="section-label text-accent hover:underline"
+            onClick={() => onNavigate('profiles')}
+          >
+            all profiles
+          </button>
+        </div>
+        <RecentProfilesStrip state={recentProfiles} onOpen={() => onNavigate('profiles')} />
+      </section>
+
       {/* Fleet KPI strip — icon-led cards (moved here from Profiles). */}
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Kpi icon={<IconLayers />} label="Profiles" value={ratio(profileCount, profileCap)} />
@@ -298,6 +403,7 @@ export function CommandCenterView({
           label="Live now"
           value={liveNow !== null ? String(liveNow) : '—'}
           accent
+          onClick={liveNowAction}
         />
         <Kpi
           icon={<IconGlobe />}
@@ -319,7 +425,7 @@ export function CommandCenterView({
             view all
           </button>
         </div>
-        <SessionHealthStrip state={health} />
+        <SessionHealthStrip state={health} onViewLive={() => onNavigate('sessions')} />
       </section>
 
       {/* Recent activity from the audit log — loads independently. */}
@@ -356,7 +462,13 @@ export function CommandCenterView({
   );
 }
 
-function SessionHealthStrip({ state }: { state: HealthState }): JSX.Element {
+function SessionHealthStrip({
+  state,
+  onViewLive,
+}: {
+  state: HealthState;
+  onViewLive: () => void;
+}): JSX.Element {
   if (state.kind === 'idle') {
     return (
       <div className="rounded-xl border border-dashed border-surface-divider px-4 py-3 text-xs text-ink-muted">
@@ -390,7 +502,14 @@ function SessionHealthStrip({ state }: { state: HealthState }): JSX.Element {
   }
   return (
     <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-      <HealthTile label="Running" value={h.running} tone="ready" />
+      {/* Running is the jump-off to live runs — clickable only when there's
+          something live to view (a 0 stays a passive stat). */}
+      <HealthTile
+        label="Running"
+        value={h.running}
+        tone="ready"
+        onClick={h.running > 0 ? onViewLive : undefined}
+      />
       <HealthTile label="Creating" value={h.creating} tone="busy" />
       <HealthTile label="Errored" value={h.errored} tone={h.errored > 0 ? 'error' : 'muted'} />
       <HealthTile label="Total" value={h.total} tone="muted" />
@@ -402,10 +521,12 @@ function HealthTile({
   label,
   value,
   tone,
+  onClick,
 }: {
   label: string;
   value: number;
   tone: 'ready' | 'busy' | 'error' | 'muted';
+  onClick?: () => void;
 }): JSX.Element {
   const valueCls =
     tone === 'ready'
@@ -415,10 +536,33 @@ function HealthTile({
         : tone === 'error'
           ? 'text-status-error'
           : 'text-ink-primary';
+  const body = (
+    <>
+      <span className="flex items-center justify-between gap-2">
+        <span className="section-label">{label}</span>
+        {onClick !== undefined && (
+          <span className="section-label text-accent" aria-hidden="true">
+            view live →
+          </span>
+        )}
+      </span>
+      <span className={`mono text-xl font-semibold tabular-nums ${valueCls}`}>{value}</span>
+    </>
+  );
+  if (onClick !== undefined) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex flex-col gap-0.5 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated"
+      >
+        {body}
+      </button>
+    );
+  }
   return (
     <div className="flex flex-col gap-0.5 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3">
-      <span className="section-label">{label}</span>
-      <span className={`mono text-xl font-semibold tabular-nums ${valueCls}`}>{value}</span>
+      {body}
     </div>
   );
 }
@@ -480,19 +624,94 @@ function ActivityFeed({ state }: { state: ActivityState }): JSX.Element {
   );
 }
 
+function RecentProfilesStrip({
+  state,
+  onOpen,
+}: {
+  state: RecentProfilesState;
+  onOpen: () => void;
+}): JSX.Element {
+  if (state.kind === 'idle') {
+    return (
+      <div className="rounded-xl border border-dashed border-surface-divider px-4 py-3 text-xs text-ink-muted">
+        Connect your API key to jump back into a profile.
+      </div>
+    );
+  }
+  if (state.kind === 'loading') {
+    return (
+      <div
+        role="status"
+        aria-label="Loading recent profiles"
+        className="h-[72px] animate-pulse rounded-xl border border-surface-divider bg-surface-inset"
+      />
+    );
+  }
+  if (state.kind === 'error') {
+    return (
+      <div className="rounded-xl border border-surface-divider px-4 py-3 text-xs text-ink-muted">
+        Couldn&rsquo;t load your profiles right now.
+      </div>
+    );
+  }
+  if (state.profiles.length === 0) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        className="rounded-xl border border-dashed border-surface-divider px-4 py-3 text-left text-xs text-ink-muted transition-colors hover:border-accent/50 hover:text-ink-secondary"
+      >
+        No profiles yet — create one to get started.
+      </button>
+    );
+  }
+  return (
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+      {state.profiles.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          onClick={onOpen}
+          title={p.name}
+          className="group flex items-center gap-2.5 rounded-xl border border-surface-divider bg-surface-raised px-3 py-2.5 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated"
+        >
+          <span
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-inset text-sm font-semibold text-ink-secondary transition-colors group-hover:text-accent"
+            aria-hidden="true"
+          >
+            {profileMonogram(p.name)}
+          </span>
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate text-sm font-medium text-ink-primary">{p.name}</span>
+            <span className="truncate text-2xs text-ink-muted">
+              {p.last_used_at !== null ? (
+                <RelativeTime iso={p.last_used_at} tooltipPrefix="Last used" />
+              ) : (
+                'Never used'
+              )}
+            </span>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Kpi({
   icon,
   label,
   value,
   accent,
+  onClick,
 }: {
   icon: ReactNode;
   label: string;
   value: string;
   accent?: boolean;
+  onClick?: () => void;
 }): JSX.Element {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3">
+  const inner = (
+    <>
       <span
         className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${accent ? 'bg-accent/15 text-accent' : 'bg-surface-inset text-ink-secondary'}`}
         aria-hidden="true"
@@ -507,6 +726,22 @@ function Kpi({
           {value}
         </span>
       </div>
+    </>
+  );
+  if (onClick !== undefined) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex items-center gap-3 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated"
+      >
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3">
+      {inner}
     </div>
   );
 }
