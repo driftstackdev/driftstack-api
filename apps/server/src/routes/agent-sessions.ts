@@ -586,7 +586,26 @@ export async function dispatchSessionAssignOnCreate(args: {
     let profile:
       | { profileId: string; dek: string; sealedBlobUrl?: string; sealedBlobPutUrl?: string }
       | undefined;
+    // Fingerprint-correctness (2026-06-19) — a bound profile carries its OWN
+    // archetype (chosen by the customer); the static sessionDispatch.archetype is
+    // an operator-config default for stateless (no-profile) runs. The harness uses
+    // the assign's archetype verbatim (A3 bus W2688), so resolving the profile's
+    // archetype here is the whole fix — otherwise every profile-backed session
+    // provisions the WRONG fingerprint. NULL stays undefined → static fallback.
+    let profileArchetype: string | undefined;
     if (profileId !== undefined && accountId !== undefined && profilesService !== undefined) {
+      try {
+        const record = await profilesService.get({ id: profileId, accountId });
+        profileArchetype = record.archetype;
+      } catch (err) {
+        // A profile-fetch failure must NOT abort the dispatch (which would leave
+        // the session created-but-never-dispatched). Degrade to the static
+        // archetype — the same best-effort pattern as the R2 url-mint block below.
+        logger?.warn(
+          { component: 'agent-session-dispatch', sessionId, profileId, err },
+          'profile archetype lookup failed; dispatching with static archetype',
+        );
+      }
       const dek = await profilesService.getProfileDek({ profileId, accountId });
       if (dek !== null) {
         const dekBase64 = dek.toString('base64');
@@ -625,7 +644,7 @@ export async function dispatchSessionAssignOnCreate(args: {
     }
     const assign = serializeSessionAssign({
       sessionId,
-      archetype: sessionDispatch.archetype,
+      archetype: profileArchetype ?? sessionDispatch.archetype,
       behaviorProfile: sessionDispatch.behaviorProfile,
       initialUrl: sessionDispatch.initialUrl,
       inlineProxyConfig,

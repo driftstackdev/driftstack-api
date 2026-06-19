@@ -194,6 +194,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     registry.register(NODE_ID, (d) => sent.push(d));
     const dek = Buffer.alloc(32, 1);
     const profilesService = {
+      get: () => Promise.resolve({ archetype: DISPATCH.archetype }),
       getProfileDek: () => Promise.resolve(dek),
     } as unknown as ProfilesService;
     await dispatchSessionAssignOnCreate({
@@ -217,6 +218,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     registry.register(NODE_ID, (d) => sent.push(d));
     const dek = Buffer.alloc(32, 1);
     const profilesService = {
+      get: () => Promise.resolve({ archetype: DISPATCH.archetype }),
       getProfileDek: () => Promise.resolve(dek),
     } as unknown as ProfilesService;
     const r2 = {
@@ -253,6 +255,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     registry.register(NODE_ID, (d) => sent.push(d));
     const dek = Buffer.alloc(32, 1);
     const profilesService = {
+      get: () => Promise.resolve({ archetype: DISPATCH.archetype }),
       getProfileDek: () => Promise.resolve(dek),
     } as unknown as ProfilesService;
     const r2 = {
@@ -286,6 +289,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
     const profilesService = {
+      get: () => Promise.resolve({ archetype: DISPATCH.archetype }),
       getProfileDek: () => Promise.resolve(null),
     } as unknown as ProfilesService;
     await dispatchSessionAssignOnCreate({
@@ -301,6 +305,85 @@ describe('dispatchSessionAssignOnCreate', () => {
     });
     const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
     expect(frame.profile).toBeUndefined();
+  });
+
+  it('serializes the bound PROFILE archetype (not the static sessionDispatch config) — fingerprint correctness (2026-06-19)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const log = logger();
+    // The profile carries its OWN archetype, distinct from the operator-config
+    // static default — the harness uses the assign's archetype verbatim, so the
+    // assign MUST carry the profile's archetype or the box provisions the wrong fp.
+    const profilesService = {
+      get: () => Promise.resolve({ archetype: 'iphone17_ios18_7_safari26_4' }),
+      getProfileDek: () => Promise.resolve(null),
+    } as unknown as ProfilesService;
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_arch1',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH, // static archetype: iphone16pro_ios18_6_safari18_6
+      accountId: 'acc_1',
+      profileId: 'prof_1',
+      profilesService,
+      logger: log,
+    });
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame.archetype).toBe('iphone17_ios18_7_safari26_4');
+    expect(frame.archetype).not.toBe(DISPATCH.archetype);
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the static archetype for a no-profile (stateless) dispatch', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_arch2',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      // no accountId/profileId/profilesService → stateless
+      logger: logger(),
+    });
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame.archetype).toBe(DISPATCH.archetype);
+  });
+
+  it('best-effort: a profile-fetch failure falls back to the static archetype (does NOT abort the dispatch)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const log = logger();
+    const dek = Buffer.alloc(32, 1);
+    // get() throws (e.g. transient DB error) — the dispatch must STILL fire with
+    // the static archetype rather than leaving the session created-but-undispatched.
+    const profilesService = {
+      get: () => Promise.reject(new Error('db down')),
+      getProfileDek: () => Promise.resolve(dek),
+    } as unknown as ProfilesService;
+    await expect(
+      dispatchSessionAssignOnCreate({
+        sessionId: 'agt_arch3',
+        fleetControlRegistry: registry,
+        fleetNodesRepo: repoReturning(macWithLivekit()),
+        livekitSecretEncryptionKey: KEY,
+        sessionDispatch: DISPATCH,
+        accountId: 'acc_1',
+        profileId: 'prof_1',
+        profilesService,
+        logger: log,
+      }),
+    ).resolves.toBeUndefined();
+    // Dispatch still went out, on the static archetype, with the DEK attached.
+    expect(sent).toHaveLength(1);
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame.archetype).toBe(DISPATCH.archetype);
+    expect(frame.profile).toMatchObject({ profile_id: 'prof_1' });
+    expect(log.warn).toHaveBeenCalled();
   });
 
   it('does NOT dispatch when the node is not connected (no queue) — logs + skips', async () => {
