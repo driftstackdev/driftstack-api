@@ -56,6 +56,19 @@ serde_json = "1.0"
 # stored secrets surface under the app's identity in OS-native UI.
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 
+# Dynamic Dock tile for the separate "Driftstack Simulator" app (founder
+# 2026-06-18: the running simulator's Dock should reflect the session — profile
+# name + proxy country). macOS-only; uses AppKit's NSApp.dockTile.badgeLabel to
+# show the proxy country code on the Dock icon (set_dock_tile / reset_dock_tile
+# in lib.rs). objc2 + objc2-app-kit are the modern, memory-safe Objective-C
+# bindings and are ALREADY in the lockfile (transitive via Tauri 2's macOS
+# stack) at these exact versions, so no new resolution churn. Only the AppKit
+# features the commands actually call are enabled (NSApplication + NSDockTile).
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString"] }
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSDockTile"] }
+
 [features]
 # Customer-facing build defaults to no devtools; opens up by passing
 # `--features devtools` during `cargo tauri dev`.

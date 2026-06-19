@@ -48,6 +48,10 @@ interface SessionQuery {
   profileName: string;
   proxyLabel: string;
   sessionId: string;
+  /** ISO-3166 alpha-2 proxy exit country (e.g. "US"), from the launch query.
+   *  Drives the macOS Dock-tile country badge (founder 2026-06-18). Empty
+   *  string → no country (the Dock tile shows no badge). */
+  countryCode: string;
   /** Per-session gui_control_key carried in the query as the SANDBOXED
    *  fallback handoff (when /tmp isn't shared). Non-sandboxed builds
    *  prefer the temp-file handoff (sim_key_take) and leave this empty.
@@ -67,11 +71,13 @@ function infoFromQuery(search: string = window.location.search): SessionQuery {
   const profileName = q.get('profile') ?? '';
   const proxyLabel = q.get('proxy') ?? '';
   const sessionId = q.get('session') ?? '';
+  // Proxy exit country (ISO alpha-2) for the macOS Dock tile (empty → no badge).
+  const countryCode = q.get('cc') ?? '';
   // Sandboxed-fallback control key (see SessionQuery.controlKey). The
   // non-sandboxed handoff is the 0600 temp file, read via sim_key_take.
   const controlKey = q.get('ck') ?? '';
   if (ws_url === null || token === null || ws_url === '' || token === '') {
-    return { info: null, deviceName, profileName, proxyLabel, sessionId, controlKey };
+    return { info: null, deviceName, profileName, proxyLabel, sessionId, countryCode, controlKey };
   }
   // LiveKitInfo carries ws_url + token (the only fields the panel/connect read);
   // room_name is informational. Cast is safe — the panel reads ws_url/token only.
@@ -81,6 +87,7 @@ function infoFromQuery(search: string = window.location.search): SessionQuery {
     profileName,
     proxyLabel,
     sessionId,
+    countryCode,
     controlKey,
   };
 }
@@ -100,6 +107,26 @@ async function withCurrentWindow(fn: (w: WebviewWindow) => Promise<void>): Promi
     // Tauri call). Swallow + log; the op simply no-ops. Every `void
     // withCurrentWindow(...)` caller is protected by this single guard.
     console.warn('[simulator] window operation failed (ignored):', err);
+  }
+}
+
+/** Set (or clear, when `countryCode` is null/empty) the running app's macOS
+ *  Dock tile to reflect the session's proxy country (founder 2026-06-18). The
+ *  Rust `set_dock_tile` / `reset_dock_tile` commands set NSApp.dockTile's badge;
+ *  the profile name rides the window title (the Dock right-click menu shows it).
+ *  Tauri + macOS only — a no-op elsewhere; failures are swallowed (best-effort
+ *  cosmetic). */
+async function applyDockTile(countryCode: string | null): Promise<void> {
+  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return;
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    if (countryCode !== null && countryCode !== '') {
+      await invoke('set_dock_tile', { countryCode });
+    } else {
+      await invoke('reset_dock_tile');
+    }
+  } catch (err) {
+    console.warn('[simulator] dock tile update failed (ignored):', err);
   }
 }
 
@@ -637,7 +664,7 @@ export function SimulatorWindow(): JSX.Element {
   // Room), and the listener below re-parses the payload exactly like the initial
   // location.search and updates this state.
   const [query, setQuery] = useState<SessionQuery>(() => infoFromQuery());
-  const { info, deviceName, profileName, proxyLabel, sessionId, controlKey } = query;
+  const { info, deviceName, profileName, proxyLabel, sessionId, countryCode, controlKey } = query;
   // Per-session control credential. The SEPARATE simulator app can't
   // read the main app's keychain, so it authorizes the control
   // endpoints with the per-session gui_control_key instead of the
@@ -741,39 +768,6 @@ export function SimulatorWindow(): JSX.Element {
       if (recordTimerRef.current !== null) window.clearInterval(recordTimerRef.current);
     };
   }, []);
-  // Closing the simulator window ENDS the session so the worker tears down the
-  // browser/fork — "close the phone → it really stops, not stay up" (founder
-  // 2026-06-18). Covers the toolbar close button (window.close fires this) AND
-  // the OS close. preventDefault + a 2s race so a slow/failed end can never
-  // wedge the window open; destroy() then closes without re-firing.
-  useEffect(() => {
-    if (sessionId === '' || typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
-      return;
-    }
-    let unlisten: (() => void) | undefined;
-    let closing = false;
-    void (async () => {
-      const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
-      const win = getCurrentWebviewWindow();
-      unlisten = await win.onCloseRequested(async (event) => {
-        if (closing) return;
-        closing = true;
-        event.preventDefault();
-        try {
-          await Promise.race([
-            endAgentSession(sessionId, controlAuth),
-            new Promise((resolve) => setTimeout(resolve, 2000)),
-          ]);
-        } catch {
-          // Best-effort — the window must close even if the end call fails.
-        }
-        await win.destroy();
-      });
-    })();
-    return () => {
-      unlisten?.();
-    };
-  }, [sessionId, controlAuth]);
   // Night-arc C cockpit: live room handle (from the panel) drives the
   // previously-dormant LK.6.e latency ping; rendered in the overlay.
   const [room, setRoom] = useState<Room | null>(null);
@@ -943,6 +937,68 @@ export function SimulatorWindow(): JSX.Element {
   useEffect(() => {
     refreshControl();
   }, [refreshControl, toolbarExpanded]);
+  // Closing the simulator window is MODE-AWARE (founder 2026-06-18): in MANUAL
+  // mode the human IS the session, so closing the phone ENDS it (the worker
+  // tears down the browser/fork — "close the phone → it really stops"). In
+  // ai/pair (agent-driven) modes the agent keeps working in the background, so
+  // closing just hides the window — the session keeps running and can be
+  // reopened (the profile-row "Live view"). Unknown/null mode (controls never
+  // loaded) is treated as NON-manual: never silently kill a session we can't
+  // confirm is human-only. Covers the toolbar close button (window.close fires
+  // this) AND the OS close. The MANUAL path preventDefaults + races a 2s timeout
+  // so a slow/failed end can never wedge the window open; destroy() then closes
+  // without re-firing. controlMode is in the deps so the handler always sees the
+  // current mode (the listener re-registers on a mode switch — same pattern as
+  // controlAuth). Declared AFTER the control state so controlMode is in scope.
+  useEffect(() => {
+    if (sessionId === '' || typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
+      return;
+    }
+    let unlisten: (() => void) | undefined;
+    let closing = false;
+    void (async () => {
+      const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+      const win = getCurrentWebviewWindow();
+      unlisten = await win.onCloseRequested(async (event) => {
+        if (closing) return;
+        closing = true;
+        // Manual → end the session before closing; agent-driven (ai/pair) or
+        // unknown → close immediately and leave the session running.
+        if (controlMode === 'manual') {
+          event.preventDefault();
+          try {
+            await Promise.race([
+              endAgentSession(sessionId, controlAuth),
+              new Promise((resolve) => setTimeout(resolve, 2000)),
+            ]);
+          } catch {
+            // Best-effort — the window MUST close even if the end call fails
+            // (rejects, e.g. session already gone) or hangs (the 2s race wins).
+          }
+          // destroy() closes without re-firing onCloseRequested.
+          await win.destroy();
+        }
+        // Non-manual: don't preventDefault — let the default close proceed; the
+        // agent session keeps running in the background.
+      });
+    })();
+    return () => {
+      unlisten?.();
+    };
+  }, [sessionId, controlAuth, controlMode]);
+  // Dynamic macOS Dock tile (founder 2026-06-18: "the Dock should reflect the
+  // session — profile name + proxy country"). With a live session, badge the
+  // Dock icon with the proxy's country code; with no session (the standalone
+  // app launched empty) clear it. The profile name itself rides the window
+  // title (set by the opener / the separate app's launch). Cleared on unmount
+  // so a closed simulator never leaves a stale badge on the Dock. No-op outside
+  // Tauri/macOS — applyDockTile guards + swallows.
+  useEffect(() => {
+    void applyDockTile(sessionId !== '' ? countryCode : null);
+    return () => {
+      void applyDockTile(null);
+    };
+  }, [sessionId, countryCode]);
   const onSetMode = (target: SessionMode): void => {
     if (sessionId === '' || target === controlMode) return;
     const prev = controlMode;

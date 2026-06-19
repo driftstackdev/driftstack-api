@@ -575,11 +575,14 @@ export function ProfilesView({
       // Open the floating-iPhone simulator window (the only experience now).
       const reopened = state.profiles.find((p) => p.id === profileId);
       const reopenProxy = pickProxy(profileId);
+      const reopenCountry =
+        reopenProxy !== null ? (probeCache[reopenProxy.id]?.exitCountry ?? null) : null;
       const sim = await openSimulatorWindow({
         sessionId: agentSessionId,
         info,
         deviceName: formatDeviceName(reopened?.archetype ?? ''),
         profileName: reopened?.name,
+        countryCode: reopenCountry,
         ...(reopenProxy !== null
           ? { proxyLabel: `${reopenProxy.label} · ${reopenProxy.host}:${String(reopenProxy.port)}` }
           : {}),
@@ -935,15 +938,21 @@ export function ProfilesView({
             ? ((await mintGuiControlKey(settings.baseUrl, apiKey, created.id)) ?? undefined)
             : undefined;
         // Open the floating-iPhone simulator window (the only experience now).
+        // The proxy's exit country (from its probe) rides through so the
+        // separate simulator app's macOS Dock tile reflects the egress country.
+        const launchProxy = pickProxy(profile.id);
+        const launchCountry =
+          launchProxy !== null ? (probeCache[launchProxy.id]?.exitCountry ?? null) : null;
         const sim = await openSimulatorWindow({
           sessionId: created.id,
           info: created.livekit,
           deviceName: formatDeviceName(profile.archetype),
           profileName: profile.name,
+          countryCode: launchCountry,
           ...(controlKey !== undefined ? { controlKey } : {}),
-          ...(pickProxy(profile.id) !== null
+          ...(launchProxy !== null
             ? {
-                proxyLabel: `${pickProxy(profile.id)?.label ?? ''} · ${pickProxy(profile.id)?.host ?? ''}:${String(pickProxy(profile.id)?.port ?? '')}`,
+                proxyLabel: `${launchProxy.label} · ${launchProxy.host}:${String(launchProxy.port)}`,
               }
             : {}),
         });

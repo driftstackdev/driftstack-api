@@ -29,6 +29,11 @@ export interface OpenSimulatorArgs {
   /** Night-arc C: egress label for the cockpit overlay — 'label · host:port'
    *  of the proxy the session launched through. Omitted → row hidden. */
   proxyLabel?: string;
+  /** ISO-3166 alpha-2 exit country of the launching proxy (e.g. "US"), from the
+   *  proxy probe (`exitCountry`). Threaded through to the simulator so the
+   *  separate app's macOS Dock tile reflects the session's egress country
+   *  (founder 2026-06-18). Omitted/null → no Dock-tile country badge. */
+  countryCode?: string | null;
   /** Per-session gui_control_key (24h TTL) so the SEPARATE Driftstack
    *  Simulator app can drive the control endpoints WITHOUT the main
    *  app's keychain (which it can't read). Handed off securely (see
@@ -55,6 +60,7 @@ export async function openSimulatorWindow({
   deviceName,
   profileName,
   proxyLabel,
+  countryCode,
   controlKey,
 }: OpenSimulatorArgs): Promise<OpenSimulatorResult> {
   // Tauri-only — guard so a browser preview doesn't throw on the dynamic import.
@@ -85,6 +91,10 @@ export async function openSimulatorWindow({
     profile: profileName ?? '',
     // Egress line for the cockpit overlay (empty → row hidden).
     proxy: proxyLabel ?? '',
+    // Proxy exit country (ISO alpha-2) for the macOS Dock tile (empty → no
+    // country badge). Carried in the same query payload as the other handoff
+    // fields (this is NOT a secret — it's the same country the world sees).
+    cc: countryCode ?? '',
     // Session id — lets the simulator window attach recordings to the
     // session (night-arc I Record pill).
     session: sessionId,

@@ -1,0 +1,165 @@
+// SimulatorWindow — Tauri-integrated behaviours (founder 2026-06-18):
+//   • MODE-AWARE close: closing in MANUAL mode ends the session before the
+//     window closes; in agent-driven (ai/pair) or unknown mode it just closes
+//     and leaves the session running in the background.
+//   • dynamic macOS Dock tile: set with the proxy country on mount (live
+//     session), reset on no-session / unmount.
+//
+// These need `__TAURI_INTERNALS__` present + the Tauri dynamic imports mocked
+// (the other simulator-window tests run with no Tauri, so those effects no-op).
+// Kept in a SEPARATE file so the mocks don't leak into the no-Tauri suite.
+
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { render, waitFor } from '@testing-library/react';
+
+/** The screen host carries `cursor-none` in manual/pair but NOT in ai mode, so
+ *  it doubles as a "the control mode has loaded into render" signal — we wait on
+ *  it before firing the close handler so we exercise the LOADED-mode handler
+ *  (the effect first registers a null-mode handler, then re-registers once the
+ *  mode resolves). */
+function host(): HTMLElement | null {
+  return document.querySelector('[data-component="simulator-screen-host"]');
+}
+
+vi.mock('../../src/lib/livekit', () => ({
+  createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
+  connectToAgentSession: () => new Promise(() => {}),
+  sendInputEvent: vi.fn(),
+  RoomEvent: {
+    TrackSubscribed: 'trackSubscribed',
+    Disconnected: 'disconnected',
+    Reconnecting: 'reconnecting',
+    Reconnected: 'reconnected',
+  },
+}));
+
+// Control transport: getAgentSession seeds the mode; endAgentSession is spied.
+let sessionMode: 'ai' | 'manual' | 'pair' = 'manual';
+const endAgentSession = vi.fn<(id: string, auth: unknown) => Promise<void>>().mockResolvedValue();
+vi.mock('../../src/lib/agent-session-control', () => ({
+  getAgentSession: () => Promise.resolve({ mode: sessionMode, pairKind: null }),
+  setSessionMode: vi.fn(),
+  takeoverSession: vi.fn(),
+  handbackSession: vi.fn(),
+  sendAgentMessage: vi.fn(),
+  endAgentSession: (id: string, auth: unknown): Promise<void> => endAgentSession(id, auth),
+  AgentSessionControlError: class extends Error {},
+}));
+
+// The real @tauri-apps/api `invoke` just calls `window.__TAURI_INTERNALS__.invoke`
+// — so we route it to a spy via the Tauri IPC seam (the canonical test pattern),
+// rather than mocking the module (whose dynamic-import interception is flaky for
+// the module-level applyDockTile helper).
+const invoke = vi.fn<(cmd: string, args?: unknown) => Promise<unknown>>();
+
+// Capture the onCloseRequested handler so a test can fire a close + a preventable
+// event object so we can observe whether the manual path preventDefaults.
+let closeHandler: ((event: { preventDefault: () => void }) => void | Promise<void>) | null = null;
+const destroy = vi.fn().mockResolvedValue(undefined);
+vi.mock('@tauri-apps/api/webviewWindow', () => ({
+  getCurrentWebviewWindow: () => ({
+    onCloseRequested: (h: (event: { preventDefault: () => void }) => void | Promise<void>) => {
+      closeHandler = h;
+      return Promise.resolve(() => {});
+    },
+    destroy,
+  }),
+}));
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: () => Promise.resolve(() => {}),
+}));
+
+const { SimulatorWindow } = await import('../../src/views/SimulatorWindow');
+const { RecordingsProvider } = await import('../../src/lib/recordings');
+
+function renderSim(): void {
+  render(
+    <RecordingsProvider>
+      <SimulatorWindow />
+    </RecordingsProvider>,
+  );
+}
+
+describe('SimulatorWindow — Tauri close + Dock tile', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    invoke.mockResolvedValue(undefined);
+    endAgentSession.mockClear();
+    destroy.mockClear();
+    closeHandler = null;
+    sessionMode = 'manual';
+    // Tauri IPC seam: the real `invoke` calls window.__TAURI_INTERNALS__.invoke.
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = { invoke };
+  });
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+  });
+
+  /** Find the args of the first invoke of `cmd` (the real `invoke` appends an
+   *  `options` arg + defaults `args` to `{}`, so we match on cmd + arg0 only). */
+  function invokeArgs(cmd: string): unknown {
+    return invoke.mock.calls.find((c) => c[0] === cmd)?.[1];
+  }
+
+  it('sets the Dock tile with the proxy country on mount when a session is live', async () => {
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=tok&session=agt_1&cc=US',
+    );
+    renderSim();
+    await waitFor(() => {
+      expect(invokeArgs('set_dock_tile')).toEqual({ countryCode: 'US' });
+    });
+  });
+
+  it('resets the Dock tile when there is no session', async () => {
+    window.history.pushState({}, '', '/?window=simulator');
+    renderSim();
+    await waitFor(() => {
+      expect(invoke.mock.calls.some((c) => c[0] === 'reset_dock_tile')).toBe(true);
+    });
+    expect(invoke.mock.calls.some((c) => c[0] === 'set_dock_tile')).toBe(false);
+  });
+
+  it('MANUAL mode: closing ENDS the session, preventDefaults, then destroys the window', async () => {
+    sessionMode = 'manual';
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=tok&session=agt_42&cc=US',
+    );
+    renderSim();
+    // Wait until the manual mode has loaded into render (cursor-none present),
+    // so the LOADED-mode close handler (not the initial null-mode one) is live.
+    await waitFor(() => expect(host()?.className).toContain('cursor-none'));
+    expect(closeHandler).not.toBeNull();
+    const event = { preventDefault: vi.fn() };
+    await closeHandler?.(event);
+    // Manual → end the session, prevent the default close, then destroy. The
+    // controlAuth is null here (no ?ck= in the query → in-app/API-key path).
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(endAgentSession).toHaveBeenCalledWith('agt_42', null);
+    expect(destroy).toHaveBeenCalled();
+  });
+
+  it('AGENT (ai) mode: closing does NOT end the session and lets the window close (no preventDefault/destroy)', async () => {
+    sessionMode = 'ai';
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=tok&session=agt_99&cc=US',
+    );
+    renderSim();
+    // ai mode drops cursor-none on the host — wait for that to confirm the mode
+    // loaded before firing close (otherwise we'd hit the null-mode handler).
+    await waitFor(() => expect(host()?.className).not.toContain('cursor-none'));
+    expect(closeHandler).not.toBeNull();
+    const event = { preventDefault: vi.fn() };
+    await closeHandler?.(event);
+    // Agent-driven → window just closes; the session keeps running in the bg.
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(endAgentSession).not.toHaveBeenCalled();
+    expect(destroy).not.toHaveBeenCalled();
+  });
+});

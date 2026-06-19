@@ -131,6 +131,8 @@ pub fn run() {
             launch_simulator,
             sim_key_write,
             sim_key_take,
+            set_dock_tile,
+            reset_dock_tile,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -281,6 +283,89 @@ fn sim_key_take(session_id: String) -> Result<Option<String>, String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e.to_string()),
     }
+}
+
+/// Set the running app's macOS Dock tile to reflect the live session (founder
+/// 2026-06-18: "the Dock should show the profile name and the proxy's country").
+/// Used by the SEPARATE "Driftstack Simulator" app, whose own Dock icon is the
+/// whole point of the standalone build.
+///
+/// Implementation = the Dock-tile BADGE label (`NSApp.dockTile.badgeLabel`) set
+/// to the 2-letter proxy country code (e.g. "US") — a real, dynamic indicator
+/// painted as a red pill on the Dock icon. The profile name rides the window
+/// title (set on the JS side), which surfaces in the Dock right-click menu +
+/// the macOS Window menu + Mission Control. A full custom monogram IMAGE
+/// (drawn into NSImage via Core Graphics) was considered but is materially more
+/// code/risk for the same goal; the badge is the clean, well-documented path.
+///
+/// AppKit is main-thread-only, so the work is hopped onto the main thread via
+/// `AppHandle::run_on_main_thread`; `MainThreadMarker::new()` then succeeds
+/// (it returns `Some` only on the main thread). Best-effort + macOS-only: a
+/// failure is returned as `Err` and the caller (JS) ignores it.
+#[tauri::command]
+fn set_dock_tile(app: tauri::AppHandle, country_code: Option<String>) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        // Normalise to an uppercase 2-letter ISO code; anything else (Tor 'T1',
+        // 'XX', empty) clears the badge rather than painting garbage on the Dock.
+        let badge: Option<String> = country_code.and_then(|c| {
+            let up = c.trim().to_uppercase();
+            if up.len() == 2 && up.bytes().all(|b| b.is_ascii_uppercase()) {
+                Some(up)
+            } else {
+                None
+            }
+        });
+        apply_dock_badge(&app, badge)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, country_code);
+        Ok(())
+    }
+}
+
+/// Clear the Dock-tile badge back to the plain app icon (no session). Called
+/// from the simulator window's close path + when it has no session. macOS-only
+/// + best-effort, mirroring `set_dock_tile`.
+#[tauri::command]
+fn reset_dock_tile(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        apply_dock_badge(&app, None)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Ok(())
+    }
+}
+
+/// Set (or clear, when `badge` is `None`) the `NSApp.dockTile.badgeLabel` on the
+/// main thread. Factored out so `set_dock_tile` + `reset_dock_tile` share the
+/// one bit of AppKit interop. macOS-only.
+#[cfg(target_os = "macos")]
+fn apply_dock_badge(app: &tauri::AppHandle, badge: Option<String>) -> Result<(), String> {
+    // Hop to the main thread — AppKit's NSApplication is main-thread-only.
+    app.run_on_main_thread(move || {
+        use objc2::MainThreadMarker;
+        use objc2_app_kit::NSApplication;
+        use objc2_foundation::NSString;
+        // We're now guaranteed on the main thread, so this returns Some.
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        let ns_app = NSApplication::sharedApplication(mtm);
+        let tile = ns_app.dockTile();
+        match &badge {
+            Some(text) => {
+                let label = NSString::from_str(text);
+                tile.setBadgeLabel(Some(&label));
+            }
+            None => tile.setBadgeLabel(None),
+        }
+    })
+    .map_err(|e| e.to_string())
 }
 
 /// Save a secret (typically the API key) to the OS keychain under the
