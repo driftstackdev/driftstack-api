@@ -6,8 +6,8 @@ description: Stripe-pattern Idempotency-Key header — safely retry POST request
 
 # Idempotency keys
 
-POST requests that create resources (sessions, agent sessions,
-crypto-invoice orders) accept an optional `Idempotency-Key` header.
+The create-style POST requests that wire idempotency (agent sessions
+and crypto-invoice orders) accept an optional `Idempotency-Key` header.
 When set, the server stores the first response keyed by `(account_id,
 idempotency_key)` and **replays the same response** on subsequent
 requests with the same key — even if the operation is otherwise
@@ -26,19 +26,19 @@ returns the original response and no duplicate is created.
 
 ## Which endpoints honour it
 
-The header is accepted on **create-style** endpoints — endpoints
-where the customer is asking the server to mint a new resource. The
-current list:
+The header is honoured (stored-and-replayed) on the **create-style**
+endpoints that wire it explicitly:
 
-- `POST /v1/sessions` — driver session creation
 - `POST /v1/agent-sessions` — agent (chat-style) session creation
-- `POST /v1/billing/checkout-session` — Stripe checkout session
 - `POST /v1/billing/crypto-orders` — NOWPayments crypto invoice
 
-Other endpoints (PATCH, DELETE, the GET surface, and idempotent-by-design
-POSTs like `/v1/auth/login`) accept the header but ignore it. Requests
-that mutate-in-place don't need replay protection — a retry simply
-re-applies the same update.
+Every other endpoint — including `POST /v1/sessions`, the Stripe
+checkout-session create, the PATCH/DELETE surface, the GET surface,
+and idempotent-by-design POSTs like `/v1/auth/login` — accepts the
+header but does not store or replay on it. Sending an `Idempotency-Key`
+to one of those endpoints is harmless but has no effect; retries are
+not collapsed, so guard those calls with your own dedupe if you need
+exactly-once semantics.
 
 ## Format
 
@@ -51,8 +51,8 @@ Idempotency-Key: <UUID-v4 or other globally-unique identifier>
 
 Stripe-pattern best practice: generate a new key per logical
 operation (not per retry of the same operation). A client retrying
-the same `POST /v1/sessions` after a timeout should send the same
-key on the retry; the next time the customer creates a session, a
+the same `POST /v1/agent-sessions` after a timeout should send the same
+key on the retry; the next time the customer creates an agent session, a
 fresh key.
 
 Constraints:

@@ -408,9 +408,9 @@ filter.
 Customers register webhook endpoints via
 `POST /v1/webhooks { url, events: [...], description? }`. The
 `events` array is a closed enum subset — the response 400s if any
-unknown event type is supplied. Adding a new event to your existing
-endpoint requires deleting + re-creating the endpoint (V-NNN follow-
-up: in-place `events` update).
+unknown event type is supplied. Adding or removing events on an
+existing endpoint is an in-place `PATCH /v1/webhooks/:id` with the new
+`events` array — no delete/re-create needed.
 
 The plaintext signing secret is returned **once** in the create
 response. Store it server-side; the Driftstack API never returns it

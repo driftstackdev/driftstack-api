@@ -18,7 +18,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // webhooks-doc-parity.test.ts pins these to source.
 
 const EVENT_TYPES = [
-  { name: 'session.completed', desc: 'Fires when a session finishes normally + the recording is ready.' },
+  { name: 'session.completed', desc: 'Fires when a session is destroyed cleanly (non-error end of life). Payload carries { session_id, duration_ms }.' },
   { name: 'session.failed', desc: 'Fires when a session ends in an errored state.' },
   { name: 'quota.warning_80pct', desc: 'Fires when an account hits 80% of a tier-metered quota.' },
   { name: 'quota.exceeded', desc: 'Fires when an account exceeds a tier-metered quota.' },

@@ -50,7 +50,7 @@ returns true for that class.
 | `errors.driftstack.dev/concurrency-limit`            | 429  | `ConcurrencyLimitError`               | `ConcurrencyLimitError`               | `ConcurrencyLimitError`               | no         |
 | `errors.driftstack.dev/tier-limit`                   | 429  | `TierLimitError`                      | `QuotaExceededError`                  | `QuotaExceededError`                  | no         |
 | `errors.driftstack.dev/session-destroyed`            | 410  | `SessionDestroyedError`               | `SessionDestroyedError`               | `SessionDestroyedError`               | no         |
-| `errors.driftstack.dev/session-timeout`              | 504  | `SessionDestroyedError`               | `SessionTimeoutError`                 | `SessionTimeoutError`                 | no         |
+| `errors.driftstack.dev/session-timeout`              | 504  | `SessionTimeoutError`                 | `SessionTimeoutError`                 | `SessionTimeoutError`                 | no         |
 | `errors.driftstack.dev/driver-error`                 | 502  | `DriverError`                         | `DriverError`                         | `DriverError`                         | no         |
 | `errors.driftstack.dev/driver-not-integrated`        | 503  | `DriverNotIntegratedError`            | `DriverError`                         | `DriverError`                         | no         |
 | `errors.driftstack.dev/feature-unavailable`          | 503  | `FeatureUnavailableError`             | `FeatureUnavailableError`             | `FeatureUnavailableError`             | no         |
