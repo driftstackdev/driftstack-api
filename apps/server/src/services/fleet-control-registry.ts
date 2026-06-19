@@ -20,6 +20,7 @@
 
 import {
   HarnessOutboundSchema,
+  TERMINAL_SESSION_STATUSES,
   type SessionAssign,
   type SessionEnd,
   type PauseSession,
@@ -30,6 +31,7 @@ import {
   type ChallengeDetected,
   type PageStateFrame,
   type Heartbeat,
+  type SessionStatus,
 } from '../schemas/harness-control-protocol.js';
 import { IntentDispatchCorrelator, type DispatchTransport } from './harness-dispatch-correlator.js';
 
@@ -50,6 +52,7 @@ export class FleetControlConnection {
   private readonly onPageState?: (frame: PageStateFrame) => void;
   private readonly onProfileSaveFailed?: (frame: ProfileSaveFailed) => void;
   private readonly onHeartbeat?: (frame: Heartbeat) => void;
+  private readonly onSessionStatus?: (frame: SessionStatus) => void;
 
   constructor(
     readonly nodeId: string,
@@ -59,6 +62,7 @@ export class FleetControlConnection {
     onPageState?: (frame: PageStateFrame) => void,
     onProfileSaveFailed?: (frame: ProfileSaveFailed) => void,
     onHeartbeat?: (frame: Heartbeat) => void,
+    onSessionStatus?: (frame: SessionStatus) => void,
   ) {
     this.send = send;
     this.onProfileSaved = onProfileSaved;
@@ -66,6 +70,7 @@ export class FleetControlConnection {
     this.onPageState = onPageState;
     this.onProfileSaveFailed = onProfileSaveFailed;
     this.onHeartbeat = onHeartbeat;
+    this.onSessionStatus = onSessionStatus;
     const transport: DispatchTransport = { send: (d) => send(JSON.stringify(d)) };
     this.correlator = new IntentDispatchCorrelator(transport);
   }
@@ -151,6 +156,16 @@ export class FleetControlConnection {
           // intent_dispatch_no_session detail prefix.
           if (frame.status === 'errored' && frame.detail !== undefined) {
             this.correlator.onSessionError(frame.sessionId, frame.detail);
+          }
+          // Worker-CONNECTED orphan auto-close (A3 W2682): a TERMINAL frame
+          // (status ∈ {ended, errored}) means the worker tore the session down —
+          // close the matching agent_sessions row so the slot frees in seconds
+          // instead of lingering until the worker-disconnect reaper / 12h
+          // backstop. Independent of (and additive to) the errored fast-fail
+          // above: an `errored` frame can both fast-fail an in-flight dispatch
+          // AND close its row. Absent consumer (stateless deploy) → ignored.
+          if (TERMINAL_SESSION_STATUSES.has(frame.status)) {
+            this.onSessionStatus?.(frame);
           }
           break;
         case 'profileSaved':
@@ -263,6 +278,16 @@ export class FleetControlRegistry {
      */
     private readonly onNodeRegistered?: (nodeId: string) => void,
     private readonly onNodeDisconnected?: (nodeId: string) => void,
+    /**
+     * Worker-CONNECTED orphan auto-close (A3 W2682) — invoked when any node
+     * reports a TERMINAL `sessionStatus` frame (status ∈ {ended, errored}).
+     * Threaded into every connection this registry creates; the connection only
+     * calls it for terminal frames. Omitted (no consumer wired / stateless
+     * deploy) → the terminal frame is accepted + ignored, identical to today's
+     * behaviour. Wired in bootstrap to close the matching agent_sessions row
+     * (see closeAgentSessionOnTerminalStatus).
+     */
+    private readonly onSessionStatus?: (frame: SessionStatus) => void,
   ) {}
 
   register(nodeId: string, send: FleetNodeSocketSend): FleetControlConnection {
@@ -278,6 +303,7 @@ export class FleetControlRegistry {
       this.onPageState,
       this.onProfileSaveFailed,
       this.onHeartbeat,
+      this.onSessionStatus,
     );
     this.connections.set(nodeId, conn);
     // Worker-disconnect fix — a (re)connect CANCELS any pending grace timer for

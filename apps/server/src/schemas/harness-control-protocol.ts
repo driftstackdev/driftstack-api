@@ -416,14 +416,43 @@ export type IntentResultEnvelope = z.infer<typeof IntentResultEnvelopeSchema>;
 // ── HarnessOutbound.sessionStatus (harness → server) ──────────────────
 // The router fast-fails an in-flight dispatch on the errored variant whose
 // `detail` is `intent_dispatch_no_session: <intentName>` (A3 W106).
+//
+// Terminal close (A3 W2682): the worker emits a terminal frame whose `status`
+// is EXACTLY `ended` (idle_timeout / max_duration / customer_closed /
+// node_drain) or `errored` (egress_lost / session_resource_overuse /
+// browser_crashed / node_shutting_down / reaped_during_provisioning), carrying
+// a clean snake_case `reason`. The server closes the matching agent_sessions row
+// on these (worker-CONNECTED orphan auto-close), keyed on `status` ∈
+// TERMINAL_SESSION_STATUSES and using `reason` as the close reason. NOTE: a
+// provisioning-failure errored frame has `reason: nil` (the cause is in
+// `detail`), but those are assign-time rejections, NOT orphans — keying on the
+// `status` set + a present-or-synthesized `reason` (never parsing `detail`)
+// keeps the close to genuine terminal frames.
 export const SessionStatusSchema = z.object({
   type: z.literal('sessionStatus'),
   sessionId: z.string().min(1),
   status: z.string().min(1),
   timestamp: z.string(),
   detail: z.string().optional(),
+  // A3 W2682 — clean snake_case close reason on a terminal frame (e.g.
+  // idle_timeout / max_duration / browser_crashed). Optional: non-terminal
+  // status frames omit it, and a provisioning-failure errored frame carries
+  // `reason: nil` (cause in detail). The terminal-close consumer falls back to
+  // a synthesized `session-<status>` when absent.
+  reason: z.string().min(1).optional(),
 });
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
+
+/**
+ * Worker-CONNECTED orphan auto-close (A3 W2682) — the EXACT terminal-status
+ * vocabulary the worker emits on a SessionStatus teardown frame: `ended`
+ * (clean: idle_timeout / max_duration / customer_closed / node_drain) and
+ * `errored` (failure: egress_lost / session_resource_overuse / browser_crashed
+ * / node_shutting_down / reaped_during_provisioning). A frame whose status is in
+ * this set closes the matching agent_sessions row. The set is the contract: a
+ * mismatch silently no-ops the close, so a drift-guard test pins it.
+ */
+export const TERMINAL_SESSION_STATUSES = new Set<string>(['ended', 'errored']);
 
 // ── HarnessOutbound payloads pinned (A3 bus W124) ─────────────────────
 // Field-sets locked by the harness `testHarnessOutboundPayloadShapesPinned`

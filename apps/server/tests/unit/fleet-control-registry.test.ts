@@ -17,7 +17,11 @@ import {
   serializePauseSession,
   serializeResumeSession,
 } from '../../src/services/harness-control-codec.js';
-import type { IntentDispatch, Heartbeat } from '../../src/schemas/harness-control-protocol.js';
+import type {
+  IntentDispatch,
+  Heartbeat,
+  SessionStatus,
+} from '../../src/schemas/harness-control-protocol.js';
 
 function dispatch(intentId: string, sessionId = 'ses_x'): IntentDispatch {
   return {
@@ -406,6 +410,129 @@ describe('FleetControlConnection', () => {
     ).not.toThrow();
   });
 
+  it('routes a TERMINAL sessionStatus (ended | errored) → invokes onSessionStatus (A3 W2682 worker-connected auto-close)', () => {
+    const seen: SessionStatus[] = [];
+    const conn = new FleetControlConnection(
+      'node-1',
+      () => {},
+      undefined, // onProfileSaved
+      undefined, // onChallengeDetected
+      undefined, // onPageState
+      undefined, // onProfileSaveFailed
+      undefined, // onHeartbeat
+      (f) => seen.push(f), // onSessionStatus
+    );
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'sessionStatus',
+        sessionId: 'agt_a',
+        status: 'ended',
+        timestamp: 't',
+        reason: 'idle_timeout',
+      }),
+    );
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'sessionStatus',
+        sessionId: 'agt_b',
+        status: 'errored',
+        timestamp: 't',
+        reason: 'browser_crashed',
+      }),
+    );
+    expect(seen).toEqual([
+      {
+        type: 'sessionStatus',
+        sessionId: 'agt_a',
+        status: 'ended',
+        timestamp: 't',
+        reason: 'idle_timeout',
+      },
+      {
+        type: 'sessionStatus',
+        sessionId: 'agt_b',
+        status: 'errored',
+        timestamp: 't',
+        reason: 'browser_crashed',
+      },
+    ]);
+  });
+
+  it('does NOT invoke onSessionStatus for a NON-terminal status (active / idle / provisioning / paused)', () => {
+    const seen: SessionStatus[] = [];
+    const conn = new FleetControlConnection(
+      'node-1',
+      () => {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (f) => seen.push(f),
+    );
+    for (const status of ['active', 'idle', 'provisioning', 'paused', 'running']) {
+      conn.handleInbound(
+        JSON.stringify({ type: 'sessionStatus', sessionId: 'agt_x', status, timestamp: 't' }),
+      );
+    }
+    expect(seen).toHaveLength(0);
+  });
+
+  it('an errored sessionStatus drives BOTH the in-flight fast-fail AND onSessionStatus (independent concerns)', async () => {
+    const seen: SessionStatus[] = [];
+    const conn = new FleetControlConnection(
+      'node-1',
+      () => {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (f) => seen.push(f),
+    );
+    const p = conn.correlator.dispatch(dispatch('int_1', 'agt_a'));
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'sessionStatus',
+        sessionId: 'agt_a',
+        status: 'errored',
+        timestamp: 't',
+        detail: 'intent_dispatch_no_session: navigate',
+        reason: 'browser_crashed',
+      }),
+    );
+    // The errored fast-fail settled the dispatch…
+    const r = await p;
+    expect(r.success).toBe(false);
+    expect(r.errorCode).toBe('intent_session_not_established');
+    // …AND the terminal-close consumer fired (the row close is independent).
+    expect(seen).toEqual([
+      {
+        type: 'sessionStatus',
+        sessionId: 'agt_a',
+        status: 'errored',
+        timestamp: 't',
+        detail: 'intent_dispatch_no_session: navigate',
+        reason: 'browser_crashed',
+      },
+    ]);
+  });
+
+  it('a terminal sessionStatus with no onSessionStatus handler wired is accepted + ignored (no crash — stateless deploy)', () => {
+    const conn = new FleetControlConnection('node-1', () => {});
+    expect(() =>
+      conn.handleInbound(
+        JSON.stringify({
+          type: 'sessionStatus',
+          sessionId: 'agt_a',
+          status: 'ended',
+          timestamp: 't',
+          reason: 'idle_timeout',
+        }),
+      ),
+    ).not.toThrow();
+  });
+
   it('close() fails every in-flight dispatch', async () => {
     const conn = new FleetControlConnection('node-1', () => {});
     const p = conn.correlator.dispatch(dispatch('int_1'));
@@ -470,6 +597,49 @@ describe('FleetControlRegistry', () => {
         sessionId: 's',
         challengeId: 'c',
         challenge: { type: 'datadome', confidence: 0.8 },
+      },
+    ]);
+  });
+
+  it('threads the onSessionStatus handler (positional arg 8) into the connections it creates — fires on a terminal frame only (A3 W2682)', () => {
+    const seen: SessionStatus[] = [];
+    const reg = new FleetControlRegistry(
+      undefined, // onProfileSaved
+      undefined, // onChallengeDetected
+      undefined, // onPageState
+      undefined, // onProfileSaveFailed
+      undefined, // onHeartbeat
+      undefined, // onNodeRegistered
+      undefined, // onNodeDisconnected
+      (f) => seen.push(f), // onSessionStatus
+    );
+    const conn = reg.register('node-1', () => {});
+    // terminal → fires
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'sessionStatus',
+        sessionId: 'agt_a',
+        status: 'ended',
+        timestamp: 't',
+        reason: 'customer_closed',
+      }),
+    );
+    // non-terminal → does NOT fire
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'sessionStatus',
+        sessionId: 'agt_a',
+        status: 'active',
+        timestamp: 't',
+      }),
+    );
+    expect(seen).toEqual([
+      {
+        type: 'sessionStatus',
+        sessionId: 'agt_a',
+        status: 'ended',
+        timestamp: 't',
+        reason: 'customer_closed',
       },
     ]);
   });

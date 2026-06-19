@@ -34,6 +34,7 @@ import {
   HARNESS_SCROLL_DEFAULT_DISTANCE_PX,
   HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_SECONDS,
   HARNESS_INTENT_PARAM_SCHEMAS,
+  TERMINAL_SESSION_STATUSES,
   HarnessIntentNameSchema,
   NavigateParamsSchema,
   ClickParamsSchema,
@@ -208,8 +209,20 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
   it('flat {type,…} wire envelope (no _0) pinned + SessionStatus + HarnessOutbound discriminated union (A3 W122 / 2a5639dc)', () => {
     expect(body).toMatch(/FLAT discriminated union keyed on `type`/);
     expect(body).toMatch(/NO `_0` nesting/);
+    // SessionStatus shape — toContain fragments (not a closed multi-line regex)
+    // so the A3 W2682 inline doc comment between `detail` and `reason` doesn't
+    // break the pin (the long-chain regex backtracking hazard / feedback).
+    expect(body).toContain('export const SessionStatusSchema = z.object({');
+    expect(body).toContain("type: z.literal('sessionStatus'),");
+    expect(body).toContain('sessionId: z.string().min(1),');
+    expect(body).toContain('status: z.string().min(1),');
+    expect(body).toContain('timestamp: z.string(),');
+    expect(body).toContain('detail: z.string().optional(),');
+    // A3 W2682 — the optional snake_case close reason on a terminal frame.
+    expect(body).toContain('reason: z.string().min(1).optional(),');
+    // A3 W2682 terminal-status vocabulary — the EXACT close-on set (drift-guarded).
     expect(body).toMatch(
-      /export const SessionStatusSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('sessionStatus'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*status: z\.string\(\)\.min\(1\),\s*\n?\s*timestamp: z\.string\(\),\s*\n?\s*detail: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const TERMINAL_SESSION_STATUSES = new Set<string>\(\['ended', 'errored'\]\);/,
     );
     expect(body).toMatch(
       /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*ProfileSavedSchema,\s*\n?\s*ChallengeDetectedSchema,\s*\n?\s*PageStateFrameSchema,\s*\n?\s*ProfileSaveFailedSchema,\s*\n?\s*\]\);/,
@@ -551,6 +564,57 @@ describe('harness-control-protocol behavioral contract', () => {
     // strict: no stray fields (would silently diverge from the harness decoder).
     expect(
       SessionEndSchema.safeParse({ type: 'sessionEnd', sessionId: 'agt_1', reason: 'x' }).success,
+    ).toBe(false);
+  });
+
+  it('A3 W2682 TERMINAL_SESSION_STATUSES is EXACTLY {ended, errored} (drift-guard — a mismatch silently no-ops the worker-connected close)', () => {
+    // Runtime membership (order-agnostic Set) — the close contract.
+    expect([...TERMINAL_SESSION_STATUSES].sort()).toEqual(['ended', 'errored']);
+    expect(TERMINAL_SESSION_STATUSES.size).toBe(2);
+    expect(TERMINAL_SESSION_STATUSES.has('ended')).toBe(true);
+    expect(TERMINAL_SESSION_STATUSES.has('errored')).toBe(true);
+    // A3 confirmed there is NO terminated/closed/crashed — those must NOT match.
+    for (const notTerminal of [
+      'terminated',
+      'closed',
+      'crashed',
+      'active',
+      'idle',
+      'provisioning',
+    ]) {
+      expect(TERMINAL_SESSION_STATUSES.has(notTerminal)).toBe(false);
+    }
+  });
+
+  it('SessionStatus carries an optional snake_case reason (A3 W2682) — present on a terminal frame, omittable on a non-terminal one', () => {
+    // terminal ended/errored frame with a clean reason parses.
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'sessionStatus',
+        sessionId: 'agt_a',
+        status: 'ended',
+        timestamp: 't',
+        reason: 'idle_timeout',
+      }).success,
+    ).toBe(true);
+    // a non-terminal frame may omit reason (today's shape).
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'sessionStatus',
+        sessionId: 'agt_a',
+        status: 'active',
+        timestamp: 't',
+      }).success,
+    ).toBe(true);
+    // reason, when present, must be a non-empty string.
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'sessionStatus',
+        sessionId: 'agt_a',
+        status: 'ended',
+        timestamp: 't',
+        reason: '',
+      }).success,
     ).toBe(false);
   });
 

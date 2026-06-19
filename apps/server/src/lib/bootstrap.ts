@@ -34,6 +34,7 @@ import { SessionLivenessStore } from '../services/session-liveness-store.js';
 import { makeProfileSavedPersister } from '../services/profile-store.js';
 import { makeChallengeRelay } from '../services/challenge-relay.js';
 import { makeProfileSaveFailedRelay } from '../services/profile-save-failed-relay.js';
+import { closeAgentSessionOnTerminalStatus } from '../services/agent-session-terminal-close.js';
 import { RedisFleetNonceCache } from '../lib/redis-fleet-nonce-cache.js';
 import { DrizzleAtlasPriorityEventsRepo } from '../db/atlas-priority-events-repo.js';
 import { InternalFleetAuth } from './internal-fleet-auth.js';
@@ -1456,6 +1457,20 @@ export async function createProductionDeps(
             // status='active' sessions (reason='worker-disconnected').
             (nodeId) => workerDisconnectReaper.onNodeRegistered(nodeId),
             (nodeId) => workerDisconnectReaper.onNodeDisconnected(nodeId),
+            // Worker-CONNECTED orphan auto-close (A3 W2682, positional arg 8): a
+            // TERMINAL sessionStatus frame (status ∈ {ended, errored}) from a
+            // still-connected worker → close the matching agent_sessions row in
+            // seconds (frees the slot, clears the GUI's phantom "open session").
+            // Fire-and-forget off the receive loop (the helper swallows+logs
+            // internally + is idempotent via an 'active'-guard); the
+            // worker-disconnect reaper + 12h orphan_reap stay the backstops.
+            (frame) =>
+              void closeAgentSessionOnTerminalStatus({
+                agentSessions: agentSessionsRepo,
+                frame,
+                logger,
+                livenessStore: sessionLivenessStore,
+              }),
           ),
           // Local fleet-demo: the config a dispatched session browses with. Only
           // assembled behind FLEET_CONTROL_PLANE_ENABLED (so inert in prod). The
