@@ -157,6 +157,20 @@ export interface AgentSessionsRepo {
   appendTranscript(id: string, entry: TranscriptEntry): Promise<AgentSessionRecord>;
   debitTokens(id: string, tokens: number): Promise<AgentSessionRecord>;
   closeWithReason(id: string, reason: string): Promise<AgentSessionRecord>;
+
+  /**
+   * Orphaned-session backstop — bulk-close every session still
+   * `status='active'` whose `created_at` is strictly before `cutoff`,
+   * setting `closed_reason='orphaned-lifetime'` + `closed_at=now`.
+   * Returns the number of rows closed. Sessions only otherwise flip to
+   * `closed` on explicit DELETE or budget exhaustion, so a session
+   * orphaned by a dead worker would linger `active` forever; the
+   * AgentSessionOrphanSweeper calls this on a wall-clock cap.
+   * INVARIANT: a session with `created_at >= cutoff` OR any non-active
+   * status is NEVER touched. Idempotent (re-running closes nothing new).
+   */
+  reapOrphanedActiveBefore(cutoff: Date): Promise<number>;
+
   /**
    * v2-#19 — Stripe-pattern idempotency lookup. Scoped per-account so
    * customer A's "key=foo" cannot collide with customer B's "key=foo"
@@ -355,5 +369,24 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     };
     this.records.set(id, updated);
     return Promise.resolve(updated);
+  }
+
+  reapOrphanedActiveBefore(cutoff: Date): Promise<number> {
+    const now = this.clock();
+    let closed = 0;
+    for (const [id, rec] of this.records) {
+      // INVARIANT: only status='active' rows older than the cutoff. A
+      // still-live (createdAt >= cutoff) or already-closed row is skipped.
+      if (rec.status !== 'active' || rec.createdAt.getTime() >= cutoff.getTime()) continue;
+      this.records.set(id, {
+        ...rec,
+        status: 'closed',
+        closedReason: 'orphaned-lifetime',
+        closedAt: rec.closedAt ?? now,
+        updatedAt: now,
+      });
+      closed += 1;
+    }
+    return Promise.resolve(closed);
   }
 }

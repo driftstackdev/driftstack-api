@@ -29,7 +29,7 @@
 // db-agent-sessions-concurrency-drizzle.test.ts (CI; skips locally w/o DB).
 
 import { randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, lt } from 'drizzle-orm';
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import type { Database } from './client.js';
 import { agentSessions } from './schema.js';
@@ -218,6 +218,30 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       throw new Error(`AgentSession ${id} not found`);
     }
     return rowToRecord(row);
+  }
+
+  async reapOrphanedActiveBefore(cutoff: Date): Promise<number> {
+    // Orphaned-session backstop (2026-06-19) — agent sessions only flip to
+    // 'closed' on an explicit DELETE or budget exhaustion. When a worker dies
+    // mid-session the row lingers status='active' forever. This wall-clock
+    // backstop bulk-closes any session that has been 'active' longer than the
+    // (generous) lifetime cap. CRITICAL INVARIANT: the WHERE is anchored on
+    // BOTH status='active' AND created_at < cutoff, so a still-live session
+    // (created_at >= cutoff) or an already-closed row is NEVER touched. The
+    // closed_at/closed_reason are set in the same statement; idempotent
+    // (re-running closes nothing new because the rows are no longer 'active').
+    const now = this.clock();
+    const updated = await this.database.db
+      .update(agentSessions)
+      .set({
+        status: 'closed',
+        closedReason: 'orphaned-lifetime',
+        closedAt: now,
+        updatedAt: now,
+      })
+      .where(and(eq(agentSessions.status, 'active'), lt(agentSessions.createdAt, cutoff)))
+      .returning({ id: agentSessions.id });
+    return updated.length;
   }
 
   async setGuiControlKey(args: {

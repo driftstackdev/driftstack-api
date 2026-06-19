@@ -133,6 +133,11 @@ import {
   registerProfileTrashPurgeJob,
 } from '../services/profile-trash-purge-sweeper.js';
 import {
+  AgentSessionOrphanSweeperService,
+  enqueueNextAgentSessionOrphanReap,
+  registerAgentSessionOrphanReapJob,
+} from '../services/agent-session-orphan-sweeper.js';
+import {
   SessionDurationSweeperService,
   enqueueNextSessionDurationSweep,
   registerSessionDurationSweepJob,
@@ -1039,6 +1044,21 @@ export async function createProductionDeps(
     logger,
   });
   await enqueueNextProfileTrashPurge({ scheduledJobs: scheduledJobsService });
+  // Orphaned agent-session backstop (2026-06-19) — agent sessions only flip to
+  // 'closed' on explicit DELETE or budget exhaustion, so a session orphaned by
+  // a dead worker would linger status='active' forever. Hourly wall-clock sweep
+  // closes any session that has been 'active' past the generous lifetime cap
+  // (DRIFTSTACK_AGENT_SESSION_MAX_LIFETIME_HOURS, default 12h); re-arms after
+  // each run. Reuses the agentSessionsRepo wired above.
+  const agentSessionOrphanSweeper = new AgentSessionOrphanSweeperService({
+    repo: agentSessionsRepo,
+  });
+  registerAgentSessionOrphanReapJob({
+    scheduledJobs: scheduledJobsService,
+    sweeper: agentSessionOrphanSweeper,
+    logger,
+  });
+  await enqueueNextAgentSessionOrphanReap({ scheduledJobs: scheduledJobsService });
   // Profile-backed sessions (file 57): decode the master key once at boot (null
   // when PROFILE_MASTER_KEY unset → profiles created without a DEK; feature inert).
   const profileMasterKeyBuf =
