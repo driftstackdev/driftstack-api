@@ -165,16 +165,27 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).toContain(
       "return live !== undefined && live.status !== 'closed' ? { id: sid, kind: 'agent' } : null;",
     );
+    // The driver branch keeps the live-list cross-check but now also EXCLUDES
+    // terminal driver sessions (destroyed/errored) so a dead session lingering
+    // in the list reads as idle instead of offering "Open session".
     expect(body).toMatch(
-      /return activeSessions\.some\(\(s\) => s\.id === sid\) \? \{ id: sid, kind: 'driver' \} : null;/,
+      /return activeSessions\.some\(\s*\n?\s*\(s\) => s\.id === sid && s\.status !== 'destroyed' && s\.status !== 'errored',\s*\n?\s*\)\s*\n?\s*\? \{ id: sid, kind: 'driver' \}\s*\n?\s*: null;/,
     );
     // handleStop closes by kind (the actual fix for "destroy keeps running").
     expect(body).toMatch(
       /if \(bound\.kind === 'agent'\) \{\s*\n?\s*await client\.agentSessions\.close\(bound\.id\);\s*\n?\s*\} else \{\s*\n?\s*await client\.sessions\.destroy\(bound\.id\);\s*\n?\s*\}/,
     );
-    // running flag + status filter both recognise agt_ sessions.
+    // running flag (per-row) + the status filter both route through boundSession
+    // as the single source of truth, so badge / filter / live-count agree and an
+    // agt_ session counts as running via the by-kind resolution above.
     expect(body).toMatch(/const running = bound !== null;/);
-    expect(body).toMatch(/sid !== null && \(sid\.startsWith\('agt_'\) \|\| activeSessions\.some/);
+    expect(body).toMatch(/const running = boundSession\(p\.id\) !== null;/);
+    // onPrimary branches on the resolved kind: an agent session re-opens the live
+    // stream (reopenStream), any other (driver) opens the session — so the row's
+    // primary action targets the right thing for the bound kind.
+    expect(body).toMatch(
+      /if \(bound\.kind === 'agent'\) void reopenStream\(bound\.id, profile\.id\);\s*\n?\s*else onOpenSession\(bound\.id\);/,
+    );
     // Live view re-opens the stream for an agent session (livekitToken).
     expect(body).toMatch(/await client\.agentSessions\.livekitToken\(agentSessionId\);/);
   });

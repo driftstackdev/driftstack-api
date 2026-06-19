@@ -89,7 +89,13 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     // Simulator control (founder 2026-06-11): the LK.6.d input-capture hook is
     // wired so `interactive` embeds (the floating-iPhone window) drive the device.
     expect(body).toMatch(/import \{ useInputCapture \} from '\.\.\/lib\/livekit-input-capture';/);
-    expect(body).toMatch(/useInputCapture\(\{ room, videoRef, enabled: interactive \}\);/);
+    // The hook now receives the <video> element via STATE (videoEl, lifted from
+    // the ref callback so the effect re-runs when it mounts) and an onPublishError
+    // forwarded up to surface a dead-control-channel badge — still wired through
+    // the ../lib/livekit-input-capture helper, not inlined SDK calls.
+    expect(body).toMatch(
+      /useInputCapture\(\{ room, videoElement: videoEl, enabled: interactive, onPublishError \}\);/,
+    );
   });
 
   it('Connect effect reconnects ONLY on the connection identity (deps [info.ws_url, info.token]) and routes onStateChange through a ref — pinned so a consumer passing an inline onStateChange (the LK.6.c badge usage) cannot make the effect re-run every render and disconnect+reconnect the LiveKit room (streaming reconnect-thrash). A regression to [info, onStateChange] re-introduces that.', () => {

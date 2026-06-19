@@ -103,8 +103,11 @@ describe('LK.6.d — useInputCapture hook', () => {
     expect(body).toMatch(/window\.removeEventListener\('keyup'/);
   });
 
-  it('hook short-circuits when enabled=false OR room===null (no listeners installed)', () => {
-    expect(body).toMatch(/if \(!enabled \|\| room === null\) return/);
+  it('hook short-circuits when enabled=false OR room===null OR video===null (no listeners installed) — the guard now also bails before the <video> element mounts (added video===null) so the window-level mouseup/pointerup fallback + editingLocally key guards are all installed AFTER the short-circuit', () => {
+    // Effect reads PRIMITIVES off opts (room / videoElement→video / enabled) so it
+    // re-runs on the real values, then short-circuits before installing any listener.
+    expect(body).toMatch(/const \{ room, videoElement: video, enabled \} = opts;/);
+    expect(body).toMatch(/if \(!enabled \|\| room === null \|\| video === null\) return;/);
   });
 
   it('sendInputEvent rejections are swallowed per-event BUT the first failure is surfaced (best-effort — handlers never throw; a silently-dead control channel read as view-only, founder-hit 2026-06-12)', () => {
