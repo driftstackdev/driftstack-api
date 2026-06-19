@@ -235,6 +235,8 @@ export function Gallery(): JSX.Element {
             onHandback={noop}
             onComposerChange={noop}
             onSendMessage={noop}
+            canNavigate={false}
+            onNavigate={noop}
           />
         </div>
         <div className="w-72 pb-48">
@@ -265,6 +267,8 @@ export function Gallery(): JSX.Element {
             onHandback={noop}
             onComposerChange={noop}
             onSendMessage={noop}
+            canNavigate
+            onNavigate={noop}
           />
         </div>
       </div>

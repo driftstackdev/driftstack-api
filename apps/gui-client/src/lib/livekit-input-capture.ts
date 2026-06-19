@@ -133,6 +133,32 @@ export function mouseButton(raw: number): 0 | 1 | 2 | null {
   return null;
 }
 
+/** Move-deadzone (video-px) for the scroll-vs-tap fix (A3 W2668, founder's
+ *  "sometimes a tap also scrolls"). The GUI streams a click as
+ *  touchStart → touchMove* → touchEnd; every sub-slop cursor drift between
+ *  mousedown and mouseup fires its OWN touchMove (no debounce). In the fork the
+ *  FIRST touchMove crossing its 10px tapSlop flips the gesture tap→scroll, so a
+ *  near-still click scrolls instead of clicking. We suppress touchMoves until the
+ *  cursor moves more than MOVE_DEADZONE from the press point — a sub-deadzone
+ *  jiggle emits no move (touchEnd synthesizes the click), a real drag (>6px)
+ *  scrolls exactly as before.
+ *
+ *  6 video-px — NOT 24: there is NO ÷devicePixelRatio here, the video track is
+ *  the 402×874 CSS-POINT profile (not 1206×2622), so video→CSS is ~1.0×/~0.8×.
+ *  6 sits safely under the fork's 10px slop while real drags still scroll; 24
+ *  would open a 10–24px dead band where a slow drag does neither. Do NOT change
+ *  the fork's tapSlop (fork-side, fingerprint-bearing) — this deadzone sits just
+ *  under it. */
+const MOVE_DEADZONE = 6;
+
+/** Squared Euclidean distance between two points — squared so the deadzone
+ *  comparison avoids a sqrt per move event (we compare against MOVE_DEADZONE²). */
+function distSq(ax: number, ay: number, bx: number, by: number): number {
+  const dx = ax - bx;
+  const dy = ay - by;
+  return dx * dx + dy * dy;
+}
+
 /** React hook that wires the user's mouse/keyboard gestures on the simulator's
  *  video element to iPhone-COHERENT TOUCH InputEvents (W198/W1249 — a real
  *  iPhone never fires mouse events; emitting them is detectable + dropped by
@@ -142,8 +168,12 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
   const lastSend = useRef<Promise<void>>(Promise.resolve());
   // The in-flight touch gesture: a press holds a touchId until release so the
   // matching move/end reuse it. null = no finger down → no move is sent (a real
-  // iPhone has no hover/pointer-move without a touch).
-  const active = useRef<{ touchId: number } | null>(null);
+  // iPhone has no hover/pointer-move without a touch). `startX/startY` (the press
+  // point in video-px) + `moved` drive the MOVE_DEADZONE scroll-vs-tap gate: no
+  // touchMove is emitted until the cursor leaves the deadzone (A3 W2668).
+  const active = useRef<{ touchId: number; startX: number; startY: number; moved: boolean } | null>(
+    null,
+  );
   const touchIdSeq = useRef(0);
   // Keep the latest onPublishError in a ref so the capture effect does NOT
   // depend on the callback's identity — the natural usage is an inline arrow (a
@@ -198,16 +228,26 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         // Browser may refuse pointer-capture — non-fatal.
       }
       const touchId = touchIdSeq.current++;
-      active.current = { touchId };
+      // Record the press point + reset the moved flag so the MOVE_DEADZONE gate
+      // restarts per gesture (a sub-deadzone jiggle then stays a tap).
+      active.current = { touchId, startX: p.x, startY: p.y, moved: false };
       send({ type: 'touchStart', x: p.x, y: p.y, touchId }, true);
     };
     // Move only while a finger is down (no iPhone hover). Lossy — a dropped
     // touchMove jitters then recovers; reliable=true would congest a fast drag.
+    // Scroll-vs-tap deadzone (A3 W2668): drop the move while still within
+    // MOVE_DEADZONE of the press point AND not yet moving — a near-still click
+    // emits no touchMove, so the fork keeps it a tap (its first touchMove past
+    // tapSlop is what flips tap→scroll). Once the cursor crosses the deadzone we
+    // latch `moved` and stream every subsequent move normally, so a real drag
+    // (>6px) scrolls exactly as before.
     const onMouseMove = (e: MouseEvent): void => {
       const g = active.current;
       if (g === null) return;
       const p = pointerToViewport(e, video);
       if (p === null) return;
+      if (!g.moved && distSq(p.x, p.y, g.startX, g.startY) <= MOVE_DEADZONE * MOVE_DEADZONE) return;
+      g.moved = true;
       send({ type: 'touchMove', x: p.x, y: p.y, touchId: g.touchId }, false);
     };
     // Release = touchEnd. A press+release with no move is a genuine tap/click.

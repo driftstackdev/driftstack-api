@@ -34,6 +34,14 @@ export type InputEvent =
   | { type: 'touchMove'; x: number; y: number; touchId: number }
   | { type: 'touchEnd'; x: number; y: number; touchId: number }
   | { type: 'swipe'; x1: number; y1: number; x2: number; y2: number; durationMs: number }
+  // URL navigation over the SAME reliable data channel as taps (A3 W2668; founder
+  // "can't press the URL bar"). The fork's rendered iOS-Safari URL bar is browser
+  // CHROME — un-tappable via the WebDriver page-touch path — so the GUI provides
+  // its own address control and emits this command. Agent 1's RoomDataDispatcher
+  // routes it to a WebDriver navigate WITH a full http/https allowlist + SSRF
+  // rejection (≤4096 bytes, non-empty); no server route is needed (that would 401
+  // for the keychain-less Simulator app).
+  | { type: 'navigate'; url: string }
   | { type: 'ping'; timestamp: number };
 
 /** Connection-state machine surfaces to the UI layer. LK.6.c
@@ -96,6 +104,21 @@ export async function sendInputEvent(
     if (isBenignTeardownError(err)) return;
     throw err;
   }
+}
+
+/** Send a `navigate` command over the SAME reliable LiveKit DataChannel as
+ *  taps (A3 W2668; founder "can't press the URL bar"). The fork's rendered
+ *  iOS-Safari URL bar is browser CHROME — the WebDriver page-touch path can't
+ *  drive it — so the GUI's own address bar emits this command instead. Agent 1's
+ *  RoomDataDispatcher routes it to a WebDriver navigate WITH a full http/https
+ *  allowlist + SSRF rejection; it rides the established session channel, so no
+ *  server route is needed (POST /v1/agent-sessions/:id/navigate would 401 for the
+ *  keychain-less Simulator app).
+ *
+ *  reliable=true (a dropped navigate would silently fail to load). Teardown-race
+ *  rejections are swallowed exactly like sendInputEvent (shared codepath). */
+export async function sendNavigate(room: Room, url: string): Promise<void> {
+  await sendInputEvent(room, { type: 'navigate', url }, { reliable: true });
 }
 
 /** True for the LiveKit errors thrown when an operation runs after the Room's

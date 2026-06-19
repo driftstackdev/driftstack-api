@@ -19,6 +19,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   isBenignTeardownError,
   sendInputEvent,
+  sendNavigate,
   type InputEvent,
   type Room,
 } from '../../src/lib/livekit';
@@ -176,6 +177,42 @@ describe('sendInputEvent — benign teardown errors', () => {
     await expect(sendInputEvent(room, { type: 'mouseMove', x: 0, y: 0 })).rejects.toThrow(
       /buffer is full/,
     );
+  });
+});
+
+// URL navigation rides the SAME reliable data channel as taps (A3 W2668;
+// founder "can't press the URL bar" — the fork's URL bar is un-tappable chrome).
+// No server route (would 401 for the keychain-less Simulator app); the harness
+// re-validates the URL with an http(s) allowlist + SSRF rejection.
+describe('sendNavigate', () => {
+  it('publishes {type:"navigate", url} on the reliable data channel', async () => {
+    const { room, publishData } = makeRoom();
+    await sendNavigate(room, 'https://example.com/');
+    expect(publishData).toHaveBeenCalledTimes(1);
+    const call = firstCall(publishData);
+    expect(decodeEvent(call)).toEqual({ type: 'navigate', url: 'https://example.com/' });
+    // reliable=true — a dropped navigate would silently fail to load.
+    expect(call.opts.reliable).toBe(true);
+  });
+
+  it('encodes the URL as UTF-8 JSON (round-trips a query string + unicode path)', async () => {
+    const { room, publishData } = makeRoom();
+    await sendNavigate(room, 'https://例え.テスト/path?q=café&x=1');
+    const decoded = decodeEvent(firstCall(publishData));
+    if (decoded.type === 'navigate') {
+      expect(decoded.url).toBe('https://例え.テスト/path?q=café&x=1');
+    } else {
+      throw new Error('expected a navigate event');
+    }
+  });
+
+  it('swallows a benign teardown rejection (shares sendInputEvent codepath)', async () => {
+    const minimal = {
+      localParticipant: { publishData: () => Promise.reject(new Error('PC manager is closed')) },
+    };
+    await expect(
+      sendNavigate(minimal as unknown as Room, 'https://example.com/'),
+    ).resolves.toBeUndefined();
   });
 });
 

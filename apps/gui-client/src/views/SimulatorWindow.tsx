@@ -19,7 +19,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
-import type { Room } from '../lib/livekit';
+import { sendNavigate, type Room } from '../lib/livekit';
 import { useLatencyPing } from '../lib/livekit-latency-ping';
 import { useRecordings } from '../lib/recordings';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
@@ -134,6 +134,26 @@ async function applyDockTile(countryCode: string | null, profileName: string): P
   }
 }
 
+/** Normalize an address-bar entry into an http(s) URL, or null if it can't be
+ *  one. Prepends `https://` when no scheme is present (typing "example.com"
+ *  navigates to https://example.com — the in-app LiveSessionView address-bar UX).
+ *  Only http/https pass; anything else (file:/javascript:/data:/about:) returns
+ *  null so the GUI never even emits it — the harness re-validates with the same
+ *  allowlist + SSRF rejection as a defense in depth (A3 W2668). */
+export function normalizeNavigateUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (trimmed === '') return null;
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  let parsed: URL;
+  try {
+    parsed = new URL(withScheme);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  return parsed.toString();
+}
+
 /** Host of a ws URL for the info overlay — guarded so a malformed ws value in
  *  the window query degrades to a label instead of throwing in render (which
  *  would drop the whole simulator into the error boundary). */
@@ -218,6 +238,8 @@ export function DeviceToolbar({
   onHandback,
   onComposerChange,
   onSendMessage,
+  canNavigate,
+  onNavigate,
 }: {
   deviceName: string;
   profileName: string;
@@ -242,6 +264,11 @@ export function DeviceToolbar({
   onHandback: () => void;
   onComposerChange: (v: string) => void;
   onSendMessage: () => void;
+  /** True when a control channel (LiveKit room) is connected so a navigate can
+   *  ride it — the address bar is disabled otherwise. */
+  canNavigate: boolean;
+  /** Submit an address-bar URL → the data-channel navigate. */
+  onNavigate: (url: string) => void;
 }): JSX.Element {
   // Dismiss the expanded control panel on an outside pointer-down or Escape, so
   // it doesn't linger over the screen after you've picked (or skipped) a control.
@@ -377,6 +404,7 @@ export function DeviceToolbar({
             onComposerChange={onComposerChange}
             onSendMessage={onSendMessage}
           />
+          <NavigateAddressBar canNavigate={canNavigate} onNavigate={onNavigate} />
           <LabeledControl
             label={landscape ? 'Rotate to portrait' : 'Rotate to landscape'}
             active={landscape}
@@ -619,6 +647,71 @@ export function SessionControlSection({
         </form>
       )}
       <div className="mx-3 my-1.5 h-px bg-white/10" aria-hidden="true" />
+    </div>
+  );
+}
+
+/** Address bar in the expandable control panel (founder 2026-06-19: "can't press
+ *  the URL bar"). The fork's rendered iOS-Safari URL bar is browser CHROME, which
+ *  the WebDriver page-touch path can't drive — so the GUI provides its own. On
+ *  submit it normalizes the entry to an http(s) URL (prepends https:// when no
+ *  scheme) and emits a `navigate` command on the SAME LiveKit data channel as
+ *  taps; the fork's chrome URL bar stays visual-only. Mirrors the in-app
+ *  LiveSessionView address-bar UX (reload affordance + a text field + a Go
+ *  submit). Disabled until a control channel is connected (canNavigate). */
+function NavigateAddressBar({
+  canNavigate,
+  onNavigate,
+}: {
+  canNavigate: boolean;
+  onNavigate: (url: string) => void;
+}): JSX.Element {
+  const [draftUrl, setDraftUrl] = useState('');
+  return (
+    <div data-component="simulator-address" className="px-3 pb-1.5 pt-0.5">
+      <div className="px-0 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+        Address
+      </div>
+      <form
+        className="flex items-center gap-1 rounded-lg bg-black/40 px-2 py-1 ring-1 ring-white/10"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!canNavigate) return;
+          onNavigate(draftUrl);
+        }}
+      >
+        <button
+          type="button"
+          disabled={!canNavigate}
+          aria-label="Reload"
+          title="Reload the current page"
+          onClick={() => {
+            if (canNavigate && draftUrl.trim() !== '') onNavigate(draftUrl);
+          }}
+          className="shrink-0 rounded p-1 text-ink-secondary transition hover:bg-white/10 hover:text-ink-primary disabled:opacity-40"
+        >
+          ↻
+        </button>
+        <input
+          type="text"
+          value={draftUrl}
+          disabled={!canNavigate}
+          onChange={(e) => setDraftUrl(e.target.value)}
+          placeholder="example.com — type a URL, press Enter"
+          spellCheck={false}
+          autoComplete="off"
+          aria-label="Address bar"
+          className="min-w-0 flex-1 bg-transparent text-[11.5px] text-ink-primary placeholder:text-ink-muted focus:outline-none disabled:opacity-50"
+        />
+        <button
+          type="submit"
+          disabled={!canNavigate || draftUrl.trim() === ''}
+          aria-label="Go to URL"
+          className="shrink-0 rounded p-1 text-accent transition hover:bg-white/10 disabled:opacity-40"
+        >
+          ⏎
+        </button>
+      </form>
     </div>
   );
 }
@@ -1058,6 +1151,26 @@ export function SimulatorWindow(): JSX.Element {
       .catch(noticeControlError)
       .finally(() => setControlBusy(false));
   };
+  // Address-bar navigation (founder 2026-06-19: "can't press the URL bar"). The
+  // fork's rendered URL bar is un-tappable chrome, so the GUI's own address bar
+  // emits a `navigate` command on the SAME LiveKit data channel as taps (no
+  // server route — it would 401 for the keychain-less app; A3 W2668). Normalize
+  // to http(s) first (prepend https:// when scheme-less); a non-http(s) entry is
+  // dropped here and the harness re-validates with the same allowlist + SSRF
+  // rejection. No-op until the room is connected.
+  const onNavigate = (raw: string): void => {
+    if (room === null) return;
+    const url = normalizeNavigateUrl(raw);
+    if (url === null) {
+      setNotice('Enter a valid http(s) URL');
+      window.setTimeout(() => setNotice(null), 3000);
+      return;
+    }
+    void sendNavigate(room, url).catch(() => {
+      setNotice('Navigation could not be sent');
+      window.setTimeout(() => setNotice(null), 3000);
+    });
+  };
   const togglePinned = (): void => {
     const next = !pinned;
     setPinned(next);
@@ -1161,6 +1274,8 @@ export function SimulatorWindow(): JSX.Element {
             onHandback={onHandback}
             onComposerChange={setComposerText}
             onSendMessage={onSendMessage}
+            canNavigate={room !== null}
+            onNavigate={onNavigate}
           />
           {/* Device body — the bezel. data-tauri-drag-region makes the frame a
               window-drag handle; the inner screen overrides it so taps reach the

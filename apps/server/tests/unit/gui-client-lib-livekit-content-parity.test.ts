@@ -31,13 +31,13 @@ describe('gui-client/lib/livekit content parity', () => {
     );
   });
 
-  it("LK.6.d InputEvent 12-variant tagged union pinned: 7 mouse/key/wheel/ping + 5 touch (tap / touchStart / touchMove / touchEnd / swipe). + 'the input-event schema the Mac side decodes. Must stay in lock-step with Agent 1's Swift InputEvent enum.' — pinned so the cross-agent Swift-side enum + the touch contract (founder 2026-06-08) all stay documented (drift would break customer manual control input). Per-variant toContain (NOT one mega-regex) to avoid the long-chain backtracking hazard.", () => {
+  it("LK.6.d InputEvent 13-variant tagged union pinned: 7 mouse/key/wheel/ping + 5 touch (tap / touchStart / touchMove / touchEnd / swipe) + navigate (URL-nav over the same data channel, A3 W2668). + 'the input-event schema the Mac side decodes. Must stay in lock-step with Agent 1's Swift InputEvent enum.' — pinned so the cross-agent Swift-side enum + the touch contract (founder 2026-06-08) + the navigate command (founder 2026-06-19) all stay documented (drift would break customer manual control input). Per-variant toContain (NOT one mega-regex) to avoid the long-chain backtracking hazard.", () => {
     // Framing comment + the union declaration.
     expect(body).toMatch(
       /\/\*\* LK\.6\.d — the input-event schema the Mac side decodes\. Must\s*\n?\s*\*\s+stay in lock-step with Agent 1's Swift `InputEvent` enum\. \*\//,
     );
     expect(body).toMatch(/export type InputEvent =/);
-    // Each variant pinned individually (mouse/key/wheel/ping + the 5 touch).
+    // Each variant pinned individually (mouse/key/wheel/ping + the 5 touch + navigate).
     for (const variant of [
       "| { type: 'mouseMove'; x: number; y: number }",
       "| { type: 'mouseDown'; x: number; y: number; button: 0 | 1 | 2 }",
@@ -50,10 +50,18 @@ describe('gui-client/lib/livekit content parity', () => {
       "| { type: 'touchMove'; x: number; y: number; touchId: number }",
       "| { type: 'touchEnd'; x: number; y: number; touchId: number }",
       "| { type: 'swipe'; x1: number; y1: number; x2: number; y2: number; durationMs: number }",
+      "| { type: 'navigate'; url: string }",
       "| { type: 'ping'; timestamp: number };",
     ]) {
       expect(body, `livekit.ts missing variant: ${variant}`).toContain(variant);
     }
+  });
+
+  it('sendNavigate emits a navigate command on the same reliable data channel as taps (A3 W2668; the URL-bar fork chrome is un-tappable so the GUI emits its own). Pinned so the data-channel transport (no server route — would 401 for the keychain-less Simulator app) stays documented', () => {
+    expect(body).toContain('export async function sendNavigate(room: Room, url: string)');
+    expect(body).toContain(
+      "await sendInputEvent(room, { type: 'navigate', url }, { reliable: true });",
+    );
   });
 
   it('LK.6.c LivekitConnectionState 6-variant tagged union pinned: idle / connecting / connected / reconnecting / disconnected / error(message). Drift to a different state-machine shape would mismatch the badge-rendering logic in LivekitConnectionBadge.tsx', () => {
