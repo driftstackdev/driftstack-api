@@ -63,6 +63,10 @@ export interface AgentSessionPanelProps {
    *  cockpit can run the (previously dormant) latency ping. Called with
    *  the room once connected and with null on teardown. */
   onRoom?: (room: Room | null) => void;
+  /** Fired (at most once per connection) when an input publish fails — the
+   *  control data channel is effectively dead, so taps/keys aren't reaching the
+   *  device. The simulator surfaces this as a small non-fatal badge. */
+  onPublishError?: () => void;
 }
 
 /** W617 — how long a connected-but-videoless room waits before the panel
@@ -105,8 +109,13 @@ export function AgentSessionPanel({
   onVideoDimensions,
   onRoom,
   onVideoEl,
+  onPublishError,
 }: AgentSessionPanelProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  // The video element as STATE (not just the ref) so useInputCapture re-runs
+  // when it mounts — a ref's `.current` is mutated without re-rendering, so an
+  // effect keyed on the ref would attach to the stale (null) element.
+  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const [state, setState] = useState<LivekitConnectionState>({ kind: 'idle' });
   // Live aspect — the stream's REAL dimensions (loadedmetadata) win over the
   // static prop, so EVERY archetype renders its true proportions (many
@@ -121,7 +130,7 @@ export function AgentSessionPanel({
   // device, so window-focus naturally scopes the keyboard and there's no other
   // UI to hijack. Non-interactive embeds stay subscriber-only.
   const [room, setRoom] = useState<Room | null>(null);
-  useInputCapture({ room, videoRef, enabled: interactive });
+  useInputCapture({ room, videoElement: videoEl, enabled: interactive, onPublishError });
   // W617 — track whether a video track ever arrived; 'waiting' →
   // 'publishing' on TrackSubscribed, 'waiting' → 'none' on timeout after
   // connect. 'none' renders the honest no-worker overlay.
@@ -233,6 +242,7 @@ export function AgentSessionPanel({
       <video
         ref={(el) => {
           videoRef.current = el;
+          setVideoEl(el);
           onVideoEl?.(el);
         }}
         autoPlay

@@ -120,6 +120,12 @@ try {
     document.documentElement.style.background = 'transparent';
     document.body.style.background = 'transparent';
     root.style.background = 'transparent';
+    // SettingsContext (the only other place that sets these theme tokens) never
+    // mounts in this bare window, so without this the dark/accent tokens fall
+    // back to a light/empty default. Pin the dark + oxblood theme up front so the
+    // device chrome reads correctly.
+    document.documentElement.dataset.mode = 'dark';
+    document.documentElement.dataset.accent = 'oxblood';
   }
   createRoot(root).render(
     <StrictMode>

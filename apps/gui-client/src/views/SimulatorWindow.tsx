@@ -41,14 +41,20 @@ const TOOLBAR_H = 34;
 const BEZEL_PAD = 20; // p-[10px] × 2
 const STATUS_STRIP_H = 40;
 
-function infoFromQuery(): {
+interface SessionQuery {
   info: LiveKitInfo | null;
   deviceName: string;
   profileName: string;
   proxyLabel: string;
   sessionId: string;
-} {
-  const q = new URLSearchParams(window.location.search);
+}
+
+/** Parse the simulator session from a query string. Defaults to the window's
+ *  own `location.search`; the relaunch `ds-session` event passes a fresh query
+ *  string so the window can switch session IN PLACE (without a reload that
+ *  would tear down the live LiveKit Room). */
+function infoFromQuery(search: string = window.location.search): SessionQuery {
+  const q = new URLSearchParams(search);
   const ws_url = q.get('ws');
   const token = q.get('token');
   const deviceName = q.get('name') ?? 'iPhone';
@@ -229,7 +235,7 @@ export function DeviceToolbar({
       <div
         onPointerDown={startToolbarDrag}
         data-component="simulator-toolbar"
-        className="flex h-[34px] w-full items-center justify-between rounded-t-[16px] bg-[#1d1e24]/80 px-3 ring-1 ring-white/[0.12] backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_-1px_0_rgba(0,0,0,0.45)]"
+        className="flex h-[34px] w-full items-center justify-between rounded-t-[16px] bg-[#1d1e24] px-3 ring-1 ring-white/[0.12] backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_-1px_0_rgba(0,0,0,0.45)]"
       >
         {/* Left — window controls. The window is BORDERLESS (the iPhone look),
             so these ARE the only close/minimize affordance. */}
@@ -267,7 +273,7 @@ export function DeviceToolbar({
             (snapshot / rotate / pin / info) live in the expandable panel below
             so the default chrome stays minimal (founder 2026-06-17: "phone
             showing only" by default, a clean expandable row for the controls). */}
-        <div data-tauri-drag-region="false" className="flex items-center gap-1 text-white/55">
+        <div data-tauri-drag-region="false" className="flex items-center gap-1 text-white/70">
           <button
             type="button"
             aria-label={recording ? 'Stop recording' : 'Start recording'}
@@ -313,7 +319,7 @@ export function DeviceToolbar({
         <div
           data-tauri-drag-region="false"
           data-component="simulator-controls"
-          className="absolute right-2 top-full z-30 mt-1 w-56 overflow-hidden rounded-xl border border-white/[0.12] bg-[#1d1e24]/92 py-1 shadow-[0_8px_16px_rgba(0,0,0,0.3),0_18px_40px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
+          className="absolute right-2 top-full z-30 mt-1 w-56 overflow-hidden rounded-xl border border-white/[0.12] bg-[#1d1e24] py-1 shadow-[0_8px_16px_rgba(0,0,0,0.3),0_18px_40px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
         >
           <SessionControlSection
             mode={mode}
@@ -489,7 +495,7 @@ export function SessionControlSection({
               onClick={() => onSetMode(opt.value)}
               className={`flex-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
                 active
-                  ? 'bg-white/10 text-accent ring-1 ring-white/10'
+                  ? 'bg-white/15 text-ink-primary ring-1 ring-white/20'
                   : 'text-ink-secondary hover:bg-white/[0.06] hover:text-ink-primary'
               }`}
             >
@@ -615,7 +621,37 @@ function IosStatusBar(): JSX.Element {
 }
 
 export function SimulatorWindow(): JSX.Element {
-  const { info, deviceName, profileName, proxyLabel, sessionId } = infoFromQuery();
+  // The session is held in state so the separate Simulator app's RELAUNCH path
+  // can switch it in place: the single-instance handler emits a `ds-session`
+  // event (instead of re-navigating, which would reload + tear down the live
+  // Room), and the listener below re-parses the payload exactly like the initial
+  // location.search and updates this state.
+  const [query, setQuery] = useState<SessionQuery>(() => infoFromQuery());
+  const { info, deviceName, profileName, proxyLabel, sessionId } = query;
+  // Relaunch session-switch listener (Tauri-only). The Rust side validated the
+  // b64 payload before emitting; decode it the same way the initial launch does
+  // (atob → query string) and re-parse. Also sync window.history so a later
+  // reload keeps the new session.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return;
+    let unlisten: (() => void) | undefined;
+    void (async () => {
+      const { listen } = await import('@tauri-apps/api/event');
+      unlisten = await listen<string>('ds-session', (event) => {
+        try {
+          const search = atob(event.payload);
+          const qs = search.startsWith('?') ? search : `?${search}`;
+          window.history.replaceState({}, '', qs);
+          setQuery(infoFromQuery(qs));
+        } catch {
+          // Garbled payload — ignore; the current session keeps streaming.
+        }
+      });
+    })();
+    return () => {
+      unlisten?.();
+    };
+  }, []);
   // Night-arc I Record pill: frames straight off the live <video> element
   // (the WebRTC stream IS the device screen) into the shared recordings
   // store — 1fps JPEG, same bounded-buffer semantics as the main window.
@@ -640,8 +676,8 @@ export function SimulatorWindow(): JSX.Element {
         recordTimerRef.current = null;
       }
       void stopRecording(recordingId);
-      setSnapshotNotice('Recording saved');
-      window.setTimeout(() => setSnapshotNotice(null), 4000);
+      setNotice('Recording saved');
+      window.setTimeout(() => setNotice(null), 4000);
       return;
     }
     const recId = startRecording(sessionId, profileName !== '' ? profileName : undefined);
@@ -718,14 +754,18 @@ export function SimulatorWindow(): JSX.Element {
     };
     el.requestVideoFrameCallback?.((t) => tick(t));
   }
-  const [snapshotNotice, setSnapshotNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Non-fatal control-channel health: set when the FIRST input publish fails
+  // (the LiveKit data channel is effectively dead, so taps/keys aren't reaching
+  // the device). Surfaced as a small badge rather than blocking the view.
+  const [controlUnreachable, setControlUnreachable] = useState(false);
   // Night-arc I (cockpit pills): Snapshot — draw the CURRENT live frame to
   // a canvas and save a PNG into ~/Downloads via the fs plugin (no native
   // screenshot API needed; the WebRTC frame IS the device screen).
   async function handleSnapshot(): Promise<void> {
     const el = videoElRef.current;
     if (el === null || el.videoWidth === 0) {
-      setSnapshotNotice('No frame yet');
+      setNotice('No frame yet');
       return;
     }
     try {
@@ -739,11 +779,11 @@ export function SimulatorWindow(): JSX.Element {
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
       const file = `driftstack-${profileName !== '' ? profileName : deviceName}-${stamp}.png`;
       await writeFile(file, bytes, { baseDir: BaseDirectory.Download });
-      setSnapshotNotice(`Saved ${file} to Downloads`);
+      setNotice(`Saved ${file} to Downloads`);
     } catch (err) {
-      setSnapshotNotice(err instanceof Error ? err.message : 'Snapshot failed');
+      setNotice(err instanceof Error ? err.message : 'Snapshot failed');
     }
-    window.setTimeout(() => setSnapshotNotice(null), 4000);
+    window.setTimeout(() => setNotice(null), 4000);
   }
   const latency = useLatencyPing({ room, enabled: room !== null });
   const [landscape, setLandscape] = useState(false);
@@ -834,8 +874,8 @@ export function SimulatorWindow(): JSX.Element {
               ? 'Sign in to control the session'
               : err.message
         : 'Control request failed';
-    setSnapshotNotice(msg);
-    window.setTimeout(() => setSnapshotNotice(null), 4000);
+    setNotice(msg);
+    window.setTimeout(() => setNotice(null), 4000);
   };
   const refreshControl = useCallback((): void => {
     if (sessionId === '') return;
@@ -891,8 +931,8 @@ export function SimulatorWindow(): JSX.Element {
     void sendAgentMessage(sessionId, text)
       .then(() => {
         setComposerText('');
-        setSnapshotNotice('Sent to agent');
-        window.setTimeout(() => setSnapshotNotice(null), 3000);
+        setNotice('Sent to agent');
+        window.setTimeout(() => setNotice(null), 3000);
       })
       .catch(noticeControlError)
       .finally(() => setControlBusy(false));
@@ -950,9 +990,26 @@ export function SimulatorWindow(): JSX.Element {
         // Standalone empty state — shown when this window opens without a
         // session (e.g. the separate Driftstack Simulator app launched from the
         // Dock with nothing streaming yet). Branded + actionable, not a bare line.
-        <div className="flex flex-col items-center gap-3 px-8 text-center">
-          <DriftMark />
-          <p className="text-sm font-medium text-white/85">No session yet</p>
+        // The window is BORDERLESS + transparent, so this is an OPAQUE rounded
+        // card (the desktop must not bleed through) that is itself a window
+        // drag-region (no title bar to grab) with its own close affordance.
+        <div
+          data-tauri-drag-region
+          data-component="simulator-empty"
+          className="relative flex flex-col items-center gap-3 rounded-3xl bg-[#1d1e24] p-8 text-center ring-1 ring-white/10"
+        >
+          <button
+            type="button"
+            aria-label="Close"
+            title="Close"
+            data-tauri-drag-region="false"
+            onClick={() => void withCurrentWindow((w) => w.close())}
+            className="absolute left-4 top-4 h-3 w-3 rounded-full bg-[#ff5f57] shadow-[inset_0_0.5px_0_rgba(255,255,255,0.4)] ring-1 ring-black/20 transition hover:brightness-110"
+          />
+          <div className="scale-[2.4]" aria-hidden="true">
+            <DriftMark />
+          </div>
+          <p className="mt-2 text-sm font-medium text-white/85">No session yet</p>
           <p className="max-w-[16rem] text-xs leading-relaxed text-white/45">
             Launch a profile in Driftstack to stream a real iPhone here.
           </p>
@@ -1000,12 +1057,21 @@ export function SimulatorWindow(): JSX.Element {
               className="relative flex flex-1 flex-col overflow-hidden rounded-[2.1rem] bg-black shadow-[inset_0_0_0_1px_rgba(0,0,0,0.9),inset_0_0_12px_rgba(0,0,0,0.55)]"
             >
               <IosStatusBar />
-              {snapshotNotice !== null && (
+              {notice !== null && (
                 <div
                   role="status"
                   className="absolute left-1/2 top-12 z-20 -translate-x-1/2 rounded-full bg-black/80 px-3 py-1 font-mono text-[10px] text-white/90 backdrop-blur"
                 >
-                  {snapshotNotice}
+                  {notice}
+                </div>
+              )}
+              {controlUnreachable && (
+                <div
+                  role="status"
+                  data-component="control-unreachable-badge"
+                  className="absolute left-1/2 top-20 z-20 -translate-x-1/2 rounded-full bg-amber-500/90 px-3 py-1 text-[10px] font-medium text-black shadow"
+                >
+                  Control may not be reaching the device
                 </div>
               )}
               {infoOpen && (
@@ -1050,9 +1116,13 @@ export function SimulatorWindow(): JSX.Element {
               >
                 <AgentSessionPanel
                   info={info}
-                  interactive
+                  // Forward mouse/keyboard to the device only in manual/pair
+                  // mode; in AI mode the agent is driving, so local input would
+                  // fight it.
+                  interactive={controlMode !== 'ai'}
                   onVideoDimensions={handleVideoDimensions}
                   onRoom={setRoom}
+                  onPublishError={() => setControlUnreachable(true)}
                   onVideoEl={(el) => {
                     videoElRef.current = el;
                     if (el !== null) armFpsCounter(el);

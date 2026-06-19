@@ -43,15 +43,23 @@ pub fn run() {
         // focus + unminimize the existing main window instead of spawning a
         // duplicate.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            use tauri::Manager;
+            use tauri::{Emitter, Manager};
             if let Some(win) = app.get_webview_window("main") {
                 // Stage 2 (separate Driftstack Simulator app): a relaunch carrying
                 // a new `--ds-session=<b64 query string>` re-points the already-open
                 // window at that session. No-op for the main GUI (never launched
                 // with this arg). See docs/internal/2026-06-18-separate-simulator-app-plan.md.
+                //
+                // RELAUNCH path: emit a `ds-session` event (NOT a location.search
+                // navigation). Re-navigating reloads the whole SPA, tearing down
+                // the live LiveKit Room mid-session (founder-hit). The SPA listens
+                // and switches the connected session IN PLACE. Guard against an
+                // empty/garbled payload so we never emit a session-less event.
                 if let Some(arg) = argv.iter().find(|a| a.starts_with("--ds-session=")) {
                     let b64 = arg.trim_start_matches("--ds-session=");
-                    let _ = win.eval(&format!("window.location.search = atob('{b64}')"));
+                    if is_valid_b64_payload(b64) {
+                        let _ = win.emit("ds-session", b64);
+                    }
                 }
                 let _ = win.unminimize();
                 let _ = win.show();
@@ -124,6 +132,19 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Cheap sanity check on a `--ds-session=<payload>` value before we hand it to
+/// the SPA: non-empty and limited to the standard base64 alphabet (the JS side
+/// decodes it with `atob`). This guards the relaunch event from firing with an
+/// empty or obviously-garbled payload (which would leave the window on a blank,
+/// session-less page). It does NOT fully validate the decoded query string —
+/// the SPA re-parses it the same way it parses the initial `location.search`.
+fn is_valid_b64_payload(payload: &str) -> bool {
+    !payload.is_empty()
+        && payload
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'=')
 }
 
 /// Health probe — the React shell calls this to confirm the Rust
@@ -612,5 +633,21 @@ mod tests {
         assert_eq!(packet[1], 4);
         assert_eq!(packet[2 + 4], 0);
         assert_eq!(packet.len(), 2 + 4 + 1);
+    }
+
+    #[test]
+    fn b64_payload_accepts_well_formed_base64() {
+        // `btoa("window=simulator&ws=wss://lk&token=t")`-style output.
+        assert!(is_valid_b64_payload("d2luZG93PXNpbXVsYXRvcg=="));
+        assert!(is_valid_b64_payload("YWJjMTIz"));
+    }
+
+    #[test]
+    fn b64_payload_rejects_empty_or_garbled() {
+        // An empty payload (the relaunch must never navigate to a blank page).
+        assert!(!is_valid_b64_payload(""));
+        // Spaces / control chars / quotes are not in the base64 alphabet.
+        assert!(!is_valid_b64_payload("not valid"));
+        assert!(!is_valid_b64_payload("'); alert(1) //"));
     }
 }

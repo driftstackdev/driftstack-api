@@ -184,7 +184,7 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
         {showTeam && (
           <SidebarItem
             icon={<IconUsers />}
-            badge={teamCount > 0 ? String(teamCount) : undefined}
+            badge={teamCount > 0 ? String(teamCount) : null}
             active={current === 'team'}
             onClick={() => onNavigate('team')}
           >

@@ -469,6 +469,16 @@ export function ProfilesView({
     [client, loadTrash, refresh, confirm, settings.baseUrl],
   );
 
+  // Switching account/workspace must NOT carry the prior account's agent-session
+  // cache forward — boundSession would otherwise match a stale agt_ id from the
+  // other account and falsely report a profile running until the next list
+  // fetch lands. Reset to the not-yet-loaded state so boundSession trusts only
+  // the binding until the fresh list arrives.
+  useEffect(() => {
+    setAgentSessions([]);
+    setAgentSessionsLoaded(false);
+  }, [client, activeWorkspace]);
+
   useEffect(() => {
     void refresh(true);
     const id = window.setInterval(() => void refresh(false), REFRESH_MS);
@@ -531,7 +541,14 @@ export function ProfilesView({
       const live = agentSessions.find((s) => s.id === sid);
       return live !== undefined && live.status !== 'closed' ? { id: sid, kind: 'agent' } : null;
     }
-    return activeSessions.some((s) => s.id === sid) ? { id: sid, kind: 'driver' } : null;
+    // A driver session reads as running only if it's live AND not in a terminal
+    // state — an errored/destroyed session lingering in the list must read idle
+    // (otherwise the row offers "Open session" on a dead session).
+    return activeSessions.some(
+      (s) => s.id === sid && s.status !== 'destroyed' && s.status !== 'errored',
+    )
+      ? { id: sid, kind: 'driver' }
+      : null;
   }
 
   // Worktimer — the ISO start time of a profile's bound running session, or
@@ -686,12 +703,10 @@ export function ProfilesView({
     }
     if (statusFilter !== 'all') {
       list = list.filter((p) => {
-        // W624 — agent-backed (agt_) sessions count as running too, not just
-        // driver sessions present in the live list.
-        const binding = bindings.find((b) => b.profileId === p.id);
-        const sid = binding?.currentSessionId ?? null;
-        const running =
-          sid !== null && (sid.startsWith('agt_') || activeSessions.some((s) => s.id === sid));
+        // Single source of truth for "running" — boundSession self-heals stale
+        // agent bindings + ignores terminal driver sessions, so filter, badge,
+        // and live count agree.
+        const running = boundSession(p.id) !== null;
         return statusFilter === 'running' ? running : !running;
       });
     }
@@ -719,6 +734,10 @@ export function ProfilesView({
     sortBy,
     activeSessions,
     bindings,
+    // boundSession (via the status filter) also reads the agent-session list +
+    // its loaded flag, so recompute when those change.
+    agentSessions,
+    agentSessionsLoaded,
   ]);
 
   // Are any of the composing filters narrowing the grid? Drives the "clear
@@ -1878,8 +1897,12 @@ export function ProfilesView({
                         launchDisabledReason={teamLaunchBlockedReason}
                         onToggleSelect={() => toggleSelected(profile.id)}
                         onPrimary={() => {
-                          if (running && bound !== null) onOpenSession(bound.id);
-                          else void handleLaunch(profile);
+                          if (running && bound !== null) {
+                            // agt_ ids 400 in the driver session viewer — re-open
+                            // the agent stream instead (mirror onWatch).
+                            if (bound.kind === 'agent') void reopenStream(bound.id, profile.id);
+                            else onOpenSession(bound.id);
+                          } else void handleLaunch(profile);
                         }}
                         onWatch={() => {
                           if (running && bound !== null) {
@@ -2004,8 +2027,12 @@ export function ProfilesView({
                         const profile = resolve(id);
                         if (profile === null) return;
                         const bound = boundSession(id);
-                        if (bound !== null) onOpenSession(bound.id);
-                        else void handleLaunch(profile);
+                        if (bound !== null) {
+                          // agt_ ids 400 in the driver session viewer — re-open
+                          // the agent stream instead (mirror onWatch).
+                          if (bound.kind === 'agent') void reopenStream(bound.id, id);
+                          else onOpenSession(bound.id);
+                        } else void handleLaunch(profile);
                       }}
                       onWatch={(id) => {
                         const profile = resolve(id);
@@ -3271,7 +3298,7 @@ function TrashPanel({
                     type="button"
                     onClick={() => onRestore(p.id)}
                     disabled={busy}
-                    className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+                    className="btn-primary text-xs"
                   >
                     {restoring ? 'Restoring…' : 'Restore'}
                   </button>

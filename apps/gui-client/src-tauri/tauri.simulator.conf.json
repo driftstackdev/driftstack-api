@@ -9,13 +9,14 @@
         "label": "main",
         "title": "Driftstack Simulator",
         "url": "index.html?window=simulator",
-        "width": 360,
-        "height": 780,
+        "width": 330,
+        "height": 718,
         "minWidth": 280,
         "minHeight": 560,
         "resizable": true,
         "decorations": false,
-        "transparent": true
+        "transparent": true,
+        "shadow": false
       }
     ],
     "security": {

@@ -140,7 +140,7 @@ export function TeamView(): JSX.Element {
             type="button"
             onClick={() => void handleInvite()}
             disabled={busy}
-            className="rounded-lg bg-accent px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+            className="btn-primary px-4"
           >
             {busy ? 'Sending…' : 'Send invite'}
           </button>

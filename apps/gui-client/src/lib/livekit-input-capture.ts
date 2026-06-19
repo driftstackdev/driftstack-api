@@ -42,7 +42,6 @@
 
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any */
 
-import type { RefObject } from 'react';
 import { useEffect, useRef } from 'react';
 import { type CanonicalModifier } from '@driftstack/sdk';
 import { sendInputEvent, type InputEvent, type Room } from './livekit';
@@ -51,12 +50,19 @@ export interface UseInputCaptureOpts {
   /** The LiveKit room — null when not connected. Capture is a
    *  no-op until a room is present. */
   room: Room | null;
-  /** The <video> element receiving the live stream. */
-  videoRef: RefObject<HTMLVideoElement>;
+  /** The <video> element receiving the live stream — null until it mounts.
+   *  Passed as the actual element (not a ref) so the effect re-runs when the
+   *  element mounts; a ref's `.current` is mutated without re-rendering, so an
+   *  effect keyed on a ref would attach to a stale (null) element. */
+  videoElement: HTMLVideoElement | null;
   /** Capture toggle. Off by default (subscriber-only viewing); the
    *  parent view flips this when the customer engages "Take
    *  control". */
   enabled: boolean;
+  /** Surfaced when the FIRST input publish fails — the data channel is
+   *  effectively dead, so control isn't reaching the device. The parent wires
+   *  this to a small non-fatal badge. Fired at most once per effect run. */
+  onPublishError?: () => void;
 }
 
 /** Map a browser pointer event to the video's intrinsic logical
@@ -139,12 +145,26 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
   // iPhone has no hover/pointer-move without a touch).
   const active = useRef<{ touchId: number } | null>(null);
   const touchIdSeq = useRef(0);
-
+  // Keep the latest onPublishError in a ref so the capture effect does NOT
+  // depend on the callback's identity — the natural usage is an inline arrow (a
+  // fresh ref every render), and re-keying the effect on it would tear down +
+  // re-attach the listeners (nulling the in-flight gesture) on every render.
+  const onPublishErrorRef = useRef(opts.onPublishError);
   useEffect(() => {
-    const { room, videoRef, enabled } = opts;
-    if (!enabled || room === null) return;
-    const video = videoRef.current;
-    if (video === null) return;
+    onPublishErrorRef.current = opts.onPublishError;
+  }, [opts.onPublishError]);
+
+  // Destructure to PRIMITIVES so the effect depends on the actual room / element
+  // / enabled VALUES, not the opts OBJECT. A caller passing an inline
+  // `{ room, videoElement, enabled }` literal (the natural usage) makes `opts` a
+  // fresh reference every render; with an `[opts]` dep the effect would re-attach
+  // the listeners — and its cleanup nulls `active.current`, dropping any
+  // in-flight finger-down gesture. Depending on the primitives (mirrors
+  // livekit-latency-ping.ts) re-runs only on a real change, and keying on the
+  // actual `videoElement` re-runs the effect when the element mounts.
+  const { room, videoElement: video, enabled } = opts;
+  useEffect(() => {
+    if (!enabled || room === null || video === null) return;
 
     let warnedPublishFailure = false;
     const send = (event: InputEvent, reliable: boolean): void => {
@@ -158,6 +178,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
             '[simulator] input publish failed — control will not reach the device:',
             err,
           );
+          onPublishErrorRef.current?.();
         }
         return undefined;
       });
@@ -198,6 +219,26 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       if (p === null) return;
       send({ type: 'touchEnd', x: p.x, y: p.y, touchId: g.touchId }, true);
     };
+    // Window-level release fallback: pointer-capture never engages (the listeners
+    // are mouse* with no pointerId, while the capture call is pointerId-guarded),
+    // so a drag that releases OFF the video element never fires the element's
+    // mouseup → the finger stays down (a stuck touch). A window-level end ALWAYS
+    // lifts the finger. It can't map coordinates off-surface, so it ends at the
+    // last gesture position via touchEnd with the held touchId (no x/y change
+    // needed — the Mac side ends the active touch).
+    const endActiveGesture = (e: MouseEvent): void => {
+      const g = active.current;
+      if (g === null) return;
+      active.current = null;
+      // Best-effort: use the in-bounds point when available, else just end the
+      // touch at its current position (the harness ends the active touchId).
+      const p = pointerToViewport(e, video);
+      if (p !== null) {
+        send({ type: 'touchEnd', x: p.x, y: p.y, touchId: g.touchId }, true);
+      } else {
+        send({ type: 'touchEnd', x: 0, y: 0, touchId: g.touchId }, true);
+      }
+    };
     // Wheel/trackpad scroll = a swipe gesture. Scrolling content DOWN
     // (deltaY > 0, reveal below) maps to a finger swiping UP, so y decreases.
     // Clamp the delta so one scroll notch is a short flick, not a fling.
@@ -217,7 +258,20 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         true,
       );
     };
+    // True when focus is in an editable element (a text field / textarea /
+    // contenteditable). The keyboard listeners are bound on `window`, so without
+    // this guard typing into the in-window "Tell the agent" composer would ALSO
+    // forward every keystroke to the device. Skip forwarding while editing.
+    const editingLocally = (): boolean => {
+      const el = document.activeElement;
+      if (el === null) return false;
+      const tag = el.tagName;
+      return (
+        tag === 'INPUT' || tag === 'TEXTAREA' || (el as HTMLElement).isContentEditable === true
+      );
+    };
     const onKeyDown = (e: KeyboardEvent): void => {
+      if (editingLocally()) return;
       const modifiers = modifiersFromEvent(e);
       send(
         {
@@ -229,6 +283,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       );
     };
     const onKeyUp = (e: KeyboardEvent): void => {
+      if (editingLocally()) return;
       const modifiers = modifiersFromEvent(e);
       send(
         {
@@ -252,6 +307,11 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // only LK consumer in v1.0.
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    // Window-level release fallback (mouse + pointer) so a drag that releases off
+    // the element still lifts the finger — pointer-capture doesn't engage on the
+    // mouse* listeners, so the element's own mouseup can be missed.
+    window.addEventListener('mouseup', endActiveGesture);
+    window.addEventListener('pointerup', endActiveGesture);
 
     return () => {
       video.removeEventListener('mousemove', onMouseMove);
@@ -260,8 +320,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       video.removeEventListener('wheel', onWheel);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('mouseup', endActiveGesture);
+      window.removeEventListener('pointerup', endActiveGesture);
       // Drop any in-flight gesture so a remount can't reuse a stale touchId.
       active.current = null;
     };
-  }, [opts]);
+  }, [room, video, enabled]);
 }
