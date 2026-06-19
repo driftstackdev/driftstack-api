@@ -482,6 +482,72 @@ describe('FleetControlRegistry', () => {
     expect(reg.size()).toBe(0);
   });
 
+  it('worker-disconnect hooks: register fires onNodeRegistered; unregister of the LIVE conn fires onNodeDisconnected (migration 0086)', () => {
+    const registered: string[] = [];
+    const disconnected: string[] = [];
+    const reg = new FleetControlRegistry(
+      undefined, // onProfileSaved
+      undefined, // onChallengeDetected
+      undefined, // onPageState
+      undefined, // onProfileSaveFailed
+      undefined, // onHeartbeat
+      (nodeId) => registered.push(nodeId),
+      (nodeId) => disconnected.push(nodeId),
+    );
+    const conn = reg.register('node-1', () => {});
+    expect(registered).toEqual(['node-1']);
+    expect(disconnected).toEqual([]);
+    reg.unregister('node-1', conn, 'closed');
+    expect(disconnected).toEqual(['node-1']);
+  });
+
+  it('worker-disconnect hooks: a lagging OLD-socket close after a reconnect does NOT fire onNodeDisconnected (identity-checked — the live conn already re-armed register)', () => {
+    const registered: string[] = [];
+    const disconnected: string[] = [];
+    const reg = new FleetControlRegistry(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (nodeId) => registered.push(nodeId),
+      (nodeId) => disconnected.push(nodeId),
+    );
+    const first = reg.register('node-1', () => {});
+    const second = reg.register('node-1', () => {}); // reconnect → fires register again
+    // The OLD socket's lagging close unregisters with the OLD conn — must be a
+    // no-op (identity check), so NO onNodeDisconnected fires for the live node.
+    reg.unregister('node-1', first, 'old socket closed');
+    expect(registered).toEqual(['node-1', 'node-1']); // each (re)connect fired register
+    expect(disconnected).toEqual([]); // the live conn was never torn down
+    // Cleanly unregister the live conn → NOW it fires disconnect.
+    reg.unregister('node-1', second, 'closed');
+    expect(disconnected).toEqual(['node-1']);
+  });
+
+  it('worker-disconnect hooks: a throwing hook does NOT break register/unregister (best-effort)', () => {
+    const reg = new FleetControlRegistry(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => {
+        throw new Error('register hook blew up');
+      },
+      () => {
+        throw new Error('disconnect hook blew up');
+      },
+    );
+    let conn!: FleetControlConnection;
+    expect(() => {
+      conn = reg.register('node-1', () => {});
+    }).not.toThrow();
+    expect(reg.get('node-1')).toBe(conn);
+    expect(() => reg.unregister('node-1', conn, 'closed')).not.toThrow();
+    expect(reg.size()).toBe(0);
+  });
+
   it('identity-checked unregister: the OLD connection closing AFTER a reconnect does NOT tear down the live new connection (reconnect/replace race)', async () => {
     const reg = new FleetControlRegistry();
     const first = reg.register('node-1', () => {});

@@ -1955,6 +1955,16 @@ export const agentSessions = pgTable(
     // 'claude-opus-4-7' (the prior hardcoded model); SDK/dashboard pick at
     // create-time. CHECK constraint lives in the migration.
     model: text('model').notNull().default('claude-opus-4-7'),
+    // 2026-06-19 (migration 0086) — which fleet node this session was
+    // dispatched to (the FleetControlRegistry key == the authed JWT iss /
+    // config.env NODE_ID, with a uuid fallback for legacy uuid-keyed nodes).
+    // Written when the sessionAssign is dispatched; NULL until then (and on
+    // every no-fleet-CP / prod row). The worker-disconnect reaper closes a
+    // node's status='active' sessions by this pointer when the node drops and
+    // doesn't reconnect within the grace window, freeing the harness slot in
+    // minutes instead of waiting for the 12h orphan_reap backstop. NOT a FK to
+    // fleet_nodes (the registry keys by the human node_id, not the uuid PK).
+    nodeId: text('node_id'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -1966,6 +1976,13 @@ export const agentSessions = pgTable(
     // v2-#9 list-by-status index. Matches the dashboard's "active
     // agent-sessions" query plan.
     index('agent_sessions_account_status_created_idx').on(t.accountId, t.status, t.createdAt),
+    // 2026-06-19 (migration 0086) — partial index backing the worker-disconnect
+    // reaper's hot read ("every still-active session for THIS node"). Mirrors the
+    // migration's `WHERE status = 'active'`; stays O(active-for-node) as closed
+    // rows accumulate.
+    index('agent_sessions_node_id_active_idx')
+      .on(t.nodeId)
+      .where(sql`${t.status} = 'active'`),
   ],
 );
 

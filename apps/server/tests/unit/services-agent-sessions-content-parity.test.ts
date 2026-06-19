@@ -91,7 +91,7 @@ describe('services/agent-sessions content parity', () => {
     expect(body).toMatch(/updatedAt: Date;/);
   });
 
-  it("AgentSessionsRepo 9-method surface pinned: create + get + listByAccount + appendTranscript + debitTokens + closeWithReason + findByIdempotencyKey + setPairModeState + setGuiControlKey. Drift to dropping a method would break the contract that lets the executor + dashboard chat UI work against either InMemoryRepo or DrizzleRepo without knowing which backend they're talking to", () => {
+  it("AgentSessionsRepo 12-method surface pinned: create + get + listByAccount + appendTranscript + debitTokens + closeWithReason + reapOrphanedActiveBefore + setNodeId + closeActiveByNode + findByIdempotencyKey + setPairModeState + setGuiControlKey. Drift to dropping a method would break the contract that lets the executor + dashboard chat UI work against either InMemoryRepo or DrizzleRepo without knowing which backend they're talking to", () => {
     expect(body).toMatch(/export interface AgentSessionsRepo \{/);
     expect(body).toMatch(/create\(args: CreateAgentSessionArgs\): Promise<AgentSessionRecord>;/);
     expect(body).toMatch(/get\(id: string\): Promise<AgentSessionRecord \| null>;/);
@@ -105,6 +105,13 @@ describe('services/agent-sessions content parity', () => {
     expect(body).toMatch(
       /closeWithReason\(id: string, reason: string\): Promise<AgentSessionRecord>;/,
     );
+    expect(body).toMatch(/reapOrphanedActiveBefore\(cutoff: Date\): Promise<number>;/);
+    // Worker-disconnect fix (2026-06-19, migration 0086) — session→node
+    // pointer + node-scoped bulk-close that the disconnect reaper drives.
+    expect(body).toMatch(
+      /setNodeId\(id: string, nodeId: string\): Promise<AgentSessionRecord \| null>;/,
+    );
+    expect(body).toMatch(/closeActiveByNode\(nodeId: string, reason: string\): Promise<number>;/);
     expect(body).toMatch(
       /findByIdempotencyKey\(\s*\n?\s*accountId: string,\s*\n?\s*idempotencyKey: string,\s*\n?\s*\): Promise<AgentSessionRecord \| null>;/,
     );

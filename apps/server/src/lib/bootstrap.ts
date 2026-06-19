@@ -137,6 +137,7 @@ import {
   enqueueNextAgentSessionOrphanReap,
   registerAgentSessionOrphanReapJob,
 } from '../services/agent-session-orphan-sweeper.js';
+import { WorkerDisconnectReaperService } from '../services/worker-disconnect-reaper.js';
 import {
   SessionDurationSweeperService,
   enqueueNextSessionDurationSweep,
@@ -1346,6 +1347,20 @@ export async function createProductionDeps(
         // registry's onPageState consumer + read by GET /v1/agent-sessions/
         // :id/page-state (the GUI loading-bar/error-overlay source).
         const sessionPageStateStore = new SessionPageStateStore();
+        // Worker-disconnect fix (2026-06-19) — close a node's active agent
+        // sessions when its control-plane connection drops and doesn't
+        // reconnect within DRIFTSTACK_WORKER_DISCONNECT_GRACE_SECONDS (default
+        // 120). The PRECISE complement to the 12h orphan_reap backstop: frees
+        // the worker's concurrent-session slot in minutes. The reaper's
+        // register/disconnect hooks are threaded into the registry below
+        // (positional args 6 + 7) so the live WS lifecycle arms/cancels the
+        // per-node grace timers. A re-register within the grace cancels the
+        // close (so a transient blip / deliberate restart never false-closes a
+        // live session). Reuses the agentSessionsRepo wired above.
+        const workerDisconnectReaper = new WorkerDisconnectReaperService({
+          repo: agentSessionsRepo,
+          logger,
+        });
         return {
           fleetNodeAuth: new FleetNodeAuthImpl(drizzleFleetNodesRepo, fleetNonceCache),
           fleetNonceCache,
@@ -1411,6 +1426,12 @@ export async function createProductionDeps(
                 );
               });
             },
+            // Worker-disconnect fix (2026-06-19) — liveness hooks (positional
+            // args 6 + 7): a (re)connect CANCELS the node's pending grace timer;
+            // a disconnect ARMS it. On grace expiry the reaper closes the node's
+            // status='active' sessions (reason='worker-disconnected').
+            (nodeId) => workerDisconnectReaper.onNodeRegistered(nodeId),
+            (nodeId) => workerDisconnectReaper.onNodeDisconnected(nodeId),
           ),
           // Local fleet-demo: the config a dispatched session browses with. Only
           // assembled behind FLEET_CONTROL_PLANE_ENABLED (so inert in prod). The

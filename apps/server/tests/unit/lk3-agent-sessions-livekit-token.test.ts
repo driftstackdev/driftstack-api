@@ -48,6 +48,7 @@ function makeSession(overrides: Partial<AgentSessionRecord> = {}): AgentSessionR
     guiControlKeyCiphertext: null,
     mode: 'ai',
     model: 'claude-opus-4-7',
+    nodeId: null,
     createdAt: new Date('2026-05-18T12:00:00Z'),
     updatedAt: new Date('2026-05-18T12:00:00Z'),
     ...overrides,

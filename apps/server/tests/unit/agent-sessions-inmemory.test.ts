@@ -297,4 +297,70 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
     expect(reClosed.closedAt?.toISOString()).toBe('2026-05-16T00:10:00.000Z');
     expect(reClosed.updatedAt.toISOString()).toBe('2026-05-16T00:20:00.000Z');
   });
+
+  // ─── Worker-disconnect fix (2026-06-19, migration 0086) ─────────────
+
+  it('0086 setNodeId: persists node_id + bumps updatedAt; create() leaves node_id null', async () => {
+    let now = new Date('2026-06-19T00:00:00Z');
+    const repo = new InMemoryAgentSessionsRepo(() => now);
+    const rec = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    expect(rec.nodeId).toBeNull();
+    now = new Date('2026-06-19T00:05:00Z');
+    const updated = await repo.setNodeId(rec.id, 'mac-macstadium-us-001');
+    expect(updated!.nodeId).toBe('mac-macstadium-us-001');
+    expect(updated!.updatedAt.toISOString()).toBe('2026-06-19T00:05:00.000Z');
+    expect((await repo.get(rec.id))!.nodeId).toBe('mac-macstadium-us-001');
+  });
+
+  it('0086 setNodeId: an unknown id is a no-op returning null (a dispatch can race a DELETE) — never throws', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    await expect(repo.setNodeId('agt_does_not_exist', 'node-x')).resolves.toBeNull();
+  });
+
+  it('0086 closeActiveByNode: closes ONLY this node’s active sessions; another node’s, an already-closed one, and a never-dispatched (null node_id) one are untouched', async () => {
+    let now = new Date('2026-06-19T00:00:00Z');
+    const repo = new InMemoryAgentSessionsRepo(() => now);
+
+    // (1) two active sessions on node-A → both must close.
+    const a1 = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    const a2 = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    await repo.setNodeId(a1.id, 'node-A');
+    await repo.setNodeId(a2.id, 'node-A');
+
+    // (2) an active session on node-B → must survive (another node).
+    const b1 = await repo.create({ accountId: 'acc_2', tokenBudgetTotal: 100 });
+    await repo.setNodeId(b1.id, 'node-B');
+
+    // (3) an ALREADY-closed session on node-A → must keep its original reason.
+    const closedOnA = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    await repo.setNodeId(closedOnA.id, 'node-A');
+    await repo.closeWithReason(closedOnA.id, 'customer-closed');
+
+    // (4) a never-dispatched active session (node_id null) → must survive.
+    const undispatched = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+
+    now = new Date('2026-06-19T00:10:00Z');
+    const closed = await repo.closeActiveByNode('node-A', 'worker-disconnected');
+    expect(closed).toBe(2);
+
+    const a1After = await repo.get(a1.id);
+    expect(a1After!.status).toBe('closed');
+    expect(a1After!.closedReason).toBe('worker-disconnected');
+    expect(a1After!.closedAt?.toISOString()).toBe('2026-06-19T00:10:00.000Z');
+    expect((await repo.get(a2.id))!.status).toBe('closed');
+
+    // node-B untouched.
+    expect((await repo.get(b1.id))!.status).toBe('active');
+    expect((await repo.get(b1.id))!.closedReason).toBeNull();
+
+    // already-closed row keeps its original reason (not re-stamped).
+    const closedAfter = await repo.get(closedOnA.id);
+    expect(closedAfter!.closedReason).toBe('customer-closed');
+
+    // never-dispatched row untouched (null node_id never matches).
+    expect((await repo.get(undispatched.id))!.status).toBe('active');
+
+    // Idempotent — a second close on the same node closes nothing new.
+    expect(await repo.closeActiveByNode('node-A', 'worker-disconnected')).toBe(0);
+  });
 });

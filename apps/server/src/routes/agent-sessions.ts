@@ -474,6 +474,11 @@ export async function dispatchSessionAssignOnCreate(args: {
   // injects it as the inlineProxyConfig instead of the operator default.
   proxyId?: string;
   accountProxiesService?: AccountProxiesService;
+  // Worker-disconnect fix (2026-06-19, migration 0086) — when wired, the
+  // dispatch persists session→node (agent_sessions.node_id) so the
+  // worker-disconnect reaper can close THIS node's active sessions if the node
+  // drops. The dispatch's `sessionId` IS the agent-session id (created.id).
+  agentSessions?: AgentSessionsRepo;
 }): Promise<void> {
   const {
     sessionId,
@@ -488,6 +493,7 @@ export async function dispatchSessionAssignOnCreate(args: {
     r2,
     proxyId,
     accountProxiesService,
+    agentSessions,
   } = args;
   if (
     fleetControlRegistry === undefined ||
@@ -586,8 +592,31 @@ export async function dispatchSessionAssignOnCreate(args: {
       ...(profile !== undefined ? { profile } : {}),
     });
     conn.sendSessionAssign(assign);
+    const dispatchedNodeId = mac.nodeId ?? mac.id;
+    // Worker-disconnect fix (2026-06-19) — persist session→node so the
+    // disconnect reaper can close THIS node's active sessions when it drops.
+    // The registry key is what the reaper sees on unregister, so we store the
+    // SAME value the dispatch resolved the connection by. Best-effort: a write
+    // failure must not break the dispatch (the 12h orphan_reap is still the
+    // backstop), so swallow + log. setNodeId returns null for an id that lost a
+    // race with DELETE — harmless, nothing to reap then.
+    if (agentSessions !== undefined) {
+      try {
+        await agentSessions.setNodeId(sessionId, dispatchedNodeId);
+      } catch (err) {
+        logger?.warn(
+          {
+            component: 'fleet-session-dispatch',
+            sessionId,
+            nodeId: dispatchedNodeId,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          'persisting session node_id failed (dispatch unaffected; 12h orphan_reap backstop holds)',
+        );
+      }
+    }
     logger?.info(
-      { component: 'fleet-session-dispatch', sessionId, nodeId: mac.nodeId ?? mac.id },
+      { component: 'fleet-session-dispatch', sessionId, nodeId: dispatchedNodeId },
       'dispatched sessionAssign to fleet node',
     );
   } catch (err) {
@@ -1075,6 +1104,9 @@ export function registerAgentSessionsRoutes(
         ...(proxyId !== undefined ? { proxyId } : {}),
         ...(accountProxiesService !== undefined ? { accountProxiesService } : {}),
         ...(r2 !== undefined ? { r2 } : {}),
+        // Worker-disconnect fix (2026-06-19) — persist session→node so the
+        // disconnect reaper can free this node's slot if the node drops.
+        agentSessions: sessions,
       });
       // Slice 6 follow-up 2026-05-20 — agent-session create audit. Best-
       // effort emit; audit failures don't break the create. Distinct

@@ -1,0 +1,31 @@
+-- 2026-06-19 — agent_sessions.node_id: which fleet node holds a session.
+--
+-- Agent sessions only flip to 'closed' on an explicit DELETE or budget
+-- exhaustion (or the 12h agent_session.orphan_reap wall-clock backstop). When a
+-- worker node CRASHES/RESTARTS mid-session the server-side row lingers
+-- status='active' — and a still-active row never triggers the
+-- dispatchSessionEndOnClose teardown, so the worker's concurrent-session slot
+-- (harness maxConcurrent) stays held until the coarse 12h reaper fires. To free
+-- the slot in MINUTES instead, the server must close a node's active sessions
+-- when that node disconnects and doesn't reconnect within a grace window — which
+-- requires knowing WHICH node each session was dispatched to.
+--
+-- `node_id` is that pointer: the registry key (the authed JWT iss / config.env
+-- NODE_ID, e.g. "mac-macstadium-us-001", with a uuid fallback for legacy
+-- uuid-keyed nodes), written when the sessionAssign is dispatched. NULL until a
+-- session is dispatched to a node (pre-dispatch / no-fleet-CP rows stay NULL).
+-- It is NOT a FK to fleet_nodes — the registry is keyed by the human node_id,
+-- not the fleet_nodes uuid PK, and a revoked-then-deleted node must not cascade
+-- a session row away.
+--
+-- Partial index ON (node_id) WHERE status = 'active' backs the
+-- disconnect-reaper's hot read: "every still-active session for THIS node". It
+-- stays O(active-for-node) as closed sessions accumulate, and only indexes the
+-- rows the reaper ever scans. Drizzle's index() can't express the partial WHERE,
+-- so it's raw SQL here (same pattern as 0071 scheduled_jobs_claim_idx +
+-- 0047 agent_sessions idempotency partial-unique). Additive + idempotent; no
+-- backfill (NULL on every existing row is correct — the disconnect reaper only
+-- ever matches a node_id it itself wrote).
+ALTER TABLE "agent_sessions" ADD COLUMN IF NOT EXISTS "node_id" text;
+CREATE INDEX IF NOT EXISTS "agent_sessions_node_id_active_idx"
+  ON "agent_sessions" ("node_id") WHERE "status" = 'active';

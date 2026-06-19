@@ -14,6 +14,7 @@ import {
 } from '../../src/routes/agent-sessions.js';
 import { FleetControlRegistry } from '../../src/services/fleet-control-registry.js';
 import { encryptLivekitSecret } from '../../src/lib/livekit-secret-encryption.js';
+import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js';
 import type { DrizzleFleetNodesRepo } from '../../src/db/fleet-nodes-repo.js';
 import type { ProfilesService } from '../../src/services/profiles.js';
 import type { R2 } from '../../src/lib/r2.js';
@@ -93,6 +94,74 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect(payload.video.canPublish).toBe(true);
     expect(payload.video.room).toBe('agt_demo1');
     expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('persists the dispatched-to node_id on the agent session (migration 0086) — the same registry key it resolved the connection by', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register('mac-macstadium-us-001', (d) => sent.push(d));
+    const agentSessions = new InMemoryAgentSessionsRepo();
+    const created = await agentSessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const mac = {
+      ...macWithLivekit(),
+      id: '3c80787f-95d6-40cf-uuid-pk',
+      nodeId: 'mac-macstadium-us-001',
+    };
+    await dispatchSessionAssignOnCreate({
+      sessionId: created.id,
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(mac),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      agentSessions,
+      logger: logger(),
+    });
+    expect(sent).toHaveLength(1);
+    // node_id == the registry key (the human node_id), NOT the fleet_nodes uuid.
+    const after = await agentSessions.get(created.id);
+    expect(after!.nodeId).toBe('mac-macstadium-us-001');
+  });
+
+  it('does NOT persist node_id when the node is not connected (no dispatch → no slot held)', async () => {
+    const registry = new FleetControlRegistry(); // node never registered
+    const agentSessions = new InMemoryAgentSessionsRepo();
+    const created = await agentSessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    await dispatchSessionAssignOnCreate({
+      sessionId: created.id,
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      agentSessions,
+      logger: logger(),
+    });
+    const after = await agentSessions.get(created.id);
+    expect(after!.nodeId).toBeNull();
+  });
+
+  it('best-effort: a setNodeId failure is swallowed (dispatch + session-create unaffected)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const log = logger();
+    const throwingSessions = {
+      setNodeId: () => Promise.reject(new Error('db down')),
+    } as unknown as InMemoryAgentSessionsRepo;
+    await expect(
+      dispatchSessionAssignOnCreate({
+        sessionId: 'agt_persist_fail',
+        fleetControlRegistry: registry,
+        fleetNodesRepo: repoReturning(macWithLivekit()),
+        livekitSecretEncryptionKey: KEY,
+        sessionDispatch: DISPATCH,
+        agentSessions: throwingSessions,
+        logger: log,
+      }),
+    ).resolves.toBeUndefined();
+    // The assign STILL went out (the dispatch is the customer-facing effect);
+    // the node_id persistence failure is logged, never thrown.
+    expect(sent).toHaveLength(1);
+    expect(log.warn).toHaveBeenCalled();
   });
 
   it('resolves the live connection by node_id (the registry key), NOT the fleet_nodes uuid (migration 0085 / Path C)', async () => {

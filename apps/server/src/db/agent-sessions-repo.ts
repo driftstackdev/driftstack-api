@@ -63,6 +63,9 @@ function rowToRecord(row: typeof agentSessions.$inferSelect): AgentSessionRecord
     // 6.c / #15 — picked Claude 4.x model (migration 0066 column;
     // existing rows pick up 'claude-opus-4-7' from the CHECK default).
     model: (row.model as AgentModel) ?? DEFAULT_AGENT_MODEL,
+    // 0086 — fleet node the session was dispatched to (NULL until dispatch /
+    // on every no-fleet-CP row).
+    nodeId: row.nodeId,
     pairModeState: row.pairModeState,
     guiControlKeyExpiresAt: row.guiControlKeyExpiresAt,
     guiControlKeyCiphertext: row.guiControlKeyCiphertext,
@@ -240,6 +243,43 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
         updatedAt: now,
       })
       .where(and(eq(agentSessions.status, 'active'), lt(agentSessions.createdAt, cutoff)))
+      .returning({ id: agentSessions.id });
+    return updated.length;
+  }
+
+  async setNodeId(id: string, nodeId: string): Promise<AgentSessionRecord | null> {
+    // Worker-disconnect fix (2026-06-19) — persist which node a session was
+    // dispatched to. A dispatch can race a DELETE, so an unknown id returns
+    // null (the best-effort dispatch caller ignores the result), never throws.
+    const now = this.clock();
+    const updated = await this.database.db
+      .update(agentSessions)
+      .set({ nodeId, updatedAt: now })
+      .where(eq(agentSessions.id, id))
+      .returning();
+    const row = updated[0];
+    return row ? rowToRecord(row) : null;
+  }
+
+  async closeActiveByNode(nodeId: string, reason: string): Promise<number> {
+    // Worker-disconnect fix (2026-06-19) — bulk-close a node's still-active
+    // sessions when the node drops and doesn't reconnect within the grace
+    // window. CRITICAL INVARIANT: the WHERE is anchored on BOTH status='active'
+    // AND node_id=nodeId, so another node's sessions, already-closed sessions,
+    // and never-dispatched rows (node_id NULL — `eq` never matches NULL) are
+    // NEVER touched. closed_at/closed_reason set in the same statement;
+    // idempotent (re-running closes nothing new — the rows are no longer
+    // 'active'). Backed by the agent_sessions_node_id_active_idx partial index.
+    const now = this.clock();
+    const updated = await this.database.db
+      .update(agentSessions)
+      .set({
+        status: 'closed',
+        closedReason: reason,
+        closedAt: now,
+        updatedAt: now,
+      })
+      .where(and(eq(agentSessions.status, 'active'), eq(agentSessions.nodeId, nodeId)))
       .returning({ id: agentSessions.id });
     return updated.length;
   }

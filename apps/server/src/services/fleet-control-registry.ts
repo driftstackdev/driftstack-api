@@ -252,6 +252,17 @@ export class FleetControlRegistry {
     private readonly onPageState?: (frame: PageStateFrame) => void,
     private readonly onProfileSaveFailed?: (frame: ProfileSaveFailed) => void,
     private readonly onHeartbeat?: (frame: Heartbeat) => void,
+    /**
+     * Worker-disconnect fix (2026-06-19) — liveness hooks for the
+     * WorkerDisconnectReaper. `onNodeRegistered` fires whenever a node
+     * (re)connects (CANCELS any pending grace timer for it); `onNodeDisconnected`
+     * fires when the node's connection is unregistered (ARMS the grace timer).
+     * Both omitted (no reaper wired / stateless deploy) → no-op, identical to
+     * today's behaviour. Best-effort: a throwing hook must not break
+     * register/unregister, so each call is guarded.
+     */
+    private readonly onNodeRegistered?: (nodeId: string) => void,
+    private readonly onNodeDisconnected?: (nodeId: string) => void,
   ) {}
 
   register(nodeId: string, send: FleetNodeSocketSend): FleetControlConnection {
@@ -269,6 +280,14 @@ export class FleetControlRegistry {
       this.onHeartbeat,
     );
     this.connections.set(nodeId, conn);
+    // Worker-disconnect fix — a (re)connect CANCELS any pending grace timer for
+    // this node, so a transient WS blip never false-closes a live session.
+    // Best-effort: a throwing hook must not break the connection registration.
+    try {
+      this.onNodeRegistered?.(nodeId);
+    } catch {
+      /* swallow — registration must not fail on a reaper-hook error */
+    }
     return conn;
   }
 
@@ -289,10 +308,20 @@ export class FleetControlRegistry {
   unregister(nodeId: string, conn: FleetControlConnection, reason: string): void {
     const current = this.connections.get(nodeId);
     // A newer connection already replaced this one (and register() already
-    // closed it) — leave the live entry alone.
+    // closed it) — leave the live entry alone. Returning here ALSO means a
+    // lagging old-socket close after a reconnect does NOT arm the grace timer
+    // (the live conn already fired onNodeRegistered, which cancels it anyway).
     if (current === undefined || current !== conn) return;
     this.connections.delete(nodeId);
     conn.close(reason);
+    // Worker-disconnect fix — the node's live connection just dropped: ARM the
+    // grace timer. If it reconnects within the window, register() cancels it.
+    // Best-effort: a throwing hook must not break the unregister teardown.
+    try {
+      this.onNodeDisconnected?.(nodeId);
+    } catch {
+      /* swallow — teardown must not fail on a reaper-hook error */
+    }
   }
 
   /** Number of live node connections (test/inspection helper). */

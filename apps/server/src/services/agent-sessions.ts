@@ -96,6 +96,14 @@ export interface AgentSessionRecord {
    */
   model: AgentModel;
   /**
+   * 2026-06-19 (migration 0086) — which fleet node this session was dispatched
+   * to (the FleetControlRegistry key == the authed JWT iss / config.env
+   * NODE_ID). Set by `setNodeId` when the sessionAssign is dispatched; NULL
+   * until then (and on every no-fleet-CP / prod row). The worker-disconnect
+   * reaper closes a node's active sessions by this pointer.
+   */
+  nodeId: string | null;
+  /**
    * Arc 2 sub-slice 8.2 (v2-#8) — pair-mode state machine discriminator
    * payload (sub-slice 8.7 will define the exact shape). NULL when
    * the session is not in pair mode, OR is in pair mode but no
@@ -170,6 +178,30 @@ export interface AgentSessionsRepo {
    * status is NEVER touched. Idempotent (re-running closes nothing new).
    */
   reapOrphanedActiveBefore(cutoff: Date): Promise<number>;
+
+  /**
+   * Worker-disconnect fix (2026-06-19, migration 0086) — record which fleet
+   * node a session was dispatched to. Called by dispatchSessionAssignOnCreate
+   * after the sessionAssign is sent. Best-effort at the call site (a write
+   * failure must not break session-create), so this just persists the pointer
+   * the disconnect reaper later matches on. No-op (returns null) when the
+   * session id is unknown — a dispatch can race a DELETE.
+   */
+  setNodeId(id: string, nodeId: string): Promise<AgentSessionRecord | null>;
+
+  /**
+   * Worker-disconnect fix (2026-06-19, migration 0086) — bulk-close every
+   * session still `status='active'` AND `node_id = nodeId`, stamping
+   * `closed_reason=reason` + `closed_at=now`. Returns the number of rows
+   * closed. Called by the worker-disconnect reaper when a node drops and does
+   * not reconnect within the grace window, so the worker's concurrent-session
+   * slot frees in minutes instead of lingering until the 12h orphan_reap.
+   * CRITICAL INVARIANT: anchored on BOTH status='active' AND node_id=nodeId, so
+   * another node's sessions, already-closed sessions, and sessions never
+   * dispatched (node_id NULL) are NEVER touched. Idempotent (re-running closes
+   * nothing new — the rows are no longer 'active').
+   */
+  closeActiveByNode(nodeId: string, reason: string): Promise<number>;
 
   /**
    * v2-#19 — Stripe-pattern idempotency lookup. Scoped per-account so
@@ -252,6 +284,8 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       mode: args.mode ?? 'ai',
       // 6.c / #15 — default model mirrors migration 0066's column default.
       model: args.model ?? DEFAULT_AGENT_MODEL,
+      // 0086 — set later by setNodeId when the sessionAssign is dispatched.
+      nodeId: null,
       pairModeState: null,
       guiControlKeyExpiresAt: null,
       guiControlKeyCiphertext: null,
@@ -382,6 +416,36 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
         ...rec,
         status: 'closed',
         closedReason: 'orphaned-lifetime',
+        closedAt: rec.closedAt ?? now,
+        updatedAt: now,
+      });
+      closed += 1;
+    }
+    return Promise.resolve(closed);
+  }
+
+  setNodeId(id: string, nodeId: string): Promise<AgentSessionRecord | null> {
+    const rec = this.records.get(id);
+    // A dispatch can race a DELETE — an unknown id is a no-op (returns null),
+    // never a throw, so the best-effort dispatch caller can ignore the result.
+    if (!rec) return Promise.resolve(null);
+    const updated: AgentSessionRecord = { ...rec, nodeId, updatedAt: this.clock() };
+    this.records.set(id, updated);
+    return Promise.resolve(updated);
+  }
+
+  closeActiveByNode(nodeId: string, reason: string): Promise<number> {
+    const now = this.clock();
+    let closed = 0;
+    for (const [id, rec] of this.records) {
+      // INVARIANT: only status='active' AND node_id=nodeId. Another node's
+      // rows, already-closed rows, and never-dispatched (nodeId=null) rows are
+      // skipped — exactly the closeActiveByNode contract.
+      if (rec.status !== 'active' || rec.nodeId !== nodeId) continue;
+      this.records.set(id, {
+        ...rec,
+        status: 'closed',
+        closedReason: reason,
         closedAt: rec.closedAt ?? now,
         updatedAt: now,
       });
