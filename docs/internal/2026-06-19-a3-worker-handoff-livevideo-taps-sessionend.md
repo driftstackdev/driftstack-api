@@ -30,6 +30,22 @@ Evidence: session `agt_a076bb5e…` dispatched to `mac-macstadium-us-001` but pu
 **no video AND no page-state** → the worker isn't in the room → that single fact
 explains BOTH the blank video and the dead taps. Fix that and both light up.
 
+**VERIFIED (A2, 2026-06-19) — the server hands the worker EVERYTHING; zero server gap:**
+
+- The node `mac-macstadium-us-001` HAS its LiveKit registered server-side (`fleet_nodes`:
+  `livekit_api_key`/`livekit_api_secret_ciphertext`/`livekit_ws_url` all present,
+  ws_url `wss://driftstack-jrluij9g.livekit.cloud`).
+- So `enqueueSessionAssign` (agent-sessions.ts:452,526) mints a **PUBLISHER** token
+  (`video: { room: <sessionId>, roomJoin:true, canPublish:true, canSubscribe:true }`)
+  and includes the `livekit` block on the `sessionAssign` frame the worker receives:
+  `{ room: <sessionId>, token: <publisher JWT>, ws_url, expires_at }` (snake_case wire).
+- Therefore the **fork/harness worker code** must, on `sessionAssign`: (1) read the
+  `livekit` block, (2) **join the room** at `ws_url` with that publisher token,
+  (3) **publish the video track**, (4) **subscribe to + decode the DataChannel
+  `InputEvent`s** (RoomDataDispatcher → WebDriverManualTouchInjector). All four are
+  worker-side; A2 has nothing left to provide. If the worker IS joining but not
+  publishing/consuming, that's the bug to find; if it never joins, start there.
+
 ## Live-test evidence (prod, 2026-06-19 ~09:13Z)
 
 - A2 launched a real agent session via the API (`agt_a076bb5e…`). Prod logged
