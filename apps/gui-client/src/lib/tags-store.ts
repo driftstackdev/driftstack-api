@@ -96,3 +96,24 @@ export function removeTag(name: string): Promise<string[]> {
     return next;
   });
 }
+
+/** Rename a user-created tag name in the persisted set. Returns the updated
+ *  sorted list. A no-op when old/new normalize equal, the old name isn't
+ *  present, or the new name is blank. Re-tagging the profiles that carry the
+ *  old tag is the caller's job (this list is the empty-tag taxonomy). */
+export function renameTag(rawOld: string, rawNew: string): Promise<string[]> {
+  return writeLock(async () => {
+    const oldName = normalizeTagName(rawOld);
+    const newName = normalizeTagName(rawNew);
+    const current = await loadTags();
+    if (oldName === null || newName === null || oldName === newName) return current;
+    if (!current.includes(oldName)) return current;
+    const withoutOld = current.filter((t) => t !== oldName);
+    const next = (withoutOld.includes(newName) ? withoutOld : [...withoutOld, newName]).sort(
+      (a, b) => a.localeCompare(b),
+    );
+    await getStore().set(KEY, next);
+    await getStore().save();
+    return next;
+  });
+}

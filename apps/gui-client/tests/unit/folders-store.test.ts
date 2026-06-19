@@ -38,6 +38,7 @@ import {
   loadFolders,
   addFolder,
   removeFolder,
+  renameFolder,
   normalizeFolderName,
   loadFolderIcons,
   setFolderIcon,
@@ -94,6 +95,26 @@ describe('folders-store', () => {
     await addFolder('Aged');
     expect(await removeFolder('Shopping')).toEqual(['Aged']);
     expect(await removeFolder('Nope')).toEqual(['Aged']);
+  });
+
+  it('removeFolder also drops the attached icon', async () => {
+    await addFolder('Shopping', '🛒');
+    expect(await loadFolderIcons()).toEqual({ Shopping: '🛒' });
+    await removeFolder('Shopping');
+    expect(await loadFolders()).toEqual([]);
+    expect(await loadFolderIcons()).toEqual({});
+  });
+
+  it('renameFolder re-keys the name + its icon; sorts; no-ops on blank/equal/missing', async () => {
+    await addFolder('Shopping', '🛒');
+    await addFolder('Aged');
+    // Rename moves the name AND re-keys the icon under the new name.
+    expect(await renameFolder('Shopping', 'Retail')).toEqual(['Aged', 'Retail']);
+    expect(await loadFolderIcons()).toEqual({ Retail: '🛒' });
+    // No-ops: equal-after-normalize, blank new, missing old.
+    expect(await renameFolder('Retail', 'Retail')).toEqual(['Aged', 'Retail']);
+    expect(await renameFolder('Retail', '   ')).toEqual(['Aged', 'Retail']);
+    expect(await renameFolder('Ghost', 'X')).toEqual(['Aged', 'Retail']);
   });
 
   it('loadFolders degrades to [] on a corrupt (non-array) value', async () => {

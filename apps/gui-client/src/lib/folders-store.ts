@@ -144,12 +144,58 @@ export function replaceAllFolders(names: string[], icons: Record<string, string>
 
 /** Remove a user-created folder name from the persisted set. Profiles still
  *  carrying that folder keep deriving it (so it only disappears from the rail
- *  once it's both removed here AND empty of profiles). */
+ *  once it's both removed here AND empty of profiles). Also drops any icon
+ *  attached to that name so a stale icon can't reattach if the name comes back. */
 export function removeFolder(name: string): Promise<string[]> {
   return writeLock(async () => {
     const current = await loadFolders();
-    if (!current.includes(name)) return current;
+    const icons = await loadFolderIcons();
+    const hadName = current.includes(name);
+    const hadIcon = icons[name] !== undefined;
+    if (!hadName && !hadIcon) return current;
+    if (hadIcon) {
+      delete icons[name];
+      await getStore().set(ICONS_KEY, icons);
+    }
+    if (!hadName) {
+      await getStore().save();
+      return current;
+    }
     const next = current.filter((f) => f !== name);
+    await getStore().set(KEY, next);
+    await getStore().save();
+    return next;
+  });
+}
+
+/** Rename a user-created folder name in BOTH the names list and the icon map
+ *  (re-keying any attached icon onto the new name). Returns the updated sorted
+ *  list. A no-op when old/new normalize equal, the old name isn't present, or
+ *  the new name is blank. Re-assigning the profiles that carry the old folder
+ *  is the caller's job (the names list here is the empty-folder taxonomy). */
+export function renameFolder(rawOld: string, rawNew: string): Promise<string[]> {
+  return writeLock(async () => {
+    const oldName = normalizeFolderName(rawOld);
+    const newName = normalizeFolderName(rawNew);
+    const current = await loadFolders();
+    if (oldName === null || newName === null || oldName === newName) return current;
+    // Re-key the icon if the old name carried one (only when not already taken).
+    const icons = await loadFolderIcons();
+    if (icons[oldName] !== undefined) {
+      if (icons[newName] === undefined) icons[newName] = icons[oldName];
+      delete icons[oldName];
+      await getStore().set(ICONS_KEY, icons);
+    }
+    if (!current.includes(oldName)) {
+      // Old name was profile-derived only (not in the persisted set). The icon
+      // re-key above still applies; nothing to rename in the names list.
+      await getStore().save();
+      return current;
+    }
+    const withoutOld = current.filter((f) => f !== oldName);
+    const next = (withoutOld.includes(newName) ? withoutOld : [...withoutOld, newName]).sort(
+      (a, b) => a.localeCompare(b),
+    );
     await getStore().set(KEY, next);
     await getStore().save();
     return next;

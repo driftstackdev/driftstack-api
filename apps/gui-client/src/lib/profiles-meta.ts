@@ -111,27 +111,38 @@ export function saveProfileMeta(
 
 /** Bulk variant: apply the same partial to MANY profiles in one load/save
  *  round-trip (the bulk-select bar's move-to-folder / add-tag actions).
- *  `mode` controls tag semantics: 'merge' unions tags into each profile's
- *  existing set; 'replace' overwrites fields verbatim (folder always
- *  overwrites — a profile lives in one folder). */
+ *  `mode` controls tag semantics: 'merge' unions `meta.tags` into each
+ *  profile's existing set; 'replace' overwrites fields verbatim (folder always
+ *  overwrites — a profile lives in one folder); 'remove' SUBTRACTS `meta.tags`
+ *  from each profile's existing set (the bulk "Remove tag" action) and leaves
+ *  the non-tag fields of `meta` (e.g. folder) applied as a verbatim overwrite. */
 export function saveProfilesMetaBulk(
   profileIds: string[],
   meta: Partial<ProfileMeta>,
-  mode: 'merge' | 'replace' = 'merge',
+  mode: 'merge' | 'replace' | 'remove' = 'merge',
   liveProfileIds?: string[],
 ): Promise<ProfilesMetaMap> {
   return writeLock(async () => {
     const all = await loadProfilesMeta();
+    const removeSet =
+      mode === 'remove' && meta.tags ? new Set(meta.tags.map((t) => t.trim())) : null;
     for (const id of profileIds) {
       if (id.length === 0) continue;
       const current = all[id] ?? { folder: '', tags: [], note: '', icon: '' };
-      const nextTags =
-        mode === 'merge' && meta.tags
-          ? [...current.tags, ...meta.tags]
-          : (meta.tags ?? current.tags);
+      let nextTags: string[];
+      if (mode === 'merge' && meta.tags) {
+        nextTags = [...current.tags, ...meta.tags];
+      } else if (removeSet !== null) {
+        nextTags = current.tags.filter((t) => !removeSet.has(t.trim()));
+      } else {
+        nextTags = meta.tags ?? current.tags;
+      }
+      // In 'remove' mode `meta.tags` is the subtraction set, NOT a verbatim
+      // overwrite — strip it from the spread so only the recomputed set lands.
+      const { tags: _ignoredTags, ...metaRest } = meta;
       all[id] = cleanEntry({
         ...current,
-        ...meta,
+        ...(removeSet !== null ? metaRest : meta),
         tags: nextTags,
       });
     }

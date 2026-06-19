@@ -33,7 +33,7 @@ vi.mock('@tauri-apps/plugin-store', () => ({
   },
 }));
 
-import { loadTags, addTag, removeTag, normalizeTagName } from '../../src/lib/tags-store';
+import { loadTags, addTag, removeTag, renameTag, normalizeTagName } from '../../src/lib/tags-store';
 
 beforeEach(() => {
   stores.clear();
@@ -69,6 +69,16 @@ describe('tags-store', () => {
     await addTag('vip');
     expect(await removeTag('aged')).toEqual(['vip']);
     expect(await removeTag('nope')).toEqual(['vip']);
+  });
+
+  it('renameTag re-keys the name; sorts; no-ops on blank/equal/missing', async () => {
+    await addTag('aged');
+    await addTag('vip');
+    expect(await renameTag('aged', 'warmup')).toEqual(['vip', 'warmup']);
+    // No-ops: equal-after-normalize (# stripped), blank new, missing old.
+    expect(await renameTag('warmup', '#warmup')).toEqual(['vip', 'warmup']);
+    expect(await renameTag('warmup', '   ')).toEqual(['vip', 'warmup']);
+    expect(await renameTag('ghost', 'x')).toEqual(['vip', 'warmup']);
   });
 
   it('loadTags degrades to [] on a corrupt (non-array) value', async () => {

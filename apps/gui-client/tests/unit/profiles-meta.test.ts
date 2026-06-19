@@ -107,6 +107,26 @@ describe('profiles-meta store', () => {
     expect(all['a']!.folder).toBe('New');
   });
 
+  it("bulk 'remove' mode SUBTRACTS the given tags from each profile (other tags + folder untouched)", async () => {
+    const { saveProfilesMetaBulk } = await import('../../src/lib/profiles-meta');
+    await saveProfileMeta('a', { folder: 'Keep', tags: ['x', 'y', 'z'] });
+    await saveProfileMeta('b', { tags: ['x'] });
+    await saveProfileMeta('c', { tags: ['q'] }); // doesn't carry the tag
+    await saveProfilesMetaBulk(['a', 'b', 'c'], { tags: ['x', 'y'] }, 'remove');
+    const all = await loadProfilesMeta();
+    expect(all['a']).toEqual({ folder: 'Keep', tags: ['z'], note: '', icon: '' });
+    expect(all['b']!.tags).toEqual([]); // last remaining tag removed
+    expect(all['c']!.tags).toEqual(['q']); // unaffected — tag not present
+  });
+
+  it("bulk 'remove' mode is NOT a verbatim tag overwrite (meta.tags is the subtraction set, never assigned)", async () => {
+    const { saveProfilesMetaBulk } = await import('../../src/lib/profiles-meta');
+    await saveProfileMeta('a', { tags: ['keep'] });
+    // 'gone' isn't on the profile; removing it must NOT add it.
+    await saveProfilesMetaBulk(['a'], { tags: ['gone'] }, 'remove');
+    expect((await loadProfilesMeta())['a']!.tags).toEqual(['keep']);
+  });
+
   it('seedMetaFromServer: seeds only no-local-entry profiles with server organization; local wins conflicts; empty server org skipped', async () => {
     const { seedMetaFromServer } = await import('../../src/lib/profiles-meta');
     const local = { kept: { folder: 'Local', tags: ['mine'], note: 'n' } };

@@ -8,7 +8,7 @@
 // Mirrors SessionsView shape: 15-second poll (REFRESH_MS), inline error
 // banner, busy state per row.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   folderList,
   aggregateTags,
@@ -20,8 +20,16 @@ import {
   type ProfileMeta,
   type ProfilesMetaMap,
 } from '../lib/profiles-meta';
-import { loadFolders, addFolder, loadFolderIcons, replaceAllFolders } from '../lib/folders-store';
-import { loadTags, addTag, replaceAllTags } from '../lib/tags-store';
+import {
+  loadFolders,
+  addFolder,
+  removeFolder,
+  renameFolder,
+  setFolderIcon,
+  loadFolderIcons,
+  replaceAllFolders,
+} from '../lib/folders-store';
+import { loadTags, addTag, removeTag, renameTag, replaceAllTags } from '../lib/tags-store';
 import { fetchOrganization, saveOrganization } from '../lib/account-organization';
 import {
   loadProbeCache,
@@ -745,6 +753,150 @@ export function ProfilesView({
     setCreatingFolder(false);
   }, [newFolderName, newFolderIcon, pushOrg, customFolderIcons, customTags]);
 
+  // 2026-06-19 (founder GUI-improvement audit) — folder/tag MANAGEMENT from the
+  // rail: delete, re-icon (folders only), rename. The stores' remove*/rename*/
+  // setFolderIcon existed but were never wired, and — the known gap — removals/
+  // re-icons never pushed to the account org (only CREATE did). Every mutation
+  // here calls pushOrg so the shrunk/edited taxonomy syncs across machines.
+
+  // Delete a folder from the rail. Removes the custom name (+ its icon) from the
+  // local store, syncs the shrunk org, and resets the filter if it was active.
+  // Profiles still carrying the name keep deriving it (per removeFolder's
+  // contract) — this clears the EMPTY-folder taxonomy entry, not the profiles.
+  const handleDeleteFolder = useCallback(
+    async (name: string) => {
+      const next = await removeFolder(name);
+      setCustomFolders(next);
+      const nextIcons = { ...customFolderIcons };
+      delete nextIcons[name];
+      setCustomFolderIcons(nextIcons);
+      pushOrg(next, nextIcons, customTags); // org-sync the removal (the known gap)
+      if (folderFilter === name) setFolderFilter('all');
+    },
+    [customFolderIcons, customTags, pushOrg, folderFilter],
+  );
+
+  // Re-icon a folder from the rail (the existing PROFILE_ICONS picker; '' clears
+  // back to the deterministic glyph). Persists via setFolderIcon, then pushes.
+  const handleReiconFolder = useCallback(
+    async (name: string, icon: string) => {
+      const nextIcons = await setFolderIcon(name, icon);
+      setCustomFolderIcons(nextIcons);
+      // Re-iconing a profile-derived folder seeds it into the custom names so the
+      // icon has a stable home in the synced taxonomy.
+      let names = customFolders;
+      if (!names.includes(name)) {
+        names = await addFolder(name);
+        setCustomFolders(names);
+      }
+      pushOrg(names, nextIcons, customTags); // org-sync the re-icon (the known gap)
+    },
+    [customFolders, customTags, pushOrg],
+  );
+
+  // Rename a folder: re-key the custom name + icon (renameFolder), BULK re-assign
+  // every profile carrying the old folder to the new one (local meta + a PATCH
+  // each), then push the edited taxonomy. Keeps the filter pinned to the folder
+  // (now under its new name) if it was active.
+  const handleRenameFolder = useCallback(
+    async (oldName: string, rawNew: string) => {
+      const newName = rawNew.trim().slice(0, 60);
+      if (newName.length === 0 || newName === oldName) return;
+      const nextNames = await renameFolder(oldName, newName);
+      setCustomFolders(nextNames);
+      const nextIcons = { ...customFolderIcons };
+      if (nextIcons[oldName] !== undefined) {
+        if (nextIcons[newName] === undefined) nextIcons[newName] = nextIcons[oldName];
+        delete nextIcons[oldName];
+      }
+      setCustomFolderIcons(nextIcons);
+      // Move every profile in the old folder into the new one (single round-trip
+      // local; per-profile PATCH best-effort, same contract as handleBulkApply).
+      const affected = state.profiles
+        .filter((p) => profilesMeta[p.id]?.folder === oldName)
+        .map((p) => p.id);
+      if (affected.length > 0) {
+        const nextMeta = await saveProfilesMetaBulk(
+          affected,
+          { folder: newName },
+          'replace',
+          activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
+        );
+        setProfilesMeta(nextMeta);
+        if (client) {
+          for (const id of affected) {
+            void client.profiles.update(id, { folder: newName }).catch(() => undefined);
+          }
+        }
+      }
+      pushOrg(nextNames, nextIcons, customTags); // org-sync the rename (the known gap)
+      if (folderFilter === oldName) setFolderFilter(newName);
+    },
+    [
+      customFolderIcons,
+      customTags,
+      pushOrg,
+      folderFilter,
+      state.profiles,
+      profilesMeta,
+      activeWorkspace,
+      client,
+    ],
+  );
+
+  // Delete a tag from the rail. Drops the custom name, syncs, clears the filter.
+  const handleDeleteTag = useCallback(
+    async (name: string) => {
+      const next = await removeTag(name);
+      setCustomTags(next);
+      pushOrg(customFolders, customFolderIcons, next); // org-sync the removal (the known gap)
+      if (tagFilter === name) setTagFilter(null);
+    },
+    [customFolders, customFolderIcons, pushOrg, tagFilter],
+  );
+
+  // Rename a tag: re-key the custom name (renameTag), BULK swap the tag on every
+  // profile carrying it (subtract old + union new, local meta + a PATCH each),
+  // then push. Keeps the filter on the tag (now renamed) if it was active.
+  const handleRenameTag = useCallback(
+    async (oldName: string, rawNew: string) => {
+      const newName = rawNew.trim().replace(/^#+/, '').trim().slice(0, 40);
+      if (newName.length === 0 || newName === oldName) return;
+      const nextNames = await renameTag(oldName, newName);
+      setCustomTags(nextNames);
+      const affected = state.profiles
+        .filter((p) => (profilesMeta[p.id]?.tags ?? []).includes(oldName))
+        .map((p) => p.id);
+      if (affected.length > 0) {
+        const live = activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined;
+        // Subtract the old tag, then union the new one — two passes so a profile
+        // that already carried both doesn't end up with a duplicate.
+        await saveProfilesMetaBulk(affected, { tags: [oldName] }, 'remove', live);
+        const nextMeta = await saveProfilesMetaBulk(affected, { tags: [newName] }, 'merge', live);
+        setProfilesMeta(nextMeta);
+        if (client) {
+          for (const id of affected) {
+            const saved = nextMeta[id];
+            if (!saved) continue;
+            void client.profiles.update(id, { tags: saved.tags }).catch(() => undefined);
+          }
+        }
+      }
+      pushOrg(customFolders, customFolderIcons, nextNames); // org-sync the rename (the known gap)
+      if (tagFilter === oldName) setTagFilter(newName);
+    },
+    [
+      customFolders,
+      customFolderIcons,
+      pushOrg,
+      tagFilter,
+      state.profiles,
+      profilesMeta,
+      activeWorkspace,
+      client,
+    ],
+  );
+
   // 2026-05-21 — derive the filtered/sorted view over state.profiles.
   // Search matches name + description + archetype AND the org metadata the
   // product syncs (folder name, tags, note) so a customer can find a profile
@@ -1128,6 +1280,53 @@ export function ProfilesView({
     }
     setSelectedIds(new Set());
     setBulkFolder('');
+    setBulkTag('');
+  }
+
+  // 2026-06-19 (founder GUI-improvement audit) — handleBulkApply is additive
+  // only. These two SUBTRACT: clear the folder off every selected profile, and
+  // remove a named tag from each. Both mirror the additive write-through (local
+  // meta + a PATCH each, best-effort).
+
+  // Clear the folder on every selected profile (folder → '' / null).
+  async function handleBulkClearFolder(): Promise<void> {
+    if (selectedIds.size === 0) return;
+    const next = await saveProfilesMetaBulk(
+      [...selectedIds],
+      { folder: '' },
+      'replace',
+      activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
+    );
+    setProfilesMeta(next);
+    if (client) {
+      for (const id of selectedIds) {
+        void client.profiles.update(id, { folder: null }).catch(() => undefined);
+      }
+    }
+    setSelectedIds(new Set());
+    setBulkFolder('');
+  }
+
+  // Remove the named tag from every selected profile (subtract via the new
+  // 'remove' mode); PATCH each profile's recomputed tag set.
+  async function handleBulkRemoveTag(): Promise<void> {
+    const tag = bulkTag.trim();
+    if (selectedIds.size === 0 || tag.length === 0) return;
+    const next = await saveProfilesMetaBulk(
+      [...selectedIds],
+      { tags: [tag] },
+      'remove',
+      activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
+    );
+    setProfilesMeta(next);
+    if (client) {
+      for (const id of selectedIds) {
+        const saved = next[id];
+        if (!saved) continue;
+        void client.profiles.update(id, { tags: saved.tags }).catch(() => undefined);
+      }
+    }
+    setSelectedIds(new Set());
     setBulkTag('');
   }
 
@@ -1721,13 +1920,32 @@ export function ProfilesView({
             value={bulkFolder}
             onChange={setBulkFolder}
           />
+          {/* Subtract — clear the folder off every selected profile (2026-06-19). */}
+          <button
+            type="button"
+            className="rounded px-2 py-1 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-raised hover:text-ink-primary"
+            onClick={() => void handleBulkClearFolder()}
+            title="Remove the selected profiles from their folder"
+          >
+            Clear folder
+          </button>
           <input
             aria-label="Bulk tag"
-            placeholder="Add tag…"
+            placeholder="Add or remove tag…"
             className="w-32 rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-primary"
             value={bulkTag}
             onChange={(e) => setBulkTag(e.target.value)}
           />
+          {/* Subtract — remove the typed tag from every selected profile (2026-06-19). */}
+          <button
+            type="button"
+            className="rounded px-2 py-1 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-raised hover:text-ink-primary disabled:opacity-50"
+            onClick={() => void handleBulkRemoveTag()}
+            disabled={bulkTag.trim().length === 0}
+            title="Remove the tag from the selected profiles"
+          >
+            Remove tag
+          </button>
           <select
             aria-label="Set icon"
             className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-primary"
@@ -1869,15 +2087,22 @@ export function ProfilesView({
               onSelect={() => setFolderFilter('all')}
             />
             {allFolders.map((f) => (
-              <FolderItem
-                key={f}
-                variant="rail"
-                label={f}
-                icon={customFolderIcons[f]}
-                count={state.profiles.filter((p) => profilesMeta[p.id]?.folder === f).length}
-                active={folderFilter === f}
-                onSelect={() => setFolderFilter(f)}
-              />
+              <div key={f} className="group/rail relative">
+                <FolderItem
+                  variant="rail"
+                  label={f}
+                  icon={customFolderIcons[f]}
+                  count={state.profiles.filter((p) => profilesMeta[p.id]?.folder === f).length}
+                  active={folderFilter === f}
+                  onSelect={() => setFolderFilter(f)}
+                />
+                <RailRowMenu
+                  label={`folder ${f}`}
+                  onRename={(next) => void handleRenameFolder(f, next)}
+                  onReicon={(emoji) => void handleReiconFolder(f, emoji)}
+                  onDelete={() => void handleDeleteFolder(f)}
+                />
+              </div>
             ))}
             <FolderItem
               variant="rail"
@@ -1964,31 +2189,37 @@ export function ProfilesView({
             {allTags.map(({ tag, count }) => {
               const active = tagFilter === tag;
               return (
-                <button
-                  key={tag}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => setTagFilter(active ? null : tag)}
-                  className={`flex w-full items-center gap-2 rounded-lg border border-transparent px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                    active
-                      ? 'bg-accent-subtle font-semibold text-ink-primary'
-                      : 'text-ink-secondary hover:bg-surface-raised hover:text-ink-primary'
-                  }`}
-                >
-                  <span
-                    aria-hidden="true"
-                    className="h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: folderColor(tag) }}
-                  />
-                  <span className="flex-1 truncate text-left">#{tag}</span>
-                  <span
-                    className={`mono rounded-[5px] px-1.5 py-px text-2xs font-semibold ${
-                      active ? 'bg-accent/15 text-ink-primary' : 'bg-surface-inset text-ink-muted'
+                <div key={tag} className="group/rail relative">
+                  <button
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setTagFilter(active ? null : tag)}
+                    className={`flex w-full items-center gap-2 rounded-lg border border-transparent px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                      active
+                        ? 'bg-accent-subtle font-semibold text-ink-primary'
+                        : 'text-ink-secondary hover:bg-surface-raised hover:text-ink-primary'
                     }`}
                   >
-                    {count}
-                  </span>
-                </button>
+                    <span
+                      aria-hidden="true"
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: folderColor(tag) }}
+                    />
+                    <span className="flex-1 truncate text-left">#{tag}</span>
+                    <span
+                      className={`mono rounded-[5px] px-1.5 py-px text-2xs font-semibold ${
+                        active ? 'bg-accent/15 text-ink-primary' : 'bg-surface-inset text-ink-muted'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                  <RailRowMenu
+                    label={`tag ${tag}`}
+                    onRename={(next) => void handleRenameTag(tag, next)}
+                    onDelete={() => void handleDeleteTag(tag)}
+                  />
+                </div>
               );
             })}
             {creatingTag ? (
@@ -2345,6 +2576,11 @@ export function ProfilesView({
           profile={editTarget}
           meta={profilesMeta[editTarget.id]}
           existingFolders={allFolders}
+          proxies={proxies}
+          // The explicitly-bound proxy (null = "First available" at launch).
+          currentProxyId={
+            bindings.find((b) => b.profileId === editTarget.id)?.defaultProxyId ?? null
+          }
           onClose={() => setEditTarget(null)}
           onSaved={(updatedMeta) => {
             // Mirror the edited organization metadata into the local cache so the
@@ -2355,6 +2591,8 @@ export function ProfilesView({
               state.profiles.map((pr) => pr.id),
             ).then(setProfilesMeta);
             setEditTarget(null);
+            // refresh(false) reloads bindings → the card/table re-render via
+            // pickProxy with the rebound proxy.
             void refresh(false);
           }}
         />
@@ -3318,6 +3556,8 @@ function EditProfileModal({
   profile,
   meta,
   existingFolders,
+  proxies,
+  currentProxyId,
   onClose,
   onSaved,
 }: {
@@ -3325,6 +3565,10 @@ function EditProfileModal({
   /** Local organization metadata for this profile (icon/folder/tags/note). */
   meta: ProfileMeta | undefined;
   existingFolders: string[];
+  /** Saved proxies, mirrors the create modal's proxy select (2026-06-19). */
+  proxies: LocalProxyConfig[];
+  /** The profile's explicitly-bound proxy id (null = "First available"). */
+  currentProxyId: string | null;
   onClose: () => void;
   /** Called with the (cleaned) organization metadata after a successful PATCH. */
   onSaved: (meta: Partial<ProfileMeta>) => void;
@@ -3336,6 +3580,13 @@ function EditProfileModal({
   const [folder, setFolder] = useState(meta?.folder ?? '');
   const [tags, setTags] = useState((meta?.tags ?? []).join(', '));
   const [note, setNote] = useState(meta?.note ?? '');
+  // 2026-06-19 (founder GUI-improvement audit) — post-create proxy REBIND.
+  // setDefaultProxy was only ever called from the create modal; a profile's
+  // proxy binding couldn't be changed afterward. The select mirrors the create
+  // modal's saved-proxy picker ('first-available' = null binding); on save we
+  // setDefaultProxy when it changed, and the parent's refresh(false) reloads
+  // bindings so pickProxy re-renders the card/table with the rebound proxy.
+  const [proxyChoice, setProxyChoice] = useState<string>(currentProxyId ?? 'first-available');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -3381,6 +3632,12 @@ function EditProfileModal({
       // local cache stays the source of truth for the hub render.
       if (Object.keys(diff).length > 0) {
         await client.profiles.update(profile.id, diff);
+      }
+      // Rebind the proxy when it changed ('first-available' = null binding).
+      // Local store write (the binding) — parent refresh reloads it into pickProxy.
+      const nextProxyId = proxyChoice === 'first-available' ? null : proxyChoice;
+      if (nextProxyId !== currentProxyId) {
+        await setDefaultProxy(profile.id, nextProxyId);
       }
       onSaved({ icon, folder: nextFolder, tags: tagList, note: nextNote });
     } catch (err) {
@@ -3497,6 +3754,29 @@ function EditProfileModal({
             className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
             placeholder="retail, warmup"
           />
+        </label>
+        {/* Proxy rebind (2026-06-19) — change the bound proxy after creation;
+            mirrors the create modal's saved-proxy picker. 'first-available' =
+            no fixed binding (the first saved proxy is used at launch). */}
+        <label className="flex flex-col gap-1">
+          <span className="section-label">Proxy</span>
+          <select
+            aria-label="Profile proxy"
+            value={proxyChoice}
+            onChange={(e) => setProxyChoice(e.target.value)}
+            disabled={submitting}
+            className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+          >
+            <option value="first-available">First available saved proxy</option>
+            {proxies.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label} ·{' '}
+                {p.scheme === 'openvpn' || p.scheme === 'wireguard'
+                  ? `${p.scheme} · ${p.host}:${p.port}`
+                  : `${p.host}:${p.port}`}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="flex flex-col gap-1">
           <span className="section-label">Note (optional)</span>
@@ -3774,6 +4054,143 @@ function FolderItem({
         {count}
       </span>
     </button>
+  );
+}
+
+// 2026-06-19 (founder GUI-improvement audit) — per-row management menu for the
+// folder/tag rail: a ⋯ toggle (revealed on hover OR tap) opening Rename / Re-icon
+// (folders only) / Delete. Absolutely positioned over the right edge of the row
+// so it overlays the count without disturbing the FolderItem/tag button DOM the
+// content-parity tests pin. Outside-click + Escape close it; the inline rename
+// input commits on Enter / blur. onReicon is optional (tags carry no icon).
+function RailRowMenu({
+  label,
+  onRename,
+  onReicon,
+  onDelete,
+}: {
+  /** Accessible disambiguator, e.g. "folder Work" / "tag aged". */
+  label: string;
+  onRename: (next: string) => void;
+  onReicon?: (emoji: string) => void;
+  onDelete: () => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState('');
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent): void => {
+      if (ref.current !== null && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setRenaming(false);
+      }
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  function commitRename(): void {
+    const next = draft.trim();
+    if (next.length > 0) onRename(next);
+    setRenaming(false);
+    setOpen(false);
+    setDraft('');
+  }
+
+  return (
+    <div ref={ref} className="absolute right-1 top-1/2 -translate-y-1/2">
+      <button
+        type="button"
+        aria-label={`Manage ${label}`}
+        title="Manage"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className={`rounded px-1 text-ink-muted transition-opacity hover:text-ink-primary group-hover/rail:opacity-100 ${
+          open ? 'opacity-100' : 'opacity-0'
+        }`}
+      >
+        ⋯
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-30 mt-1 w-40 overflow-hidden rounded-lg border border-surface-divider bg-surface-raised py-1 shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
+        >
+          {renaming ? (
+            <input
+              autoFocus
+              aria-label={`Rename ${label}`}
+              value={draft}
+              maxLength={60}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitRename();
+                else if (e.key === 'Escape') {
+                  setRenaming(false);
+                  setOpen(false);
+                }
+              }}
+              onBlur={commitRename}
+              className="m-1 w-[calc(100%-0.5rem)] rounded border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary focus:border-accent focus:outline-none"
+            />
+          ) : (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setDraft(label.replace(/^(folder|tag) /, ''));
+                setRenaming(true);
+              }}
+              className="block w-full px-3 py-1.5 text-left text-xs text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"
+            >
+              Rename
+            </button>
+          )}
+          {onReicon !== undefined && !renaming && (
+            <label className="flex items-center gap-1 px-3 py-1.5 text-xs text-ink-secondary">
+              Icon
+              <select
+                aria-label={`Re-icon ${label}`}
+                value=""
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === '__noop') return;
+                  onReicon(v === '__none' ? '' : v);
+                  setOpen(false);
+                }}
+                className="ml-auto rounded border border-surface-divider bg-surface-base px-1 py-0.5 text-xs text-ink-primary"
+              >
+                <option value="__noop">Pick…</option>
+                <option value="__none">✕ None</option>
+                {PROFILE_ICONS.map((i) => (
+                  <option key={i.emoji} value={i.emoji}>
+                    {i.emoji} {i.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {!renaming && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onDelete();
+              }}
+              className="block w-full px-3 py-1.5 text-left text-xs font-medium text-status-error hover:bg-status-error/10"
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
