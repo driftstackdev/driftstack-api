@@ -244,4 +244,22 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
+
+  it('founder 2026-06-20: Clone + Export + Import are flag-gated (CLONE_ENABLED / IMPORT_EXPORT_ENABLED, default false) and hidden when off — the handlers are KEPT for reversibility, not deleted (clone deemed useless; export/import a profile-cheat abuse vector)', () => {
+    expect(body).toMatch(/const CLONE_ENABLED = false;/);
+    expect(body).toMatch(/const IMPORT_EXPORT_ENABLED = false;/);
+    // Affordances gated off (card clone + export, table clone, import modal).
+    expect(body).toMatch(
+      /onClone=\{CLONE_ENABLED \? \(\) => void handleClone\(profile\.id\) : undefined\}/,
+    );
+    expect(body).toMatch(/CLONE_ENABLED \? \(id\) => void handleClone\(id\) : undefined/);
+    expect(body).toMatch(
+      /IMPORT_EXPORT_ENABLED \? \(\) => void handleExport\(profile\.id\) : undefined/,
+    );
+    expect(body).toMatch(/IMPORT_EXPORT_ENABLED && importOpen &&/);
+    // Reversibility invariant — the handlers must remain DEFINED, not removed.
+    expect(body).toMatch(/async function handleClone\(/);
+    expect(body).toMatch(/async function handleExport\(/);
+    expect(body).toMatch(/async function handleImport\(/);
+  });
 });

@@ -270,6 +270,11 @@ export function ProfilesView({
   // Import-profile modal state (V-480) — drop/paste an export envelope (single
   // object or a bulk array) to mint fresh profiles in this account.
   const [importOpen, setImportOpen] = useState(false);
+  // founder 2026-06-20: clone (currently useless) + export/import (a profile-cheat
+  // abuse vector) are hidden from the UI for now; the handlers, SDK methods, and
+  // server endpoints are kept intact — flip these to re-enable.
+  const CLONE_ENABLED = false;
+  const IMPORT_EXPORT_ENABLED = false;
   // 2026-05-21 — header action cluster (operator-UI polish wave).
   // Pure-local filter/sort over `state.profiles`; no API change. Defaults
   // mirror the "what did I touch last" mental model that dominates
@@ -1986,17 +1991,21 @@ export function ProfilesView({
               <span aria-hidden="true">⚡</span>
               <span>{quickBusy ? 'Starting…' : 'Quick Session'}</span>
             </button>
-            <button
-              type="button"
-              className="btn-secondary flex items-center gap-1.5"
-              onClick={() => setImportOpen(true)}
-              disabled={state.loading || atProfileCap}
-              aria-disabled={state.loading || atProfileCap}
-              title={atProfileCap ? profileCapReason : 'Import profiles from an exported JSON file'}
-            >
-              <span aria-hidden="true">⤒</span>
-              <span>Import</span>
-            </button>
+            {IMPORT_EXPORT_ENABLED && (
+              <button
+                type="button"
+                className="btn-secondary flex items-center gap-1.5"
+                onClick={() => setImportOpen(true)}
+                disabled={state.loading || atProfileCap}
+                aria-disabled={state.loading || atProfileCap}
+                title={
+                  atProfileCap ? profileCapReason : 'Import profiles from an exported JSON file'
+                }
+              >
+                <span aria-hidden="true">⤒</span>
+                <span>Import</span>
+              </button>
+            )}
             <button
               type="button"
               className="btn-primary flex items-center gap-1.5"
@@ -2171,15 +2180,17 @@ export function ProfilesView({
           >
             Apply
           </button>
-          <button
-            type="button"
-            className="btn-secondary px-2.5 py-1 text-xs disabled:opacity-50"
-            onClick={() => void handleBulkExport()}
-            disabled={bulkExporting}
-            title="Download the selected profiles as a portable JSON export"
-          >
-            {bulkExporting ? 'Exporting…' : 'Export'}
-          </button>
+          {IMPORT_EXPORT_ENABLED && (
+            <button
+              type="button"
+              className="btn-secondary px-2.5 py-1 text-xs disabled:opacity-50"
+              onClick={() => void handleBulkExport()}
+              disabled={bulkExporting}
+              title="Download the selected profiles as a portable JSON export"
+            >
+              {bulkExporting ? 'Exporting…' : 'Export'}
+            </button>
+          )}
           <span aria-hidden className="h-5 w-px bg-surface-divider" />
           <button
             type="button"
@@ -2578,10 +2589,12 @@ export function ProfilesView({
                           onStop={running ? () => void handleStop(profile) : undefined}
                           onAssist={onAssist ? () => onAssist(profile.id) : undefined}
                           onEdit={() => setEditTarget(profile)}
-                          onClone={() => void handleClone(profile.id)}
+                          onClone={CLONE_ENABLED ? () => void handleClone(profile.id) : undefined}
                           cloneDisabled={atProfileCap}
                           cloneDisabledReason={profileCapReason}
-                          onExport={() => void handleExport(profile.id)}
+                          onExport={
+                            IMPORT_EXPORT_ENABLED ? () => void handleExport(profile.id) : undefined
+                          }
                           onDelete={() => void handleDelete(profile.id)}
                         />
                       </div>
@@ -2702,7 +2715,7 @@ export function ProfilesView({
                         const profile = resolve(id);
                         if (profile !== null) setEditTarget(profile);
                       }}
-                      onClone={(id) => void handleClone(id)}
+                      onClone={CLONE_ENABLED ? (id) => void handleClone(id) : undefined}
                       cloneDisabled={atProfileCap}
                       cloneDisabledReason={profileCapReason}
                       onDelete={(id) => void handleDelete(id)}
@@ -2769,7 +2782,7 @@ export function ProfilesView({
         />
       )}
 
-      {importOpen && (
+      {IMPORT_EXPORT_ENABLED && importOpen && (
         <ImportProfileModal
           onClose={() => setImportOpen(false)}
           onImport={(text, nameOverride) => void handleImport(text, nameOverride)}

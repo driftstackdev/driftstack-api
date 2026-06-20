@@ -156,7 +156,9 @@ describe('ProfilesView profile-lifecycle actions', () => {
     refreshAccountMe.mockClear();
   });
 
-  describe('Clone', () => {
+  // Clone affordance hidden 2026-06-20 (CLONE_ENABLED=false; founder: clone is
+  // currently useless) — handler kept; re-enable these when the flag flips.
+  describe.skip('Clone', () => {
     it('calls profiles.clone + refreshes the cap counter, and shows a duplicated notice', async () => {
       await openCardMenu();
       fireEvent.click(await screen.findByRole('button', { name: 'Duplicate Demo' }));
@@ -199,7 +201,9 @@ describe('ProfilesView profile-lifecycle actions', () => {
     });
   });
 
-  describe('Import', () => {
+  // Import affordance hidden 2026-06-20 (IMPORT_EXPORT_ENABLED=false; founder:
+  // profile-cheat abuse vector) — handler kept; re-enable when the flag flips.
+  describe.skip('Import', () => {
     const ENVELOPE = {
       version: 1,
       exported_at: '2026-06-08T00:00:00Z',

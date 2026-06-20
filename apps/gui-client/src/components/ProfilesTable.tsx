@@ -63,8 +63,10 @@ export interface ProfilesTableProps {
   onStop: (id: string) => void;
   onTest: (id: string) => void;
   onEdit: (id: string) => void;
-  /** Duplicate a profile (server clone). Disabled at the tier cap. */
-  onClone: (id: string) => void;
+  /** Duplicate a profile (server clone). Disabled at the tier cap. Optional —
+   *  when omitted (founder 2026-06-20 CLONE_ENABLED=false) the Duplicate action
+   *  is hidden entirely; the handler is kept so it can be re-enabled. */
+  onClone?: (id: string) => void;
   cloneDisabled?: boolean;
   cloneDisabledReason?: string;
   onDelete: (id: string) => void;
@@ -403,15 +405,17 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
           >
             Edit
           </button>
-          <button
-            type="button"
-            className="text-[11px] text-ink-muted hover:text-ink-primary disabled:opacity-50"
-            onClick={stop(() => p.onClone(r.id))}
-            disabled={r.busy || p.cloneDisabled}
-            title={p.cloneDisabled ? p.cloneDisabledReason : undefined}
-          >
-            Duplicate
-          </button>
+          {p.onClone && (
+            <button
+              type="button"
+              className="text-[11px] text-ink-muted hover:text-ink-primary disabled:opacity-50"
+              onClick={stop(() => p.onClone?.(r.id))}
+              disabled={r.busy || p.cloneDisabled}
+              title={p.cloneDisabled ? p.cloneDisabledReason : undefined}
+            >
+              Duplicate
+            </button>
+          )}
           <button
             type="button"
             className="text-[11px] text-ink-muted hover:text-status-error disabled:opacity-50"
