@@ -389,14 +389,25 @@ export function AgentChatView({
               }}
               className="form-input max-h-40 min-h-[2.25rem] flex-1 resize-none"
             />
-            <button
-              type="button"
-              onClick={submit}
-              disabled={draft.trim().length === 0 || chat.sending}
-              className="btn-primary px-3 py-2 text-sm disabled:opacity-50"
-            >
-              {chat.sending ? 'Sending…' : 'Send'}
-            </button>
+            {chat.sending ? (
+              <button
+                type="button"
+                onClick={() => chat.cancel()}
+                title="Stop waiting for this reply"
+                className="rounded border border-surface-divider px-3 py-2 text-sm hover:bg-surface-elevated"
+              >
+                Stop
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={submit}
+                disabled={draft.trim().length === 0}
+                className="btn-primary px-3 py-2 text-sm disabled:opacity-50"
+              >
+                Send
+              </button>
+            )}
           </div>
           <p className="mx-auto mt-1 max-w-3xl text-2xs text-ink-muted">
             Enter to send · Shift+Enter for a new line

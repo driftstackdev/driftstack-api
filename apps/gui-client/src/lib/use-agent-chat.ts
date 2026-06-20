@@ -97,6 +97,10 @@ export interface UseAgentChatResult {
   approve: () => Promise<void>;
   deny: () => void;
   reset: () => void;
+  /** Soft-cancel an in-flight turn — un-blocks the composer immediately and
+   *  discards the turn's result when it eventually resolves (the server may
+   *  still finish it; this is a UI stop, not a network/turn abort). */
+  cancel: () => void;
   /** Load a saved transcript into the view (reopening a past chat). The live
    *  server session is dropped — continuing the chat starts a fresh session,
    *  while the restored transcript stays visible as the chat's memory. */
@@ -120,6 +124,14 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     idRef.current += 1;
     return idRef.current;
   }, []);
+  // Soft cancel — Stop bumps this; an in-flight post that captured an older
+  // generation discards its result on resolve. (UI stop; the server turn may
+  // still complete — a true network/turn abort is a follow-up.)
+  const cancelGenRef = useRef(0);
+  const cancel = useCallback(() => {
+    cancelGenRef.current += 1;
+    setSending(false);
+  }, []);
 
   const post = useCallback(
     async (
@@ -140,6 +152,9 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       const approvals = options?.approvals;
       setSending(true);
       setError(null);
+      // Capture this send's cancel-generation; if Stop bumps it before we
+      // resolve, the result is discarded (the user moved on).
+      const gen = cancelGenRef.current;
       if (options?.appendUserTurn !== false) {
         // Append the user turn immediately for responsiveness.
         setTurns((t) => [...t, { id: nextId(), role: 'user', text: userMessage }]);
@@ -162,14 +177,16 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
             ? { approveConsequentialActions: approvals }
             : {}),
         });
+        if (cancelGenRef.current !== gen) return false; // user hit Stop — discard
         setSession(response.session);
         setTurns((t) => [...t, { id: nextId(), role: 'agent', response }]);
         return true;
       } catch (err) {
+        if (cancelGenRef.current !== gen) return false; // cancelled — swallow the error
         setError(friendlyChatError(err));
         return false;
       } finally {
-        setSending(false);
+        if (cancelGenRef.current === gen) setSending(false);
       }
     },
     [client, session, opts.model, opts.tokenBudget, opts.profileId, nextId],
@@ -240,5 +257,6 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     deny,
     reset,
     restore,
+    cancel,
   };
 }
