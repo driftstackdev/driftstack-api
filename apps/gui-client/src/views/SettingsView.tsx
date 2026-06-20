@@ -240,6 +240,20 @@ export function SettingsView(): JSX.Element {
           <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-secondary">
             {isFirstRun ? (
               <span className="text-ink-muted">not connected · add a key to begin</span>
+            ) : keyCheck.kind === 'fail' ? (
+              // A saved key that just failed validation must NOT read "Connected"
+              // while the 401/unreachable banner sits right below it. (Idle/ok/
+              // checking keep the green state — we don't re-validate on load, so
+              // the common case is unaffected.)
+              <>
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-1.5 w-1.5 rounded-full bg-status-error"
+                />
+                <span className="font-semibold text-status-error">Key set · check failed</span>
+                <span className="text-surface-divider">·</span>
+                <span className="mono text-ink-secondary">{settings.baseUrl}</span>
+              </>
             ) : (
               <>
                 <span
