@@ -58,7 +58,9 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     // required to be line-adjacent (a copy-session-id handler now sits between
     // them — W##: GUI polish wave). Asserted independently so each fragment
     // still drifts the guard if it changes.
-    expect(body).toMatch(/const \{ recordings, deleteRecording, loading \} = useRecordings\(\);/);
+    expect(body).toMatch(
+      /const \{ recordings, deleteRecording, hydrateFrames, loading \} = useRecordings\(\);/,
+    );
     expect(body).toMatch(
       /const list = Array\.from\(recordings\.values\(\)\)\.sort\(\(a, b\) => b\.startedAt - a\.startedAt\);/,
     );
@@ -123,6 +125,21 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     expect(body).toMatch(
       /Recordings capture every frame of a live session for replay \+ audit\. Open a live session,\s*\n?\s*hit Record, and frames stream into memory while the session runs — they persist on this\s*\n?\s*machine and survive an app restart\./,
     );
+  });
+
+  it("Export affordance (founder-approved recordings export): rail Export button → handleExport, which hydrates a persisted recording's frames first, then downloadJson(recordingExportFilename, buildRecordingExport). Disabled with the same openable predicate as Open (an empty recording has nothing to write). PROFILE export stays hidden — this is recordings-only.", () => {
+    expect(body).toMatch(
+      /import \{ buildRecordingExport, recordingExportFilename \} from '\.\.\/lib\/recordings-export';/,
+    );
+    expect(body).toMatch(/import \{ downloadJson \} from '\.\.\/lib\/download';/);
+    expect(body).toContain('async function handleExport(rec: Recording): Promise<void> {');
+    // Persisted recordings must be hydrated before the envelope is built.
+    expect(body).toContain('if (rec.hydrated && rec.frames.length === 0) {');
+    expect(body).toContain('const hydrated = await hydrateFrames(rec.id);');
+    expect(body).toContain(
+      'downloadJson(recordingExportFilename(full, now), buildRecordingExport(full, now));',
+    );
+    expect(body).toContain('onClick={() => void handleExport(selected)}');
   });
 
   it('file exists at canonical path', () => {

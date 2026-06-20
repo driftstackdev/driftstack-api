@@ -8,6 +8,8 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { ToastProvider } from '../../src/lib/toasts';
 import type { Recording } from '../../src/lib/recordings';
 
 const recording: Recording = {
@@ -38,13 +40,21 @@ vi.mock('../../src/lib/recordings', () => ({
 
 const { RecordingPlayerView } = await import('../../src/views/RecordingPlayerView');
 
+// The player now surfaces an Export button via useToasts, so renders must sit
+// inside <ToastProvider> (the real app wraps the whole tree in one).
+function renderPlayer(el: ReactElement): ReturnType<typeof render> {
+  return render(<ToastProvider>{el}</ToastProvider>);
+}
+
 afterEach(() => {
   vi.clearAllMocks();
 });
 
 describe('RecordingPlayerView — Space play/pause keyboard control', () => {
   it('Space toggles the play/pause button when focus is not on a text field', () => {
-    const { container } = render(<RecordingPlayerView recordingId="rec_1" onBack={vi.fn()} />);
+    const { container } = renderPlayer(
+      <RecordingPlayerView recordingId="rec_1" onBack={vi.fn()} />,
+    );
     const view = within(container);
 
     // Starts paused → primary button reads "Play".
@@ -58,7 +68,9 @@ describe('RecordingPlayerView — Space play/pause keyboard control', () => {
   });
 
   it('Space is IGNORED while an input/textarea is focused (does not hijack typing)', () => {
-    const { container } = render(<RecordingPlayerView recordingId="rec_1" onBack={vi.fn()} />);
+    const { container } = renderPlayer(
+      <RecordingPlayerView recordingId="rec_1" onBack={vi.fn()} />,
+    );
     const view = within(container);
 
     // Start with the scrubber range input as the keystroke target — typing
@@ -77,7 +89,23 @@ describe('RecordingPlayerView — Space play/pause keyboard control', () => {
   });
 
   it('the scrubber carries an accessible label', () => {
-    const { container } = render(<RecordingPlayerView recordingId="rec_1" onBack={vi.fn()} />);
+    const { container } = renderPlayer(
+      <RecordingPlayerView recordingId="rec_1" onBack={vi.fn()} />,
+    );
     expect(within(container).getByLabelText('Playback progress')).toHaveAttribute('type', 'range');
+  });
+
+  it('offers an Export button that confirms via a toast (recordings export is founder-approved)', () => {
+    const { container } = renderPlayer(
+      <RecordingPlayerView recordingId="rec_1" onBack={vi.fn()} />,
+    );
+    const view = within(container);
+    const exportBtn = view.getByText('Export');
+    expect(exportBtn).toBeInTheDocument();
+    expect(exportBtn).not.toBeDisabled();
+    // downloadJson no-ops in jsdom (no URL.createObjectURL); the success toast
+    // still fires, so a click confirms the wiring without a real download.
+    fireEvent.click(exportBtn);
+    expect(view.getByText('Exported')).toBeInTheDocument();
   });
 });

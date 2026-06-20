@@ -13,6 +13,9 @@ import {
   recordingTotalBytes,
   useRecordings,
 } from '../lib/recordings';
+import { useToasts } from '../lib/toasts';
+import { downloadJson } from '../lib/download';
+import { buildRecordingExport, recordingExportFilename } from '../lib/recordings-export';
 
 export interface RecordingPlayerViewProps {
   recordingId: string;
@@ -26,6 +29,7 @@ export function RecordingPlayerView({
   onBack,
 }: RecordingPlayerViewProps): JSX.Element {
   const { recordings, hydrateFrames } = useRecordings();
+  const { push: pushToast } = useToasts();
   const recording = recordings.get(recordingId) ?? null;
 
   // Cursor position in ms relative to recording.startedAt.
@@ -160,6 +164,19 @@ export function RecordingPlayerView({
     }
   }
 
+  // Export the open recording as a portable JSON envelope. Frames are already
+  // hydrated by the time the player is interactive, so no async hydrate here.
+  function handleExport(): void {
+    if (recording === null || recording.frames.length === 0) return;
+    const now = new Date();
+    downloadJson(recordingExportFilename(recording, now), buildRecordingExport(recording, now));
+    pushToast({
+      title: 'Exported',
+      body: `${recording.frames.length} frames saved as JSON.`,
+      tone: 'success',
+    });
+  }
+
   function togglePlay(): void {
     if (cursorMs >= totalMs) {
       // Restart from the beginning if we're at the end.
@@ -196,6 +213,15 @@ export function RecordingPlayerView({
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={handleExport}
+            disabled={recording.frames.length === 0}
+            title="Download this recording as a JSON file"
+          >
+            Export
+          </button>
           <button type="button" className="btn-primary" onClick={togglePlay}>
             {playing ? 'Pause' : cursorMs >= totalMs ? 'Replay' : 'Play'}
           </button>

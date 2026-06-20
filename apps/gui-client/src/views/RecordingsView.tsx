@@ -21,6 +21,8 @@ import {
   useRecordings,
   type Recording,
 } from '../lib/recordings';
+import { downloadJson } from '../lib/download';
+import { buildRecordingExport, recordingExportFilename } from '../lib/recordings-export';
 
 export interface RecordingsViewProps {
   onOpen: (recordingId: string) => void;
@@ -28,7 +30,7 @@ export interface RecordingsViewProps {
 
 export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
   const { push: pushToast } = useToasts();
-  const { recordings, deleteRecording, loading } = useRecordings();
+  const { recordings, deleteRecording, hydrateFrames, loading } = useRecordings();
 
   // Copy the selected recording's session id so the operator can correlate it
   // with the dashboard / API without retyping. Clipboard writes can fail in
@@ -39,6 +41,38 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
       pushToast({ title: 'Copied', tone: 'success' });
     } catch {
       /* clipboard write can fail in locked-down envs; silent */
+    }
+  }
+
+  // Export the selected recording as a portable JSON envelope (header + every
+  // frame as a data URL). Persisted recordings list their frame count but don't
+  // hold frames in memory until opened, so hydrate first — otherwise the
+  // envelope would be empty. (Founder-approved: recordings export is fine; only
+  // PROFILE export stays hidden for its abuse surface.)
+  async function handleExport(rec: Recording): Promise<void> {
+    try {
+      let full = rec;
+      if (rec.hydrated && rec.frames.length === 0) {
+        const hydrated = await hydrateFrames(rec.id);
+        if (hydrated) full = hydrated;
+      }
+      if (full.frames.length === 0) {
+        pushToast({
+          title: 'Nothing to export',
+          body: 'This recording has no frames yet.',
+          tone: 'warn',
+        });
+        return;
+      }
+      const now = new Date();
+      downloadJson(recordingExportFilename(full, now), buildRecordingExport(full, now));
+      pushToast({
+        title: 'Exported',
+        body: `${full.frames.length} frames saved as JSON.`,
+        tone: 'success',
+      });
+    } catch {
+      pushToast({ title: 'Export failed', tone: 'error' });
     }
   }
   const list = Array.from(recordings.values()).sort((a, b) => b.startedAt - a.startedAt);
@@ -190,6 +224,19 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
                 >
                   <PlayGlyph size={12} />
                   Open
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => void handleExport(selected)}
+                  // Same openable predicate as Open — an empty recording has
+                  // nothing to write.
+                  disabled={
+                    selected.frames.length === 0 && !(selected.hydrated && selected.frameCount > 0)
+                  }
+                  title="Download this recording as a JSON file"
+                >
+                  Export
                 </button>
                 <button
                   type="button"
