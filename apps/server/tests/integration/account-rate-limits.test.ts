@@ -15,7 +15,11 @@ const auth = (fixture: TestAppFixture): { authorization: string } => ({
 });
 
 interface BucketRow {
-  bucket_key: 'global' | 'sessions:create' | 'agent_sessions:message';
+  bucket_key:
+    | 'global'
+    | 'sessions:create'
+    | 'agent_sessions:message'
+    | 'agent_sessions:input_event';
   capacity: number;
   refill_per_second: number;
   source: 'tier_default' | 'override';
@@ -37,8 +41,9 @@ describe('GET /v1/account/rate-limits', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<RateLimitsResponse>();
     expect(body.tier).toBe('api_builder');
-    // v2-#8 sub-slice 8.20 — 3 buckets (added agent_sessions:message).
-    expect(body.buckets).toHaveLength(3);
+    // 4 buckets — all enforced buckets in TIER_RATE_LIMIT_DEFAULTS, including
+    // agent_sessions:input_event (was previously omitted from the route view).
+    expect(body.buckets).toHaveLength(4);
 
     const expected = TIER_RATE_LIMIT_DEFAULTS.api_builder;
     const global = body.buckets.find((b) => b.bucket_key === 'global');
@@ -58,6 +63,15 @@ describe('GET /v1/account/rate-limits', () => {
     expect(message!.refill_per_second).toBe(expected['agent_sessions:message'].refill_per_second);
     expect(message!.source).toBe('tier_default');
     expect(message!.override_expires_at).toBeNull();
+
+    const inputEvent = body.buckets.find((b) => b.bucket_key === 'agent_sessions:input_event');
+    expect(inputEvent).toBeDefined();
+    expect(inputEvent!.capacity).toBe(expected['agent_sessions:input_event'].capacity);
+    expect(inputEvent!.refill_per_second).toBe(
+      expected['agent_sessions:input_event'].refill_per_second,
+    );
+    expect(inputEvent!.source).toBe('tier_default');
+    expect(inputEvent!.override_expires_at).toBeNull();
   });
 
   it('reflects an active rate-limit override on the global bucket', async () => {

@@ -209,9 +209,10 @@ describe('W1041 routes/billing-crypto-orders V-666.G/J/M/P/Q/U cross-source inva
 
   // ─── parseOrThrow helper ─────────────────────────────────────
 
-  it('CRITICAL parseOrThrow throws BadRequestError with result.error.message. The single helper is the boundary translator from zod-error to RFC7807 400.', () => {
+  it('CRITICAL parseOrThrow throws a fixed-message BadRequestError (RFC7807 400) — the boundary translator from zod-error to a customer-safe 400, without leaking the raw zod JSON.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto-orders.ts'));
     expect(p).toMatch(/function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{/);
-    expect(p).toMatch(/throw new BadRequestError\(result\.error\.message\)/);
+    expect(p).toContain("throw new BadRequestError('Invalid request parameters.');");
+    expect(p).not.toMatch(/throw new BadRequestError\(result\.error\.message\)/);
   });
 });

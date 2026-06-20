@@ -26,6 +26,7 @@ import {
   BadRequestError,
   ConflictError,
   FeatureUnavailableError,
+  InternalError,
   NotFoundError,
   ValidationError,
 } from '../lib/errors.js';
@@ -148,11 +149,13 @@ export function registerMacNodesRoutes(
       let ciphertextBase64: string;
       try {
         ciphertextBase64 = encryptLivekitSecret(body.livekit.api_secret, encryptionKey);
-      } catch (err) {
+      } catch {
         bumpOutcome('encryption_error');
-        throw new BadRequestError(
-          `Failed to encrypt LiveKit API secret: ${err instanceof Error ? err.message : 'unknown'}`,
-        );
+        // A config-time failure (e.g. a misconfigured MFA_ENCRYPTION_KEY) — not
+        // the caller's fault, so 500 not 400, and don't echo the key-shape
+        // internals from err.message into the response. The cause lands in
+        // Sentry via the error handler.
+        throw new InternalError('Failed to encrypt the LiveKit API secret.');
       }
 
       const updated = await repo.setLivekitCredentials({

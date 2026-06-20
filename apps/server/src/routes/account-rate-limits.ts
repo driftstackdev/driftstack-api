@@ -6,7 +6,15 @@
 import type { FastifyInstance } from 'fastify';
 import { TIER_RATE_LIMIT_DEFAULTS } from '@driftstack/api-types';
 
-const BUCKET_KEYS = ['global', 'sessions:create', 'agent_sessions:message'] as const;
+// All four enforced buckets — must match TIER_RATE_LIMIT_DEFAULTS so the
+// customer view never hides a limit that's actually applied. (input_event has
+// no admin-override path today, so it always resolves to the tier default.)
+const BUCKET_KEYS = [
+  'global',
+  'sessions:create',
+  'agent_sessions:message',
+  'agent_sessions:input_event',
+] as const;
 type BucketKey = (typeof BUCKET_KEYS)[number];
 
 export function registerAccountRateLimitsRoutes(app: FastifyInstance): void {

@@ -121,15 +121,17 @@ export function registerAgentSessionsLivekitTokenRoute(
       let apiSecret: string;
       try {
         apiSecret = decryptLivekitSecret(mac.livekit.apiSecretCiphertextBase64, encryptionKey);
-      } catch (err) {
+      } catch {
         // Decryption failure = catastrophic: either the secret is
         // corrupted or the key has rotated without re-registering
         // Macs. Surface as 503 + ops alert (the throw lands in
         // Sentry via the error-handler).
         bump('secret_unreadable');
+        // Customer-facing 503 — keep it generic. The node id + underlying crypto
+        // error are ops detail (captured in Sentry via the error handler), not
+        // something to leak to an authenticated customer.
         throw new FeatureUnavailableError(
-          `Mac ${mac.id} LiveKit secret is unreadable; re-run /v1/mac-nodes/register. ` +
-            `Underlying: ${err instanceof Error ? err.message : 'unknown'}`,
+          'Session media credentials are temporarily unavailable — please retry in a moment.',
         );
       }
 

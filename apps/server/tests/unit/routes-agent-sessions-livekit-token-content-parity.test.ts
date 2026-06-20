@@ -74,13 +74,16 @@ describe('routes/agent-sessions-livekit-token content parity', () => {
     );
   });
 
-  it("Secret-unreadable catastrophic framing pinned: 'Decryption failure = catastrophic: either the secret is corrupted or the key has rotated without re-registering Macs. Surface as 503 + ops alert (the throw lands in Sentry via the error-handler).' + 'Mac ${mac.id} LiveKit secret is unreadable; re-run /v1/mac-nodes/register.' — pinned so the corrupted-or-rotated-key + Sentry-routing + actionable-recovery-guidance contract all stay documented", () => {
+  it("Secret-unreadable catastrophic framing pinned: 'Decryption failure = catastrophic ... Surface as 503 + ops alert (the throw lands in Sentry via the error-handler).' + a GENERIC customer-facing 503 message — the node id + underlying crypto error are ops detail (Sentry), NOT leaked to the authenticated customer", () => {
     expect(body).toMatch(
       /\/\/ Decryption failure = catastrophic: either the secret is\s*\n?\s*\/\/ corrupted or the key has rotated without re-registering\s*\n?\s*\/\/ Macs\. Surface as 503 \+ ops alert \(the throw lands in\s*\n?\s*\/\/ Sentry via the error-handler\)\./,
     );
-    expect(body).toMatch(
-      /`Mac \$\{mac\.id\} LiveKit secret is unreadable; re-run \/v1\/mac-nodes\/register\. ` \+\s*\n?\s*`Underlying: \$\{err instanceof Error \? err\.message : 'unknown'\}`/,
+    expect(body).toContain(
+      "'Session media credentials are temporarily unavailable — please retry in a moment.',",
     );
+    // The customer 503 must NOT leak the node id or the underlying crypto error.
+    expect(body).not.toMatch(/`Mac \$\{mac\.id\} LiveKit secret is unreadable/);
+    expect(body).not.toMatch(/Underlying: \$\{err/);
   });
 
   it("mintLivekitToken subscriber-for-tracks call shape pinned: identity: `customer-${ctx.account.id}` + room: sessionId + canPublish: false (no customer-injected video — the capability-boundary leak guard) + canSubscribe: true + canPublishData: true (the simulator's input-capture publishes InputEvents over the DataChannel to the Mac CGEvent decoder — explicit, not LiveKit's default)", () => {

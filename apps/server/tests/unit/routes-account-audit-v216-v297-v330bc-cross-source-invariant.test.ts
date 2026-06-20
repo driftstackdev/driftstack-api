@@ -169,7 +169,10 @@ describe('W1037 routes/account-audit V-216 + V-297 + V-330b/c + V-484 cross-sour
   it('CRITICAL JSON export envelope 5-field — generated_at (ISO) + account_id (acc_) + row_count + truncated + data: all.map(publicEntry).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-audit.ts'));
     expect(p).toMatch(/generated_at: new Date\(\)\.toISOString\(\),/);
-    expect(p).toMatch(/account_id: `acc_\$\{ctx\.account\.id\}`,/);
+    // account_id labels the scoped account (owner under team export, caller else).
+    expect(p).toContain(
+      "account_id: `acc_${effective.kind === 'team' ? effective.accountId : ctx.account.id}`,",
+    );
     expect(p).toMatch(/row_count: all\.length,/);
     expect(p).toMatch(/truncated,/);
     expect(p).toMatch(/data: all\.map\(\(row\) => publicEntry\(row, redactActorPrivacy\)\),/);

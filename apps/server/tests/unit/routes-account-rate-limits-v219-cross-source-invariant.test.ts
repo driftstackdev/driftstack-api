@@ -56,10 +56,10 @@ describe('W1017 routes/account-rate-limits V-219 cross-source invariant', () => 
     expect(p).toMatch(/\/\/ override if currently active\)\./);
   });
 
-  it("CRITICAL BUCKET_KEYS readonly tuple — 'global' + 'sessions:create' + 'agent_sessions:message'. The 3-bucket set defines what customers can introspect. v2-#8 sub-slice 8.20 added the agent_sessions:message bucket.", () => {
+  it("CRITICAL BUCKET_KEYS readonly tuple — 'global' + 'sessions:create' + 'agent_sessions:message' + 'agent_sessions:input_event'. The 4-bucket set defines what customers can introspect; it must match TIER_RATE_LIMIT_DEFAULTS so no enforced limit is hidden (input_event was previously omitted).", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-rate-limits.ts'));
     expect(p).toMatch(
-      /const BUCKET_KEYS = \['global', 'sessions:create', 'agent_sessions:message'\] as const;/,
+      /const BUCKET_KEYS = \[\s*'global',\s*'sessions:create',\s*'agent_sessions:message',\s*'agent_sessions:input_event',?\s*\] as const;/,
     );
     expect(p).toMatch(/type BucketKey = \(typeof BUCKET_KEYS\)\[number\];/);
   });

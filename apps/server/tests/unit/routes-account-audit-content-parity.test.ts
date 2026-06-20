@@ -172,9 +172,15 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
     );
   });
 
-  it('Export JSON envelope: generated_at ISO + account_id=acc_ + row_count + truncated boolean + data: all.map(publicEntry); attachment .json + truncated header', () => {
+  it('Export JSON envelope: generated_at ISO + account_id labelled with the SCOPED account (owner under a team export, caller otherwise) + row_count + truncated boolean + data: all.map(publicEntry); attachment .json + truncated header', () => {
+    expect(body).toContain('generated_at: new Date().toISOString(),');
+    // The envelope must label the account whose rows these ARE (mirrors the
+    // data scope), not always the calling member.
+    expect(body).toContain(
+      "account_id: `acc_${effective.kind === 'team' ? effective.accountId : ctx.account.id}`,",
+    );
     expect(body).toMatch(
-      /\.send\(\{\s*\n?\s*generated_at: new Date\(\)\.toISOString\(\),\s*\n?\s*account_id: `acc_\$\{ctx\.account\.id\}`,\s*\n?\s*row_count: all\.length,\s*\n?\s*truncated,\s*\n?\s*data: all\.map\(\(row\) => publicEntry\(row, redactActorPrivacy\)\),\s*\n?\s*\}\);/,
+      /row_count: all\.length,\s*\n?\s*truncated,\s*\n?\s*data: all\.map\(\(row\) => publicEntry\(row, redactActorPrivacy\)\),/,
     );
     expect(body).toMatch(/\.header\('content-type', 'application\/json; charset=utf-8'\)/);
     expect(body).toMatch(

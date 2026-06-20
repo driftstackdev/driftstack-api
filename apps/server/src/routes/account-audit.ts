@@ -207,7 +207,10 @@ export function registerAccountAuditRoutes(
         .header('x-driftstack-export-truncated', truncated ? 'true' : 'false')
         .send({
           generated_at: new Date().toISOString(),
-          account_id: `acc_${ctx.account.id}`,
+          // Label the envelope with the account whose rows these ARE — the
+          // owner under a team export, the caller otherwise — mirroring the
+          // data scope above (effectiveAccountId when team).
+          account_id: `acc_${effective.kind === 'team' ? effective.accountId : ctx.account.id}`,
           row_count: all.length,
           truncated,
           data: all.map((row) => publicEntry(row, redactActorPrivacy)),

@@ -325,6 +325,9 @@ export function registerCustomerCryptoOrdersRoutes(
 
 function parseOrThrow<T>(schema: z.ZodSchema<T>, input: unknown): T {
   const result = schema.safeParse(input);
-  if (!result.success) throw new BadRequestError(result.error.message);
+  // Don't leak the raw serialized zod error (full issue/path JSON) into the
+  // customer-facing problem detail; this helper validates several shapes
+  // (query params + body), so keep the message generic.
+  if (!result.success) throw new BadRequestError('Invalid request parameters.');
   return result.data;
 }

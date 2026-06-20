@@ -224,10 +224,12 @@ describe('W421.C apps/server/src/routes/billing-crypto-orders.ts content parity'
     expect(gated?.length).toBe(2);
   });
 
-  it('parseOrThrow helper: zod safeParse + BadRequestError(error.message)', () => {
+  it('parseOrThrow helper: zod safeParse + a fixed generic BadRequestError message (no raw zod JSON leaked into the customer problem detail)', () => {
     expect(body).toMatch(
-      /function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{\s*\n?\s*const result = schema\.safeParse\(input\);\s*\n?\s*if \(!result\.success\) throw new BadRequestError\(result\.error\.message\);\s*\n?\s*return result\.data;/,
+      /function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{\s*\n?\s*const result = schema\.safeParse\(input\);/,
     );
+    expect(body).toContain("throw new BadRequestError('Invalid request parameters.');");
+    expect(body).not.toMatch(/BadRequestError\(result\.error\.message\)/);
   });
 
   it('imports: FastifyInstance/FastifyRequest + zod + BadRequest/Conflict/NotFoundError + buildReceiptPdfBytes + CryptoOrder/Service', () => {

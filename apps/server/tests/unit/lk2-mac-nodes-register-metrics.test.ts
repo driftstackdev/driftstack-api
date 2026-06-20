@@ -188,7 +188,9 @@ describe('Arc 7 obs.16 — mac_node_livekit_register_total counter', () => {
         },
       },
     });
-    expect(res.statusCode).toBe(400);
+    // A malformed MFA_ENCRYPTION_KEY is a server config error, not the caller's
+    // fault → 500 (InternalError), with a generic detail (no key-shape leak).
+    expect(res.statusCode).toBe(500);
     expect(readCount(metrics, 'encryption_error')).toBe(1);
     expect(readCount(metrics, 'ok')).toBe(0);
     await app.close();

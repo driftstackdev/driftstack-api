@@ -43,9 +43,9 @@ describe('W413.A apps/server/src/routes/account-rate-limits.ts content parity', 
     );
   });
 
-  it("BUCKET_KEYS: as const 3-tuple ['global', 'sessions:create', 'agent_sessions:message'] + BucketKey = typeof[number]", () => {
+  it("BUCKET_KEYS: as const 4-tuple ['global', 'sessions:create', 'agent_sessions:message', 'agent_sessions:input_event'] + BucketKey = typeof[number] — all enforced buckets so the customer view hides none", () => {
     expect(body).toMatch(
-      /const BUCKET_KEYS = \['global', 'sessions:create', 'agent_sessions:message'\] as const;/,
+      /const BUCKET_KEYS = \[\s*'global',\s*'sessions:create',\s*'agent_sessions:message',\s*'agent_sessions:input_event',?\s*\] as const;/,
     );
     expect(body).toMatch(/type BucketKey = \(typeof BUCKET_KEYS\)\[number\];/);
   });
