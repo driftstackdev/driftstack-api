@@ -234,12 +234,15 @@ describe('W768 docs /api/audit-log content parity', () => {
     );
   });
 
-  it('CRITICAL CSV-columns 8-field set pinned — id/timestamp/action/actor_type/actor_account_id/actor_key_id/target_resource_id/payload_json. Drift to dropping a column would silently mismatch SDK consumer parsers.', () => {
+  it('CRITICAL CSV-columns 9-field set pinned — timestamp/action/actor_type/actor_account_id/actor_key_id/target_resource_id/ip_address/user_agent/payload. Must match the server CSV header (account-audit.ts) so SDK consumer parsers stay aligned; the doc previously listed a fictional `id` + `payload_json` and omitted ip_address/user_agent.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /CSV columns: `id`, `timestamp`, `action`, `actor_type`,\s*\n?`actor_account_id`, `actor_key_id`, `target_resource_id`,\s*\n?`payload_json`\./,
+      /CSV columns \(in order\): `timestamp`, `action`, `actor_type`,\s*\n?`actor_account_id`, `actor_key_id`, `target_resource_id`, `ip_address`,\s*\n?`user_agent`, `payload`\./,
     );
+    // The fictional columns must not return.
+    expect(p).not.toMatch(/CSV columns.*`id`/s);
+    expect(p).not.toMatch(/`payload_json`/);
   });
 
   it('CRITICAL JSON-envelope shape pinned — generated_at + account_id + row_count + truncated + data[]. The truncated flag is the load-bearing 10k-cap discriminator.', () => {

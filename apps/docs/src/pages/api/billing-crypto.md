@@ -100,7 +100,7 @@ Returns the authenticated customer's crypto orders, newest first.
 
 ```json
 {
-  "data": [
+  "orders": [
     {
       "order_id": "ord_a1b2c3d4e5f6",
       "product": "solo_manual",
@@ -110,16 +110,23 @@ Returns the authenticated customer's crypto orders, newest first.
       "status": "paid",
       "customer_note": null,
       "events": [
-        { "status": "pending", "at": 1779565200000, "source": "create" },
-        { "status": "confirming", "at": 1779565260000, "source": "ipn" },
-        { "status": "paid", "at": 1779565800000, "source": "ipn" }
+        { "status": "pending", "at": "2026-05-20T12:00:00.000Z", "source": "create" },
+        { "status": "confirming", "at": "2026-05-20T12:01:00.000Z", "source": "ipn" },
+        { "status": "paid", "at": "2026-05-20T12:10:00.000Z", "source": "ipn" }
       ],
-      "created_at": 1779565200000,
-      "updated_at": 1779565800000
+      "expires_at": null,
+      "created_at": "2026-05-20T12:00:00.000Z",
+      "updated_at": "2026-05-20T12:10:00.000Z"
     }
-  ]
+  ],
+  "next_cursor": null
 }
 ```
+
+Timestamps are ISO-8601 strings. The list is cursor-paginated: pass the
+returned `next_cursor` back as `?cursor=<...>` to fetch the next page
+(`null` means no more pages). `expires_at` is set only while an order is
+`pending`; it is `null` once the order resolves.
 
 `events` is an append-only state-transition log — the canonical
 record of how the order reached its current state, for support

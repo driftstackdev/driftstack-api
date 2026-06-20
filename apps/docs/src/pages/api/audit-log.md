@@ -239,10 +239,10 @@ Response headers:
 Cap: 10,000 rows per file. Older entries remain accessible via the
 paginated read endpoint above.
 
-CSV columns: `id`, `timestamp`, `action`, `actor_type`,
-`actor_account_id`, `actor_key_id`, `target_resource_id`,
-`payload_json`. The `payload_json` column is the JSON-encoded
-`payload` field (stringified + escaped per CSV rules).
+CSV columns (in order): `timestamp`, `action`, `actor_type`,
+`actor_account_id`, `actor_key_id`, `target_resource_id`, `ip_address`,
+`user_agent`, `payload`. The `payload` column is the JSON-encoded payload
+field (stringified + escaped per CSV rules).
 
 JSON envelope:
 
