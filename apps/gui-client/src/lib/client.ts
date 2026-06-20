@@ -43,12 +43,23 @@ export function buildClient(
    *  the SDK's effectiveAccount option (X-Driftstack-Account). Null =
    *  personal workspace. */
   effectiveAccount: string | null = null,
+  /** Fired when any API call returns 401 with a key SET — i.e. the key expired
+   *  or was revoked mid-session. Lets SettingsContext surface ONE central
+   *  re-auth prompt instead of every view rendering its own 401 copy. */
+  onUnauthorized?: () => void,
 ): DriftstackClient | null {
   if (apiKey === null || apiKey.length === 0) return null;
+  // Layer a 401 observer over loggingFetch — pure pass-through (returns the
+  // same Response), it only NOTIFIES on an expired/revoked key mid-session.
+  const authFetch: typeof fetch = (input, init) =>
+    loggingFetch(input, init).then((res) => {
+      if (res.status === 401) onUnauthorized?.();
+      return res;
+    });
   return new Driftstack({
     apiKey,
     baseUrl: baseUrl.replace(/\/+$/, ''),
-    fetch: loggingFetch,
+    fetch: authFetch,
     ...(effectiveAccount !== null ? { effectiveAccount } : {}),
   });
 }

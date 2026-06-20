@@ -54,11 +54,15 @@ describe('W461.C apps/gui-client/src/lib/client.ts content parity', () => {
     expect(body).toMatch(/export type DriftstackClient = Driftstack;/);
   });
 
-  it('buildClient(apiKey, baseUrl, effectiveAccount=null): null-or-empty apiKey → null early return; otherwise new Driftstack({apiKey, baseUrl trailing-slash-stripped, fetch: loggingFetch, effectiveAccount when non-null}) — W609 Dev Logs fetch seam + workspace half-2 scoping', () => {
+  it('buildClient(apiKey, baseUrl, effectiveAccount=null, onUnauthorized?): null-or-empty apiKey → null early return; otherwise new Driftstack({apiKey, baseUrl trailing-slash-stripped, fetch: authFetch (a 401-observer pass-through over loggingFetch), effectiveAccount when non-null}) — W609 Dev Logs fetch seam + workspace half-2 scoping + central 401 re-auth', () => {
     expect(body).toContain('effectiveAccount: string | null = null,');
+    expect(body).toContain('onUnauthorized?: () => void,');
     expect(body).toContain('if (apiKey === null || apiKey.length === 0) return null;');
     expect(body).toContain("baseUrl: baseUrl.replace(/\\/+$/, ''),");
-    expect(body).toContain('fetch: loggingFetch,');
+    expect(body).toContain('fetch: authFetch,');
+    // authFetch is a pure pass-through over loggingFetch that NOTIFIES on 401.
+    expect(body).toContain('loggingFetch(input, init)');
+    expect(body).toMatch(/if \(res\.status === 401\) onUnauthorized\?\.\(\);/);
     expect(body).toContain('...(effectiveAccount !== null ? { effectiveAccount } : {}),');
   });
 

@@ -65,7 +65,7 @@ export function App(): JSX.Element {
 }
 
 function Shell(): JSX.Element {
-  const { settings, loading } = useSettings();
+  const { settings, loading, authExpired, dismissAuthExpired } = useSettings();
   // 2026-06-14 — Command Center ('home') is the default landing (5→10 G4):
   // it leads with Automate (Ask AI / recipes) + an account/session overview,
   // making automation the primary surface; Profiles/Sessions are one click away.
@@ -302,6 +302,38 @@ function Shell(): JSX.Element {
         />
         {update && !updateDismissed ? (
           <UpdateBanner update={update} onDismiss={() => setUpdateDismissed(true)} />
+        ) : null}
+        {/* Central re-auth prompt — a key that expired / was revoked mid-session
+            makes every call 401; SettingsContext flips authExpired once (via the
+            client's fetch observer) so this single banner replaces the scattered
+            per-view 401 copy. */}
+        {authExpired ? (
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-3 border-b border-status-error/40 bg-status-error/10 px-4 py-2 text-xs text-status-error"
+          >
+            <span>Your API key expired or was revoked — re-authenticate to keep working.</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="rounded border border-status-error/40 px-2 py-0.5 font-medium hover:bg-status-error/15"
+                onClick={() => {
+                  dismissAuthExpired();
+                  setView({ kind: 'settings' });
+                }}
+              >
+                Go to Settings
+              </button>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                className="px-1 text-sm leading-none hover:text-ink-primary"
+                onClick={dismissAuthExpired}
+              >
+                ×
+              </button>
+            </div>
+          </div>
         ) : null}
         <div className="flex flex-1 overflow-hidden">
           <Sidebar

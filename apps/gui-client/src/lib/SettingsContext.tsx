@@ -29,6 +29,11 @@ interface SettingsContextValue {
   accountMe: AccountSelfProfile | null;
   /** V-239 — manually trigger a re-fetch (e.g. after a create/destroy). */
   refreshAccountMe: () => Promise<void>;
+  /** True when an API call returned 401 with a key set (key expired / revoked
+   *  mid-session) — surfaced once centrally as a re-auth prompt. */
+  authExpired: boolean;
+  /** Dismiss the central re-auth prompt. */
+  dismissAuthExpired: () => void;
   /** Update settings + persist. Returns once the on-disk write resolves. */
   update: (next: Partial<DriftstackSettings>) => Promise<void>;
 }
@@ -103,10 +108,20 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
       /* session-only persistence */
     }
   }, []);
+  // Central 401 handling — an expired/revoked key makes every call 401; the
+  // client's fetch observer flips this once so App shows ONE re-auth banner
+  // instead of each view rendering its own 401 copy.
+  const [authExpired, setAuthExpired] = useState(false);
+  const handleUnauthorized = useCallback(() => setAuthExpired(true), []);
+  const dismissAuthExpired = useCallback(() => setAuthExpired(false), []);
   const client = useMemo(
-    () => buildClient(settings.apiKey, settings.baseUrl, activeWorkspace),
-    [settings.apiKey, settings.baseUrl, activeWorkspace],
+    () => buildClient(settings.apiKey, settings.baseUrl, activeWorkspace, handleUnauthorized),
+    [settings.apiKey, settings.baseUrl, activeWorkspace, handleUnauthorized],
   );
+  // A changed key / base / workspace clears any prior expired state.
+  useEffect(() => {
+    setAuthExpired(false);
+  }, [settings.apiKey, settings.baseUrl, activeWorkspace]);
 
   // V-239 — fetch the AccountSelfProfile whenever the client (apiKey/
   // baseUrl combo) changes. Failures (e.g. invalid key, server down)
@@ -144,6 +159,8 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
       setActiveWorkspace,
       accountMe,
       refreshAccountMe,
+      authExpired,
+      dismissAuthExpired,
       update,
     }),
     [
@@ -154,6 +171,8 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
       setActiveWorkspace,
       accountMe,
       refreshAccountMe,
+      authExpired,
+      dismissAuthExpired,
       update,
     ],
   );
