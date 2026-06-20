@@ -67,9 +67,9 @@ describe('LK.6.a — gui-client livekit-client dep + wrapper', () => {
     expect(body).toMatch(/kind: 'error'/);
   });
 
-  it('wrapper exposes createLivekitRoom() with adaptiveStream + dynacast enabled', () => {
+  it('wrapper exposes createLivekitRoom() tuned for the interactive simulator: adaptiveStream OFF (visibility/size gating adds latency to a single always-visible real-time track) + dynacast ON', () => {
     expect(body).toMatch(/export function createLivekitRoom/);
-    expect(body).toMatch(/adaptiveStream:\s*true/);
+    expect(body).toMatch(/adaptiveStream:\s*false/);
     expect(body).toMatch(/dynacast:\s*true/);
   });
 
