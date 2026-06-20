@@ -79,6 +79,7 @@ vi.mock('../../src/lib/proxies', () => ({
 const { ProfilesView } = await import('../../src/views/ProfilesView');
 const { RecordingsView } = await import('../../src/views/RecordingsView');
 const { ProxiesView } = await import('../../src/views/ProxiesView');
+const { ToastProvider } = await import('../../src/lib/toasts');
 
 describe('V-275 ProfilesView empty state', () => {
   it('renders oxblood-tinted icon + heading + body + CTA + footnote', async () => {
@@ -106,7 +107,11 @@ describe('V-275 ProfilesView empty state', () => {
 
 describe('V-276 RecordingsView empty state', () => {
   it('renders oxblood-tinted bullseye icon + heading + body + footnote', () => {
-    render(<RecordingsView onOpen={vi.fn()} />);
+    render(
+      <ToastProvider>
+        <RecordingsView onOpen={vi.fn()} />
+      </ToastProvider>,
+    );
 
     const heading = screen.getByRole('heading', { name: /no recordings yet/i });
     expect(heading).toBeInTheDocument();

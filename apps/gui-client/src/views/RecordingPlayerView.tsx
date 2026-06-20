@@ -97,6 +97,35 @@ export function RecordingPlayerView({
     return stopTick;
   }, [playing, startTick, stopTick]);
 
+  // Space toggles play/pause — but only when the keystroke isn't meant for a
+  // text field. Without the typing guard, hitting Space while focused in an
+  // input/textarea/contenteditable would both type a space AND hijack
+  // playback, so we bail when an editable element holds focus.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent): void {
+      if (e.key !== ' ' && e.code !== 'Space') return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        target?.isContentEditable === true
+      ) {
+        return;
+      }
+      e.preventDefault();
+      if (cursorMs >= totalMs) {
+        // Restart from the beginning if we're at the end (mirrors togglePlay).
+        setCursorMs(0);
+        playStateRef.current = { wallStart: Date.now(), cursorBase: 0 };
+      }
+      setPlaying((p) => !p);
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [cursorMs, totalMs]);
+
   // Pick the frame whose `at` is the latest <= recording.startedAt + cursorMs.
   const currentFrame = useMemo(() => {
     if (recording === null || recording.frames.length === 0) return null;
@@ -204,6 +233,7 @@ export function RecordingPlayerView({
           value={Math.min(cursorMs, totalMs)}
           step={TICK_MS}
           onChange={handleScrub}
+          aria-label="Playback progress"
           className="flex-1 accent-accent"
         />
         <span className="mono w-12">{formatDuration(totalMs)}</span>

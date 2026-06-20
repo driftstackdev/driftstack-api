@@ -54,8 +54,13 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     expect(body).toMatch(
       /export interface RecordingsViewProps \{\s*\n?\s*onOpen: \(recordingId: string\) => void;\s*\n?\s*\}/,
     );
+    // The destructure + the newest-first sort are both pinned, but no longer
+    // required to be line-adjacent (a copy-session-id handler now sits between
+    // them — W##: GUI polish wave). Asserted independently so each fragment
+    // still drifts the guard if it changes.
+    expect(body).toMatch(/const \{ recordings, deleteRecording, loading \} = useRecordings\(\);/);
     expect(body).toMatch(
-      /const \{ recordings, deleteRecording, loading \} = useRecordings\(\);\s*\n?\s*const list = Array\.from\(recordings\.values\(\)\)\.sort\(\(a, b\) => b\.startedAt - a\.startedAt\);/,
+      /const list = Array\.from\(recordings\.values\(\)\)\.sort\(\(a, b\) => b\.startedAt - a\.startedAt\);/,
     );
     // Deleted/unknown selection degrades to the newest recording — the
     // rail never points at a recording that no longer exists.

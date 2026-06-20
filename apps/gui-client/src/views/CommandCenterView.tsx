@@ -574,7 +574,7 @@ function HealthTile({
       <button
         type="button"
         onClick={onClick}
-        className="flex flex-col gap-0.5 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated"
+        className="flex cursor-pointer flex-col gap-0.5 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated hover:ring-1 hover:ring-accent/30"
       >
         {body}
       </button>
@@ -759,7 +759,7 @@ function Kpi({
       <button
         type="button"
         onClick={onClick}
-        className="flex items-center gap-3 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated"
+        className="flex cursor-pointer items-center gap-3 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated hover:ring-1 hover:ring-accent/30"
       >
         {inner}
       </button>

@@ -20,6 +20,7 @@ import { useSettings } from '../lib/SettingsContext';
 import { isCloudBaseUrl } from '../lib/telemetry';
 import { rememberedKeyFor } from '../lib/settings';
 import { useConfirm } from '../components/ConfirmProvider';
+import { useToasts } from '../lib/toasts';
 
 const CLOUD_URL = 'https://api.driftstack.dev';
 const SELF_HOSTED_DEFAULT = 'http://localhost:3000';
@@ -32,6 +33,7 @@ type TestState =
 
 export function SettingsView(): JSX.Element {
   const confirm = useConfirm();
+  const { push: pushToast } = useToasts();
   const { settings, update, loading } = useSettings();
   const [draftKey, setDraftKey] = useState(settings.apiKey ?? '');
   const [draftUrl, setDraftUrl] = useState(settings.baseUrl);
@@ -136,6 +138,19 @@ export function SettingsView(): JSX.Element {
       setSavedAt(Date.now());
     },
   });
+
+  // Copy the REAL API key (not the 12+4 masked display) so a customer can
+  // paste it into a script / CI secret without re-minting. Clipboard writes
+  // can fail in locked-down WKWebView contexts — fail quietly, no toast.
+  async function handleCopyKey(): Promise<void> {
+    if (settings.apiKey === null) return;
+    try {
+      await navigator.clipboard.writeText(settings.apiKey);
+      pushToast({ title: 'Copied', tone: 'success' });
+    } catch {
+      /* clipboard write can fail in locked-down envs; silent */
+    }
+  }
 
   async function handleSave(): Promise<void> {
     setSaving(true);
@@ -379,6 +394,15 @@ export function SettingsView(): JSX.Element {
                 </span>
                 .
               </p>
+              {settings.apiKey !== null && (
+                <button
+                  type="button"
+                  className="btn-secondary mt-2 text-xs"
+                  onClick={() => void handleCopyKey()}
+                >
+                  Copy key
+                </button>
+              )}
             </div>
             <span
               aria-hidden="true"
@@ -486,6 +510,15 @@ export function SettingsView(): JSX.Element {
               >
                 {testState.kind === 'testing' ? 'Testing…' : 'Test connection'}
               </button>
+              {draftMode === 'self-hosted' && draftUrl !== SELF_HOSTED_DEFAULT && (
+                <button
+                  type="button"
+                  onClick={() => setDraftUrl(SELF_HOSTED_DEFAULT)}
+                  className="btn-secondary text-xs"
+                >
+                  Reset to default
+                </button>
+              )}
               {testState.kind === 'ok' && (
                 <span className="text-2xs text-status-ready">
                   ✓ Reachable · <span className="mono">{testState.version.slice(0, 7)}</span>

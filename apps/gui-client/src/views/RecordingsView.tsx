@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { EmptyState } from '../components/EmptyState';
 import { RelativeTime } from '../components/RelativeTime';
 import { Skeleton } from '../components/Skeleton';
+import { useToasts } from '../lib/toasts';
 import {
   formatDuration,
   recordingDurationMs,
@@ -26,7 +27,20 @@ export interface RecordingsViewProps {
 }
 
 export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
+  const { push: pushToast } = useToasts();
   const { recordings, deleteRecording, loading } = useRecordings();
+
+  // Copy the selected recording's session id so the operator can correlate it
+  // with the dashboard / API without retyping. Clipboard writes can fail in
+  // locked-down WKWebView contexts — fail quietly.
+  async function handleCopySession(sessionId: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(sessionId);
+      pushToast({ title: 'Copied', tone: 'success' });
+    } catch {
+      /* clipboard write can fail in locked-down envs; silent */
+    }
+  }
   const list = Array.from(recordings.values()).sort((a, b) => b.startedAt - a.startedAt);
   // Selected card drives the rail. Default = newest; deleting the
   // selected recording falls back to newest on the next render.
@@ -117,7 +131,18 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
               </p>
               <dl className="flex flex-col">
                 <FactRow k="Session">
-                  <span className="mono text-ink-secondary">{selected.sessionId}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="mono text-ink-secondary">{selected.sessionId}</span>
+                    <button
+                      type="button"
+                      aria-label="Copy session ID"
+                      title="Copy session ID"
+                      className="text-2xs text-accent hover:underline"
+                      onClick={() => void handleCopySession(selected.sessionId)}
+                    >
+                      Copy
+                    </button>
+                  </span>
                 </FactRow>
                 <FactRow k="Started">
                   <RelativeTime
