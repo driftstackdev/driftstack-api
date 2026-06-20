@@ -55,12 +55,20 @@ export type LivekitConnectionState =
   | { kind: 'disconnected' }
   | { kind: 'error'; message: string };
 
-/** Construct a Room with adaptive-stream + autoSubscribe enabled.
- *  No connect() call here — the AgentSessionPanel component owns
- *  the lifecycle. */
+/** Construct a Room for the INTERACTIVE simulator with adaptiveStream OFF +
+ *  autoSubscribe (default) on. adaptiveStream pauses/downgrades a track based
+ *  on the <video> element's on-screen visibility + size — useful for a passive
+ *  grid of many feeds, but it adds perceptible latency to a real-time control
+ *  surface (it is the likeliest subscribe-side cause of the founder-reported
+ *  "very very slow streaming / huge delay" on the live view). The simulator
+ *  shows a single, always-visible, full-size track, so there is nothing to
+ *  adapt to — we want the freshest full frame with no visibility gating. dynacast
+ *  stays on (publisher-side; effectively a no-op against the single-layer
+ *  simulcast:false publish, but harmless + documents intent). No connect() call
+ *  here — the AgentSessionPanel component owns the lifecycle. */
 export function createLivekitRoom(): Room {
   return new Room({
-    adaptiveStream: true,
+    adaptiveStream: false,
     dynacast: true,
   });
 }

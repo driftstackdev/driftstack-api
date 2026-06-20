@@ -70,10 +70,11 @@ describe('gui-client/lib/livekit content parity', () => {
     );
   });
 
-  it("createLivekitRoom adaptive-stream + dynacast framing pinned: 'Construct a Room with adaptive-stream + autoSubscribe enabled. No connect() call here — the AgentSessionPanel component owns the lifecycle.' + new Room({adaptiveStream: true, dynacast: true}). Drift to dropping adaptiveStream would force the SFU to send full-resolution under congestion", () => {
+  it("createLivekitRoom is tuned for the INTERACTIVE simulator: adaptiveStream OFF (it gates a track on the <video> element's visibility/size, adding latency to a real-time control surface — the likeliest subscribe-side cause of the founder-reported 'very very slow streaming / huge delay') + dynacast ON (publisher-side no-op against simulcast:false, kept harmless). new Room({adaptiveStream: false, dynacast: true}). Drift back to adaptiveStream:true would re-introduce the visibility-gated latency on the live view.", () => {
     expect(body).toMatch(
-      /export function createLivekitRoom\(\): Room \{\s*\n?\s*return new Room\(\{\s*\n?\s*adaptiveStream: true,\s*\n?\s*dynacast: true,\s*\n?\s*\}\);/,
+      /export function createLivekitRoom\(\): Room \{\s*\n?\s*return new Room\(\{\s*\n?\s*adaptiveStream: false,\s*\n?\s*dynacast: true,\s*\n?\s*\}\);/,
     );
+    expect(body).toMatch(/adaptiveStream pauses\/downgrades a track based/);
   });
 
   it("sendInputEvent reliable=true default framing pinned: 'lossy: false (TCP-style; mouse/key events MUST arrive in order). For high-frequency mouseMove streams, callers can opt-in to lossy: true to drop intermediate frames if the link congests — acceptable trade for cursor-tracking only.' + opts.reliable ?? true + JSON.stringify(event) → publishData. Drift to reliable=false default would let click/keypress events drop silently", () => {
