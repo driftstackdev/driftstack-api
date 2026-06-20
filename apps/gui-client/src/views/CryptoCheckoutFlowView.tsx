@@ -80,7 +80,7 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
             <span className="text-ink-secondary">Loading quote…</span>
           )}
           {quote.state.kind === 'error' && (
-            <ErrorBanner message={quote.state.message} onDismiss={() => undefined} />
+            <ErrorBanner message={quote.state.message} onDismiss={() => void quote.refetch()} />
           )}
           {quote.state.kind === 'ready' && (
             <span>

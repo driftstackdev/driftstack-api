@@ -96,10 +96,14 @@ describe('W414.B apps/server/src/routes/account-cost.ts content parity', () => {
     expect(body).toMatch(/void NotFoundError;/);
   });
 
-  it('parseOrThrow helper: zod safeParse + BadRequestError(result.error.message)', () => {
+  it('parseOrThrow helper: zod safeParse + a fixed BadRequestError message (no raw zod JSON leaked into the customer problem detail)', () => {
     expect(body).toMatch(
-      /function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{\s*\n?\s*const result = schema\.safeParse\(input\);\s*\n?\s*if \(!result\.success\) throw new BadRequestError\(result\.error\.message\);\s*\n?\s*return result\.data;/,
+      /function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{\s*\n?\s*const result = schema\.safeParse\(input\);/,
     );
+    expect(body).toContain(
+      "if (!result.success) throw new BadRequestError('Invalid query: billing_cycle must be YYYY-MM.');",
+    );
+    expect(body).not.toMatch(/BadRequestError\(result\.error\.message\)/);
   });
 
   it('imports: FastifyInstance + zod + CostMonitoringService/billingCycleFromDate + BadRequestError/NotFoundError', () => {

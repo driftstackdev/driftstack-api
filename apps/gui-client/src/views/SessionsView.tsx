@@ -91,6 +91,12 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
     return { ready, busy, errored };
   }, [state.sessions]);
 
+  // "Active/running" = non-terminal sessions only. state.sessions includes
+  // destroyed/errored entries until the next poll drops them (the server list
+  // is account-scoped, not status-filtered), so counting the raw array length
+  // over-reports running sessions.
+  const activeCount = counts.ready + counts.busy;
+
   const refresh = useCallback(
     async (showLoading: boolean): Promise<void> => {
       if (!client) {
@@ -235,7 +241,7 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
             </span>
           </h2>
           <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-secondary">
-            <b className="font-semibold text-ink-primary">{state.sessions.length}</b> running
+            <b className="font-semibold text-ink-primary">{activeCount}</b> running
             <span className="text-surface-divider">·</span>
             <span className="font-semibold text-status-ready">{counts.ready} ready</span>
             {counts.busy > 0 && (
@@ -313,7 +319,7 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-surface-divider bg-surface-divider sm:grid-cols-4">
           <Stat
             l="Active"
-            value={state.sessions.length}
+            value={activeCount}
             sub={
               concurrentCap !== null
                 ? `of ${concurrentCap.toString()} concurrent cap`

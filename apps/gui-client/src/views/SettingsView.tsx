@@ -178,10 +178,17 @@ export function SettingsView(): JSX.Element {
       return;
     }
     setKeyCheck({ kind: 'checking' });
+    // Bound the validation like runConnectionTest — without an abort, a server
+    // that hangs (rather than refusing) leaves keyCheck stuck on 'checking'
+    // ("Validating key…") forever with no resolution.
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 8_000);
     try {
       const res = await fetch(`${url}/v1/account/me`, {
         headers: { authorization: `Bearer ${draftKey}` },
+        signal: controller.signal,
       });
+      window.clearTimeout(timer);
       if (res.ok) {
         setKeyCheck({ kind: 'ok' });
       } else if (res.status === 401) {
@@ -198,6 +205,7 @@ export function SettingsView(): JSX.Element {
         });
       }
     } catch (err) {
+      window.clearTimeout(timer);
       setKeyCheck({
         kind: 'fail',
         message:
@@ -423,12 +431,15 @@ export function SettingsView(): JSX.Element {
                     { confirmLabel: 'Sign out' },
                   )
                 ) {
-                  setDraftKey('');
-                  void update({
+                  // Await the keychain write BEFORE clearing the draft — a
+                  // fire-and-forget update that fails would leave the UI signed
+                  // out while the key is still stored (UI/keychain desync).
+                  await update({
                     apiKey: null,
                     baseUrl: settings.baseUrl,
                     telemetryOptIn: settings.telemetryOptIn,
                   });
+                  setDraftKey('');
                 }
               })();
             }}

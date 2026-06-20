@@ -80,6 +80,8 @@ export function registerAccountCostRoutes(
 
 function parseOrThrow<T>(schema: z.ZodSchema<T>, input: unknown): T {
   const result = schema.safeParse(input);
-  if (!result.success) throw new BadRequestError(result.error.message);
+  // Don't leak the raw zod error JSON into the customer-facing problem detail;
+  // the only validated query is billing_cycle (YYYY-MM).
+  if (!result.success) throw new BadRequestError('Invalid query: billing_cycle must be YYYY-MM.');
   return result.data;
 }

@@ -76,7 +76,7 @@ describe('W481.A apps/gui-client/src/views/CryptoCheckoutFlowView.tsx content pa
     );
   });
 
-  it("Step 1 picker: disabled while checkout.state.kind !== 'idle' (user can't change products mid-mint) + SUPPORTED_PRODUCTS.map options; Step 1 quote: 'Loading quote…' / ErrorBanner onDismiss={() => undefined} / ready 'Price: <strong>{formatCents(...)}</strong>'", () => {
+  it("Step 1 picker: disabled while checkout.state.kind !== 'idle' (user can't change products mid-mint) + SUPPORTED_PRODUCTS.map options; Step 1 quote: 'Loading quote…' / ErrorBanner onDismiss={() => void quote.refetch()} (Dismiss retries the quote — not a dead control) / ready 'Price: <strong>{formatCents(...)}</strong>'", () => {
     expect(body).toMatch(
       /<select\s*\n?\s*value=\{product\}\s*\n?\s*onChange=\{\(e\) => setProduct\(e\.target\.value\)\}\s*\n?\s*disabled=\{checkout\.state\.kind !== 'idle'\}/,
     );
@@ -84,7 +84,7 @@ describe('W481.A apps/gui-client/src/views/CryptoCheckoutFlowView.tsx content pa
       /\{SUPPORTED_PRODUCTS\.map\(\(p\) => \(\s*\n?\s*<option key=\{p\} value=\{p\}>\s*\n?\s*\{p\}\s*\n?\s*<\/option>\s*\n?\s*\)\)\}/,
     );
     expect(body).toMatch(
-      /\{quote\.state\.kind === 'loading' && \(\s*\n?\s*<span className="text-ink-secondary">Loading quote…<\/span>\s*\n?\s*\)\}\s*\n?\s*\{quote\.state\.kind === 'error' && \(\s*\n?\s*<ErrorBanner message=\{quote\.state\.message\} onDismiss=\{\(\) => undefined\} \/>\s*\n?\s*\)\}\s*\n?\s*\{quote\.state\.kind === 'ready' && \(\s*\n?\s*<span>\s*\n?\s*Price:\{' '\}\s*\n?\s*<strong>\s*\n?\s*\{formatCents\(quote\.state\.data\.price_cents, quote\.state\.data\.price_currency\)\}\s*\n?\s*<\/strong>\s*\n?\s*<\/span>\s*\n?\s*\)\}/,
+      /\{quote\.state\.kind === 'loading' && \(\s*\n?\s*<span className="text-ink-secondary">Loading quote…<\/span>\s*\n?\s*\)\}\s*\n?\s*\{quote\.state\.kind === 'error' && \(\s*\n?\s*<ErrorBanner message=\{quote\.state\.message\} onDismiss=\{\(\) => void quote\.refetch\(\)\} \/>\s*\n?\s*\)\}\s*\n?\s*\{quote\.state\.kind === 'ready' && \(\s*\n?\s*<span>\s*\n?\s*Price:\{' '\}\s*\n?\s*<strong>\s*\n?\s*\{formatCents\(quote\.state\.data\.price_cents, quote\.state\.data\.price_currency\)\}\s*\n?\s*<\/strong>\s*\n?\s*<\/span>\s*\n?\s*\)\}/,
     );
   });
 

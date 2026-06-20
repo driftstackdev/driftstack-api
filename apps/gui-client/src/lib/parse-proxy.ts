@@ -42,10 +42,24 @@ export function parseProxyString(input: string): ParsedProxy | null {
   let username: string | null = null;
   let password: string | null = null;
 
-  const hp = hostport.split(':');
-  if (hp.length < 2) return null;
-  const host = (hp[0] ?? '').trim();
-  const port = Number.parseInt((hp[1] ?? '').trim(), 10);
+  // Bracketed IPv6 authority — [2001:db8::1]:1080. The address's own colons
+  // mean only the bracket form is unambiguous; any credentials must arrive via
+  // the user:pass@ prefix (the colon-delimited host:port:user:pass form can't
+  // represent an IPv6 host). `hp` stays null in this branch so the colon-
+  // delimited credential parse below is skipped.
+  let host: string;
+  let port: number;
+  let hp: string[] | null = null;
+  const v6 = hostport.match(/^\[([^\]]+)\]:(\d+)$/);
+  if (v6 !== null) {
+    host = (v6[1] ?? '').trim();
+    port = Number.parseInt(v6[2] ?? '', 10);
+  } else {
+    hp = hostport.split(':');
+    if (hp.length < 2) return null;
+    host = (hp[0] ?? '').trim();
+    port = Number.parseInt((hp[1] ?? '').trim(), 10);
+  }
 
   if (creds !== null) {
     // creds = user[:pass] — first colon splits (passwords may contain ':').
@@ -56,7 +70,7 @@ export function parseProxyString(input: string): ParsedProxy | null {
       username = creds.slice(0, ci) || null;
       password = creds.slice(ci + 1) || null;
     }
-  } else {
+  } else if (hp !== null) {
     // Colon-delimited: host:port[:user[:pass]]. The password is everything
     // after the 3rd colon (rejoined) so a ':' inside it survives.
     const u = hp[2];

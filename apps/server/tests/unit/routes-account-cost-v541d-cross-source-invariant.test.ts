@@ -118,8 +118,8 @@ describe('W1025 routes/account-cost V-541.D cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-cost.ts'));
     expect(p).toMatch(/\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/);
     expect(p).toMatch(/function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{/);
-    expect(p).toMatch(
-      /if \(!result\.success\) throw new BadRequestError\(result\.error\.message\);/,
+    expect(p).toContain(
+      "if (!result.success) throw new BadRequestError('Invalid query: billing_cycle must be YYYY-MM.');",
     );
   });
 

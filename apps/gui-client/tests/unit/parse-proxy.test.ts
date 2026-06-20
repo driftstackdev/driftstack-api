@@ -71,4 +71,32 @@ describe('parseProxyString', () => {
     expect(parseProxyString('host:70000')).toBeNull();
     expect(parseProxyString('host:notaport')).toBeNull();
   });
+
+  it('parses a bracketed IPv6 authority — [v6]:port', () => {
+    expect(parseProxyString('[2001:db8::1]:1080')).toEqual({
+      host: '2001:db8::1',
+      port: 1080,
+      username: null,
+      password: null,
+    });
+  });
+
+  it('parses a bracketed IPv6 authority with user:pass@ credentials', () => {
+    expect(parseProxyString('alice:s3cret@[2001:db8::1]:1080')).toEqual({
+      host: '2001:db8::1',
+      port: 1080,
+      username: 'alice',
+      password: 's3cret',
+    });
+  });
+
+  it('strips a scheme before a bracketed IPv6 authority', () => {
+    expect(parseProxyString('socks5://[fe80::1]:1080')?.host).toBe('fe80::1');
+  });
+
+  it('returns null for an unbracketed IPv6 (ambiguous host/port split)', () => {
+    // Without brackets the address colons are indistinguishable from the
+    // port separator, so we require the bracket form.
+    expect(parseProxyString('2001:db8::1:1080')).toBeNull();
+  });
 });
