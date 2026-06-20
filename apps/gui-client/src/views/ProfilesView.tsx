@@ -46,6 +46,7 @@ import { EmptyState } from '../components/EmptyState';
 import {
   ProfilesActionBar,
   type ProfileSortBy,
+  type ProfileSortDir,
   type ProfileStatusFilter,
 } from '../components/ProfilesActionBar';
 import { ProxyCapabilityChips, proxyCapabilities } from '../components/ProxyCapabilities';
@@ -148,6 +149,24 @@ export function formatDeviceName(archetype: string): string {
   return ['iPhone', `${num}${e ? 'e' : ''}`, pro ? 'Pro' : '', max ? 'Max' : '']
     .filter(Boolean)
     .join(' ');
+}
+
+// 2026-06-20 — UNIFIED sort plumbing. The action-bar (ProfileSortBy) and the
+// list-view table headers (ProfilesTableSortKey) speak almost the same
+// vocabulary; the only mismatch is last-used ↔ lastUsed. These pure maps keep
+// the two in lockstep so a grid↔list toggle (or a header click) never changes
+// the order out from under the operator.
+function mapTableSortKey(key: ProfilesTableSortKey): ProfileSortBy {
+  return key === 'lastUsed' ? 'last-used' : key;
+}
+function mapSortByToTableKey(by: ProfileSortBy): ProfilesTableSortKey {
+  return by === 'last-used' ? 'lastUsed' : by;
+}
+// Natural first-click direction per key, mirroring the prior grid behavior:
+// recency keys default to descending (newest first); name/status/country to
+// ascending (A→Z, idle→live, country A→Z).
+function defaultSortDir(by: ProfileSortBy): ProfileSortDir {
+  return by === 'created' || by === 'last-used' ? 'desc' : 'asc';
 }
 
 export interface ProfilesViewProps {
@@ -261,9 +280,6 @@ export function ProfilesView({
   // Grid is the DEFAULT (founder directive 2026-06-12 night arc) — the
   // visual workspace is the product; list remains a toggle for dense ops.
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
-  // List-view (table) sort — default by name asc. Header clicks toggle dir.
-  const [sortKey, setSortKey] = useState<ProfilesTableSortKey>('name');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [quickBusy, setQuickBusy] = useState(false);
   // Increment 2 — client-persisted organization (folders/tags/notes).
   const [profilesMeta, setProfilesMeta] = useState<ProfilesMetaMap>({});
@@ -308,6 +324,11 @@ export function ProfilesView({
   const [trashLoading, setTrashLoading] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [purgingId, setPurgingId] = useState<string | null>(null);
+  // 2026-06-20 — bulk trash actions run as a SEQUENTIAL per-row loop over the
+  // existing single-id endpoints (no server bulk endpoint yet — see the
+  // restoreAll/emptyTrash follow-up note on the SDK). `bulkTrashBusy` flags an
+  // in-flight Restore-all / Empty-trash so the row + bulk buttons disable.
+  const [bulkTrashBusy, setBulkTrashBusy] = useState(false);
   const confirm = useConfirm();
   // Onboarding checklist dismissal — webview localStorage persists per
   // install. Guarded: some embeddings/test environments stub storage out.
@@ -329,7 +350,29 @@ export function ProfilesView({
     }
   });
   const [statusFilter, setStatusFilter] = useState<ProfileStatusFilter>('all');
+  // 2026-06-20 — UNIFIED sort: `sortBy` + `sortDir` are the SINGLE source of
+  // truth for BOTH the grid and the list-view (table). Previously the table kept
+  // its own sortKey/sortDir and re-sorted the already-grid-sorted list, so a
+  // grid↔list toggle silently changed the order. Now the action-bar dropdown and
+  // the table column headers read/write the same state, and `filteredProfiles`
+  // is the single ordered list (the table renders it verbatim). Default last-used
+  // descending (most-recent first) mirrors the prior grid default.
   const [sortBy, setSortBy] = useState<ProfileSortBy>('last-used');
+  const [sortDir, setSortDir] = useState<ProfileSortDir>('desc');
+  // Picking a sort key (dropdown OR a table header) seeds that key's natural
+  // direction when it CHANGES the key, and toggles direction when the SAME key
+  // is re-selected — the long-standing table-header behavior, now shared so the
+  // grid dropdown and the table headers stay in lockstep.
+  const changeSort = useCallback((next: ProfileSortBy) => {
+    setSortBy((cur) => {
+      if (cur === next) {
+        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+        return cur;
+      }
+      setSortDir(defaultSortDir(next));
+      return next;
+    });
+  }, []);
   // F1 deep-link (CommandCenter "Jump back in") — consume `initialProfileId`
   // ONCE, after the first load that actually contains it. Tracked by ref so the
   // 15s background poll re-rendering the list never re-selects/re-scrolls (which
@@ -565,6 +608,80 @@ export function ProfilesView({
       }
     },
     [client, loadTrash, refresh, confirm, settings.baseUrl],
+  );
+
+  // 2026-06-20 — bulk "Restore all" over the per-id endpoint, run SEQUENTIALLY
+  // and PARTIAL-FAILURE TOLERANT: a 409 (name taken) or any other error on one
+  // profile is collected, not thrown, so the remaining restores still run. The
+  // server has no bulk restore endpoint yet (FOLLOW-UP: add
+  // client.profiles.restoreAll() + POST /v1/profiles/trash/restore-all so this
+  // is one atomic round-trip instead of N). Refreshes once at the end and
+  // surfaces a single summary if anything was skipped.
+  const handleRestoreAll = useCallback(
+    async (ids: ReadonlyArray<string>): Promise<void> => {
+      if (!client || ids.length === 0) return;
+      setBulkTrashBusy(true);
+      let nameClashes = 0;
+      let otherErrors = 0;
+      try {
+        for (const id of ids) {
+          try {
+            await client.profiles.restore(id);
+          } catch (err) {
+            if ((err as { status?: number }).status === 409) nameClashes += 1;
+            else otherErrors += 1;
+          }
+        }
+        await Promise.all([loadTrash(), refresh(false)]);
+        if (nameClashes > 0 || otherErrors > 0) {
+          const parts: string[] = [];
+          if (nameClashes > 0)
+            parts.push(
+              `${nameClashes.toString()} couldn’t be restored because a live profile already uses the name — rename it, then restore again`,
+            );
+          if (otherErrors > 0) parts.push(`${otherErrors.toString()} failed to restore`);
+          await confirm(`Restored what it could. ${parts.join('; ')}.`, { confirmLabel: 'OK' });
+        }
+      } finally {
+        setBulkTrashBusy(false);
+      }
+    },
+    [client, loadTrash, refresh, confirm],
+  );
+
+  // 2026-06-20 — bulk "Empty trash": confirm ONCE, then purge every trashed
+  // profile SEQUENTIALLY over the per-id endpoint, tolerating per-row failures
+  // (a failed purge doesn't abort the rest). FOLLOW-UP: a server
+  // DELETE /v1/profiles/trash + client.profiles.emptyTrash() would make this
+  // atomic instead of N irreversible calls.
+  const handleEmptyTrash = useCallback(
+    async (ids: ReadonlyArray<string>): Promise<void> => {
+      if (!client || typeof client.profiles.purge !== 'function' || ids.length === 0) return;
+      const ok = await confirm(
+        `Permanently delete all ${ids.length.toString()} profile${ids.length === 1 ? '' : 's'} in the trash? This frees their slots but can’t be undone — they’re gone for good.`,
+        { confirmLabel: 'Empty trash' },
+      );
+      if (!ok) return;
+      setBulkTrashBusy(true);
+      let failures = 0;
+      try {
+        for (const id of ids) {
+          try {
+            await client.profiles.purge(id);
+          } catch {
+            failures += 1;
+          }
+        }
+        await Promise.all([loadTrash(), refresh(false)]);
+        if (failures > 0)
+          await confirm(`Emptied the trash. ${failures.toString()} couldn’t be deleted.`, {
+            confirmLabel: 'OK',
+          });
+      } finally {
+        setBulkTrashBusy(false);
+      }
+    },
+    [client, loadTrash, refresh, confirm],
   );
 
   // F3 — single note-save path shared by BOTH the grid card and the table row
@@ -998,19 +1115,36 @@ export function ProfilesView({
         return statusFilter === 'running' ? running : !running;
       });
     }
-    const ordered = [...list].sort((a, b) => {
+    // 2026-06-20 — single, direction-aware comparator over the unified sortBy.
+    // The base comparator orders ASCENDING for every key; `dir` flips it. The
+    // status/country keys read the same derived signals the list-view row uses
+    // (boundSession running, probed exit country) so a grid sort by Status or
+    // Country matches what the table would have shown.
+    const exitCountryOf = (p: Profile): string => {
+      const px = pickProxy(p.id);
+      const probe = px !== null ? probeCache[px.id] : undefined;
+      // 'zz' sinks the unknowns to the end of an ascending sort.
+      return probe?.exitCountry ?? 'zz';
+    };
+    const cmp = (a: Profile, b: Profile): number => {
       switch (sortBy) {
         case 'name':
           return a.name.localeCompare(b.name);
         case 'created':
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
         case 'last-used': {
           const at = a.last_used_at !== null ? new Date(a.last_used_at).getTime() : 0;
           const bt = b.last_used_at !== null ? new Date(b.last_used_at).getTime() : 0;
-          return bt - at;
+          return at - bt;
         }
+        case 'status':
+          return Number(boundSession(a.id) !== null) - Number(boundSession(b.id) !== null);
+        case 'country':
+          return exitCountryOf(a).localeCompare(exitCountryOf(b));
       }
-    });
+    };
+    const sign = sortDir === 'asc' ? 1 : -1;
+    const ordered = [...list].sort((a, b) => sign * cmp(a, b));
     return ordered;
   }, [
     folderFilter,
@@ -1020,11 +1154,15 @@ export function ProfilesView({
     searchQuery,
     statusFilter,
     sortBy,
+    sortDir,
+    // status/country comparators read the proxy probe cache + the proxy set.
+    probeCache,
+    proxies,
     activeSessions,
     bindings,
-    // boundSession (via the status filter) also reads the agent-session list (now
-    // carrying the server `liveness`) + its loaded flag, so recompute when those
-    // change.
+    // boundSession (via the status filter + status sort) also reads the
+    // agent-session list (now carrying the server `liveness`) + its loaded flag,
+    // so recompute when those change.
     agentSessions,
     agentSessionsLoaded,
   ]);
@@ -1916,7 +2054,9 @@ export function ProfilesView({
             statusFilter={statusFilter}
             onStatusFilterChange={setStatusFilter}
             sortBy={sortBy}
-            onSortByChange={setSortBy}
+            onSortByChange={changeSort}
+            sortDir={sortDir}
+            onSortDirChange={setSortDir}
             visibleCount={filteredProfiles.length}
             totalCount={state.profiles.length}
           />
@@ -2358,8 +2498,11 @@ export function ProfilesView({
                   loading={trashLoading}
                   restoringId={restoringId}
                   purgingId={purgingId}
+                  bulkBusy={bulkTrashBusy}
                   onRestore={(id) => void handleRestore(id)}
                   onPurge={(id, name) => void handlePurge(id, name)}
+                  onRestoreAll={(ids) => void handleRestoreAll(ids)}
+                  onEmptyTrash={(ids) => void handleEmptyTrash(ids)}
                   onBack={() => setTrashView(false)}
                 />
               ) : viewMode === 'grid' ? (
@@ -2505,40 +2648,19 @@ export function ProfilesView({
                       launchDisabledReason: teamLaunchBlockedReason,
                     };
                   });
-                  const dir = sortDir === 'asc' ? 1 : -1;
-                  rows.sort((a, b) => {
-                    switch (sortKey) {
-                      case 'name':
-                        return dir * a.name.localeCompare(b.name);
-                      case 'status':
-                        return dir * (Number(a.running) - Number(b.running));
-                      case 'country':
-                        return dir * (a.countryCode ?? 'zz').localeCompare(b.countryCode ?? 'zz');
-                      case 'created': {
-                        const at = a.createdAtIso !== null ? new Date(a.createdAtIso).getTime() : 0;
-                        const bt = b.createdAtIso !== null ? new Date(b.createdAtIso).getTime() : 0;
-                        return dir * (at - bt);
-                      }
-                      case 'lastUsed': {
-                        const at = a.lastUsedIso !== null ? new Date(a.lastUsedIso).getTime() : 0;
-                        const bt = b.lastUsedIso !== null ? new Date(b.lastUsedIso).getTime() : 0;
-                        return dir * (at - bt);
-                      }
-                    }
-                  });
+                  // 2026-06-20 — UNIFIED sort: `rows` is built from the already
+                  // ordered `filteredProfiles`, so the table renders it verbatim
+                  // (the old in-table re-sort is gone — it was what silently
+                  // changed the order on a grid↔list toggle). The header reflects
+                  // the shared sortBy via the key map; clicking one routes back
+                  // through `changeSort`.
                   const resolve = (id: string) => byId.get(id) ?? null;
                   return (
                     <ProfilesTable
                       rows={rows}
-                      sortKey={sortKey}
+                      sortKey={mapSortByToTableKey(sortBy)}
                       sortDir={sortDir}
-                      onSort={(k) => {
-                        if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-                        else {
-                          setSortKey(k);
-                          setSortDir('asc');
-                        }
-                      }}
+                      onSort={(k) => changeSort(mapTableSortKey(k))}
                       allSelected={rows.length > 0 && rows.every((row) => selectedIds.has(row.id))}
                       onToggleSelectAll={() => {
                         setSelectedIds((prev) => {
@@ -4421,23 +4543,72 @@ function friendlyError(err: unknown, baseUrl?: string): string {
 // L4b recycle bin — the Trash view. Lists soft-deleted profiles with a Restore
 // action; the row data + DEK survive server-side until a purge. Restore returns
 // a profile to the live list (its name must be free, else the server 409s).
+//
+// 2026-06-20 — upgrades: client-side search/filter + sort over `trashed[]`, plus
+// bulk "Restore all" / "Empty trash" that loop the existing per-id endpoints
+// (no server bulk endpoint yet — see the restoreAll/emptyTrash follow-up notes
+// on the bulk handlers).
+type TrashSortBy = 'deleted' | 'name' | 'device';
+
 function TrashPanel({
   trashed,
   loading,
   restoringId,
   purgingId,
+  bulkBusy,
   onRestore,
   onPurge,
+  onRestoreAll,
+  onEmptyTrash,
   onBack,
 }: {
   trashed: Profile[];
   loading: boolean;
   restoringId: string | null;
   purgingId: string | null;
+  bulkBusy: boolean;
   onRestore: (id: string) => void;
   onPurge: (id: string, name: string) => void;
+  onRestoreAll: (ids: ReadonlyArray<string>) => void;
+  onEmptyTrash: (ids: ReadonlyArray<string>) => void;
   onBack: () => void;
 }): JSX.Element {
+  const [query, setQuery] = useState('');
+  const [sortBy, setSortBy] = useState<TrashSortBy>('deleted');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered =
+      q.length === 0
+        ? trashed
+        : trashed.filter(
+            (p) =>
+              p.name.toLowerCase().includes(q) ||
+              formatDeviceName(p.archetype).toLowerCase().includes(q),
+          );
+    const sign = sortDir === 'asc' ? 1 : -1;
+    const cmp = (a: Profile, b: Profile): number => {
+      switch (sortBy) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'device':
+          return formatDeviceName(a.archetype).localeCompare(formatDeviceName(b.archetype));
+        case 'deleted': {
+          const at = a.deleted_at !== null ? new Date(a.deleted_at).getTime() : 0;
+          const bt = b.deleted_at !== null ? new Date(b.deleted_at).getTime() : 0;
+          return at - bt;
+        }
+      }
+    };
+    return [...filtered].sort((a, b) => sign * cmp(a, b));
+  }, [trashed, query, sortBy, sortDir]);
+
+  // Bulk targets the FILTERED view, so a search lets the operator restore/empty
+  // just the matching subset (matching the per-row buttons' scope).
+  const visibleIds = visible.map((p) => p.id);
+  const anyBusy = bulkBusy || restoringId !== null || purgingId !== null;
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -4457,19 +4628,76 @@ function TrashPanel({
           ← Back to profiles
         </button>
       </div>
+      {!loading && trashed.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            aria-label="Search trash"
+            placeholder="Search trash…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="min-w-[12rem] flex-1 rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-primary placeholder:text-ink-muted focus-visible:border-accent focus-visible:outline-none"
+          />
+          <label className="flex items-center gap-1.5 text-xs text-ink-secondary">
+            <span className="section-label">Sort</span>
+            <select
+              aria-label="Sort trash"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as TrashSortBy)}
+              className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-primary focus-visible:border-accent focus-visible:outline-none"
+            >
+              <option value="deleted">Deleted</option>
+              <option value="name">Name</option>
+              <option value="device">Device</option>
+            </select>
+            <button
+              type="button"
+              aria-label={`Trash sort direction: ${sortDir === 'asc' ? 'ascending' : 'descending'}`}
+              title={sortDir === 'asc' ? 'Ascending' : 'Descending'}
+              onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+              className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-primary focus-visible:border-accent focus-visible:outline-none"
+            >
+              {sortDir === 'asc' ? '↑' : '↓'}
+            </button>
+          </label>
+          <span aria-hidden className="h-5 w-px bg-surface-divider" />
+          <button
+            type="button"
+            onClick={() => onRestoreAll(visibleIds)}
+            disabled={anyBusy || visibleIds.length === 0}
+            title="Restore every profile shown — names already in use are skipped"
+            className="rounded-lg border border-surface-divider px-2.5 py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:text-ink-primary disabled:opacity-50"
+          >
+            {bulkBusy ? 'Working…' : `Restore all (${visibleIds.length.toString()})`}
+          </button>
+          <button
+            type="button"
+            onClick={() => onEmptyTrash(visibleIds)}
+            disabled={anyBusy || visibleIds.length === 0}
+            title="Permanently delete every profile shown — can’t be undone"
+            className="rounded-lg border border-status-error/40 px-2.5 py-1.5 text-xs font-medium text-status-error transition-colors hover:bg-status-error/15 disabled:opacity-50"
+          >
+            Empty trash
+          </button>
+        </div>
+      )}
       {loading ? (
         <p className="py-8 text-center text-xs text-ink-muted">Loading…</p>
       ) : trashed.length === 0 ? (
         <p className="rounded-lg border border-dashed border-surface-divider py-10 text-center text-xs text-ink-muted">
           Trash is empty.
         </p>
+      ) : visible.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-surface-divider py-10 text-center text-xs text-ink-muted">
+          No trashed profiles match your search.
+        </p>
       ) : (
         <div className="flex flex-col gap-2">
-          {trashed.map((p) => {
+          {visible.map((p) => {
             const id = p.id.replace(/^prof_/, '');
             const restoring = restoringId === id || restoringId === p.id;
             const purging = purgingId === id || purgingId === p.id;
-            const busy = restoring || purging;
+            const busy = restoring || purging || bulkBusy;
             return (
               <div
                 key={p.id}

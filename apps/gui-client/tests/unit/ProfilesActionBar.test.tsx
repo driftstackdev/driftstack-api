@@ -19,6 +19,8 @@ function renderBar(props: Partial<React.ComponentProps<typeof ProfilesActionBar>
     onStatusFilterChange: vi.fn(),
     sortBy: 'last-used',
     onSortByChange: vi.fn(),
+    sortDir: 'desc',
+    onSortDirChange: vi.fn(),
     visibleCount: 5,
     totalCount: 5,
   };
@@ -75,6 +77,24 @@ describe('ProfilesActionBar', () => {
     renderBar({ onSortByChange });
     fireEvent.change(screen.getByLabelText('Sort profiles'), { target: { value: 'name' } });
     expect(onSortByChange).toHaveBeenCalledWith('name');
+  });
+
+  it('exposes the unified sort keys incl. the list-view-only Status + Country', () => {
+    renderBar();
+    const select = screen.getByLabelText<HTMLSelectElement>('Sort profiles');
+    const opts = Array.from(select.options).map((o) => o.value);
+    expect(opts).toEqual(['last-used', 'name', 'created', 'status', 'country']);
+  });
+
+  it('toggles sort direction, surfacing the current dir as a glyph + a11y label', () => {
+    const onSortDirChange = vi.fn();
+    const { rerender, props } = renderBar({ sortDir: 'desc', onSortDirChange });
+    const btn = screen.getByLabelText('Sort direction: descending');
+    expect(btn).toHaveTextContent('↓');
+    btn.click();
+    expect(onSortDirChange).toHaveBeenCalledWith('asc');
+    rerender(<ProfilesActionBar {...props} sortDir="asc" />);
+    expect(screen.getByLabelText('Sort direction: ascending')).toHaveTextContent('↑');
   });
 
   it('shows total count when no filter is active', () => {

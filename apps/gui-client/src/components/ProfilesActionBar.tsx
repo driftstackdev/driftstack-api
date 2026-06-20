@@ -11,7 +11,13 @@
 import { useEffect, useRef, type ChangeEvent } from 'react';
 
 export type ProfileStatusFilter = 'all' | 'running' | 'idle';
-export type ProfileSortBy = 'name' | 'last-used' | 'created';
+// 2026-06-20 — sort is now UNIFIED: the action-bar dropdown is the single
+// source of truth shared with the list-view (table) column headers, so toggling
+// grid↔list no longer silently re-sorts. The dropdown therefore carries the
+// table-only keys too (status / country). `ProfilesTableSortKey` maps onto this
+// via mapTableSortKey/mapSortByToTableKey in ProfilesView.
+export type ProfileSortBy = 'name' | 'last-used' | 'created' | 'status' | 'country';
+export type ProfileSortDir = 'asc' | 'desc';
 
 export interface ProfilesActionBarProps {
   searchQuery: string;
@@ -20,6 +26,8 @@ export interface ProfilesActionBarProps {
   onStatusFilterChange: (next: ProfileStatusFilter) => void;
   sortBy: ProfileSortBy;
   onSortByChange: (next: ProfileSortBy) => void;
+  sortDir: ProfileSortDir;
+  onSortDirChange: (next: ProfileSortDir) => void;
   visibleCount: number;
   totalCount: number;
 }
@@ -31,6 +39,8 @@ export function ProfilesActionBar({
   onStatusFilterChange,
   sortBy,
   onSortByChange,
+  sortDir,
+  onSortDirChange,
   visibleCount,
   totalCount,
 }: ProfilesActionBarProps): JSX.Element {
@@ -122,7 +132,26 @@ export function ProfilesActionBar({
           <option value="last-used">Last used</option>
           <option value="name">Name</option>
           <option value="created">Created</option>
+          <option value="status">Status</option>
+          <option value="country">Country</option>
         </select>
+        {/* Direction toggle — shared with the list-view column headers so the
+            order survives a grid↔list switch. */}
+        <button
+          type="button"
+          aria-label={`Sort direction: ${sortDir === 'asc' ? 'ascending' : 'descending'}`}
+          title={
+            sortDir === 'asc'
+              ? 'Ascending — click for descending'
+              : 'Descending — click for ascending'
+          }
+          onClick={() => onSortDirChange(sortDir === 'asc' ? 'desc' : 'asc')}
+          className="rounded border border-surface-divider bg-surface-inset px-2 py-1
+                     text-xs text-ink-primary transition-colors hover:text-ink-primary
+                     focus-visible:border-accent focus-visible:ring-1 focus-visible:ring-accent-ring"
+        >
+          {sortDir === 'asc' ? '↑' : '↓'}
+        </button>
       </label>
 
       <span className="ml-auto text-2xs text-ink-muted">

@@ -25,16 +25,21 @@ describe('W486.B apps/gui-client/src/components/ProfilesActionBar.tsx content pa
 
   it("exports the ProfileStatusFilter + ProfileSortBy types so ProfilesView (and any future caller) can re-use the same taxonomy — pinned so a stray `as 'idle' | 'all'` literal can't fork the segmented-control's truth table", () => {
     expect(body).toMatch(/export type ProfileStatusFilter = 'all' \| 'running' \| 'idle';/);
-    expect(body).toMatch(/export type ProfileSortBy = 'name' \| 'last-used' \| 'created';/);
+    expect(body).toMatch(
+      /export type ProfileSortBy = 'name' \| 'last-used' \| 'created' \| 'status' \| 'country';/,
+    );
+    expect(body).toMatch(/export type ProfileSortDir = 'asc' \| 'desc';/);
   });
 
-  it("3-segment status filter taxonomy + sort dropdown 3 options pinned: All / Running / Idle ; Last used / Name / Created — pinned so a refactor can't silently drop a status or reorder the sort options (UX defaults rely on 'last-used' being first)", () => {
+  it("3-segment status filter taxonomy + sort dropdown 5 options pinned: All / Running / Idle ; Last used / Name / Created / Status / Country — pinned so a refactor can't silently drop a status or reorder the sort options (UX defaults rely on 'last-used' being first)", () => {
     expect(body).toMatch(/\{ id: 'all', label: 'All' \}/);
     expect(body).toMatch(/\{ id: 'running', label: 'Running' \}/);
     expect(body).toMatch(/\{ id: 'idle', label: 'Idle' \}/);
     expect(body).toMatch(/<option value="last-used">Last used<\/option>/);
     expect(body).toMatch(/<option value="name">Name<\/option>/);
     expect(body).toMatch(/<option value="created">Created<\/option>/);
+    expect(body).toMatch(/<option value="status">Status<\/option>/);
+    expect(body).toMatch(/<option value="country">Country<\/option>/);
   });
 
   it('search-input contract: aria-label="Search profiles", type=search, placeholder hints the ⌘F shortcut, clear button aria-label="Clear search" — pinned so the keyboard-accessible search surface stays addressable for tests + screen readers (the placeholder reminds the user that ⌘F is wired)', () => {
