@@ -6,7 +6,7 @@
 // account header) doesn't silently drop a customer-facing counter.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import type { AccountSelfProfile } from '@driftstack/sdk';
 import { Sidebar } from '../../src/components/Sidebar';
@@ -52,6 +52,8 @@ let mockAccountMe: AccountSelfProfile | null = null;
 let mockApiKey: string | null = 'ds_live_test';
 let mockBaseUrl = 'https://api.driftstack.dev';
 let mockRecordings = new Map<string, unknown>();
+let mockActiveWorkspace: string | null = null;
+const mockSetActiveWorkspace = vi.fn();
 
 vi.mock('../../src/lib/SettingsContext', () => ({
   useSettings: () => ({
@@ -65,6 +67,8 @@ vi.mock('../../src/lib/SettingsContext', () => ({
     refreshAccountMe: vi.fn(),
     update: vi.fn(),
     loading: false,
+    activeWorkspace: mockActiveWorkspace,
+    setActiveWorkspace: mockSetActiveWorkspace,
   }),
 }));
 
@@ -107,6 +111,8 @@ beforeEach(() => {
   mockApiKey = 'ds_live_test';
   mockBaseUrl = 'https://api.driftstack.dev';
   mockRecordings = new Map();
+  mockActiveWorkspace = null;
+  mockSetActiveWorkspace.mockClear();
 });
 
 afterEach(() => {
@@ -151,6 +157,27 @@ describe('Sidebar — count badges + section gates', () => {
     render(<Sidebar current="profiles" onNavigate={() => {}} onSignOut={() => {}} />);
     expect(screen.getByText('Team')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
+  });
+
+  it('hides the workspace switcher for a solo account (no teams)', () => {
+    mockAccountMe = buildAccountMe({ teams: [] });
+    render(<Sidebar current="profiles" onNavigate={() => {}} onSignOut={() => {}} />);
+    expect(screen.queryByLabelText('Active workspace')).not.toBeInTheDocument();
+  });
+
+  it('shows the workspace switcher for a team member + switches effectiveAccount on change', () => {
+    mockAccountMe = buildAccountMe({
+      teams: [{ owner_account_id: 'acc_team1', role: 'admin', membership_id: 'm1' }],
+    });
+    render(<Sidebar current="profiles" onNavigate={() => {}} onSignOut={() => {}} />);
+    const sel = screen.getByLabelText('Active workspace');
+    expect(sel).toBeInTheDocument();
+    // Switching to the team passes the owner account id…
+    fireEvent.change(sel, { target: { value: 'acc_team1' } });
+    expect(mockSetActiveWorkspace).toHaveBeenCalledWith('acc_team1');
+    // …and switching back to Personal passes null.
+    fireEvent.change(sel, { target: { value: '' } });
+    expect(mockSetActiveWorkspace).toHaveBeenCalledWith(null);
   });
 
   it('hides Cluster section on cloud baseUrl', () => {

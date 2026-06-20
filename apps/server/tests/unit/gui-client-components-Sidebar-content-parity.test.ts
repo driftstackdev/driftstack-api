@@ -71,4 +71,16 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
     expect(body).toMatch(/const signedIn = settings\.apiKey !== null;/);
     expect(body).toMatch(/⌘⇧L/);
   });
+
+  it('Workspace switcher (founder-approved): footer <select> rendered only for members of >=1 team (accountMe.teams.length > 0); options = Personal (value="") + each team; onChange -> setActiveWorkspace(value===""? null : value) which re-scopes the SDK effectiveAccount. Pinned so a solo account never sees the affordance and the switch wiring cannot silently drop.', () => {
+    expect(body).toMatch(/activeWorkspace, setActiveWorkspace \} = useSettings\(\);/);
+    expect(body).toMatch(/accountMe !== null && accountMe\.teams\.length > 0 &&/);
+    expect(body).toMatch(/aria-label="Active workspace"/);
+    expect(body).toMatch(/value=\{activeWorkspace \?\? ''\}/);
+    expect(body).toContain(
+      "onChange={(e) => setActiveWorkspace(e.target.value === '' ? null : e.target.value)}",
+    );
+    expect(body).toMatch(/<option value="">Personal<\/option>/);
+    expect(body).toContain('function workspaceLabel(');
+  });
 });

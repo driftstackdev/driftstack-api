@@ -42,7 +42,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.Element {
-  const { settings, accountMe } = useSettings();
+  const { settings, accountMe, activeWorkspace, setActiveWorkspace } = useSettings();
   const { recordings } = useRecordings();
   const signedIn = settings.apiKey !== null;
   const [proxyCount, setProxyCount] = useState<number | null>(null);
@@ -214,6 +214,30 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
               )}
             </div>
           </div>
+          {/* Workspace switcher — only for members of >=1 team. Switching sets
+              the SDK effectiveAccount (SettingsContext.activeWorkspace), which
+              re-scopes every read/write to that team's workspace; Personal =
+              null. account.me() ignores the effective-account header, so this
+              list (the caller's own memberships) stays stable across switches. */}
+          {accountMe !== null && accountMe.teams.length > 0 && (
+            <label className="flex flex-col gap-1 px-1">
+              <span className="text-2xs text-ink-muted">Workspace</span>
+              <select
+                data-tauri-no-drag
+                aria-label="Active workspace"
+                value={activeWorkspace ?? ''}
+                onChange={(e) => setActiveWorkspace(e.target.value === '' ? null : e.target.value)}
+                className="rounded border border-surface-divider bg-surface-inset px-1.5 py-1 text-xs text-ink-secondary"
+              >
+                <option value="">Personal</option>
+                {accountMe.teams.map((t) => (
+                  <option key={t.membership_id} value={t.owner_account_id}>
+                    {workspaceLabel(t)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {/* Usage at a glance — what's left, not jargon. */}
           <div className="flex flex-col gap-1 rounded-md bg-surface-inset px-2 py-1.5">
             <UsageRow label="Profiles" value={profileCount} cap={profileCap} />
@@ -298,6 +322,15 @@ function SidebarItem({ children, icon, badge, active, onClick }: SidebarItemProp
       )}
     </button>
   );
+}
+
+/** Label for a team-workspace option. The teams[] payload carries only the
+ *  owner account id + role (no team name yet), so show a short id + the
+ *  caller's role in that workspace. A friendlier team name is a follow-up once
+ *  the API surfaces one. */
+function workspaceLabel(t: { owner_account_id: string; role: 'admin' | 'member' }): string {
+  const short = t.owner_account_id.replace(/^acc_/, '').slice(0, 8);
+  return `Team ${short} · ${t.role}`;
 }
 
 function fmtRatio(value: number | null, cap: number | null): string | null {
