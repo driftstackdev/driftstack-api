@@ -27,6 +27,12 @@ export interface ProfilePhoneCardProps {
   lastUsedIso: string | null;
   folder: string;
   tags: ReadonlyArray<string>;
+  /** Free-text note (F3 — now editable in the grid card too, not just the table).
+   *  Empty string = no note. */
+  note?: string;
+  /** Save the trimmed note (Enter / Save / blur in the inline editor); empty
+   *  clears it. Omitted → the "Edit note" affordance isn't offered. */
+  onSaveNote?: (note: string) => void;
   // proxy / egress
   hasProxy: boolean;
   flag: string; // emoji or '🌍'
@@ -72,6 +78,14 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   // they're tap-discoverable on a trackpad, not hover-only (founder 2026-06-16,
   // matching the visual-demo dock). Mouse hover still reveals them too.
   const [actionsOpen, setActionsOpen] = useState(false);
+  // F3 — inline note editor (opened from the ⋯ menu's "Edit note" row). Lives
+  // here so the small <textarea> overlays the card body without leaving the grid.
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteDraft, setNoteDraft] = useState(p.note ?? '');
+  const commitNote = (): void => {
+    p.onSaveNote?.(noteDraft.trim());
+    setEditingNote(false);
+  };
   // Dismiss the tap-opened ⋯ menu on an outside pointer-down or Escape — a
   // toggle-opened dropdown that can only be re-toggled shut reads as stuck.
   const footerRef = useRef<HTMLDivElement | null>(null);
@@ -129,6 +143,52 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
     >
       {/* SCREEN — taller (height-only bump) so the body has room. */}
       <div className="relative flex aspect-[9/18.5] flex-col overflow-hidden rounded-[17px] bg-surface-raised">
+        {/* F3 — inline note editor overlay. Floats over the screen so it never
+            reshapes the card; stops propagation so typing/saving never toggles
+            selection. Enter saves, Shift+Enter newlines, Escape cancels. */}
+        {editingNote ? (
+          <div
+            className="absolute inset-0 z-40 flex flex-col gap-2 bg-surface-raised/95 p-3 backdrop-blur-sm"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <span className="text-[11px] font-semibold text-ink-secondary">Note</span>
+            <textarea
+              autoFocus
+              aria-label={`Note for ${p.name}`}
+              value={noteDraft}
+              maxLength={280}
+              rows={5}
+              placeholder="Add a note…"
+              onChange={(e) => setNoteDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  commitNote();
+                } else if (e.key === 'Escape') {
+                  setNoteDraft(p.note ?? '');
+                  setEditingNote(false);
+                }
+              }}
+              className="min-h-0 flex-1 resize-none rounded-lg border border-surface-divider bg-surface-inset px-2 py-1.5 text-[11.5px] text-ink-primary placeholder:text-ink-muted focus:border-accent focus:outline-none"
+            />
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setNoteDraft(p.note ?? '');
+                  setEditingNote(false);
+                }}
+                className="rounded-lg border border-surface-divider px-2.5 py-1 text-[11px] font-medium text-ink-secondary transition-colors hover:text-ink-primary"
+              >
+                Cancel
+              </button>
+              <button type="button" onClick={commitNote} className="btn-primary text-[11px]">
+                Save
+              </button>
+            </div>
+          </div>
+        ) : null}
         <div
           aria-hidden="true"
           className="absolute inset-0 opacity-[0.16]"
@@ -314,6 +374,23 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             </div>
           )}
 
+          {/* F3 — note line. Editable in-place (click) when onSaveNote is wired;
+              clicking opens the same overlay editor as the ⋯ "Edit note" row. */}
+          {p.onSaveNote && p.note && p.note.trim() !== '' ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setNoteDraft(p.note ?? '');
+                setEditingNote(true);
+              }}
+              title="Click to edit note"
+              className="line-clamp-2 rounded-md border border-surface-divider/70 bg-surface-inset/60 px-1.5 py-1 text-left text-[9.5px] italic text-ink-secondary transition-colors hover:text-ink-primary"
+            >
+              🗒 {p.note}
+            </button>
+          ) : null}
+
           <span className="mt-auto text-center text-[9.5px] text-ink-muted">
             {p.lastUsedIso !== null ? (
               <RelativeTime iso={p.lastUsedIso} tooltipPrefix="Last used" />
@@ -395,6 +472,18 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 onClick={() => {
                   setActionsOpen(false);
                   p.onEdit?.();
+                }}
+              />
+            ) : null}
+            {p.onSaveNote ? (
+              <MenuRow
+                glyph="🗒"
+                caption={p.note && p.note.trim() !== '' ? 'Edit note' : 'Add note'}
+                label={`Edit note for ${p.name}`}
+                onClick={() => {
+                  setActionsOpen(false);
+                  setNoteDraft(p.note ?? '');
+                  setEditingNote(true);
                 }}
               />
             ) : null}

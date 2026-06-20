@@ -156,12 +156,18 @@ export interface ProfilesViewProps {
   onOpenSession: (sessionId: string) => void;
   /** F1c — open the AI assistant scoped to a profile (from a card's "Assist"). */
   onAssist?: (profileId: string) => void;
+  /** Deep-link target (CommandCenter "Jump back in" card → App nav payload):
+   *  once the profile list has loaded, select + scroll-to this profile so the
+   *  view lands ON it instead of the bare list. Best-effort — an id no longer in
+   *  the account (deleted/cross-account) is silently ignored. */
+  initialProfileId?: string;
 }
 
 export function ProfilesView({
   onGoToSettings,
   onOpenSession,
   onAssist,
+  initialProfileId,
 }: ProfilesViewProps): JSX.Element {
   const { client, settings, accountMe, refreshAccountMe, activeWorkspace, setActiveWorkspace } =
     useSettings();
@@ -324,6 +330,11 @@ export function ProfilesView({
   });
   const [statusFilter, setStatusFilter] = useState<ProfileStatusFilter>('all');
   const [sortBy, setSortBy] = useState<ProfileSortBy>('last-used');
+  // F1 deep-link (CommandCenter "Jump back in") — consume `initialProfileId`
+  // ONCE, after the first load that actually contains it. Tracked by ref so the
+  // 15s background poll re-rendering the list never re-selects/re-scrolls (which
+  // would yank the view away from wherever the operator scrolled to).
+  const deepLinkConsumed = useRef(false);
 
   useEffect(() => {
     void loadProfilesMeta().then(setProfilesMeta);
@@ -332,6 +343,33 @@ export function ProfilesView({
     void loadFolderIcons().then(setCustomFolderIcons);
     void loadTags().then(setCustomTags);
   }, []);
+
+  // F1 deep-link — once the list has loaded WITH the requested profile, select it,
+  // drop any active filters/trash view that would hide it, and scroll its card
+  // into view. Consumed once (deepLinkConsumed) so background polls don't re-grab
+  // focus. A missing id (deleted / cross-account) is silently left unconsumed-but-
+  // skipped — there's nothing to land on.
+  useEffect(() => {
+    if (deepLinkConsumed.current) return;
+    if (initialProfileId === undefined || initialProfileId.length === 0) return;
+    const target = state.profiles.find((p) => p.id === initialProfileId);
+    if (target === undefined) return;
+    deepLinkConsumed.current = true;
+    // Clear filters that could hide the target, leave the trash view, and select it.
+    setTrashView(false);
+    setSearchQuery('');
+    setFolderFilter('all');
+    setTagFilter(null);
+    setStatusFilter('all');
+    setSelectedIds(new Set([initialProfileId]));
+    // Scroll to the card after the cleared filters re-render it (grid is default;
+    // in table view the selection still highlights the row even if the row isn't
+    // tagged for scroll).
+    window.setTimeout(() => {
+      const el = document.querySelector(`[data-profile-id="${CSS.escape(initialProfileId)}"]`);
+      if (el !== null) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 0);
+  }, [initialProfileId, state.profiles]);
 
   // org-sync phase 3c (2026-06-16) — pull the account-level taxonomy (empty
   // folders/icons + tags) from the server so it follows the account across
@@ -527,6 +565,27 @@ export function ProfilesView({
       }
     },
     [client, loadTrash, refresh, confirm, settings.baseUrl],
+  );
+
+  // F3 — single note-save path shared by BOTH the grid card and the table row
+  // (founder batch #2 "Add note", now editable in the default grid too). Writes
+  // the client-persisted org meta AND mirrors the note through to the server
+  // profile row so it follows the account (per-account sync, 2026-06-16). Empty
+  // string clears the note (sent as null to the server).
+  const handleSaveNote = useCallback(
+    (id: string, note: string): void => {
+      void saveProfileMeta(
+        id,
+        { note },
+        state.profiles.map((pr) => pr.id),
+      ).then(setProfilesMeta);
+      if (client) {
+        void client.profiles
+          .update(id, { note: note.length > 0 ? note : null })
+          .catch(() => undefined);
+      }
+    },
+    [client, state.profiles],
   );
 
   // Switching account/workspace must NOT carry the prior account's agent-session
@@ -2324,62 +2383,65 @@ export function ProfilesView({
                       lat !== undefined ? Math.max(6, Math.min(100, (lat / 250) * 100)) : 0;
                     const latGood = lat !== undefined && lat <= 100;
                     return (
-                      <ProfilePhoneCard
-                        key={profile.id}
-                        name={profile.name}
-                        monogram={profileMonogram(profile.name)}
-                        icon={profilesMeta[profile.id]?.icon ?? ''}
-                        hue={identityHue(profile.name)}
-                        deviceLabel={formatDeviceName(profile.archetype)}
-                        running={running}
-                        selected={selectedIds.has(profile.id)}
-                        lastUsedIso={profile.last_used_at}
-                        folder={profilesMeta[profile.id]?.folder ?? ''}
-                        tags={profilesMeta[profile.id]?.tags ?? []}
-                        hasProxy={px !== null}
-                        flag={probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}
-                        countryCode={probe?.exitCountry ?? null}
-                        exitIp={probe?.exitIp ?? null}
-                        latencyMs={lat ?? null}
-                        latencyFillPct={latFill}
-                        latencyGood={latGood}
-                        probed={probe !== undefined}
-                        capabilities={probe?.result ?? null}
-                        checkedAtIso={
-                          probe?.at !== undefined ? new Date(probe.at).toISOString() : null
-                        }
-                        busy={busyId === profile.id}
-                        testing={px !== null && testingProxyId === px.id}
-                        testDisabled={testingProxyId !== null}
-                        launchDisabled={teamLaunchBlocked}
-                        launchDisabledReason={teamLaunchBlockedReason}
-                        onToggleSelect={() => toggleSelected(profile.id)}
-                        onPrimary={() => {
-                          if (running && bound !== null) {
-                            // agt_ ids 400 in the driver session viewer — re-open
-                            // the agent stream instead (mirror onWatch).
-                            if (bound.kind === 'agent') void reopenStream(bound.id, profile.id);
-                            else onOpenSession(bound.id);
-                          } else void handleLaunch(profile);
-                        }}
-                        onWatch={() => {
-                          if (running && bound !== null) {
-                            if (bound.kind === 'agent') void reopenStream(bound.id, profile.id);
-                            else onOpenSession(bound.id);
-                          } else void handleLaunch(profile);
-                        }}
-                        onTest={() => {
-                          if (px !== null) void handleTestProxy(px);
-                        }}
-                        onStop={running ? () => void handleStop(profile) : undefined}
-                        onAssist={onAssist ? () => onAssist(profile.id) : undefined}
-                        onEdit={() => setEditTarget(profile)}
-                        onClone={() => void handleClone(profile.id)}
-                        cloneDisabled={atProfileCap}
-                        cloneDisabledReason={profileCapReason}
-                        onExport={() => void handleExport(profile.id)}
-                        onDelete={() => void handleDelete(profile.id)}
-                      />
+                      <div key={profile.id} data-profile-id={profile.id}>
+                        <ProfilePhoneCard
+                          name={profile.name}
+                          monogram={profileMonogram(profile.name)}
+                          icon={profilesMeta[profile.id]?.icon ?? ''}
+                          hue={identityHue(profile.name)}
+                          deviceLabel={formatDeviceName(profile.archetype)}
+                          running={running}
+                          selected={selectedIds.has(profile.id)}
+                          lastUsedIso={profile.last_used_at}
+                          folder={profilesMeta[profile.id]?.folder ?? ''}
+                          tags={profilesMeta[profile.id]?.tags ?? []}
+                          note={profilesMeta[profile.id]?.note ?? ''}
+                          onSaveNote={(note) => handleSaveNote(profile.id, note)}
+                          hasProxy={px !== null}
+                          flag={probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}
+                          countryCode={probe?.exitCountry ?? null}
+                          exitIp={probe?.exitIp ?? null}
+                          latencyMs={lat ?? null}
+                          latencyFillPct={latFill}
+                          latencyGood={latGood}
+                          probed={probe !== undefined}
+                          capabilities={probe?.result ?? null}
+                          checkedAtIso={
+                            probe?.at !== undefined ? new Date(probe.at).toISOString() : null
+                          }
+                          busy={busyId === profile.id}
+                          testing={px !== null && testingProxyId === px.id}
+                          testDisabled={testingProxyId !== null}
+                          launchDisabled={teamLaunchBlocked}
+                          launchDisabledReason={teamLaunchBlockedReason}
+                          onToggleSelect={() => toggleSelected(profile.id)}
+                          onPrimary={() => {
+                            if (running && bound !== null) {
+                              // agt_ ids 400 in the driver session viewer — re-open
+                              // the agent stream instead (mirror onWatch).
+                              if (bound.kind === 'agent') void reopenStream(bound.id, profile.id);
+                              else onOpenSession(bound.id);
+                            } else void handleLaunch(profile);
+                          }}
+                          onWatch={() => {
+                            if (running && bound !== null) {
+                              if (bound.kind === 'agent') void reopenStream(bound.id, profile.id);
+                              else onOpenSession(bound.id);
+                            } else void handleLaunch(profile);
+                          }}
+                          onTest={() => {
+                            if (px !== null) void handleTestProxy(px);
+                          }}
+                          onStop={running ? () => void handleStop(profile) : undefined}
+                          onAssist={onAssist ? () => onAssist(profile.id) : undefined}
+                          onEdit={() => setEditTarget(profile)}
+                          onClone={() => void handleClone(profile.id)}
+                          cloneDisabled={atProfileCap}
+                          cloneDisabledReason={profileCapReason}
+                          onExport={() => void handleExport(profile.id)}
+                          onDelete={() => void handleDelete(profile.id)}
+                        />
+                      </div>
                     );
                   })}
                 </div>
@@ -2522,20 +2584,7 @@ export function ProfilesView({
                       cloneDisabled={atProfileCap}
                       cloneDisabledReason={profileCapReason}
                       onDelete={(id) => void handleDelete(id)}
-                      onSaveNote={(id, note) => {
-                        void saveProfileMeta(
-                          id,
-                          { note },
-                          state.profiles.map((pr) => pr.id),
-                        ).then(setProfilesMeta);
-                        // Per-account sync (2026-06-16) — write the note through
-                        // to the server profile row so it follows the account.
-                        if (client) {
-                          void client.profiles
-                            .update(id, { note: note.length > 0 ? note : null })
-                            .catch(() => undefined);
-                        }
-                      }}
+                      onSaveNote={handleSaveNote}
                     />
                   );
                 })()

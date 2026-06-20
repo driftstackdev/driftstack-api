@@ -194,8 +194,13 @@ function greeting(hour: number): string {
 
 export function CommandCenterView({
   onNavigate,
+  onOpenProfile,
 }: {
   onNavigate: (kind: HomeNavTarget) => void;
+  /** Open Profiles scoped to a specific profile (the "Jump back in" cards) —
+   *  selects + scrolls to it instead of landing on the bare list. Omitted →
+   *  the cards fall back to the bare Profiles list. */
+  onOpenProfile?: (profileId: string) => void;
 }): JSX.Element {
   const { accountMe, client } = useSettings();
   const profileCount = accountMe?.profile_count ?? null;
@@ -394,7 +399,13 @@ export function CommandCenterView({
         </div>
         {/* aria-live so SR users hear the loading → ready/error/empty transition. */}
         <div aria-live="polite">
-          <RecentProfilesStrip state={recentProfiles} onOpen={() => onNavigate('profiles')} />
+          <RecentProfilesStrip
+            state={recentProfiles}
+            onOpen={() => onNavigate('profiles')}
+            onOpenProfile={
+              onOpenProfile !== undefined ? (id) => onOpenProfile(id) : () => onNavigate('profiles')
+            }
+          />
         </div>
       </section>
 
@@ -636,9 +647,15 @@ function ActivityFeed({ state }: { state: ActivityState }): JSX.Element {
 function RecentProfilesStrip({
   state,
   onOpen,
+  onOpenProfile,
 }: {
   state: RecentProfilesState;
+  /** Bare Profiles navigation — used by the idle/empty placeholders where there
+   *  is no specific profile to open. */
   onOpen: () => void;
+  /** Open a SPECIFIC profile (deep-link) — each populated card calls this with
+   *  its id so the card lands on that profile, not the bare list. */
+  onOpenProfile: (id: string) => void;
 }): JSX.Element {
   if (state.kind === 'idle') {
     return (
@@ -680,7 +697,7 @@ function RecentProfilesStrip({
         <button
           key={p.id}
           type="button"
-          onClick={onOpen}
+          onClick={() => onOpenProfile(p.id)}
           title={p.name}
           className="group flex items-center gap-2.5 rounded-xl border border-surface-divider bg-surface-raised px-3 py-2.5 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated"
         >

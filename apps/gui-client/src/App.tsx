@@ -44,7 +44,7 @@ type View =
   | { kind: 'sessions' }
   | { kind: 'live-session'; sessionId: string }
   | { kind: 'sessions-history' }
-  | { kind: 'profiles' }
+  | { kind: 'profiles'; profileId?: string }
   | { kind: 'recordings' }
   | { kind: 'recording-player'; recordingId: string }
   | { kind: 'proxies' }
@@ -342,7 +342,12 @@ function CurrentView({
 }): JSX.Element {
   switch (view.kind) {
     case 'home':
-      return <CommandCenterView onNavigate={(kind) => onNavigate({ kind })} />;
+      return (
+        <CommandCenterView
+          onNavigate={(kind) => onNavigate({ kind })}
+          onOpenProfile={(profileId) => onNavigate({ kind: 'profiles', profileId })}
+        />
+      );
     case 'ai':
       return <AgentChatView initialProfileId={view.profileId} />;
     case 'recipes':
@@ -388,6 +393,7 @@ function CurrentView({
     case 'profiles':
       return (
         <ProfilesView
+          initialProfileId={view.profileId}
           onGoToSettings={() => onNavigate({ kind: 'settings' })}
           onOpenSession={(sessionId) => onNavigate({ kind: 'live-session', sessionId })}
           onAssist={(profileId) => onNavigate({ kind: 'ai', profileId })}

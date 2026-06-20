@@ -100,9 +100,11 @@ describe('apps/gui-client/src/views/CommandCenterView.tsx content parity', () =>
 
   it('"Jump back in" section sits right under the hero with cards + an empty state, all routing to Profiles (the real launch surface) — the home never launches itself', () => {
     expect(body).toContain('Jump back in');
-    expect(body).toContain(
-      "<RecentProfilesStrip state={recentProfiles} onOpen={() => onNavigate('profiles')} />",
-    );
+    // Idle/empty placeholders fall back to the bare Profiles list; populated
+    // "Jump back in" cards deep-link to their specific profile via onOpenProfile,
+    // still landing in Profiles (2026-06-20) — never a launch path of its own.
+    expect(body).toContain("onOpen={() => onNavigate('profiles')}");
+    expect(body).toContain('onOpenProfile');
     expect(body).toContain('No profiles yet — create one to get started.');
     // The home routes into Profiles; it must NOT call a launch path of its own.
     expect(body).not.toContain('.launch(');
