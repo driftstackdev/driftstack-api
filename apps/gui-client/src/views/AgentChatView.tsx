@@ -192,7 +192,11 @@ export function AgentChatView({
     const text = draft.trim();
     if (text.length === 0 || chat.sending) return;
     setDraft('');
-    void chat.send(text);
+    // Retry-friendly: if the send fails, restore the draft so the user can
+    // re-send without retyping (don't clobber a draft they've since started).
+    void chat.send(text).then((ok) => {
+      if (!ok) setDraft((d) => (d.length === 0 ? text : d));
+    });
   }
 
   return (

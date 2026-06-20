@@ -91,7 +91,9 @@ export interface UseAgentChatResult {
   error: string | null;
   /** The consequential action the last turn halted on (Approve/Deny), or null. */
   pendingConfirmation: PendingConfirmation | null;
-  send: (userMessage: string) => Promise<void>;
+  /** Resolves true when the turn succeeded, false on error — lets the caller
+   *  restore the draft for a retry instead of losing the typed message. */
+  send: (userMessage: string) => Promise<boolean>;
   approve: () => Promise<void>;
   deny: () => void;
   reset: () => void;
@@ -130,10 +132,10 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
          *  bubble would misleadingly look like a second request. */
         appendUserTurn?: boolean;
       },
-    ): Promise<void> => {
+    ): Promise<boolean> => {
       if (!client) {
         setError('Not connected — set your API key in Settings.');
-        return;
+        return false;
       }
       const approvals = options?.approvals;
       setSending(true);
@@ -162,8 +164,10 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         });
         setSession(response.session);
         setTurns((t) => [...t, { id: nextId(), role: 'agent', response }]);
+        return true;
       } catch (err) {
         setError(friendlyChatError(err));
+        return false;
       } finally {
         setSending(false);
       }
@@ -171,7 +175,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     [client, session, opts.model, opts.tokenBudget, opts.profileId, nextId],
   );
 
-  const send = useCallback((userMessage: string): Promise<void> => post(userMessage), [post]);
+  const send = useCallback((userMessage: string): Promise<boolean> => post(userMessage), [post]);
 
   // Derive the pending confirmation from the most recent agent turn (unless the
   // customer already resolved it via approve/deny).
