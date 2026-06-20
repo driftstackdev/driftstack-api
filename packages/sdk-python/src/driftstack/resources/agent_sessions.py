@@ -111,6 +111,7 @@ class AgentSessionsResource:
         user_message: str,
         *,
         byok_api_key: str | None = None,
+        approve_consequential_actions: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         """Run one decompose→execute turn against the agent session.
 
@@ -128,10 +129,20 @@ class AgentSessionsResource:
         # client-side saves the round-trip header and matches the Go
         # SDK's `opts.ByokAPIKey != ""` shape.
         extra_headers = {"x-byok-anthropic-api-key": byok_api_key} if byok_api_key else None
+        body: dict[str, Any] = {"user_message": user_message}
+        # W443/W445 — re-send approved consequential actions (each
+        # {"category", "matched_text"}) so the executor skips the confirmation
+        # halt. Omitted when empty (matches the route's optional schema). Without
+        # this, Python callers were permanently stuck on a confirmation turn.
+        if approve_consequential_actions:
+            body["approve_consequential_actions"] = [
+                {"category": a["category"], "matched_text": a["matched_text"]}
+                for a in approve_consequential_actions
+            ]
         return self._http.request(
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/message",
-            json_body=coerce_body({"user_message": user_message}),
+            json_body=coerce_body(body),
             extra_headers=extra_headers,
         )
 
@@ -339,6 +350,7 @@ class AsyncAgentSessionsResource:
         user_message: str,
         *,
         byok_api_key: str | None = None,
+        approve_consequential_actions: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         """Async counterpart to AgentSessionsResource.message.
 
@@ -356,10 +368,19 @@ class AsyncAgentSessionsResource:
         # client-side saves the round-trip header and matches the Go
         # SDK's `opts.ByokAPIKey != ""` shape.
         extra_headers = {"x-byok-anthropic-api-key": byok_api_key} if byok_api_key else None
+        body: dict[str, Any] = {"user_message": user_message}
+        # W443/W445 — re-send approved consequential actions (each
+        # {"category", "matched_text"}) so the executor skips the confirmation
+        # halt. Omitted when empty (matches the route's optional schema).
+        if approve_consequential_actions:
+            body["approve_consequential_actions"] = [
+                {"category": a["category"], "matched_text": a["matched_text"]}
+                for a in approve_consequential_actions
+            ]
         return await self._http.request(
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/message",
-            json_body=coerce_body({"user_message": user_message}),
+            json_body=coerce_body(body),
             extra_headers=extra_headers,
         )
 

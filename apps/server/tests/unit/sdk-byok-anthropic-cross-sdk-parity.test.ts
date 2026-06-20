@@ -62,7 +62,7 @@ describe('cross-SDK BYOK Anthropic header invariant', () => {
 
   it('Go exposes the option as `MessageOptions.ByokAPIKey` (PascalCase per Go style; matches the Go SDK docs + example)', () => {
     const go = read(GO);
-    expect(go).toMatch(/type MessageOptions struct \{[\s\S]*?ByokAPIKey string/);
+    expect(go).toMatch(/type MessageOptions struct \{[\s\S]*?ByokAPIKey\s+string/);
   });
 
   it('server-side route reads the same header name (apps/server/src/routes/agent-sessions.ts) — closes the loop end-to-end', () => {

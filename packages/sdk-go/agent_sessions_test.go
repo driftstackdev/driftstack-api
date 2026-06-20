@@ -137,6 +137,42 @@ func TestAgentSessions_Message_Plan(t *testing.T) {
 	}
 }
 
+func TestAgentSessions_Message_ApprovesConsequentialActions(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body["user_message"] != "retry the purchase" {
+			t.Errorf("user_message=%v", body["user_message"])
+		}
+		approvals, ok := body["approve_consequential_actions"].([]any)
+		if !ok || len(approvals) != 1 {
+			t.Fatalf("approve_consequential_actions=%v", body["approve_consequential_actions"])
+		}
+		first, _ := approvals[0].(map[string]any)
+		if first["category"] != "purchase" || first["matched_text"] != "Buy now" {
+			t.Errorf("approval=%v", first)
+		}
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"kind":    "plan-executed",
+			"session": agentSessionEnvelope,
+			"intents": []any{},
+			"results": []any{},
+			"ok":      true,
+		})
+	})
+	if _, err := client.AgentSessions.Message(context.Background(), "agt_1", "retry the purchase", &MessageOptions{
+		ApproveConsequentialActions: []ConsequentialActionApproval{
+			{Category: "purchase", MatchedText: "Buy now"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAgentSessions_Message_Refuse(t *testing.T) {
 	t.Parallel()
 	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {

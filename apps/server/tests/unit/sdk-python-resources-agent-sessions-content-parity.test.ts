@@ -61,7 +61,7 @@ describe('sdk-python resources/agent_sessions content parity', () => {
     );
     expect(body).toMatch(/def get\(self, agent_session_id: str\) -> dict\[str, Any\]:/);
     expect(body).toMatch(
-      /def message\(\s*\n?\s*self,\s*\n?\s*agent_session_id: str,\s*\n?\s*user_message: str,\s*\n?\s*\*,\s*\n?\s*byok_api_key: str \| None = None,\s*\n?\s*\) -> dict\[str, Any\]:/,
+      /def message\(\s*\n?\s*self,\s*\n?\s*agent_session_id: str,\s*\n?\s*user_message: str,\s*\n?\s*\*,\s*\n?\s*byok_api_key: str \| None = None,\s*\n?\s*approve_consequential_actions: list\[dict\[str, str\]\] \| None = None,\s*\n?\s*\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(/def close\(self, agent_session_id: str\) -> None:/);
     expect(body).toMatch(
@@ -166,7 +166,11 @@ describe('sdk-python resources/agent_sessions content parity', () => {
   it('Body coercion via coerce_body() consistent across sync + async (for non-empty bodies). Drift to bypass coerce_body would break the cross-SDK Decimal/datetime handling helper that ensures clean JSON-encoding', () => {
     expect(body).toMatch(/from driftstack\.resources\._common import coerce_body/);
     expect(body).toMatch(/json_body=coerce_body\(body or \{\}\),/);
-    expect(body).toMatch(/json_body=coerce_body\(\{"user_message": user_message\}\),/);
+    // message() now builds a `body` dict (user_message + optional
+    // approve_consequential_actions) then coerce_body(body) — sync + async.
+    expect(body).toMatch(/json_body=coerce_body\(body\),/);
+    expect(body).toMatch(/body: dict\[str, Any\] = \{"user_message": user_message\}/);
+    expect(body).toContain('body["approve_consequential_actions"] = [');
     expect(body).toMatch(/json_body=coerce_body\(\{"client_id": client_id\}\),/);
     expect(body).toMatch(/json_body=coerce_body\(\{\}\),/);
   });

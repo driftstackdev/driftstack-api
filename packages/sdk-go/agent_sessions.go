@@ -174,13 +174,27 @@ func (r *AgentSessionsResource) Get(ctx context.Context, agentSessionID string) 
 	return &out, nil
 }
 
+// ConsequentialActionApproval re-sends a consequential action a prior turn
+// halted on (W443/W445), so the executor proceeds + dispatches it instead of
+// halting again. Category + MatchedText echo the halt's fields.
+type ConsequentialActionApproval struct {
+	Category    string `json:"category"`
+	MatchedText string `json:"matched_text"`
+}
+
 // MessageOptions carries optional per-call overrides for Message.
 //
 // ByokAPIKey is the customer-supplied Anthropic API key (BYOK Tier-3
 // LOCKED 2026-05-16). Forwarded as the x-byok-anthropic-api-key
 // request header so callers don't construct it by hand. NEVER logged.
+//
+// ApproveConsequentialActions re-sends consequential actions a prior turn
+// halted on so the executor proceeds instead of halting again (omitted from
+// the request body when empty). Without it, Go callers were permanently
+// stuck on any confirmation-required turn.
 type MessageOptions struct {
-	ByokAPIKey string
+	ByokAPIKey                  string
+	ApproveConsequentialActions []ConsequentialActionApproval
 }
 
 // Message runs one decompose→execute turn. Closed sessions return
@@ -190,10 +204,17 @@ type MessageOptions struct {
 // fallback path).
 func (r *AgentSessionsResource) Message(ctx context.Context, agentSessionID, userMessage string, opts *MessageOptions) (*AgentMessageResponse, error) {
 	var out AgentMessageResponse
+	body := map[string]any{"user_message": userMessage}
+	// W443/W445 — re-send approved consequential actions in the wire's
+	// snake_case shape so the executor skips the confirmation halt. Omitted
+	// when empty (matches the route's optional schema + the TS/Python SDKs).
+	if opts != nil && len(opts.ApproveConsequentialActions) > 0 {
+		body["approve_consequential_actions"] = opts.ApproveConsequentialActions
+	}
 	req := requestOptions{
 		method: "POST",
 		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/message",
-		body:   map[string]string{"user_message": userMessage},
+		body:   body,
 		out:    &out,
 	}
 	if opts != nil && opts.ByokAPIKey != "" {
