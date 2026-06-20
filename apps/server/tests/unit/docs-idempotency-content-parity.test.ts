@@ -33,7 +33,10 @@ describe('Arc 6 docs.idempotency — apps/docs/src/pages/reference/idempotency.m
         routeFile: 'apps/server/src/routes/agent-sessions.ts',
       },
       {
-        path: '/v1/billing/crypto-orders',
+        // The idempotent crypto endpoint is the checkout create (billing-crypto.ts
+        // reads the Idempotency-Key); /v1/billing/crypto-orders is a GET list and
+        // does NOT honour it.
+        path: '/v1/billing/crypto-checkout',
         routeFile: 'apps/server/src/routes/billing-crypto.ts',
       },
     ];

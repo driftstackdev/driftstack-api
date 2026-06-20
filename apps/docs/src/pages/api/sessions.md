@@ -117,7 +117,7 @@ persona the harness drives touch / scroll / typing cadence with — one
 of `casual`, `regular`, or `power_user`. Defaults to `regular` when
 omitted; set once for the session's lifetime.
 
-Returns the created session (200).
+Returns the created session (201).
 
 Errors:
 
@@ -133,10 +133,9 @@ Cursor-paginated, newest-first. Optional `status` filter.
 
 ## Get one
 
-`GET /v1/sessions/:id/state` — single session's current state. There
-is no separate metadata-only path today; session metadata travels
-alongside the live state response. See [Get state](#get-state) below
-for the response shape.
+`GET /v1/sessions/:id/state` — a session's current live state (`url`,
+`page_state`, and the screenshot-capable payload). See [Get state](#get-state)
+below for the response shape.
 
 ## Navigate
 

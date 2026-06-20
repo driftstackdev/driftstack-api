@@ -30,7 +30,7 @@ The header is honoured (stored-and-replayed) on the **create-style**
 endpoints that wire it explicitly:
 
 - `POST /v1/agent-sessions` — agent (chat-style) session creation
-- `POST /v1/billing/crypto-orders` — NOWPayments crypto invoice
+- `POST /v1/billing/crypto-checkout` — crypto checkout (NOWPayments invoice)
 
 Every other endpoint — including `POST /v1/sessions`, the Stripe
 checkout-session create, the PATCH/DELETE surface, the GET surface,
@@ -42,8 +42,11 @@ exactly-once semantics.
 
 ## Format
 
-The header value is an arbitrary string. The server stores it as-is
-and matches it character-for-character. Recommended format:
+The header value is a printable-ASCII string, 1–255 characters, with no
+whitespace. The server trims surrounding whitespace, then stores and
+matches the trimmed value exactly; a key that is empty, longer than 255
+characters, or contains whitespace or non-printable characters is
+rejected with a `400`. Recommended format:
 
 ```
 Idempotency-Key: <UUID-v4 or other globally-unique identifier>

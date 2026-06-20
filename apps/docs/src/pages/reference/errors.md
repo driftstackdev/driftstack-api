@@ -15,7 +15,7 @@ explains what went wrong in human-readable text.
 ```json
 {
   "type": "https://errors.driftstack.dev/rate-limited",
-  "title": "Rate limit exceeded",
+  "title": "Too Many Requests",
   "status": 429,
   "detail": "Rate limit for \"global\" exceeded for tier \"api_starter\".",
   "retry_after_seconds": 12
