@@ -36,6 +36,10 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     );
     expect(body).toMatch(/On TrackSubscribed RemoteVideoTrack event: attach to the <video>\./);
     expect(body).toMatch(/On unmount \/ beforeunload: room\.disconnect\(\)\./);
+    // Low-latency: on subscribe, minimize the receiver jitter buffer for the
+    // interactive simulator (pairs with adaptiveStream:false). Guarded no-op on
+    // older livekit-client.
+    expect(body).toMatch(/track\.setPlayoutDelay\?\.\(0\);/);
   });
 
   it('subscriber-only LK.6.b scope pinned: input capture (LK.6.d) + latency measurement (LK.6.e) are deferred to follow-up sub-slices. Drift to growing the panel into input/latency would mix concerns that the LK.6.* split deliberately separates', () => {

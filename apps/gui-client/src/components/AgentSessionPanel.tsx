@@ -174,6 +174,16 @@ export function AgentSessionPanel({
       if (track.kind !== 'video') return;
       const el = videoRef.current;
       if (el !== null) track.attach(el);
+      // Minimize the receiver-side jitter buffer for the interactive simulator:
+      // a deep buffer trades latency for jitter-smoothing, but this is a live
+      // control surface where input→pixel lag matters most. Pairs with the
+      // publisher's real-time config + adaptiveStream:false. Guarded — an older
+      // livekit-client without setPlayoutDelay just no-ops.
+      try {
+        track.setPlayoutDelay?.(0);
+      } catch {
+        /* setPlayoutDelay unsupported — ignore */
+      }
       setPublisher('publishing');
     });
     (room as any).on(RoomEvent.Disconnected, () => {
