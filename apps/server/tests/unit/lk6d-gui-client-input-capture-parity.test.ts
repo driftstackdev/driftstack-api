@@ -38,13 +38,16 @@ describe('LK.6.d — useInputCapture hook', () => {
     expect(body).toMatch(/addEventListener\('keyup'/);
   });
 
-  it('emits iPhone-COHERENT TOUCH variants (touchStart/Move/End + swipe + keyDown/Up) and NEVER mouse* (W198/W1249 — mouse events are a detectable iPhone tell the harness drops)', () => {
+  it('emits iPhone-COHERENT TOUCH variants (touchStart/Move/End + keyDown/Up); wheel scroll is a touchStream drag (per-move scroll, no momentum), NOT a swipe; NEVER mouse* (W198/W1249 — mouse events are a detectable iPhone tell the harness drops)', () => {
     expect(body).toMatch(/type: 'touchStart'/);
     expect(body).toMatch(/type: 'touchMove'/);
     expect(body).toMatch(/type: 'touchEnd'/);
-    expect(body).toMatch(/type: 'swipe'/);
     expect(body).toMatch(/type: 'keyDown'/);
     expect(body).toMatch(/type: 'keyUp'/);
+    // Wheel/trackpad scroll now drives a touchStream drag (A3 W2736: the fork adds
+    // its OWN momentum to every `swipe`, so ~100 wheel events/sec stacked into jumpy
+    // overshoot / "randomly scrolls back up") → the GUI no longer emits `swipe`.
+    expect(body).not.toMatch(/type: 'swipe'/);
     // The browser EVENT SOURCES stay mouse (the user drives with a mouse), but
     // no mouse* InputEvent is ever emitted on the wire (W198/W1249 coherence).
     expect(body).not.toMatch(/type: 'mouseMove'/);

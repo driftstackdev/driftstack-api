@@ -79,6 +79,13 @@ function fireWindow(type: string, x: number, y: number, ts: number): void {
   window.dispatchEvent(ev);
 }
 
+/** Dispatch a wheel event on the video element. */
+function fireWheel(el: HTMLElement, deltaX: number, deltaY: number): void {
+  el.dispatchEvent(
+    new WheelEvent('wheel', { clientX: 200, clientY: 400, deltaX, deltaY, bubbles: true }),
+  );
+}
+
 describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
   beforeEach(() => {
     sendInputEvent.mockClear();
@@ -189,5 +196,26 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
     // listener still fires; the move clamps to the edge and keeps scrolling.
     fireWindow('mousemove', 600, 300, 1060);
     expect(eventsOfType('touchMove').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('WHEEL scroll → a touchStream drag (touchStart+touchMove), NOT a swipe (no fork momentum stacking)', () => {
+    const video = mountCapture();
+    fireWheel(video, 0, 100); // scroll content down
+    const types = emittedTypes();
+    expect(types).toContain('touchStart');
+    expect(types).toContain('touchMove');
+    expect(types).not.toContain('swipe');
+    // Scroll DOWN (deltaY>0) = finger swipes UP → the move y is above the start y.
+    const ts = eventsOfType('touchStart')[0];
+    const tm = eventsOfType('touchMove').at(-1) as InputEvent & { y: number };
+    expect(tm.y).toBeLessThan((ts as InputEvent & { y: number }).y);
+  });
+
+  it('WHEEL scroll stays a continuous drag across many events (one touchStart, many moves) — no per-event swipe spam', () => {
+    const video = mountCapture();
+    for (let i = 0; i < 6; i++) fireWheel(video, 0, 40);
+    expect(eventsOfType('touchStart').length).toBe(1); // one finger, not 6
+    expect(eventsOfType('touchMove').length).toBeGreaterThanOrEqual(6);
+    expect(emittedTypes()).not.toContain('swipe');
   });
 });

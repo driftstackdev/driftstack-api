@@ -96,7 +96,12 @@ describe('gui-client/lib/livekit-input-capture content parity', () => {
     expect(body).toMatch(
       /send\(\{ type: 'touchEnd', x: p\.x, y: devY\(p\.y\), touchId: g\.touchId \}, true\);/,
     );
-    expect(body).toMatch(/type: 'swipe',/);
+    // Wheel/trackpad scroll drives a touchStream drag (touchStart→touchMove→touchEnd
+    // via wheelDrag), NOT a `swipe` — the fork adds its own momentum to every swipe
+    // (A3 W2736), so per-event swipes stacked into jumpy overshoot. The GUI no longer
+    // emits swipe.
+    expect(body).toMatch(/wheelDrag/);
+    expect(body).not.toMatch(/type: 'swipe'/);
     // Left-button-only press (right/middle have no touch analogue).
     expect(body).toMatch(/if \(mouseButton\(e\.button\) !== 0\) return;/);
     // NEVER emits mouse* / wheel InputEvent types on the wire.

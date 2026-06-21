@@ -499,28 +499,62 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       }
       send({ type: 'touchEnd', x: p.x, y: devY(p.y), touchId: g.touchId }, true);
     };
-    // Wheel/trackpad scroll = a swipe gesture. Scrolling content DOWN
-    // (deltaY > 0, reveal below) maps to a finger swiping UP, so y decreases.
-    // Clamp the delta so one scroll notch is a short flick, not a fling.
-    const onWheel = (e: WheelEvent): void => {
-      const p = pointerToViewport(e, video);
-      if (p === null) return;
-      const clamp = (d: number): number => Math.max(-240, Math.min(240, d));
-      // Apply devY ONCE to the origin, then offset the endpoint from it — do NOT
-      // re-clamp the endpoint through devY, or near the top ~32px both ends clamp
-      // to 0 and the scroll vector collapses to zero (no scroll, audit S3).
-      const y1 = devY(p.y);
+    // Wheel/trackpad scroll → a CONTINUOUS touch drag (touchStream), NOT a per-event
+    // `swipe`. The fork scrolls per-move (scrollBy) for touchMoves but applies its OWN
+    // momentum to EVERY `swipe` (BehavioralRhythm.swipeMomentumPath, A3 W2736) — so a
+    // trackpad firing ~100 wheel events/sec became ~100 overlapping momentum swipes →
+    // jumpy + overshoot/"randomly scrolls back up" (founder 2026-06-21). One virtual
+    // finger (down → move per wheel delta → up after a pause) gives a smooth, 1:1,
+    // momentum-free scroll. Scrolling content DOWN (deltaY>0) = finger swipes UP (y↓).
+    // When the finger nears an edge we lift + re-centre (like a real re-swipe) so a
+    // long continuous scroll never pins at the edge (the page scroll position persists
+    // across the re-anchor; only the touch origin moves).
+    let wheelDrag: { touchId: number; x: number; y: number } | null = null;
+    let wheelTimer = 0;
+    const endWheelDrag = (): void => {
+      if (wheelDrag === null) return;
       send(
         {
-          type: 'swipe',
-          x1: p.x,
-          y1,
-          x2: p.x - clamp(e.deltaX),
-          y2: y1 - clamp(e.deltaY),
-          durationMs: 120,
+          type: 'touchEnd',
+          x: clampX(wheelDrag.x),
+          y: devY(clampY(wheelDrag.y)),
+          touchId: wheelDrag.touchId,
         },
         true,
       );
+      wheelDrag = null;
+    };
+    const startWheelDrag = (x: number, y: number): { touchId: number; x: number; y: number } => {
+      const touchId = touchIdSeq.current++;
+      const wd = { touchId, x: clampX(x), y: clampY(y) };
+      wheelDrag = wd;
+      send({ type: 'touchStart', x: wd.x, y: devY(wd.y), touchId }, true);
+      return wd;
+    };
+    const onWheel = (e: WheelEvent): void => {
+      const p = pointerToViewport(e, video);
+      if (p === null) return;
+      const vw = video.videoWidth || 402;
+      const vh = video.videoHeight || 874;
+      const margin = 48;
+      const clampDelta = (d: number): number => Math.max(-120, Math.min(120, d));
+      const dx = clampDelta(e.deltaX);
+      const dy = clampDelta(e.deltaY);
+      let w = wheelDrag ?? startWheelDrag(p.x, Math.round(vh / 2));
+      let nx = w.x - dx;
+      let ny = w.y - dy;
+      // Re-centre before pinning at an edge so a long continuous scroll keeps going.
+      if (ny < margin || ny > vh - margin || nx < margin || nx > vw - margin) {
+        endWheelDrag();
+        w = startWheelDrag(Math.round(vw / 2), Math.round(vh / 2));
+        nx = w.x - dx;
+        ny = w.y - dy;
+      }
+      w.x = clampX(nx);
+      w.y = clampY(ny);
+      send({ type: 'touchMove', x: w.x, y: devY(w.y), touchId: w.touchId }, false);
+      window.clearTimeout(wheelTimer);
+      wheelTimer = window.setTimeout(endWheelDrag, 110);
     };
     // True when focus is in an editable element (a text field / textarea /
     // contenteditable). The keyboard listeners are bound on `window`, so without
@@ -607,6 +641,9 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         );
       }
       cancelFling(true);
+      // Lift an in-flight wheel-scroll finger + clear its end timer.
+      window.clearTimeout(wheelTimer);
+      endWheelDrag();
       active.current = null;
     };
   }, [room, video, enabled]);
