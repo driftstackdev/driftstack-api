@@ -1904,9 +1904,17 @@ export function SimulatorWindow(): JSX.Element {
                   <div className="truncate">
                     {fps !== null && <span>{fps} fps · </span>}
                     latency{' '}
+                    {/* Prefer the app-level DataChannel ping RTT; if the box isn't
+                        echoing it, fall back to the REAL media/candidate-pair RTT
+                        (conn.rttMs) so a true number always shows (the EU→US link
+                        latency the founder feels), not a permanent "measuring…". */}
                     {latency.rttMs !== null ? (
                       <span className={latency.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'}>
                         {latency.rttMs} ms
+                      </span>
+                    ) : conn.rttMs !== null ? (
+                      <span className={conn.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'}>
+                        {conn.rttMs} ms (link)
                       </span>
                     ) : (
                       <span className="text-white/50">measuring…</span>
