@@ -192,6 +192,16 @@ describe('resolveAddressBarInput (omnibox: URL vs search)', () => {
     expect(resolveAddressBarInput('192.168.1.1')).toBe('https://192.168.1.1/');
   });
 
+  it('navigates internationalized domains with non-ASCII TLDs, trailing-dot FQDNs, and bare IPv6 (audit fixes)', () => {
+    // IDN with a non-Latin ccTLD — punycoded by normalize, NOT searched.
+    expect(resolveAddressBarInput('файл.рф')).toBe('https://xn--80asg7a.xn--p1ai/');
+    // Trailing-dot absolute FQDN.
+    expect(resolveAddressBarInput('example.com.')).toBe('https://example.com./');
+    // Bare bracketed IPv6 literal (+ port).
+    expect(resolveAddressBarInput('[::1]:8080')).toBe('https://[::1]:8080/');
+    expect(resolveAddressBarInput('[2606:4700::1]')).toBe('https://[2606:4700::1]/');
+  });
+
   it('searches anything that does NOT look like a URL (multi-word or single bare word)', () => {
     expect(resolveAddressBarInput('best coffee near me')).toBe(
       'https://www.google.com/search?q=best%20coffee%20near%20me',

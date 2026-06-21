@@ -46,9 +46,14 @@ export function resolveAddressBarInput(raw: string): string | null {
   }
   const looksLikeHost =
     !/\s/.test(t) &&
-    (/^[^\s/?#]+\.[a-z]{2,}([/:?#]|$)/i.test(t) || // dotted host (+ optional path/port)
+    // Dotted host: the last label is any run of ≥2 non-delimiter chars (Unicode-aware
+    // via /u so non-ASCII ccTLDs like .рф/.テスト navigate, not search), with an
+    // optional trailing dot (a valid absolute-DNS FQDN "example.com."). normalize
+    // punycodes the Unicode labels.
+    (/^[^\s/?#]+\.[^\s/?#.]{2,}\.?([/:?#]|$)/u.test(t) ||
       /^localhost([/:?#]|$)/i.test(t) || // localhost[:port][/path]
-      /^\d{1,3}(\.\d{1,3}){3}([/:?#]|$)/.test(t)); // bare IPv4
+      /^\d{1,3}(\.\d{1,3}){3}([/:?#]|$)/.test(t) || // bare IPv4
+      /^\[[0-9a-f:]+\](:\d+)?([/?#]|$)/i.test(t)); // bracketed IPv6 literal [::1]:8080
   if (looksLikeHost) {
     const url = normalizeNavigateUrl(t);
     if (url !== null) return url;

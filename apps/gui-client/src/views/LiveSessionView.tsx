@@ -34,7 +34,7 @@ import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { GUIInputError, sendGUIInput, type GUIInputAction } from '../lib/gui-input';
-import { resolveAddressBarInput } from '../lib/address-bar';
+import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
 import { SessionTabStrip } from '../components/SessionTabStrip';
 import { useRecordings } from '../lib/recordings';
 
@@ -533,7 +533,11 @@ export function LiveSessionView({
         onBackNav={goBack}
         onForwardNav={goForward}
         onReload={() => {
-          if (state.currentUrl !== null) void navigateTo(state.currentUrl);
+          // Reload navigates the current URL VERBATIM (not through the omnibox), so a
+          // non-http device URL (initial about:blank, data:, …) is a no-op, not a
+          // Google search for the literal text.
+          const u = normalizeNavigateUrl(state.currentUrl ?? '');
+          if (u !== null) void navigateTo(u);
         }}
         onDestroy={() => void handleDestroy()}
       />
@@ -553,7 +557,9 @@ export function LiveSessionView({
         onToggleDeviceFrame={toggleDeviceFrame}
         pageState={state.pageState}
         onReloadPage={() => {
-          if (state.currentUrl !== null) void navigateTo(state.currentUrl);
+          // Verbatim reload (see onReload) — never re-classify the live URL as search.
+          const u = normalizeNavigateUrl(state.currentUrl ?? '');
+          if (u !== null) void navigateTo(u);
         }}
         lastTap={state.lastTap}
         onImgClick={handleImgClick}

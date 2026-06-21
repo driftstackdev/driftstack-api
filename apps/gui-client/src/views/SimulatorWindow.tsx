@@ -24,7 +24,7 @@ import { useLatencyPing } from '../lib/livekit-latency-ping';
 import { useConnectionStats } from '../lib/livekit-connection-stats';
 import { useRecordings } from '../lib/recordings';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
-import { resolveAddressBarInput } from '../lib/address-bar';
+import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
 import {
   getAgentSession,
   getAgentSessionPageState,
@@ -843,8 +843,13 @@ function BrowserBar({
   // Reload mid-edit must never silently navigate away. Falls back to the draft
   // only when the live URL isn't known yet (first page not yet reported).
   const reload = (): void => {
-    const target = (liveUrl || draft).trim();
-    if (canNavigate && target !== '') onNavigate(target);
+    if (!canNavigate) return;
+    // Reload re-loads the page the device is ACTUALLY on (a same-URL navigate is a
+    // reload). Navigate the live URL VERBATIM via normalizeNavigateUrl — NOT the
+    // omnibox resolver — so a non-http device URL (the initial about:blank, data:, …)
+    // is a no-op rather than a Google search for the literal text.
+    const target = normalizeNavigateUrl((liveUrl || draft).trim());
+    if (target !== null) onNavigate(target);
   };
   // Copy the live URL to the clipboard (a browser-chrome affordance) with a brief
   // "Copied" confirmation. Mirrors the app's existing clipboard pattern
@@ -1399,6 +1404,12 @@ export function SimulatorWindow(): JSX.Element {
   const [pageLoading, setPageLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState<number | null>(null);
   const loadWatchdogRef = useRef<number | null>(null);
+  // Timestamp of the last operator navigate. The ~2s page-state poll can fire before
+  // the box has seen a just-submitted navigate and would read the PREVIOUS page as
+  // 'loaded' → kill the optimistic spinner instantly (audit wqhvarsb9). For a short
+  // grace after a navigate, the poll won't turn loading OFF (the watchdog still
+  // bounds it), so the loading bar survives until the box reports the new page.
+  const lastNavAtRef = useRef(0);
   const clearLoadWatchdog = (): void => {
     if (loadWatchdogRef.current !== null) {
       window.clearTimeout(loadWatchdogRef.current);
@@ -1472,6 +1483,10 @@ export function SimulatorWindow(): JSX.Element {
           if (cancelled || ps === null) return;
           if (typeof ps.url === 'string' && ps.url !== '') setLiveUrl(ps.url);
           const loading = ps.state === 'loading';
+          // Don't let a stale 'loaded' (the box hasn't seen our just-submitted
+          // navigate yet) kill the optimistic spinner. Within the grace window after
+          // a navigate, only ESCALATE to loading; the 6s watchdog still bounds it.
+          if (!loading && Date.now() - lastNavAtRef.current < 2500) return;
           setPageLoading(loading);
           if (!loading) clearLoadWatchdog();
         })
@@ -1544,6 +1559,21 @@ export function SimulatorWindow(): JSX.Element {
   const [pairKind, setPairKind] = useState<string | null>(null);
   const [controlBusy, setControlBusy] = useState(false);
   const [composerText, setComposerText] = useState('');
+  // CRITICAL session-switch reset. The relaunch listener swaps sessionId IN PLACE
+  // (no remount — to keep the live Room), so per-session UI state would otherwise
+  // carry over. Two real bugs that causes (audit wqhvarsb9): (1) a stale controlMode
+  // ('manual' from the previous session) makes the mode-aware close handler
+  // endAgentSession(NEW_sessionId) — DELETING the freshly-launched session; (2) the
+  // browser bar shows the previous session's URL/loading until the new box reports.
+  // Reset to a clean slate on every sessionId change (controlMode=null is the safe
+  // non-manual default; refreshControl re-fetches the real mode right after).
+  useEffect(() => {
+    setControlMode(null);
+    setPairKind(null);
+    setLiveUrl('');
+    setPageLoading(false);
+    setLoadProgress(null);
+  }, [sessionId]);
   // Control-channel load state for the panel caption (founder 2026-06-18: the
   // mode toggle was stuck "Connecting…" forever when getAgentSession failed and
   // the error was swallowed). null = no error; a classified message = the last
@@ -1756,6 +1786,7 @@ export function SimulatorWindow(): JSX.Element {
     setLiveUrl(url);
     setPageLoading(true);
     setLoadProgress(null);
+    lastNavAtRef.current = Date.now();
     clearLoadWatchdog();
     loadWatchdogRef.current = window.setTimeout(() => {
       setPageLoading(false);

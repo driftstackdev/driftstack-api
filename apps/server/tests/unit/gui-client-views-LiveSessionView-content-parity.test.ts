@@ -165,7 +165,9 @@ describe('W485.B apps/gui-client/src/views/LiveSessionView.tsx content parity', 
     // address-bar resolver) — replaced the old bare-host `'https://' + url`.
     expect(body).toMatch(/resolveAddressBarInput\(/);
     expect(body).toMatch(/props\.onNavigate\(draftUrl\)/);
-    expect(body).toMatch(/void navigateTo\(state\.currentUrl\)/);
+    // Reload navigates the live URL VERBATIM (normalizeNavigateUrl guard), never via
+    // the omnibox — so the initial about:blank can't be re-classified as a search.
+    expect(body).toMatch(/normalizeNavigateUrl\(state\.currentUrl/);
     // The draft URL isn't clobbered by the poll mid-type (synced only when
     // currentUrl actually changes underneath).
     expect(body).toMatch(/const \[draftUrl, setDraftUrl\] = useState/);
