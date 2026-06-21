@@ -222,6 +222,34 @@ export class DrizzleFleetNodesRepo implements FleetNodesRepo {
     return row ? rowToDetail(row) : null;
   }
 
+  /** Region-aware variant of findAnyWithLivekit: prefer a non-revoked node WITH
+   *  LiveKit in the caller's home region, falling back to ANY livekit node when
+   *  the home region has none (so a single-region fleet, or a regional outage,
+   *  never fails a session — a far box beats no box). `region` null/empty →
+   *  straight to any. The data (accounts.region + fleet_nodes.region) already
+   *  exists; this is the SELECTION that uses it so an EU box actually serves EU
+   *  customers (vs findAnyWithLivekit, which is region-blind). */
+  async findNearestWithLivekit(region: string | null | undefined): Promise<FleetNodeDetail | null> {
+    if (region != null && region !== '') {
+      const rows = await this.database.db
+        .select()
+        .from(fleetNodes)
+        .where(
+          and(
+            isNull(fleetNodes.revokedAt),
+            eq(fleetNodes.region, region),
+            sql`${fleetNodes.livekitApiKey} IS NOT NULL`,
+          ),
+        )
+        .orderBy(desc(fleetNodes.livekitRegisteredAt))
+        .limit(1);
+      const row = rows[0];
+      if (row) return rowToDetail(row);
+    }
+    // No home-region livekit node (or no region given) → any livekit node.
+    return this.findAnyWithLivekit();
+  }
+
   /** Operator-dashboard list: non-revoked nodes, most-recently-seen
    *  first. Uses the partial index on `last_seen_at WHERE revoked_at
    *  IS NULL`. */

@@ -50,6 +50,13 @@ function repoReturning(mac: unknown, spy?: () => void): DrizzleFleetNodesRepo {
       spy?.();
       return Promise.resolve(mac);
     },
+    // Region-aware dispatch calls findNearestWithLivekit; the stub returns the
+    // same node regardless of region (the prefer-region+fallback SQL is covered
+    // separately). Same spy so the "no-op when unwired" assertions still hold.
+    findNearestWithLivekit: () => {
+      spy?.();
+      return Promise.resolve(mac);
+    },
   } as unknown as DrizzleFleetNodesRepo;
 }
 
@@ -94,6 +101,65 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect(payload.video.canPublish).toBe(true);
     expect(payload.video.room).toBe('agt_demo1');
     expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('region-aware: an EU viewer routes to the EU node (region threaded to findNearestWithLivekit), not the US node', async () => {
+    const sentEu: string[] = [];
+    const sentUs: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register('mac-eu-paris-001', (d) => sentEu.push(d));
+    registry.register('mac-us-vegas-001', (d) => sentUs.push(d));
+    const usNode = { ...macWithLivekit(), id: 'us-uuid', nodeId: 'mac-us-vegas-001' };
+    const euNode = { ...macWithLivekit(), id: 'eu-uuid', nodeId: 'mac-eu-paris-001' };
+    let regionSeen: string | null | undefined = 'UNSET';
+    const regionalRepo = {
+      findAnyWithLivekit: () => Promise.resolve(usNode),
+      // Mirrors the real repo contract: prefer the home-region node, else any.
+      findNearestWithLivekit: (region: string | null | undefined) => {
+        regionSeen = region;
+        return Promise.resolve(region === 'eu' ? euNode : usNode);
+      },
+    } as unknown as DrizzleFleetNodesRepo;
+
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_eu1',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: regionalRepo,
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      accountRegion: 'eu',
+      logger: logger(),
+    });
+
+    // The viewer's region was threaded to the selector…
+    expect(regionSeen).toBe('eu');
+    // …and the assign went to the EU node, NOT the US node.
+    expect(sentEu).toHaveLength(1);
+    expect(sentUs).toHaveLength(0);
+  });
+
+  it('region-aware: falls back to any node when the home region has none (repo returns the fallback) — session still dispatches', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register('mac-us-vegas-001', (d) => sent.push(d));
+    const usNode = { ...macWithLivekit(), id: 'us-uuid', nodeId: 'mac-us-vegas-001' };
+    const regionalRepo = {
+      findAnyWithLivekit: () => Promise.resolve(usNode),
+      // apac viewer, no apac node → the repo's fallback returns the US node.
+      findNearestWithLivekit: (region: string | null | undefined) =>
+        Promise.resolve(region === 'apac' ? usNode : usNode),
+    } as unknown as DrizzleFleetNodesRepo;
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_apac1',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: regionalRepo,
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      accountRegion: 'apac',
+      logger: logger(),
+    });
+    // A far box still beats no box — the session dispatched to the US node.
+    expect(sent).toHaveLength(1);
   });
 
   it('persists the dispatched-to node_id on the agent session (migration 0086) — the same registry key it resolved the connection by', async () => {

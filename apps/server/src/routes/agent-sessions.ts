@@ -525,6 +525,12 @@ export async function dispatchSessionAssignOnCreate(args: {
   // worker-disconnect reaper can close THIS node's active sessions if the node
   // drops. The dispatch's `sessionId` IS the agent-session id (created.id).
   agentSessions?: AgentSessionsRepo;
+  // Region-aware dispatch (2026-06-21) — the viewer's home region (`us|eu|apac`,
+  // from the authed account). Selects the nearest livekit node so a multi-region
+  // fleet (e.g. an EU box for EU customers) actually routes by proximity; falls
+  // back to any node when the home region has none (single-region fleet / outage
+  // → a far box still beats no box). Absent/null → region-blind any-node (today).
+  accountRegion?: string | null;
 }): Promise<void> {
   const {
     sessionId,
@@ -540,6 +546,7 @@ export async function dispatchSessionAssignOnCreate(args: {
     proxyId,
     accountProxiesService,
     agentSessions,
+    accountRegion,
   } = args;
   if (
     fleetControlRegistry === undefined ||
@@ -550,7 +557,9 @@ export async function dispatchSessionAssignOnCreate(args: {
     return;
   }
   try {
-    const mac = await fleetNodesRepo.findAnyWithLivekit();
+    // Region-aware: prefer a livekit node in the viewer's home region, fall back
+    // to any (single-region fleet → same as before). See findNearestWithLivekit.
+    const mac = await fleetNodesRepo.findNearestWithLivekit(accountRegion);
     if (mac === null || mac.livekit === null) return;
     // The registry is keyed by the authed node_id (the JWT iss), NOT the
     // fleet_nodes uuid PK — so resolve the live connection by nodeId (migration
@@ -1173,6 +1182,10 @@ export function registerAgentSessionsRoutes(
         // Worker-disconnect fix (2026-06-19) — persist session→node so the
         // disconnect reaper can free this node's slot if the node drops.
         agentSessions: sessions,
+        // Region-aware dispatch (2026-06-21) — the viewer's home region so the
+        // session routes to the nearest livekit node (EU box for EU customers);
+        // falls back to any node when the home region has none.
+        accountRegion: ctx.account.region,
       });
       // Slice 6 follow-up 2026-05-20 — agent-session create audit. Best-
       // effort emit; audit failures don't break the create. Distinct
