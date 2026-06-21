@@ -108,6 +108,24 @@ describe('SimulatorWindow — address bar navigate', () => {
     fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
     expect(sendNavigate).not.toHaveBeenCalled();
   });
+
+  it('Reload re-loads the LIVE page, NOT a half-typed draft (audit P2 fix)', () => {
+    const { container } = renderSim();
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    // Establish a live URL by navigating once (sets liveUrl optimistically).
+    fireEvent.change(addressInput, { target: { value: 'live.example.com' } });
+    fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
+    expect(sendNavigate).toHaveBeenLastCalledWith(fakeRoom, 'https://live.example.com/');
+    sendNavigate.mockClear();
+    // Operator starts typing a DIFFERENT address but never submits it.
+    fireEvent.change(addressInput, {
+      target: { value: 'typed-but-not-submitted.example.org' },
+    });
+    // Clicking Reload must reload the live page, not silently navigate to the draft.
+    fireEvent.click(container.querySelector('[aria-label="Reload"]') as Element);
+    expect(sendNavigate).toHaveBeenCalledTimes(1);
+    expect(sendNavigate).toHaveBeenCalledWith(fakeRoom, 'https://live.example.com/');
+  });
 });
 
 describe('normalizeNavigateUrl', () => {

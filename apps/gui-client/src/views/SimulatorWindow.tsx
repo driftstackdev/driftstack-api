@@ -857,6 +857,14 @@ function BrowserBar({
   const submit = (): void => {
     if (canNavigate && draft.trim() !== '') onNavigate(draft.trim());
   };
+  // Reload re-loads the page the device is ACTUALLY on (a same-URL navigate is a
+  // reload), not whatever half-typed text sits in the draft field — clicking
+  // Reload mid-edit must never silently navigate away. Falls back to the draft
+  // only when the live URL isn't known yet (first page not yet reported).
+  const reload = (): void => {
+    const target = (liveUrl || draft).trim();
+    if (canNavigate && target !== '') onNavigate(target);
+  };
   return (
     <div
       data-component="simulator-address-bar"
@@ -868,7 +876,7 @@ function BrowserBar({
         aria-label="Reload"
         title={canNavigate ? 'Reload' : 'Connecting…'}
         disabled={!canNavigate}
-        onClick={submit}
+        onClick={reload}
         className="shrink-0 rounded-md p-1 text-ink-secondary transition hover:bg-white/10 hover:text-ink-primary disabled:opacity-40"
       >
         <svg
