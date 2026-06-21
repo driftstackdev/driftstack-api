@@ -387,6 +387,11 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // A new touch during a glide stops it (iOS: tap-to-halt momentum) and lifts
       // the gliding finger before this press starts its own.
       cancelFling(true);
+      // A new press also lifts any in-flight wheel-scroll finger (symmetry with the
+      // effect teardown) so the wheel + mouse paths never leave two fingers on the
+      // wire — a residual wheel touch + a fresh press = a spurious multi-touch/pinch.
+      window.clearTimeout(wheelTimer);
+      endWheelDrag();
       const p = pointerToViewport(e, video);
       if (p === null) return;
       try {
@@ -436,11 +441,13 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         if (!commit) return; // still possibly a tap — keep buffering (send nothing)
         g.committed = true;
         // Emit the buffered touchStart at the press point so the scroll originates
-        // there, then seed velocity tracking from the press.
+        // there, then seed velocity tracking from the COMMIT point (the current move),
+        // NOT the press — otherwise the initial dwell (up to DRAG_HOLD_MS) folds into
+        // the first velocity sample and distorts the release speed (used by the fling).
         send({ type: 'touchStart', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
-        g.lastX = g.startX;
-        g.lastY = g.startY;
-        g.lastT = g.startT;
+        g.lastX = p.x;
+        g.lastY = p.y;
+        g.lastT = e.timeStamp;
       }
       // Track release velocity (EMA, px/ms) for the inertial slide: weight recent
       // motion so a fast flick at the very end produces a strong glide.
@@ -537,6 +544,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       return wd;
     };
     const onWheel = (e: WheelEvent): void => {
+      // A held mouse gesture owns the single virtual finger — ignore the wheel until
+      // it releases, so a click-drag + trackpad scroll can't put a SECOND concurrent
+      // touch on the wire (the device reads two touchIds as a pinch/multi-touch).
+      if (active.current !== null) return;
       const p = pointerToViewport(e, video);
       if (p === null) return;
       const vw = video.videoWidth || 402;

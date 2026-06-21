@@ -218,4 +218,23 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
     expect(eventsOfType('touchMove').length).toBeGreaterThanOrEqual(6);
     expect(emittedTypes()).not.toContain('swipe');
   });
+
+  it('WHEEL during a COMMITTED mouse drag is IGNORED — no second concurrent finger (audit: spurious pinch)', () => {
+    const video = mountCapture();
+    fireMouse(video, 'mousedown', 200, 400, 1000);
+    fireMouse(video, 'mousemove', 200, 300, 1010); // 100px up → commit (mouse finger on the wire)
+    sendInputEvent.mockClear();
+    fireWheel(video, 0, 100); // spin the wheel while the mouse finger is still down
+    // The wheel is ignored while a mouse gesture owns the single finger → no 2nd touchStart.
+    expect(eventsOfType('touchStart')).toHaveLength(0);
+  });
+
+  it('a new mouse PRESS lifts an in-flight wheel-scroll finger (audit: no stuck second touch)', () => {
+    const video = mountCapture();
+    fireWheel(video, 0, 60); // starts a wheel drag — wheel finger held down
+    sendInputEvent.mockClear();
+    fireMouse(video, 'mousedown', 150, 300, 2000); // press within the 110ms wheel-idle window
+    // onMouseDown calls endWheelDrag → a touchEnd lifts the lingering wheel finger.
+    expect(eventsOfType('touchEnd').length).toBeGreaterThanOrEqual(1);
+  });
 });
