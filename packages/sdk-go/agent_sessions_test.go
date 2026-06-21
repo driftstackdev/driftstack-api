@@ -173,6 +173,24 @@ func TestAgentSessions_Message_ApprovesConsequentialActions(t *testing.T) {
 	}
 }
 
+func TestAgentSessions_List(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" || r.URL.Path != "/v1/agent-sessions" {
+			t.Errorf("method=%q path=%q", r.Method, r.URL.Path)
+		}
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{agentSessionEnvelope}})
+	})
+	page, err := client.AgentSessions.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Data) != 1 {
+		t.Errorf("len(data)=%d", len(page.Data))
+	}
+}
+
 func TestAgentSessions_Message_Refuse(t *testing.T) {
 	t.Parallel()
 	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {

@@ -136,6 +136,16 @@ describe('W582.C packages/sdk-python/src/driftstack/resources/profiles.py conten
     expect(body).toMatch(
       /async def delete\(self, profile_id: str\) -> None:\s*\n\s*await self\._http\.request\("DELETE", f"\/v1\/profiles\/\{quote\(profile_id, safe=''\)\}"\)/,
     );
+    // L4b recycle bin — async mirror of the sync list_trash/restore/purge.
+    expect(body).toMatch(
+      /async def list_trash\(self\) -> dict\[str, Any\]:[\s\S]*?await self\._http\.request\("GET", "\/v1\/profiles\/trash"\)/,
+    );
+    expect(body).toMatch(
+      /async def restore\(self, profile_id: str\) -> dict\[str, Any\]:[\s\S]*?await self\._http\.request\(\s*\n\s*"POST", f"\/v1\/profiles\/\{quote\(profile_id, safe=''\)\}\/restore"\s*\n\s*\)/,
+    );
+    expect(body).toMatch(
+      /async def purge\(self, profile_id: str\) -> None:[\s\S]*?await self\._http\.request\("DELETE", f"\/v1\/profiles\/\{quote\(profile_id, safe=''\)\}\/purge"\)/,
+    );
     expect(body).toMatch(
       /async def clone\(self, profile_id: str, body: dict\[str, Any\] \| None = None\) -> dict\[str, Any\]:\s*\n\s*return await self\._http\.request\(\s*\n\s*"POST",\s*\n\s*f"\/v1\/profiles\/\{quote\(profile_id, safe=''\)\}\/clone",\s*\n\s*json_body=coerce_body\(body or \{\}\),\s*\n\s*\)/,
     );

@@ -105,6 +105,12 @@ class AgentSessionsResource:
         """Read agent session state."""
         return self._http.request("GET", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}")
 
+    def list(self) -> dict[str, Any]:
+        """List the account's agent sessions (newest first, capped at 100
+        server-side). Returns the ``{"data": [...]}`` envelope. Mirrors the
+        TS + Go SDK list()."""
+        return self._http.request("GET", "/v1/agent-sessions")
+
     def message(
         self,
         agent_session_id: str,
@@ -343,6 +349,10 @@ class AsyncAgentSessionsResource:
         return await self._http.request(
             "GET", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}"
         )
+
+    async def list(self) -> dict[str, Any]:
+        """Async counterpart to AgentSessionsResource.list."""
+        return await self._http.request("GET", "/v1/agent-sessions")
 
     async def message(
         self,

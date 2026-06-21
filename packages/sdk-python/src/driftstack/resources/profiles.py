@@ -168,6 +168,28 @@ class AsyncProfilesResource:
     async def delete(self, profile_id: str) -> None:
         await self._http.request("DELETE", f"/v1/profiles/{quote(profile_id, safe='')}")
 
+    async def list_trash(self) -> dict[str, Any]:
+        """Async mirror — L4b recycle bin: the account's trashed profiles,
+        newest first. Each carries ``deleted_at``. Returns ``{"data": [...]}``.
+        """
+        return await self._http.request("GET", "/v1/profiles/trash")
+
+    async def restore(self, profile_id: str) -> dict[str, Any]:
+        """Async mirror — L4b recycle bin: restore a trashed profile (clears
+        ``deleted_at``). 404 if no trashed profile with that id; 409 if a live
+        profile already holds the name (rename it first).
+        """
+        return await self._http.request(
+            "POST", f"/v1/profiles/{quote(profile_id, safe='')}/restore"
+        )
+
+    async def purge(self, profile_id: str) -> None:
+        """Async mirror — L4b recycle bin: permanently delete a trashed profile,
+        freeing its cap slot immediately. 404 if no trashed profile has that id.
+        Irreversible.
+        """
+        await self._http.request("DELETE", f"/v1/profiles/{quote(profile_id, safe='')}/purge")
+
     async def launch(self, profile_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         """Async mirror — same Slice 2 antidetect launch semantics as sync."""
         return await self._http.request(

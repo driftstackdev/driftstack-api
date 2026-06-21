@@ -174,6 +174,26 @@ func (r *AgentSessionsResource) Get(ctx context.Context, agentSessionID string) 
 	return &out, nil
 }
 
+// AgentSessionsListPage is the GET /v1/agent-sessions envelope — newest
+// first, capped at 100 by the server (no cursor).
+type AgentSessionsListPage struct {
+	Data []AgentSession `json:"data"`
+}
+
+// List returns the account's agent sessions (newest first, capped at 100 by
+// the server). Mirrors the TS + Python SDK list().
+func (r *AgentSessionsResource) List(ctx context.Context) (*AgentSessionsListPage, error) {
+	var out AgentSessionsListPage
+	if err := r.client.do(ctx, requestOptions{
+		method: "GET",
+		path:   "/v1/agent-sessions",
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // ConsequentialActionApproval re-sends a consequential action a prior turn
 // halted on (W443/W445), so the executor proceeds + dispatches it instead of
 // halting again. Category + MatchedText echo the halt's fields.

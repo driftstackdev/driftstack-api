@@ -99,13 +99,17 @@ describe('sdk-go agent_sessions content parity', () => {
     );
   });
 
-  it('AgentSessionsResource 10-method surface: Create + Get + Message + Close + SetMode + SendInputEvent + Takeover + Handback + LivekitToken + Resume (W474). Drift to dropping a method would break the cross-SDK uniformity (TS + Python have the same 10); drift to changing signature would break Go consumers using context.Context-first idiom', () => {
+  it('AgentSessionsResource 11-method surface: Create + Get + List + Message + Close + SetMode + SendInputEvent + Takeover + Handback + LivekitToken + Resume. Drift to dropping a method would break cross-SDK uniformity (TS + Python have the same set); drift to changing signature would break Go consumers using the context.Context-first idiom', () => {
     expect(body).toMatch(
       /func \(r \*AgentSessionsResource\) Create\(ctx context\.Context, body \*CreateAgentSessionRequest, opts \*CreateOptions\) \(\*AgentSession, error\)/,
     );
     expect(body).toMatch(
       /func \(r \*AgentSessionsResource\) Get\(ctx context\.Context, agentSessionID string\) \(\*AgentSession, error\)/,
     );
+    expect(body).toMatch(
+      /func \(r \*AgentSessionsResource\) List\(ctx context\.Context\) \(\*AgentSessionsListPage, error\)/,
+    );
+    expect(body).toMatch(/type AgentSessionsListPage struct \{[\s\S]*?Data \[\]AgentSession/);
     expect(body).toMatch(
       /func \(r \*AgentSessionsResource\) Message\(ctx context\.Context, agentSessionID, userMessage string, opts \*MessageOptions\) \(\*AgentMessageResponse, error\)/,
     );
