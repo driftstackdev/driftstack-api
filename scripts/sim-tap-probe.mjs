@@ -49,6 +49,10 @@ const getOpt = (name, def) => {
   return i >= 0 && argv[i + 1] ? argv[i + 1] : def;
 };
 const KEEP = getFlag('--keep');
+// --cleantap: send a zero-move touchStart+touchEnd (what the GUI emits for a TAP)
+// instead of a {type:'tap'} — verifies the box treats a no-move touch as a tap, not
+// a scroll (A3 W2736/W2737 clean-gesture confirmation).
+const CLEANTAP = getFlag('--cleantap');
 const PROBE_URL = getOpt('--url', 'https://driftstack.dev/sim-probe.html');
 // Title-band compensation to mimic the GUI's devY (set --ycomp 32 to verify the
 // shipped tap fix): inject y-YCOMP but score error against the original aim.
@@ -357,7 +361,15 @@ try {
     // Inject the (optionally) compensated Y, but score against the original aim:
     // with --ycomp 32 this mirrors the GUI's devY so a landing on (x,y) = err ~0.
     const iy = Math.max(0, y - YCOMP);
-    await publish({ type: 'tap', x, y: iy });
+    if (CLEANTAP) {
+      // Zero-move touch sequence = the GUI's clean tap. A green marker at (x,iy)
+      // ⇒ the box synthesized a TAP (no scroll); a missing/shifted marker ⇒ scroll.
+      const tid = 90000 + tapNum;
+      await publish({ type: 'touchStart', x, y: iy, touchId: tid });
+      await publish({ type: 'touchEnd', x, y: iy, touchId: tid });
+    } else {
+      await publish({ type: 'tap', x, y: iy });
+    }
     await sleep(1600);
     const green = await page.evaluate(() => window.__grabGreen());
     const stale = green.found && pre.found && Math.hypot(green.vx - pre.vx, green.vy - pre.vy) < 6;
