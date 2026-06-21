@@ -1211,6 +1211,39 @@ export function SimulatorWindow(): JSX.Element {
       return true;
     }
   });
+  // Device aspect (videoW / videoH) from the live stream — drives window sizing so
+  // the frame fits ANY archetype. Seeded to iphone17 until the stream reports.
+  const deviceAspectRef = useRef(402 / 874);
+  // Size the window so the device video FILLS the frame width AND the whole window
+  // FITS the screen height. The iPhone's tall aspect makes a width-driven height
+  // overflow a laptop screen → the OS clamps the height → the device letterboxes
+  // with side gaps ("the iphone view is lower width than the window", founder
+  // 2026-06-21). Fix: derive height from the width; if it would overflow the screen
+  // work area, clamp to the screen and derive the WIDTH from the aspect instead, so
+  // the device always fills the frame edge-to-edge.
+  const fitWindow = (browserModeOn: boolean): void => {
+    void withCurrentWindow(async (win) => {
+      const { LogicalSize } = await import('@tauri-apps/api/dpi');
+      const factor = await win.scaleFactor();
+      const size = await win.innerSize();
+      const curWidth = Math.round(size.width / factor);
+      const aspect = deviceAspectRef.current;
+      const chrome = TOOLBAR_H + (browserModeOn ? BROWSER_BAR_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
+      // window.screen.availHeight is CSS px already minus the menu bar + Dock; a
+      // small margin leaves room for the window frame so we never trip the OS clamp
+      // (the clamp is what letterboxed the device with side gaps).
+      const avail = typeof window !== 'undefined' ? (window.screen?.availHeight ?? 0) : 0;
+      const maxH = avail > 0 ? avail - 24 : Number.POSITIVE_INFINITY;
+      const screenW = curWidth - BEZEL_PAD;
+      let width = curWidth;
+      let height = Math.round(chrome + screenW / aspect); // h/w = 1/aspect
+      if (height > maxH) {
+        height = Math.round(maxH);
+        width = Math.round((height - chrome) * aspect + BEZEL_PAD);
+      }
+      await win.setSize(new LogicalSize(width, height));
+    });
+  };
   const toggleBrowserMode = (): void => {
     const next = !browserMode;
     setBrowserMode(next);
@@ -1219,16 +1252,9 @@ export function SimulatorWindow(): JSX.Element {
     } catch {
       /* storage disabled — mode just won't persist */
     }
-    // The browser bar is a real chrome row, so grow/shrink the window by its
-    // height to keep the device video's exact aspect (no letterbox jump).
-    void withCurrentWindow(async (win) => {
-      const { LogicalSize } = await import('@tauri-apps/api/dpi');
-      const size = await win.innerSize();
-      const factor = await win.scaleFactor();
-      const width = Math.round(size.width / factor);
-      const cur = Math.round(size.height / factor);
-      await win.setSize(new LogicalSize(width, cur + (next ? BROWSER_BAR_H : -BROWSER_BAR_H)));
-    });
+    // Re-fit the whole window (not a naive ±bar-height bump, which could overflow
+    // the screen and re-introduce the side-gap letterbox).
+    fitWindow(next);
   };
 
   // Live page state from the device (A3 page_state over the LiveKit data channel,
@@ -1252,15 +1278,26 @@ export function SimulatorWindow(): JSX.Element {
       try {
         const msg = JSON.parse(new TextDecoder().decode(payload)) as {
           type?: string;
+          state?: string;
           url?: string;
+          title?: string;
           loading?: boolean;
           progress?: number;
         };
-        if (msg.type !== 'page_state') return;
-        if (typeof msg.url === 'string') setLiveUrl(msg.url);
-        if (typeof msg.loading === 'boolean') {
-          setPageLoading(msg.loading);
-          if (!msg.loading) clearLoadWatchdog();
+        // Accept BOTH the proposed {type:'page_state', url, loading, progress}
+        // envelope AND A3's shipped HarnessOutbound.PageState {sessionId, state,
+        // url, error} where state ∈ loading|loaded|errored (bus W2717-done). The
+        // box emits the latter over THIS data channel on navigate; prod's
+        // page-state REST endpoint is stubbed, so the channel is the only live
+        // source — keying only on type:'page_state' silently dropped every event.
+        const isHarnessState =
+          msg.state === 'loading' || msg.state === 'loaded' || msg.state === 'errored';
+        if (msg.type !== 'page_state' && !isHarnessState) return;
+        if (typeof msg.url === 'string' && msg.url !== '') setLiveUrl(msg.url);
+        const loading = isHarnessState ? msg.state === 'loading' : msg.loading;
+        if (typeof loading === 'boolean') {
+          setPageLoading(loading);
+          if (!loading) clearLoadWatchdog();
         }
         setLoadProgress(typeof msg.progress === 'number' ? msg.progress : null);
       } catch {
@@ -1583,16 +1620,10 @@ export function SimulatorWindow(): JSX.Element {
   const handleVideoDimensions = (w: number, h: number): void => {
     if (sizedToStreamRef.current || landscapeRef.current || w <= 0 || h <= 0) return;
     sizedToStreamRef.current = true;
-    void withCurrentWindow(async (win) => {
-      const { LogicalSize } = await import('@tauri-apps/api/dpi');
-      const size = await win.innerSize();
-      const factor = await win.scaleFactor();
-      const width = Math.round(size.width / factor);
-      const screenW = width - BEZEL_PAD;
-      const chrome = TOOLBAR_H + (browserMode ? BROWSER_BAR_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
-      const height = Math.round(chrome + screenW * (h / w));
-      await win.setSize(new LogicalSize(width, height));
-    });
+    deviceAspectRef.current = w / h;
+    // Fit to the real device aspect + the current chrome, clamped to the screen so
+    // the device fills the frame width with no side gaps (see fitWindow).
+    fitWindow(browserMode);
   };
 
   // Rotate: swap the window's width/height so the bezel reflows to the new
