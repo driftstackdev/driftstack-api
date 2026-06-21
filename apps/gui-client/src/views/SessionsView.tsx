@@ -54,7 +54,9 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
   const prevStatuses = useRef(new Map<string, string>());
   useEffect(() => {
     const prev = prevStatuses.current;
+    const seen = new Set<string>();
     for (const session of state.sessions) {
+      seen.add(session.id);
       const before = prev.get(session.id);
       if (before !== undefined && before !== 'errored' && session.status === 'errored') {
         pushToast({
@@ -65,6 +67,11 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
         });
       }
       prev.set(session.id, session.status);
+    }
+    // Evict ids that left the list so the Map can't grow unbounded over the
+    // lifetime of this long-lived, polling view (audit wja3dfl5t).
+    for (const id of prev.keys()) {
+      if (!seen.has(id)) prev.delete(id);
     }
   }, [state.sessions, pushToast, onView]);
 
@@ -513,7 +520,20 @@ function SessionCard({
 
       {/* Quiet row actions: View + Stop. */}
       <div className="mt-auto flex gap-2 pt-0.5">
-        <button type="button" className="btn-secondary flex-1 text-xs" onClick={onView}>
+        <button
+          type="button"
+          className="btn-secondary flex-1 text-xs disabled:opacity-40"
+          onClick={onView}
+          // Don't offer View for a terminated session — the list keeps destroyed/
+          // errored rows until the next poll, and their live viewer can't stream
+          // (it just shows "Session ended"). (audit wja3dfl5t)
+          disabled={session.status === 'destroyed' || session.status === 'errored'}
+          title={
+            session.status === 'destroyed' || session.status === 'errored'
+              ? 'This session has ended'
+              : undefined
+          }
+        >
           View
         </button>
         <button

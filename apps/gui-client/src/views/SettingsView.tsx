@@ -12,7 +12,7 @@
 // rewritten to point at the V-268 browser sign-in flow instead of the
 // stale "npm run admin:create-key" instruction.
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ConnectivityView } from './ConnectivityView';
 import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
@@ -56,7 +56,16 @@ export function SettingsView(): JSX.Element {
    *  keeps whatever the customer last typed (or the default). W584 — also
    *  auto-restores that deployment's remembered key so switching modes never
    *  asks the customer to re-paste a key they already entered once. */
+  // Monotonic token guarding the async remembered-key restore: bumped on every
+  // mode switch AND on a manual key edit, so an out-of-order rememberedKeyFor
+  // resolution (rapid toggling, different keychain/store latencies) or a key the
+  // user typed after switching can't clobber the latest intent (audit wja3dfl5t).
+  const keyRestoreTokenRef = useRef(0);
+  // Monotonic token for the post-save key validation (see handleSave) — a newer
+  // Save supersedes an older in-flight validation so a stale verdict can't land.
+  const validateTokenRef = useRef(0);
   function switchMode(next: 'cloud' | 'self-hosted'): void {
+    const token = ++keyRestoreTokenRef.current;
     setDraftMode(next);
     let target: string;
     if (next === 'cloud') {
@@ -71,7 +80,8 @@ export function SettingsView(): JSX.Element {
     setTestState({ kind: 'idle' });
     setKeyCheck({ kind: 'idle' });
     void rememberedKeyFor(target).then((remembered) => {
-      setDraftKey(remembered ?? '');
+      // Only apply if this is still the latest switch and the user hasn't typed.
+      if (keyRestoreTokenRef.current === token) setDraftKey(remembered ?? '');
     });
   }
 
@@ -178,6 +188,10 @@ export function SettingsView(): JSX.Element {
       return;
     }
     setKeyCheck({ kind: 'checking' });
+    // Token this validation so a SLOWER older validation (a second Save fired
+    // before the first's /account/me resolved) can't clobber the newer key's
+    // verdict — its result is discarded on resolve (audit wja3dfl5t).
+    const token = ++validateTokenRef.current;
     // Bound the validation like runConnectionTest — without an abort, a server
     // that hangs (rather than refusing) leaves keyCheck stuck on 'checking'
     // ("Validating key…") forever with no resolution.
@@ -189,6 +203,7 @@ export function SettingsView(): JSX.Element {
         signal: controller.signal,
       });
       window.clearTimeout(timer);
+      if (validateTokenRef.current !== token) return; // superseded by a newer Save
       if (res.ok) {
         setKeyCheck({ kind: 'ok' });
       } else if (res.status === 401) {
@@ -206,6 +221,7 @@ export function SettingsView(): JSX.Element {
       }
     } catch (err) {
       window.clearTimeout(timer);
+      if (validateTokenRef.current !== token) return; // superseded by a newer Save
       setKeyCheck({
         kind: 'fail',
         message:
@@ -454,6 +470,13 @@ export function SettingsView(): JSX.Element {
                     telemetryOptIn: settings.telemetryOptIn,
                   });
                   setDraftKey('');
+                  // Clean re-entry state: re-mask the field + drop stale verdicts
+                  // so the next key isn't typed into a revealed field beside a
+                  // prior account's "reachable"/"check failed" lines. (audit wja3dfl5t)
+                  setReveal(false);
+                  setKeyCheck({ kind: 'idle' });
+                  setTestState({ kind: 'idle' });
+                  setSavedAt(null);
                 }
               })();
             }}
@@ -471,7 +494,15 @@ export function SettingsView(): JSX.Element {
               <input
                 type={reveal ? 'text' : 'password'}
                 value={draftKey}
-                onChange={(e) => setDraftKey(e.target.value)}
+                onChange={(e) => {
+                  setDraftKey(e.target.value);
+                  // Editing invalidates a prior validation verdict (so the header
+                  // doesn't show "check failed" for a key that's since been
+                  // changed) AND any pending mode-switch key restore (so it can't
+                  // overwrite what the user just typed). (audit wja3dfl5t)
+                  setKeyCheck({ kind: 'idle' });
+                  keyRestoreTokenRef.current += 1;
+                }}
                 placeholder="ds_live_…"
                 className="form-input mono flex-1"
                 spellCheck={false}
