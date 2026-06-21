@@ -1279,12 +1279,24 @@ export function registerAgentSessionsRoutes(
   // or nothing has been reported yet.
   app.get<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id/page-state',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    // Control-auth path (b): the SEPARATE Simulator app has no account Bearer key,
+    // only a per-session gui_control_key — so this MUST accept it like GET /:id
+    // (was app.requireAuth → every poll from the standalone Simulator 401'd → the
+    // live URL never appeared). 'read' is the floor for the account path.
+    { preHandler: [controlKeyOrAccountAuth('read'), app.rateLimit('global')] },
     async (req) => {
-      const ctx = requireCtx(req);
       const rec = await sessions.get(req.params.id);
-      if (rec === null || rec.accountId !== ctx.account.id) {
+      if (rec === null) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      // Account path: enforce ownership. Control-key path: the key was already
+      // decrypt-matched against THIS `:id` session in the preHandler, so it skips
+      // the account-ownership check (same as GET /:id).
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (rec.accountId !== ctx.account.id) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
       }
       return { page_state: sessionPageStateStore?.get(req.params.id) ?? null };
     },
