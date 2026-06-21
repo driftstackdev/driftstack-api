@@ -318,9 +318,15 @@ try {
   // marker in the video frame (self-contained), plus the page-state read (dual).
   let tapNum = 0;
   for (const [x, y] of TAPS) {
+    // Pre-tap marker position — so a tap that DOESN'T register (leaving the
+    // marker where the previous tap put it) is detected as stale, not a false
+    // measurement.
+    const pre = await page.evaluate(() => window.__grabGreen());
     await publish({ type: 'tap', x, y });
     await sleep(1600);
     const green = await page.evaluate(() => window.__grabGreen());
+    const stale = green.found && pre.found && Math.hypot(green.vx - pre.vx, green.vy - pre.vy) < 6;
+    if (stale) green.found = false; // treat an unmoved marker as a missed tap
     tapNum += 1;
     if (tapNum === 1) {
       try {
@@ -349,6 +355,8 @@ try {
       const dy = green.vy - y;
       err = Math.round(Math.hypot(dx, dy));
       line = `landed (${green.vx},${green.vy}) err (${dx},${dy}) |${err}|px [green n=${green.count}]`;
+    } else if (stale) {
+      line = `MISSED (marker unmoved — tap not registered)`;
     } else {
       line = `NO GREEN [video ${green.w}x${green.h}]`;
     }
