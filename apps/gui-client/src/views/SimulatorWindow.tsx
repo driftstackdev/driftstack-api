@@ -26,6 +26,7 @@ import { useRecordings } from '../lib/recordings';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import {
   getAgentSession,
+  getAgentSessionPageState,
   setSessionMode,
   takeoverSession,
   handbackSession,
@@ -1331,6 +1332,37 @@ export function SimulatorWindow(): JSX.Element {
       }
     };
   }, [room]);
+
+  // Live URL via the page-state API (A3 W2730): the box reports pageState over the
+  // CONTROL PLANE (→ server sessionPageStateStore), NOT the LiveKit data channel —
+  // which is why the data-channel consumer above never populated it. The founder
+  // asked the API to expose the URL; this POLLS GET /v1/agent-sessions/:id/
+  // page-state (~2s) so the address bar shows the device's actual current URL
+  // (including the first page it opens + redirects). Best-effort + guarded; null
+  // until the box reports. BrowserBar won't clobber what the operator is typing.
+  useEffect(() => {
+    if (sessionId === '' || room === null || !browserMode) return;
+    let cancelled = false;
+    const tick = (): void => {
+      void getAgentSessionPageState(sessionId, controlAuth)
+        .then((ps) => {
+          if (cancelled || ps === null) return;
+          if (typeof ps.url === 'string' && ps.url !== '') setLiveUrl(ps.url);
+          const loading = ps.state === 'loading';
+          setPageLoading(loading);
+          if (!loading) clearLoadWatchdog();
+        })
+        .catch(() => {
+          /* best-effort poll — transient errors are non-fatal */
+        });
+    };
+    tick();
+    const handle = window.setInterval(tick, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(handle);
+    };
+  }, [sessionId, controlAuth, room, browserMode]);
 
   // iOS TAP cursor (founder 2026-06-17: "standard is full control + iOS TAP
   // cursor"): a short-lived ring at the tap point, so a click on the screen

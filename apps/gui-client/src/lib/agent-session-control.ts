@@ -149,6 +149,29 @@ export async function getAgentSession(
   return { mode: isMode(body.mode) ? body.mode : 'ai', pairKind: pairKindOf(body) };
 }
 
+/** The device's latest page-state (live URL + load state) for the browser-mode
+ *  address bar. Served by GET /v1/agent-sessions/:id/page-state, populated by the
+ *  fleet control plane's pageState frames (box → control plane → store). It is the
+ *  source for the live URL — the box reports pageState over the control plane, NOT
+ *  the LiveKit data channel (A3 W2730), so the GUI POLLS this. null when nothing
+ *  has been reported yet (or the control plane is absent). */
+export interface AgentPageState {
+  state: 'loading' | 'loaded' | 'errored';
+  url: string | null;
+  error: { kind?: string; message?: string } | null;
+}
+export async function getAgentSessionPageState(
+  id: string,
+  auth: ControlAuth = null,
+): Promise<AgentPageState | null> {
+  const body = (await authedFetch(
+    `/v1/agent-sessions/${encodeURIComponent(id)}/page-state`,
+    { method: 'GET' },
+    auth,
+  )) as { page_state?: AgentPageState | null };
+  return body.page_state ?? null;
+}
+
 /** POST a new control mode; returns the resulting mode + pair state. */
 export async function setSessionMode(
   id: string,
