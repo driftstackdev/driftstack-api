@@ -132,11 +132,31 @@ try {
   }
   console.log(`profile: ${prof.id} (${prof.archetype ?? 'archetype?'})`);
 
+  // 1b. resolve a working egress proxy (mirrors the GUI: a no-proxy session
+  // uses the operator default which can be down → "SOCKS5 CONNECT failed").
+  // --proxy <id|none>; default = the account's first proxy.
+  const proxyArg = getOpt('--proxy', '');
+  let proxyId;
+  if (proxyArg === 'none') {
+    proxyId = undefined;
+  } else if (proxyArg) {
+    proxyId = proxyArg;
+  } else {
+    const px = await fetch(`${BASE}/v1/account/me/proxies`, { headers: H }).then(jres);
+    const pl = Array.isArray(px.body?.data) ? px.body.data : [];
+    proxyId = pl[0]?.id;
+  }
+  console.log(`proxy: ${proxyId ?? '(none — operator default)'}`);
+
   // 2. create the agent session.
   const created = await fetch(`${BASE}/v1/agent-sessions`, {
     method: 'POST',
     headers: H,
-    body: JSON.stringify({ profile_id: prof.id, mode: 'manual' }),
+    body: JSON.stringify({
+      profile_id: prof.id,
+      mode: 'manual',
+      ...(proxyId ? { proxy_id: proxyId } : {}),
+    }),
   }).then(jres);
   sid = created.body?.id ?? null;
   const lk = created.body?.livekit;
@@ -238,23 +258,45 @@ try {
       await room.localParticipant.publishData(data, { reliable: true });
     }, event);
 
-  // 4. navigate to the probe page, wait until it's observable.
+  // Avg luminance of the current frame — sim-probe.html is near-black (#0b0c0f);
+  // the default landing (webkit.org) is bright. Lets us DETECT the page change
+  // from the video (page_state is unreliable here), so we know navigate landed.
+  await page.evaluate(() => {
+    window.__avgLuma = () => {
+      const v = document.getElementById('dsvid');
+      const w = v.videoWidth,
+        h = v.videoHeight;
+      if (!w) return -1;
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(v, 0, 0, w, h);
+      const d = ctx.getImageData(0, 0, w, h).data;
+      let s = 0;
+      for (let i = 0; i < d.length; i += 4) s += d[i] + d[i + 1] + d[i + 2];
+      return Math.round(s / (d.length / 4) / 3);
+    };
+  });
+
+  // 4. navigate to the probe page. The box starts on a default page (webkit.org)
+  // + the data channel may not be ready immediately, so RE-SEND navigate a few
+  // times after a settle, and confirm via the frame going dark (sim-probe.html).
   console.log(`navigate → ${PROBE_URL}`);
-  await publish({ type: 'navigate', url: PROBE_URL });
+  await sleep(6000); // let the box + data channel come up before the first nav
   let navOk = false;
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 40; i++) {
+    if (i % 5 === 0) await publish({ type: 'navigate', url: PROBE_URL });
     await sleep(1500);
-    const o = await observe(sid);
-    console.log(`  nav t+${((i + 1) * 1.5).toFixed(1)}s ${obsLine(o)}`);
-    const u = o.url ?? o.page_state?.url ?? '';
-    if (typeof u === 'string' && u.includes('sim-probe')) {
-      navOk = true;
+    const luma = await page.evaluate(() => window.__avgLuma());
+    if (i % 4 === 0 || luma >= 0)
+      console.log(`  nav t+${((i + 1) * 1.5).toFixed(1)}s luma=${luma}`);
+    if (luma >= 0 && luma < 40) {
+      navOk = true; // dark frame → sim-probe.html (or its error page) is showing
       break;
     }
   }
-  console.log(
-    navOk ? 'navigate observed ✓' : 'navigate NOT observed (page_state may be undeployed/slow)',
-  );
+  console.log(navOk ? 'navigate observed ✓ (dark frame = sim-probe)' : 'navigate NOT confirmed');
 
   // Log the device video resolution once — that's the aim-space for taps.
   const vdim = await page.evaluate(() => {
