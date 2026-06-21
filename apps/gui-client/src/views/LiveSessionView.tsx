@@ -225,6 +225,13 @@ export function LiveSessionView({
         // servers don't send it; treat absent as null.
         pageState: (st as { page_state?: PageStateInfo | null }).page_state ?? null,
       }));
+      // W623 — seed history (once) with the page the session is already on when the
+      // live view opens, so Back can return to the opening page after the first
+      // navigate (otherwise the first navigate lands at index 0 with nothing behind).
+      if (historyRef.current.length === 0 && typeof st.url === 'string' && st.url !== '') {
+        historyRef.current = [st.url];
+        historyIndexRef.current = 0;
+      }
     } catch (err) {
       // Session gone → stop polling here too, so an early meta poll (it runs
       // before the first frame on mount) doesn't keep firing on a dead session.
@@ -258,15 +265,15 @@ export function LiveSessionView({
   }, []);
 
   const navigateTo = useCallback(
-    async (rawUrl: string, opts: { recordHistory?: boolean } = {}): Promise<void> => {
-      if (!client) return;
+    async (rawUrl: string, opts: { recordHistory?: boolean } = {}): Promise<boolean> => {
+      if (!client) return false;
       const raw = rawUrl.trim();
-      if (raw.length === 0) return;
+      if (raw.length === 0) return false;
       // Omnibox (founder "just like our web browser"): a URL navigates, anything
       // else becomes a web search. null only for empty / a rejected dangerous
       // scheme — then do nothing (consistent with the empty-entry early return).
       const target = resolveAddressBarInput(raw);
-      if (target === null) return;
+      if (target === null) return false;
       setState((s) => ({ ...s, loading: true, error: null }));
       try {
         await client.sessions.navigate(sessionId, { url: target });
@@ -284,6 +291,11 @@ export function LiveSessionView({
         }
         await fetchSessionMeta();
         await fetchFrame();
+        // Clear loading EXPLICITLY: fetchFrame early-returns (a no-op) while paused
+        // or when a capture is already in flight, so it can't be relied on to clear
+        // the optimistic loading flag — otherwise navigate-while-paused spins forever.
+        setState((s) => ({ ...s, loading: false }));
+        return true;
       } catch (err) {
         const diag = diagnosticFetchError(err, settings.baseUrl);
         setState((s) => ({
@@ -291,25 +303,39 @@ export function LiveSessionView({
           loading: false,
           error: diag ?? (err instanceof Error ? err.message : 'Navigation failed.'),
         }));
+        return false;
       }
     },
     [client, sessionId, fetchSessionMeta, fetchFrame, settings.baseUrl, syncHistoryNav],
   );
 
+  // Back/forward move the index only AFTER the navigate succeeds — mutating it up
+  // front (then firing an async navigate that can reject on a flaky network) left
+  // the index desynced from the displayed page and permanently corrupted the stack.
   const goBack = useCallback((): void => {
-    if (historyIndexRef.current <= 0) return;
-    historyIndexRef.current -= 1;
-    syncHistoryNav();
-    const url = historyRef.current[historyIndexRef.current];
-    if (url !== undefined) void navigateTo(url, { recordHistory: false });
+    const target = historyIndexRef.current - 1;
+    if (target < 0) return;
+    const url = historyRef.current[target];
+    if (url === undefined) return;
+    void navigateTo(url, { recordHistory: false }).then((ok) => {
+      if (ok) {
+        historyIndexRef.current = target;
+        syncHistoryNav();
+      }
+    });
   }, [navigateTo, syncHistoryNav]);
 
   const goForward = useCallback((): void => {
-    if (historyIndexRef.current >= historyRef.current.length - 1) return;
-    historyIndexRef.current += 1;
-    syncHistoryNav();
-    const url = historyRef.current[historyIndexRef.current];
-    if (url !== undefined) void navigateTo(url, { recordHistory: false });
+    const target = historyIndexRef.current + 1;
+    if (target > historyRef.current.length - 1) return;
+    const url = historyRef.current[target];
+    if (url === undefined) return;
+    void navigateTo(url, { recordHistory: false }).then((ok) => {
+      if (ok) {
+        historyIndexRef.current = target;
+        syncHistoryNav();
+      }
+    });
   }, [navigateTo, syncHistoryNav]);
 
   // Mount: fetch session meta + start frame polling.
@@ -420,8 +446,17 @@ export function LiveSessionView({
     (e: React.WheelEvent<HTMLImageElement>): void => {
       if (!manualControlRef.current) return;
       e.preventDefault();
-      const dx = Math.round(e.deltaX);
-      const dy = Math.round(e.deltaY);
+      const img = e.currentTarget;
+      const rect = img.getBoundingClientRect();
+      const naturalW = img.naturalWidth;
+      const naturalH = img.naturalHeight;
+      if (naturalW === 0 || naturalH === 0 || rect.width === 0 || rect.height === 0) return;
+      // Normalize deltaMode (line/page → px), then scale display(CSS) px into device
+      // px with the SAME factor the tap path uses (handleImgClick) — otherwise a
+      // shrunk pane scrolls the device a different distance per notch than shown.
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? rect.height : 1;
+      const dx = Math.round(((e.deltaX * unit) / rect.width) * naturalW);
+      const dy = Math.round(((e.deltaY * unit) / rect.height) * naturalH);
       if (dx === 0 && dy === 0) return;
       void interact({ kind: 'scroll', delta_x: dx, delta_y: dy });
     },
@@ -614,9 +649,13 @@ function Header(props: HeaderProps): JSX.Element {
   // page actually changes underneath.
   const [draftUrl, setDraftUrl] = useState(props.currentUrl ?? '');
   const lastSyncedUrl = useRef(props.currentUrl);
+  // Don't resync the draft while the user is editing — the ~5s meta poll updating
+  // currentUrl (a redirect/SPA nav underneath) would otherwise overwrite their
+  // in-progress keystrokes mid-type. On blur, revert to the live URL (browser-like).
+  const inputFocusedRef = useRef(false);
   if (props.currentUrl !== lastSyncedUrl.current) {
     lastSyncedUrl.current = props.currentUrl;
-    setDraftUrl(props.currentUrl ?? '');
+    if (!inputFocusedRef.current) setDraftUrl(props.currentUrl ?? '');
   }
   return (
     <header className="flex items-center justify-between gap-3">
@@ -673,6 +712,14 @@ function Header(props: HeaderProps): JSX.Element {
             type="text"
             value={draftUrl}
             onChange={(e) => setDraftUrl(e.target.value)}
+            onFocus={() => {
+              inputFocusedRef.current = true;
+            }}
+            onBlur={() => {
+              inputFocusedRef.current = false;
+              // Abandoned edit → revert to the live URL (matches a real omnibox).
+              setDraftUrl(props.currentUrl ?? '');
+            }}
             placeholder="Search or enter address"
             spellCheck={false}
             autoComplete="off"

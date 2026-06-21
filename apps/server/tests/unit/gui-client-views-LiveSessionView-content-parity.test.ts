@@ -235,18 +235,30 @@ describe('W485.B apps/gui-client/src/views/LiveSessionView.tsx content parity', 
     }
   });
 
-  it('W623 GUI-side back/forward history: navigateTo records AFTER successful navigate (failed navigations excluded), new navigation truncates forward entries, back/forward move the index with recordHistory:false, buttons disabled at the stack edges — pinned because the driver has no history route (the stack is the only history)', () => {
+  it('W623 GUI-side back/forward history: navigateTo records AFTER successful navigate (failed navigations excluded), new navigation truncates forward entries, back/forward commit the index only on a SUCCESSFUL navigate (no desync on failure), the opening page is seeded into history, buttons disabled at the stack edges — pinned because the driver has no history route (the stack is the only history)', () => {
     expect(body).toMatch(/const historyRef = useRef<string\[\]>\(\[\]\);/);
     expect(body).toMatch(/const historyIndexRef = useRef\(-1\);/);
     expect(body).toMatch(
       /const h = historyRef\.current\.slice\(0, historyIndexRef\.current \+ 1\);/,
     );
     expect(body).toMatch(/if \(opts\.recordHistory !== false\) \{/);
-    expect(body).toMatch(/void navigateTo\(url, \{ recordHistory: false \}\);/);
+    // Back/forward commit the index only after the navigate resolves true.
+    expect(body).toMatch(/void navigateTo\(url, \{ recordHistory: false \}\)\.then\(\(ok\) => \{/);
+    // The opening page is seeded into history so Back can return to it.
+    expect(body).toMatch(/historyRef\.current = \[st\.url\];/);
     expect(body).toMatch(/disabled=\{!props\.canBack\}/);
     expect(body).toMatch(/disabled=\{!props\.canForward\}/);
     expect(body).toMatch(/aria-label="Back"/);
     expect(body).toMatch(/aria-label="Forward"/);
+  });
+
+  it('W2746 session-viewer robustness (audit fixes): the address draft is not clobbered while the input is focused, wheel deltas are scaled into device px (deltaMode-normalized) like the tap path, and navigate clears loading explicitly so navigate-while-paused does not spin forever', () => {
+    // #2 — focus guard on the draft resync.
+    expect(body).toMatch(/const inputFocusedRef = useRef\(false\);/);
+    expect(body).toMatch(/if \(!inputFocusedRef\.current\) setDraftUrl/);
+    // #3 — wheel deltas normalized + scaled to device px (not raw display px).
+    expect(body).toMatch(/e\.deltaMode === 1 \? 16 : e\.deltaMode === 2/);
+    expect(body).toMatch(/\(\(e\.deltaY \* unit\) \/ rect\.height\) \* naturalH/);
   });
 
   it('stops polling on a gone session (410/404): isSessionGone gates a clearInterval + ended terminal panel, instead of hammering capture/state — founder 2026-06-18 logs flooded with "410 Gone" for minutes after a session was destroyed', () => {
