@@ -830,10 +830,10 @@ export class CryptoOrdersService {
         productMap[o.price_currency] = (productMap[o.price_currency] ?? 0) + o.price_cents;
         paidRevenueByProduct[o.product] = productMap;
         paidCountByProduct[o.product] = (paidCountByProduct[o.product] ?? 0) + 1;
-        // V-666.W — updated_at on a paid order is the moment the IPN
-        // applied the paid transition; created_at is order mint. The
-        // difference is the customer's "time-to-pay" for that order.
-        const elapsed = o.updated_at - o.created_at;
+        // V-666.W — time-to-pay = paid-transition moment − order mint. Source
+        // the paid moment from the event log (paidAtMs), NOT updated_at: a
+        // post-payment note edit bumps updated_at and would inflate the KPI.
+        const elapsed = paidAtMs(o) - o.created_at;
         if (elapsed >= 0) {
           paidElapsedSumMs += elapsed;
           paidSample += 1;
@@ -948,7 +948,7 @@ export class CryptoOrdersService {
       price_cents: order.price_cents,
       price_currency: order.price_currency,
       payment_id: order.payment_id,
-      paid_at: order.status === 'paid' ? new Date(order.updated_at).toISOString() : null,
+      paid_at: order.status === 'paid' ? new Date(paidAtMs(order)).toISOString() : null,
       created_at: new Date(order.created_at).toISOString(),
     };
   }
@@ -1175,6 +1175,15 @@ export class CryptoOrdersService {
  * Allow transitions that move the order forward (towards a terminal
  * state). Reject reverse transitions.
  */
+/** The moment an order transitioned to paid — sourced from the append-only
+ *  event log, NOT `updated_at`. `updated_at` is bumped by post-payment note
+ *  edits (setInternalNote / updateCustomerNote have no status guard), which
+ *  would drift the customer receipt's paid_at + inflate the time-to-pay KPI.
+ *  Falls back to updated_at for legacy rows with no recorded paid event. */
+function paidAtMs(order: CryptoOrder): number {
+  return order.events.find((e) => e.status === 'paid')?.at ?? order.updated_at;
+}
+
 function isTerminalForward(current: CryptoOrderStatus, next: CryptoOrderStatus): boolean {
   // Same state — idempotent no-op, but caller wants the row touched
   // (updated_at refresh).

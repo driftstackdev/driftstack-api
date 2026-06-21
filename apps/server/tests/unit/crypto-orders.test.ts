@@ -746,6 +746,20 @@ describe('V-666.M getReceipt', () => {
     expect(r?.issued_at).toBe(new Date(9_000).toISOString());
   });
 
+  it('paid_at comes from the paid event, not updated_at — a post-payment note edit must not move it (audit fix)', async () => {
+    const { svc } = await seedRcpt({ status: 'paid' }); // paid transition at now=6_000
+    // An ops note edit AFTER payment bumps the order's updated_at (seedRcpt left now=7_000)…
+    await svc.setInternalNote({ order_id: 'ord_rcpt', internal_note: 'reviewed by ops' });
+    const r = await svc.getReceipt({
+      order_id: 'ord_rcpt',
+      account_id: 'acc_owner',
+      issued_at: 9_000,
+    });
+    // …but the customer receipt's paid_at stays the real paid moment (6_000),
+    // sourced from the append-only event log, not the bumped updated_at.
+    expect(r?.paid_at).toBe(new Date(6_000).toISOString());
+  });
+
   it('returns paid_at=null for a non-paid order (order-summary mode)', async () => {
     const { svc } = await seedRcpt();
     const r = await svc.getReceipt({ order_id: 'ord_rcpt', account_id: 'acc_owner' });
