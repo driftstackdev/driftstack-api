@@ -3,7 +3,7 @@
 // split (drag the frame to move the window; taps on the screen reach the
 // device). Mocks the livekit wrapper so no real WebRTC spins up in jsdom.
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 
 vi.mock('../../src/lib/livekit', () => ({
@@ -22,6 +22,30 @@ const { SimulatorWindow } = await import('../../src/views/SimulatorWindow');
 const { RecordingsProvider } = await import('../../src/lib/recordings');
 
 describe('SimulatorWindow — floating iPhone', () => {
+  // The controls panel auto-opens on launch UNTIL the user has navigated once
+  // (discoverability of the Address bar — A3 wpiyo8v6x). jsdom in this project
+  // ships a non-functional localStorage (its methods throw), so install a
+  // working Map-backed one. Most tests below assert the steady-state collapsed
+  // chrome, so default the flag to "navigated"; the discoverability test
+  // overrides it to the fresh-user open path.
+  const lsStore = new Map<string, string>();
+  beforeEach(() => {
+    lsStore.clear();
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string): string | null => lsStore.get(k) ?? null,
+      setItem: (k: string, v: string): void => {
+        lsStore.set(k, v);
+      },
+      removeItem: (k: string): void => {
+        lsStore.delete(k);
+      },
+      clear: (): void => lsStore.clear(),
+      key: (): string | null => null,
+      length: 0,
+    });
+    localStorage.setItem('ds-sim-navigated', '1');
+  });
+
   it('renders the device frame + screen when ws/token are present in the query', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok');
     const { container } = render(
@@ -104,6 +128,24 @@ describe('SimulatorWindow — floating iPhone', () => {
     const shell = container.querySelector('[data-component="simulator-shell"]');
     expect(shell?.firstElementChild).toBe(wrap);
     expect(wrap?.querySelector('[data-component="simulator-toolbar"]')).toBe(toolbar);
+  });
+
+  it('discoverability: the controls panel auto-opens on launch UNTIL the user navigates, with the Address bar as its first control (A3 wpiyo8v6x)', () => {
+    // A fresh user (never navigated) — the panel should advertise itself.
+    localStorage.removeItem('ds-sim-navigated');
+    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    const wrap = container.querySelector('[data-component="simulator-toolbar-wrap"]');
+    const panel = wrap?.querySelector('[data-component="simulator-controls"]');
+    // Open by default so the GUI Address bar is found (the founder kept tapping
+    // the non-interactive rendered Safari pill instead).
+    expect(panel).not.toBeNull();
+    // The Address bar is the FIRST control in the panel (most prominent).
+    expect(panel?.firstElementChild?.getAttribute('data-component')).toBe('simulator-address');
   });
 
   it('the expand chevron reveals the control panel — the Mode segmented control (Agent/Pair/Manual) + rotate / pin / info', () => {

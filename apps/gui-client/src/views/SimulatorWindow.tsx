@@ -416,6 +416,9 @@ export function DeviceToolbar({
           data-component="simulator-controls"
           className="absolute right-2 top-full z-30 mt-1 w-56 overflow-hidden rounded-xl border border-white/[0.12] bg-[#1d1e24] py-1 shadow-[0_8px_16px_rgba(0,0,0,0.3),0_18px_40px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
         >
+          {/* Address bar FIRST — it's the control the founder looks for (the
+              rendered Safari URL pill is non-interactive fork chrome). */}
+          <NavigateAddressBar canNavigate={canNavigate} onNavigate={onNavigate} />
           <SessionControlSection
             mode={mode}
             pairKind={pairKind}
@@ -429,7 +432,6 @@ export function DeviceToolbar({
             onComposerChange={onComposerChange}
             onSendMessage={onSendMessage}
           />
-          <NavigateAddressBar canNavigate={canNavigate} onNavigate={onNavigate} />
           <LabeledControl
             label={landscape ? 'Rotate to portrait' : 'Rotate to landscape'}
             active={landscape}
@@ -1014,8 +1016,23 @@ export function SimulatorWindow(): JSX.Element {
   // Cockpit info overlay (demo-concepts arc): session facts at a glance.
   const [infoOpen, setInfoOpen] = useState(false);
   // Expandable control panel — collapsed by default so the window is phone-only
-  // (founder 2026-06-17); the chevron reveals the labelled control rows.
-  const [toolbarExpanded, setToolbarExpanded] = useState(false);
+  // (founder 2026-06-17); the chevron reveals the labelled control rows. EXCEPT
+  // until the user has navigated at least once: A3's tap-path investigation
+  // (wpiyo8v6x, 2026-06-21) found the founder kept tapping the RENDERED Safari
+  // pill (non-interactive fork chrome) because the GUI's own Address bar — which
+  // lives in this panel — wasn't discoverable. So we open the panel on launch
+  // (its first item is the Address bar) until a successful navigate sets the
+  // flag, after which it returns to collapsed-by-default. Self-resolving: the
+  // controls advertise themselves exactly until they're used. The panel is an
+  // absolute overlay (no effect on the fixed TOOLBAR_H window-sizing math) and
+  // auto-dismisses on the first tap, so it never lingers over the device.
+  const [toolbarExpanded, setToolbarExpanded] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('ds-sim-navigated') !== '1';
+    } catch {
+      return false;
+    }
+  });
 
   // iOS TAP cursor (founder 2026-06-17: "standard is full control + iOS TAP
   // cursor"): a short-lived ring at the tap point, so a click on the screen
@@ -1270,6 +1287,13 @@ export function SimulatorWindow(): JSX.Element {
       setNotice('Enter a valid http(s) URL');
       window.setTimeout(() => setNotice(null), 3000);
       return;
+    }
+    // First successful navigate: stop auto-opening the controls panel on launch
+    // (the Address bar has been discovered + used). See toolbarExpanded init.
+    try {
+      localStorage.setItem('ds-sim-navigated', '1');
+    } catch {
+      /* private mode / storage disabled — harmless, panel just keeps advertising */
     }
     void sendNavigate(room, url).catch(() => {
       setNotice('Navigation could not be sent');

@@ -143,13 +143,20 @@ export function mouseButton(raw: number): 0 | 1 | 2 | null {
  *  jiggle emits no move (touchEnd synthesizes the click), a real drag (>6px)
  *  scrolls exactly as before.
  *
- *  6 video-px — NOT 24: there is NO ÷devicePixelRatio here, the video track is
- *  the 402×874 CSS-POINT profile (not 1206×2622), so video→CSS is ~1.0×/~0.8×.
- *  6 sits safely under the fork's 10px slop while real drags still scroll; 24
- *  would open a 10–24px dead band where a slow drag does neither. Do NOT change
- *  the fork's tapSlop (fork-side, fingerprint-bearing) — this deadzone sits just
- *  under it. */
-const MOVE_DEADZONE = 6;
+ *  14 video-px (was 6): A3's deep tap-path investigation (wpiyo8v6x, 2026-06-21)
+ *  found the founder STILL hit "tap scrolls" at 6 — a real mouse/trackpad click
+ *  easily drifts >6 video-px between down and up, so the move leaked through and
+ *  the fork scrolled. There is NO ÷devicePixelRatio here (the video track is the
+ *  402×874 CSS-POINT profile, not 1206×2622, so video→CSS is ~1.0×/~0.8×), so to
+ *  prevent a drifty click from scrolling the GUI deadzone must sit ABOVE the
+ *  fork's 10px tapSlop — otherwise the move that crosses our deadzone also
+ *  crosses the fork's slop and scrolls. 14 clears typical click-drift with a 4px
+ *  margin over the fork slop; the cost is only that a deliberate <14px micro-
+ *  scroll registers as a tap (a tiny movement — far less jarring than a tap that
+ *  scrolls the page away). A genuine scroll (>14px) still scrolls exactly as
+ *  before. Do NOT change the fork's tapSlop (fork-side, fingerprint-bearing) —
+ *  this deadzone sits just above it. */
+const MOVE_DEADZONE = 14;
 
 /** Squared Euclidean distance between two points — squared so the deadzone
  *  comparison avoids a sqrt per move event (we compare against MOVE_DEADZONE²). */
