@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>ready</title>
+    <!--
+      INTERNAL test harness target (Agent-2, founder 2026-06-21) — NOT a customer
+      page. Lets the autonomous sim-behavior probe (task #43) measure tap-LANDING
+      accuracy + scroll behavior WITHOUT a human: every tap/scroll encodes its
+      result into observable session state (document.title AND location.hash) so
+      the probe can read it back via getAgentSession/getState and compare to where
+      it aimed. Reachable at https://driftstack.dev/sim-probe.html.
+
+      Encoding (whichever the box reports — title or url#hash):
+        - on load:            title="ready"
+        - tap cell (r,c):     title="tap:r,c"   + location.hash="#tap=r,c"
+        - scroll settled:     title="scroll:<y>" + location.hash="#scroll=<y>"
+      The grid is COLS×ROWS of full-bleed cells over a tall body so both tapping
+      (which cell) and scrolling (how far) are exercised + measurable.
+    -->
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        width: 100%;
+      }
+      body {
+        font-family: -apple-system, system-ui, sans-serif;
+        background: #0b0c0f;
+        color: #e6e7ea;
+        /* Tall so the page scrolls: ROWS cells tall, each ~14vh → ~ multiple screens. */
+      }
+      #grid {
+        display: grid;
+        grid-template-columns: repeat(var(--cols), 1fr);
+        gap: 2px;
+        padding: 2px;
+      }
+      .cell {
+        height: 14vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 15px;
+        font-variant-numeric: tabular-nums;
+        background: #15171d;
+        border: 1px solid #23262e;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-tap-highlight-color: rgba(80, 160, 255, 0.35);
+      }
+      .cell:active {
+        background: #1f6feb;
+        color: #fff;
+      }
+      #hud {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 6px 10px;
+        font-size: 13px;
+        font-weight: 600;
+        background: rgba(8, 9, 11, 0.9);
+        border-bottom: 1px solid #23262e;
+        z-index: 10;
+        backdrop-filter: blur(4px);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="hud">probe: ready</div>
+    <div id="grid"></div>
+    <script>
+      (function () {
+        var COLS = 4;
+        var ROWS = 24; // tall → scrollable
+        var grid = document.getElementById('grid');
+        var hud = document.getElementById('hud');
+        grid.style.setProperty('--cols', String(COLS));
+
+        function report(kind, value) {
+          // Encode in BOTH title and hash so the probe can read whichever the
+          // box surfaces via getState (title) or url (hash).
+          document.title = kind + ':' + value;
+          try {
+            location.hash = kind + '=' + value;
+          } catch (e) {}
+          hud.textContent = 'probe: ' + kind + ' ' + value;
+        }
+
+        for (var r = 0; r < ROWS; r++) {
+          for (var c = 0; c < COLS; c++) {
+            var cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.textContent = r + ',' + c;
+            cell.dataset.rc = r + ',' + c;
+            // pointerup is the most reliable "tap landed here" signal across
+            // mouse/touch; click also fires for keyboard/synthetic.
+            cell.addEventListener('pointerup', onCellHit);
+            cell.addEventListener('click', onCellHit);
+            grid.appendChild(cell);
+          }
+        }
+        function onCellHit(e) {
+          var rc = (e.currentTarget && e.currentTarget.dataset.rc) || '?';
+          report('tap', rc);
+        }
+
+        // Scroll: report the settled scrollY (debounced) so the probe can verify
+        // a drag actually scrolled (and by how much) vs a tap that shouldn't.
+        var scrollTimer = null;
+        window.addEventListener(
+          'scroll',
+          function () {
+            if (scrollTimer) clearTimeout(scrollTimer);
+            scrollTimer = setTimeout(function () {
+              report('scroll', String(Math.round(window.scrollY)));
+            }, 120);
+          },
+          { passive: true },
+        );
+
+        report('boot', '1');
+      })();
+    </script>
+  </body>
+</html>
