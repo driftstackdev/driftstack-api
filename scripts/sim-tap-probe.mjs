@@ -212,6 +212,16 @@ try {
           /* ignore */
         }
       });
+      // Capture inbound DataChannel messages (A3's HarnessOutbound page_state etc.)
+      // so we can VERIFY the exact live-URL wire shape the GUI consumer must parse.
+      window.__dsData = [];
+      room.on(LK.RoomEvent.DataReceived, (payload) => {
+        try {
+          window.__dsData.push(new TextDecoder().decode(payload));
+        } catch (e) {
+          /* ignore */
+        }
+      });
       // Capture the latest frame + find the green landing marker's centroid (the
       // sim-probe page draws a bright-green dot at the tapped point). Returns the
       // centroid in VIDEO pixels so we can compare to the aimed video-px.
@@ -376,6 +386,20 @@ try {
     console.log(
       `tap (${x},${y}) → ${line}${landed ? ' | page-state ' + landed + ' [' + src + ']' : ''}`,
     );
+  }
+
+  // 5b. dump inbound DataChannel messages (A3 page_state etc.) — verify the exact
+  // live-URL wire shape the GUI consumer (SimulatorWindow page_state parser) must
+  // match, instead of guessing it.
+  try {
+    const data = await page.evaluate(() => window.__dsData || []);
+    const pageStates = data.filter((d) => /url|state|page/i.test(d));
+    console.log(
+      `\n=== DataChannel inbound: ${data.length} msgs, ${pageStates.length} page_state-like ===`,
+    );
+    for (const d of pageStates.slice(0, 8)) console.log('  ' + d.slice(0, 300));
+  } catch {
+    /* ignore */
   }
 
   // 6. summary.
