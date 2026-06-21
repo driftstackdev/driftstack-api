@@ -915,7 +915,7 @@ function BrowserBar({
           onChange={(e) => setDraft(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          placeholder={canNavigate ? 'Search or enter address' : 'connecting…'}
+          placeholder={canNavigate ? 'Enter a website address' : 'connecting…'}
           title={
             canNavigate
               ? undefined
@@ -1215,6 +1215,15 @@ export function SimulatorWindow(): JSX.Element {
   // Device aspect (videoW / videoH) from the live stream — drives window sizing so
   // the frame fits ANY archetype. Seeded to iphone17 until the stream reports.
   const deviceAspectRef = useRef(402 / 874);
+  // Landscape ref kept current every render so the window-sizing closures (fitWindow
+  // + the onResized listener) use the ROTATED aspect — else rotate snaps back to a
+  // portrait sliver (audit B2/B3). Declared here (before fitWindow) so those
+  // closures can read it.
+  const landscapeRef = useRef(false);
+  landscapeRef.current = landscape;
+  // The window-sizing aspect: inverted when rotated to landscape.
+  const sizingAspect = (): number =>
+    landscapeRef.current ? 1 / deviceAspectRef.current : deviceAspectRef.current;
   // Size the window so the device video FILLS the frame width AND the whole window
   // FITS the screen height. The iPhone's tall aspect makes a width-driven height
   // overflow a laptop screen → the OS clamps the height → the device letterboxes
@@ -1228,7 +1237,7 @@ export function SimulatorWindow(): JSX.Element {
       const factor = await win.scaleFactor();
       const size = await win.innerSize();
       const curWidth = Math.round(size.width / factor);
-      const aspect = deviceAspectRef.current; // videoW / videoH
+      const aspect = sizingAspect(); // videoW / videoH (inverted in landscape)
       const chrome = TOOLBAR_H + (browserModeOn ? BROWSER_BAR_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
       // The device screen-area must match the video aspect or the video
       // object-contains with side gaps. Height for a width = chrome + (w-bezel)/aspect.
@@ -1309,7 +1318,7 @@ export function SimulatorWindow(): JSX.Element {
                 const size = await win.innerSize();
                 const h = Math.round(size.height / factor);
                 const w = Math.round(size.width / factor);
-                const aspect = deviceAspectRef.current;
+                const aspect = sizingAspect();
                 const chrome =
                   TOOLBAR_H + (browserMode ? BROWSER_BAR_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
                 const needW = Math.round((h - chrome) * aspect + BEZEL_PAD);
@@ -1715,11 +1724,15 @@ export function SimulatorWindow(): JSX.Element {
     setPinned(next);
     void withCurrentWindow((w) => w.setAlwaysOnTop(next));
   };
-  const landscapeRef = useRef(false);
-  landscapeRef.current = landscape;
   // Resize-to-archetype runs ONCE per window (first real video dimensions) so
   // it never fights the user's manual resize or the rotate toggle.
   const sizedToStreamRef = useRef(false);
+  // …but a DIFFERENT session streaming into the SAME window (in-place relaunch)
+  // must re-fit: clear the once-guard when the LiveKit join info changes, else a
+  // different-aspect archetype keeps the prior window shape + letterboxes (audit S5).
+  useEffect(() => {
+    sizedToStreamRef.current = false;
+  }, [info?.ws_url, info?.token]);
 
   // The stream reported its REAL pixel dimensions (the archetype's screen
   // resolution): resize the window so the frame matches the device's true
