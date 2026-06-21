@@ -699,7 +699,10 @@ export function ProfilesView({
       void saveProfileMeta(
         id,
         { note },
-        state.profiles.map((pr) => pr.id),
+        // Only pass the prune list in Personal — in a team workspace state.profiles
+        // is the OWNER's set, so pruning against it would WIPE the member's own
+        // personal org metadata (same guard as every other save path).
+        activeWorkspace === null ? state.profiles.map((pr) => pr.id) : undefined,
       ).then(setProfilesMeta);
       if (client) {
         void client.profiles
@@ -707,7 +710,7 @@ export function ProfilesView({
           .catch(() => undefined);
       }
     },
-    [client, state.profiles],
+    [client, state.profiles, activeWorkspace],
   );
 
   // Switching account/workspace must NOT carry the prior account's agent-session
@@ -1172,6 +1175,24 @@ export function ProfilesView({
     agentSessionsLoaded,
   ]);
 
+  // Keep the selection within the VISIBLE set. Bulk actions (incl. destructive
+  // Delete + billed Launch) operate on selectedIds, so a selection made before a
+  // filter/search/workspace change must not silently act on now-hidden profiles.
+  // Prune ids that left filteredProfiles → the bulk-bar count and every bulk
+  // action cover exactly what's on screen (audit wn1ghalx1).
+  useEffect(() => {
+    const visible = new Set(filteredProfiles.map((p) => p.id));
+    setSelectedIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (visible.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [filteredProfiles]);
+
   // Are any of the composing filters narrowing the grid? Drives the "clear
   // filters" affordance on the empty state (folder + tag + search + status all
   // AND together, so it's easy to filter to zero and not see why).
@@ -1393,6 +1414,11 @@ export function ProfilesView({
             ...s,
             error: `Couldn't open the simulator window: ${sim.reason ?? 'unknown'}. If one is already open for this session, close it and relaunch.`,
           }));
+        } else {
+          // A live LiveKit launch succeeded → clear any stale polling/mock-driver
+          // banner from an earlier fallback launch (it would otherwise stick for
+          // the rest of the app session even though we're now streaming live).
+          setUsedPollingFallback(false);
         }
       } else {
         // W611/W613 — no livekit block (deployment without LiveKit, e.g. a
@@ -2772,7 +2798,9 @@ export function ProfilesView({
             void saveProfileMeta(
               editTarget.id,
               updatedMeta,
-              state.profiles.map((pr) => pr.id),
+              // Personal only — in a team workspace state.profiles is the OWNER's
+              // set; pruning against it would wipe the member's own org metadata.
+              activeWorkspace === null ? state.profiles.map((pr) => pr.id) : undefined,
             ).then(setProfilesMeta);
             setEditTarget(null);
             // refresh(false) reloads bindings → the card/table re-render via
