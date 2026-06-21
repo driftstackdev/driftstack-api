@@ -104,11 +104,14 @@ export function registerAgentSessionsLivekitTokenRoute(
         throw new ForbiddenError(`Cannot mint LiveKit token for ${session.status} agent session.`);
       }
 
-      // v1.0: pick any non-revoked Mac with LiveKit credentials.
-      // Per-session Mac assignment is a follow-up slice; once
-      // agent_sessions tracks the assigned Mac, this becomes a
-      // direct fleetNodesRepo.getDetail(session.assignedMacNodeId).
-      const mac = await fleetNodesRepo.findAnyWithLivekit();
+      // Region-aware Mac selection — parity with session-create
+      // (findNearestWithLivekit(accountRegion)). Prefer a node in the customer's
+      // region so a token RE-MINT doesn't pin e.g. an EU viewer to a far (US) box
+      // and add a needless transatlantic media hop. Falls back to any node when
+      // there's no regional match (single-region fleet → unchanged).
+      // Per-session Mac assignment is a follow-up slice; once agent_sessions tracks
+      // the assigned Mac this becomes getDetail(session.assignedMacNodeId).
+      const mac = await fleetNodesRepo.findNearestWithLivekit(ctx.account.region);
       if (mac === null || mac.livekit === null) {
         bump('no_mac');
         throw new FeatureUnavailableError(
