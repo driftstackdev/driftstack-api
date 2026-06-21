@@ -241,6 +241,8 @@ export function DeviceToolbar({
   onSendMessage,
   canNavigate,
   onNavigate,
+  browserMode,
+  onToggleBrowserMode,
   running,
   onEndSession,
 }: {
@@ -272,6 +274,11 @@ export function DeviceToolbar({
   canNavigate: boolean;
   /** Submit an address-bar URL → the data-channel navigate. */
   onNavigate: (url: string) => void;
+  /** Browser mode (founder 2026-06-21): toolbar center becomes a native address
+   *  field instead of the device identity, so URL control doesn't depend on the
+   *  un-tappable rendered iOS chrome. */
+  browserMode: boolean;
+  onToggleBrowserMode: () => void;
   /** True when a live agent session is bound to this window — drives the running
    *  indicator + enables the explicit End-session control (founder Track A). */
   running: boolean;
@@ -282,6 +289,8 @@ export function DeviceToolbar({
   // Dismiss the expanded control panel on an outside pointer-down or Escape, so
   // it doesn't linger over the screen after you've picked (or skipped) a control.
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  // Browser-mode address field draft (local; navigate fires on Enter/submit).
+  const [browserUrl, setBrowserUrl] = useState('');
   useEffect(() => {
     if (!expanded) return;
     const onPointerDown = (e: PointerEvent): void => {
@@ -334,20 +343,76 @@ export function DeviceToolbar({
             className="h-3 w-3 rounded-full bg-[#febc2e] shadow-[inset_0_0.5px_0_rgba(255,255,255,0.4)] ring-1 ring-black/20 transition hover:brightness-110"
           />
         </div>
-        {/* Center — Drift mark + identity: the profile this phone runs as
-            (primary) and the device (muted). Profile-less → device only. */}
-        <div
-          data-tauri-drag-region
-          className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5"
-        >
-          <DriftMark />
-          <span className="max-w-[140px] truncate text-[11px] font-semibold tracking-tight text-white/85">
-            {profileName !== '' ? profileName : deviceName}
-          </span>
-          {profileName !== '' && (
-            <span className="text-[11px] tracking-tight text-white/45">· {deviceName}</span>
-          )}
-        </div>
+        {/* Center — Browser mode: a native address pill (the GUI's real URL
+            control, since the rendered iOS pill is un-tappable). Otherwise the
+            Drift mark + identity (profile primary, device muted). */}
+        {browserMode ? (
+          <form
+            data-tauri-drag-region="false"
+            data-no-drag
+            data-component="simulator-address-bar"
+            className="mx-2 flex min-w-0 flex-1 items-center gap-1.5 rounded-full bg-black/35 px-2.5 py-[3px] ring-1 ring-white/10 transition focus-within:bg-black/50 focus-within:ring-white/25"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (canNavigate && browserUrl.trim() !== '') onNavigate(browserUrl);
+            }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="11"
+              height="11"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              className="shrink-0 text-white/40"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
+            </svg>
+            <input
+              type="text"
+              value={browserUrl}
+              disabled={!canNavigate}
+              onChange={(e) => setBrowserUrl(e.target.value)}
+              placeholder={canNavigate ? 'Search or enter address' : 'connecting…'}
+              title={
+                canNavigate
+                  ? undefined
+                  : 'Connecting to the device — the address bar unlocks once it is live'
+              }
+              spellCheck={false}
+              autoComplete="off"
+              aria-label="Address bar"
+              className="min-w-0 flex-1 bg-transparent text-center text-[11px] leading-none text-white/90 placeholder:text-white/35 focus:text-left focus:outline-none disabled:opacity-50"
+            />
+            {browserUrl.trim() !== '' && canNavigate && (
+              <button
+                type="submit"
+                aria-label="Go to URL"
+                title="Go"
+                className="shrink-0 rounded-full px-1 text-[11px] leading-none text-accent transition hover:text-ink-primary"
+              >
+                ⏎
+              </button>
+            )}
+          </form>
+        ) : (
+          <div
+            data-tauri-drag-region
+            className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5"
+          >
+            <DriftMark />
+            <span className="max-w-[140px] truncate text-[11px] font-semibold tracking-tight text-white/85">
+              {profileName !== '' ? profileName : deviceName}
+            </span>
+            {profileName !== '' && (
+              <span className="text-[11px] tracking-tight text-white/45">· {deviceName}</span>
+            )}
+          </div>
+        )}
         {/* Right — quick Record + the expand chevron. The window-controls
             (rotate / pin / info) live in the expandable panel below so the
             default chrome stays minimal (founder 2026-06-17: "phone showing
@@ -417,8 +482,10 @@ export function DeviceToolbar({
           className="absolute right-2 top-full z-30 mt-1 w-56 overflow-hidden rounded-xl border border-white/[0.12] bg-[#1d1e24] py-1 shadow-[0_8px_16px_rgba(0,0,0,0.3),0_18px_40px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
         >
           {/* Address bar FIRST — it's the control the founder looks for (the
-              rendered Safari URL pill is non-interactive fork chrome). */}
-          <NavigateAddressBar canNavigate={canNavigate} onNavigate={onNavigate} />
+              rendered Safari URL pill is non-interactive fork chrome). In browser
+              mode the toolbar already hosts the address field, so skip it here to
+              avoid two URL bars. */}
+          {!browserMode && <NavigateAddressBar canNavigate={canNavigate} onNavigate={onNavigate} />}
           <SessionControlSection
             mode={mode}
             pairKind={pairKind}
@@ -431,6 +498,31 @@ export function DeviceToolbar({
             onHandback={onHandback}
             onComposerChange={onComposerChange}
             onSendMessage={onSendMessage}
+          />
+          <LabeledControl
+            label={browserMode ? 'Browser mode: on' : 'Browser mode'}
+            hint={
+              browserMode
+                ? 'URL bar lives in the toolbar'
+                : 'Type URLs in the toolbar, not the phone'
+            }
+            active={browserMode}
+            onClick={onToggleBrowserMode}
+            glyph={
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18" />
+              </svg>
+            }
           />
           <LabeledControl
             label={landscape ? 'Rotate to portrait' : 'Rotate to landscape'}
@@ -1034,6 +1126,32 @@ export function SimulatorWindow(): JSX.Element {
     }
   });
 
+  // Browser mode (founder 2026-06-21, greenlit) — a native GUI URL bar in the
+  // toolbar instead of relying on the rendered iOS-Safari chrome (which the page
+  // tap-path can't reach). Persisted per-install. When on, the toolbar center is
+  // an editable address field (Enter → navigate) rather than the device identity;
+  // fingerprint-neutral (operator-view only). Phase 1; tabs + A3 content-only
+  // video (drops the now-redundant rendered bar) follow. See
+  // docs/internal/gui-browser-chrome-mode-plan-2026-06-21.md.
+  const [browserMode, setBrowserMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('ds-sim-browser-mode') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleBrowserMode = (): void => {
+    setBrowserMode((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem('ds-sim-browser-mode', next ? '1' : '0');
+      } catch {
+        /* storage disabled — mode just won't persist */
+      }
+      return next;
+    });
+  };
+
   // iOS TAP cursor (founder 2026-06-17: "standard is full control + iOS TAP
   // cursor"): a short-lived ring at the tap point, so a click on the screen
   // reads as a deliberate iOS touch. Capture-phase + purely visual (never
@@ -1405,6 +1523,8 @@ export function SimulatorWindow(): JSX.Element {
             onSendMessage={onSendMessage}
             canNavigate={room !== null}
             onNavigate={onNavigate}
+            browserMode={browserMode}
+            onToggleBrowserMode={toggleBrowserMode}
             running={sessionId !== ''}
             onEndSession={onEndSession}
           />

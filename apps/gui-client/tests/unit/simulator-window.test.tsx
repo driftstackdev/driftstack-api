@@ -188,6 +188,36 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(badge?.textContent).toContain('Slow link');
   });
 
+  it('Browser mode: the toolbar center becomes a native address bar (replacing the device identity); off → identity shows (founder 2026-06-21)', () => {
+    // OFF (default): the device identity is in the toolbar, no address bar.
+    localStorage.setItem('ds-sim-browser-mode', '0');
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017&profile=Amsterdam%20Shopper',
+    );
+    const off = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    const toolbarOff = off.container.querySelector('[data-component="simulator-toolbar"]');
+    expect(toolbarOff?.textContent).toContain('Amsterdam Shopper');
+    expect(off.container.querySelector('[data-component="simulator-address-bar"]')).toBeNull();
+    off.unmount();
+
+    // ON: a native address field in the toolbar; the device identity is replaced.
+    localStorage.setItem('ds-sim-browser-mode', '1');
+    const on = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    const bar = on.container.querySelector('[data-component="simulator-address-bar"]');
+    expect(bar).not.toBeNull();
+    expect(bar?.querySelector('[aria-label="Address bar"]')).not.toBeNull();
+  });
+
   it('the expand chevron reveals the control panel — the Mode segmented control (Agent/Pair/Manual) + rotate / pin / info', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
     const { container } = render(
