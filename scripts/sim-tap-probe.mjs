@@ -323,6 +323,19 @@ try {
   });
   console.log(`video dims: ${vdim.w}x${vdim.h}${vdim.w ? '' : ' (NO FRAME YET)'}`);
 
+  // Verify the page-state STORE populates after navigate (the live-URL source the
+  // GUI polls): GET /v1/agent-sessions/:id/page-state should return {state,url,…}
+  // once the box's control-plane pageState frame lands. null here = not reaching
+  // the server store (coordinate A3).
+  try {
+    const o0 = await observe(sid);
+    console.log(
+      `page-state after nav: ${JSON.stringify(o0.page_state)} | url=${o0.url ?? '∅'} | title=${o0.title ?? '∅'}`,
+    );
+  } catch {
+    /* ignore */
+  }
+
   // Capture what the box is ACTUALLY showing (the <video> fills the page) so we
   // can SEE whether navigate landed + where taps go. Visual self-debugging.
   try {
