@@ -848,12 +848,20 @@ export function registerAgentSessionsRoutes(
   async function maybeMintLivekit(
     sessionId: string,
     accountId: string,
+    region: string | null,
   ): Promise<PublicLivekitInfo | undefined> {
     if (fleetNodesRepo === undefined || livekitSecretEncryptionKey === undefined) {
       return undefined;
     }
     try {
-      const mac = await fleetNodesRepo.findAnyWithLivekit();
+      // Region-aware + CONSISTENT WITH THE PUBLISHER DISPATCH: the SFU is
+      // co-located on the box, so the viewer MUST connect to the same node the
+      // harness publishes to. dispatchSessionAssignOnCreate uses
+      // findNearestWithLivekit(region); the viewer token must resolve the same
+      // node or (with a multi-region fleet) it'd join a different box's SFU and
+      // see no track. Same region → same node (or same fallback). Single box →
+      // findNearest falls back to findAny, so today's behavior is unchanged.
+      const mac = await fleetNodesRepo.findNearestWithLivekit(region);
       if (mac === null || mac.livekit === null) return undefined;
       const apiSecret = decryptLivekitSecret(
         mac.livekit.apiSecretCiphertextBase64,
@@ -1095,7 +1103,7 @@ export function registerAgentSessionsRoutes(
             });
             if (stored !== null) byokKeyCache.set(existing.id, stored);
           }
-          const livekit = await maybeMintLivekit(existing.id, ownerAccountId);
+          const livekit = await maybeMintLivekit(existing.id, ownerAccountId, ctx.account.region);
           return reply.code(201).send(publicAgentSession(existing, livekit, sessionLivenessStore));
         }
       }
@@ -1136,7 +1144,7 @@ export function registerAgentSessionsRoutes(
               });
               if (stored !== null) byokKeyCache.set(winner.id, stored);
             }
-            const livekit = await maybeMintLivekit(winner.id, ownerAccountId);
+            const livekit = await maybeMintLivekit(winner.id, ownerAccountId, ctx.account.region);
             return reply.code(201).send(publicAgentSession(winner, livekit, sessionLivenessStore));
           }
         }
@@ -1156,7 +1164,7 @@ export function registerAgentSessionsRoutes(
           byokKeyCache.set(created.id, stored);
         }
       }
-      const livekit = await maybeMintLivekit(created.id, ownerAccountId);
+      const livekit = await maybeMintLivekit(created.id, ownerAccountId, ctx.account.region);
       // Fleet-CP session dispatch — hand the new session to a connected
       // harness node (local fleet-demo). No-op in prod (no registry); best-
       // effort (never throws) so it can't break session-create.

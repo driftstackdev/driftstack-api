@@ -94,6 +94,9 @@ function makeStubAgentSessionsRepo(session: AgentSessionRecord | null): AgentSes
 function makeStubFleetRepo(mac: FleetNodeDetail | null): DrizzleFleetNodesRepo {
   return {
     findAnyWithLivekit: () => Promise.resolve(mac),
+    // maybeMintLivekit is now region-aware (consistent with the publisher
+    // dispatch); the stub returns the same node regardless of region.
+    findNearestWithLivekit: () => Promise.resolve(mac),
   } as unknown as DrizzleFleetNodesRepo;
 }
 
