@@ -149,6 +149,41 @@
   animation: ds-tap 0.46s ease-out forwards;
 }
 
+/* iOS fingertip touch cursor (SimulatorWindow, founder 2026-06-21 "make it more
+   like an iOS touch") — a soft, translucent contact disc that tracks the pointer
+   over the streamed screen so the device reads as a touchscreen, not a desktop
+   window. The radial fill (no hard edge) mimics a fingertip on glass; on press it
+   contracts + brightens into a smaller "contact patch" via a GPU transform spring,
+   so a tap or slide feels physical. The translate is BAKED INTO the transform (so
+   it composes with scale); the host sets cursor-none + the dot is pointer-events
+   -none upstream, so it never intercepts the real touch. */
+.ds-touch-dot {
+  width: 46px;
+  height: 46px;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle at 50% 40%,
+    rgba(255, 255, 255, 0.4),
+    rgba(255, 255, 255, 0.14) 56%,
+    rgba(255, 255, 255, 0) 72%
+  );
+  box-shadow: 0 1px 7px rgba(0, 0, 0, 0.18);
+  transform: translate(-50%, -50%) scale(1);
+  transition:
+    transform 130ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 130ms ease-out;
+  will-change: transform;
+}
+.ds-touch-dot--pressed {
+  transform: translate(-50%, -50%) scale(0.58);
+  background: radial-gradient(
+    circle at 50% 40%,
+    rgba(255, 255, 255, 0.64),
+    rgba(255, 255, 255, 0.26) 56%,
+    rgba(255, 255, 255, 0) 72%
+  );
+}
+
 /* Browser-mode address bar loading sweep (founder 2026-06-21) — indeterminate
    progress until the device emits real page_state progress (A3 W2719). A 40%-wide
    segment slides L→R under the URL bar so it reads as "loading" with no number. */

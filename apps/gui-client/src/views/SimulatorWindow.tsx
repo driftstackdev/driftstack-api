@@ -1835,8 +1835,8 @@ export function SimulatorWindow(): JSX.Element {
                   <span
                     data-component="touch-cursor"
                     aria-hidden="true"
-                    className={`pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/60 bg-white/15 shadow-[0_0_10px_rgba(255,255,255,0.25)] backdrop-blur-[1px] transition-[width,height,background-color] duration-100 ${
-                      touchPressed ? 'h-7 w-7 bg-white/30' : 'h-10 w-10'
+                    className={`ds-touch-dot pointer-events-none absolute z-20 ${
+                      touchPressed ? 'ds-touch-dot--pressed' : ''
                     }`}
                     style={{ left: touchPoint.x, top: touchPoint.y }}
                   />
