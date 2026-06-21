@@ -285,7 +285,7 @@ try {
   console.log(`navigate → ${PROBE_URL}`);
   await sleep(6000); // let the box + data channel come up before the first nav
   let navOk = false;
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 90; i++) {
     if (i % 5 === 0) await publish({ type: 'navigate', url: PROBE_URL });
     await sleep(1500);
     const luma = await page.evaluate(() => window.__avgLuma());
