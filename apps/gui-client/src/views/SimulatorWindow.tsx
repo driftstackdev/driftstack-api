@@ -21,6 +21,7 @@ import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import { sendNavigate, type Room } from '../lib/livekit';
 import { useLatencyPing } from '../lib/livekit-latency-ping';
+import { useConnectionStats } from '../lib/livekit-connection-stats';
 import { useRecordings } from '../lib/recordings';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import {
@@ -998,6 +999,9 @@ export function SimulatorWindow(): JSX.Element {
   // the device). Surfaced as a small badge rather than blocking the view.
   const [controlUnreachable, setControlUnreachable] = useState(false);
   const latency = useLatencyPing({ room, enabled: room !== null });
+  // WebRTC transport diagnostics (relay/tcp? loss? freezes?) — founder's
+  // "is it slow because we're on TCP?" question. Read-only stats poll.
+  const conn = useConnectionStats({ room, enabled: room !== null });
   const [landscape, setLandscape] = useState(false);
   // Pin = always-on-top (the floating-iPhone default). Unpinned the window
   // behaves like a normal sibling window (Cmd+` cycling, Mission Control,
@@ -1437,6 +1441,43 @@ export function SimulatorWindow(): JSX.Element {
                       <span className="text-white/50">measuring…</span>
                     )}
                   </div>
+                  {/* WebRTC transport diagnostics — answers "are we on TCP / relayed?"
+                      + shows the loss/freezes/decode-fps that explain a worse-than-RDP feel. */}
+                  <div className="truncate">
+                    transport{' '}
+                    {conn.transport !== null ? (
+                      <span
+                        className={
+                          conn.transport === 'udp' && conn.relayed !== true
+                            ? 'text-emerald-300'
+                            : 'text-rose-300'
+                        }
+                      >
+                        {conn.transport}
+                        {conn.relayed ? ' · relay ⚠' : ' · direct'}
+                      </span>
+                    ) : (
+                      <span className="text-white/50">measuring…</span>
+                    )}
+                  </div>
+                  {(conn.decodeFps !== null ||
+                    conn.packetLossPct !== null ||
+                    conn.freezeCount !== null) && (
+                    <div className="truncate text-white/70">
+                      {conn.decodeFps !== null && <span>decode {conn.decodeFps} fps · </span>}
+                      {conn.packetLossPct !== null && (
+                        <span className={conn.packetLossPct > 1 ? 'text-amber-300' : ''}>
+                          loss {conn.packetLossPct}% ·{' '}
+                        </span>
+                      )}
+                      {conn.jitterMs !== null && <span>jitter {conn.jitterMs}ms · </span>}
+                      {conn.freezeCount !== null && (
+                        <span className={conn.freezeCount > 0 ? 'text-amber-300' : ''}>
+                          freezes {conn.freezeCount}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div className="mt-1.5 border-t border-white/15 pt-1.5">
                     <div className="font-sans text-[11px] font-semibold text-white">Identity</div>
                     <div className="truncate">engine-deep · bit-exact device</div>
