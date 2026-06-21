@@ -142,6 +142,18 @@ describe('SimulatorWindow — address bar navigate', () => {
     expect(sendNavigate).toHaveBeenCalledWith(fakeRoom, 'https://live.example.com/');
   });
 
+  it('shows a determinate, seeded loading bar when a navigate is in flight (realistic progress, not a 0→100 jump)', () => {
+    const { container } = renderSim();
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: 'example.com' } });
+    fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
+    const bar = container.querySelector('[data-component="simulator-loadbar"]') as HTMLElement;
+    expect(bar).not.toBeNull();
+    const width = parseFloat(bar.style.width);
+    expect(width).toBeGreaterThan(0); // seeded to a visible base, not 0
+    expect(width).toBeLessThan(100); // climbs toward ~90%, never a 0→100 jump
+  });
+
   it('Copy URL writes the live address to the clipboard', () => {
     const writeText = vi.fn(() => Promise.resolve());
     const orig = Object.getOwnPropertyDescriptor(navigator, 'clipboard');

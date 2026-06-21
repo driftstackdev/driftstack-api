@@ -835,6 +835,53 @@ function BrowserBar({
   useEffect(() => {
     if (!focused) setDraft(liveUrl);
   }, [liveUrl, focused]);
+  // Realistic browser-style load progress (founder: "realistic progress of the
+  // page's loading, just like our web browser"). A3 only emits progress 0 (start)
+  // then 1 (done), so a raw bar would jump 0→100%. Instead trickle the DISPLAYED
+  // progress up toward ~90% while loading (nprogress-style, decelerating — never
+  // quite reaching it), snap to 100% on completion, then fade out.
+  const [barProgress, setBarProgress] = useState(0);
+  const [barVisible, setBarVisible] = useState(false);
+  const trickleRef = useRef<number | null>(null);
+  const hideRef = useRef<number | null>(null);
+  const loadingActiveRef = useRef(false);
+  useEffect(() => {
+    if (pageLoading) {
+      loadingActiveRef.current = true;
+      if (hideRef.current !== null) {
+        window.clearTimeout(hideRef.current);
+        hideRef.current = null;
+      }
+      setBarVisible(true);
+      // Seed from the reported progress (≥ a small visible base); never go backwards.
+      setBarProgress((p) => Math.max(p, loadProgress ?? 0, 0.08));
+      if (trickleRef.current === null) {
+        trickleRef.current = window.setInterval(() => {
+          setBarProgress((p) => (p >= 0.9 ? p : p + (0.9 - p) * 0.12));
+        }, 400);
+      }
+    } else if (loadingActiveRef.current) {
+      // Was loading, now done → snap to 100%, then fade the bar out.
+      loadingActiveRef.current = false;
+      if (trickleRef.current !== null) {
+        window.clearInterval(trickleRef.current);
+        trickleRef.current = null;
+      }
+      setBarProgress(1);
+      hideRef.current = window.setTimeout(() => {
+        setBarVisible(false);
+        setBarProgress(0);
+        hideRef.current = null;
+      }, 300);
+    }
+  }, [pageLoading, loadProgress]);
+  useEffect(
+    () => () => {
+      if (trickleRef.current !== null) window.clearInterval(trickleRef.current);
+      if (hideRef.current !== null) window.clearTimeout(hideRef.current);
+    },
+    [],
+  );
   const submit = (): void => {
     if (canNavigate && draft.trim() !== '') onNavigate(draft.trim());
   };
@@ -979,25 +1026,21 @@ function BrowserBar({
           )}
         </button>
       </form>
-      {/* Live loading bar — page_state-driven (A3 W2719). Determinate width when
-          progress is known, else an indeterminate sweep. */}
-      {pageLoading && (
+      {/* Live loading bar — realistic browser-style trickle (founder W2719/2740).
+          Climbs toward ~90% while loading, snaps to 100% + fades on completion. */}
+      {barVisible && (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute bottom-0 left-0 h-[2px] w-full overflow-hidden"
         >
-          {loadProgress !== null ? (
-            <div
-              data-component="simulator-loadbar"
-              className="h-full bg-accent transition-[width] duration-200"
-              style={{ width: `${Math.round(Math.max(0, Math.min(1, loadProgress)) * 100)}%` }}
-            />
-          ) : (
-            <div
-              data-component="simulator-loadbar"
-              className="ds-loadbar-indeterminate absolute top-0 h-full bg-accent"
-            />
-          )}
+          <div
+            data-component="simulator-loadbar"
+            className="h-full bg-accent transition-[width,opacity] duration-200 ease-out"
+            style={{
+              width: `${Math.round(Math.max(0, Math.min(1, barProgress)) * 100)}%`,
+              opacity: barProgress >= 1 ? 0 : 1,
+            }}
+          />
         </div>
       )}
     </div>
