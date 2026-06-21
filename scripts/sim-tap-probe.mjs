@@ -14,10 +14,15 @@
 //
 // Run (key via env — NEVER hardcode/log it):
 //   DS_KEY="$(security find-generic-password -s dev.driftstack.gui -w)" \
-//     node operations/scripts/sim-tap-probe.mjs
+//     node scripts/sim-tap-probe.mjs
 // Options:
 //   --taps "x,y x,y ..."   video-px points to tap (default: a spread grid)
 //   --url <https-url>      page to navigate to (default sim-probe.html)
+//   --proxy <id|none>      egress proxy (default: the account's first proxy)
+//   --ycomp <n>            subtract n from each injected tap Y (mimic the GUI's
+//                          devY title-band compensation) while measuring error vs
+//                          the ORIGINAL aim → verifies the GUI's -n offset (the
+//                          +32 title-band fix) drives the landing error to ~0
 //   --keep                 do NOT delete the session (debugging)
 //
 // NOTE: this never prints DS_KEY or the LiveKit token. Diagnostic-first: it logs
@@ -30,7 +35,7 @@ const BASE = 'https://api.driftstack.dev';
 const KEY = process.env.DS_KEY;
 if (!KEY || KEY.length < 8) {
   console.error(
-    'Missing DS_KEY. Run:\n  DS_KEY="$(security find-generic-password -s dev.driftstack.gui -w)" node operations/scripts/sim-tap-probe.mjs',
+    'Missing DS_KEY. Run:\n  DS_KEY="$(security find-generic-password -s dev.driftstack.gui -w)" node scripts/sim-tap-probe.mjs',
   );
   process.exit(2);
 }
@@ -45,6 +50,9 @@ const getOpt = (name, def) => {
 };
 const KEEP = getFlag('--keep');
 const PROBE_URL = getOpt('--url', 'https://driftstack.dev/sim-probe.html');
+// Title-band compensation to mimic the GUI's devY (set --ycomp 32 to verify the
+// shipped tap fix): inject y-YCOMP but score error against the original aim.
+const YCOMP = parseInt(getOpt('--ycomp', '0'), 10) || 0;
 const DEFAULT_TAPS = '50,120 150,120 250,120 350,120 120,320 280,520';
 const TAPS = getOpt('--taps', DEFAULT_TAPS)
   .trim()
@@ -316,13 +324,17 @@ try {
 
   // 5. tap sweep — aim at each video-px; MEASURE the landed point from the green
   // marker in the video frame (self-contained), plus the page-state read (dual).
+  if (YCOMP) console.log(`ycomp: injecting y-${YCOMP} (GUI devY), scoring vs original aim`);
   let tapNum = 0;
   for (const [x, y] of TAPS) {
     // Pre-tap marker position — so a tap that DOESN'T register (leaving the
     // marker where the previous tap put it) is detected as stale, not a false
     // measurement.
     const pre = await page.evaluate(() => window.__grabGreen());
-    await publish({ type: 'tap', x, y });
+    // Inject the (optionally) compensated Y, but score against the original aim:
+    // with --ycomp 32 this mirrors the GUI's devY so a landing on (x,y) = err ~0.
+    const iy = Math.max(0, y - YCOMP);
+    await publish({ type: 'tap', x, y: iy });
     await sleep(1600);
     const green = await page.evaluate(() => window.__grabGreen());
     const stale = green.found && pre.found && Math.hypot(green.vx - pre.vx, green.vy - pre.vy) < 6;
