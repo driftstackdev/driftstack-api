@@ -232,6 +232,11 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   }, [pendingConfirmation]);
 
   const reset = useCallback((): void => {
+    // Bump the cancel-generation so any in-flight post() for the PREVIOUS chat
+    // discards its result on resolve instead of writing the response onto this
+    // fresh chat's transcript + session (audit wja3dfl5t P0). Same for restore().
+    cancelGenRef.current += 1;
+    setSending(false);
     setTurns([]);
     setSession(null);
     setError(null);
@@ -240,6 +245,10 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   }, []);
 
   const restore = useCallback((restoredTurns: ReadonlyArray<ChatTurn>): void => {
+    // Invalidate any in-flight post() from the chat we're switching AWAY from, so
+    // its late response can't attach to (and persist onto) the restored chat.
+    cancelGenRef.current += 1;
+    setSending(false);
     setTurns([...restoredTurns]);
     setSession(null);
     setError(null);

@@ -119,15 +119,15 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
     );
   });
 
-  it('V-239 refreshAccountMe + auto-fetch effect — useCallback on [client]; null-client short-circuit sets accountMe=null; soft-fail try/catch swallows the error and leaves accountMe=null ("Views consuming accountMe should treat null as cap unknown; don\'t gate"). Drift to surfacing the error here would break the "cap-unknown → ungated UI" invariant that prevents accidentally locking customers out when the server is down.', () => {
+  it('V-239 refreshAccountMe — useCallback on [client]; null-client short-circuit sets accountMe=null; the soft-fail catch now FAILS CLOSED: it KEEPS the last-known accountMe (does NOT null it) so a transient /account/me blip cannot evaporate the at-cap session-cap gate (audit wja3dfl5t). Drift back to nulling on transient error would re-open the at-cap New-session button.', () => {
     expect(body).toMatch(
-      /const refreshAccountMe = useCallback\(async \(\): Promise<void> => \{\s*\n\s*if \(!client\) \{\s*\n\s*setAccountMe\(null\);\s*\n\s*return;\s*\n\s*\}\s*\n\s*try \{\s*\n\s*const me = await client\.account\.me\(\);\s*\n\s*setAccountMe\(me\);\s*\n\s*\} catch \{\s*\n\s*\/\/ Soft-fail: leave accountMe null \+ don't surface the error here\./,
+      /const refreshAccountMe = useCallback\(async \(\): Promise<void> => \{\s*\n\s*if \(!client\) \{\s*\n\s*setAccountMe\(null\);\s*\n\s*return;\s*\n\s*\}/,
     );
-    expect(body).toMatch(/\/\/ Views consuming accountMe should treat null as "cap unknown;/);
-    expect(body).toMatch(/\/\/ don't gate"\./);
-    expect(body).toMatch(/The actual failure surfaces when the user attempts/);
-    expect(body).toMatch(/an action that hits the cap \(server returns 402\)\./);
-    expect(body).toMatch(/setAccountMe\(null\);\s*\n\s*\}\s*\n\s*\}, \[client\]\);/);
+    expect(body).toMatch(/const me = await client\.account\.me\(\);/);
+    expect(body).toMatch(/setAccountMe\(me\);/);
+    expect(body).toMatch(/Soft-fail, but FAIL CLOSED: KEEP the last-known accountMe/);
+    expect(body).toMatch(/evaporated the at-cap New-session gate/);
+    expect(body).toMatch(/\}, \[client\]\);/);
     expect(body).toMatch(
       /useEffect\(\(\) => \{\s*\n\s*void refreshAccountMe\(\);\s*\n\s*\}, \[refreshAccountMe\]\);/,
     );

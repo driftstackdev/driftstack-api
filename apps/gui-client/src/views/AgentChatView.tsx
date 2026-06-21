@@ -100,13 +100,18 @@ export function AgentChatView({
     ).then(setChats);
   }, [chat.turns, activeChatId, profileId, model]);
 
+  // The rail's new/select/delete are LOCKED while a turn is in flight: switching
+  // chats mid-send would otherwise strand (or, pre-fix, misattach) the in-flight
+  // reply. The user hits Stop first. Mirrors the header New-chat button's guard.
+  // (audit wja3dfl5t — the surface that made the P0 wrong-chat-attach reachable.)
   function handleNewChat(): void {
+    if (chat.sending) return;
     chat.reset();
     setActiveChatId(crypto.randomUUID());
     setProfileId(initialProfileId ?? '');
   }
   function handleSelectChat(c: StoredChat): void {
-    if (c.id === activeChatId) return;
+    if (chat.sending || c.id === activeChatId) return;
     createdAtRef.current[c.id] = c.createdAt;
     setActiveChatId(c.id);
     setProfileId(c.profileId);
@@ -114,6 +119,7 @@ export function AgentChatView({
     chat.restore(c.turns);
   }
   function handleDeleteChat(id: string): void {
+    if (chat.sending) return;
     void deleteChat(id).then(setChats);
     if (id === activeChatId) handleNewChat();
   }
@@ -205,6 +211,7 @@ export function AgentChatView({
       <ChatRail
         chats={chats}
         activeId={activeChatId}
+        busy={chat.sending}
         onNew={handleNewChat}
         onSelect={handleSelectChat}
         onDelete={handleDeleteChat}
@@ -493,12 +500,14 @@ export function AgentChatView({
 function ChatRail({
   chats,
   activeId,
+  busy,
   onNew,
   onSelect,
   onDelete,
 }: {
   chats: ReadonlyArray<StoredChat>;
   activeId: string;
+  busy: boolean;
   onNew: () => void;
   onSelect: (c: StoredChat) => void;
   onDelete: (id: string) => void;
@@ -509,7 +518,9 @@ function ChatRail({
         <button
           type="button"
           onClick={onNew}
-          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent-hover"
+          disabled={busy}
+          title={busy ? 'Finish or stop the current reply first' : undefined}
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent-hover disabled:opacity-40"
         >
           + New chat
         </button>
@@ -531,7 +542,9 @@ function ChatRail({
                   <button
                     type="button"
                     onClick={() => onSelect(c)}
-                    className="min-w-0 flex-1 text-left"
+                    disabled={busy}
+                    title={busy ? 'Finish or stop the current reply first' : undefined}
+                    className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
                   >
                     <span className="block truncate text-xs text-ink-primary">{c.title}</span>
                     <span className="block text-2xs text-ink-muted">
@@ -544,9 +557,10 @@ function ChatRail({
                   <button
                     type="button"
                     aria-label={`Delete chat ${c.title}`}
-                    title="Delete chat"
+                    title={busy ? 'Finish or stop the current reply first' : 'Delete chat'}
                     onClick={() => onDelete(c.id)}
-                    className="shrink-0 px-1 text-ink-muted opacity-0 transition-opacity hover:text-status-error group-hover:opacity-100"
+                    disabled={busy}
+                    className="shrink-0 px-1 text-ink-muted opacity-0 transition-opacity hover:text-status-error group-hover:opacity-100 disabled:hover:text-ink-muted"
                   >
                     ✕
                   </button>

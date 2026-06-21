@@ -138,11 +138,14 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
       const me = await client.account.me();
       setAccountMe(me);
     } catch {
-      // Soft-fail: leave accountMe null + don't surface the error here.
-      // Views consuming accountMe should treat null as "cap unknown;
-      // don't gate". The actual failure surfaces when the user attempts
-      // an action that hits the cap (server returns 402).
-      setAccountMe(null);
+      // Soft-fail, but FAIL CLOSED: KEEP the last-known accountMe rather than
+      // nulling it. Views treat null as "cap unknown; don't gate", so nulling on a
+      // transient blip (network/5xx/429 — e.g. right after a successful create's
+      // refresh) silently evaporated the at-cap New-session gate and the customer
+      // hit the raw 402 the gate exists to prevent (audit wja3dfl5t). The cap stays
+      // enforced on the last-known figures; a real key change replaces it on the
+      // next successful fetch (and a missing client nulls it above). The underlying
+      // error still surfaces when the user takes an action the server rejects.
     }
   }, [client]);
 
