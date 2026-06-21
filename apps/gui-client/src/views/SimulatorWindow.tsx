@@ -19,7 +19,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
-import { sendNavigate, type Room } from '../lib/livekit';
+import { sendNavigate, RoomEvent, type Room } from '../lib/livekit';
 import { useLatencyPing } from '../lib/livekit-latency-ping';
 import { useConnectionStats } from '../lib/livekit-connection-stats';
 import { useRecordings } from '../lib/recordings';
@@ -40,6 +40,7 @@ import {
  *  real screen aspect: toolbar above the bezel, the bezel's p-[10px] padding,
  *  and the in-screen status strip the video sits below. */
 const TOOLBAR_H = 34;
+const BROWSER_BAR_H = 40; // dedicated browser-mode address bar (its own row)
 const BEZEL_PAD = 20; // p-[10px] × 2
 const STATUS_STRIP_H = 40;
 
@@ -289,8 +290,6 @@ export function DeviceToolbar({
   // Dismiss the expanded control panel on an outside pointer-down or Escape, so
   // it doesn't linger over the screen after you've picked (or skipped) a control.
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  // Browser-mode address field draft (local; navigate fires on Enter/submit).
-  const [browserUrl, setBrowserUrl] = useState('');
   useEffect(() => {
     if (!expanded) return;
     const onPointerDown = (e: PointerEvent): void => {
@@ -343,76 +342,21 @@ export function DeviceToolbar({
             className="h-3 w-3 rounded-full bg-[#febc2e] shadow-[inset_0_0.5px_0_rgba(255,255,255,0.4)] ring-1 ring-black/20 transition hover:brightness-110"
           />
         </div>
-        {/* Center — Browser mode: a native address pill (the GUI's real URL
-            control, since the rendered iOS pill is un-tappable). Otherwise the
-            Drift mark + identity (profile primary, device muted). */}
-        {browserMode ? (
-          <form
-            data-tauri-drag-region="false"
-            data-no-drag
-            data-component="simulator-address-bar"
-            className="mx-2 flex min-w-0 flex-1 items-center gap-1.5 rounded-full bg-black/35 px-2.5 py-[3px] ring-1 ring-white/10 transition focus-within:bg-black/50 focus-within:ring-white/25"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (canNavigate && browserUrl.trim() !== '') onNavigate(browserUrl);
-            }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="11"
-              height="11"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-              className="shrink-0 text-white/40"
-            >
-              <circle cx="12" cy="12" r="9" />
-              <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
-            </svg>
-            <input
-              type="text"
-              value={browserUrl}
-              disabled={!canNavigate}
-              onChange={(e) => setBrowserUrl(e.target.value)}
-              placeholder={canNavigate ? 'Search or enter address' : 'connecting…'}
-              title={
-                canNavigate
-                  ? undefined
-                  : 'Connecting to the device — the address bar unlocks once it is live'
-              }
-              spellCheck={false}
-              autoComplete="off"
-              aria-label="Address bar"
-              className="min-w-0 flex-1 bg-transparent text-center text-[11px] leading-none text-white/90 placeholder:text-white/35 focus:text-left focus:outline-none disabled:opacity-50"
-            />
-            {browserUrl.trim() !== '' && canNavigate && (
-              <button
-                type="submit"
-                aria-label="Go to URL"
-                title="Go"
-                className="shrink-0 rounded-full px-1 text-[11px] leading-none text-accent transition hover:text-ink-primary"
-              >
-                ⏎
-              </button>
-            )}
-          </form>
-        ) : (
-          <div
-            data-tauri-drag-region
-            className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5"
-          >
-            <DriftMark />
-            <span className="max-w-[140px] truncate text-[11px] font-semibold tracking-tight text-white/85">
-              {profileName !== '' ? profileName : deviceName}
-            </span>
-            {profileName !== '' && (
-              <span className="text-[11px] tracking-tight text-white/45">· {deviceName}</span>
-            )}
-          </div>
-        )}
+        {/* Center — Drift mark + identity (profile primary, device muted). In
+            Browser mode the URL lives in the dedicated browser bar below the
+            toolbar, so the identity stays here in every mode. */}
+        <div
+          data-tauri-drag-region
+          className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5"
+        >
+          <DriftMark />
+          <span className="max-w-[140px] truncate text-[11px] font-semibold tracking-tight text-white/85">
+            {profileName !== '' ? profileName : deviceName}
+          </span>
+          {profileName !== '' && (
+            <span className="text-[11px] tracking-tight text-white/45">· {deviceName}</span>
+          )}
+        </div>
         {/* Right — quick Record + the expand chevron. The window-controls
             (rotate / pin / info) live in the expandable panel below so the
             default chrome stays minimal (founder 2026-06-17: "phone showing
@@ -881,6 +825,133 @@ function NavigateAddressBar({
 }
 
 /**
+ * Browser mode (founder 2026-06-21): a dedicated, full-width browser-chrome bar
+ * below the toolbar — a real native address bar (the rendered iOS Safari pill is
+ * un-tappable fork chrome). Reload + a bigger live URL field + a loading bar. The
+ * live URL + load progress come from A3's page_state over the data channel (bus
+ * W2719); until then onNavigate drives an optimistic loading sweep. The field
+ * follows the live URL while not being edited. `data-no-drag` so the toolbar's
+ * window-drag handler doesn't hijack clicks here.
+ */
+function BrowserBar({
+  canNavigate,
+  onNavigate,
+  liveUrl,
+  pageLoading,
+  loadProgress,
+}: {
+  canNavigate: boolean;
+  onNavigate: (url: string) => void;
+  liveUrl: string;
+  pageLoading: boolean;
+  loadProgress: number | null;
+}): JSX.Element {
+  const [draft, setDraft] = useState(liveUrl);
+  const [focused, setFocused] = useState(false);
+  // Follow the live URL when the user isn't editing (so a redirect/link-tap
+  // updates the bar), but never clobber what they're typing.
+  useEffect(() => {
+    if (!focused) setDraft(liveUrl);
+  }, [liveUrl, focused]);
+  const submit = (): void => {
+    if (canNavigate && draft.trim() !== '') onNavigate(draft.trim());
+  };
+  return (
+    <div
+      data-component="simulator-address-bar"
+      data-no-drag
+      className="relative flex h-10 w-full shrink-0 items-center gap-2 bg-[#1d1e24] px-3 ring-1 ring-white/[0.10] shadow-[inset_0_-1px_0_rgba(0,0,0,0.45)]"
+    >
+      <button
+        type="button"
+        aria-label="Reload"
+        title={canNavigate ? 'Reload' : 'Connecting…'}
+        disabled={!canNavigate}
+        onClick={submit}
+        className="shrink-0 rounded-md p-1 text-ink-secondary transition hover:bg-white/10 hover:text-ink-primary disabled:opacity-40"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M23 4v6h-6" />
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+        </svg>
+      </button>
+      <form
+        className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md bg-black/30 px-2.5 ring-1 ring-white/10 transition focus-within:bg-black/40 focus-within:ring-white/25"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="12"
+          height="12"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          className="shrink-0 text-white/35"
+        >
+          <circle cx="12" cy="12" r="9" />
+          <path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18" />
+        </svg>
+        <input
+          type="text"
+          value={draft}
+          disabled={!canNavigate}
+          onChange={(e) => setDraft(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder={canNavigate ? 'Search or enter address' : 'connecting…'}
+          title={
+            canNavigate
+              ? undefined
+              : 'Connecting to the device — the address bar unlocks once it is live'
+          }
+          spellCheck={false}
+          autoComplete="off"
+          aria-label="Address bar"
+          className="min-w-0 flex-1 bg-transparent text-[12px] leading-none text-white/90 placeholder:text-white/35 focus:outline-none disabled:opacity-50"
+        />
+      </form>
+      {/* Live loading bar — page_state-driven (A3 W2719). Determinate width when
+          progress is known, else an indeterminate sweep. */}
+      {pageLoading && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-0 left-0 h-[2px] w-full overflow-hidden"
+        >
+          {loadProgress !== null ? (
+            <div
+              data-component="simulator-loadbar"
+              className="h-full bg-accent transition-[width] duration-200"
+              style={{ width: `${Math.round(Math.max(0, Math.min(1, loadProgress)) * 100)}%` }}
+            />
+          ) : (
+            <div
+              data-component="simulator-loadbar"
+              className="ds-loadbar-indeterminate absolute top-0 h-full bg-accent"
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Cosmetic iOS status bar — live clock + cellular/Wi-Fi/battery glyphs, with
  * the dynamic island centered in the strip. A DEDICATED black strip at the top
  * of the screen — the page video starts BELOW it, so it never overlaps browser
@@ -1141,16 +1212,78 @@ export function SimulatorWindow(): JSX.Element {
     }
   });
   const toggleBrowserMode = (): void => {
-    setBrowserMode((v) => {
-      const next = !v;
-      try {
-        localStorage.setItem('ds-sim-browser-mode', next ? '1' : '0');
-      } catch {
-        /* storage disabled — mode just won't persist */
-      }
-      return next;
+    const next = !browserMode;
+    setBrowserMode(next);
+    try {
+      localStorage.setItem('ds-sim-browser-mode', next ? '1' : '0');
+    } catch {
+      /* storage disabled — mode just won't persist */
+    }
+    // The browser bar is a real chrome row, so grow/shrink the window by its
+    // height to keep the device video's exact aspect (no letterbox jump).
+    void withCurrentWindow(async (win) => {
+      const { LogicalSize } = await import('@tauri-apps/api/dpi');
+      const size = await win.innerSize();
+      const factor = await win.scaleFactor();
+      const width = Math.round(size.width / factor);
+      const cur = Math.round(size.height / factor);
+      await win.setSize(new LogicalSize(width, cur + (next ? BROWSER_BAR_H : -BROWSER_BAR_H)));
     });
   };
+
+  // Live page state from the device (A3 page_state over the LiveKit data channel,
+  // bus W2719) — drives the browser-mode address bar's live URL + loading bar.
+  // Until the harness emits it, onNavigate optimistically shows a loading sweep
+  // that a watchdog clears (graceful fallback).
+  const [liveUrl, setLiveUrl] = useState('');
+  const [pageLoading, setPageLoading] = useState(false);
+  const [loadProgress, setLoadProgress] = useState<number | null>(null);
+  const loadWatchdogRef = useRef<number | null>(null);
+  const clearLoadWatchdog = (): void => {
+    if (loadWatchdogRef.current !== null) {
+      window.clearTimeout(loadWatchdogRef.current);
+      loadWatchdogRef.current = null;
+    }
+  };
+  useEffect(() => () => clearLoadWatchdog(), []);
+  useEffect(() => {
+    if (room === null) return;
+    const onData = (payload: Uint8Array): void => {
+      try {
+        const msg = JSON.parse(new TextDecoder().decode(payload)) as {
+          type?: string;
+          url?: string;
+          loading?: boolean;
+          progress?: number;
+        };
+        if (msg.type !== 'page_state') return;
+        if (typeof msg.url === 'string') setLiveUrl(msg.url);
+        if (typeof msg.loading === 'boolean') {
+          setPageLoading(msg.loading);
+          if (!msg.loading) clearLoadWatchdog();
+        }
+        setLoadProgress(typeof msg.progress === 'number' ? msg.progress : null);
+      } catch {
+        /* not a page_state JSON message — ignore */
+      }
+    };
+    const r = room as unknown as {
+      on?: (e: string, cb: (p: Uint8Array) => void) => void;
+      off?: (e: string, cb: (p: Uint8Array) => void) => void;
+    };
+    try {
+      r.on?.(RoomEvent.DataReceived, onData);
+    } catch {
+      return;
+    }
+    return () => {
+      try {
+        r.off?.(RoomEvent.DataReceived, onData);
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [room]);
 
   // iOS TAP cursor (founder 2026-06-17: "standard is full control + iOS TAP
   // cursor"): a short-lived ring at the tap point, so a click on the screen
@@ -1413,9 +1546,22 @@ export function SimulatorWindow(): JSX.Element {
     } catch {
       /* private mode / storage disabled — harmless, panel just keeps advertising */
     }
+    // Optimistic loading state for the browser bar. If the harness emits
+    // page_state it overrides this (and clears it on {loading:false}); otherwise
+    // the watchdog clears the sweep so it never spins forever.
+    setLiveUrl(url);
+    setPageLoading(true);
+    setLoadProgress(null);
+    clearLoadWatchdog();
+    loadWatchdogRef.current = window.setTimeout(() => {
+      setPageLoading(false);
+      loadWatchdogRef.current = null;
+    }, 6000);
     void sendNavigate(room, url).catch(() => {
       setNotice('Navigation could not be sent');
       window.setTimeout(() => setNotice(null), 3000);
+      setPageLoading(false);
+      clearLoadWatchdog();
     });
   };
   const togglePinned = (): void => {
@@ -1443,7 +1589,8 @@ export function SimulatorWindow(): JSX.Element {
       const factor = await win.scaleFactor();
       const width = Math.round(size.width / factor);
       const screenW = width - BEZEL_PAD;
-      const height = Math.round(TOOLBAR_H + BEZEL_PAD + STATUS_STRIP_H + screenW * (h / w));
+      const chrome = TOOLBAR_H + (browserMode ? BROWSER_BAR_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
+      const height = Math.round(chrome + screenW * (h / w));
       await win.setSize(new LogicalSize(width, height));
     });
   };
@@ -1528,6 +1675,15 @@ export function SimulatorWindow(): JSX.Element {
             running={sessionId !== ''}
             onEndSession={onEndSession}
           />
+          {browserMode && (
+            <BrowserBar
+              canNavigate={room !== null}
+              onNavigate={onNavigate}
+              liveUrl={liveUrl}
+              pageLoading={pageLoading}
+              loadProgress={loadProgress}
+            />
+          )}
           {/* Device body — the bezel. data-tauri-drag-region makes the frame a
               window-drag handle; the inner screen overrides it so taps reach the
               device. flex-1 fills the height below the toolbar. */}

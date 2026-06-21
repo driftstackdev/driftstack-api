@@ -149,6 +149,23 @@
   animation: ds-tap 0.46s ease-out forwards;
 }
 
+/* Browser-mode address bar loading sweep (founder 2026-06-21) — indeterminate
+   progress until the device emits real page_state progress (A3 W2719). A 40%-wide
+   segment slides L→R under the URL bar so it reads as "loading" with no number. */
+@keyframes ds-loadbar {
+  0% {
+    left: -40%;
+    width: 40%;
+  }
+  100% {
+    left: 100%;
+    width: 40%;
+  }
+}
+.ds-loadbar-indeterminate {
+  animation: ds-loadbar 1.1s ease-in-out infinite;
+}
+
 /* ─── Fleet design-system token layer (2026-06-12 rework) ─────────────
    Contract: docs/internal/2026-06-12-design-system-spec.md. Two axes on
    <html>: data-mode (light|dark) × data-accent (violet|oxblood|teal).
