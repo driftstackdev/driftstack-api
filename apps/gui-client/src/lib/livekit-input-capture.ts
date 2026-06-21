@@ -158,6 +158,19 @@ export function mouseButton(raw: number): 0 | 1 | 2 | null {
  *  this deadzone sits just above it. */
 const MOVE_DEADZONE = 14;
 
+/** Tap-landing Y compensation (founder 2026-06-21; A3 W2725/26-ack). The device
+ *  renders a ~32px iOS title band atop the streamed screen that the box's
+ *  tap-coordinate mapping does NOT subtract, so an injected tap/touch lands ~32px
+ *  too LOW — the autonomous probe (scripts/sim-tap-probe.mjs) measured a uniform
+ *  +32px Y offset, X exact, across the screen. Subtract it from the Y we SEND so
+ *  a tap lands where the operator clicked. v1 constant for iphone17 (the only
+ *  shipped archetype); A3's content-only "(B)" stream (native content, no title
+ *  band) zeroes it → set TAP_Y_OFFSET=0 when (B) ships. Applied to SENT coords
+ *  ONLY: the scroll-vs-tap deadzone keeps RAW pointerToViewport coords (a uniform
+ *  shift doesn't change distances) and pointerToViewport stays the pure mapping. */
+const TAP_Y_OFFSET = 32;
+const devY = (y: number): number => Math.max(0, y - TAP_Y_OFFSET);
+
 /** Squared Euclidean distance between two points — squared so the deadzone
  *  comparison avoids a sqrt per move event (we compare against MOVE_DEADZONE²). */
 function distSq(ax: number, ay: number, bx: number, by: number): number {
@@ -238,7 +251,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // Record the press point + reset the moved flag so the MOVE_DEADZONE gate
       // restarts per gesture (a sub-deadzone jiggle then stays a tap).
       active.current = { touchId, startX: p.x, startY: p.y, moved: false };
-      send({ type: 'touchStart', x: p.x, y: p.y, touchId }, true);
+      send({ type: 'touchStart', x: p.x, y: devY(p.y), touchId }, true);
     };
     // Move only while a finger is down (no iPhone hover). Lossy — a dropped
     // touchMove jitters then recovers; reliable=true would congest a fast drag.
@@ -255,7 +268,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       if (p === null) return;
       if (!g.moved && distSq(p.x, p.y, g.startX, g.startY) <= MOVE_DEADZONE * MOVE_DEADZONE) return;
       g.moved = true;
-      send({ type: 'touchMove', x: p.x, y: p.y, touchId: g.touchId }, false);
+      send({ type: 'touchMove', x: p.x, y: devY(p.y), touchId: g.touchId }, false);
     };
     // Release = touchEnd. A press+release with no move is a genuine tap/click.
     const onMouseUp = (e: MouseEvent): void => {
@@ -264,7 +277,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       if (g === null) return;
       const p = pointerToViewport(e, video);
       if (p === null) return;
-      send({ type: 'touchEnd', x: p.x, y: p.y, touchId: g.touchId }, true);
+      send({ type: 'touchEnd', x: p.x, y: devY(p.y), touchId: g.touchId }, true);
     };
     // Window-level release fallback: pointer-capture never engages (the listeners
     // are mouse* with no pointerId, while the capture call is pointerId-guarded),
@@ -281,7 +294,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // touch at its current position (the harness ends the active touchId).
       const p = pointerToViewport(e, video);
       if (p !== null) {
-        send({ type: 'touchEnd', x: p.x, y: p.y, touchId: g.touchId }, true);
+        send({ type: 'touchEnd', x: p.x, y: devY(p.y), touchId: g.touchId }, true);
       } else {
         send({ type: 'touchEnd', x: 0, y: 0, touchId: g.touchId }, true);
       }
@@ -297,9 +310,9 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         {
           type: 'swipe',
           x1: p.x,
-          y1: p.y,
+          y1: devY(p.y),
           x2: p.x - clamp(e.deltaX),
-          y2: p.y - clamp(e.deltaY),
+          y2: devY(p.y - clamp(e.deltaY)),
           durationMs: 120,
         },
         true,
