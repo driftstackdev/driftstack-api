@@ -158,6 +158,18 @@ export function mouseButton(raw: number): 0 | 1 | 2 | null {
  *  this deadzone sits just above it. */
 const MOVE_DEADZONE = 14;
 
+/** Scroll-vs-tap as a TIME + DISTANCE gesture (founder 2026-06-21 "taps still
+ *  scroll instead of tapping"): the touchStart is BUFFERED and a gesture stays a
+ *  TAP — emitting a clean touchStart+touchEnd at the PRESS point with NO touchMove,
+ *  so the box can't scroll it — until it COMMITS to a drag. It commits only when it
+ *  moves past MOVE_DEADZONE AND is either sustained (held > DRAG_HOLD_MS — a
+ *  deliberate scroll) or decisive (moved past DRAG_HARD_PX — a fast flick). So a
+ *  QUICK press→release never scrolls, even with several px of mouse/trackpad drift;
+ *  only a real drag scrolls. The inertial fling runs ONLY on a committed drag, so a
+ *  tap (or a marginal flick) never flings into a scroll either. */
+const DRAG_HOLD_MS = 140;
+const DRAG_HARD_PX = 44;
+
 /** Tap-landing Y compensation (founder 2026-06-21; A3 W2725/26-ack). The device
  *  renders a ~32px iOS title band atop the streamed screen that the box's
  *  tap-coordinate mapping does NOT subtract, so an injected tap/touch lands ~32px
@@ -253,7 +265,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     touchId: number;
     startX: number;
     startY: number;
-    moved: boolean;
+    // Press timestamp + whether the gesture has COMMITTED to a drag. Until it
+    // commits the touchStart is buffered (a tap emits no touchMove → never scrolls).
+    startT: number;
+    committed: boolean;
     // Release-velocity tracking for the inertial slide: the last move's position +
     // timestamp and an EMA-smoothed velocity (px/ms). Undefined until the first
     // post-deadzone move, so a tap (no drag) never carries velocity → no glide.
@@ -378,29 +393,41 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         // Browser may refuse pointer-capture — non-fatal.
       }
       const touchId = touchIdSeq.current++;
-      // Record the press point + reset the moved flag so the MOVE_DEADZONE gate
-      // restarts per gesture (a sub-deadzone jiggle then stays a tap).
-      active.current = { touchId, startX: p.x, startY: p.y, moved: false };
-      send({ type: 'touchStart', x: p.x, y: devY(p.y), touchId }, true);
+      // BUFFER the touchStart: record the press but send NOTHING yet. The gesture
+      // stays a tap (→ clean touchStart+touchEnd at release, no move) until it
+      // commits to a drag in onMouseMove. This is why a quick press→release never
+      // scrolls, even with pointer drift (see DRAG_HOLD_MS / DRAG_HARD_PX).
+      active.current = { touchId, startX: p.x, startY: p.y, startT: e.timeStamp, committed: false };
     };
-    // Move only while a finger is down (no iPhone hover). Lossy — a dropped
-    // touchMove jitters then recovers; reliable=true would congest a fast drag.
-    // Scroll-vs-tap deadzone (A3 W2668): drop the move while still within
-    // MOVE_DEADZONE of the press point AND not yet moving — a near-still click
-    // emits no touchMove, so the fork keeps it a tap (its first touchMove past
-    // tapSlop is what flips tap→scroll). Once the cursor crosses the deadzone we
-    // latch `moved` and stream every subsequent move normally, so a real drag
-    // (>6px) scrolls exactly as before.
+    // Move only while a finger is down (no iPhone hover). Until the gesture COMMITS
+    // to a drag we send nothing (it might still be a tap); on commit we emit the
+    // buffered touchStart at the PRESS point, then stream moves. Commit needs the
+    // cursor past MOVE_DEADZONE AND (held > DRAG_HOLD_MS = a deliberate scroll, OR
+    // moved past DRAG_HARD_PX = a decisive/fast flick) — so a quick drifty click
+    // never crosses into a scroll. touchMove is lossy (reliable=false); a dropped
+    // move jitters then recovers, while reliable=true would congest a fast drag.
     const onMouseMove = (e: MouseEvent): void => {
       const g = active.current;
       if (g === null) return;
       const p = pointerToViewport(e, video);
       if (p === null) return;
-      if (!g.moved && distSq(p.x, p.y, g.startX, g.startY) <= MOVE_DEADZONE * MOVE_DEADZONE) return;
-      g.moved = true;
+      if (!g.committed) {
+        const far = distSq(p.x, p.y, g.startX, g.startY);
+        const elapsed = e.timeStamp - g.startT;
+        const commit =
+          (far > MOVE_DEADZONE * MOVE_DEADZONE && elapsed > DRAG_HOLD_MS) ||
+          far > DRAG_HARD_PX * DRAG_HARD_PX;
+        if (!commit) return; // still possibly a tap — keep buffering (send nothing)
+        g.committed = true;
+        // Emit the buffered touchStart at the press point so the scroll originates
+        // there, then seed velocity tracking from the press.
+        send({ type: 'touchStart', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
+        g.lastX = g.startX;
+        g.lastY = g.startY;
+        g.lastT = g.startT;
+      }
       // Track release velocity (EMA, px/ms) for the inertial slide: weight recent
-      // motion so a fast flick at the very end produces a strong glide. Skip the
-      // first post-deadzone sample (no prior point) and any zero-dt duplicate.
+      // motion so a fast flick at the very end produces a strong glide.
       const t = e.timeStamp;
       if (g.lastT !== undefined && g.lastX !== undefined && g.lastY !== undefined) {
         const dt = t - g.lastT;
@@ -416,19 +443,32 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       g.lastT = t;
       send({ type: 'touchMove', x: p.x, y: devY(p.y), touchId: g.touchId }, false);
     };
-    // Release = touchEnd. A press+release with no move is a genuine tap/click.
+    // Release. A gesture that never committed is a TAP → emit the buffered
+    // touchStart + touchEnd AT THE PRESS POINT with no move (the box click-synths
+    // it; it can NEVER scroll). A committed drag ends normally, with the inertial
+    // fling on a fast flick-release.
     const onMouseUp = (e: MouseEvent): void => {
       const g = active.current;
       active.current = null;
       if (g === null) return;
+      if (!g.committed) {
+        send({ type: 'touchStart', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
+        send({ type: 'touchEnd', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
+        return;
+      }
       const p = pointerToViewport(e, video);
-      if (p === null) return;
-      // Inertial slide: a fast flick-release keeps gliding (iOS momentum) instead
-      // of stopping dead. Only when the gesture actually dragged AND the release
-      // was recent (a pause before lifting = the finger settled → no glide).
+      if (p === null) {
+        // Committed drag released off-surface → end at the last in-bounds point.
+        const ex = clampX(g.lastX ?? g.startX);
+        const ey = devY(clampY(g.lastY ?? g.startY));
+        send({ type: 'touchEnd', x: ex, y: ey, touchId: g.touchId }, true);
+        return;
+      }
+      // Inertial slide: a fast flick-release keeps gliding (iOS momentum). Only on
+      // a committed drag + a recent release (a pause before lifting = settled).
       const fresh = g.lastT !== undefined && e.timeStamp - g.lastT <= FLING_STALE_MS;
       const speed = g.vx !== undefined && g.vy !== undefined ? Math.hypot(g.vx, g.vy) : 0;
-      if (g.moved && fresh && speed >= FLING_MIN_SPEED) {
+      if (fresh && speed >= FLING_MIN_SPEED) {
         startFling(g.touchId, p.x, p.y, g.vx as number, g.vy as number);
         return;
       }
@@ -445,14 +485,20 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       const g = active.current;
       if (g === null) return;
       active.current = null;
-      // Best-effort: use the in-bounds point when available, else just end the
-      // touch at its current position (the harness ends the active touchId).
-      const p = pointerToViewport(e, video);
-      if (p !== null) {
-        send({ type: 'touchEnd', x: p.x, y: devY(p.y), touchId: g.touchId }, true);
-      } else {
-        send({ type: 'touchEnd', x: 0, y: 0, touchId: g.touchId }, true);
+      // A gesture that never committed = a TAP released off-window → still emit the
+      // buffered clean tap at the press point (no move, so it never scrolls).
+      if (!g.committed) {
+        send({ type: 'touchStart', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
+        send({ type: 'touchEnd', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
+        return;
       }
+      // Committed drag: end at the in-bounds point when available, else the LAST
+      // gesture position (NOT raw 0,0 — the Mac injector honors the end coord, so
+      // 0,0 would read as a spurious flick to the top-left).
+      const p = pointerToViewport(e, video);
+      const ex = p !== null ? p.x : (g.lastX ?? g.startX);
+      const ey = p !== null ? p.y : (g.lastY ?? g.startY);
+      send({ type: 'touchEnd', x: clampX(ex), y: devY(clampY(ey)), touchId: g.touchId }, true);
     };
     // Wheel/trackpad scroll = a swipe gesture. Scrolling content DOWN
     // (deltaY > 0, reveal below) maps to a finger swiping UP, so y decreases.
@@ -537,9 +583,25 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('mouseup', endActiveGesture);
       window.removeEventListener('pointerup', endActiveGesture);
-      // Stop any in-flight inertial glide (just clear its timer — the room is
-      // tearing down) and drop the gesture so a remount can't reuse a stale touchId.
-      cancelFling(false);
+      // Lift any in-flight finger so a control-flip (manual→AI, which re-runs this
+      // effect with enabled=false while the room is still up) or teardown never
+      // leaves a STUCK touch on the live phone: end an in-progress committed drag,
+      // then stop+lift an inertial glide. send() is best-effort — if the channel is
+      // already gone the touchEnd is harmlessly swallowed. An UNcommitted (buffered)
+      // gesture sent no touchStart, so it needs no touchEnd.
+      const g = active.current;
+      if (g !== null && g.committed) {
+        send(
+          {
+            type: 'touchEnd',
+            x: clampX(g.lastX ?? g.startX),
+            y: devY(clampY(g.lastY ?? g.startY)),
+            touchId: g.touchId,
+          },
+          true,
+        );
+      }
+      cancelFling(true);
       active.current = null;
     };
   }, [room, video, enabled]);

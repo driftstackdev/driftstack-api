@@ -84,9 +84,11 @@ describe('gui-client/lib/livekit-input-capture content parity', () => {
     // Sends the touch variants. The sent y is wrapped in devY(...) — the iOS
     // title-band compensation (the box maps the streamed screen without
     // subtracting the ~32px title band, so an injected tap lands too low); x stays
-    // raw. devY is applied at the SEND sites only (the deadzone uses raw coords).
+    // raw. devY is applied at the SEND sites only. touchStart is BUFFERED and
+    // emitted at the PRESS point (g.startX/g.startY) — on drag-commit AND on a
+    // clean tap — so a tap never sends a touchMove (scroll-vs-tap gesture model).
     expect(body).toMatch(
-      /send\(\{ type: 'touchStart', x: p\.x, y: devY\(p\.y\), touchId \}, true\);/,
+      /send\(\{ type: 'touchStart', x: g\.startX, y: devY\(g\.startY\), touchId: g\.touchId \}, true\);/,
     );
     expect(body).toMatch(
       /send\(\{ type: 'touchMove', x: p\.x, y: devY\(p\.y\), touchId: g\.touchId \}, false\);/,
