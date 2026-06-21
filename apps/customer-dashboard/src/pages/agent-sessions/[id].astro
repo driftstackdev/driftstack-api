@@ -579,7 +579,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
         // 2026-05-22 — surface BYOK status in the header model pill so
         // customers know upfront which key path will be used (their
         // own vs. bundled/fallback). Soft-fails to silent default; the
-        // model badge stays "opus-4-7" without the BYOK indicator
+        // model badge stays "opus-4-8" without the BYOK indicator
         // if the lookup 404s.
         fetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key', {
           headers: { ...authHeaders() },
@@ -1139,7 +1139,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
               const headerModelName = document.querySelector('[data-header-model-name]');
               if (headerModelName) {
                 // 2026-05-22 — pretty-print the model id ("claude-
-                // opus-4-7" → "Opus 4-7"). Keeps capitalization
+                // opus-4-8" → "Opus 4-8"). Keeps capitalization
                 // consistent with the SSR default. Falls through to
                 // a strip-claude-prefix path if the id doesn't
                 // match a known family.

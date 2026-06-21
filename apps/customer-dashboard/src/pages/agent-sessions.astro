@@ -179,14 +179,14 @@ const apiBaseUrl = resolveApiBaseUrl();
               emerald when /v1/account/me/byok-anthropic-key
               reports key_set=true. */}
           <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-            {/* 6.c / #15 — per-session model picker. Opus 4.7 is the
+            {/* 6.c / #15 — per-session model picker. Opus 4.8 is the
                 default (strongest reasoning); Sonnet 4.6 / Haiku 4.5
                 are lower cost-to-serve. Threaded into the create POST
                 body; the server records it on the agent_session + bills
                 the per-model rate. */}
             <label
               class="inline-flex items-center gap-1.5 rounded-md border border-tk-border bg-tk-bg/60 px-2.5 py-1"
-              title="Pick the Claude model your agent session runs on. Opus 4.7 = strongest reasoning + tool-use accuracy; Sonnet 4.6 / Haiku 4.5 = lower cost for simpler workloads."
+              title="Pick the Claude model your agent session runs on. Opus 4.8 = strongest reasoning + tool-use accuracy (default); Sonnet 4.6 / Haiku 4.5 = lower cost for simpler workloads."
             >
               <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-tk-accent" aria-hidden="true">
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
@@ -668,7 +668,7 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
           ev.preventDefault();
           const fd = new FormData(createForm);
           const mode = fd.get('mode') ?? 'pair';
-          // 6.c / #15 — picked Claude model (defaults to Opus 4.7).
+          // 6.c / #15 — picked Claude model (defaults to Opus 4.8).
           const model = fd.get('model') ?? 'claude-opus-4-8';
           fetch(apiBaseUrl + '/v1/agent-sessions', {
             method: 'POST',
