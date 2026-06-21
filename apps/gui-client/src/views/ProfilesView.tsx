@@ -1323,7 +1323,10 @@ export function ProfilesView({
     return created.id;
   }
 
-  async function handleLaunch(profile: Profile): Promise<void> {
+  async function handleLaunch(
+    profile: Profile,
+    opts: { skipProxyDownConfirm?: boolean } = {},
+  ): Promise<void> {
     if (!client) return;
     setBusyId(profile.id);
     try {
@@ -1340,9 +1343,15 @@ export function ProfilesView({
       // warn before launching (override-able) rather than opening a session
       // that'll fail on a dead exit. Uses the CACHED result only — never blocks
       // a launch on a fresh probe, so an untested/healthy proxy launches
-      // straight through.
+      // straight through. SKIPPED for bulk launch (skipProxyDownConfirm) — the
+      // operator already confirmed the batch up front; a per-profile modal here
+      // would block the whole loop on each prompt (audit wn1ghalx1).
       const lastProbe = probeCache[proxy.id];
-      if (lastProbe && (!lastProbe.result.reachable || !lastProbe.result.auth_ok)) {
+      if (
+        !opts.skipProxyDownConfirm &&
+        lastProbe &&
+        (!lastProbe.result.reachable || !lastProbe.result.auth_ok)
+      ) {
         const reason = !lastProbe.result.reachable ? 'was unreachable' : 'rejected its credentials';
         const proceed = await confirm(
           `The proxy "${proxy.label}" ${reason} on its last test, so this session may fail to reach the internet. Launch anyway?`,
@@ -1723,9 +1732,12 @@ export function ProfilesView({
     try {
       for (const p of targets) {
         try {
-          await handleLaunch(p);
+          // skipProxyDownConfirm: the up-front bulk confirm already covered intent;
+          // a per-profile proxy-down modal here would block the whole batch.
+          await handleLaunch(p, { skipProxyDownConfirm: true });
         } catch {
-          /* skip one that failed/was gated — keep launching the rest */
+          /* defensive: handleLaunch handles its own errors, but keep the batch
+             resilient if a future change lets one throw */
         }
       }
       setSelectedIds(new Set());
