@@ -81,13 +81,18 @@ describe('gui-client/lib/livekit-input-capture content parity', () => {
   });
 
   it('touch translation behavior pinned (W198/W1249 coherence): a press → touchStart, drag → touchMove, release → touchEnd, wheel → swipe; left-button-only; NO mouseDown/mouseMove/mouseUp/wheel InputEvents are ever sent (those are the detectable iPhone tell the harness drops). Drift back to mouse* event types would re-break the loop + the fingerprint coherence', () => {
-    // Sends the touch variants.
-    expect(body).toMatch(/send\(\{ type: 'touchStart', x: p\.x, y: p\.y, touchId \}, true\);/);
+    // Sends the touch variants. The sent y is wrapped in devY(...) — the iOS
+    // title-band compensation (the box maps the streamed screen without
+    // subtracting the ~32px title band, so an injected tap lands too low); x stays
+    // raw. devY is applied at the SEND sites only (the deadzone uses raw coords).
     expect(body).toMatch(
-      /send\(\{ type: 'touchMove', x: p\.x, y: p\.y, touchId: g\.touchId \}, false\);/,
+      /send\(\{ type: 'touchStart', x: p\.x, y: devY\(p\.y\), touchId \}, true\);/,
     );
     expect(body).toMatch(
-      /send\(\{ type: 'touchEnd', x: p\.x, y: p\.y, touchId: g\.touchId \}, true\);/,
+      /send\(\{ type: 'touchMove', x: p\.x, y: devY\(p\.y\), touchId: g\.touchId \}, false\);/,
+    );
+    expect(body).toMatch(
+      /send\(\{ type: 'touchEnd', x: p\.x, y: devY\(p\.y\), touchId: g\.touchId \}, true\);/,
     );
     expect(body).toMatch(/type: 'swipe',/);
     // Left-button-only press (right/middle have no touch analogue).
