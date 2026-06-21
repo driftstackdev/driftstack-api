@@ -409,8 +409,20 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     const onMouseMove = (e: MouseEvent): void => {
       const g = active.current;
       if (g === null) return;
-      const p = pointerToViewport(e, video);
-      if (p === null) return;
+      let p = pointerToViewport(e, video);
+      if (p === null) {
+        // Off the video. An uncommitted gesture stays buffered (ignore). A COMMITTED
+        // drag keeps scrolling: clamp the cursor to the video edge so wandering off
+        // the small (~330px) frame doesn't FREEZE the scroll (audit S1) — the move
+        // listener is on window, so we still receive these.
+        if (!g.committed) return;
+        const r = video.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) return;
+        const cx = Math.max(r.left, Math.min(r.right, e.clientX));
+        const cy = Math.max(r.top, Math.min(r.bottom, e.clientY));
+        p = pointerToViewport({ clientX: cx, clientY: cy } as MouseEvent, video);
+        if (p === null) return;
+      }
       if (!g.committed) {
         const far = distSq(p.x, p.y, g.startX, g.startY);
         const elapsed = e.timeStamp - g.startT;
@@ -443,14 +455,20 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       g.lastT = t;
       send({ type: 'touchMove', x: p.x, y: devY(p.y), touchId: g.touchId }, false);
     };
-    // Release. A gesture that never committed is a TAP → emit the buffered
-    // touchStart + touchEnd AT THE PRESS POINT with no move (the box click-synths
-    // it; it can NEVER scroll). A committed drag ends normally, with the inertial
-    // fling on a fast flick-release.
-    const onMouseUp = (e: MouseEvent): void => {
+    // The SINGLE gesture-release handler, wired to the element mouseup AND the
+    // window mouseup + pointerup. CRITICAL ordering (audit w5q5vvdca B1): a real
+    // WebView dispatches `pointerup` (→ window) BEFORE the compat `mouseup`, so the
+    // window listener wins the race — the FULL release logic (tap / off-surface /
+    // inertial fling) must live HERE, not only in the element mouseup, or the fling
+    // would never run (pointerup ended the gesture first → no glide). Idempotent:
+    // it nulls active.current first, so whichever release event fires first owns
+    // the gesture and the rest no-op (no double touchEnd, no double fling).
+    const finishGesture = (e: MouseEvent): void => {
       const g = active.current;
-      active.current = null;
       if (g === null) return;
+      active.current = null;
+      // Never committed = a TAP → clean touchStart+touchEnd at the press point (no
+      // move, so the box can NEVER scroll it).
       if (!g.committed) {
         send({ type: 'touchStart', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
         send({ type: 'touchEnd', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
@@ -458,14 +476,21 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       }
       const p = pointerToViewport(e, video);
       if (p === null) {
-        // Committed drag released off-surface → end at the last in-bounds point.
-        const ex = clampX(g.lastX ?? g.startX);
-        const ey = devY(clampY(g.lastY ?? g.startY));
-        send({ type: 'touchEnd', x: ex, y: ey, touchId: g.touchId }, true);
+        // Committed drag released OFF the surface → lift at the last in-bounds point
+        // (NOT 0,0 — the Mac injector honors the end coord, so 0,0 reads as a flick).
+        send(
+          {
+            type: 'touchEnd',
+            x: clampX(g.lastX ?? g.startX),
+            y: devY(clampY(g.lastY ?? g.startY)),
+            touchId: g.touchId,
+          },
+          true,
+        );
         return;
       }
-      // Inertial slide: a fast flick-release keeps gliding (iOS momentum). Only on
-      // a committed drag + a recent release (a pause before lifting = settled).
+      // Committed drag released in-bounds: a fast, fresh flick keeps gliding (iOS
+      // momentum); otherwise end at the release point.
       const fresh = g.lastT !== undefined && e.timeStamp - g.lastT <= FLING_STALE_MS;
       const speed = g.vx !== undefined && g.vy !== undefined ? Math.hypot(g.vx, g.vy) : 0;
       if (fresh && speed >= FLING_MIN_SPEED) {
@@ -474,32 +499,6 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       }
       send({ type: 'touchEnd', x: p.x, y: devY(p.y), touchId: g.touchId }, true);
     };
-    // Window-level release fallback: pointer-capture never engages (the listeners
-    // are mouse* with no pointerId, while the capture call is pointerId-guarded),
-    // so a drag that releases OFF the video element never fires the element's
-    // mouseup → the finger stays down (a stuck touch). A window-level end ALWAYS
-    // lifts the finger. It can't map coordinates off-surface, so it ends at the
-    // last gesture position via touchEnd with the held touchId (no x/y change
-    // needed — the Mac side ends the active touch).
-    const endActiveGesture = (e: MouseEvent): void => {
-      const g = active.current;
-      if (g === null) return;
-      active.current = null;
-      // A gesture that never committed = a TAP released off-window → still emit the
-      // buffered clean tap at the press point (no move, so it never scrolls).
-      if (!g.committed) {
-        send({ type: 'touchStart', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
-        send({ type: 'touchEnd', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
-        return;
-      }
-      // Committed drag: end at the in-bounds point when available, else the LAST
-      // gesture position (NOT raw 0,0 — the Mac injector honors the end coord, so
-      // 0,0 would read as a spurious flick to the top-left).
-      const p = pointerToViewport(e, video);
-      const ex = p !== null ? p.x : (g.lastX ?? g.startX);
-      const ey = p !== null ? p.y : (g.lastY ?? g.startY);
-      send({ type: 'touchEnd', x: clampX(ex), y: devY(clampY(ey)), touchId: g.touchId }, true);
-    };
     // Wheel/trackpad scroll = a swipe gesture. Scrolling content DOWN
     // (deltaY > 0, reveal below) maps to a finger swiping UP, so y decreases.
     // Clamp the delta so one scroll notch is a short flick, not a fling.
@@ -507,13 +506,17 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       const p = pointerToViewport(e, video);
       if (p === null) return;
       const clamp = (d: number): number => Math.max(-240, Math.min(240, d));
+      // Apply devY ONCE to the origin, then offset the endpoint from it — do NOT
+      // re-clamp the endpoint through devY, or near the top ~32px both ends clamp
+      // to 0 and the scroll vector collapses to zero (no scroll, audit S3).
+      const y1 = devY(p.y);
       send(
         {
           type: 'swipe',
           x1: p.x,
-          y1: devY(p.y),
+          y1,
           x2: p.x - clamp(e.deltaX),
-          y2: devY(p.y - clamp(e.deltaY)),
+          y2: y1 - clamp(e.deltaY),
           durationMs: 120,
         },
         true,
@@ -556,10 +559,18 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       );
     };
 
-    video.addEventListener('mousemove', onMouseMove);
     video.addEventListener('mousedown', onMouseDown);
-    video.addEventListener('mouseup', onMouseUp);
     video.addEventListener('wheel', onWheel, { passive: true });
+    // Move + release on WINDOW, not just the video: the streamed phone is small
+    // (~330px wide), so a drag easily wanders off it. onMouseMove no-ops unless a
+    // gesture is active, so a window listener keeps a drag scrolling once it leaves
+    // the element (audit S1) instead of freezing. finishGesture owns release on
+    // BOTH mouseup AND pointerup (the WebView fires pointerup first → it wins the
+    // race → the fling actually runs, audit B1); it's idempotent so the duplicate
+    // events no-op.
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', finishGesture);
+    window.addEventListener('pointerup', finishGesture);
     // Keyboard events go on window so capture works even when the
     // <video> isn't directly focused. Side-effect: the customer can
     // type into the remote browser without first clicking on the
@@ -568,21 +579,15 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // only LK consumer in v1.0.
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
-    // Window-level release fallback (mouse + pointer) so a drag that releases off
-    // the element still lifts the finger — pointer-capture doesn't engage on the
-    // mouse* listeners, so the element's own mouseup can be missed.
-    window.addEventListener('mouseup', endActiveGesture);
-    window.addEventListener('pointerup', endActiveGesture);
 
     return () => {
-      video.removeEventListener('mousemove', onMouseMove);
       video.removeEventListener('mousedown', onMouseDown);
-      video.removeEventListener('mouseup', onMouseUp);
       video.removeEventListener('wheel', onWheel);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', finishGesture);
+      window.removeEventListener('pointerup', finishGesture);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
-      window.removeEventListener('mouseup', endActiveGesture);
-      window.removeEventListener('pointerup', endActiveGesture);
       // Lift any in-flight finger so a control-flip (manual→AI, which re-runs this
       // effect with enabled=false while the room is still up) or teardown never
       // leaves a STUCK touch on the live phone: end an in-progress committed drag,

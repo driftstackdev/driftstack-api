@@ -65,6 +65,20 @@ function fireMouse(el: HTMLElement, type: string, x: number, y: number, ts: numb
   el.dispatchEvent(ev);
 }
 
+/** Dispatch a release on WINDOW (the real WebView fires window `pointerup` BEFORE
+ *  the element `mouseup`; the release handler must own the full logic there). */
+function fireWindow(type: string, x: number, y: number, ts: number): void {
+  const ev = new MouseEvent(type, {
+    clientX: x,
+    clientY: y,
+    button: 0,
+    bubbles: true,
+    cancelable: true,
+  });
+  Object.defineProperty(ev, 'timeStamp', { value: ts, configurable: true });
+  window.dispatchEvent(ev);
+}
+
 describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
   beforeEach(() => {
     sendInputEvent.mockClear();
@@ -148,5 +162,32 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
     fireMouse(video, 'mousemove', 102, 101, 2040); // dist ~2 → tap
     fireMouse(video, 'mouseup', 102, 101, 2060);
     expect(emittedTypes()).not.toContain('touchMove');
+  });
+
+  it('B1 RACE: a committed fast flick released via WINDOW pointerup (which beats the element mouseup) STILL flings — momentum is not lost to the event-ordering race', () => {
+    const video = mountCapture();
+    fireMouse(video, 'mousedown', 200, 400, 1000);
+    fireMouse(video, 'mousemove', 200, 300, 1010); // 100px up fast → commit + high velocity
+    // Real WebView ordering: window 'pointerup' fires BEFORE the element 'mouseup'.
+    fireWindow('pointerup', 200, 300, 1015);
+    fireMouse(video, 'mouseup', 200, 300, 1016); // arrives after → must no-op
+    const types = emittedTypes();
+    // The fling ran: commit touchMove + at least the fling's first (synchronous)
+    // step move; the final touchEnd is deferred via a timer (not synchronous).
+    expect(types.filter((t) => t === 'touchMove').length).toBeGreaterThanOrEqual(2);
+    expect(types).not.toContain('touchEnd'); // glide in progress, not stopped dead
+    // No double gesture from the duplicate mouseup (idempotent on active.current).
+    expect(types.filter((t) => t === 'touchStart').length).toBe(1);
+  });
+
+  it('OFF-VIDEO DRAG keeps scrolling: a committed drag that moves off the element still streams touchMove (clamped), not freeze', () => {
+    const video = mountCapture();
+    fireMouse(video, 'mousedown', 200, 400, 1000);
+    fireMouse(video, 'mousemove', 200, 320, 1030); // commit (80px)
+    sendInputEvent.mockClear();
+    // Wander off the right edge of the 402-wide video (clientX 600) — window
+    // listener still fires; the move clamps to the edge and keeps scrolling.
+    fireWindow('mousemove', 600, 300, 1060);
+    expect(eventsOfType('touchMove').length).toBeGreaterThanOrEqual(1);
   });
 });

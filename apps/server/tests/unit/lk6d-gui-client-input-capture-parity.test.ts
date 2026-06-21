@@ -95,10 +95,14 @@ describe('LK.6.d — useInputCapture hook', () => {
   });
 
   it('cleanup removes every listener it installed (no leaks on unmount)', () => {
-    expect(body).toMatch(/video\.removeEventListener\('mousemove'/);
+    // mousedown + wheel stay on the video; move + release are on WINDOW so an
+    // off-element drag keeps scrolling (S1) and pointerup wins the release race so
+    // the inertial fling actually runs (B1, audit w5q5vvdca).
     expect(body).toMatch(/video\.removeEventListener\('mousedown'/);
-    expect(body).toMatch(/video\.removeEventListener\('mouseup'/);
     expect(body).toMatch(/video\.removeEventListener\('wheel'/);
+    expect(body).toMatch(/window\.removeEventListener\('mousemove'/);
+    expect(body).toMatch(/window\.removeEventListener\('mouseup'/);
+    expect(body).toMatch(/window\.removeEventListener\('pointerup'/);
     expect(body).toMatch(/window\.removeEventListener\('keydown'/);
     expect(body).toMatch(/window\.removeEventListener\('keyup'/);
   });
