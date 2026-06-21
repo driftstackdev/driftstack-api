@@ -289,48 +289,71 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     ).toBe(false);
   });
 
-  it('pageState (A3 W1238/W1240) pinned to the outbound union + shape (camelCase sessionId, state enum, url nullable, error null|{kind:net|timeout, http_status:null, message}) — was silently dropped at safeParse before recognition', () => {
-    // Shape pinned to A3's wire contract (testHarnessOutboundPageStateCodable).
-    expect(body).toMatch(
-      /export const PageStateFrameSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('pageState'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*state: z\.enum\(\['loading', 'loaded', 'errored'\]\),\s*\n?\s*url: z\.string\(\)\.nullable\(\),\s*\n?\s*error: z\s*\n?\s*\.object\(\{\s*\n?\s*kind: z\.enum\(\['net', 'timeout'\]\),\s*\n?\s*http_status: z\.null\(\),\s*\n?\s*message: z\.string\(\),\s*\n?\s*\}\)\s*\n?\s*\.nullable\(\),\s*\n?\s*\}\);/,
-    );
-    // loading (no error) + loaded + errored (with error) all parse via the union.
+  it('pageState (A3 W2730 wire spec) pinned to the outbound union + the RELAXED shape (Swift encodeIfPresent OMITS nil keys): url/title/error all optional, kind lenient, http_status optional+null-only. The previous REQUIRED url/error/http_status dropped EVERY real frame at safeParse → empty store → no live URL', () => {
+    // Shape pinned via toContain fragments (NOT a closed multi-line regex — the
+    // schema now carries comments + prettier may reflow it). Key relaxations:
+    expect(body).toContain('export const PageStateFrameSchema = z.object({');
+    expect(body).toContain("type: z.literal('pageState'),");
+    expect(body).toContain("state: z.enum(['loading', 'loaded', 'errored']),");
+    expect(body).toContain('url: z.string().nullable().optional(),');
+    expect(body).toContain('title: z.string().nullable().optional(),');
+    expect(body).toContain('kind: z.string().min(1),');
+    expect(body).toContain('http_status: z.null().optional(),');
+    // The exact A3 W2730 wire shapes must ALL parse (these are what the box sends):
+    // loading: url present, NO error key.
     expect(
       HarnessOutboundSchema.safeParse({
         type: 'pageState',
-        sessionId: 's1',
+        sessionId: 'agt_1',
         state: 'loading',
         url: 'https://example.com',
-        error: null,
       }).success,
     ).toBe(true);
+    // loaded: url + title, NO error key.
     expect(
       HarnessOutboundSchema.safeParse({
         type: 'pageState',
-        sessionId: 's1',
-        state: 'errored',
-        url: null,
-        error: { kind: 'net', http_status: null, message: 'connection refused' },
+        sessionId: 'agt_1',
+        state: 'loaded',
+        url: 'https://example.com/landed',
+        title: 'Example Domain',
       }).success,
     ).toBe(true);
-    // http_status must be null (A3 W1222 — not observable via W3C WebDriver).
+    // reload: url OMITTED entirely (encodeIfPresent).
     expect(
       HarnessOutboundSchema.safeParse({
         type: 'pageState',
-        sessionId: 's1',
+        sessionId: 'agt_1',
+        state: 'loading',
+      }).success,
+    ).toBe(true);
+    // errored: nested {kind, message} WITHOUT http_status (never emitted, W1222).
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'pageState',
+        sessionId: 'agt_1',
         state: 'errored',
-        url: null,
+        url: 'https://example.com',
+        error: { kind: 'net', message: 'connection refused' },
+      }).success,
+    ).toBe(true);
+    // kind is lenient now (was net|timeout only) so a frame is NEVER dropped on an
+    // unexpected kind (earlier docs listed http|tls|dns).
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'pageState',
+        sessionId: 'agt_1',
+        state: 'errored',
+        error: { kind: 'tls', message: 'x' },
+      }).success,
+    ).toBe(true);
+    // http_status, if ever present, must be null — a numeric status is rejected.
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'pageState',
+        sessionId: 'agt_1',
+        state: 'errored',
         error: { kind: 'net', http_status: 404, message: 'x' },
-      }).success,
-    ).toBe(false);
-    // an unknown error.kind (tls/dns/http) is rejected (only net|timeout observable).
-    expect(
-      HarnessOutboundSchema.safeParse({
-        type: 'pageState',
-        sessionId: 's1',
-        state: 'errored',
-        url: null,
-        error: { kind: 'tls', http_status: null, message: 'x' },
       }).success,
     ).toBe(false);
   });

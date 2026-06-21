@@ -628,14 +628,23 @@ export const PageStateFrameSchema = z.object({
   type: z.literal('pageState'),
   sessionId: z.string().min(1),
   state: z.enum(['loading', 'loaded', 'errored']),
-  url: z.string().nullable(),
+  // A3 W2730 (authoritative wire spec — Swift encodeIfPresent → nil keys are
+  // OMITTED, not null): `url` is absent on reload, `title` only on 'loaded',
+  // `error` only on 'errored', and `http_status` is NEVER emitted. The previous
+  // REQUIRED url / error / error.http_status therefore failed safeParse on EVERY
+  // real frame → it was silently dropped → the page-state store stayed empty → no
+  // live URL in the GUI. All three are now optional; `kind` is lenient (A3 emits
+  // net|timeout; earlier docs listed http|tls|dns) so a frame is never dropped.
+  url: z.string().nullable().optional(),
+  title: z.string().nullable().optional(),
   error: z
     .object({
-      kind: z.enum(['net', 'timeout']),
-      http_status: z.null(),
+      kind: z.string().min(1),
       message: z.string(),
+      http_status: z.null().optional(),
     })
-    .nullable(),
+    .nullable()
+    .optional(),
 });
 export type PageStateFrame = z.infer<typeof PageStateFrameSchema>;
 

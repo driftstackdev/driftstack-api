@@ -33,7 +33,13 @@ export class SessionPageStateStore {
     // delete+set moves the key to newest in the Map's insertion order, so the
     // size-cap eviction below drops the genuinely-stalest session.
     this.map.delete(frame.sessionId);
-    this.map.set(frame.sessionId, { state: frame.state, url: frame.url, error: frame.error });
+    // url/error are OMITTED on some frames (reload omits url; non-error states omit
+    // error) → normalize the absent key to null for a stable customer-facing shape.
+    this.map.set(frame.sessionId, {
+      state: frame.state,
+      url: frame.url ?? null,
+      error: frame.error ?? null,
+    });
     if (this.map.size > this.maxEntries) {
       const oldest = this.map.keys().next().value;
       if (oldest !== undefined) this.map.delete(oldest);
