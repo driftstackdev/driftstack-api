@@ -32,6 +32,7 @@ import {
 import { RelativeTime } from '../components/RelativeTime';
 
 const MODELS: ReadonlyArray<{ id: ChatModel; label: string }> = [
+  { id: 'claude-opus-4-8', label: 'Opus 4.8' },
   { id: 'claude-opus-4-7', label: 'Opus 4.7' },
   { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
   { id: 'claude-haiku-4-5', label: 'Haiku 4.5' },
@@ -50,7 +51,7 @@ export function AgentChatView({
   // key. (The server-side LLM config can't be probed from here; an API key is
   // the necessary + honest precondition the GUI can assert.)
   const aiReady = settings.apiKey !== null;
-  const [model, setModel] = useState<ChatModel>('claude-opus-4-7');
+  const [model, setModel] = useState<ChatModel>('claude-opus-4-8');
   const [profileId, setProfileId] = useState<string>(initialProfileId ?? '');
   const [profiles, setProfiles] = useState<ReadonlyArray<{ id: string; name: string }>>([]);
   const [draft, setDraft] = useState('');

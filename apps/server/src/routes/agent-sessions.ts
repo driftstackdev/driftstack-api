@@ -1103,7 +1103,7 @@ export function registerAgentSessionsRoutes(
           // otherwise repo applies the default ('ai').
           ...(parsed.data.mode !== undefined ? { mode: parsed.data.mode } : {}),
           // 6.c / #15 — forward the picked model when supplied; otherwise
-          // repo applies the default ('claude-opus-4-7').
+          // repo applies the default ('claude-opus-4-8').
           ...(parsed.data.model !== undefined ? { model: parsed.data.model } : {}),
         });
       } catch (err) {

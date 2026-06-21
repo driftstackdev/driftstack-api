@@ -40,7 +40,11 @@ function friendlyChatError(err: unknown): string {
   return msg.length > 0 ? msg : 'The agent request failed — try again.';
 }
 
-export type ChatModel = 'claude-opus-4-7' | 'claude-sonnet-4-6' | 'claude-haiku-4-5';
+export type ChatModel =
+  | 'claude-opus-4-8'
+  | 'claude-opus-4-7'
+  | 'claude-sonnet-4-6'
+  | 'claude-haiku-4-5';
 
 export interface ChatTurn {
   /** Stable, monotonic id for React keys (turns are append-only). */

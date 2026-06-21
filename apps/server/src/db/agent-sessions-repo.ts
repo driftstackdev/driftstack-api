@@ -60,8 +60,8 @@ function rowToRecord(row: typeof agentSessions.$inferSelect): AgentSessionRecord
     // migration 0052. Existing rows pick up mode='ai' from the CHECK
     // default; null for pair_mode_state + gui_control_key_expires_at.
     mode: (row.mode as 'manual' | 'ai' | 'pair') ?? 'ai',
-    // 6.c / #15 — picked Claude 4.x model (migration 0066 column;
-    // existing rows pick up 'claude-opus-4-7' from the CHECK default).
+    // 6.c / #15 — picked Claude 4.x model (migration 0066 column; backfill
+    // default 'claude-opus-4-7', bumped to 'claude-opus-4-8' for new rows in 0087).
     model: (row.model as AgentModel) ?? DEFAULT_AGENT_MODEL,
     // 0086 — fleet node the session was dispatched to (NULL until dispatch /
     // on every no-fleet-CP row).

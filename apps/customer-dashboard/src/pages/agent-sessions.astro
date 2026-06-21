@@ -198,6 +198,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 aria-label="Agent model"
                 class="bg-transparent font-mono text-tk-ink text-[10px] focus:outline-none"
               >
+                <option value="claude-opus-4-8">Claude Opus 4.8</option>
                 <option value="claude-opus-4-7">Claude Opus 4.7</option>
                 <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
                 <option value="claude-haiku-4-5">Claude Haiku 4.5</option>
@@ -668,7 +669,7 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
           const fd = new FormData(createForm);
           const mode = fd.get('mode') ?? 'pair';
           // 6.c / #15 — picked Claude model (defaults to Opus 4.7).
-          const model = fd.get('model') ?? 'claude-opus-4-7';
+          const model = fd.get('model') ?? 'claude-opus-4-8';
           fetch(apiBaseUrl + '/v1/agent-sessions', {
             method: 'POST',
             headers: {

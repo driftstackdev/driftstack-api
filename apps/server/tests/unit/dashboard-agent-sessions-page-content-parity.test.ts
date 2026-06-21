@@ -114,8 +114,8 @@ describe('v2-#8 Wave 2.C sub-slice 8.24 agent-sessions page parity', () => {
   it('create-session form POSTs /v1/agent-sessions with { mode, model } (6.c per-session model picker); 503 reveals feature banner', () => {
     expect(body).toMatch(/method: 'POST'/);
     expect(body).toMatch(/JSON\.stringify\(\{ mode, model \}\)/);
-    // 6.c — model read from the picker (default Opus 4.7) + a <select name="model">.
-    expect(body).toMatch(/const model = fd\.get\('model'\) \?\? 'claude-opus-4-7';/);
+    // 6.c — model read from the picker (default Opus 4.8) + a <select name="model">.
+    expect(body).toMatch(/const model = fd\.get\('model'\) \?\? 'claude-opus-4-8';/);
     expect(body).toMatch(/<select\s*\n?\s*name="model"/);
     expect(body).toMatch(/r\.status === 503/);
     expect(body).toMatch(/featureBanner\.classList\.remove\('hidden'\)/);

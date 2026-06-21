@@ -212,7 +212,7 @@ class AgentSession(BaseModel):
     closed_at: str | None
     created_by_user_id: str | None
     mode: Literal["manual", "ai", "pair"]
-    model: Literal["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+    model: Literal["claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
     pair_mode_state: PairModeState | None
     created_at: str
     updated_at: str

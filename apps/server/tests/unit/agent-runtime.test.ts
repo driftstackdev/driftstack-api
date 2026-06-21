@@ -203,7 +203,7 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     expect(seenCalls[0]?.byok).toBeUndefined();
   });
 
-  it('6.c model threading: the session-picked model reaches DecomposeArgs.model (cross-layer: create-time model → loaded session → decompose call), and defaults to claude-opus-4-7 when unset', async () => {
+  it('6.c model threading: the session-picked model reaches DecomposeArgs.model (cross-layer: create-time model → loaded session → decompose call), and defaults to claude-opus-4-8 when unset', async () => {
     const seenModels: Array<DecomposeArgs['model']> = [];
     const recordingDecomposer = {
       decompose: (args: DecomposeArgs) => {
@@ -233,13 +233,13 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
       userMessage: 'a sufficiently long task description for clarity',
     });
     expect(seenModels[0]).toBe('claude-haiku-4-5');
-    // Default (no model picked) → Opus 4.7.
+    // Default (no model picked) → Opus 4.8.
     const def = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
     await runtime.runTurn({
       agentSessionId: def.id,
       userMessage: 'a sufficiently long task description for clarity',
     });
-    expect(seenModels[1]).toBe('claude-opus-4-7');
+    expect(seenModels[1]).toBe('claude-opus-4-8');
   });
 
   it('Q.3 token budget exhausted before turn: returns refuse + ATOMICALLY CLOSES the session with closedReason=budget-exhausted (so the next turn short-circuits on session-closed instead of letting the customer retry into another budget refusal)', async () => {

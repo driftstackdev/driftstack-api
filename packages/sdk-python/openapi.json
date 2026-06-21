@@ -408,7 +408,7 @@
           },
           "model": {
             "type": "string",
-            "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+            "enum": ["claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
           },
           "pair_mode_state": {
             "type": ["object", "null"],
@@ -15902,7 +15902,12 @@
                   },
                   "model": {
                     "type": "string",
-                    "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+                    "enum": [
+                      "claude-opus-4-8",
+                      "claude-opus-4-7",
+                      "claude-sonnet-4-6",
+                      "claude-haiku-4-5"
+                    ]
                   },
                   "profile_id": {
                     "type": "string"
@@ -15956,7 +15961,12 @@
                     },
                     "model": {
                       "type": "string",
-                      "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+                      "enum": [
+                        "claude-opus-4-8",
+                        "claude-opus-4-7",
+                        "claude-sonnet-4-6",
+                        "claude-haiku-4-5"
+                      ]
                     },
                     "pair_mode_state": {
                       "type": ["object", "null"],
@@ -16139,7 +16149,12 @@
                           },
                           "model": {
                             "type": "string",
-                            "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+                            "enum": [
+                              "claude-opus-4-8",
+                              "claude-opus-4-7",
+                              "claude-sonnet-4-6",
+                              "claude-haiku-4-5"
+                            ]
                           },
                           "pair_mode_state": {
                             "type": ["object", "null"],
@@ -16329,7 +16344,12 @@
                     },
                     "model": {
                       "type": "string",
-                      "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+                      "enum": [
+                        "claude-opus-4-8",
+                        "claude-opus-4-7",
+                        "claude-sonnet-4-6",
+                        "claude-haiku-4-5"
+                      ]
                     },
                     "pair_mode_state": {
                       "type": ["object", "null"],
@@ -16735,7 +16755,12 @@
                             },
                             "model": {
                               "type": "string",
-                              "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+                              "enum": [
+                                "claude-opus-4-8",
+                                "claude-opus-4-7",
+                                "claude-sonnet-4-6",
+                                "claude-haiku-4-5"
+                              ]
                             },
                             "pair_mode_state": {
                               "type": ["object", "null"],
@@ -17360,7 +17385,12 @@
                             },
                             "model": {
                               "type": "string",
-                              "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+                              "enum": [
+                                "claude-opus-4-8",
+                                "claude-opus-4-7",
+                                "claude-sonnet-4-6",
+                                "claude-haiku-4-5"
+                              ]
                             },
                             "pair_mode_state": {
                               "type": ["object", "null"],
@@ -17489,7 +17519,12 @@
                             },
                             "model": {
                               "type": "string",
-                              "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+                              "enum": [
+                                "claude-opus-4-8",
+                                "claude-opus-4-7",
+                                "claude-sonnet-4-6",
+                                "claude-haiku-4-5"
+                              ]
                             },
                             "pair_mode_state": {
                               "type": ["object", "null"],

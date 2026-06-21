@@ -103,9 +103,10 @@ export interface AgentSession {
   mode: 'manual' | 'ai' | 'pair';
   /**
    * 6.c — the Claude 4.x model the AI agent runs for this session
-   * (set at create-time; defaults to 'claude-opus-4-7').
+   * (set at create-time; defaults to 'claude-opus-4-8'). 'claude-opus-4-7'
+   * stays accepted for back-compat with sessions created before the bump.
    */
-  model: 'claude-opus-4-7' | 'claude-sonnet-4-6' | 'claude-haiku-4-5';
+  model: 'claude-opus-4-8' | 'claude-opus-4-7' | 'claude-sonnet-4-6' | 'claude-haiku-4-5';
   /**
    * Slice 3 (Wave 29-NNN ARC 3) — pair-mode state machine
    * discriminator. `null` when mode != 'pair'; carries the
@@ -155,10 +156,11 @@ export interface CreateAgentSessionRequest {
   mode?: 'manual' | 'ai' | 'pair';
   /**
    * 6.c — the Claude 4.x model the AI agent runs for this session.
-   * Defaults server-side to 'claude-opus-4-7' when omitted. Picking a
+   * Defaults server-side to 'claude-opus-4-8' when omitted. Picking a
    * cheaper model (Sonnet 4.6 / Haiku 4.5) lowers cost-to-serve.
+   * 'claude-opus-4-7' stays accepted for back-compat.
    */
-  model?: 'claude-opus-4-7' | 'claude-sonnet-4-6' | 'claude-haiku-4-5';
+  model?: 'claude-opus-4-8' | 'claude-opus-4-7' | 'claude-sonnet-4-6' | 'claude-haiku-4-5';
   /**
    * Attach a saved profile (a persistent browser identity — cookies,
    * localStorage, etc.) so the session resumes that profile's stored state and
