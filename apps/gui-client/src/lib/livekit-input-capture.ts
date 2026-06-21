@@ -184,12 +184,16 @@ const TAP_Y_OFFSET = 32;
 const devY = (y: number): number => Math.max(0, y - TAP_Y_OFFSET);
 
 /** Inertial slide (founder 2026-06-21 "slide simulation like a new iphone"): on a
- *  fast drag-release the touch keeps GLIDING and decelerates to a stop instead of
- *  stopping dead, mimicking iOS momentum scrolling. Only a genuine flick triggers
- *  it; a tap or slow drag is unchanged. The glide is bounded + cancellable (a new
- *  touch during it halts it, like iOS). FLING_MIN_SPEED = release speed (px/ms) to
- *  trigger; FLING_STALE_MS = a pause longer than this before lifting means the
- *  finger settled, so NO glide; FLING_STEP_MS = the move cadence during the glide. */
+ *  fast drag-release the touch keeps GLIDING and decelerates to a stop. ⚠️ DISABLED
+ *  2026-06-21 (FLING_ENABLED=false): once it actually fired (the B1 pointerup-race
+ *  fix), the founder hit "awful latency, much scrolling AFTER i'm done" — the glide
+ *  over-drove the fork's per-move scroll (A3 W2736 warned of this), so a click-drag
+ *  scroll kept moving after release. A click-drag scroll now stops dead on release
+ *  (reliable > over-scroll). The pure computeFlingPath + the cancellable runtime are
+ *  kept for a future re-enable (ideally native fork momentum). FLING_MIN_SPEED =
+ *  release speed (px/ms) to trigger; FLING_STALE_MS = a settle pause that cancels it;
+ *  FLING_STEP_MS = the move cadence during the glide. */
+const FLING_ENABLED = false;
 const FLING_MIN_SPEED = 0.45;
 const FLING_STALE_MS = 60;
 const FLING_STEP_MS = 16;
@@ -489,11 +493,12 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         );
         return;
       }
-      // Committed drag released in-bounds: a fast, fresh flick keeps gliding (iOS
-      // momentum); otherwise end at the release point.
+      // Committed drag released in-bounds. The inertial fling is DISABLED
+      // (FLING_ENABLED=false) — it over-drove the scroll ("much scrolling after i'm
+      // done", founder 2026-06-21); a click-drag scroll now stops dead on release.
       const fresh = g.lastT !== undefined && e.timeStamp - g.lastT <= FLING_STALE_MS;
       const speed = g.vx !== undefined && g.vy !== undefined ? Math.hypot(g.vx, g.vy) : 0;
-      if (fresh && speed >= FLING_MIN_SPEED) {
+      if (FLING_ENABLED && fresh && speed >= FLING_MIN_SPEED) {
         startFling(g.touchId, p.x, p.y, g.vx as number, g.vy as number);
         return;
       }

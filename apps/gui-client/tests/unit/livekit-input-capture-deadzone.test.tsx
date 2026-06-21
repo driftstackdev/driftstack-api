@@ -171,20 +171,20 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
     expect(emittedTypes()).not.toContain('touchMove');
   });
 
-  it('B1 RACE: a committed fast flick released via WINDOW pointerup (which beats the element mouseup) STILL flings — momentum is not lost to the event-ordering race', () => {
+  it('RELEASE RACE (B1): a committed drag released via WINDOW pointerup (which beats the element mouseup) is still ENDED — release handling is not lost to the event-ordering race, and the duplicate mouseup no-ops (no stuck finger, no double end)', () => {
     const video = mountCapture();
     fireMouse(video, 'mousedown', 200, 400, 1000);
-    fireMouse(video, 'mousemove', 200, 300, 1010); // 100px up fast → commit + high velocity
+    fireMouse(video, 'mousemove', 200, 300, 1010); // 100px up → commit
     // Real WebView ordering: window 'pointerup' fires BEFORE the element 'mouseup'.
-    fireWindow('pointerup', 200, 300, 1015);
-    fireMouse(video, 'mouseup', 200, 300, 1016); // arrives after → must no-op
+    fireWindow('pointerup', 200, 300, 1500);
+    fireMouse(video, 'mouseup', 200, 300, 1501); // arrives after → must no-op
     const types = emittedTypes();
-    // The fling ran: commit touchMove + at least the fling's first (synchronous)
-    // step move; the final touchEnd is deferred via a timer (not synchronous).
-    expect(types.filter((t) => t === 'touchMove').length).toBeGreaterThanOrEqual(2);
-    expect(types).not.toContain('touchEnd'); // glide in progress, not stopped dead
-    // No double gesture from the duplicate mouseup (idempotent on active.current).
+    // The drag scrolled (touchMove) and the release was handled on the pointerup:
+    // exactly one touchStart + one touchEnd (the fling is disabled → stops dead, no
+    // glide; the duplicate mouseup is idempotent on active.current).
+    expect(types).toContain('touchMove');
     expect(types.filter((t) => t === 'touchStart').length).toBe(1);
+    expect(types.filter((t) => t === 'touchEnd').length).toBe(1);
   });
 
   it('OFF-VIDEO DRAG keeps scrolling: a committed drag that moves off the element still streams touchMove (clamped), not freeze', () => {
