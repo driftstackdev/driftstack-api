@@ -76,6 +76,7 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
 // badge — isolates the room-recovery reset path.
 vi.mock('../../src/lib/agent-session-control', () => ({
   getAgentSession: () => new Promise(() => {}),
+  getAgentSessionPageState: () => Promise.resolve(null),
   setSessionMode: vi.fn(),
   takeoverSession: vi.fn(),
   handbackSession: vi.fn(),

@@ -50,6 +50,7 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
 // The control transport — mode 'manual' so the panel renders the full chrome.
 vi.mock('../../src/lib/agent-session-control', () => ({
   getAgentSession: () => Promise.resolve({ mode: 'manual', pairKind: null }),
+  getAgentSessionPageState: () => Promise.resolve(null),
   setSessionMode: vi.fn(),
   takeoverSession: vi.fn(),
   handbackSession: vi.fn(),

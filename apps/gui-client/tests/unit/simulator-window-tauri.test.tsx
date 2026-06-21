@@ -38,6 +38,7 @@ let sessionMode: 'ai' | 'manual' | 'pair' = 'manual';
 const endAgentSession = vi.fn<(id: string, auth: unknown) => Promise<void>>().mockResolvedValue();
 vi.mock('../../src/lib/agent-session-control', () => ({
   getAgentSession: () => Promise.resolve({ mode: sessionMode, pairKind: null }),
+  getAgentSessionPageState: () => Promise.resolve(null),
   setSessionMode: vi.fn(),
   takeoverSession: vi.fn(),
   handbackSession: vi.fn(),
