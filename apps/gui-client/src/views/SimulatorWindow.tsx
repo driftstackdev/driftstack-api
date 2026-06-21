@@ -1281,6 +1281,60 @@ export function SimulatorWindow(): JSX.Element {
     return () => window.clearTimeout(t);
   }, [browserMode, info]);
 
+  // Aspect-lock manual resizing (founder 2026-06-21 "if i double click it fully
+  // maximizes, looks strange"): the device video is aspect-locked, so any resize
+  // to an off-aspect size letterboxes the phone. Disable the macOS zoom and, after
+  // a resize settles, snap the WIDTH to match the (user-chosen) height + aspect so
+  // the phone always fills the frame — resizing scales the phone instead of adding
+  // gaps. Loop-safe: only corrects when off-aspect by >4px (our own setSize then
+  // re-fires onResized but reads as already-on-aspect → no-op). Tauri-only.
+  useEffect(() => {
+    if (info === null || typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window))
+      return;
+    let unlisten = (): void => {};
+    let disposed = false;
+    let timer = 0;
+    void (async () => {
+      try {
+        const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+        const { LogicalSize } = await import('@tauri-apps/api/dpi');
+        const win = getCurrentWebviewWindow();
+        await win.setMaximizable(false).catch(() => undefined);
+        const stop = await win.onResized(() => {
+          window.clearTimeout(timer);
+          timer = window.setTimeout(() => {
+            void (async () => {
+              try {
+                const factor = await win.scaleFactor();
+                const size = await win.innerSize();
+                const h = Math.round(size.height / factor);
+                const w = Math.round(size.width / factor);
+                const aspect = deviceAspectRef.current;
+                const chrome =
+                  TOOLBAR_H + (browserMode ? BROWSER_BAR_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
+                const needW = Math.round((h - chrome) * aspect + BEZEL_PAD);
+                if (needW > 0 && Math.abs(w - needW) > 4) {
+                  await win.setSize(new LogicalSize(needW, h));
+                }
+              } catch {
+                /* window API unavailable (non-Tauri / mock) — ignore */
+              }
+            })();
+          }, 110);
+        });
+        if (disposed) stop();
+        else unlisten = stop;
+      } catch {
+        /* getCurrentWebviewWindow / onResized unavailable (non-Tauri / mock) — ignore */
+      }
+    })();
+    return () => {
+      disposed = true;
+      window.clearTimeout(timer);
+      unlisten();
+    };
+  }, [browserMode, info]);
+
   // Live page state from the device (A3 page_state over the LiveKit data channel,
   // bus W2719) — drives the browser-mode address bar's live URL + loading bar.
   // Until the harness emits it, onNavigate optimistically shows a loading sweep
@@ -1537,7 +1591,7 @@ export function SimulatorWindow(): JSX.Element {
         // Non-manual: don't preventDefault — let the default close proceed; the
         // agent session keeps running in the background.
       });
-    })();
+    })().catch(() => undefined); // window API unavailable (non-Tauri / mock) — no close handler
     return () => {
       unlisten?.();
     };

@@ -172,7 +172,13 @@ export async function openSimulatorWindow({
       title: `${deviceName ?? 'iPhone'}${profileName !== undefined && profileName !== '' ? ` — ${profileName}` : ''}`,
       width: SIM_WIDTH,
       height: SIM_HEIGHT,
+      // Resizable so the operator can scale the phone, but NOT maximizable: the
+      // device video is aspect-locked, so a full-screen "zoom" (macOS double-click
+      // the drag region) just letterboxes the phone in a huge frame — "looks
+      // strange" (founder 2026-06-21). SimulatorWindow re-fits to the device aspect
+      // on every resize, so manual resizing scales the phone with no side gaps.
       resizable: true,
+      maximizable: false,
       // BORDERLESS + transparent — the iPhone IS the window (founder 2026-06-18:
       // "back like it was", no macOS title-bar chrome ON the phone). The
       // separate/selectable part comes from the standalone Driftstack Simulator
