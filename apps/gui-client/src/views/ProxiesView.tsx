@@ -5,7 +5,7 @@
 // integration coordination). Until then this view lets the founder
 // curate the proxy list so it's ready when the contract lands.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
 import { RelativeTime } from '../components/RelativeTime';
@@ -61,6 +61,10 @@ export function ProxiesView(): JSX.Element {
   // Native SOCKS5 probe per saved proxy — reachability + UDP-associate
   // support. Keyed by proxy id so each row keeps its own last result.
   const [testingId, setTestingId] = useState<string | null>(null);
+  // Epoch token for in-flight probes: bumped when a proxy is edited (endpoint
+  // changed) or removed, so a slow probe that started against the OLD endpoint
+  // discards its result instead of re-advertising stale reachability/geo.
+  const testEpochRef = useRef(0);
   // E-2 exit-geo: per-proxy echo result (null entry = probed but
   // unavailable — native command or server endpoint not live yet).
   const [exitResults, setExitResults] = useState<Record<string, ProxyExitProbeResult | null>>({});
@@ -122,6 +126,7 @@ export function ProxiesView(): JSX.Element {
           prev.username !== draft.username ||
           prev.password !== draft.password;
         if (connChanged) {
+          testEpochRef.current++; // discard any in-flight probe against the old endpoint
           void invalidateProbe(editId).catch(() => undefined);
           setTestResults((r) => dropKey(r, editId));
           setExitResults((r) => dropKey(r, editId));
@@ -138,6 +143,7 @@ export function ProxiesView(): JSX.Element {
     setBusyId(id);
     try {
       await removeProxy(id);
+      testEpochRef.current++; // discard any in-flight probe for the removed proxy
       // Drop the cached probe too, else its exit-IP/geo orphans in the
       // cache (and a future re-minted id could inherit stale geo).
       void invalidateProbe(id).catch(() => undefined);
@@ -152,6 +158,8 @@ export function ProxiesView(): JSX.Element {
   }
 
   async function handleTest(p: ProxyConfig): Promise<void> {
+    const epoch = ++testEpochRef.current; // claim this probe; an edit/remove bumps it
+    const stale = (): boolean => testEpochRef.current !== epoch;
     setTestingId(p.id);
     try {
       const result = await testProxy({
@@ -160,6 +168,7 @@ export function ProxiesView(): JSX.Element {
         username: p.username,
         password: p.password,
       });
+      if (stale()) return; // proxy endpoint changed/removed mid-probe → discard
       setTestResults((r) => ({ ...r, [p.id]: result }));
       // Night-arc B: persist so profile cards can render egress
       // capability (UDP badge) without re-probing. Best-effort.
@@ -173,9 +182,18 @@ export function ProxiesView(): JSX.Element {
           username: p.username,
           password: p.password,
         });
+        if (stale()) return;
         setExitResults((r) => ({ ...r, [p.id]: exit }));
         if (exit !== null) {
-          void saveExitResult(p.id, exit.ip, exit.country).catch(() => undefined);
+          // Persist the FULL geo enrichment (city/region/timezone/asn), not just
+          // ip/country — mirrors ProfilesView so the Profiles hub + a reload show
+          // the same exit location for a proxy tested from here.
+          void saveExitResult(p.id, exit.ip, exit.country, {
+            city: exit.city ?? null,
+            region: exit.region ?? null,
+            timezone: exit.timezone ?? null,
+            asnOrg: exit.asn_org ?? null,
+          }).catch(() => undefined);
         }
       } else {
         // Proxy is no longer usable (not reachable / auth failed) — drop any
@@ -184,6 +202,7 @@ export function ProxiesView(): JSX.Element {
         setExitResults((r) => dropKey(r, p.id));
       }
     } catch (err) {
+      if (stale()) return;
       setTestResults((r) => ({
         ...r,
         [p.id]: {
@@ -196,7 +215,7 @@ export function ProxiesView(): JSX.Element {
       }));
       setExitResults((r) => dropKey(r, p.id));
     } finally {
-      setTestingId(null);
+      if (!stale()) setTestingId(null);
     }
   }
 
@@ -302,6 +321,10 @@ export function ProxiesView(): JSX.Element {
           (the whole page scrolls inside the app's <main overflow-auto>). */}
       {(editor.kind === 'add' || editor.kind === 'edit') && (
         <ProxyForm
+          // Identity-bound key → the form REMOUNTS when the edit target changes,
+          // so switching Edit A → Edit B (the list stays clickable below) reseeds
+          // the draft instead of writing A's host/port/creds onto B.
+          key={editor.kind === 'edit' ? editor.id : 'add'}
           initial={editing !== null ? toDraft(editing) : EMPTY_DRAFT}
           mode={editor.kind}
           onCancel={() => setEditor({ kind: 'idle' })}
@@ -337,6 +360,7 @@ export function ProxiesView(): JSX.Element {
           proxies={state.proxies}
           busyId={busyId}
           testingId={testingId}
+          testingAll={testingAll}
           testResults={testResults}
           exitResults={exitResults}
           onEdit={(id) => setEditor({ kind: 'edit', id })}
@@ -386,6 +410,7 @@ function ProxyList({
   proxies,
   busyId,
   testingId,
+  testingAll,
   testResults,
   exitResults,
   onEdit,
@@ -395,6 +420,7 @@ function ProxyList({
   proxies: ProxyConfig[];
   busyId: string | null;
   testingId: string | null;
+  testingAll: boolean;
   testResults: Record<string, ProxyTestResult>;
   exitResults: Record<string, ProxyExitProbeResult | null>;
   onEdit: (id: string) => void;
@@ -409,6 +435,9 @@ function ProxyList({
           proxy={p}
           busy={busyId === p.id}
           testing={testingId === p.id}
+          // During a Test-all the whole row is locked so a stray per-card click
+          // can't spawn a concurrent probe that clobbers the shared spinner.
+          testingAll={testingAll}
           result={testResults[p.id]}
           exit={p.id in exitResults ? exitResults[p.id] : undefined}
           onEdit={() => onEdit(p.id)}
@@ -428,6 +457,7 @@ function ProxyCard({
   proxy: p,
   busy,
   testing,
+  testingAll,
   result,
   exit,
   onEdit,
@@ -437,6 +467,7 @@ function ProxyCard({
   proxy: ProxyConfig;
   busy: boolean;
   testing: boolean;
+  testingAll: boolean;
   result: ProxyTestResult | undefined;
   // undefined = exit-geo never recorded for this proxy; null = probed but
   // unavailable (server endpoint / native command not live yet).
@@ -582,7 +613,7 @@ function ProxyCard({
           type="button"
           className="btn-primary flex-1 text-xs"
           onClick={onTest}
-          disabled={testing}
+          disabled={testing || testingAll}
         >
           {testing ? 'Testing…' : result !== undefined ? 'Re-test' : 'Test'}
         </button>
