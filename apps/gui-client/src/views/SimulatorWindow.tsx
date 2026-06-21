@@ -1961,6 +1961,14 @@ export function SimulatorWindow(): JSX.Element {
                     <div className="font-sans text-[11px] font-semibold text-white">Identity</div>
                     <div className="truncate">engine-deep · bit-exact device</div>
                     <div className="truncate">input human-cadence native</div>
+                    {/* Build stamp — baked in at vite build time so the running
+                        build is verifiable at a glance (ends the stale-build
+                        "no change" confusion: a relaunch before a rebuild
+                        finishes shows the OLD stamp). Guarded for vitest, where
+                        the define is absent. */}
+                    <div className="truncate text-white/40">
+                      build {typeof __BUILD_STAMP__ !== 'undefined' ? __BUILD_STAMP__ : 'dev'}
+                    </div>
                   </div>
                 </div>
               )}
