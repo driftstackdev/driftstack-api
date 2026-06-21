@@ -1227,21 +1227,31 @@ export function SimulatorWindow(): JSX.Element {
       const factor = await win.scaleFactor();
       const size = await win.innerSize();
       const curWidth = Math.round(size.width / factor);
-      const aspect = deviceAspectRef.current;
+      const aspect = deviceAspectRef.current; // videoW / videoH
       const chrome = TOOLBAR_H + (browserModeOn ? BROWSER_BAR_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
-      // window.screen.availHeight is CSS px already minus the menu bar + Dock; a
-      // small margin leaves room for the window frame so we never trip the OS clamp
-      // (the clamp is what letterboxed the device with side gaps).
+      // The device screen-area must match the video aspect or the video
+      // object-contains with side gaps. Height for a width = chrome + (w-bezel)/aspect.
+      // First pass: ask for that height, pre-capped to the screen work area (a hint).
       const avail = typeof window !== 'undefined' ? (window.screen?.availHeight ?? 0) : 0;
-      const maxH = avail > 0 ? avail - 24 : Number.POSITIVE_INFINITY;
-      const screenW = curWidth - BEZEL_PAD;
+      let height = Math.round(chrome + (curWidth - BEZEL_PAD) / aspect);
       let width = curWidth;
-      let height = Math.round(chrome + screenW / aspect); // h/w = 1/aspect
-      if (height > maxH) {
-        height = Math.round(maxH);
+      if (avail > 0 && height > avail - 24) {
+        height = avail - 24;
         width = Math.round((height - chrome) * aspect + BEZEL_PAD);
       }
-      await win.setSize(new LogicalSize(width, height));
+      await win.setSize(new LogicalSize(width, Math.round(height)));
+      // GUARANTEE — independent of any screen-size guess: macOS clamps a window to
+      // the work area, which would re-letterbox the device with side gaps. Read back
+      // the ACTUAL size; if the height got clamped, derive the WIDTH from that real
+      // height so the device fills the frame edge-to-edge on ANY screen.
+      await new Promise((resolve) => setTimeout(resolve, 90));
+      const after = await win.innerSize();
+      const realH = Math.round(after.height / factor);
+      const realW = Math.round(after.width / factor);
+      const needW = Math.round((realH - chrome) * aspect + BEZEL_PAD);
+      if (needW > 0 && Math.abs(realW - needW) > 2) {
+        await win.setSize(new LogicalSize(needW, realH));
+      }
     });
   };
   const toggleBrowserMode = (): void => {
