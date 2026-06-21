@@ -18,6 +18,23 @@ vi.mock('../../src/lib/livekit', () => ({
   },
 }));
 
+// The transport diagnostic hook reads a live RTCStatsReport; in jsdom there's no
+// real track, so drive it with a controllable stub for the fallback-badge test.
+const EMPTY_CONN = {
+  transport: null,
+  relayed: null,
+  rttMs: null,
+  packetLossPct: null,
+  jitterMs: null,
+  decodeFps: null,
+  freezeCount: null,
+};
+let mockConn: typeof EMPTY_CONN = { ...EMPTY_CONN };
+vi.mock('../../src/lib/livekit-connection-stats', () => ({
+  useConnectionStats: () => mockConn,
+  CONNECTION_STATS_INTERVAL_MS: 3000,
+}));
+
 const { SimulatorWindow } = await import('../../src/views/SimulatorWindow');
 const { RecordingsProvider } = await import('../../src/lib/recordings');
 
@@ -30,6 +47,7 @@ describe('SimulatorWindow — floating iPhone', () => {
   // overrides it to the fresh-user open path.
   const lsStore = new Map<string, string>();
   beforeEach(() => {
+    mockConn = { ...EMPTY_CONN };
     lsStore.clear();
     vi.stubGlobal('localStorage', {
       getItem: (k: string): string | null => lsStore.get(k) ?? null,
@@ -146,6 +164,28 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(panel).not.toBeNull();
     // The Address bar is the FIRST control in the panel (most prominent).
     expect(panel?.firstElementChild?.getAttribute('data-component')).toBe('simulator-address');
+  });
+
+  it('shows a LOUD transport-fallback badge when the WebRTC media is relayed / TCP (the #1 latency suspect — A3 wmdoil11r)', () => {
+    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
+    // No fallback → no badge.
+    mockConn = { ...EMPTY_CONN, transport: 'udp', relayed: false };
+    const { container, rerender } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    expect(container.querySelector('[data-component="transport-fallback-badge"]')).toBeNull();
+    // Relayed/TCP → the badge appears (even with the info overlay closed).
+    mockConn = { ...EMPTY_CONN, transport: 'tcp', relayed: true };
+    rerender(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    const badge = container.querySelector('[data-component="transport-fallback-badge"]');
+    expect(badge).not.toBeNull();
+    expect(badge?.textContent).toContain('Slow link');
   });
 
   it('the expand chevron reveals the control panel — the Mode segmented control (Agent/Pair/Manual) + rotate / pin / info', () => {

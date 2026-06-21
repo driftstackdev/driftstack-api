@@ -1442,6 +1442,24 @@ export function SimulatorWindow(): JSX.Element {
                   Control may not be reaching the device
                 </div>
               )}
+              {/* LOUD transport-fallback badge (A3 wmdoil11r rec (a)): WebRTC
+                  silently falls back to a TCP/TURN relay when direct UDP is
+                  blocked (box firewall / NAT / ISP) — head-of-line blocking makes
+                  real-time video feel "1000× slower". Surface it prominently
+                  (NOT only in the info overlay) so a relayed session is never
+                  silently slow — this is the #1 latency suspect. */}
+              {(conn.transport === 'tcp' || conn.relayed === true) && (
+                <div
+                  role="status"
+                  data-component="transport-fallback-badge"
+                  title="The video is going through a TCP/TURN relay because direct UDP is blocked (firewall / NAT / ISP). Real-time video over TCP head-of-line-blocks, which feels very slow. Fix: open the box UDP port range to your network, or use a closer (EU) box."
+                  className="absolute left-1/2 top-32 z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-rose-600/90 px-3 py-1 text-[10px] font-semibold text-white shadow"
+                >
+                  ⚠ Slow link — video{' '}
+                  {conn.relayed === true ? 'relayed' : `over ${conn.transport?.toUpperCase()}`} (UDP
+                  blocked)
+                </div>
+              )}
               {infoOpen && (
                 <div
                   data-component="simulator-info-overlay"
