@@ -62,6 +62,10 @@ describe('SimulatorWindow — floating iPhone', () => {
       length: 0,
     });
     localStorage.setItem('ds-sim-navigated', '1');
+    // Browser mode defaults ON (founder 2026-06-21); most tests assert the
+    // device-identity toolbar, so default them to OFF. The browser-mode test
+    // overrides to exercise the on/default path.
+    localStorage.setItem('ds-sim-browser-mode', '0');
   });
 
   it('renders the device frame + screen when ws/token are present in the query', () => {
@@ -188,26 +192,15 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(badge?.textContent).toContain('Slow link');
   });
 
-  it('Browser mode: the toolbar center becomes a native address bar (replacing the device identity); off → identity shows (founder 2026-06-21)', () => {
-    // OFF (default): the device identity is in the toolbar, no address bar.
-    localStorage.setItem('ds-sim-browser-mode', '0');
+  it('Browser mode: DEFAULT ON → native address bar in the toolbar; explicit off → device identity (founder 2026-06-21)', () => {
     window.history.pushState(
       {},
       '',
       '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017&profile=Amsterdam%20Shopper',
     );
-    const off = render(
-      <RecordingsProvider>
-        <SimulatorWindow />
-      </RecordingsProvider>,
-    );
-    const toolbarOff = off.container.querySelector('[data-component="simulator-toolbar"]');
-    expect(toolbarOff?.textContent).toContain('Amsterdam Shopper');
-    expect(off.container.querySelector('[data-component="simulator-address-bar"]')).toBeNull();
-    off.unmount();
 
-    // ON: a native address field in the toolbar; the device identity is replaced.
-    localStorage.setItem('ds-sim-browser-mode', '1');
+    // DEFAULT (no stored pref) → ON: a native address field in the toolbar.
+    localStorage.removeItem('ds-sim-browser-mode');
     const on = render(
       <RecordingsProvider>
         <SimulatorWindow />
@@ -216,6 +209,18 @@ describe('SimulatorWindow — floating iPhone', () => {
     const bar = on.container.querySelector('[data-component="simulator-address-bar"]');
     expect(bar).not.toBeNull();
     expect(bar?.querySelector('[aria-label="Address bar"]')).not.toBeNull();
+    on.unmount();
+
+    // Explicit opt-out ('0') → identity in the toolbar, no address bar.
+    localStorage.setItem('ds-sim-browser-mode', '0');
+    const off = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    const toolbarOff = off.container.querySelector('[data-component="simulator-toolbar"]');
+    expect(toolbarOff?.textContent).toContain('Amsterdam Shopper');
+    expect(off.container.querySelector('[data-component="simulator-address-bar"]')).toBeNull();
   });
 
   it('the expand chevron reveals the control panel — the Mode segmented control (Agent/Pair/Manual) + rotate / pin / info', () => {

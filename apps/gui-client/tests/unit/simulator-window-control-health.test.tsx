@@ -13,8 +13,31 @@
 // test can drive the failed-publish → recovery sequence (the real panel needs a
 // live WebRTC connect jsdom can't do).
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/react';
+
+// Browser mode defaults ON (founder 2026-06-21), which hosts the URL bar in the
+// toolbar and hides the panel's NavigateAddressBar. These tests exercise the
+// panel address bar's connecting affordance, so pin Browser mode OFF with a
+// working localStorage stub (jsdom's is non-functional here).
+beforeEach(() => {
+  const store = new Map<string, string>([
+    ['ds-sim-browser-mode', '0'],
+    ['ds-sim-navigated', '1'],
+  ]);
+  vi.stubGlobal('localStorage', {
+    getItem: (k: string): string | null => store.get(k) ?? null,
+    setItem: (k: string, v: string): void => {
+      store.set(k, v);
+    },
+    removeItem: (k: string): void => {
+      store.delete(k);
+    },
+    clear: (): void => store.clear(),
+    key: (): string | null => null,
+    length: 0,
+  });
+});
 
 vi.mock('../../src/lib/livekit', () => ({
   createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),

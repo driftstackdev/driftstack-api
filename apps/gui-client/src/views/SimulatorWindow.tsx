@@ -1128,16 +1128,16 @@ export function SimulatorWindow(): JSX.Element {
 
   // Browser mode (founder 2026-06-21, greenlit) — a native GUI URL bar in the
   // toolbar instead of relying on the rendered iOS-Safari chrome (which the page
-  // tap-path can't reach). Persisted per-install. When on, the toolbar center is
-  // an editable address field (Enter → navigate) rather than the device identity;
-  // fingerprint-neutral (operator-view only). Phase 1; tabs + A3 content-only
-  // video (drops the now-redundant rendered bar) follow. See
+  // tap-path can't reach). When on, the toolbar center is an editable address
+  // field (Enter → navigate) rather than the device identity; fingerprint-neutral
+  // (operator-view only). DEFAULT ON (founder 2026-06-21) — opt-out via the panel
+  // toggle (persists '0'). Phase 1; tabs + A3 content-only video follow. See
   // docs/internal/gui-browser-chrome-mode-plan-2026-06-21.md.
   const [browserMode, setBrowserMode] = useState<boolean>(() => {
     try {
-      return localStorage.getItem('ds-sim-browser-mode') === '1';
+      return localStorage.getItem('ds-sim-browser-mode') !== '0';
     } catch {
-      return false;
+      return true;
     }
   });
   const toggleBrowserMode = (): void => {
