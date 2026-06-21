@@ -202,7 +202,16 @@ export function CommandCenterView({
    *  the cards fall back to the bare Profiles list. */
   onOpenProfile?: (profileId: string) => void;
 }): JSX.Element {
-  const { accountMe, client } = useSettings();
+  const { accountMe, client, refreshAccountMe } = useSettings();
+  // Refresh accountMe when the home view mounts. The session-health rollup below
+  // independently re-fetches on every mount, but accountMe (which drives the cap
+  // alerts + the profile/Live-now KPIs) is otherwise only fetched on client change
+  // → after a session ends elsewhere and you return home, the live tiles show the
+  // fresh count while a stale "At your session limit" alert still renders. Keep
+  // both in sync. (audit wn1ghalx1)
+  useEffect(() => {
+    void refreshAccountMe();
+  }, [refreshAccountMe]);
   const profileCount = accountMe?.profile_count ?? null;
   const profileCap = accountMe?.profile_cap ?? null;
   const tier = accountMe?.tier ?? null;
@@ -308,7 +317,13 @@ export function CommandCenterView({
     };
   }, []);
 
-  const liveNow = health.kind === 'ready' ? health.health.running : null;
+  // Prefer the AUTHORITATIVE live count (server countActiveSessions: non-destroyed
+  // + active statuses) over the session-health rollup, which only summarizes the
+  // first page (≤50, createdAt-ordered, incl. destroyed) and so undercounts live
+  // runs once an account has churned >50 sessions. (audit wn1ghalx1)
+  const liveNow =
+    accountMe?.concurrent_session_active ??
+    (health.kind === 'ready' ? health.health.running : null);
   // The "Live now" KPI is a jump-off to live runs only when there's something to
   // jump to — a 0 (or unloaded) count stays a passive stat.
   const liveNowAction = liveNow !== null && liveNow > 0 ? () => onNavigate('sessions') : undefined;

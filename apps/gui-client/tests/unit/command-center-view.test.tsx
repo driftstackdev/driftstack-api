@@ -14,7 +14,7 @@ import type { HomeNavTarget } from '../../src/views/CommandCenterView';
 let accountMe: unknown = null;
 let client: unknown = null;
 vi.mock('../../src/lib/SettingsContext', () => ({
-  useSettings: () => ({ accountMe, client }),
+  useSettings: () => ({ accountMe, client, refreshAccountMe: () => Promise.resolve() }),
 }));
 
 const {
