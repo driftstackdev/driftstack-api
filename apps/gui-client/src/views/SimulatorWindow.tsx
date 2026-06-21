@@ -1268,6 +1268,19 @@ export function SimulatorWindow(): JSX.Element {
     fitWindow(next);
   };
 
+  // Belt-and-suspenders: fit the window when the session first renders AND whenever
+  // browser mode toggles — NOT only when the video reports its dimensions. The
+  // device video object-contains, so if handleVideoDimensions never fires (callback
+  // timing) the window keeps its initial 330×718 and the browser bar's extra height
+  // letterboxes the device with side gaps (founder: "window larger width than the
+  // iphone, because of the url"). fitWindow uses the seeded aspect here, refined by
+  // the real stream dimensions later. Runs after paint so innerSize is settled.
+  useEffect(() => {
+    if (info === null) return;
+    const t = window.setTimeout(() => fitWindow(browserMode), 0);
+    return () => window.clearTimeout(t);
+  }, [browserMode, info]);
+
   // Live page state from the device (A3 page_state over the LiveKit data channel,
   // bus W2719) — drives the browser-mode address bar's live URL + loading bar.
   // Until the harness emits it, onNavigate optimistically shows a loading sweep
