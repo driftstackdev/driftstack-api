@@ -161,7 +161,11 @@ try {
     const t = m.text();
     if (t.startsWith('[probe]')) console.log('  ' + t);
   });
-  await page.setContent('<!doctype html><html><body>probe</body></html>');
+  await page.setContent(
+    '<!doctype html><html><body style="margin:0;background:#000">' +
+      '<video id="dsvid" autoplay muted playsinline style="position:fixed;inset:0;width:100vw;height:100vh;object-fit:contain"></video>' +
+      '</body></html>',
+  );
   await page.addScriptTag({
     url: 'https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js',
   });
@@ -171,13 +175,50 @@ try {
       if (!LK) return 'no-livekit-umd';
       const room = new LK.Room();
       window.__dsRoom = room;
+      const vid = document.getElementById('dsvid');
+      // Subscribe + attach the device video so we can read frames.
+      room.on(LK.RoomEvent.TrackSubscribed, (track) => {
+        try {
+          if (track.kind === 'video') track.attach(vid);
+        } catch (e) {
+          /* ignore */
+        }
+      });
+      // Capture the latest frame + find the green landing marker's centroid (the
+      // sim-probe page draws a bright-green dot at the tapped point). Returns the
+      // centroid in VIDEO pixels so we can compare to the aimed video-px.
+      window.__grabGreen = () => {
+        const w = vid.videoWidth,
+          h = vid.videoHeight;
+        if (!w || !h) return { found: false, count: 0, w: 0, h: 0 };
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(vid, 0, 0, w, h);
+        const d = ctx.getImageData(0, 0, w, h).data;
+        let n = 0,
+          sx = 0,
+          sy = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 1] > 170 && d[i] < 110 && d[i + 2] < 110) {
+            const p = i >> 2;
+            sx += p % w;
+            sy += (p / w) | 0;
+            n++;
+          }
+        }
+        return n > 0
+          ? { found: true, count: n, vx: Math.round(sx / n), vy: Math.round(sy / n), w, h }
+          : { found: false, count: 0, w, h };
+      };
       try {
-        await room.connect(ws, token, { autoSubscribe: false });
+        await room.connect(ws, token, { autoSubscribe: true });
       } catch (e) {
         return 'connect-error: ' + (e && e.message ? e.message : String(e));
       }
-      // brief settle so the data channel is up
-      await new Promise((r) => setTimeout(r, 1500));
+      // brief settle so the data channel + first video frame are up
+      await new Promise((r) => setTimeout(r, 2500));
       console.log('[probe] room.state=' + room.state);
       return room.state;
     },
@@ -201,7 +242,7 @@ try {
   console.log(`navigate → ${PROBE_URL}`);
   await publish({ type: 'navigate', url: PROBE_URL });
   let navOk = false;
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 30; i++) {
     await sleep(1500);
     const o = await observe(sid);
     console.log(`  nav t+${((i + 1) * 1.5).toFixed(1)}s ${obsLine(o)}`);
@@ -212,36 +253,89 @@ try {
     }
   }
   console.log(
-    navOk ? 'navigate observed ✓' : 'navigate NOT observed (page_state may be undeployed)',
+    navOk ? 'navigate observed ✓' : 'navigate NOT observed (page_state may be undeployed/slow)',
   );
 
-  // 5. tap sweep — aim at each video-px, read back the landed cell.
+  // Log the device video resolution once — that's the aim-space for taps.
+  const vdim = await page.evaluate(() => {
+    const v = document.getElementById('dsvid');
+    return { w: v.videoWidth, h: v.videoHeight };
+  });
+  console.log(`video dims: ${vdim.w}x${vdim.h}${vdim.w ? '' : ' (NO FRAME YET)'}`);
+
+  // Capture what the box is ACTUALLY showing (the <video> fills the page) so we
+  // can SEE whether navigate landed + where taps go. Visual self-debugging.
+  try {
+    await page.screenshot({ path: '/tmp/probe-nav.png' });
+    console.log('saved frame → /tmp/probe-nav.png');
+  } catch (e) {
+    console.log('screenshot failed:', e?.message ?? e);
+  }
+
+  // 5. tap sweep — aim at each video-px; MEASURE the landed point from the green
+  // marker in the video frame (self-contained), plus the page-state read (dual).
+  let tapNum = 0;
   for (const [x, y] of TAPS) {
     await publish({ type: 'tap', x, y });
+    await sleep(1600);
+    const green = await page.evaluate(() => window.__grabGreen());
+    tapNum += 1;
+    if (tapNum === 1) {
+      try {
+        await page.screenshot({ path: '/tmp/probe-tap.png' });
+        console.log('saved post-tap frame → /tmp/probe-tap.png');
+      } catch {
+        /* ignore */
+      }
+    }
+    // page-state observation (kept as a second source).
     let landed = null;
     let src = null;
-    for (let i = 0; i < 4; i++) {
-      await sleep(1200);
+    for (let i = 0; i < 3; i++) {
       const o = await observe(sid);
       landed = parseLanded(o);
       if (landed) {
         src = o.page_state?.url || o.url ? 'url' : 'title';
         break;
       }
+      await sleep(800);
     }
-    results.push({ x, y, landed });
-    console.log(`tap (${x},${y}) → landed ${landed ?? 'NONE'}${landed ? ' [' + src + ']' : ''}`);
+    let err = null;
+    let line;
+    if (green.found) {
+      const dx = green.vx - x;
+      const dy = green.vy - y;
+      err = Math.round(Math.hypot(dx, dy));
+      line = `landed (${green.vx},${green.vy}) err (${dx},${dy}) |${err}|px [green n=${green.count}]`;
+    } else {
+      line = `NO GREEN [video ${green.w}x${green.h}]`;
+    }
+    results.push({ x, y, green, err, landed });
+    console.log(
+      `tap (${x},${y}) → ${line}${landed ? ' | page-state ' + landed + ' [' + src + ']' : ''}`,
+    );
   }
 
   // 6. summary.
   console.log('\n=== SUMMARY ===');
+  const measured = results.filter((r) => r.green?.found);
   console.log(
-    `taps: ${results.length} | observed landings: ${results.filter((r) => r.landed).length}`,
+    `taps: ${results.length} | green-measured: ${measured.length} | page-state landings: ${results.filter((r) => r.landed).length}`,
   );
-  for (const r of results) console.log(`  aim (${r.x},${r.y}) -> ${r.landed ?? 'NONE'}`);
-  if (results.every((r) => !r.landed)) {
+  if (measured.length) {
+    const errs = measured.map((r) => r.err);
+    const mean = Math.round(errs.reduce((a, b) => a + b, 0) / errs.length);
+    const max = Math.max(...errs);
+    console.log(`landing error: mean ${mean}px | max ${max}px (over ${measured.length} taps)`);
+    for (const r of measured) {
+      console.log(`  aim (${r.x},${r.y}) -> (${r.green.vx},${r.green.vy}) |${r.err}|px`);
+    }
+  } else {
+    const anyVideo = results.some((r) => r.green && r.green.w > 0);
     console.log(
-      'No landings observed — likely A3 page_state/title for live taps is not deployed yet, OR the page-state route does not carry the hash/title. This run still proves create+connect+publish; wire the read path once A3 confirms what live signal updates on tap.',
+      anyVideo
+        ? 'Video frames OK but NO GREEN found — the box may not have delivered the tap, or the page did not render the marker (confirm navigate observed + that the box honors taps).'
+        : 'NO VIDEO frames (videoWidth=0) — autoSubscribe/track-attach issue or no video published; cannot measure from video.',
     );
   }
 } catch (e) {

@@ -111,9 +111,27 @@
             grid.appendChild(cell);
           }
         }
+        // Machine-readable LANDING SIGNAL for the autonomous probe: draw a single
+        // bright-green dot AT the exact tapped point. The probe captures the video
+        // frame + finds this dot's centroid → the landed point in video-px → vs
+        // the aimed video-px = the tap-landing error. High-contrast green-on-dark
+        // survives H.264. One reused element → exactly one dot, at the latest tap.
+        var dsmark = null;
+        function mark(x, y) {
+          if (!dsmark) {
+            dsmark = document.createElement('div');
+            dsmark.id = 'dsmark';
+            dsmark.style.cssText =
+              'position:fixed;width:26px;height:26px;border-radius:50%;background:#00ff00;box-shadow:0 0 0 3px #000;z-index:99999;pointer-events:none;transform:translate(-50%,-50%);';
+            document.body.appendChild(dsmark);
+          }
+          dsmark.style.left = x + 'px';
+          dsmark.style.top = y + 'px';
+        }
         function onCellHit(e) {
           var rc = (e.currentTarget && e.currentTarget.dataset.rc) || '?';
           report('tap', rc);
+          mark(e.clientX, e.clientY);
         }
 
         // Scroll: report the settled scrollY (debounced) so the probe can verify
