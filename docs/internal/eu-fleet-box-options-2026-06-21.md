@@ -58,23 +58,22 @@ operational overhead than Scaleway; only worth it if we standardize on AWS.
    tradeoff: fingerprint fidelity (M2 Pro, 16 GB) vs headroom/newness (M4 Pro,
    64 GB).**
 
-## Prerequisite — region-aware dispatch (server, A2 lane)
+## Prerequisite — region-aware dispatch (server, A2 lane) — ✅ DONE (5e7b8614)
 
-⚠️ An EU box only helps EU users if session dispatch actually _routes_ them to it.
-Today it does **not**: `dispatchSessionAssignOnCreate` (routes/agent-sessions.ts:553)
-picks `fleetNodesRepo.findAnyWithLivekit()` — **any** node, region-blind. The data
-to do better already exists — `accounts.region` (`us | eu | apac | null`) and
-`fleet_nodes.region` — only the _selection_ ignores it. With one box this is moot
-(findAny returns the one box), so it's not worth building speculatively now; but the
-moment a 2nd-region box exists, an EU customer could still be handed the US box.
-
-**When the EU box is greenlit, wire (small, purely server-side, A2 can do it fast):**
-a `findNearestWithLivekit(region)` that prefers `node.region === account.region` and
-falls back to any-with-livekit (never fail a session just because the home region is
-full/down). Thread `account.region` into the dispatch. The harness `sessionAssign`
-payload / W298 contract is unchanged — only _which_ connected node receives it. Add a
-test: EU account + both boxes connected → assign goes to the EU node; EU box down →
-falls back to US. (Tracked here so it isn't forgotten in the bring-up.)
+An EU box only helps EU users if session dispatch actually _routes_ them to it.
+Dispatch **was** region-blind (`findAnyWithLivekit`); it is now region-aware and
+deployed, so the EU box is plug-and-play the moment it registers. `accounts.region`
+(`us | eu | apac | null`) + `fleet_nodes.region` now drive selection via
+`DrizzleFleetNodesRepo.findNearestWithLivekit(region)`: prefer a non-revoked livekit
+node in the viewer's home region, fall back to any livekit node when the region has
+none (single-region fleet / regional outage → a far box still beats no box).
+`dispatchSessionAssignOnCreate` threads `ctx.account.region`. The harness
+`sessionAssign` payload / W298 contract is unchanged — only _which_ connected node
+receives it. **No behavior change for the current single US box** (findNearest falls
+back to findAny). Tested: dispatch threads the region + picks the EU node for an EU
+viewer (unit); repo prefers-region / skips-revoked / within-region-livekit-filter /
+fallback (integration vs real Postgres). So the only remaining EU-box work is the
+provisioning decision + bring-up below.
 
 ## Recommendation
 
