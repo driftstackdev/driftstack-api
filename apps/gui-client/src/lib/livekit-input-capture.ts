@@ -171,12 +171,70 @@ const MOVE_DEADZONE = 14;
 const TAP_Y_OFFSET = 32;
 const devY = (y: number): number => Math.max(0, y - TAP_Y_OFFSET);
 
+/** Inertial slide (founder 2026-06-21 "slide simulation like a new iphone"): on a
+ *  fast drag-release the touch keeps GLIDING and decelerates to a stop instead of
+ *  stopping dead, mimicking iOS momentum scrolling. Only a genuine flick triggers
+ *  it; a tap or slow drag is unchanged. The glide is bounded + cancellable (a new
+ *  touch during it halts it, like iOS). FLING_MIN_SPEED = release speed (px/ms) to
+ *  trigger; FLING_STALE_MS = a pause longer than this before lifting means the
+ *  finger settled, so NO glide; FLING_STEP_MS = the move cadence during the glide. */
+const FLING_MIN_SPEED = 0.45;
+const FLING_STALE_MS = 60;
+const FLING_STEP_MS = 16;
+
 /** Squared Euclidean distance between two points — squared so the deadzone
  *  comparison avoids a sqrt per move event (we compare against MOVE_DEADZONE²). */
 function distSq(ax: number, ay: number, bx: number, by: number): number {
   const dx = ax - bx;
   const dy = ay - by;
   return dx * dx + dy * dy;
+}
+
+/** Decelerating point path for an inertial "slide" (momentum) gesture. Given the
+ *  release point + velocity (px/ms), returns the touch positions as the glide eases
+ *  to a stop under friction — replayed as touchMove events so a fast flick keeps
+ *  scrolling + settles like iOS rather than stopping dead. Pure + hard-bounded
+ *  (caps on both step count and total distance) so it's deterministic, unit-testable
+ *  and can never run away. Empty when the release velocity is already below the stop
+ *  threshold (→ caller just ends the touch). Operates in raw video-px; the caller
+ *  applies devY + surface clamping when it sends each point. */
+export function computeFlingPath(
+  x0: number,
+  y0: number,
+  vx: number,
+  vy: number,
+  opts: {
+    friction?: number;
+    stepMs?: number;
+    stopSpeed?: number;
+    maxSteps?: number;
+    maxDist?: number;
+  } = {},
+): Array<{ x: number; y: number }> {
+  const friction = opts.friction ?? 0.93;
+  const stepMs = opts.stepMs ?? FLING_STEP_MS;
+  const stopSpeed = opts.stopSpeed ?? 0.05;
+  const maxSteps = opts.maxSteps ?? 38;
+  const maxDist = opts.maxDist ?? 1000;
+  const pts: Array<{ x: number; y: number }> = [];
+  let x = x0;
+  let y = y0;
+  let velX = vx;
+  let velY = vy;
+  let dist = 0;
+  for (let i = 0; i < maxSteps; i++) {
+    if (Math.hypot(velX, velY) < stopSpeed) break;
+    const dx = velX * stepMs;
+    const dy = velY * stepMs;
+    x += dx;
+    y += dy;
+    dist += Math.hypot(dx, dy);
+    pts.push({ x: Math.round(x), y: Math.round(y) });
+    if (dist >= maxDist) break;
+    velX *= friction;
+    velY *= friction;
+  }
+  return pts;
 }
 
 /** React hook that wires the user's mouse/keyboard gestures on the simulator's
@@ -191,9 +249,23 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
   // iPhone has no hover/pointer-move without a touch). `startX/startY` (the press
   // point in video-px) + `moved` drive the MOVE_DEADZONE scroll-vs-tap gate: no
   // touchMove is emitted until the cursor leaves the deadzone (A3 W2668).
-  const active = useRef<{ touchId: number; startX: number; startY: number; moved: boolean } | null>(
-    null,
-  );
+  const active = useRef<{
+    touchId: number;
+    startX: number;
+    startY: number;
+    moved: boolean;
+    // Release-velocity tracking for the inertial slide: the last move's position +
+    // timestamp and an EMA-smoothed velocity (px/ms). Undefined until the first
+    // post-deadzone move, so a tap (no drag) never carries velocity → no glide.
+    lastX?: number;
+    lastY?: number;
+    lastT?: number;
+    vx?: number;
+    vy?: number;
+  } | null>(null);
+  // The in-flight inertial glide (null = none). Holds the held touchId + current
+  // glide position + the step timer so a new press / teardown can halt it cleanly.
+  const fling = useRef<{ touchId: number; x: number; y: number; timer: number } | null>(null);
   const touchIdSeq = useRef(0);
   // Keep the latest onPublishError in a ref so the capture effect does NOT
   // depend on the callback's identity — the natural usage is an inline arrow (a
@@ -234,10 +306,68 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       });
     };
 
+    // Clamp a glide point inside the video — a flick path extends past where the
+    // finger lifted, so this keeps us from sending a wild off-surface touch (read
+    // live: the video's intrinsic size may not be known at effect-setup time).
+    const clampX = (v: number): number => {
+      const w = video.videoWidth || 0;
+      return w > 0 ? Math.max(0, Math.min(w, v)) : Math.max(0, v);
+    };
+    const clampY = (v: number): number => {
+      const h = video.videoHeight || 0;
+      return h > 0 ? Math.max(0, Math.min(h, v)) : Math.max(0, v);
+    };
+    // Halt an in-flight inertial glide. endTouch=true lifts the gliding finger (a
+    // new press mid-glide, like tapping to stop iOS momentum); teardown passes
+    // false (just clear the timer — the room is going away).
+    const cancelFling = (endTouch: boolean): void => {
+      const f = fling.current;
+      if (f === null) return;
+      window.clearTimeout(f.timer);
+      fling.current = null;
+      if (endTouch) {
+        send({ type: 'touchEnd', x: clampX(f.x), y: devY(clampY(f.y)), touchId: f.touchId }, true);
+      }
+    };
+    // Replay a decelerating flick as timed touchMove events, then a final touchEnd.
+    // The held touchId stays down through the glide so the device reads ONE
+    // continuous finger sliding + settling (iOS momentum), not a new gesture.
+    const startFling = (touchId: number, x0: number, y0: number, vx: number, vy: number): void => {
+      cancelFling(false);
+      const path = computeFlingPath(x0, y0, vx, vy);
+      if (path.length === 0) {
+        send({ type: 'touchEnd', x: clampX(x0), y: devY(clampY(y0)), touchId }, true);
+        return;
+      }
+      fling.current = { touchId, x: x0, y: y0, timer: 0 };
+      let i = 0;
+      const step = (): void => {
+        const f = fling.current;
+        if (f === null) return;
+        const pt = i < path.length ? path[i] : undefined;
+        i += 1;
+        if (pt === undefined) {
+          // Glide exhausted (or a defensive miss) — lift the finger at the last
+          // point we sent (f.x/f.y track it), settling the momentum scroll.
+          send({ type: 'touchEnd', x: clampX(f.x), y: devY(clampY(f.y)), touchId }, true);
+          fling.current = null;
+          return;
+        }
+        f.x = pt.x;
+        f.y = pt.y;
+        send({ type: 'touchMove', x: clampX(pt.x), y: devY(clampY(pt.y)), touchId }, false);
+        f.timer = window.setTimeout(step, FLING_STEP_MS);
+      };
+      step();
+    };
+
     // A left-button mouse press = a finger down → touchStart. Right/middle
     // buttons have no iPhone touch analogue, so they're ignored.
     const onMouseDown = (e: MouseEvent): void => {
       if (mouseButton(e.button) !== 0) return;
+      // A new touch during a glide stops it (iOS: tap-to-halt momentum) and lifts
+      // the gliding finger before this press starts its own.
+      cancelFling(true);
       const p = pointerToViewport(e, video);
       if (p === null) return;
       try {
@@ -268,6 +398,22 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       if (p === null) return;
       if (!g.moved && distSq(p.x, p.y, g.startX, g.startY) <= MOVE_DEADZONE * MOVE_DEADZONE) return;
       g.moved = true;
+      // Track release velocity (EMA, px/ms) for the inertial slide: weight recent
+      // motion so a fast flick at the very end produces a strong glide. Skip the
+      // first post-deadzone sample (no prior point) and any zero-dt duplicate.
+      const t = e.timeStamp;
+      if (g.lastT !== undefined && g.lastX !== undefined && g.lastY !== undefined) {
+        const dt = t - g.lastT;
+        if (dt > 0) {
+          const ivx = (p.x - g.lastX) / dt;
+          const ivy = (p.y - g.lastY) / dt;
+          g.vx = g.vx === undefined ? ivx : g.vx * 0.6 + ivx * 0.4;
+          g.vy = g.vy === undefined ? ivy : g.vy * 0.6 + ivy * 0.4;
+        }
+      }
+      g.lastX = p.x;
+      g.lastY = p.y;
+      g.lastT = t;
       send({ type: 'touchMove', x: p.x, y: devY(p.y), touchId: g.touchId }, false);
     };
     // Release = touchEnd. A press+release with no move is a genuine tap/click.
@@ -277,6 +423,15 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       if (g === null) return;
       const p = pointerToViewport(e, video);
       if (p === null) return;
+      // Inertial slide: a fast flick-release keeps gliding (iOS momentum) instead
+      // of stopping dead. Only when the gesture actually dragged AND the release
+      // was recent (a pause before lifting = the finger settled → no glide).
+      const fresh = g.lastT !== undefined && e.timeStamp - g.lastT <= FLING_STALE_MS;
+      const speed = g.vx !== undefined && g.vy !== undefined ? Math.hypot(g.vx, g.vy) : 0;
+      if (g.moved && fresh && speed >= FLING_MIN_SPEED) {
+        startFling(g.touchId, p.x, p.y, g.vx as number, g.vy as number);
+        return;
+      }
       send({ type: 'touchEnd', x: p.x, y: devY(p.y), touchId: g.touchId }, true);
     };
     // Window-level release fallback: pointer-capture never engages (the listeners
@@ -382,7 +537,9 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('mouseup', endActiveGesture);
       window.removeEventListener('pointerup', endActiveGesture);
-      // Drop any in-flight gesture so a remount can't reuse a stale touchId.
+      // Stop any in-flight inertial glide (just clear its timer — the room is
+      // tearing down) and drop the gesture so a remount can't reuse a stale touchId.
+      cancelFling(false);
       active.current = null;
     };
   }, [room, video, enabled]);
