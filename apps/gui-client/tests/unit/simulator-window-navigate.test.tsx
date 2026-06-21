@@ -59,7 +59,8 @@ vi.mock('../../src/lib/agent-session-control', () => ({
   AgentSessionControlError: class extends Error {},
 }));
 
-const { SimulatorWindow, normalizeNavigateUrl } = await import('../../src/views/SimulatorWindow');
+const { SimulatorWindow } = await import('../../src/views/SimulatorWindow');
+const { normalizeNavigateUrl, resolveAddressBarInput } = await import('../../src/lib/address-bar');
 const { RecordingsProvider } = await import('../../src/lib/recordings');
 
 function renderSim() {
@@ -90,6 +91,18 @@ describe('SimulatorWindow — address bar navigate', () => {
     expect(sendNavigate).toHaveBeenCalledWith(fakeRoom, 'https://example.com/');
   });
 
+  it('typing a non-URL search query publishes a navigate to a web search (omnibox)', () => {
+    const { container } = renderSim();
+    fireEvent.click(container.querySelector('[aria-label="Show controls"]') as Element);
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: 'driftstack pricing' } });
+    fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
+    expect(sendNavigate).toHaveBeenCalledWith(
+      fakeRoom,
+      'https://www.google.com/search?q=driftstack%20pricing',
+    );
+  });
+
   it('passes an explicit https URL through unchanged', () => {
     const { container } = renderSim();
     fireEvent.click(container.querySelector('[aria-label="Show controls"]') as Element);
@@ -99,12 +112,14 @@ describe('SimulatorWindow — address bar navigate', () => {
     expect(sendNavigate).toHaveBeenCalledWith(fakeRoom, 'https://news.example.org/page');
   });
 
-  it('does NOT emit a navigate for an empty or non-http(s) entry (the harness re-validates too)', () => {
+  it('does NOT emit a navigate for an explicit non-http(s) scheme (the harness re-validates too)', () => {
     const { container } = renderSim();
     fireEvent.click(container.querySelector('[aria-label="Show controls"]') as Element);
     const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
-    // javascript: scheme — must be dropped client-side (defense in depth).
-    fireEvent.change(addressInput, { target: { value: 'javascript:alert(1)' } });
+    // file:// scheme — dropped client-side (defense in depth). A bare-colon
+    // pseudo-scheme without // would instead be searched as harmless text; an
+    // explicit non-http(s) scheme like this must never navigate.
+    fireEvent.change(addressInput, { target: { value: 'file:///etc/passwd' } });
     fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
     expect(sendNavigate).not.toHaveBeenCalled();
   });
@@ -146,5 +161,45 @@ describe('normalizeNavigateUrl', () => {
     expect(normalizeNavigateUrl('file:///etc/passwd')).toBeNull();
     expect(normalizeNavigateUrl('data:text/html,x')).toBeNull();
     expect(normalizeNavigateUrl('about:blank')).toBeNull();
+  });
+});
+
+describe('resolveAddressBarInput (omnibox: URL vs search)', () => {
+  it('navigates a thing that looks like a URL', () => {
+    expect(resolveAddressBarInput('example.com')).toBe('https://example.com/');
+    expect(resolveAddressBarInput('shop.example.com/x?y=1')).toBe('https://shop.example.com/x?y=1');
+    expect(resolveAddressBarInput('https://news.example.org/p')).toBe('https://news.example.org/p');
+    expect(resolveAddressBarInput('localhost:3000/health')).toBe('https://localhost:3000/health');
+    expect(resolveAddressBarInput('192.168.1.1')).toBe('https://192.168.1.1/');
+  });
+
+  it('searches anything that does NOT look like a URL (multi-word or single bare word)', () => {
+    expect(resolveAddressBarInput('best coffee near me')).toBe(
+      'https://www.google.com/search?q=best%20coffee%20near%20me',
+    );
+    expect(resolveAddressBarInput('weather')).toBe('https://www.google.com/search?q=weather');
+    // A query that happens to contain URL-ish punctuation but has spaces → search.
+    expect(resolveAddressBarInput('C++ vs Rust')).toBe(
+      'https://www.google.com/search?q=C%2B%2B%20vs%20Rust',
+    );
+  });
+
+  it('drops an explicit non-http(s) scheme that carries // (never navigates to it)', () => {
+    expect(resolveAddressBarInput('file:///etc/passwd')).toBeNull();
+    expect(resolveAddressBarInput('ftp://host/x')).toBeNull();
+    expect(resolveAddressBarInput('')).toBeNull();
+    expect(resolveAddressBarInput('   ')).toBeNull();
+  });
+
+  it('a bare-colon pseudo-scheme (no //) is searched as literal text — so the box only ever receives an https URL, never an executable scheme', () => {
+    // javascript:/data: without // are not URL schemes here; they get searched as
+    // plain text. The resulting nav is a safe https google-search URL — the
+    // box never sees an executable scheme. (The // forms above are dropped.)
+    expect(resolveAddressBarInput('javascript:alert(1)')).toBe(
+      `https://www.google.com/search?q=${encodeURIComponent('javascript:alert(1)')}`,
+    );
+    expect(resolveAddressBarInput('data:text/html,x')).toBe(
+      `https://www.google.com/search?q=${encodeURIComponent('data:text/html,x')}`,
+    );
   });
 });

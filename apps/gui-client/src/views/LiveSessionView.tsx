@@ -34,6 +34,7 @@ import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { GUIInputError, sendGUIInput, type GUIInputAction } from '../lib/gui-input';
+import { resolveAddressBarInput } from '../lib/address-bar';
 import { SessionTabStrip } from '../components/SessionTabStrip';
 import { useRecordings } from '../lib/recordings';
 
@@ -259,10 +260,13 @@ export function LiveSessionView({
   const navigateTo = useCallback(
     async (rawUrl: string, opts: { recordHistory?: boolean } = {}): Promise<void> => {
       if (!client) return;
-      const url = rawUrl.trim();
-      if (url.length === 0) return;
-      // Be forgiving: a bare host (example.com) gets https://.
-      const target = /^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? url : 'https://' + url;
+      const raw = rawUrl.trim();
+      if (raw.length === 0) return;
+      // Omnibox (founder "just like our web browser"): a URL navigates, anything
+      // else becomes a web search. null only for empty / a rejected dangerous
+      // scheme — then do nothing (consistent with the empty-entry early return).
+      const target = resolveAddressBarInput(raw);
+      if (target === null) return;
       setState((s) => ({ ...s, loading: true, error: null }));
       try {
         await client.sessions.navigate(sessionId, { url: target });
@@ -663,7 +667,7 @@ function Header(props: HeaderProps): JSX.Element {
             type="text"
             value={draftUrl}
             onChange={(e) => setDraftUrl(e.target.value)}
-            placeholder="example.com — type a URL, press Enter"
+            placeholder="Search or enter address"
             spellCheck={false}
             autoComplete="off"
             aria-label="Address bar"

@@ -134,7 +134,7 @@ describe('SimulatorWindow — address bar connect state', () => {
       '[aria-label="Address bar"]',
     ) as HTMLInputElement;
     expect(connectedInput.disabled).toBe(false);
-    expect(connectedInput.getAttribute('placeholder')).toContain('type a URL');
+    expect(connectedInput.getAttribute('placeholder')).toContain('Search or enter');
     expect(container.querySelector('[data-component="simulator-address-connecting"]')).toBeNull();
   });
 });

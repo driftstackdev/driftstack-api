@@ -24,6 +24,7 @@ import { useLatencyPing } from '../lib/livekit-latency-ping';
 import { useConnectionStats } from '../lib/livekit-connection-stats';
 import { useRecordings } from '../lib/recordings';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
+import { resolveAddressBarInput } from '../lib/address-bar';
 import {
   getAgentSession,
   getAgentSessionPageState,
@@ -135,26 +136,6 @@ async function applyDockTile(countryCode: string | null, profileName: string): P
   } catch (err) {
     console.warn('[simulator] dock tile update failed (ignored):', err);
   }
-}
-
-/** Normalize an address-bar entry into an http(s) URL, or null if it can't be
- *  one. Prepends `https://` when no scheme is present (typing "example.com"
- *  navigates to https://example.com — the in-app LiveSessionView address-bar UX).
- *  Only http/https pass; anything else (file:/javascript:/data:/about:) returns
- *  null so the GUI never even emits it — the harness re-validates with the same
- *  allowlist + SSRF rejection as a defense in depth (A3 W2668). */
-export function normalizeNavigateUrl(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (trimmed === '') return null;
-  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-  let parsed: URL;
-  try {
-    parsed = new URL(withScheme);
-  } catch {
-    return null;
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
-  return parsed.toString();
 }
 
 /** Host of a ws URL for the info overlay — guarded so a malformed ws value in
@@ -759,7 +740,7 @@ function NavigateAddressBar({
   // + a caption) so the wait is legible and distinct from a real failure (which
   // surfaces separately as a navigate-error notice toast).
   const placeholder = canNavigate
-    ? 'example.com — type a URL, press Enter'
+    ? 'Search or enter address'
     : 'connecting… — the address bar unlocks once the device is live';
   const disabledTitle = 'Connecting to the device — the address bar unlocks once it is live';
   return (
@@ -923,7 +904,7 @@ function BrowserBar({
           onChange={(e) => setDraft(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          placeholder={canNavigate ? 'Enter a website address' : 'connecting…'}
+          placeholder={canNavigate ? 'Search or enter address' : 'connecting…'}
           title={
             canNavigate
               ? undefined
@@ -1696,9 +1677,11 @@ export function SimulatorWindow(): JSX.Element {
   // rejection. No-op until the room is connected.
   const onNavigate = (raw: string): void => {
     if (room === null) return;
-    const url = normalizeNavigateUrl(raw);
+    // Omnibox behaviour: a URL navigates, anything else becomes a web search —
+    // null only for empty input or a rejected dangerous scheme.
+    const url = resolveAddressBarInput(raw);
     if (url === null) {
-      setNotice('Enter a valid http(s) URL');
+      setNotice('Enter an address or a search term');
       window.setTimeout(() => setNotice(null), 3000);
       return;
     }
