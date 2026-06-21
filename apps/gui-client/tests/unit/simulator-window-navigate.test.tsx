@@ -141,6 +141,25 @@ describe('SimulatorWindow — address bar navigate', () => {
     expect(sendNavigate).toHaveBeenCalledTimes(1);
     expect(sendNavigate).toHaveBeenCalledWith(fakeRoom, 'https://live.example.com/');
   });
+
+  it('Copy URL writes the live address to the clipboard', () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    const orig = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    try {
+      const { container } = renderSim();
+      const addressInput = container.querySelector(
+        '[aria-label="Address bar"]',
+      ) as HTMLInputElement;
+      // Establish a live URL, then copy it.
+      fireEvent.change(addressInput, { target: { value: 'live.example.com' } });
+      fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
+      fireEvent.click(container.querySelector('[aria-label="Copy URL"]') as Element);
+      expect(writeText).toHaveBeenCalledWith('https://live.example.com/');
+    } finally {
+      if (orig) Object.defineProperty(navigator, 'clipboard', orig);
+    }
+  });
 });
 
 describe('normalizeNavigateUrl', () => {

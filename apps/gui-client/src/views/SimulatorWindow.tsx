@@ -846,6 +846,24 @@ function BrowserBar({
     const target = (liveUrl || draft).trim();
     if (canNavigate && target !== '') onNavigate(target);
   };
+  // Copy the live URL to the clipboard (a browser-chrome affordance) with a brief
+  // "Copied" confirmation. Mirrors the app's existing clipboard pattern
+  // (CryptoReceiptView) — silently no-ops in locked-down envs.
+  const [copied, setCopied] = useState(false);
+  const copyUrl = (): void => {
+    const text = (liveUrl || draft).trim();
+    if (text === '') return;
+    void navigator.clipboard?.writeText(text).then(
+      () => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1200);
+      },
+      () => {
+        /* clipboard blocked — silent */
+      },
+    );
+  };
+  const copyTarget = (liveUrl || draft).trim();
   return (
     <div
       data-component="simulator-address-bar"
@@ -915,6 +933,46 @@ function BrowserBar({
           aria-label="Address bar"
           className="min-w-0 flex-1 bg-transparent text-[12px] leading-none text-white/90 placeholder:text-white/35 focus:outline-none disabled:opacity-50"
         />
+        <button
+          type="button"
+          aria-label={copied ? 'Copied' : 'Copy URL'}
+          title={copied ? 'Copied' : 'Copy address'}
+          disabled={copyTarget === ''}
+          onClick={copyUrl}
+          className="shrink-0 rounded p-0.5 text-white/35 transition hover:text-white/80 disabled:opacity-30"
+        >
+          {copied ? (
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              className="text-emerald-400"
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          ) : (
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+          )}
+        </button>
       </form>
       {/* Live loading bar — page_state-driven (A3 W2719). Determinate width when
           progress is known, else an indeterminate sweep. */}
