@@ -172,16 +172,35 @@ try {
     }, event);
   const luma = () => page.evaluate(() => window.__avgLuma());
 
-  // 4. ensure the gradient page is loaded (initial_url should land it; re-send navigate
-  //    a few times as a fallback, like the tap probe).
+  // 4. wait for the device VIDEO track to come up (box boot + proxy connect can take a
+  //    while — a too-short wait => videoWidth=0 => luma -1 => false "NO-SCROLL"), THEN
+  //    ensure the gradient page is loaded (initial_url should land it; re-send navigate).
+  const videoW = () =>
+    page.evaluate(() => {
+      const v = document.getElementById('dsvid');
+      return v ? v.videoWidth : 0;
+    });
+  console.log('waiting for the device video track…');
+  let vw = 0;
+  for (let i = 0; i < 70; i++) {
+    vw = await videoW();
+    if (vw > 0) {
+      console.log(`  video up at t+${(i * 2).toFixed(0)}s (w=${vw})`);
+      break;
+    }
+    await sleep(2000);
+  }
+  if (!vw) {
+    console.error('No device video after ~140s — box did not stream; aborting (session deleted).');
+    process.exit(1);
+  }
   console.log(`ensuring ${PROBE_URL} is loaded…`);
-  await sleep(6000);
-  for (let i = 0; i < 12; i++) {
-    await publish({ type: 'navigate', url: PROBE_URL });
+  for (let i = 0; i < 20; i++) {
+    if (i % 3 === 0) await publish({ type: 'navigate', url: PROBE_URL });
     await sleep(1500);
     const l = await luma();
     console.log(`  load t+${((i + 1) * 1.5).toFixed(1)}s luma=${l}`);
-    if (l >= 0 && l < 90) break; // gradient TOP is dark → low luma once it lands
+    if (l >= 0 && l < 110) break; // gradient TOP is dark → low luma once it lands
   }
   await sleep(1500);
 
@@ -248,23 +267,64 @@ try {
     return { label, base, net, dips, maxDip, trace, verdict };
   }
 
+  // STRAY-MOVE: the decisive regression for A3's W2770 fork gate (the proven back-up cause).
+  // Scroll down a bit, lift (touchEnd), then send a touchMove with NO active finger at a y
+  // far BELOW the drag end → the buggy fork reads a big NEGATIVE delta off the stale
+  // lastTouchPoint and scrolls the page back UP. Pre-W2770: luma DROPS (bounce reproduced).
+  // Post-W2770 (m_driftstackTouchActive gate): the move is ignored → luma FLAT.
+  async function runStrayMove() {
+    console.log(`\n=== STRAY-MOVE (regression for A3 W2770 down-less-move gate) ===`);
+    const X = 200;
+    let id = tid++;
+    await publish({ type: 'touchStart', x: X, y: 700, touchId: id });
+    await sleep(150);
+    for (let y = 650; y >= 250; y -= 50) {
+      await publish({ type: 'touchMove', x: X, y, touchId: id });
+      await sleep(110);
+    }
+    await publish({ type: 'touchEnd', x: X, y: 250, touchId: id });
+    await sleep(300);
+    const afterDrag = await luma();
+    const strayId = tid++; // NO touchStart for this id → finger NOT active
+    await publish({ type: 'touchMove', x: X, y: 760, touchId: strayId });
+    await sleep(350);
+    const afterStray = await luma();
+    const delta = Math.round((afterStray - afterDrag) * 10) / 10;
+    console.log(`  luma afterDrag=${afterDrag} afterStray=${afterStray} delta=${delta}`);
+    const verdict =
+      delta < -NOISE
+        ? `BOUNCE REPRODUCED — the down-less move scrolled the page back UP (luma ${afterDrag}->${afterStray}). A3 W2770 gate not yet effective on this box.`
+        : `GATED — the down-less move did NOT scroll (luma ${afterDrag}->${afterStray}, flat). W2770 gate working (or fork ignores it).`;
+    console.log(`  VERDICT [stray-move]: ${verdict}`);
+    return { label: 'stray-move', verdict, bounce: delta < -NOISE };
+  }
+
   const out = [];
   if (MODE === 'clean' || MODE === 'both')
     out.push(await runDrag('clean-single-leg', 700, 50, 12, 0)); // 700→100, 600px, one leg
   if (MODE === 'legs' || MODE === 'both')
     out.push(await runDrag('multi-leg-recenter', 700, 50, 18, 6)); // re-centre every 6 moves
+  if (MODE === 'stray' || MODE === 'both') out.push(await runStrayMove());
 
   console.log('\n===== SCROLL PROBE SUMMARY =====');
   for (const r of out) console.log(`  [${r.label}] ${r.verdict}`);
-  if (out.some((r) => r.dips > 0)) {
+  const cleanBounce = out.some((r) => r.dips > 0);
+  const strayBounce = out.some((r) => r.bounce);
+  const cleanScrolled = out.filter((r) => r.net !== undefined).every((r) => r.net > NOISE);
+  if (cleanBounce) {
+    console.log('A clean monotonic drag itself bounced => fork mishandles even clean input.');
+    exitCode = 3;
+  } else if (strayBounce) {
     console.log(
-      'BOUNCE reproduced on the live box. A clean monotonic drag that still bounces => the FORK (box) is the cause (e.g. undeployed W2761 sub-pixel phantom), not the GUI converter.',
+      'A down-less move bounced the page (A3 W2770 root cause) — gate not yet live here.',
     );
     exitCode = 3;
-  } else if (out.every((r) => r.net > NOISE)) {
-    console.log('All drags scrolled DOWN monotonically with NO bounce on the live box.');
+  } else if (cleanScrolled) {
+    console.log(
+      'Clean drags scrolled DOWN monotonically with NO bounce, and the down-less move was gated. Scroll verified on the live box.',
+    );
   } else {
-    console.log('Inconclusive — at least one drag showed no scroll (luma flat). See traces above.');
+    console.log('Inconclusive — a drag showed no scroll (luma flat). See traces above.');
     exitCode = 4;
   }
 } catch (e) {
