@@ -498,6 +498,15 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid proxy.');
       }
       assertSafeProxyHost(parsed.data.host);
+      // Per-account cap (resource bound; audit #5). A generous fixed cap counted before
+      // insert — a strict tx-lock is unnecessary for a 100-row bound (a race overage of 1-2
+      // is harmless); this just prevents unbounded proxy creation.
+      const MAX_PROXIES_PER_ACCOUNT = 100;
+      if ((await accountProxiesRepo.list(ctx.account.id)).length >= MAX_PROXIES_PER_ACCOUNT) {
+        throw new BadRequestError(
+          `Proxy limit reached (${String(MAX_PROXIES_PER_ACCOUNT)}). Delete an existing proxy to add another.`,
+        );
+      }
       // VPN schemes carry an encrypted secret (config_blob / private_key) + a
       // non-secret config block; socks5/http use the write-only password.
       const vpn = buildVpnSecretAndConfig(ctx.account.id, parsed.data);

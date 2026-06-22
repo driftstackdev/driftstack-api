@@ -39,8 +39,38 @@ export function registerStatusStreamRoutes(
 ): void {
   const { bus, sla } = opts;
   const heartbeatMs = opts.heartbeatMs ?? 30_000;
+  // Concurrent-connection caps (audit #6 — the unauth SSE had no app-level bound, a
+  // resource-exhaustion DoS). Global cap bounds total resource; per-IP cap stops one client
+  // exhausting it. In-memory counters (SSE is single-process per node), released idempotently
+  // on close/error so the counters can't leak.
+  const MAX_TOTAL_CONNECTIONS = 500;
+  const MAX_CONNECTIONS_PER_IP = 10;
+  let openTotal = 0;
+  const openPerIp = new Map<string, number>();
 
   app.get('/v1/status/stream', (request, reply) => {
+    // Connection-cap gate (before hijack): reject at capacity so an attacker can't open
+    // unbounded SSE connections (per-IP first, then global).
+    const ip = request.ip;
+    const perIp = openPerIp.get(ip) ?? 0;
+    if (openTotal >= MAX_TOTAL_CONNECTIONS || perIp >= MAX_CONNECTIONS_PER_IP) {
+      reply
+        .code(503)
+        .header('retry-after', '30')
+        .send({ error: 'Status stream at capacity; retry shortly.' });
+      return;
+    }
+    openTotal += 1;
+    openPerIp.set(ip, perIp + 1);
+    let released = false;
+    const releaseConn = (): void => {
+      if (released) return;
+      released = true;
+      openTotal -= 1;
+      const n = (openPerIp.get(ip) ?? 1) - 1;
+      if (n <= 0) openPerIp.delete(ip);
+      else openPerIp.set(ip, n);
+    };
     // Hijack the reply so Fastify doesn't auto-finish the response.
     reply.raw.writeHead(200, {
       'content-type': 'text/event-stream; charset=utf-8',
@@ -70,6 +100,7 @@ export function registerStatusStreamRoutes(
     const cleanup = (): void => {
       clearInterval(heartbeat);
       unsubscribe();
+      releaseConn();
       reply.raw.end();
     };
 

@@ -93,9 +93,9 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
     );
   });
 
-  it('Cleanup: clearInterval + unsubscribe + reply.raw.end() on request.raw close AND error', () => {
+  it('Cleanup: clearInterval + unsubscribe + releaseConn + reply.raw.end() on request.raw close AND error', () => {
     expect(body).toMatch(
-      /const cleanup = \(\): void => \{\s*\n?\s*clearInterval\(heartbeat\);\s*\n?\s*unsubscribe\(\);\s*\n?\s*reply\.raw\.end\(\);\s*\n?\s*\};/,
+      /const cleanup = \(\): void => \{\s*\n?\s*clearInterval\(heartbeat\);\s*\n?\s*unsubscribe\(\);\s*\n?\s*releaseConn\(\);\s*\n?\s*reply\.raw\.end\(\);\s*\n?\s*\};/,
     );
     expect(body).toMatch(/request\.raw\.on\('close', cleanup\);/);
     expect(body).toMatch(/request\.raw\.on\('error', cleanup\);/);
