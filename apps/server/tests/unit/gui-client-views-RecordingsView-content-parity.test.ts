@@ -79,10 +79,10 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     expect(body).not.toMatch(/Persistence to disk lands in a\s*\n?\s*follow-up\s*\n?\s*phase/);
   });
 
-  it("Live guard survives the gallery port: endedAt === null → 'live' badge with text-status-busy (card meta + rail Duration) + rail Delete disabled when live with title='Stop recording before deleting' — pinned so operator can't delete a still-capturing recording (Tauri process couldn't release the buffer)", () => {
+  it("Live guard survives the gallery port: endedAt === null → 'live' badge with text-status-busy (card meta + rail Duration) + rail Delete disabled when live OR while a delete is in flight (deletingId guard, audit wiq542bfj — a fast double-click otherwise deleted a 2nd recording) with title='Stop recording before deleting' — pinned so operator can't delete a still-capturing recording (Tauri process couldn't release the buffer)", () => {
     expect(body).toMatch(/const live = r\.endedAt === null;/);
     expect(body).toContain('<span className="ml-1.5 text-status-busy">live</span>');
-    expect(body).toContain('disabled={selected.endedAt === null}');
+    expect(body).toContain('disabled={selected.endedAt === null || deletingId !== null}');
     expect(body).toContain(
       "selected.endedAt === null ? 'Stop recording before deleting' : undefined",
     );
