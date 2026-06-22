@@ -2,7 +2,7 @@
 // the drift-guard series. Pins the 3 SDK retry implementations in
 // lockstep: same 3-retry default, same exponential-backoff with full
 // jitter, same Retry-After honoring, same retryable-error set
-// (TransportError + RateLimitError). Drift would let one SDK retry
+// (TransportError + RateLimitError + InternalError/5xx). Drift would let one SDK retry
 // more aggressively than its siblings — a class of cross-SDK divergence
 // that's invisible until production traffic hits the edge cases.
 
@@ -62,15 +62,15 @@ describe('W815 cross-SDK retry policy parity', () => {
 
   // ─── Retryable error set ──────────────────────────────────────
 
-  it('CRITICAL all 3 retry implementations retry exactly TransportError + RateLimitError. TS imports both; Python lists them in retryable_errors tuple; Go documents "Retries TransportError + RateLimitError". Drift to retrying ValidationError or auth errors would create infinite-loop bugs.', () => {
+  it('CRITICAL all 3 retry implementations retry TransportError + RateLimitError + InternalError (5xx) — but NOT ValidationError/auth (the infinite-loop class). TS retries status>=500; Python lists them in retryable_errors; Go documents the set.', () => {
     expect(read(TS)).toMatch(
       /import \{ DriftstackError, RateLimitError, TransportError \} from '\.\/errors\.js';/,
     );
     expect(read(PY)).toMatch(
-      /retryable_errors: tuple\[type\[BaseException\], \.\.\.\] = field\(\s*\n\s+default_factory=lambda: \(TransportError, RateLimitError\)\s*\n\s+\)/,
+      /retryable_errors: tuple\[type\[BaseException\], \.\.\.\] = field\(\s*\n\s+default_factory=lambda: \(TransportError, RateLimitError, InternalError\)\s*\n\s+\)/,
     );
     expect(read(GO)).toMatch(
-      /Retries TransportError \+\s*\n\/\/ RateLimitError; every other typed Driftstack error propagates\s*\n\/\/ immediately\./,
+      /Retries TransportError \+\s*\n\/\/ InternalError \(5xx\) \+ RateLimitError; every other typed Driftstack error\s*\n\/\/ propagates immediately\./,
     );
   });
 

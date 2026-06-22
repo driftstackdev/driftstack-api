@@ -58,9 +58,11 @@ describe('W588.B packages/sdk-go/retry.go content parity', () => {
 
   it('withRetry loop: Disabled fast path + per-attempt fn() call + non-retryable propagates + attempt counter + ctx.Done() abort between attempts + bm fallback when <=0', () => {
     expect(body).toMatch(/\/\/ withRetry runs fn with retries per cfg\. Retries TransportError \+/);
-    expect(body).toMatch(/\/\/ RateLimitError; every other typed Driftstack error propagates/);
     expect(body).toMatch(
-      /\/\/ immediately\. Honours Retry-After when the error is a RateLimitError\./,
+      /\/\/ InternalError \(5xx\) \+ RateLimitError; every other typed Driftstack error/,
+    );
+    expect(body).toMatch(
+      /\/\/ propagates immediately\. Honours Retry-After when the error is a RateLimitError\./,
     );
     expect(body).toMatch(/\/\/ ctx cancellation aborts the retry loop between attempts —/);
     expect(body).toMatch(/\/\/ long-running attempts are cancelled by the inner fn\./);
@@ -81,7 +83,7 @@ describe('W588.B packages/sdk-go/retry.go content parity', () => {
   it('isRetryable + retryAfterFromErr + nextDelay: errors.As TransportError/RateLimitError + Retry-After (seconds*time.Second) capped + full-jitter rand.Int63n int64(cap)', () => {
     expect(body).toMatch(/\/\/ isRetryable returns true for transient errors that the loop should/);
     expect(body).toMatch(
-      /^func isRetryable\(err error\) bool \{\s*\n\s*var t \*TransportError\s*\n\s*if errors\.As\(err, &t\) \{\s*\n\s*return true\s*\n\s*\}\s*\n\s*var r \*RateLimitError\s*\n\s*return errors\.As\(err, &r\)\s*\n\}/m,
+      /^func isRetryable\(err error\) bool \{\s*\n\s*return IsRetryable\(err\)\s*\n\}/m,
     );
     expect(body).toMatch(
       /^func retryAfterFromErr\(err error\) time\.Duration \{\s*\n\s*var r \*RateLimitError\s*\n\s*if errors\.As\(err, &r\) && r\.RetryAfterSeconds > 0 \{\s*\n\s*return time\.Duration\(r\.RetryAfterSeconds\) \* time\.Second\s*\n\s*\}\s*\n\s*return 0\s*\n\}/m,

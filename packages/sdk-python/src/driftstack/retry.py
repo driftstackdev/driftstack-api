@@ -18,6 +18,7 @@ from typing import TypeVar
 
 from driftstack.errors import (
     DriftstackError,
+    InternalError,
     RateLimitError,
     TransportError,
 )
@@ -34,9 +35,9 @@ class RetryConfig:
     max_delay_ms: int = 10_000
     backoff_multiplier: float = 2.0
     enabled: bool = True
-    """If True, retry on TransportError + RateLimitError. If False, never retry."""
+    """If True, retry on TransportError + InternalError (5xx) + RateLimitError. If False, never retry."""
     retryable_errors: tuple[type[BaseException], ...] = field(
-        default_factory=lambda: (TransportError, RateLimitError)
+        default_factory=lambda: (TransportError, RateLimitError, InternalError)
     )
     """Errors that ARE retryable when retries are enabled."""
 

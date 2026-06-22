@@ -8,6 +8,7 @@ import pytest
 
 from driftstack.errors import (
     DriftstackError,
+    InternalError,
     InvalidKeyError,
     RateLimitError,
     TransportError,
@@ -37,6 +38,23 @@ def test_retries_on_transport_error_then_succeeds() -> None:
 
     cfg = RetryConfig(max_retries=3, initial_delay_ms=1, backoff_multiplier=1.0, max_delay_ms=2)
     with patch("time.sleep"):  # don't actually wait in tests
+        assert with_retry(fn, cfg) == "recovered"
+    assert len(attempts) == 3
+
+
+def test_retries_on_internal_error_then_succeeds() -> None:
+    # 5xx (InternalError) MUST be retried, matching the TS SDK + is_retryable — the
+    # default retryable_errors had omitted it (cross-SDK retry drift, audit we0i8bkgm).
+    attempts: list[int] = []
+
+    def fn() -> str:
+        attempts.append(len(attempts))
+        if len(attempts) < 3:
+            raise InternalError("boom", status=500)
+        return "recovered"
+
+    cfg = RetryConfig(max_retries=3, initial_delay_ms=1, backoff_multiplier=1.0, max_delay_ms=2)
+    with patch("time.sleep"):
         assert with_retry(fn, cfg) == "recovered"
     assert len(attempts) == 3
 

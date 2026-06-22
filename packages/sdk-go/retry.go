@@ -37,8 +37,8 @@ func DefaultRetry() RetryConfig {
 }
 
 // withRetry runs fn with retries per cfg. Retries TransportError +
-// RateLimitError; every other typed Driftstack error propagates
-// immediately. Honours Retry-After when the error is a RateLimitError.
+// InternalError (5xx) + RateLimitError; every other typed Driftstack error
+// propagates immediately. Honours Retry-After when the error is a RateLimitError.
 //
 // ctx cancellation aborts the retry loop between attempts —
 // long-running attempts are cancelled by the inner fn.
@@ -74,14 +74,12 @@ func withRetry(ctx context.Context, cfg RetryConfig, fn func() error) error {
 }
 
 // isRetryable returns true for transient errors that the loop should
-// re-attempt. Other typed Driftstack errors are treated as terminal.
+// re-attempt. Delegates to the public IsRetryable so the built-in retry loop stays
+// in lockstep with it (TransportError + InternalError/5xx + RateLimitError). These
+// had DRIFTED: the loop omitted InternalError, so 5xx were never retried — unlike the
+// TypeScript SDK (and contrary to this SDK's own IsRetryable contract).
 func isRetryable(err error) bool {
-	var t *TransportError
-	if errors.As(err, &t) {
-		return true
-	}
-	var r *RateLimitError
-	return errors.As(err, &r)
+	return IsRetryable(err)
 }
 
 func retryAfterFromErr(err error) time.Duration {

@@ -35,6 +35,24 @@ func TestWithRetryRetriesOnTransportError(t *testing.T) {
 	}
 }
 
+func TestWithRetryRetriesOnInternalError(t *testing.T) {
+	t.Parallel()
+	// 5xx (InternalError) MUST be retried, matching the TS SDK + this SDK's public
+	// IsRetryable contract — the built-in loop had omitted it (cross-SDK retry drift).
+	cfg := RetryConfig{MaxRetries: 3, InitialDelay: 1 * time.Millisecond, MaxDelay: 2 * time.Millisecond, BackoffMultiplier: 1.0}
+	calls := 0
+	err := withRetry(context.Background(), cfg, func() error {
+		calls++
+		if calls < 3 {
+			return &InternalError{apiError: apiError{Status: 500, Message: "boom"}}
+		}
+		return nil
+	})
+	if err != nil || calls != 3 {
+		t.Fatalf("got err=%v calls=%d, want nil/3 (5xx must retry)", err, calls)
+	}
+}
+
 func TestWithRetryGivesUpAfterMax(t *testing.T) {
 	t.Parallel()
 	cfg := RetryConfig{MaxRetries: 2, InitialDelay: 1 * time.Millisecond, MaxDelay: 2 * time.Millisecond}
