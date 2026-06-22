@@ -999,6 +999,13 @@ export class SessionsService {
       } catch {
         /* swallow — original error wins */
       }
+      // Tear down the LIVE driver/browser session. Marking the row 'errored' +
+      // stamping destroyedAt frees the DB cap slot, but the duration sweeper only
+      // reaps ACTIVE_SESSION_STATUSES (creating/ready/busy) and destroy() short-
+      // circuits 'errored' — so without this the real browser leaks forever
+      // (cost-to-serve) on EVERY transient driver error (audit wxzlp9yiz P1).
+      // Best-effort, mirroring create()'s orphan guard; the original error wins.
+      await this.deps.driver.destroy(session.driverSessionId).catch(() => {});
       try {
         await this.deps.repo.recordEvent({
           sessionId: session.id,

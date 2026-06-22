@@ -1404,7 +1404,12 @@ export function registerAgentSessionsRoutes(
   if (guiControlKeyEncryptionKey !== undefined) {
     app.get<{ Params: { id: string } }>(
       '/v1/agent-sessions/:id/gui-control-key',
-      { preHandler: [app.requireAuth, app.rateLimit('global')] },
+      // requireScope('write'): the returned gui_control_key is a CONTROL credential —
+      // via the control-key path it authorizes mode/input/takeover/handback AND
+      // DELETE (all of which skip requireScope on the control-key branch). Handing it
+      // out is write-equivalent, so a read-only key must NOT be able to fetch it and
+      // escalate to full write+destroy (audit wxzlp9yiz P1 auth-bypass).
+      { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
       async (req) => {
         const ctx = requireCtx(req);
         const rec = await sessions.get(req.params.id);
