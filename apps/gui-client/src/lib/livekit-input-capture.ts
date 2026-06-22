@@ -515,28 +515,57 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // per-event `swipe` (the fork momentum-glides every `swipe` → overlapping glides =
     // jumpy/overshoot, W2736). The founder scrolls with a MacBook TRACKPAD (A3 W2764):
     // two-finger scroll fires HIGH-FREQUENCY `wheel` events INCLUDING the OS inertial
-    // momentum stream after the fingers lift ("not even moving my finger and it
-    // scrolls"). Two smoothness rules:
-    //   1. rAF-COALESCE: accumulate wheel deltas + emit ONE evenly-timed touchMove per
-    //      animation frame. A touchMove PER wheel event floods the box's serial inject
-    //      path → bursty/jerky; one-per-frame is smooth. Delta beyond the per-frame
-    //      cap CARRIES to the next frame, so a fast flick scrolls its FULL distance
-    //      smoothly — no per-event ±120 clamp (that made "big scroll only moves a bit").
-    //   2. The OS momentum is ALREADY in the wheel stream, so the fork must NOT add its
-    //      own touchEnd momentum on THIS path (would double it — A3 keeps Step-B fork
-    //      momentum to genuine finger-touch only).
-    // Content DOWN (deltaY>0) = finger swipes UP (y↓). Near an edge we lift + re-centre
-    // at the CURSOR x (page scroll position persists; only the touch origin moves) so a
-    // long scroll never pins AND the hit-tested scroller stays consistent.
+    // momentum stream after the fingers lift ("not even moving my finger and it scrolls").
+    //
+    // The wheel stream is NOT echoed as per-frame RELATIVE finger moves — the old
+    // `ny = w.y - dy` reproduced EVERY spurious opposite-sign frame, so the page bounced
+    // back UP mid-scroll (founder's "scrolls me back up", PROVEN by the agt_07aaeccf box
+    // trace: one continuous scroll arrived as 9 centre-re-anchored, oscillating gestures).
+    // Instead we accumulate the wheel deltas into ONE monotonic drag (A3 W2768):
+    //   1. rAF-COALESCE: ≤1 touchMove per animation frame; per-frame delta capped at
+    //      WHEEL_MAX_FRAME_DELTA, the remainder CARRIES so a fast flick scrolls its FULL
+    //      distance smoothly (no per-event ±120 clamp = "big scroll only moves a bit").
+    //   2. LOCK a dominant axis + direction once the cumulative intent clears a deadband;
+    //      the off-axis is dropped so a near-vertical scroll stays vertical.
+    //   3. RATCHET: the finger position is a strictly-monotonic projection of the
+    //      cumulative displacement onto the locked direction — a single opposite-sign
+    //      frame nudges the accumulator back but moves the finger by 0 (HOLD), so the page
+    //      can never bounce. Only a SUSTAINED give-back (> WHEEL_REVERSAL_PX from the
+    //      travel peak) is a genuine reversal: it cleanly touchEnds + seeds a fresh
+    //      gesture in the new direction.
+    //   4. Re-centre at a true edge CARRYING the locked direction (never a fresh-sign
+    //      reset), so a long scroll never pins and a re-centre never reverses the scroll.
+    //   5. The OS momentum is ALREADY in the wheel stream → the fork must NOT add its own
+    //      touchEnd momentum on THIS path (would double it — A3 keeps Step-B fork momentum
+    //      to genuine finger-touch only).
+    // Content DOWN (deltaY>0) = finger swipes UP (y↓).
     let wheelDrag: { touchId: number; x: number; y: number } | null = null;
     let wheelTimer = 0;
     let wheelRaf = 0;
     let wheelPendingDx = 0;
     let wheelPendingDy = 0;
     let wheelCursorX = 0;
-    // Per-frame applied-delta cap ≤ the virtual finger's travel from centre, so a
+    // Signed cumulative wheel displacement consumed into the current drag (origin = the
+    // touchStart anchor, in wheel-delta space). The finger position is a monotone ratchet
+    // of this, projected onto the locked direction.
+    let wheelAccDx = 0;
+    let wheelAccDy = 0;
+    let wheelTravel = 0; // ratcheted scalar travel applied to the finger (≥0, never decreases)
+    let wheelDirX = 0; // locked dominant-axis direction (−1/0/1); 0/0 = not yet locked
+    let wheelDirY = 0;
+    // Per-frame applied-delta cap ≤ the virtual finger's travel from centre (≈389px), so a
     // single frame never needs an intra-frame re-centre; the remainder carries.
     const WHEEL_MAX_FRAME_DELTA = 320;
+    const WHEEL_DIR_LOCK_PX = 8; // cumulative magnitude before the axis/sign locks (ignore first-sample jitter)
+    const WHEEL_REVERSAL_PX = 96; // give-back from the travel peak that = a GENUINE reversal (else HOLD)
+    const WHEEL_IDLE_MS = 320; // no wheel for this long = the scroll (incl OS momentum) is over
+    const resetWheelAccum = (): void => {
+      wheelAccDx = 0;
+      wheelAccDy = 0;
+      wheelTravel = 0;
+      wheelDirX = 0;
+      wheelDirY = 0;
+    };
     const endWheelDrag = (): void => {
       if (wheelRaf !== 0) {
         cancelAnimationFrame(wheelRaf);
@@ -544,17 +573,11 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       }
       wheelPendingDx = 0;
       wheelPendingDy = 0;
-      if (wheelDrag === null) return;
-      send(
-        {
-          type: 'touchEnd',
-          x: clampX(wheelDrag.x),
-          y: devY(clampY(wheelDrag.y)),
-          touchId: wheelDrag.touchId,
-        },
-        true,
-      );
+      const wd = wheelDrag;
       wheelDrag = null;
+      resetWheelAccum();
+      if (wd === null) return;
+      send({ type: 'touchEnd', x: clampX(wd.x), y: devY(clampY(wd.y)), touchId: wd.touchId }, true);
     };
     const startWheelDrag = (x: number, y: number): { touchId: number; x: number; y: number } => {
       const touchId = touchIdSeq.current++;
@@ -562,6 +585,30 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       wheelDrag = wd;
       send({ type: 'touchStart', x: wd.x, y: devY(wd.y), touchId }, true);
       return wd;
+    };
+    // Lock the dominant-axis direction once the cumulative intent clears the deadband, so
+    // the gesture is axis-locked (a near-vertical scroll stays vertical) and the sign is
+    // the TRUE scroll sign — not a jittery first sample. Returns true once locked.
+    const tryLockWheelDir = (): boolean => {
+      if (wheelDirX !== 0 || wheelDirY !== 0) return true;
+      if (Math.hypot(wheelAccDx, wheelAccDy) < WHEEL_DIR_LOCK_PX) return false;
+      if (Math.abs(wheelAccDx) >= Math.abs(wheelAccDy)) {
+        wheelDirX = Math.sign(wheelAccDx) || 1;
+        wheelDirY = 0;
+      } else {
+        wheelDirX = 0;
+        wheelDirY = Math.sign(wheelAccDy) || 1;
+      }
+      return true;
+    };
+    // Re-arm: keep draining a big flick this frame, else end the gesture after the idle
+    // grace (spans macOS inter-burst + momentum-decay gaps so one scroll = one gesture).
+    const armWheelTail = (): void => {
+      if (Math.abs(wheelPendingDx) >= 0.5 || Math.abs(wheelPendingDy) >= 0.5) {
+        wheelRaf = requestAnimationFrame(flushWheel);
+      } else {
+        wheelTimer = window.setTimeout(endWheelDrag, WHEEL_IDLE_MS);
+      }
     };
     const flushWheel = (): void => {
       wheelRaf = 0;
@@ -578,30 +625,88 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       const margin = 48;
       const cap = (d: number): number =>
         Math.max(-WHEEL_MAX_FRAME_DELTA, Math.min(WHEEL_MAX_FRAME_DELTA, d));
-      const dx = cap(wheelPendingDx);
-      const dy = cap(wheelPendingDy);
-      // Carry the remainder so a fast flick scrolls its full distance over frames.
-      wheelPendingDx -= dx;
-      wheelPendingDy -= dy;
-      let w = wheelDrag ?? startWheelDrag(wheelCursorX, Math.round(vh / 2));
-      let nx = w.x - dx;
-      let ny = w.y - dy;
+      // Apply at most one per-frame cap worth of delta; carry the remainder.
+      const frameDx = cap(wheelPendingDx);
+      const frameDy = cap(wheelPendingDy);
+      wheelPendingDx -= frameDx;
+      wheelPendingDy -= frameDy;
+      // Fold this frame's (capped) delta into the signed cumulative displacement: the
+      // finger speed is bounded per frame while the FULL distance is delivered over frames.
+      wheelAccDx += frameDx;
+      wheelAccDy += frameDy;
+
+      // Not enough intent yet → accumulate, emit NOTHING (no moveless touchStart spam for
+      // a sub-deadband jiggle), keep draining / arm idle.
+      if (!tryLockWheelDir()) {
+        armWheelTail();
+        return;
+      }
+
+      // Lazily START the drag at the moment direction locks, anchored at centre (cursor x,
+      // mid-height) for symmetric runway — NOT an edge anchor, so a tiny scroll doesn't
+      // start the finger at the screen edge (where the fork's hit-test row differs).
+      if (wheelDrag === null) {
+        startWheelDrag(wheelCursorX, Math.round(vh / 2));
+      }
+
+      // Signed travel along the locked direction.
+      let proj = wheelAccDx * wheelDirX + wheelAccDy * wheelDirY;
+
+      // GENUINE sustained reversal (gave back > WHEEL_REVERSAL_PX from the ratchet peak):
+      // cleanly END this gesture and seed a fresh one in the NEW direction with the
+      // residual reverse displacement, so distance is not lost and the new lock takes the
+      // new sign. A single/transient opposite frame instead just HOLDS (ratchet below).
+      if (proj < wheelTravel - WHEEL_REVERSAL_PX) {
+        const backDx = wheelAccDx - wheelTravel * wheelDirX;
+        const backDy = wheelAccDy - wheelTravel * wheelDirY;
+        endWheelDrag(); // touchEnd at the current finger position; resets accum + dir
+        wheelAccDx = backDx;
+        wheelAccDy = backDy;
+        if (!tryLockWheelDir()) {
+          // New direction not yet decisive → hold; next frame re-establishes it.
+          armWheelTail();
+          return;
+        }
+        startWheelDrag(wheelCursorX, Math.round(vh / 2));
+        proj = wheelAccDx * wheelDirX + wheelAccDy * wheelDirY;
+      }
+
+      // RATCHET: the finger only ever advances. A back-nudge within the reversal band
+      // (proj ≤ travel) HOLDS the finger → NO touchMove → the page never bounces.
+      const newTravel = Math.max(wheelTravel, proj);
+      const advance = newTravel - wheelTravel;
+      if (advance <= 0) {
+        armWheelTail();
+        return;
+      }
+      wheelTravel = newTravel;
+
+      // Finger moves OPPOSITE to content along the locked direction.
+      const w = wheelDrag as { touchId: number; x: number; y: number };
+      const nx = w.x - wheelDirX * advance;
+      const ny = w.y - wheelDirY * advance;
+
+      // True-edge re-centre, CARRYING the locked direction (never a fresh-sign reset). The
+      // fork resets lastTouchPoint on touchStart, so re-anchoring does NOT jump the page;
+      // the next move continues in the identical direction. Re-base accum/travel to 0 at
+      // the new centre and apply this frame's `advance` fresh from there.
       if (ny < margin || ny > vh - margin || nx < margin || nx > vw - margin) {
+        const keepDirX = wheelDirX;
+        const keepDirY = wheelDirY;
         endWheelDrag();
-        w = startWheelDrag(wheelCursorX, Math.round(vh / 2));
-        nx = w.x - dx;
-        ny = w.y - dy;
+        const re = startWheelDrag(wheelCursorX, Math.round(vh / 2));
+        wheelDirX = keepDirX;
+        wheelDirY = keepDirY;
+        re.x = clampX(re.x - keepDirX * advance);
+        re.y = clampY(re.y - keepDirY * advance);
+        send({ type: 'touchMove', x: re.x, y: devY(re.y), touchId: re.touchId }, false);
+        armWheelTail();
+        return;
       }
       w.x = clampX(nx);
       w.y = clampY(ny);
       send({ type: 'touchMove', x: w.x, y: devY(w.y), touchId: w.touchId }, false);
-      // Carry remaining → keep draining next frame; else arm the idle-end (110ms of no
-      // wheel events = the stream, incl OS momentum, has stopped).
-      if (Math.abs(wheelPendingDx) >= 0.5 || Math.abs(wheelPendingDy) >= 0.5) {
-        wheelRaf = requestAnimationFrame(flushWheel);
-      } else {
-        wheelTimer = window.setTimeout(endWheelDrag, 110);
-      }
+      armWheelTail();
     };
     const onWheel = (e: WheelEvent): void => {
       // A held mouse gesture owns the single virtual finger — ignore the wheel until

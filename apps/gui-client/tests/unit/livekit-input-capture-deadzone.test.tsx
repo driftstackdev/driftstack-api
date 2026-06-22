@@ -269,8 +269,95 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
     fireWheel(video, 0, 60); // starts a wheel drag — wheel finger held down
     flushRaf(); // flush the coalescer so the wheel finger is actually down
     sendInputEvent.mockClear();
-    fireMouse(video, 'mousedown', 150, 300, 2000); // press within the 110ms wheel-idle window
+    fireMouse(video, 'mousedown', 150, 300, 2000); // press while the wheel finger is still down (idle timer not yet fired)
     // onMouseDown calls endWheelDrag → a touchEnd lifts the lingering wheel finger.
     expect(eventsOfType('touchEnd').length).toBeGreaterThanOrEqual(1);
+  });
+
+  // ───── W2768: trackpad wheel→touch = ONE monotonic drag (A3 box-trace agt_07aaeccf) ─────
+  it('MONOTONIC RATCHET: a single opposite-sign wheel frame mid-scroll does NOT bounce the page back up (the founder fix)', () => {
+    const video = mountCapture();
+    fireWheel(video, 0, 150); // scroll down
+    flushRaf();
+    fireWheel(video, 0, -40); // a transient opposite frame (< WHEEL_REVERSAL_PX=96)
+    flushRaf();
+    fireWheel(video, 0, 120); // resume down
+    flushRaf();
+    // ONE continuous gesture (no per-burst re-anchor); the finger NEVER moves back down —
+    // every touchMove y is ≤ the previous (strictly monotone for a scroll-down), so the
+    // page can't bounce. This is the direct regression for "it scrolls me back up".
+    expect(eventsOfType('touchStart').length).toBe(1);
+    const moves = eventsOfType('touchMove') as (InputEvent & { y: number })[];
+    expect(moves.length).toBeGreaterThanOrEqual(1);
+    const ys = moves.map((m) => m.y);
+    for (let i = 1; i < ys.length; i++) expect(ys[i]).toBeLessThanOrEqual(ys[i - 1]);
+    const ts0 = eventsOfType('touchStart')[0] as InputEvent & { y: number };
+    expect(ys.at(-1)!).toBeLessThan(ts0.y); // net: scrolled down (finger up)
+  });
+
+  it('GENUINE REVERSAL: a sustained opposite scroll cleanly ends the gesture + starts a fresh one in the new direction', () => {
+    const video = mountCapture();
+    fireWheel(video, 0, 200); // scroll down
+    flushRaf();
+    fireWheel(video, 0, -200); // reverse hard (give-back > WHEEL_REVERSAL_PX) → scroll up
+    flushRaf();
+    // The reversal SPLITS into two gestures (not an intra-gesture bounce).
+    expect(eventsOfType('touchStart').length).toBe(2);
+    expect(eventsOfType('touchEnd').length).toBeGreaterThanOrEqual(1);
+    // The 2nd gesture moves the finger DOWN (y past its own start) = scrolling UP.
+    const lastStart = (eventsOfType('touchStart') as (InputEvent & { y: number })[]).at(-1)!;
+    const lastMove = (eventsOfType('touchMove') as (InputEvent & { y: number })[]).at(-1)!;
+    expect(lastMove.y).toBeGreaterThan(lastStart.y);
+  });
+
+  it('SUB-DEADBAND jiggle emits NOTHING (no moveless touchStart/End spam)', () => {
+    const video = mountCapture();
+    fireWheel(video, 0, 4); // < WHEEL_DIR_LOCK_PX=8 → no direction lock, lazy start
+    flushRaf();
+    expect(eventsOfType('touchStart')).toHaveLength(0);
+    expect(eventsOfType('touchMove')).toHaveLength(0);
+    expect(eventsOfType('touchEnd')).toHaveLength(0);
+  });
+
+  it('HORIZONTAL wheel → finger moves along X only (axis-locked), y unchanged', () => {
+    const video = mountCapture();
+    fireWheel(video, 120, 0); // scroll content right
+    flushRaf();
+    const ts = eventsOfType('touchStart')[0] as InputEvent & { x: number; y: number };
+    const tm = eventsOfType('touchMove').at(-1) as InputEvent & { x: number; y: number };
+    expect(tm.x).toBeLessThan(ts.x); // finger swipes left for content-right
+    expect(tm.y).toBe(ts.y); // axis locked to X — no vertical drift
+  });
+
+  it('DOMINANT-AXIS LOCK: a near-vertical diagonal scroll locks to Y (no x wobble)', () => {
+    const video = mountCapture();
+    fireWheel(video, 20, 300); // vertical dominant
+    flushRaf();
+    const ts = eventsOfType('touchStart')[0] as InputEvent & { x: number; y: number };
+    const tm = eventsOfType('touchMove').at(-1) as InputEvent & { x: number; y: number };
+    expect(tm.x).toBe(ts.x); // off-axis dropped → no diagonal wobble
+    expect(tm.y).toBeLessThan(ts.y); // scrolled down
+  });
+
+  it('NO FRAGMENTATION across sub-idle gaps; a real idle gap ends the gesture once (W2768 320ms idle)', () => {
+    const video = mountCapture();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      fireWheel(video, 0, 80);
+      flushRaf();
+      vi.advanceTimersByTime(150); // < 320ms idle → gesture stays alive
+      fireWheel(video, 0, 80);
+      flushRaf();
+      vi.advanceTimersByTime(150);
+      fireWheel(video, 0, 80);
+      flushRaf();
+      // three sub-idle bursts = ONE continuous gesture (no per-burst re-anchor to centre).
+      expect(eventsOfType('touchStart').length).toBe(1);
+      expect(eventsOfType('touchEnd').length).toBe(0);
+      vi.advanceTimersByTime(360); // a real > 320ms idle gap closes it exactly once.
+      expect(eventsOfType('touchEnd').length).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
