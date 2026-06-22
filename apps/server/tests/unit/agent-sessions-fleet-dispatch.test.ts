@@ -18,6 +18,7 @@ import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js'
 import type { DrizzleFleetNodesRepo } from '../../src/db/fleet-nodes-repo.js';
 import type { ProfilesService } from '../../src/services/profiles.js';
 import type { R2 } from '../../src/lib/r2.js';
+import type { AccountProxiesService } from '../../src/services/account-proxies.js';
 
 const KEY = Buffer.alloc(32, 7).toString('base64');
 const NODE_ID = 'local-mac-dev-001';
@@ -173,6 +174,28 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect(sent).toHaveLength(1);
     const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
     expect(frame.idleTimeoutSeconds).toBeUndefined();
+  });
+
+  it('fails closed when a requested proxy_id is unresolvable — NO operator-default fallback (no sessionAssign sent)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_failclosed',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      logger: logger(),
+      accountId: 'acc_x',
+      proxyId: 'prx_unresolvable',
+      accountProxiesService: {
+        resolveForDispatch: () => Promise.resolve(null),
+      } as unknown as AccountProxiesService,
+    });
+    // The customer's requested proxy couldn't resolve → we MUST NOT fall back to the
+    // operator-default egress (egress-identity leak). Session created but NOT dispatched.
+    expect(sent).toHaveLength(0);
   });
 
   it('region-aware: an EU viewer routes to the EU node (region threaded to findNearestWithLivekit), not the US node', async () => {

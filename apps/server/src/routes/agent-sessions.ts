@@ -719,7 +719,19 @@ export async function dispatchSessionAssignOnCreate(args: {
     let inlineProxyConfig: SocksProxyConfig | InlineVpnProxyWire = sessionDispatch.proxy;
     if (proxyId !== undefined && accountId !== undefined && accountProxiesService !== undefined) {
       const resolved = await accountProxiesService.resolveForDispatch({ proxyId, accountId });
-      if (resolved !== null) inlineProxyConfig = resolved;
+      if (resolved === null) {
+        // FAIL CLOSED: the customer explicitly requested their OWN proxy but it can't be
+        // resolved (not found / non-dispatchable scheme / decrypt fail). Do NOT silently fall
+        // back to the operator-default egress — that would run the customer's session through
+        // shared egress they never chose (an egress-identity leak). Skip the dispatch instead.
+        // (An unsafe-host proxy already throws UnsafeProxyHostError → the outer catch skips.)
+        logger?.warn(
+          { component: 'fleet-session-dispatch', sessionId, proxyId },
+          'requested proxy_id unresolvable; failing closed (no operator-default egress fallback)',
+        );
+        return;
+      }
+      inlineProxyConfig = resolved;
     }
     const assign = serializeSessionAssign({
       sessionId,
