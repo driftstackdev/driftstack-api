@@ -17,17 +17,26 @@
 //                    undeployed W2761 sub-pixel phantom), NOT the GUI wheel→touch converter.
 //   --mode legs    : a longer drag that forces an edge re-centre (touchEnd+touchStart
 //                    mid-scroll) — tests the re-anchor path on the fork.
+//   --e2e          : THE PROPER REAL LIVE TEST (founder 2026-06-22). Mounts the REAL GUI
+//                    wheel->touch converter (scripts/scroll-e2e/harness.iife.js) on the
+//                    live #dsvid box stream, wires its emitted touch to publishData, then
+//                    dispatches a realistic macOS trackpad scroll-DOWN WheelEvent stream at
+//                    it. This drives the founder's ACTUAL path end-to-end (trackpad wheel ->
+//                    converter -> DataChannel -> box -> scroll), not hand-crafted touch.
 //
 // Verdict: for a scroll-DOWN the luma trace must be NON-DECREASING (page shows lower =
 // lighter content). A DIP below the running max by > NOISE = a BOUNCE (scrolled back up).
 //
 // Run (key via env — NEVER hardcode/log it):
 //   DS_KEY="$(security find-generic-password -s dev.driftstack.gui -w)" node scripts/sim-scroll-probe.mjs
-// Options: --url <https-url> (default scroll-probe.html) · --proxy <id|none> · --keep
+// Options: --url <https-url> (default scroll-probe.html) · --proxy <id|none> · --keep · --e2e
 //
 // NEVER prints DS_KEY or the LiveKit token. Always deletes the session (unless --keep).
 
 import { chromium } from 'playwright';
+import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const BASE = 'https://api.driftstack.dev';
 const KEY = process.env.DS_KEY;
@@ -46,9 +55,19 @@ const getOpt = (n, d) => {
   return i >= 0 && argv[i + 1] ? argv[i + 1] : d;
 };
 const KEEP = getFlag('--keep');
+// --e2e: run the FULL LIVE flow through the REAL GUI wheel->touch converter (W2769).
+// Instead of hand-crafting touch (the default modes) or driving the fork's native path,
+// --e2e injects the bundled REAL converter (scripts/scroll-e2e/harness.iife.js), wires its
+// emitted touch straight to the box DataChannel, then fires a realistic macOS trackpad
+// WheelEvent stream at it — exercising EXACTLY the founder's path: trackpad wheel ->
+// useInputCapture -> sendInputEvent -> publishData -> box -> scroll. Additive: the existing
+// modes still run unless you pass --e2e (which runs ONLY the e2e flow).
+const E2E = getFlag('--e2e');
 const PROBE_URL = getOpt('--url', 'https://driftstack.dev/scroll-probe.html');
 const MODE = getOpt('--mode', 'both');
 const NOISE = 3; // luma units of frame noise to tolerate before calling a dip a bounce
+const here = path.dirname(fileURLToPath(import.meta.url));
+const HARNESS_PATH = path.join(here, 'scroll-e2e', 'harness.iife.js');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const jres = async (r) => {
@@ -303,36 +322,208 @@ try {
     return { label: `stray-${label}`, verdict, bounce: delta < -NOISE };
   }
 
+  // === --e2e: THE FULL LIVE FLOW through the REAL GUI wheel->touch converter (W2769) ===
+  // Mounts the bundled REAL useInputCapture converter on the live #dsvid box stream, wires
+  // its emitted touch straight to publishData, then dispatches a realistic macOS trackpad
+  // scroll-DOWN WheelEvent stream at it. Measures the real scroll via luma. This is the only
+  // path that exercises the founder's ACTUAL chain (trackpad wheel -> converter ->
+  // DataChannel -> box -> scroll); the hand-crafted modes above never touch the converter.
+  async function runE2E() {
+    console.log('\n=== E2E [real wheel -> REAL converter -> DataChannel -> box] ===');
+    if (!fs.existsSync(HARNESS_PATH)) {
+      console.error(
+        `harness bundle missing at ${HARNESS_PATH} — build it first:\n  node scripts/scroll-e2e/build.mjs`,
+      );
+      return { label: 'e2e', verdict: 'NO-HARNESS', noScroll: true, bounce: false };
+    }
+
+    // (1) inject the bundled REAL converter into THIS probe page (same page that owns
+    //     window.__dsRoom + #dsvid + window.__avgLuma).
+    await page.addScriptTag({ path: HARNESS_PATH });
+
+    // (2) wire the converter's emitted touch straight to the box DataChannel, and (3) mount
+    //     the converter on the REAL #dsvid box-stream element. The harness's __dsMountConverter
+    //     stubs getBoundingClientRect AND overrides videoWidth/videoHeight to 402x874; per the
+    //     task we keep #dsvid's REAL videoWidth/videoHeight (the box capture IS 402x874, but
+    //     mapping must use the real attached track) while keeping the 402x874 rect stub the
+    //     converter's pointerToViewport needs in a headless page (the <video> CSS box is the
+    //     full viewport, not the capture size). We re-define the real dims back after mount.
+    const mounted = await page.evaluate(() => {
+      const vid = document.getElementById('dsvid');
+      if (!vid) return { ok: false, why: 'no #dsvid' };
+      if (typeof window.__dsMountConverter !== 'function')
+        return { ok: false, why: '__dsMountConverter missing (harness not injected)' };
+      const realW = vid.videoWidth;
+      const realH = vid.videoHeight;
+      // (2) publish each emitted InputEvent to the box exactly like sendInputEvent does.
+      window.__dsPublishTouch = (ev) => {
+        try {
+          const data = new TextEncoder().encode(JSON.stringify(ev));
+          window.__dsRoom.localParticipant.publishData(data, { reliable: true });
+        } catch (e) {
+          /* never throw back into the converter */
+        }
+      };
+      window.__dsResetLog && window.__dsResetLog();
+      // (3) mount the REAL converter on the live #dsvid. __dsMountConverter applies the
+      //     402x874 rect stub (good — the headless <video> CSS box is viewport-sized, not the
+      //     capture size, so pointerToViewport needs the real capture rect to map wheel coords).
+      window.__dsMountConverter(vid);
+      // …but restore the REAL videoWidth/videoHeight the stub clobbered, so the converter maps
+      //  against the actual attached device track dims (per task instruction).
+      if (realW > 0) Object.defineProperty(vid, 'videoWidth', { value: realW, configurable: true });
+      if (realH > 0)
+        Object.defineProperty(vid, 'videoHeight', { value: realH, configurable: true });
+      return { ok: true, realW, realH };
+    });
+    if (!mounted.ok) {
+      console.error(`  E2E mount failed: ${mounted.why}`);
+      return {
+        label: 'e2e',
+        verdict: `MOUNT-FAILED (${mounted.why})`,
+        noScroll: true,
+        bounce: false,
+      };
+    }
+    console.log(`  converter mounted on #dsvid (real track ${mounted.realW}x${mounted.realH})`);
+
+    // A realistic macOS two-finger scroll-DOWN stream (matches smoke.mjs + the realtiming
+    // reference test): a finger-drag ramp (deltaY 5..40) then an inertial momentum tail
+    // (deltaY decays ~42*exp(-i/9), SAME positive sign), ~12ms apart. All deltaY > 0.
+    const wheelStream = [];
+    for (let i = 0; i < 8; i++) wheelStream.push({ dy: 5 + i * 5, dt: 12 });
+    for (let i = 0; i < 34; i++)
+      wheelStream.push({ dy: Math.max(1, Math.round(42 * Math.exp(-i / 9))), dt: 12 });
+
+    // (5) sample luma over time: a baseline, then through the wheel stream, then a settle tail.
+    const trace = [];
+    const tags = [];
+    const samp = async (tag) => {
+      const l = await luma();
+      trace.push(l);
+      tags.push(tag);
+      return l;
+    };
+    const base = await samp('base');
+
+    // (4) dispatch the wheel stream on #dsvid via __dsFireWheel — drives the REAL converter
+    //     live (its real rAF coalescer + 320ms idle run under real browser timing). Sample
+    //     luma every few wheels so the trace captures the scroll progression.
+    for (let i = 0; i < wheelStream.length; i++) {
+      const e = wheelStream[i];
+      await page.evaluate((dy) => window.__dsFireWheel(0, dy), e.dy);
+      await sleep(e.dt);
+      if (i % 6 === 5) await samp('w' + (i + 1)); // ~7 mid-stream samples
+    }
+    // settle: let the converter's 320ms idle flush the final touchEnd + the box render+stream.
+    for (let i = 0; i < 8; i++) {
+      await sleep(150);
+      await samp('s' + (i + 1));
+    }
+
+    // How many touch events the REAL converter actually emitted (sanity: the chain ran).
+    const emitted = await page.evaluate(() => {
+      const log = Array.isArray(window.__dsTouchLog) ? window.__dsTouchLog : [];
+      const c = { touchStart: 0, touchMove: 0, touchEnd: 0 };
+      for (const e of log) if (e.type in c) c[e.type]++;
+      return { total: log.length, ...c };
+    });
+    console.log(
+      `  converter emitted: ${emitted.total} events (start=${emitted.touchStart} move=${emitted.touchMove} end=${emitted.touchEnd})`,
+    );
+
+    // (6) verdict: for a scroll-DOWN the luma trace must RISE MONOTONICALLY (non-decreasing
+    //     within NOISE) with NO dip (a dip below the running max = the page bounced back UP)
+    //     and reach a clear NET increase.
+    let runMax = trace[0];
+    let dips = 0;
+    let maxDip = 0;
+    for (let i = 1; i < trace.length; i++) {
+      if (trace[i] < runMax - NOISE) {
+        dips++;
+        maxDip = Math.max(maxDip, runMax - trace[i]);
+      }
+      runMax = Math.max(runMax, trace[i]);
+    }
+    const net = Math.round((trace[trace.length - 1] - base) * 10) / 10;
+    console.log(`  luma trace: ${trace.map((l, i) => `${tags[i]}=${l}`).join(' ')}`);
+    console.log(
+      `  baseline=${base} net=${net} (>0 = scrolled down) | dips=${dips} maxDip=${Math.round(maxDip * 10) / 10}`,
+    );
+    let verdict;
+    let noScroll = false;
+    let bounce = false;
+    if (emitted.touchMove < 1) {
+      verdict = 'NO-SCROLL (converter emitted no touchMove — wheel->touch did not run)';
+      noScroll = true;
+    } else if (net <= NOISE && dips === 0) {
+      verdict =
+        'NO-SCROLL (luma flat — box did not honor the published touch, or page not scrollable)';
+      noScroll = true;
+    } else if (dips > 0) {
+      verdict = `BOUNCE — ${dips} dip(s), maxDip=${Math.round(maxDip * 10) / 10} luma (page scrolled back UP mid/after the real wheel stream)`;
+      bounce = true;
+    } else {
+      verdict =
+        'PASS — real trackpad wheel -> REAL converter -> box scrolled DOWN monotonically, no bounce';
+    }
+    console.log(`  VERDICT [e2e]: ${verdict}`);
+    return { label: 'e2e', base, net, dips, maxDip, trace, verdict, noScroll, bounce };
+  }
+
   const out = [];
-  if (MODE === 'clean' || MODE === 'both')
-    out.push(await runDrag('clean-single-leg', 700, 50, 12, 0)); // 700→100, 600px, one leg
-  if (MODE === 'legs' || MODE === 'both')
-    out.push(await runDrag('multi-leg-recenter', 700, 50, 18, 6)); // re-centre every 6 moves
-  if (MODE === 'stray' || MODE === 'both') {
-    out.push(await runStrayMove('sameid', true));
-    out.push(await runStrayMove('newid', false));
+  if (E2E) {
+    out.push(await runE2E());
+  } else {
+    if (MODE === 'clean' || MODE === 'both')
+      out.push(await runDrag('clean-single-leg', 700, 50, 12, 0)); // 700→100, 600px, one leg
+    if (MODE === 'legs' || MODE === 'both')
+      out.push(await runDrag('multi-leg-recenter', 700, 50, 18, 6)); // re-centre every 6 moves
+    if (MODE === 'stray' || MODE === 'both') {
+      out.push(await runStrayMove('sameid', true));
+      out.push(await runStrayMove('newid', false));
+    }
   }
 
   console.log('\n===== SCROLL PROBE SUMMARY =====');
   for (const r of out) console.log(`  [${r.label}] ${r.verdict}`);
-  const cleanBounce = out.some((r) => r.dips > 0);
-  const strayBounce = out.some((r) => r.bounce);
-  const cleanScrolled = out.filter((r) => r.net !== undefined).every((r) => r.net > NOISE);
-  if (cleanBounce) {
-    console.log('A clean monotonic drag itself bounced => fork mishandles even clean input.');
-    exitCode = 3;
-  } else if (strayBounce) {
-    console.log(
-      'A down-less move bounced the page (A3 W2770 root cause) — gate not yet live here.',
-    );
-    exitCode = 3;
-  } else if (cleanScrolled) {
-    console.log(
-      'Clean drags scrolled DOWN monotonically with NO bounce, and the down-less move was gated. Scroll verified on the live box.',
-    );
+  if (E2E) {
+    const e = out[0];
+    if (e.bounce) {
+      console.log(
+        'The REAL GUI wheel->touch converter, driven by a realistic trackpad scroll-DOWN, BOUNCED the live box (luma dipped). The founder path reproduces the back-up.',
+      );
+      exitCode = 3;
+    } else if (e.noScroll) {
+      console.log(
+        'Inconclusive — the converter ran but the live box showed no scroll (luma flat). See trace above.',
+      );
+      exitCode = 4;
+    } else {
+      console.log(
+        'A real trackpad scroll-DOWN through the REAL GUI converter scrolled the live box DOWN monotonically with NO bounce. Founder path verified end-to-end.',
+      );
+    }
   } else {
-    console.log('Inconclusive — a drag showed no scroll (luma flat). See traces above.');
-    exitCode = 4;
+    const cleanBounce = out.some((r) => r.dips > 0);
+    const strayBounce = out.some((r) => r.bounce);
+    const cleanScrolled = out.filter((r) => r.net !== undefined).every((r) => r.net > NOISE);
+    if (cleanBounce) {
+      console.log('A clean monotonic drag itself bounced => fork mishandles even clean input.');
+      exitCode = 3;
+    } else if (strayBounce) {
+      console.log(
+        'A down-less move bounced the page (A3 W2770 root cause) — gate not yet live here.',
+      );
+      exitCode = 3;
+    } else if (cleanScrolled) {
+      console.log(
+        'Clean drags scrolled DOWN monotonically with NO bounce, and the down-less move was gated. Scroll verified on the live box.',
+      );
+    } else {
+      console.log('Inconclusive — a drag showed no scroll (luma flat). See traces above.');
+      exitCode = 4;
+    }
   }
 } catch (e) {
   console.error('ERR', e?.message ?? e);
