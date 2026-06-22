@@ -471,6 +471,37 @@ try {
     return { label: 'e2e', base, net, dips, maxDip, trace, verdict, noScroll, bounce };
   }
 
+  // STUCK-FINGER: the dropped-touchEnd case A3 found (audit #5 → fork fix W2780). Scroll
+  // down but DROP the touchEnd, wait past the 250ms re-anchor window, then send a late move
+  // on the still-"active" finger. A fork WITHOUT W2780 lets the stale finger FLING the page
+  // (luma jumps); WITH W2780 (>250ms gap => re-anchor) the late move is re-anchored => no
+  // fling (luma flat). Always sends a final touchEnd to clean up the stuck finger.
+  async function runStuckFinger() {
+    console.log(`\n=== STUCK-FINGER (regression for A3 W2780 dropped-touchEnd fling) ===`);
+    const X = 200;
+    const id = tid++;
+    await publish({ type: 'touchStart', x: X, y: 700, touchId: id });
+    await sleep(150);
+    for (let y = 650; y >= 250; y -= 50) {
+      await publish({ type: 'touchMove', x: X, y, touchId: id });
+      await sleep(110);
+    }
+    await sleep(600); // DROP the touchEnd → stuck finger; wait past the 250ms re-anchor window
+    const afterScroll = await luma();
+    await publish({ type: 'touchMove', x: X, y: 760, touchId: id }); // late move on the stuck finger
+    await sleep(350);
+    const afterLate = await luma();
+    await publish({ type: 'touchEnd', x: X, y: 760, touchId: id }); // clean up the stuck finger
+    const delta = Math.round((afterLate - afterScroll) * 10) / 10;
+    console.log(`  luma afterScroll=${afterScroll} afterLate=${afterLate} delta=${delta}`);
+    const verdict =
+      Math.abs(delta) > NOISE
+        ? `FLUNG — the stuck-finger late move MOVED the page (luma ${afterScroll}->${afterLate}, |Δ|=${Math.abs(delta)}). Expected pre-W2780; the gap re-anchor is not effective here.`
+        : `RE-ANCHORED — the stuck-finger late move did NOT move the page (luma ${afterScroll}->${afterLate}, flat). W2780 gap-reanchor working.`;
+    console.log(`  VERDICT [stuck-finger]: ${verdict}`);
+    return { label: 'stuck-finger', verdict, flung: Math.abs(delta) > NOISE };
+  }
+
   const out = [];
   if (E2E) {
     out.push(await runE2E());
@@ -483,6 +514,7 @@ try {
       out.push(await runStrayMove('sameid', true));
       out.push(await runStrayMove('newid', false));
     }
+    if (MODE === 'stuck' || MODE === 'both') out.push(await runStuckFinger());
   }
 
   console.log('\n===== SCROLL PROBE SUMMARY =====');
@@ -516,6 +548,11 @@ try {
         'A down-less move bounced the page (A3 W2770 root cause) — gate not yet live here.',
       );
       exitCode = 3;
+    } else if (out.some((r) => r.flung)) {
+      console.log(
+        'A dropped-touchEnd stuck finger FLUNG the page (A3 W2780 case) — expected pre-W2780; the W2770 down-less-move path is clean. Re-run after W2780 deploys to confirm RE-ANCHORED.',
+      );
+      exitCode = 5;
     } else if (cleanScrolled) {
       console.log(
         'Clean drags scrolled DOWN monotonically with NO bounce, and the down-less move was gated. Scroll verified on the live box.',
