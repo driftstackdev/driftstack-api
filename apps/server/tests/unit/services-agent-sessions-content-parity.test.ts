@@ -95,9 +95,10 @@ describe('services/agent-sessions content parity', () => {
     expect(body).toMatch(/export interface AgentSessionsRepo \{/);
     expect(body).toMatch(/create\(args: CreateAgentSessionArgs\): Promise<AgentSessionRecord>;/);
     expect(body).toMatch(/get\(id: string\): Promise<AgentSessionRecord \| null>;/);
-    expect(body).toMatch(
-      /listByAccount\(accountId: string\): Promise<ReadonlyArray<AgentSessionRecord>>;/,
-    );
+    // Method-name pin only (the surface-existence intent) — the signature gained
+    // an optional `opts?: { limit?: number }` for DB-level paging and now wraps
+    // across lines, which a full-signature regex can't match.
+    expect(body).toMatch(/listByAccount\(/);
     expect(body).toMatch(
       /appendTranscript\(id: string, entry: TranscriptEntry\): Promise<AgentSessionRecord>;/,
     );

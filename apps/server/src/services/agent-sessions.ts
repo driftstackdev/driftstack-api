@@ -161,7 +161,10 @@ export interface CreateAgentSessionArgs {
 export interface AgentSessionsRepo {
   create(args: CreateAgentSessionArgs): Promise<AgentSessionRecord>;
   get(id: string): Promise<AgentSessionRecord | null>;
-  listByAccount(accountId: string): Promise<ReadonlyArray<AgentSessionRecord>>;
+  listByAccount(
+    accountId: string,
+    opts?: { limit?: number },
+  ): Promise<ReadonlyArray<AgentSessionRecord>>;
   appendTranscript(id: string, entry: TranscriptEntry): Promise<AgentSessionRecord>;
   debitTokens(id: string, tokens: number): Promise<AgentSessionRecord>;
   closeWithReason(id: string, reason: string): Promise<AgentSessionRecord>;
@@ -312,12 +315,23 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     return Promise.resolve(this.records.get(id) ?? null);
   }
 
-  listByAccount(accountId: string): Promise<ReadonlyArray<AgentSessionRecord>> {
+  listByAccount(
+    accountId: string,
+    opts?: { limit?: number },
+  ): Promise<ReadonlyArray<AgentSessionRecord>> {
     const out: AgentSessionRecord[] = [];
     for (const rec of this.records.values()) {
       if (rec.accountId === accountId) out.push(rec);
     }
-    return Promise.resolve(out);
+    // Match the Drizzle query: most-recent first ((created_at, id) desc), then
+    // the optional limit — so the in-memory double and the DB agree on the page.
+    out.sort((a, b) => {
+      const at = a.createdAt instanceof Date ? a.createdAt.getTime() : 0;
+      const bt = b.createdAt instanceof Date ? b.createdAt.getTime() : 0;
+      if (bt !== at) return bt - at;
+      return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+    });
+    return Promise.resolve(opts?.limit !== undefined ? out.slice(0, opts.limit) : out);
   }
 
   appendTranscript(id: string, entry: TranscriptEntry): Promise<AgentSessionRecord> {

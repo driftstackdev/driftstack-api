@@ -63,6 +63,24 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
     expect(acc3).toEqual([]);
   });
 
+  it('listByAccount: most-recent first (createdAt desc) + honors the optional limit (DB-paging parity)', async () => {
+    let now = new Date('2026-06-22T00:00:00Z');
+    const repo = new InMemoryAgentSessionsRepo(() => now);
+    const a = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 1 });
+    now = new Date('2026-06-22T00:01:00Z');
+    const b = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 1 });
+    now = new Date('2026-06-22T00:02:00Z');
+    const c = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 1 });
+    // Unlimited → all three, newest first (matches the Drizzle ORDER BY desc so
+    // the route renders the same page against either backend).
+    const all = await repo.listByAccount('acc_1');
+    expect(all.map((r) => r.id)).toEqual([c.id, b.id, a.id]);
+    // limit caps to the N most-recent (the route passes { limit: 100 } so a busy
+    // account's full history is never pulled into memory).
+    const top2 = await repo.listByAccount('acc_1', { limit: 2 });
+    expect(top2.map((r) => r.id)).toEqual([c.id, b.id]);
+  });
+
   it('appendTranscript: append-only, ordered, bumps updatedAt; previous transcript array is NOT mutated', async () => {
     let now = new Date('2026-05-16T00:00:00Z');
     const repo = new InMemoryAgentSessionsRepo(() => now);

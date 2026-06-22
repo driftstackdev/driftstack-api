@@ -29,7 +29,7 @@
 // db-agent-sessions-concurrency-drizzle.test.ts (CI; skips locally w/o DB).
 
 import { randomUUID } from 'node:crypto';
-import { and, eq, lt } from 'drizzle-orm';
+import { and, desc, eq, lt } from 'drizzle-orm';
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import type { Database } from './client.js';
 import { agentSessions } from './schema.js';
@@ -127,11 +127,20 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     return row ? rowToRecord(row) : null;
   }
 
-  async listByAccount(accountId: string): Promise<ReadonlyArray<AgentSessionRecord>> {
-    const rows = await this.database.db
+  async listByAccount(
+    accountId: string,
+    opts?: { limit?: number },
+  ): Promise<ReadonlyArray<AgentSessionRecord>> {
+    // Push the sort + cap to the DB so a busy account's full session history
+    // isn't fetched into memory on every list call (the only caller renders just
+    // the most-recent page). Most-recent first; (created_at, id) desc is a stable
+    // total order for the tiebreak.
+    const base = this.database.db
       .select()
       .from(agentSessions)
-      .where(eq(agentSessions.accountId, accountId));
+      .where(eq(agentSessions.accountId, accountId))
+      .orderBy(desc(agentSessions.createdAt), desc(agentSessions.id));
+    const rows = opts?.limit !== undefined ? await base.limit(opts.limit) : await base;
     return rows.map(rowToRecord);
   }
 

@@ -1250,9 +1250,10 @@ export function registerAgentSessionsRoutes(
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
-      const all = await sessions.listByAccount(ctx.account.id);
-      // Sort newest-first by createdAt for the dashboard's "recent
-      // sessions" rendering. The repo doesn't guarantee order.
+      // Most-recent 100 only — the repo now sorts + caps at the DB so a busy
+      // account's full history isn't pulled into memory on every list call. The
+      // re-sort below is a cheap defensive belt over the ≤100 returned rows.
+      const all = await sessions.listByAccount(ctx.account.id, { limit: 100 });
       const sorted = [...all].sort((a, b) => {
         const aT = a.createdAt instanceof Date ? a.createdAt.getTime() : 0;
         const bT = b.createdAt instanceof Date ? b.createdAt.getTime() : 0;
