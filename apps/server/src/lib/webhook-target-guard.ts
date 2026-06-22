@@ -114,14 +114,37 @@ export function classifyUnsafeHost(
   return null;
 }
 
-/** Strip the `:port` from a `host:port` endpoint, handling bracketed IPv6 (`[::1]:51820`)
- *  and bare hosts — returns the host portion for SSRF classification. */
+/** Strip the `:port` from a `host:port` endpoint, handling bracketed IPv6 (`[::1]:51820`),
+ *  UNBRACKETED IPv6 (the WG schema's only-accepted IPv6 form), and bare hosts — returns
+ *  the host portion for SSRF classification.
+ *
+ *  ⚠️ The naive last-colon heuristic is an SSRF bypass: an unbracketed IPv6 whose final
+ *  hextet is decimal (`fc00::9999`, `fe80::443`) gets its tail mistaken for a port and
+ *  chopped to `fc00:` / `fe80:`, which is not a valid IP literal → classifyUnsafeHost
+ *  returns null → the guard PASSES and the internal IPv6 is reachable. The WG endpoint
+ *  schema accepts unbracketed IPv6 but rejects the bracketed form, so this mishandled
+ *  shape is exactly what a customer can submit. We therefore only strip a `:port` when the
+ *  host portion is unambiguous (bracketed IPv6, or a head with no further colons / a valid
+ *  bare IPv6); an unbracketed string that IS a valid IPv6 literal is returned whole. */
 function vpnEndpointHost(endpoint: string): string {
   const e = endpoint.trim();
+  // [ipv6]:port → host
   const bracketed = e.match(/^\[(.+)\]:\d+$/);
   if (bracketed) return bracketed[1]!;
+  // [ipv6] (bare bracketed, no port)
+  if (e.startsWith('[') && e.endsWith(']')) return e.slice(1, -1);
+  // An unbracketed string that is itself a valid IPv6 literal has NO port to strip (an
+  // unbracketed IPv6 cannot carry a port unambiguously) — return it whole so the real
+  // address is classified. THE SSRF-critical case: `fc00::9999` must not become `fc00:`.
+  if (isIP(e) === 6) return e;
   const lastColon = e.lastIndexOf(':');
-  if (lastColon > 0 && /^\d+$/.test(e.slice(lastColon + 1))) return e.slice(0, lastColon);
+  if (lastColon > 0 && /^\d+$/.test(e.slice(lastColon + 1))) {
+    const head = e.slice(0, lastColon);
+    // Only strip the trailing `:digits` as a port when the head is an IPv4/hostname (no
+    // further colons) OR a valid bare IPv6 — else the colon belonged to an IPv6 literal,
+    // so keep the whole string for classification rather than corrupting it.
+    if (!head.includes(':') || isIP(head) === 6) return head;
+  }
   return e;
 }
 

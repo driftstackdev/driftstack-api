@@ -147,6 +147,30 @@ describe('V-820 FleetNodeAuthImpl.verify', () => {
     expect(res).toEqual({ ok: false, reason: 'too_long_lived' });
   });
 
+  it('future-dated iat with exp=iat+300 (delta passes) → ok=false reason future_iat (cannot disguise a far-future long-lived token as fresh)', async () => {
+    const jwt = await signJwt(pair.privateKey, {
+      iss: NODE_ID,
+      sub: NODE_ID,
+      iat: NOW_S + 3600, // minted "1 hour ahead"
+      exp: NOW_S + 3600 + 300, // exp - iat = 300 (within the delta cap) but far from NOW
+      nonce: 'x',
+    });
+    const res = await auth.verify(jwt, NOW);
+    expect(res).toEqual({ ok: false, reason: 'future_iat' });
+  });
+
+  it('exp more than the lifetime cap from NOW, even with a not-future iat → ok=false too_long_lived', async () => {
+    const jwt = await signJwt(pair.privateKey, {
+      iss: NODE_ID,
+      sub: NODE_ID,
+      iat: NOW_S - 100, // valid (past) iat
+      exp: NOW_S + 3600, // but exp is ~1h from now → absolute window check rejects
+      nonce: 'x',
+    });
+    const res = await auth.verify(jwt, NOW);
+    expect(res).toEqual({ ok: false, reason: 'too_long_lived' });
+  });
+
   it('signature signed by a different key → ok=false reason signature_invalid', async () => {
     const otherPair = await makeKeyPair();
     const jwt = await signJwt(otherPair.privateKey, {

@@ -160,6 +160,20 @@ describe('classifyUnsafeVpnTargets — guards the REAL VPN egress (endpoint/dns/
     expect(classifyUnsafeVpnTargets({ endpoint: '[::1]:51820' })).not.toBeNull(); // IPv6 loopback
     expect(classifyUnsafeVpnTargets({ endpoint: 'localhost:51820' })).toBe('localhost');
   });
+  it('blocks UNBRACKETED IPv6 endpoints — the SSRF bypass the last-colon heuristic missed (fc00::9999→fc00:)', () => {
+    // The WG endpoint schema accepts unbracketed IPv6 (and rejects the bracketed form),
+    // so these are exactly what a customer can submit. The decimal final hextet must NOT
+    // be mistaken for a port + chopped to a non-IP that slips past the guard.
+    expect(classifyUnsafeVpnTargets({ endpoint: 'fc00::9999' })).toBe('private'); // ULA
+    expect(classifyUnsafeVpnTargets({ endpoint: 'fe80::443' })).toBe('private'); // link-local
+    expect(classifyUnsafeVpnTargets({ endpoint: 'fd12:3456:789a::5' })).toBe('private'); // ULA
+    expect(classifyUnsafeVpnTargets({ endpoint: '::1' })).not.toBeNull(); // loopback, bare
+    // ipv6:port unbracketed — strip the real port, still block the ULA host.
+    expect(classifyUnsafeVpnTargets({ endpoint: 'fc00::9999:51820' })).toBe('private');
+    // No false-positive: a public IPv6 (with or without a port) still passes.
+    expect(classifyUnsafeVpnTargets({ endpoint: '2606:4700::1111' })).toBeNull();
+    expect(classifyUnsafeVpnTargets({ endpoint: '2606:4700::1111:51820' })).toBeNull();
+  });
   it('flags an unsafe WireGuard dns (incl. a list)', () => {
     expect(classifyUnsafeVpnTargets({ endpoint: 'vpn.example.com:51820', dns: '10.0.0.1' })).toBe(
       'private',

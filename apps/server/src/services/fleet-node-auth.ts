@@ -67,6 +67,7 @@ export type FleetJwtVerifyError =
   | 'signature_invalid'
   | 'expired'
   | 'too_long_lived'
+  | 'future_iat'
   | 'iss_sub_mismatch'
   | 'replayed_nonce';
 
@@ -79,6 +80,10 @@ export interface FleetNodeAuth {
 }
 
 const MAX_JWT_LIFETIME_SECONDS = 300; // 5 minutes per spec.
+// Tolerance for modest clock drift between a fleet node and the control plane when
+// pinning the token's validity window to wall-clock (the future-iat + absolute-expiry
+// checks). Small enough that it can't meaningfully extend the 5-minute bound.
+const CLOCK_SKEW_SECONDS = 60;
 
 function base64UrlDecodeToBytes(s: string): Uint8Array {
   // Standard JWT base64url decode — RFC 7515 §2.
@@ -152,6 +157,14 @@ export class FleetNodeAuthImpl implements FleetNodeAuth {
 
     const nowSeconds = Math.floor(now.getTime() / 1000);
     if (claims.exp <= nowSeconds) return { ok: false, reason: 'expired' };
+    // The iat→exp DELTA check above bounds a token that HONESTLY claims a long life, but a
+    // future-dated iat with exp=iat+300 reads as a fresh 5-minute token while really minted
+    // far ahead — defeating the short-lived-token bound. Pin the window to wall-clock too:
+    // reject a future iat (beyond skew) AND an exp more than the max lifetime from NOW.
+    if (claims.iat > nowSeconds + CLOCK_SKEW_SECONDS) return { ok: false, reason: 'future_iat' };
+    if (claims.exp - nowSeconds > MAX_JWT_LIFETIME_SECONDS + CLOCK_SKEW_SECONDS) {
+      return { ok: false, reason: 'too_long_lived' };
+    }
 
     const node = await this.repo.getPublicKey(claims.iss);
     if (node === null) return { ok: false, reason: 'unknown_node' };
