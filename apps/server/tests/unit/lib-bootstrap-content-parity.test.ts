@@ -327,7 +327,12 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     // Registry takes the profileSaved→R2 persister when R2 is configured, else
     // undefined (frame accepted + ignored). Pinned so the persistence wiring
     // can't be silently dropped (a profile-backed session would lose its store).
-    expect(body).toContain('fleetControlRegistry: new FleetControlRegistry(');
+    // W2808: the registry is assigned inline to a forward holder
+    // (fleetRegistryHolder.current) so the onHeartbeat CP↔daemon reconcile can
+    // resolve the reporting node's connection to re-issue sessionEnd.
+    expect(body).toContain(
+      'fleetControlRegistry: (fleetRegistryHolder.current = new FleetControlRegistry(',
+    );
     // ARC-A-followup: the persister now takes a cross-account ownership guard
     // (session→account + profile-ownership) so a node can't overwrite another
     // account's profile blob. Pinned via fragments (prettier-reflow-robust).

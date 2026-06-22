@@ -35,6 +35,8 @@ import { makeProfileSavedPersister } from '../services/profile-store.js';
 import { makeChallengeRelay } from '../services/challenge-relay.js';
 import { makeProfileSaveFailedRelay } from '../services/profile-save-failed-relay.js';
 import { closeAgentSessionOnTerminalStatus } from '../services/agent-session-terminal-close.js';
+import { reconcileWorkerReportedOrphans } from '../services/cp-daemon-reconcile.js';
+import { serializeSessionEnd } from '../services/harness-control-codec.js';
 import { RedisFleetNonceCache } from '../lib/redis-fleet-nonce-cache.js';
 import { DrizzleAtlasPriorityEventsRepo } from '../db/atlas-priority-events-repo.js';
 import { InternalFleetAuth } from './internal-fleet-auth.js';
@@ -1326,6 +1328,12 @@ export async function createProductionDeps(
   // nonce cache instance is shared between the verifier (replay defence)
   // and AppDeps.fleetNonceCache — app.ts's activation gate requires all
   // three (fleetNodeAuth + fleetNonceCache + fleetControlRegistry).
+  // W2808 — forward holder so the onHeartbeat CP↔daemon reconcile can resolve the
+  // reporting node's connection (to re-issue sessionEnd) WITHOUT extracting the
+  // registry construction out of the return object. Set inline at construction
+  // (`fleetRegistryHolder.current = new FleetControlRegistry(...)`) and read only at
+  // heartbeat fire-time (long after construction completes).
+  const fleetRegistryHolder: { current?: FleetControlRegistry } = {};
   const fleetControlPlaneDeps = config.fleetControlPlaneEnabled
     ? (() => {
         const fleetNonceCache = new RedisFleetNonceCache(redis);
@@ -1384,7 +1392,7 @@ export async function createProductionDeps(
           // W393 challenge-handling: a `challengeDetected` frame relays to the
           // customer-facing `session.challenge_detected` webhook (resolves the
           // owning account from the session id).
-          fleetControlRegistry: new FleetControlRegistry(
+          fleetControlRegistry: (fleetRegistryHolder.current = new FleetControlRegistry(
             r2 !== null
               ? makeProfileSavedPersister(r2, logger, {
                   agentSessions: agentSessionsRepo,
@@ -1449,6 +1457,21 @@ export async function createProductionDeps(
                   frame.activeSessionStates,
                   Date.parse(frame.timestamp) || Date.now(),
                 );
+                // CP↔daemon reconcile (A2 W2808 / A3 W2804): re-issue sessionEnd for
+                // any session this still-connected worker reports active that the CP
+                // already holds terminal (WSS-blip / lost-sessionEnd orphan — still
+                // billed + slot-holding). Fire-and-forget off the receive loop; the
+                // helper swallows+logs per session + acts ONLY on existing-terminal rows.
+                void reconcileWorkerReportedOrphans({
+                  agentSessions: agentSessionsRepo,
+                  activeSessionStates: frame.activeSessionStates,
+                  macNodeId: frame.macNodeId,
+                  sendSessionEnd: (sessionId) =>
+                    fleetRegistryHolder.current
+                      ?.get(frame.macNodeId)
+                      ?.sendSessionEnd(serializeSessionEnd(sessionId)),
+                  logger,
+                });
               }
             },
             // Worker-disconnect fix (2026-06-19) — liveness hooks (positional
@@ -1471,7 +1494,7 @@ export async function createProductionDeps(
                 logger,
                 livenessStore: sessionLivenessStore,
               }),
-          ),
+          )),
           // Local fleet-demo: the config a dispatched session browses with. Only
           // assembled behind FLEET_CONTROL_PLANE_ENABLED (so inert in prod). The
           // archetype is the canonical current-code iPhone (NOT the canvas-gated
