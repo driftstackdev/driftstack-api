@@ -78,9 +78,9 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
     );
   });
 
-  it("ApproveAuthorization body: authorization_id + account_id uuid; ExchangeCode body: grant_type literal 'authorization_code' + code + code_verifier 43..128 + client_id + client_secret + redirect_uri. Slice 117 added defensive max-length caps on previously-unbounded fields", () => {
+  it("ApproveAuthorization body: authorization_id ONLY (account_id removed — bound to the authed caller, cross-account-takeover guard); ExchangeCode body: grant_type literal 'authorization_code' + code + code_verifier 43..128 + client_id + client_secret + redirect_uri. Slice 117 added defensive max-length caps on previously-unbounded fields", () => {
     expect(body).toMatch(
-      /const ApproveAuthorizationBody = z\.object\(\{\s*\n?\s*authorization_id: z\.string\(\)\.min\(1\)\.max\(128\),\s*\n?\s*account_id: z\.string\(\)\.uuid\(\),\s*\n?\s*\}\);/,
+      /const ApproveAuthorizationBody = z\.object\(\{\s*\n?\s*authorization_id: z\.string\(\)\.min\(1\)\.max\(128\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /const ExchangeCodeBody = z\.object\(\{\s*\n?\s*grant_type: z\.literal\('authorization_code'\),\s*\n?\s*code: z\.string\(\)\.min\(1\)\.max\(256\),\s*\n?\s*code_verifier: z\.string\(\)\.min\(43\)\.max\(128\),\s*\n?\s*client_id: z\.string\(\)\.min\(1\)\.max\(128\),\s*\n?\s*client_secret: z\.string\(\)\.min\(1\)\.max\(256\),\s*\n?\s*redirect_uri: z\.string\(\)\.url\(\),\s*\n?\s*\}\);/,
@@ -139,10 +139,14 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
     );
   });
 
-  it('POST /authorize/complete: app.requireAuth bearer gate; approveAuthorization(body); POST /token: exchangeCode (code + verifier + client_id + client_secret + redirect_uri)', () => {
+  it('POST /authorize/complete: app.requireAuth gate; account bound to the AUTHENTICATED caller (ctx.account.id) NOT a body account_id (cross-account-takeover guard) + scope restricted to ctx.apiKey.scopes; POST /token: exchangeCode (code + verifier + client_id + client_secret + redirect_uri)', () => {
     expect(body).toMatch(
       /app\.post\(\s*\n?\s*'\/v1\/oauth\/authorize\/complete',\s*\n?\s*\{ preHandler: \[app\.requireAuth\] \},/,
     );
+    // SECURITY (cross-account-takeover guard): the approving account is derived from the
+    // authenticated caller, NEVER the request body; the granted scope is the approver's own.
+    expect(body).toContain('account_id: ctx.account.id,');
+    expect(body).toContain('approverScopes: ctx.apiKey.scopes,');
     expect(body).toMatch(
       /const result = await deps\.service\.exchangeCode\(\{\s*\n?\s*code: body\.code,\s*\n?\s*code_verifier: body\.code_verifier,\s*\n?\s*client_id: body\.client_id,\s*\n?\s*client_secret: body\.client_secret,\s*\n?\s*redirect_uri: body\.redirect_uri,\s*\n?\s*\}\);/,
     );

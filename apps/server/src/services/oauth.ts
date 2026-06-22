@@ -27,6 +27,14 @@ import type { ApiKeyScope } from '@driftstack/api-types';
 import { verifyS256Challenge } from '../lib/oauth-pkce.js';
 
 const CODE_TTL_SECONDS = 5 * 60;
+
+// Privileged scopes a third-party OAuth token must NEVER carry (full account / admin
+// control). Granted scope = requested ∩ approver scopes, minus these.
+const OAUTH_DENY_SCOPES: ReadonlySet<ApiKeyScope> = new Set([
+  'account_owner',
+  'driftstack_internal_admin',
+  'admin',
+] as ApiKeyScope[]);
 const TOKEN_TTL_SECONDS = 60 * 60; // 1 hour — short by design; no refresh tokens.
 
 export interface OAuthClient {
@@ -232,6 +240,12 @@ export interface AuthorizeResult {
 export interface ApproveAuthorizationArgs {
   authorization_id: string;
   account_id: string;
+  // The approving caller's own scopes (the route always passes these). The granted
+  // code/token scope is restricted to the intersection of the requested scope and these,
+  // minus privileged scopes — so a third-party OAuth token can never exceed the approver's
+  // authority or carry account_owner / admin / driftstack_internal_admin. When omitted, the
+  // privileged deny-set still applies (the intersection is just skipped).
+  approverScopes?: readonly ApiKeyScope[];
 }
 
 export interface ApproveAuthorizationResult {
@@ -371,13 +385,21 @@ export class OAuthService {
     if (this.nowFn() - pending.created_at > CODE_TTL_SECONDS * 1000) {
       throw new OAuthError('invalid_request', 'authorization expired before approval');
     }
+    // SECURITY: restrict the granted scope — always drop the privileged deny-set, and (when
+    // the approver's scopes are supplied) intersect with them, so the OAuth token never
+    // exceeds the approver's own authority.
+    const approverScopes = args.approverScopes;
+    const grantedScope = pending.scope.filter(
+      (s) =>
+        !OAUTH_DENY_SCOPES.has(s) && (approverScopes === undefined || approverScopes.includes(s)),
+    );
     const code = `oac_${randomBytes(32).toString('base64url')}`;
     await this.store.insertCode({
       code,
       client_id: pending.client_id,
       redirect_uri: pending.redirect_uri,
       state: pending.state,
-      scope: pending.scope,
+      scope: grantedScope,
       code_challenge: pending.code_challenge,
       account_id: args.account_id,
       created_at: this.nowFn(),

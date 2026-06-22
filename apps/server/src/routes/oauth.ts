@@ -47,9 +47,12 @@ const AuthorizeQuery = z.object({
   scope: z.string().max(1024).optional(),
 });
 
+// SECURITY: account_id is intentionally NOT accepted from the body — the approving
+// account is taken from the authenticated caller (see the /authorize/complete handler).
+// A body-supplied account_id would let any authed principal mint an OAuth code/token for
+// a VICTIM's account (cross-account takeover). Unknown keys are stripped by zod.
 const ApproveAuthorizationBody = z.object({
   authorization_id: z.string().min(1).max(128),
-  account_id: z.string().uuid(),
 });
 
 const ExchangeCodeBody = z.object({
@@ -243,9 +246,18 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRou
     '/v1/oauth/authorize/complete',
     { preHandler: [app.requireAuth] },
     async (req: FastifyRequest, reply) => {
+      const ctx = req.account;
+      if (!ctx) throw new UnauthorizedError('authentication required');
       const body = parseOrThrow(ApproveAuthorizationBody, req.body);
       try {
-        const result = await deps.service.approveAuthorization(body);
+        // SECURITY: bind the issued code to the AUTHENTICATED caller's account — never a
+        // body-supplied account_id (cross-account takeover). The granted scope is the
+        // approver's own scopes minus privileged ones (restricted service-side).
+        const result = await deps.service.approveAuthorization({
+          authorization_id: body.authorization_id,
+          account_id: ctx.account.id,
+          approverScopes: ctx.apiKey.scopes,
+        });
         return reply.send(result);
       } catch (err) {
         throw oauthErrorToHttp(err);
