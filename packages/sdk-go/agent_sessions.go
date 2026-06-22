@@ -111,6 +111,11 @@ type CreateAgentSessionRequest struct {
 	// /v1/account/me/proxies). Must be an owned proxy id (unknown/not-owned →
 	// 404). Empty string omits it (default egress).
 	ProxyID string `json:"proxy_id,omitempty"`
+	// Start URL the remote browser opens on session launch. When supplied,
+	// overrides the operator-default start URL. Must be an absolute http(s)
+	// URL; file:, javascript:, data: schemes are rejected (400). Empty string
+	// omits it (operator default).
+	InitialURL string `json:"initial_url,omitempty"`
 }
 
 // AgentMessageResponse is the discriminated turn-result. Branch on
