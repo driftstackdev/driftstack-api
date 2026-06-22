@@ -86,7 +86,9 @@ Request body (all fields optional):
   "model": "claude-opus-4-8 | claude-opus-4-7 | claude-sonnet-4-6 | claude-haiku-4-5",
   "driftstack_session_id": "ses_<uuid>",
   "token_budget": 100000,
-  "profile_id": "prof_<uuid>"
+  "profile_id": "prof_<uuid>",
+  "proxy_id": "a1b2c3d4-...",
+  "initial_url": "https://driftstack.dev"
 }
 ```
 
@@ -113,6 +115,16 @@ so the run resumes that profile's stored state and saves changes back when it
 ends. Pass the `prof_<uuid>` id from the profiles API (a bare uuid is also
 accepted). It must reference a profile your account owns; an unknown or
 not-owned id returns `404`. Omit it for a stateless (fresh) session.
+
+The optional `proxy_id` routes the session's egress through one of your saved
+**account proxies** (manage them at `/v1/account/me/proxies`); pass the bare
+proxy uuid. It must reference a proxy your account owns — an unknown or
+not-owned id returns `404`. Omit it for the default egress.
+
+The optional `initial_url` sets the start URL the remote browser opens on
+launch, overriding the operator-default start URL. It must be an absolute
+`http(s)` URL; `file:`, `javascript:`, and `data:` schemes are rejected
+(`400`). Omit it to use the operator default.
 
 ## Get
 
