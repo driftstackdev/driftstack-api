@@ -721,3 +721,63 @@ describe('dispatchSessionEndOnClose', () => {
     expect(log.warn).toHaveBeenCalled();
   });
 });
+
+describe('dispatchSessionEndOnClose / dispatchResumeSession — owning-node targeting (audit #1)', () => {
+  it('sessionEnd targets the persisted owning node_id directly — no region-blind findAnyWithLivekit fallback', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register('owner-node-B', (d) => sent.push(d));
+    let fallbackCalled = false;
+    await dispatchSessionEndOnClose({
+      sessionId: 'agt_x',
+      nodeId: 'owner-node-B',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit(), () => {
+        fallbackCalled = true;
+      }),
+      logger: logger(),
+    });
+    expect(fallbackCalled).toBe(false); // owning node targeted directly
+    expect(sent).toHaveLength(1);
+    expect(JSON.parse(sent[0]!)).toMatchObject({ type: 'sessionEnd', sessionId: 'agt_x' });
+  });
+
+  it('sessionEnd falls back to findAnyWithLivekit when node_id is null (legacy/never-dispatched row)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d)); // macWithLivekit().id === NODE_ID
+    let fallbackCalled = false;
+    await dispatchSessionEndOnClose({
+      sessionId: 'agt_y',
+      nodeId: null,
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit(), () => {
+        fallbackCalled = true;
+      }),
+      logger: logger(),
+    });
+    expect(fallbackCalled).toBe(true);
+    expect(sent).toHaveLength(1);
+    expect(JSON.parse(sent[0]!)).toMatchObject({ type: 'sessionEnd', sessionId: 'agt_y' });
+  });
+
+  it('resumeSession targets the persisted owning node_id directly', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register('owner-node-B', (d) => sent.push(d));
+    let fallbackCalled = false;
+    await dispatchResumeSession({
+      sessionId: 'agt_z',
+      nodeId: 'owner-node-B',
+      challengeId: 'ch_1',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit(), () => {
+        fallbackCalled = true;
+      }),
+      logger: logger(),
+    });
+    expect(fallbackCalled).toBe(false);
+    expect(sent).toHaveLength(1);
+    expect(JSON.parse(sent[0]!)).toMatchObject({ type: 'resumeSession', sessionId: 'agt_z' });
+  });
+});

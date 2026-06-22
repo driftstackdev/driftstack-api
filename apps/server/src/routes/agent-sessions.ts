@@ -806,23 +806,35 @@ export async function dispatchSessionAssignOnCreate(args: {
  */
 export async function dispatchSessionEndOnClose(args: {
   sessionId: string;
+  /** The session's persisted owning node (agent_sessions.node_id, migration 0086). When
+   *  set, sessionEnd targets THAT node — region-aware multi-node dispatch can place a
+   *  session on a node that is NOT the latest-registered, so the region-blind
+   *  findAnyWithLivekit() fallback would send the teardown to the wrong node and leak the
+   *  owner's concurrency slot (orphan billed til the 12h reap). NULL = legacy/never-
+   *  dispatched row → fall back to findAnyWithLivekit. */
+  nodeId?: string | null;
   fleetControlRegistry: FleetControlRegistry | undefined;
   fleetNodesRepo: DrizzleFleetNodesRepo | undefined;
   logger?: { info: (obj: unknown, msg: string) => void; warn: (obj: unknown, msg: string) => void };
 }): Promise<void> {
-  const { sessionId, fleetControlRegistry, fleetNodesRepo, logger } = args;
+  const { sessionId, nodeId, fleetControlRegistry, fleetNodesRepo, logger } = args;
   if (fleetControlRegistry === undefined || fleetNodesRepo === undefined) return;
   try {
-    const mac = await fleetNodesRepo.findAnyWithLivekit();
-    if (mac === null) return;
-    // The registry is keyed by the authed node_id (the JWT iss), NOT the
-    // fleet_nodes uuid PK — so resolve the live connection by nodeId (migration
-    // 0085 / Path C). Fall back to the uuid for any legacy uuid-keyed node.
-    const conn = fleetControlRegistry.get(mac.nodeId ?? mac.id);
+    // Target the OWNING node when known (migration 0086); else fall back to the region-
+    // blind latest-registered node (legacy rows only).
+    let targetNodeId: string | null = nodeId ?? null;
+    if (targetNodeId === null) {
+      const mac = await fleetNodesRepo.findAnyWithLivekit();
+      if (mac === null) return;
+      // The registry is keyed by the authed node_id (the JWT iss), NOT the fleet_nodes
+      // uuid PK (migration 0085 / Path C). Fall back to the uuid for a legacy uuid-keyed node.
+      targetNodeId = mac.nodeId ?? mac.id;
+    }
+    const conn = fleetControlRegistry.get(targetNodeId);
     if (conn === undefined) return; // node not connected → nothing to tear down server-side
     conn.sendSessionEnd(serializeSessionEnd(sessionId));
     logger?.info(
-      { component: 'fleet-session-dispatch', sessionId, nodeId: mac.nodeId ?? mac.id },
+      { component: 'fleet-session-dispatch', sessionId, nodeId: targetNodeId },
       'dispatched sessionEnd to fleet node',
     );
   } catch (err) {
@@ -848,6 +860,10 @@ export async function dispatchSessionEndOnClose(args: {
 export async function dispatchResumeSession(args: {
   sessionId: string;
   challengeId?: string;
+  /** Persisted owning node (agent_sessions.node_id) — target it so a resume reaches the
+   *  node actually running the session, not the region-blind latest-registered one (same
+   *  multi-node correctness fix as dispatchSessionEndOnClose). NULL → findAnyWithLivekit. */
+  nodeId?: string | null;
   fleetControlRegistry: FleetControlRegistry | undefined;
   fleetNodesRepo: DrizzleFleetNodesRepo | undefined;
   logger?: {
@@ -855,15 +871,19 @@ export async function dispatchResumeSession(args: {
     warn: (obj: unknown, msg: string) => void;
   };
 }): Promise<void> {
-  const { sessionId, challengeId, fleetControlRegistry, fleetNodesRepo, logger } = args;
+  const { sessionId, challengeId, nodeId, fleetControlRegistry, fleetNodesRepo, logger } = args;
   if (fleetControlRegistry === undefined || fleetNodesRepo === undefined) return;
   try {
-    const mac = await fleetNodesRepo.findAnyWithLivekit();
-    if (mac === null) return;
-    // The registry is keyed by the authed node_id (the JWT iss), NOT the
-    // fleet_nodes uuid PK — so resolve the live connection by nodeId (migration
-    // 0085 / Path C). Fall back to the uuid for any legacy uuid-keyed node.
-    const conn = fleetControlRegistry.get(mac.nodeId ?? mac.id);
+    // Target the OWNING node when known (migration 0086); else the region-blind
+    // latest-registered node (legacy rows only).
+    let targetNodeId: string | null = nodeId ?? null;
+    if (targetNodeId === null) {
+      const mac = await fleetNodesRepo.findAnyWithLivekit();
+      if (mac === null) return;
+      // Registry is keyed by the authed node_id (JWT iss), not the uuid PK (migration 0085).
+      targetNodeId = mac.nodeId ?? mac.id;
+    }
+    const conn = fleetControlRegistry.get(targetNodeId);
     if (conn === undefined) return; // node not connected → nothing to resume server-side
     conn.sendResumeSession(
       serializeResumeSession({
@@ -872,7 +892,7 @@ export async function dispatchResumeSession(args: {
       }),
     );
     logger?.info(
-      { component: 'fleet-session-dispatch', sessionId, nodeId: mac.id, challengeId },
+      { component: 'fleet-session-dispatch', sessionId, nodeId: targetNodeId, challengeId },
       'dispatched resumeSession to fleet node',
     );
   } catch (err) {
@@ -2326,6 +2346,7 @@ export function registerAgentSessionsRoutes(
       // control plane isn't wired); never blocks the close.
       await dispatchSessionEndOnClose({
         sessionId: req.params.id,
+        nodeId: pre.nodeId,
         fleetControlRegistry,
         fleetNodesRepo,
         logger: req.log,
@@ -2388,6 +2409,7 @@ export function registerAgentSessionsRoutes(
       }
       await dispatchResumeSession({
         sessionId: req.params.id,
+        nodeId: rec.nodeId,
         ...(parsed.data.challenge_id !== undefined
           ? { challengeId: parsed.data.challenge_id }
           : {}),
