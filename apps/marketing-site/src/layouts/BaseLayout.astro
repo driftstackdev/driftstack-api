@@ -98,7 +98,11 @@ const structuredData = {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f2f3f6" />
+    <!-- Dark to match the dark-mode-default page (data-mode="dark", --bg #060608).
+         Was #f2f3f6 (the light-mode bg) → on the dark site iOS Safari tinted the
+         status-bar area near-white = a white strip above the dark page (founder
+         2026-06-22, seen in the simulator on driftstack.dev). -->
+    <meta name="theme-color" content="#060608" />
     <meta name="robots" content={noindex ? 'noindex,nofollow' : 'index,follow'} />
     <link rel="canonical" href={canonical} />
     <title>{fullTitle}</title>
