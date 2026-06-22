@@ -360,4 +360,22 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
       vi.useRealTimers();
     }
   });
+
+  it('FAST FLICK: a long scroll re-centres at the edge but stays one-directional (every leg scrolls down, no bounce)', () => {
+    const video = mountCapture();
+    fireWheel(video, 0, 1200); // hard flick → exceeds one finger-runway → edge re-centres
+    flushRaf();
+    const starts = eventsOfType('touchStart') as (InputEvent & { touchId: number; y: number })[];
+    const moves = eventsOfType('touchMove') as (InputEvent & { touchId: number; y: number })[];
+    // Exceeds the ~389px centre-runway → it re-centres into multiple clean legs.
+    expect(starts.length).toBeGreaterThanOrEqual(2);
+    expect(moves.length).toBeGreaterThanOrEqual(2);
+    // EVERY leg scrolls the SAME way (finger up = content down); no leg ever bounces back —
+    // the edge re-centre CARRIES the locked direction (the W2768 fix's hardest branch).
+    const startY = new Map<number, number>(starts.map((s) => [s.touchId, s.y] as [number, number]));
+    for (const m of moves) {
+      expect(startY.has(m.touchId)).toBe(true);
+      expect(m.y).toBeLessThan(startY.get(m.touchId)!);
+    }
+  });
 });
