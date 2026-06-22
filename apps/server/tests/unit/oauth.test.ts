@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { createHash, randomBytes } from 'node:crypto';
 import { InMemoryOAuthStore, OAuthError, OAuthService } from '../../src/services/oauth.js';
 import { computeS256Challenge } from '../../src/lib/oauth-pkce.js';
+import type { ApiKeyScope } from '@driftstack/api-types';
 
 function makeService(): { svc: OAuthService; store: InMemoryOAuthStore } {
   const store = new InMemoryOAuthStore();
@@ -173,6 +174,56 @@ describe('V-667 OAuthService — approveAuthorization + exchangeCode (full happy
     const intro = await svc.introspect(token.access_token);
     expect(intro?.account_id).toBe('acc_test_001');
     expect(intro?.client_id).toBe(reg.client_id);
+  });
+});
+
+describe('V-667 OAuthService — granted scope restriction (the cross-account/escalation fix)', () => {
+  async function grantedScopeFor(
+    requestScope: readonly ApiKeyScope[],
+    approverScopes: readonly ApiKeyScope[],
+  ): Promise<readonly ApiKeyScope[]> {
+    const { svc } = makeService();
+    const reg = await svc.registerClient({
+      label: 'App',
+      redirect_uris: ['https://app.example/cb'],
+    });
+    const verifier = makeVerifier();
+    const auth = await svc.authorize({
+      client_id: reg.client_id,
+      redirect_uri: 'https://app.example/cb',
+      state: 'st',
+      code_challenge: computeS256Challenge(verifier),
+      code_challenge_method: 'S256',
+      scope: requestScope,
+    });
+    const approval = await svc.approveAuthorization({
+      authorization_id: auth.authorization_id,
+      account_id: 'acc_test_001',
+      approverScopes,
+    });
+    const token = await svc.exchangeCode({
+      code: approval.code,
+      code_verifier: verifier,
+      client_id: reg.client_id,
+      client_secret: reg.client_secret,
+      redirect_uri: 'https://app.example/cb',
+    });
+    return token.scope;
+  }
+
+  it('intersects the granted scope with the approver scopes — cannot grant what the approver lacks', async () => {
+    // Requests read+write, but the approving key holds only read → write is dropped.
+    const scope = await grantedScopeFor(['read:sessions', 'write:sessions'], ['read:sessions']);
+    expect(scope).toEqual(['read:sessions']);
+  });
+
+  it('strips deny-set scopes (account_owner) even when requested AND the approver holds them', async () => {
+    // The escalation guard: account_owner can never be minted via the OAuth flow.
+    const scope = await grantedScopeFor(
+      ['read:sessions', 'account_owner'],
+      ['read:sessions', 'account_owner'],
+    );
+    expect(scope).toEqual(['read:sessions']);
   });
 });
 
