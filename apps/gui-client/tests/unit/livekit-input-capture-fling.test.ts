@@ -30,11 +30,8 @@ describe('computeFlingPath', () => {
     const gaps: number[] = [];
     for (let i = 1; i < steps.length; i++) gaps.push(dist(steps[i - 1], steps[i]));
     for (let i = 1; i < gaps.length; i++) {
-      // friction < 1 → shrinking gaps. The path is rounded to integer coords, so a
-      // gap can tick UP by at most 1px on a rounding boundary (e.g. 9→10); allow that
-      // ±1 noise — a real acceleration would be a large jump, and the overall-decel
-      // assertion below still holds.
-      expect(gaps[i]).toBeLessThanOrEqual(gaps[i - 1] + 1);
+      // friction < 1 → strictly shrinking gaps (allow equality only at rounding floor)
+      expect(gaps[i]).toBeLessThanOrEqual(gaps[i - 1]);
     }
     expect(gaps[gaps.length - 1]).toBeLessThan(gaps[0]);
   });

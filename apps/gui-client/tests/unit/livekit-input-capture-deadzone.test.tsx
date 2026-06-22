@@ -101,11 +101,11 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
     expect(eventsOfType('touchEnd')[0]).toMatchObject({ x: 150, y: 268 });
   });
 
-  it('DRIFTY TAP: press + ~11px drift + release → NO touchMove (a small drift stays a tap, under the 14px deadzone)', () => {
+  it('QUICK DRIFTY TAP: press + ~28px FAST drift + release → NO touchMove (the founder fix — a drifty quick tap no longer scrolls)', () => {
     const video = mountCapture();
     fireMouse(video, 'mousedown', 200, 400, 1000);
-    fireMouse(video, 'mousemove', 208, 408, 1040); // dist ~11 (< MOVE_DEADZONE 14) → tap
-    fireMouse(video, 'mouseup', 208, 408, 1060);
+    fireMouse(video, 'mousemove', 220, 420, 1040); // dist ~28 (>14, <44), 40ms (<140) → tap
+    fireMouse(video, 'mouseup', 220, 420, 1060);
     const types = emittedTypes();
     expect(types).toContain('touchStart');
     expect(types).toContain('touchEnd');
@@ -134,20 +134,20 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
     expect(emittedTypes()).toContain('touchMove');
   });
 
-  it('VERY QUICK SMALL DRAG (>14px but <26px, <35ms): stays a TAP (the brief time floor rejects the fastest drifty clicks)', () => {
+  it('QUICK SMALL DRAG (>14px but <44px, <140ms): stays a TAP', () => {
     const video = mountCapture();
     fireMouse(video, 'mousedown', 200, 400, 1000);
-    fireMouse(video, 'mousemove', 200, 420, 1020); // dist 20 (>14, <26 hard), elapsed 20ms (<35) → tap
-    fireMouse(video, 'mouseup', 200, 420, 1035);
+    fireMouse(video, 'mousemove', 200, 420, 1050); // dist 20, elapsed 50ms (<140), <44 → tap
+    fireMouse(video, 'mouseup', 200, 420, 1070);
     expect(eventsOfType('touchMove')).toHaveLength(0);
   });
 
-  it('COMMITTED touchStart is emitted at the PRESS point with RAW Y (scroll origin, exact vector — devY is taps-only)', () => {
+  it('COMMITTED touchStart is emitted at the PRESS point (so the scroll originates there), not the commit point', () => {
     const video = mountCapture();
     fireMouse(video, 'mousedown', 100, 100, 1000);
-    fireMouse(video, 'mousemove', 100, 160, 1030); // 60px > 26 hard → commit
+    fireMouse(video, 'mousemove', 100, 160, 1030); // 60px > 44 → commit
     fireMouse(video, 'mouseup', 100, 160, 1050);
-    expect(eventsOfType('touchStart')[0]).toMatchObject({ x: 100, y: 100 }); // press, RAW Y (no devY)
+    expect(eventsOfType('touchStart')[0]).toMatchObject({ x: 100, y: 68 }); // press 100 - 32 devY
   });
 
   it('LATCH: once committed, a follow-up move back near the press still streams', () => {

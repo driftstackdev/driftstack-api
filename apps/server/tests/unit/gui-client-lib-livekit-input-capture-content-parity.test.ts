@@ -81,20 +81,20 @@ describe('gui-client/lib/livekit-input-capture content parity', () => {
   });
 
   it('touch translation behavior pinned (W198/W1249 coherence): a press → touchStart, drag → touchMove, release → touchEnd, wheel → swipe; left-button-only; NO mouseDown/mouseMove/mouseUp/wheel InputEvents are ever sent (those are the detectable iPhone tell the harness drops). Drift back to mouse* event types would re-break the loop + the fingerprint coherence', () => {
-    // The sent y splits by gesture (W2750): TAPS use devY(...) — the iOS title-band
-    // compensation (the box maps the streamed screen without subtracting the ~32px
-    // band, so a tap lands too low) — but a committed-drag SCROLL uses RAW y so the
-    // per-move delta (what the box scrolls by) is exact, with no devY floor stalling
-    // the vector near the top band. x is always raw. touchStart is BUFFERED + emitted
-    // at the PRESS point on a clean tap (devY) so a tap never sends a touchMove.
+    // Sends the touch variants. The sent y is wrapped in devY(...) — the iOS
+    // title-band compensation (the box maps the streamed screen without
+    // subtracting the ~32px title band, so an injected tap lands too low); x stays
+    // raw. devY is applied at the SEND sites only. touchStart is BUFFERED and
+    // emitted at the PRESS point (g.startX/g.startY) — on drag-commit AND on a
+    // clean tap — so a tap never sends a touchMove (scroll-vs-tap gesture model).
     expect(body).toMatch(
       /send\(\{ type: 'touchStart', x: g\.startX, y: devY\(g\.startY\), touchId: g\.touchId \}, true\);/,
     );
     expect(body).toMatch(
-      /send\(\{ type: 'touchMove', x: p\.x, y: p\.y, touchId: g\.touchId \}, false\);/,
+      /send\(\{ type: 'touchMove', x: p\.x, y: devY\(p\.y\), touchId: g\.touchId \}, false\);/,
     );
     expect(body).toMatch(
-      /send\(\{ type: 'touchEnd', x: p\.x, y: p\.y, touchId: g\.touchId \}, true\);/,
+      /send\(\{ type: 'touchEnd', x: p\.x, y: devY\(p\.y\), touchId: g\.touchId \}, true\);/,
     );
     // Wheel/trackpad scroll drives a touchStream drag (touchStart→touchMove→touchEnd
     // via wheelDrag), NOT a `swipe` — the fork adds its own momentum to every swipe

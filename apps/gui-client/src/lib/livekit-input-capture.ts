@@ -167,17 +167,8 @@ const MOVE_DEADZONE = 14;
  *  QUICK press→release never scrolls, even with several px of mouse/trackpad drift;
  *  only a real drag scrolls. The inertial fling runs ONLY on a committed drag, so a
  *  tap (or a marginal flick) never flings into a scroll either. */
-// A small time floor (was 140ms — that froze the start of every deliberate scroll
-// for ~140ms, "laggy/jerky", founder 2026-06-22). 35ms is below human lag
-// perception yet still rejects sub-frame drifty clicks; the real tap-vs-scroll
-// discriminator is MOVE_DEADZONE (14px > the fork's 10px tapSlop). A fast flick
-// still commits instantly via DRAG_HARD_PX.
-const DRAG_HOLD_MS = 35;
-// 26 (was 44): the hard-commit distance is the worst-case initial scroll step
-// (touchStart at press → first touchMove at the current point), so a big value made
-// a fast flick lurch ≥44px at the start. 26 still clears typical click-drift (well
-// above the deadzone) while shrinking that first step.
-const DRAG_HARD_PX = 26;
+const DRAG_HOLD_MS = 140;
+const DRAG_HARD_PX = 44;
 
 /** Tap-landing Y compensation (founder 2026-06-21; A3 W2725/26-ack). The device
  *  renders a ~32px iOS title band atop the streamed screen that the box's
@@ -202,19 +193,9 @@ const devY = (y: number): number => Math.max(0, y - TAP_Y_OFFSET);
  *  kept for a future re-enable (ideally native fork momentum). FLING_MIN_SPEED =
  *  release speed (px/ms) to trigger; FLING_STALE_MS = a settle pause that cancels it;
  *  FLING_STEP_MS = the move cadence during the glide. */
-// RE-ENABLED 2026-06-22 (founder: "a big scroll to scroll far only scrolls a little
-// bit"). With the fling OFF a flick only scrolled its literal drag distance — a real
-// iPhone carries with momentum. The earlier OFF was because it over-drove ("much
-// scrolling after i'm done"); the fix is tighter GATING + a SHORTER glide so ONLY a
-// genuine fast flick carries, while a deliberate drag-and-release still stops dead:
-//   FLING_MIN_SPEED 0.55 px/ms — only a fast flick flings (a gentle drag does not).
-//   FLING_STALE_MS 50 — the release must come right after motion; pause-then-release
-//     = a deliberate stop, NOT a flick → no glide (this is what killed the overshoot).
-//   FLING_STEP_MS 16 — glide replay cadence. The glide DISTANCE is bounded in
-//     computeFlingPath (friction + maxDist), so a flick carries far but never runs away.
-const FLING_ENABLED = true;
-const FLING_MIN_SPEED = 0.55;
-const FLING_STALE_MS = 50;
+const FLING_ENABLED = false;
+const FLING_MIN_SPEED = 0.45;
+const FLING_STALE_MS = 60;
 const FLING_STEP_MS = 16;
 
 /** Squared Euclidean distance between two points — squared so the deadzone
@@ -246,15 +227,11 @@ export function computeFlingPath(
     maxDist?: number;
   } = {},
 ): Array<{ x: number; y: number }> {
-  // Tuned 2026-06-22 for a snappier, BOUNDED carry: friction 0.90 (was 0.93 — decays
-  // faster so it doesn't keep crawling), maxDist 850 (≈ one screen height, was 1000 —
-  // a flick carries ~a screenful, not "forever"). A genuine flick still scrolls far;
-  // a deliberate drag never reaches here (gated by FLING_MIN_SPEED + FLING_STALE_MS).
-  const friction = opts.friction ?? 0.92;
+  const friction = opts.friction ?? 0.93;
   const stepMs = opts.stepMs ?? FLING_STEP_MS;
   const stopSpeed = opts.stopSpeed ?? 0.05;
-  const maxSteps = opts.maxSteps ?? 32;
-  const maxDist = opts.maxDist ?? 850;
+  const maxSteps = opts.maxSteps ?? 38;
+  const maxDist = opts.maxDist ?? 1000;
   const pts: Array<{ x: number; y: number }> = [];
   let x = x0;
   let y = y0;
@@ -368,8 +345,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       window.clearTimeout(f.timer);
       fling.current = null;
       if (endTouch) {
-        // Raw Y (clampY only, no devY) — the fling continues the raw-Y scroll stream.
-        send({ type: 'touchEnd', x: clampX(f.x), y: clampY(f.y), touchId: f.touchId }, true);
+        send({ type: 'touchEnd', x: clampX(f.x), y: devY(clampY(f.y)), touchId: f.touchId }, true);
       }
     };
     // Replay a decelerating flick as timed touchMove events, then a final touchEnd.
@@ -379,7 +355,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       cancelFling(false);
       const path = computeFlingPath(x0, y0, vx, vy);
       if (path.length === 0) {
-        send({ type: 'touchEnd', x: clampX(x0), y: clampY(y0), touchId }, true);
+        send({ type: 'touchEnd', x: clampX(x0), y: devY(clampY(y0)), touchId }, true);
         return;
       }
       fling.current = { touchId, x: x0, y: y0, timer: 0 };
@@ -392,13 +368,13 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         if (pt === undefined) {
           // Glide exhausted (or a defensive miss) — lift the finger at the last
           // point we sent (f.x/f.y track it), settling the momentum scroll.
-          send({ type: 'touchEnd', x: clampX(f.x), y: clampY(f.y), touchId }, true);
+          send({ type: 'touchEnd', x: clampX(f.x), y: devY(clampY(f.y)), touchId }, true);
           fling.current = null;
           return;
         }
         f.x = pt.x;
         f.y = pt.y;
-        send({ type: 'touchMove', x: clampX(pt.x), y: clampY(pt.y), touchId }, false);
+        send({ type: 'touchMove', x: clampX(pt.x), y: devY(clampY(pt.y)), touchId }, false);
         f.timer = window.setTimeout(step, FLING_STEP_MS);
       };
       step();
@@ -464,18 +440,16 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
           far > DRAG_HARD_PX * DRAG_HARD_PX;
         if (!commit) return; // still possibly a tap — keep buffering (send nothing)
         g.committed = true;
-        // Emit the buffered touchStart at the PRESS point, then fall through to the
-        // touchMove at the current point so the scroll covers the full pre-commit
-        // travel (a single fast move still scrolls). The initial step is bounded by the
-        // SMALL commit thresholds (deadzone 14px / DRAG_HARD_PX 26px) so it reads as a
-        // normal scroll start, not the old ≥44px lurch (founder "jumpy/jerks"). RAW Y
-        // (no devY) so the scroll vector is exact — see the touchMove note below.
-        send({ type: 'touchStart', x: g.startX, y: g.startY, touchId: g.touchId }, true);
+        // Emit the buffered touchStart at the press point so the scroll originates
+        // there, then seed velocity tracking from the COMMIT point (the current move),
+        // NOT the press — otherwise the initial dwell (up to DRAG_HOLD_MS) folds into
+        // the first velocity sample and distorts the release speed (used by the fling).
+        send({ type: 'touchStart', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
         g.lastX = p.x;
         g.lastY = p.y;
         g.lastT = e.timeStamp;
       }
-      // Track release velocity (EMA, px/ms) for the inertial flick: weight recent
+      // Track release velocity (EMA, px/ms) for the inertial slide: weight recent
       // motion so a fast flick at the very end produces a strong glide.
       const t = e.timeStamp;
       if (g.lastT !== undefined && g.lastX !== undefined && g.lastY !== undefined) {
@@ -490,11 +464,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       g.lastX = p.x;
       g.lastY = p.y;
       g.lastT = t;
-      // RAW Y for the scroll stream (NOT devY). devY's Math.max(0, y-32) floor zeroed
-      // the vertical delta in the top 32px band, stalling the scroll near the top; the
-      // box scrolls by the per-move DELTA so a raw stream gives the exact vector
-      // everywhere. (devY's +32 tap compensation is only needed for discrete taps.)
-      send({ type: 'touchMove', x: p.x, y: p.y, touchId: g.touchId }, false);
+      send({ type: 'touchMove', x: p.x, y: devY(p.y), touchId: g.touchId }, false);
     };
     // The SINGLE gesture-release handler, wired to the element mouseup AND the
     // window mouseup + pointerup. CRITICAL ordering (audit w5q5vvdca B1): a real
@@ -523,24 +493,23 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
           {
             type: 'touchEnd',
             x: clampX(g.lastX ?? g.startX),
-            y: clampY(g.lastY ?? g.startY),
+            y: devY(clampY(g.lastY ?? g.startY)),
             touchId: g.touchId,
           },
           true,
         );
         return;
       }
-      // Committed drag released in-bounds. The inertial fling is RE-ENABLED (founder
-      // "big scroll only scrolls a little") but tightly gated: it carries ONLY a
-      // genuine fast flick (fresh release + speed ≥ FLING_MIN_SPEED) — a deliberate
-      // drag that slows/pauses before release stops dead (no overshoot). RAW Y stream.
+      // Committed drag released in-bounds. The inertial fling is DISABLED
+      // (FLING_ENABLED=false) — it over-drove the scroll ("much scrolling after i'm
+      // done", founder 2026-06-21); a click-drag scroll now stops dead on release.
       const fresh = g.lastT !== undefined && e.timeStamp - g.lastT <= FLING_STALE_MS;
       const speed = g.vx !== undefined && g.vy !== undefined ? Math.hypot(g.vx, g.vy) : 0;
       if (FLING_ENABLED && fresh && speed >= FLING_MIN_SPEED) {
         startFling(g.touchId, p.x, p.y, g.vx as number, g.vy as number);
         return;
       }
-      send({ type: 'touchEnd', x: p.x, y: p.y, touchId: g.touchId }, true);
+      send({ type: 'touchEnd', x: p.x, y: devY(p.y), touchId: g.touchId }, true);
     };
     // Wheel/trackpad scroll → a CONTINUOUS touch drag (touchStream), NOT a per-event
     // `swipe`. The fork scrolls per-move (scrollBy) for touchMoves but applies its OWN
@@ -681,7 +650,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
           {
             type: 'touchEnd',
             x: clampX(g.lastX ?? g.startX),
-            y: clampY(g.lastY ?? g.startY),
+            y: devY(clampY(g.lastY ?? g.startY)),
             touchId: g.touchId,
           },
           true,
