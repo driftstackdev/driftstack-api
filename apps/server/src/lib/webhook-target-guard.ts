@@ -114,6 +114,58 @@ export function classifyUnsafeHost(
   return null;
 }
 
+/** Strip the `:port` from a `host:port` endpoint, handling bracketed IPv6 (`[::1]:51820`)
+ *  and bare hosts — returns the host portion for SSRF classification. */
+function vpnEndpointHost(endpoint: string): string {
+  const e = endpoint.trim();
+  const bracketed = e.match(/^\[(.+)\]:\d+$/);
+  if (bracketed) return bracketed[1]!;
+  const lastColon = e.lastIndexOf(':');
+  if (lastColon > 0 && /^\d+$/.test(e.slice(lastColon + 1))) return e.slice(0, lastColon);
+  return e;
+}
+
+/** Hosts of every `remote <host> [port]` directive in an OpenVPN config blob. */
+export function openvpnRemoteHosts(configBlob: string): string[] {
+  const hosts: string[] = [];
+  for (const line of configBlob.split(/\r?\n/)) {
+    const m = line.trim().match(/^remote\s+(\S+)/i);
+    if (m) hosts.push(m[1]!);
+  }
+  return hosts;
+}
+
+/**
+ * Returns the unsafe reason for the FIRST private/loopback/metadata VPN egress target, or
+ * null when all are safe. Guards the REAL connection destinations the cosmetic display
+ * `host` field does NOT cover: a WireGuard `endpoint` host + `dns`, and every OpenVPN
+ * `remote` host. Without this a customer can tunnel sessions to 169.254.169.254 / RFC1918
+ * even though the display host passed classifyUnsafeHost (SSRF).
+ */
+export function classifyUnsafeVpnTargets(opts: {
+  endpoint?: string | null;
+  dns?: string | null;
+  configBlob?: string | null;
+}): 'localhost' | 'private' | 'numeric-encoding' | null {
+  if (opts.endpoint) {
+    const r = classifyUnsafeHost(vpnEndpointHost(opts.endpoint));
+    if (r !== null) return r;
+  }
+  if (opts.dns) {
+    for (const d of opts.dns.split(/[,\s]+/).filter(Boolean)) {
+      const r = classifyUnsafeHost(d);
+      if (r !== null) return r;
+    }
+  }
+  if (opts.configBlob) {
+    for (const h of openvpnRemoteHosts(opts.configBlob)) {
+      const r = classifyUnsafeHost(h);
+      if (r !== null) return r;
+    }
+  }
+  return null;
+}
+
 /**
  * Returns a rejection reason when `url` is an unsafe webhook target
  * (over-length, non-https, localhost, a numeric IP encoding, or a literal

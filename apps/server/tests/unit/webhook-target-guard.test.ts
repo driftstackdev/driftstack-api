@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import {
   unsafeWebhookTargetReason as reason,
   classifyUnsafeHost,
+  classifyUnsafeVpnTargets,
+  openvpnRemoteHosts,
 } from '../../src/lib/webhook-target-guard.js';
 
 describe('unsafeWebhookTargetReason — rejects internal/reserved targets', () => {
@@ -148,5 +150,48 @@ describe('classifyUnsafeHost — raw-host SSRF (proxy/egress path, no URL normal
     expect(classifyUnsafeHost('2606:4700:4700::1111')).toBeNull(); // Cloudflare public IPv6
     expect(classifyUnsafeHost('8.8.8.8')).toBeNull(); // public IPv4 (no all-IPv4 quirk)
     expect(classifyUnsafeHost('hooks.example.com')).toBeNull();
+  });
+});
+
+describe('classifyUnsafeVpnTargets — guards the REAL VPN egress (endpoint/dns/remote), not the display host', () => {
+  it('flags a WireGuard endpoint pointing at cloud metadata / RFC1918 / loopback (strips :port)', () => {
+    expect(classifyUnsafeVpnTargets({ endpoint: '169.254.169.254:80' })).not.toBeNull();
+    expect(classifyUnsafeVpnTargets({ endpoint: '10.0.0.5:51820' })).toBe('private');
+    expect(classifyUnsafeVpnTargets({ endpoint: '[::1]:51820' })).not.toBeNull(); // IPv6 loopback
+    expect(classifyUnsafeVpnTargets({ endpoint: 'localhost:51820' })).toBe('localhost');
+  });
+  it('flags an unsafe WireGuard dns (incl. a list)', () => {
+    expect(classifyUnsafeVpnTargets({ endpoint: 'vpn.example.com:51820', dns: '10.0.0.1' })).toBe(
+      'private',
+    );
+    expect(
+      classifyUnsafeVpnTargets({
+        endpoint: 'vpn.example.com:51820',
+        dns: '1.1.1.1, 169.254.169.254',
+      }),
+    ).not.toBeNull();
+  });
+  it('flags an OpenVPN remote directive pointing internal', () => {
+    expect(
+      classifyUnsafeVpnTargets({ configBlob: 'client\nremote 169.254.169.254 1194\n' }),
+    ).not.toBeNull();
+    expect(classifyUnsafeVpnTargets({ configBlob: 'client\nremote 192.168.1.1 1194 udp\n' })).toBe(
+      'private',
+    );
+  });
+  it('passes a fully public WireGuard + OpenVPN config', () => {
+    expect(
+      classifyUnsafeVpnTargets({ endpoint: 'vpn.example.com:51820', dns: '1.1.1.1' }),
+    ).toBeNull();
+    expect(
+      classifyUnsafeVpnTargets({ configBlob: 'client\nremote vpn.example.com 1194\n' }),
+    ).toBeNull();
+    expect(classifyUnsafeVpnTargets({})).toBeNull();
+  });
+  it('openvpnRemoteHosts extracts every remote host', () => {
+    expect(openvpnRemoteHosts('remote a.example 1194\nremote b.example 443\nfoo')).toEqual([
+      'a.example',
+      'b.example',
+    ]);
   });
 });

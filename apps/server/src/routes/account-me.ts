@@ -35,7 +35,7 @@ import type {
   AccountProxyRowUpdates,
 } from '../db/account-proxies-repo.js';
 import { wrapAccountSecret } from '../lib/profile-key-hierarchy.js';
-import { classifyUnsafeHost } from '../lib/webhook-target-guard.js';
+import { classifyUnsafeHost, classifyUnsafeVpnTargets } from '../lib/webhook-target-guard.js';
 import { defaultTcpProbe } from '../services/proxy-backends/socks5.js';
 import { avatarKey, type R2 } from '../lib/r2.js';
 import {
@@ -431,6 +431,12 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         throw new BadRequestError('An `openvpn` config is required for scheme "openvpn".');
       }
       const { config_blob, username, password } = input.openvpn;
+      // SSRF: the real egress is the embedded `remote <host>`, NOT the display host — guard it.
+      if (classifyUnsafeVpnTargets({ configBlob: config_blob }) !== null) {
+        throw new BadRequestError(
+          'OpenVPN remote must not target a private, loopback, link-local, or metadata address.',
+        );
+      }
       const secret = JSON.stringify({ config_blob, ...(password ? { password } : {}) });
       return {
         wrappedSecret: wrapProxySecret(accountId, secret),
@@ -442,6 +448,12 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         throw new BadRequestError('A `wireguard` config is required for scheme "wireguard".');
       }
       const { private_key, peer_public_key, endpoint, allowed_ips, address, dns } = input.wireguard;
+      // SSRF: the real egress is the endpoint (+ dns), NOT the display host — guard them.
+      if (classifyUnsafeVpnTargets({ endpoint, dns }) !== null) {
+        throw new BadRequestError(
+          'WireGuard endpoint/DNS must not target a private, loopback, link-local, or metadata address.',
+        );
+      }
       return {
         wrappedSecret: wrapProxySecret(accountId, private_key),
         config: {

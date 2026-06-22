@@ -8,7 +8,7 @@ import type { InlineVpnProxyWire, SocksProxyConfig } from '@driftstack/api-types
 import { InlineVpnProxyWireSchema } from '@driftstack/api-types';
 import type { AccountProxiesRepo, AccountProxyRow } from '../db/account-proxies-repo.js';
 import { unwrapAccountSecret } from '../lib/profile-key-hierarchy.js';
-import { classifyUnsafeHost } from '../lib/webhook-target-guard.js';
+import { classifyUnsafeHost, classifyUnsafeVpnTargets } from '../lib/webhook-target-guard.js';
 
 /** Thrown when a stored proxy's host resolves to an internal-reachable address
  *  at dispatch time (defense-in-depth; the host is also guarded at create). The
@@ -138,6 +138,9 @@ export class AccountProxiesService {
         return null;
       }
       if (typeof parsed.config_blob !== 'string') return null;
+      // SSRF re-guard at dispatch (defense-in-depth): the real egress is the embedded
+      // `remote <host>`, never the display host already checked above. Fail-closed.
+      if (classifyUnsafeVpnTargets({ configBlob: parsed.config_blob }) !== null) return null;
       candidate = {
         type: 'openvpn',
         config_blob: parsed.config_blob,
@@ -146,6 +149,11 @@ export class AccountProxiesService {
       };
     } else {
       // wireguard: secret = the raw private_key; the rest rides config.
+      // SSRF re-guard at dispatch (defense-in-depth): the real egress is the endpoint (+ dns),
+      // never the display host already checked above. Fail-closed.
+      if (classifyUnsafeVpnTargets({ endpoint: str('endpoint'), dns: str('dns') }) !== null) {
+        return null;
+      }
       candidate = {
         type: 'wireguard',
         private_key: secret,
