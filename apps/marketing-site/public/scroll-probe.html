@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>scroll-probe</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      /* A tall vertical gradient: black at the very top, white at the bottom. The
+         simulator streams the rendered viewport, so the AVERAGE LUMA of the frame
+         encodes the scroll position — scrolled to top = dark (low luma), scrolled
+         down = lighter (high luma). An autonomous probe (scripts/sim-scroll-probe.mjs)
+         samples luma over time while injecting a clean monotonic touch drag: luma must
+         rise MONOTONICALLY for a scroll-down. Any DIP = the page scrolled back UP = a
+         bounce (the founder's "it scrolls me back up"). Bands every 500px give a
+         coarse ruler on top of the gradient for visual debugging. */
+      #ruler {
+        height: 2500px;
+        background:
+          repeating-linear-gradient(
+            180deg,
+            rgba(255, 0, 0, 0.18) 0,
+            rgba(255, 0, 0, 0.18) 4px,
+            transparent 4px,
+            transparent 500px
+          ),
+          linear-gradient(180deg, #000 0%, #fff 100%);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="ruler"></div>
+    <script>
+      // Report scrollY into the document title + hash so the server page-state poll is a
+      // second (slow) measurement channel alongside the real-time video-luma signal.
+      function report() {
+        var y = Math.round(window.scrollY);
+        var max = Math.round(document.documentElement.scrollHeight - window.innerHeight);
+        document.title = 'scroll:' + y + '/' + max;
+        try {
+          history.replaceState(null, '', '#sy' + y);
+        } catch (e) {
+          /* ignore */
+        }
+      }
+      window.addEventListener('scroll', report, { passive: true });
+      report();
+    </script>
+  </body>
+</html>
