@@ -20,6 +20,7 @@
 
 import { LazyStore } from '@tauri-apps/plugin-store';
 import { invoke } from '@tauri-apps/api/core';
+import { makeWriteLock } from './store-write-lock';
 
 export type ThemeMode = 'light' | 'dark';
 export type ThemeAccent = 'violet' | 'oxblood' | 'teal';
@@ -292,7 +293,16 @@ export async function loadSettings(): Promise<DriftstackSettings> {
   return { apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn, startUrl };
 }
 
+// Serialize saves: saveSettings does a get→modify keyMap→set read-modify-write, so two
+// concurrent saves (e.g. theme + accent in quick succession) could lose a host's remembered
+// key. The lock mirrors the folders/tags sibling stores. (#7)
+const settingsWriteLock = makeWriteLock();
+
 export async function saveSettings(s: DriftstackSettings): Promise<void> {
+  return settingsWriteLock(() => saveSettingsUnlocked(s));
+}
+
+async function saveSettingsUnlocked(s: DriftstackSettings): Promise<void> {
   const useKeychain = useKeychainForBaseUrl(s.baseUrl);
   const hasKey = s.apiKey !== null && s.apiKey.length > 0;
   // W584 — preserve OTHER deployments' remembered keys on every save. The

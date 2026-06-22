@@ -97,13 +97,17 @@ export function addFolder(rawName: string, icon?: string): Promise<string[]> {
   return writeLock(async () => {
     const name = normalizeFolderName(rawName);
     if (name === null) return loadFolders();
-    if (icon !== undefined && icon.trim().length > 0) {
+    const current = await loadFolders();
+    const alreadyPresent = current.includes(name);
+    const atCap = current.length >= MAX_FOLDERS;
+    // Only persist the icon if the folder will actually exist (already present, or about to be
+    // added) — otherwise an at-cap add stores an orphan icon for a name that's never in the list.
+    if (icon !== undefined && icon.trim().length > 0 && (alreadyPresent || !atCap)) {
       const icons = await loadFolderIcons();
       icons[name] = icon.trim().slice(0, MAX_ICON_CHARS);
       await getStore().set(ICONS_KEY, icons);
     }
-    const current = await loadFolders();
-    if (current.includes(name) || current.length >= MAX_FOLDERS) {
+    if (alreadyPresent || atCap) {
       await getStore().save();
       return current;
     }

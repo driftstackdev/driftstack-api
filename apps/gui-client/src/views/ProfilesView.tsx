@@ -431,6 +431,30 @@ export function ProfilesView({
     void (async () => {
       try {
         const org = await fetchOrganization(settings.baseUrl, apiKey);
+        // Don't let a fresh/empty server taxonomy WIPE locally-created (offline) folders/tags:
+        // if the server has nothing but the local cache has entries, SEED the server from local
+        // instead of clobbering local to empty. (#441 data-loss)
+        if (org.folders.length === 0 && org.tags.length === 0) {
+          const [localFolders, localIcons, localTags] = await Promise.all([
+            loadFolders(),
+            loadFolderIcons(),
+            loadTags(),
+          ]);
+          if (localFolders.length > 0 || localTags.length > 0) {
+            void saveOrganization(settings.baseUrl, apiKey, {
+              folders: localFolders.map((name) =>
+                localIcons[name] !== undefined && localIcons[name].length > 0
+                  ? { name, icon: localIcons[name] }
+                  : { name },
+              ),
+              tags: localTags,
+            }).catch(() => undefined);
+            setCustomFolders([...localFolders].sort((a, b) => a.localeCompare(b)));
+            setCustomFolderIcons(localIcons);
+            setCustomTags([...localTags].sort((a, b) => a.localeCompare(b)));
+            return;
+          }
+        }
         const names = org.folders.map((f) => f.name);
         const icons: Record<string, string> = {};
         for (const f of org.folders)

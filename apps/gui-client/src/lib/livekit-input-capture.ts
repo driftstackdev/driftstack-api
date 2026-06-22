@@ -618,6 +618,12 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       if (Math.abs(wheelPendingDx) < 0.5 && Math.abs(wheelPendingDy) < 0.5) {
         wheelPendingDx = 0;
         wheelPendingDy = 0;
+        // A drag is still down → re-arm the idle-end we just cleared above. Without this a
+        // sub-0.5 stray frame (common in the momentum tail) cancels the only pending touchEnd
+        // and returns with no rAF + no timer → the virtual finger is left pressed forever.
+        if (wheelDrag !== null) {
+          wheelTimer = window.setTimeout(endWheelDrag, WHEEL_IDLE_MS);
+        }
         return;
       }
       const vw = video.videoWidth || 402;
@@ -657,11 +663,16 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // residual reverse displacement, so distance is not lost and the new lock takes the
       // new sign. A single/transient opposite frame instead just HOLDS (ratchet below).
       if (proj < wheelTravel - WHEEL_REVERSAL_PX) {
-        const backDx = wheelAccDx - wheelTravel * wheelDirX;
-        const backDy = wheelAccDy - wheelTravel * wheelDirY;
+        // Signed reverse travel ALONG the locked axis (≤ -WHEEL_REVERSAL_PX). Seed the fresh
+        // gesture with ONLY this along-axis residual — dropping the off-axis accumulator — so
+        // the new direction-lock can't grab the wrong (off-axis) direction on a near-pure
+        // vertical/horizontal reversal. (Capturing dir before endWheelDrag, which resets it.)
+        const reverseProj = proj - wheelTravel;
+        const lockedDirX = wheelDirX;
+        const lockedDirY = wheelDirY;
         endWheelDrag(); // touchEnd at the current finger position; resets accum + dir
-        wheelAccDx = backDx;
-        wheelAccDy = backDy;
+        wheelAccDx = reverseProj * lockedDirX;
+        wheelAccDy = reverseProj * lockedDirY;
         if (!tryLockWheelDir()) {
           // New direction not yet decisive → hold; next frame re-establishes it.
           armWheelTail();

@@ -108,8 +108,15 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
   });
 
   it('update() — useCallback with [settings] dep, merges Partial<DriftstackSettings> over previous settings + persists via saveSettings. Returns once the on-disk write resolves so callers can chain on completion. Drift to a different merge order (e.g. previous over next) would break the "partial update overwrites only the passed fields" contract.', () => {
+    // Contract fragments (merge ORDER + setSettings + persist + [settings] dep). saveSettings
+    // is now wrapped in a best-effort try/catch so a persist failure can't blank the app via an
+    // unhandled rejection (#9) — assert the durable contract, not the exact whitespace.
+    expect(body).toContain('async (next: Partial<DriftstackSettings>) => {');
+    expect(body).toContain('const merged: DriftstackSettings = { ...settings, ...next };');
+    expect(body).toContain('setSettings(merged);');
+    expect(body).toContain('await saveSettings(merged);');
     expect(body).toMatch(
-      /const update = useCallback\(\s*\n\s*async \(next: Partial<DriftstackSettings>\) => \{\s*\n\s*const merged: DriftstackSettings = \{ \.\.\.settings, \.\.\.next \};\s*\n\s*setSettings\(merged\);\s*\n\s*await saveSettings\(merged\);\s*\n\s*\},\s*\n\s*\[settings\],\s*\n\s*\);/,
+      /const update = useCallback\([\s\S]{0,1000}?\n\s*\[settings\],\s*\n\s*\);/,
     );
   });
 

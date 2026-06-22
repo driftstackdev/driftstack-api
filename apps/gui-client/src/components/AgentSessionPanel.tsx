@@ -194,6 +194,20 @@ export function AgentSessionPanel({
       }
       setPublisher('publishing');
     });
+    // Reverse of TrackSubscribed: the publishing worker (the Mac browser fork) crashes or
+    // restarts → the SFU drops its video track while OUR signal connection stays UP, so
+    // RoomEvent.Disconnected never fires. Without this the last frame freezes with no overlay
+    // and no recovery path (founder-hit class). Flip back to 'none' so the W617 "no live
+    // video" overlay + the recovery affordance surface; TrackSubscribed restores 'publishing'
+    // if it comes back. (#145)
+    const onPublisherLost = (): void => {
+      if (cancelled) return;
+      setPublisher((p) => (p === 'publishing' ? 'none' : p));
+    };
+    (room as any).on(RoomEvent.TrackUnsubscribed, (track: any) => {
+      if (track?.kind === 'video') onPublisherLost();
+    });
+    (room as any).on(RoomEvent.ParticipantDisconnected, onPublisherLost);
     (room as any).on(RoomEvent.Disconnected, () => {
       if (!cancelled) setS({ kind: 'disconnected' });
     });

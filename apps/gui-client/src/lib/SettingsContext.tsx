@@ -87,7 +87,15 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
     async (next: Partial<DriftstackSettings>) => {
       const merged: DriftstackSettings = { ...settings, ...next };
       setSettings(merged);
-      await saveSettings(merged);
+      // Persistence is best-effort — the in-memory state is already applied above. A
+      // keychain/store write failure must NOT become an unhandled rejection: every caller
+      // does `void update(...)`, so it would trip the global fatal overlay and blank the
+      // whole app (e.g. on a theme/accent toggle). (#9)
+      try {
+        await saveSettings(merged);
+      } catch (e) {
+        console.warn('[settings] persist failed (kept in memory):', e);
+      }
     },
     [settings],
   );
