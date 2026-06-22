@@ -272,10 +272,14 @@ try {
   // far BELOW the drag end → the buggy fork reads a big NEGATIVE delta off the stale
   // lastTouchPoint and scrolls the page back UP. Pre-W2770: luma DROPS (bounce reproduced).
   // Post-W2770 (m_driftstackTouchActive gate): the move is ignored → luma FLAT.
-  async function runStrayMove() {
-    console.log(`\n=== STRAY-MOVE (regression for A3 W2770 down-less-move gate) ===`);
+  // sameId=true → the stray move reuses the JUST-ENDED finger's touchId (a "late move
+  // after touchEnd" — matches A3's exact repro). sameId=false → a fresh orphan id (no
+  // touchStart at all). Try BOTH so the probe reliably reproduces A3's down-less-move
+  // bounce regardless of whether the fork keys the gate on touchId or on a global flag.
+  async function runStrayMove(label, sameId) {
+    console.log(`\n=== STRAY-MOVE [${label}] (regression for A3 W2770 down-less-move gate) ===`);
     const X = 200;
-    let id = tid++;
+    const id = tid++;
     await publish({ type: 'touchStart', x: X, y: 700, touchId: id });
     await sleep(150);
     for (let y = 650; y >= 250; y -= 50) {
@@ -285,7 +289,7 @@ try {
     await publish({ type: 'touchEnd', x: X, y: 250, touchId: id });
     await sleep(300);
     const afterDrag = await luma();
-    const strayId = tid++; // NO touchStart for this id → finger NOT active
+    const strayId = sameId ? id : tid++; // a move with NO active finger (after touchEnd)
     await publish({ type: 'touchMove', x: X, y: 760, touchId: strayId });
     await sleep(350);
     const afterStray = await luma();
@@ -293,10 +297,10 @@ try {
     console.log(`  luma afterDrag=${afterDrag} afterStray=${afterStray} delta=${delta}`);
     const verdict =
       delta < -NOISE
-        ? `BOUNCE REPRODUCED — the down-less move scrolled the page back UP (luma ${afterDrag}->${afterStray}). A3 W2770 gate not yet effective on this box.`
-        : `GATED — the down-less move did NOT scroll (luma ${afterDrag}->${afterStray}, flat). W2770 gate working (or fork ignores it).`;
-    console.log(`  VERDICT [stray-move]: ${verdict}`);
-    return { label: 'stray-move', verdict, bounce: delta < -NOISE };
+        ? `BOUNCE REPRODUCED — down-less move (${label}) scrolled the page back UP (${afterDrag}->${afterStray}). Pre-W2770 / gate not effective.`
+        : `GATED — down-less move (${label}) did NOT scroll (${afterDrag}->${afterStray}, flat).`;
+    console.log(`  VERDICT [stray-${label}]: ${verdict}`);
+    return { label: `stray-${label}`, verdict, bounce: delta < -NOISE };
   }
 
   const out = [];
@@ -304,7 +308,10 @@ try {
     out.push(await runDrag('clean-single-leg', 700, 50, 12, 0)); // 700→100, 600px, one leg
   if (MODE === 'legs' || MODE === 'both')
     out.push(await runDrag('multi-leg-recenter', 700, 50, 18, 6)); // re-centre every 6 moves
-  if (MODE === 'stray' || MODE === 'both') out.push(await runStrayMove());
+  if (MODE === 'stray' || MODE === 'both') {
+    out.push(await runStrayMove('sameid', true));
+    out.push(await runStrayMove('newid', false));
+  }
 
   console.log('\n===== SCROLL PROBE SUMMARY =====');
   for (const r of out) console.log(`  [${r.label}] ${r.verdict}`);
