@@ -67,6 +67,13 @@ export interface AgentSessionPanelProps {
    *  control data channel is effectively dead, so taps/keys aren't reaching the
    *  device. The simulator surfaces this as a small non-fatal badge. */
   onPublishError?: () => void;
+  /** Mask the freed iOS-Safari URL-bar band at the bottom of the capture. A3 hid
+   *  the URL bar box-side (DRIFTSTACK_SAFARI_CHROME_HIDDEN, founder "remove the
+   *  url bar") but the web-view stays 714px, leaving a ~110px empty band at the
+   *  bottom (y 764-874 of the 402x874 capture — A3 W2784). The simulator sets this
+   *  to cover that band with bezel-black so the removal reads clean. Overlay only
+   *  (pointer-events-none) — never touches the video element or the tap mapping. */
+  coverChromeBand?: boolean;
 }
 
 /** W617 — how long a connected-but-videoless room waits before the panel
@@ -110,6 +117,7 @@ export function AgentSessionPanel({
   onRoom,
   onVideoEl,
   onPublishError,
+  coverChromeBand = false,
 }: AgentSessionPanelProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // The video element as STATE (not just the ref) so useInputCapture re-runs
@@ -272,6 +280,19 @@ export function AgentSessionPanel({
           }
         }}
       />
+      {/* URL-bar band cover (founder "remove the url bar" + A3 W2784): the box hides
+          the iOS-Safari URL bar but the web-view stays 714px → a ~110px empty band at
+          the capture bottom (y 764-874 of 402x874). Mask it bezel-black so it reads as
+          the device's bottom edge, not a gap. pointer-events-none → taps pass through
+          to the screen-host handlers unchanged (the band has no content anyway). */}
+      {coverChromeBand && (
+        <div
+          aria-hidden="true"
+          data-component="chrome-band-cover"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-10 rounded-b-lg bg-black"
+          style={{ height: `${(110 / 874) * 100}%` }}
+        />
+      )}
       {/* W617 — connected but nothing publishing: waiting spinner first,
           then the honest no-worker overlay with the parent's fallback. */}
       {state.kind === 'connected' && publisher !== 'publishing' && (

@@ -2107,6 +2107,10 @@ export function SimulatorWindow(): JSX.Element {
               >
                 <AgentSessionPanel
                   info={info}
+                  // The box hides the iOS-Safari URL bar fleet-wide
+                  // (DRIFTSTACK_SAFARI_CHROME_HIDDEN, founder "remove the url bar");
+                  // mask the ~110px freed band at the capture bottom (A3 W2784).
+                  coverChromeBand
                   // Forward mouse/keyboard to the device only in manual/pair
                   // mode; in AI mode the agent is driving, so local input would
                   // fight it.
