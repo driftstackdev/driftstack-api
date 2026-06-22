@@ -174,6 +174,13 @@ export interface CreateAgentSessionRequest {
    * unknown or not-owned id returns 404). Omit for the default egress.
    */
   proxy_id?: string;
+  /**
+   * Start URL the remote browser opens on session launch. When supplied,
+   * overrides the operator-default start URL. Must be an absolute http(s) URL;
+   * `file:`, `javascript:`, `data:` schemes are rejected (400). Omit to use the
+   * operator default.
+   */
+  initial_url?: string;
 }
 
 export type AgentIntent =

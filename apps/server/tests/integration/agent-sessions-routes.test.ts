@@ -253,6 +253,27 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.statusCode).toBe(201);
   });
 
+  it('initial_url validation: http(s) accepted (201); javascript:/file:/data:/garbage + over-length rejected (400) — customer start URL is scheme-guarded at the route', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const post = (initial_url: string) =>
+      fx.app.inject({
+        method: 'POST',
+        url: '/v1/agent-sessions',
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+        payload: { token_budget: 50_000, initial_url },
+      });
+    // Valid http(s) → created (not a validation 400).
+    expect((await post('https://news.example.com/x')).statusCode).toBe(201);
+    expect((await post('http://example.org')).statusCode).toBe(201);
+    // Dangerous / non-http schemes + unparseable → 400 at the route refine.
+    expect((await post('javascript:alert(1)')).statusCode).toBe(400);
+    expect((await post('file:///etc/passwd')).statusCode).toBe(400);
+    expect((await post('data:text/html,x')).statusCode).toBe(400);
+    expect((await post('not a url')).statusCode).toBe(400);
+    // Over the 2048-char cap → 400.
+    expect((await post('https://x.com/' + 'a'.repeat(2100))).statusCode).toBe(400);
+  });
+
   // Teams member-launch (898cb5f) — the SECURITY-SENSITIVE positive + RBAC
   // paths, exercised against a REAL seeded membership (the fail-closed
   // non-member / malformed cases are covered above). These pin the three

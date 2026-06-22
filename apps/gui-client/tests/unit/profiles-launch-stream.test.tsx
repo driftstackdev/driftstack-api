@@ -58,7 +58,11 @@ vi.mock('../../src/lib/SettingsContext', () => {
         list: () => agentSessionsList(),
       },
     },
-    settings: { apiKey: 'ds_test_x', baseUrl: 'http://localhost:3000' },
+    settings: {
+      apiKey: 'ds_test_x',
+      baseUrl: 'http://localhost:3000',
+      startUrl: 'https://driftstack.dev',
+    },
     accountMe: {
       tier: 'solo_manual',
       concurrent_session_cap: 1,
@@ -134,7 +138,13 @@ describe('ProfilesView launch → stream', () => {
     // Launch attaches THIS profile (file 57) — the canonical prof_<uuid> id is
     // passed as-is (the API normalizes it server-side, W335/W336) — and starts in
     // manual mode (a GUI launch opens the simulator for the user to drive).
-    expect(agentCreate).toHaveBeenCalledWith({ profile_id: 'prof_1', mode: 'manual' });
+    // initial_url = the normalized Start URL setting (normalizeNavigateUrl runs the
+    // value through new URL().toString(), which adds the root trailing slash).
+    expect(agentCreate).toHaveBeenCalledWith({
+      profile_id: 'prof_1',
+      mode: 'manual',
+      initial_url: 'https://driftstack.dev/',
+    });
     // The simulator is ONLY the separate window now (founder 2026-06-18: the
     // scaled in-app overlay was removed). Launch hands the session + livekit
     // join info to the opener; no in-app overlay renders.

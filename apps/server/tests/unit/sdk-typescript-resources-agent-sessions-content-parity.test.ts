@@ -83,6 +83,10 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     expect(body).toMatch(/profile_id\?: string;/);
   });
 
+  it('CreateAgentSessionRequest exposes optional initial_url (customer-settable start URL the remote browser opens on launch; http(s)-only, validated server-side). Drift to dropping it removes the SDK surface for the Settings → Start URL feature.', () => {
+    expect(body).toMatch(/initial_url\?: string;/);
+  });
+
   it('AgentIntent 4-kind union: navigate / interact / wait / capture. Drift to dropping a kind would break the executor contract; drift to adding an undeclared kind would render as TS error in callers using exhaustive switch', () => {
     expect(body).toMatch(/\{ kind: 'navigate'; url: string \}/);
     expect(body).toMatch(

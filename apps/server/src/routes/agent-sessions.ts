@@ -132,6 +132,21 @@ declare module 'fastify' {
 
 const DEFAULT_TOKEN_BUDGET = 100_000;
 
+// http(s)-only guard for the customer-supplied initial_url. Mirrors the
+// navigate.url / SessionAssign.initialUrl scheme guard in
+// schemas/harness-control-protocol.ts (which is file-local / not exported) —
+// kept as a small local copy to avoid exporting a schema-internal helper.
+// serializeSessionAssign re-validates initialUrl at the wire as a backstop.
+function isInitialUrlHttpOrHttps(raw: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return false;
+  }
+  return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+}
+
 const CreateAgentSessionRequestSchema = z.object({
   // Canonical `ses_<36-char-uuid>` = 40 chars. Cap at 100 (slice 116
   // pattern) — generous headroom, blocks multi-KB strings that would
@@ -159,6 +174,20 @@ const CreateAgentSessionRequestSchema = z.object({
   // returns 404 (never confirm another account's proxy exists). Bare uuid (the
   // id the proxies API returns). Optional → operator-default egress (unchanged).
   proxy_id: z.string().uuid().optional(),
+  // Customer-settable start URL — the URL the remote browser opens on launch.
+  // When supplied, overrides the operator-default sessionDispatch.initialUrl.
+  // http(s)-only (file:/javascript:/data: rejected here → 400 at the route, not a
+  // silent dispatch drop); 2048-char cap blocks pathological payloads. Omit →
+  // operator default (today https://driftstack.dev).
+  initial_url: z
+    .string()
+    .min(1)
+    .max(2048)
+    .refine(isInitialUrlHttpOrHttps, {
+      message:
+        'initial_url must be an absolute http(s) URL; file:, javascript:, data:, etc. are rejected',
+    })
+    .optional(),
 });
 
 const RunTurnRequestSchema = z.object({
@@ -553,6 +582,11 @@ export async function dispatchSessionAssignOnCreate(args: {
   // back to any node when the home region has none (single-region fleet / outage
   // → a far box still beats no box). Absent/null → region-blind any-node (today).
   accountRegion?: string | null;
+  // Customer-supplied start URL from the create body. Overrides
+  // sessionDispatch.initialUrl when present; falls back to the operator default
+  // when absent. Already http(s)-validated at the route; serializeSessionAssign
+  // re-validates at the wire.
+  initialUrl?: string;
 }): Promise<void> {
   const {
     sessionId,
@@ -569,6 +603,7 @@ export async function dispatchSessionAssignOnCreate(args: {
     accountProxiesService,
     agentSessions,
     accountRegion,
+    initialUrl,
   } = args;
   if (
     fleetControlRegistry === undefined ||
@@ -677,7 +712,9 @@ export async function dispatchSessionAssignOnCreate(args: {
       sessionId,
       archetype: profileArchetype ?? sessionDispatch.archetype,
       behaviorProfile: sessionDispatch.behaviorProfile,
-      initialUrl: sessionDispatch.initialUrl,
+      // Customer-supplied initial_url wins; falls back to the operator-config
+      // default when the create body omitted it.
+      initialUrl: initialUrl ?? sessionDispatch.initialUrl,
       inlineProxyConfig,
       livekit: {
         room: sessionId,
@@ -1216,6 +1253,10 @@ export function registerAgentSessionsRoutes(
         // session routes to the nearest livekit node (EU box for EU customers);
         // falls back to any node when the home region has none.
         accountRegion: ctx.account.region,
+        // Customer start URL from the create body — overrides the operator
+        // default; omitted when absent so the fallback applies. The harness opens
+        // this URL on session launch (inert until the box honors initialUrl).
+        ...(parsed.data.initial_url !== undefined ? { initialUrl: parsed.data.initial_url } : {}),
       });
       // Slice 6 follow-up 2026-05-20 — agent-session create audit. Best-
       // effort emit; audit failures don't break the create. Distinct

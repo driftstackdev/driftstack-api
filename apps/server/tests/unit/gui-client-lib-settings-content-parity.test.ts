@@ -80,7 +80,9 @@ describe('W467.C apps/gui-client/src/lib/settings.ts content parity', () => {
     expect(body).toMatch(
       /V-242 \/ D-2026-05-06-02 — explicit telemetry opt-in\/out\. When\s*\n?\s*\*\s*`null`, the platform default is used: ON for cloud, OFF for\s*\n?\s*\*\s*self-hosted\. A non-null value is the customer's explicit choice\s*\n?\s*\*\s*and overrides the default\./,
     );
-    expect(body).toMatch(/telemetryOptIn: boolean \| null;\s*\n?\s*\}/);
+    expect(body).toMatch(/telemetryOptIn: boolean \| null;/);
+    // startUrl (customer-settable session start URL) is the new last field.
+    expect(body).toMatch(/startUrl: string;\s*\n?\s*\}/);
   });
 
   it("DEFAULT_SETTINGS pinned: apiKey null + baseUrl 'http://localhost:3000' (SDK default port) + dark/oxblood theme defaults (founder 2026-06-15: GUI standard = Dark + Red, matching the marketing brand) + telemetryOptIn null", () => {
@@ -128,9 +130,17 @@ describe('W467.C apps/gui-client/src/lib/settings.ts content parity', () => {
     expect(body).toMatch(/\} else \{\s*\n?\s*migratedApiKey = inKeychain;\s*\n?\s*\}/);
   });
 
-  it("loadSettings cleanup write: persisted && 'apiKey' in persisted → store.set + store.save without apiKey field (cleaned shape) + returns {apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn}", () => {
+  it("loadSettings cleanup write: persisted && 'apiKey' in persisted → store.set + store.save without apiKey field (cleaned shape, now incl startUrl) + returns {apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn, startUrl}", () => {
+    expect(body).toMatch(/if \(persisted && 'apiKey' in persisted\) \{/);
+    // The cleaned shape carries the non-secret fields incl startUrl, NOT apiKey.
+    // Prettier reflows the object across lines once it grows past the print width,
+    // so match loosely (\s* spans the wrapped form) — no rigid inline structure.
     expect(body).toMatch(
-      /if \(persisted && 'apiKey' in persisted\) \{\s*\n?\s*await getStore\(\)\.set\(SETTINGS_KEY, \{ baseUrl, themeMode, themeAccent, telemetryOptIn \}\);\s*\n?\s*await getStore\(\)\.save\(\);\s*\n?\s*\}\s*\n?\s*return \{ apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn \};/,
+      /getStore\(\)\.set\(SETTINGS_KEY, \{\s*baseUrl,\s*themeMode,\s*themeAccent,\s*telemetryOptIn,\s*startUrl,?\s*\}\);/,
+    );
+    expect(body).toMatch(/await getStore\(\)\.save\(\);/);
+    expect(body).toMatch(
+      /return \{ apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn, startUrl \};/,
     );
   });
 
@@ -139,7 +149,7 @@ describe('W467.C apps/gui-client/src/lib/settings.ts content parity', () => {
       /export async function saveSettings\(s: DriftstackSettings\): Promise<void>/,
     );
     expect(body).toMatch(
-      /await getStore\(\)\.set\(SETTINGS_KEY, \{\s*\n?\s*baseUrl: s\.baseUrl,\s*\n?\s*themeMode: s\.themeMode,\s*\n?\s*themeAccent: s\.themeAccent,\s*\n?\s*telemetryOptIn: s\.telemetryOptIn,\s*\n?\s*\.\.\.\(!useKeychain && hasKey \? \{ apiKey: s\.apiKey \} : \{\}\),\s*\n?\s*\.\.\.\(Object\.keys\(keyMap\)\.length > 0 \? \{ apiKeys: keyMap \} : \{\}\),\s*\n?\s*\}\);/,
+      /await getStore\(\)\.set\(SETTINGS_KEY, \{\s*\n?\s*baseUrl: s\.baseUrl,\s*\n?\s*themeMode: s\.themeMode,\s*\n?\s*themeAccent: s\.themeAccent,\s*\n?\s*telemetryOptIn: s\.telemetryOptIn,\s*\n?\s*startUrl: s\.startUrl,\s*\n?\s*\.\.\.\(!useKeychain && hasKey \? \{ apiKey: s\.apiKey \} : \{\}\),\s*\n?\s*\.\.\.\(Object\.keys\(keyMap\)\.length > 0 \? \{ apiKeys: keyMap \} : \{\}\),\s*\n?\s*\}\);/,
     );
     // W584 — per-deployment key map: cloud saves preserve other hosts' keys
     // (the founder's "switch modes → signed out" loop) and self-hosted

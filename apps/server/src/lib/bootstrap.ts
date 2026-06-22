@@ -1481,7 +1481,7 @@ export async function createProductionDeps(
           sessionDispatch: {
             archetype: 'iphone16pro_ios18_6_safari18_6',
             behaviorProfile: 'default',
-            initialUrl: 'https://example.com',
+            initialUrl: 'https://driftstack.dev',
             proxy: {
               host: '127.0.0.1',
               port: 1080,

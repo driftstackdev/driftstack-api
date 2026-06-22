@@ -65,6 +65,7 @@ import {
 import { openSimulatorWindow } from '../lib/open-simulator';
 import { mintGuiControlKey } from '../lib/agent-session-control';
 import { useSettings } from '../lib/SettingsContext';
+import { normalizeNavigateUrl } from '../lib/address-bar';
 import { useConnectionStatus } from '../lib/use-connection-status';
 import { DriftstackError, type Session } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
@@ -1378,10 +1379,19 @@ export function ProfilesView({
       // Launch in manual mode: a GUI launch opens the simulator for the user to
       // drive, so it should start under their control (not AI). They can switch
       // via the mode toggle. (The agent-chat path creates with mode:'ai'.)
+      // Start URL the remote browser opens on launch (Settings → Sessions → Start
+      // URL; default https://driftstack.dev). normalizeNavigateUrl prepends
+      // https:// + rejects non-http(s); fall back to the default if it returns null.
+      const startUrl = normalizeNavigateUrl(settings.startUrl) ?? 'https://driftstack.dev';
       const created = await client.agentSessions.create(
         proxyIdForLaunch !== undefined
-          ? { profile_id: profile.id, proxy_id: proxyIdForLaunch, mode: 'manual' }
-          : { profile_id: profile.id, mode: 'manual' },
+          ? {
+              profile_id: profile.id,
+              proxy_id: proxyIdForLaunch,
+              mode: 'manual',
+              initial_url: startUrl,
+            }
+          : { profile_id: profile.id, mode: 'manual', initial_url: startUrl },
       );
       await markLaunched(profile.id, created.id);
       if (created.livekit) {

@@ -37,6 +37,13 @@ export interface DriftstackSettings {
    * and overrides the default.
    */
   telemetryOptIn: boolean | null;
+  /**
+   * Start URL the remote iPhone browser opens when a session launches. GUI-local
+   * config (like baseUrl/theme; non-sensitive → settings store, never keychain).
+   * Passed per-launch as agentSessions.create({ initial_url }). Default
+   * https://driftstack.dev.
+   */
+  startUrl: string;
 }
 
 export const DEFAULT_SETTINGS: DriftstackSettings = {
@@ -49,6 +56,7 @@ export const DEFAULT_SETTINGS: DriftstackSettings = {
   themeMode: 'dark',
   themeAccent: 'oxblood',
   telemetryOptIn: null,
+  startUrl: 'https://driftstack.dev',
 };
 
 const STORE_FILE = 'settings.json';
@@ -99,6 +107,7 @@ interface PersistedSettings {
   themeMode?: unknown;
   themeAccent?: unknown;
   telemetryOptIn?: unknown;
+  startUrl?: unknown;
   /** W584 — per-deployment self-hosted keys, keyed by hostIdFor(baseUrl). */
   apiKeys?: unknown;
 }
@@ -177,6 +186,12 @@ export async function loadSettings(): Promise<DriftstackSettings> {
     persisted?.themeAccent === 'teal'
       ? persisted.themeAccent
       : DEFAULT_SETTINGS.themeAccent;
+  // Start URL the remote browser opens on launch (GUI-local; passed per-launch as
+  // agentSessions.create({ initial_url })). Non-empty string or the default.
+  const startUrl =
+    persisted && typeof persisted.startUrl === 'string' && persisted.startUrl.length > 0
+      ? persisted.startUrl
+      : DEFAULT_SETTINGS.startUrl;
 
   // GUI W232 (c) — self-hosted / localhost: the API key lives in settings.json
   // (no keychain → no per-rebuild ACL prompt). Read it straight from the store.
@@ -211,11 +226,12 @@ export async function loadSettings(): Promise<DriftstackSettings> {
         apiKey,
         baseUrl,
         telemetryOptIn,
+        startUrl,
         apiKeys: keyMap,
       });
       await getStore().save();
     }
-    return { apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn };
+    return { apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn, startUrl };
   }
 
   const scopedName = keychainNameFor(baseUrl);
@@ -261,11 +277,17 @@ export async function loadSettings(): Promise<DriftstackSettings> {
   // If migration ran (or settings.json had a stale apiKey that we just
   // dropped), persist the cleaned-up shape.
   if (persisted && 'apiKey' in persisted) {
-    await getStore().set(SETTINGS_KEY, { baseUrl, themeMode, themeAccent, telemetryOptIn });
+    await getStore().set(SETTINGS_KEY, {
+      baseUrl,
+      themeMode,
+      themeAccent,
+      telemetryOptIn,
+      startUrl,
+    });
     await getStore().save();
   }
 
-  return { apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn };
+  return { apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn, startUrl };
 }
 
 export async function saveSettings(s: DriftstackSettings): Promise<void> {
@@ -291,6 +313,7 @@ export async function saveSettings(s: DriftstackSettings): Promise<void> {
     themeMode: s.themeMode,
     themeAccent: s.themeAccent,
     telemetryOptIn: s.telemetryOptIn,
+    startUrl: s.startUrl,
     ...(!useKeychain && hasKey ? { apiKey: s.apiKey } : {}),
     ...(Object.keys(keyMap).length > 0 ? { apiKeys: keyMap } : {}),
   });

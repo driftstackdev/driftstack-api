@@ -19,6 +19,7 @@ import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { useSettings } from '../lib/SettingsContext';
 import { isCloudBaseUrl } from '../lib/telemetry';
 import { rememberedKeyFor } from '../lib/settings';
+import { normalizeNavigateUrl } from '../lib/address-bar';
 import { useConfirm } from '../components/ConfirmProvider';
 import { useToasts } from '../lib/toasts';
 
@@ -41,6 +42,7 @@ export function SettingsView(): JSX.Element {
     isCloudBaseUrl(settings.baseUrl) ? 'cloud' : 'self-hosted',
   );
   const [draftTelemetry, setDraftTelemetry] = useState<boolean | null>(settings.telemetryOptIn);
+  const [draftStartUrl, setDraftStartUrl] = useState(settings.startUrl);
   const [reveal, setReveal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -170,6 +172,9 @@ export function SettingsView(): JSX.Element {
         apiKey: draftKey.length > 0 ? draftKey : null,
         baseUrl: url,
         telemetryOptIn: draftTelemetry,
+        // Normalize on save (prepends https://, rejects non-http(s) → null); fall
+        // back to the existing value so a bad entry never wipes the setting.
+        startUrl: normalizeNavigateUrl(draftStartUrl) ?? settings.startUrl,
       });
       setSavedAt(Date.now());
     } finally {
@@ -234,7 +239,8 @@ export function SettingsView(): JSX.Element {
   const dirty =
     draftKey !== (settings.apiKey ?? '') ||
     draftUrl !== settings.baseUrl ||
-    draftTelemetry !== settings.telemetryOptIn;
+    draftTelemetry !== settings.telemetryOptIn ||
+    draftStartUrl !== settings.startUrl;
 
   // V-242 — surface the platform default to the customer so they
   // understand what the "use default" choice means in their context.
@@ -602,6 +608,27 @@ export function SettingsView(): JSX.Element {
         <span className="section-label">Connection test</span>
         <div className="mt-4">
           <ConnectivityView embedded />
+        </div>
+      </Panel>
+
+      <Panel>
+        <span className="section-label">Sessions</span>
+        <div className="mt-4">
+          <Field label="Start URL">
+            <input
+              type="url"
+              value={draftStartUrl}
+              onChange={(e) => setDraftStartUrl(e.target.value)}
+              placeholder="https://driftstack.dev"
+              className="form-input mono"
+              spellCheck={false}
+              autoComplete="off"
+            />
+            <span className="mt-2 block text-2xs text-ink-muted">
+              The page the remote browser opens when a session launches. http(s) only — saved as a
+              full URL (https:// is added if you omit it).
+            </span>
+          </Field>
         </div>
       </Panel>
 

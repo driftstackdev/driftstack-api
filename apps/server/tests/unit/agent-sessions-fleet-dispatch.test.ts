@@ -103,6 +103,43 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
+  it('customer initial_url OVERRIDES the operator-default (sessionDispatch.initialUrl) on the dispatched assign', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_override',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      logger: logger(),
+      initialUrl: 'https://news.example.com/world',
+    });
+    expect(sent).toHaveLength(1);
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    // The customer's start URL wins over DISPATCH.initialUrl.
+    expect(frame.initialUrl).toBe('https://news.example.com/world');
+  });
+
+  it('absent initial_url FALLS BACK to the operator-default (sessionDispatch.initialUrl)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_fallback',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      logger: logger(),
+      // no initialUrl → the `?? sessionDispatch.initialUrl` fallback applies
+    });
+    expect(sent).toHaveLength(1);
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame.initialUrl).toBe(DISPATCH.initialUrl);
+  });
+
   it('region-aware: an EU viewer routes to the EU node (region threaded to findNearestWithLivekit), not the US node', async () => {
     const sentEu: string[] = [];
     const sentUs: string[] = [];
