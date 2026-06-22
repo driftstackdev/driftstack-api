@@ -831,6 +831,15 @@ export function ProfilesView({
     setBusyId(profileId);
     try {
       const info = await client.agentSessions.livekitToken(agentSessionId);
+      // Mint the per-session gui_control_key so the SEPARATE simulator app (which can't
+      // read this app's keychain) can drive the control endpoints — identical to the launch
+      // path. Without it, reopen-via-"Live view" left Take over / Hand back / End session
+      // dead (401 auth_missing) in the separate app (audit #1, 2026-06-22).
+      const reopenApiKey = settings.apiKey;
+      const reopenControlKey =
+        reopenApiKey !== null && reopenApiKey.length > 0
+          ? ((await mintGuiControlKey(settings.baseUrl, reopenApiKey, agentSessionId)) ?? undefined)
+          : undefined;
       // Open the floating-iPhone simulator window (the only experience now).
       const reopened = state.profiles.find((p) => p.id === profileId);
       const reopenProxy = pickProxy(profileId);
@@ -842,6 +851,7 @@ export function ProfilesView({
         deviceName: formatDeviceName(reopened?.archetype ?? ''),
         profileName: reopened?.name,
         countryCode: reopenCountry,
+        ...(reopenControlKey !== undefined ? { controlKey: reopenControlKey } : {}),
         ...(reopenProxy !== null
           ? { proxyLabel: `${reopenProxy.label} · ${reopenProxy.host}:${String(reopenProxy.port)}` }
           : {}),

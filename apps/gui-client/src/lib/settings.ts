@@ -225,6 +225,8 @@ export async function loadSettings(): Promise<DriftstackSettings> {
       await getStore().set(SETTINGS_KEY, {
         apiKey,
         baseUrl,
+        themeMode,
+        themeAccent,
         telemetryOptIn,
         startUrl,
         apiKeys: keyMap,

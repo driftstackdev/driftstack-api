@@ -1191,6 +1191,11 @@ export function SimulatorWindow(): JSX.Element {
   const { startRecording, stopRecording, addFrame, activeRecordingFor } = useRecordings();
   const recordingId = sessionId !== '' ? activeRecordingFor(sessionId) : null;
   const recordTimerRef = useRef<number | null>(null);
+  // The recId currently being captured. recordingId (derived from sessionId) flips to null
+  // on an in-place session swap, so track the live id separately to finalize it on swap
+  // (audit #2: else the 1fps loop writes the NEW session's frames into the OLD recording —
+  // cross-session capture — the Record dot reads OFF, and the timer leaks).
+  const activeRecIdRef = useRef<string | null>(null);
   function captureFrame(recId: string): void {
     const el = videoElRef.current;
     if (el === null || el.videoWidth === 0) return;
@@ -1209,11 +1214,15 @@ export function SimulatorWindow(): JSX.Element {
         recordTimerRef.current = null;
       }
       void stopRecording(recordingId);
+      activeRecIdRef.current = null;
       setNotice('Recording saved');
       window.setTimeout(() => setNotice(null), 4000);
       return;
     }
+    // Orphan-guard: never leave a prior interval running when starting a new one.
+    if (recordTimerRef.current !== null) window.clearInterval(recordTimerRef.current);
     const recId = startRecording(sessionId, profileName !== '' ? profileName : undefined);
+    activeRecIdRef.current = recId;
     captureFrame(recId);
     recordTimerRef.current = window.setInterval(() => captureFrame(recId), 1000);
   }
@@ -1611,12 +1620,23 @@ export function SimulatorWindow(): JSX.Element {
   // Reset to a clean slate on every sessionId change (controlMode=null is the safe
   // non-manual default; refreshControl re-fetches the real mode right after).
   useEffect(() => {
+    // Finalize any in-flight recording BEFORE the new session takes over — else the 1fps
+    // loop keeps capturing the NEW session's screen into the OLD recording (cross-session
+    // capture) and the Record dot reads OFF, stranding the user with no stop (audit #2).
+    if (recordTimerRef.current !== null) {
+      window.clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+    if (activeRecIdRef.current !== null) {
+      void stopRecording(activeRecIdRef.current);
+      activeRecIdRef.current = null;
+    }
     setControlMode(null);
     setPairKind(null);
     setLiveUrl('');
     setPageLoading(false);
     setLoadProgress(null);
-  }, [sessionId]);
+  }, [sessionId, stopRecording]);
   // Control-channel load state for the panel caption (founder 2026-06-18: the
   // mode toggle was stuck "Connecting…" forever when getAgentSession failed and
   // the error was swallowed). null = no error; a classified message = the last
@@ -1863,11 +1883,13 @@ export function SimulatorWindow(): JSX.Element {
   // from the aspect + the fixed chrome (toolbar / bezel / status strip).
   // Works for ANY archetype — nothing per-device hardcoded.
   const handleVideoDimensions = (w: number, h: number): void => {
-    if (sizedToStreamRef.current || landscapeRef.current || w <= 0 || h <= 0) return;
+    if (sizedToStreamRef.current || w <= 0 || h <= 0) return;
     sizedToStreamRef.current = true;
     deviceAspectRef.current = w / h;
-    // Fit to the real device aspect + the current chrome, clamped to the screen so
-    // the device fills the frame width with no side gaps (see fitWindow).
+    // Fit ONCE to the real device aspect + the current chrome, in EITHER orientation —
+    // fitWindow's sizingAspect inverts for landscape. The old early-return on landscape
+    // dropped the aspect entirely → the window stayed at the seeded 402/874 and letterboxed
+    // permanently (audit #4: landscape-at-first-frame / in-place relaunch while rotated).
     fitWindow(browserMode);
   };
 
