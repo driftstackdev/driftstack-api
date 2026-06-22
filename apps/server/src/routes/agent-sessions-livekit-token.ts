@@ -72,7 +72,11 @@ export function registerAgentSessionsLivekitTokenRoute(
   app.post<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id/livekit-token',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      // requireScope('write'): this mints a token with canPublishData:true — a
+      // CONTROL credential (the DataChannel drives mouse/keyboard InputEvents to
+      // the Mac). A read-only key minting one could DRIVE the session, so the mint
+      // is write-equivalent (same posture as the gui-control-key route).
+      preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')],
     },
     async (req, reply) => {
       const ctx = req.account;

@@ -119,6 +119,11 @@ async function buildApp(args: {
   await app.register(stubAuthPlugin);
   app.decorate('rateLimit', () => async () => {});
   app.decorate('requireAuth', async () => {});
+  // requireScope: no-op stub — the route now gates the (control-bearing,
+  // canPublishData:true) token mint to write scope (audit wxzlp9yiz #3). The
+  // onRequest hook above already grants ['read','write'], so a real check would
+  // pass; the stub just satisfies the decorator at registration.
+  app.decorate('requireScope', () => async () => {});
   registerAgentSessionsLivekitTokenRoute(app, {
     fleetNodesRepo: makeStubFleetRepo(args.mac),
     agentSessionsRepo: makeStubAgentSessionsRepo(args.session),
