@@ -81,6 +81,19 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = (selectedId !== null ? recordings.get(selectedId) : undefined) ?? list[0];
   const liveCount = list.filter((r) => r.endedAt === null).length;
+  // Delete is permanent (no recycle bin for recordings). deleteRecording removes
+  // the entry synchronously, so `selected` immediately re-resolves to the next
+  // newest — a fast double-click would then delete a SECOND, unintended recording.
+  // Capture the id + disable Delete while one is in flight (audit wiq542bfj P1).
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const handleDelete = (id: string): void => {
+    if (deletingId !== null) return;
+    setDeletingId(id);
+    void deleteRecording(id).finally(() => {
+      setDeletingId(null);
+      setSelectedId(null);
+    });
+  };
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
@@ -241,11 +254,11 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
                 <button
                   type="button"
                   className="btn-danger"
-                  onClick={() => void deleteRecording(selected.id)}
-                  disabled={selected.endedAt === null}
+                  onClick={() => handleDelete(selected.id)}
+                  disabled={selected.endedAt === null || deletingId !== null}
                   title={selected.endedAt === null ? 'Stop recording before deleting' : undefined}
                 >
-                  Delete
+                  {deletingId !== null ? 'Deleting…' : 'Delete'}
                 </button>
               </div>
             </aside>

@@ -120,7 +120,13 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
               apiKey={apiKey}
               validating={validating}
               error={validationError}
-              onApiKeyChange={setApiKey}
+              onApiKeyChange={(v) => {
+                setApiKey(v);
+                // Editing the key invalidates a prior validation verdict so the
+                // (possibly mode-specific) error doesn't linger against new input
+                // until the next submit. (audit wiq542bfj P3)
+                setValidationError(null);
+              }}
               onBack={() => setStep('mode')}
               onValidate={(override) => void validateAndSave(override)}
             />
@@ -455,7 +461,12 @@ export function ApiKeyStep({
             </div>
           )}
 
-          {browserState.kind === 'success' && (
+          {/* Show "Authorized. Continuing…" ONLY while the post-auth key validation
+              is still pending — if validateAndSave failed (error !== null), the auth
+              succeeded but the key couldn't be validated, so the success line is
+              suppressed and the error block below takes over (audit wiq542bfj: the
+              wizard used to sit forever on a misleading "Authorized. Continuing…"). */}
+          {browserState.kind === 'success' && error === null && (
             <div className="rounded-md border border-status-success/30 bg-status-success/5 p-4 text-sm text-ink-primary">
               Authorized. Continuing…
             </div>
@@ -465,6 +476,25 @@ export function ApiKeyStep({
             <div className="rounded-md border border-status-error/30 bg-status-error/5 p-4">
               <p className="whitespace-pre-line text-sm text-status-error">
                 {browserState.message}
+              </p>
+              <button
+                type="button"
+                className="btn-primary mt-3"
+                onClick={() => void startBrowserSignIn()}
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
+          {/* Validation failed AFTER browser auth succeeded (transient /account/me
+              error, or a self-hosted server rejecting a cloud key). Surface it in
+              the browser path too — it was previously only rendered in paste mode,
+              so a browser-path failure showed no error at all. */}
+          {error !== null && (
+            <div className="rounded-md border border-status-error/30 bg-status-error/5 p-4">
+              <p className="whitespace-pre-line text-sm text-status-error" role="alert">
+                {error}
               </p>
               <button
                 type="button"

@@ -6,7 +6,7 @@
 // list confirmed members, remove a member. All calls are account_owner-scoped
 // server-side — a non-owner just sees empty lists + a gentle hint.
 
-import { useCallback, useEffect, useState, type JSX } from 'react';
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import type { TeamMember, TeamInvite, TeamRole } from '@driftstack/sdk';
 import { useSettings } from '../lib/SettingsContext';
 import { useConfirm } from '../components/ConfirmProvider';
@@ -45,17 +45,30 @@ export function TeamView(): JSX.Element {
   // (both used to render as the same muted line — a failure looked like a win).
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  // Distinct from "empty": a non-403 load failure means the list is stale, not
+  // that the team is empty (audit wiq542bfj). null = no load error.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!client) return;
     setLoading(true);
+    setLoadError(null);
     try {
-      const [m, i] = await Promise.all([
-        client.team.listMembers().catch(() => ({ data: [] as TeamMember[] })),
-        client.team.listInvites().catch(() => ({ data: [] as TeamInvite[] })),
-      ]);
+      const [m, i] = await Promise.all([client.team.listMembers(), client.team.listInvites()]);
       setMembers(m.data);
       setInvites(i.data);
+    } catch (err) {
+      // A 403 = not an account owner → legitimately no team to manage (clean empty
+      // state, no error). ANY other failure (network/5xx/429) means the list is
+      // STALE, not empty — surface it with a retry so an owner doesn't think their
+      // team was wiped (the old per-call catch swallowed ALL errors to []). (W2749)
+      const status = (err as { status?: number } | null)?.status;
+      if (status === 403) {
+        setMembers([]);
+        setInvites([]);
+      } else {
+        setLoadError(friendlyTeamError(err, 'Could not load your team — please try again.'));
+      }
     } finally {
       setLoading(false);
     }
@@ -65,13 +78,19 @@ export function TeamView(): JSX.Element {
     void refresh();
   }, [refresh]);
 
+  // Synchronous re-entry guard: the Send button is disabled while busy, but the
+  // email's Enter handler isn't — a fast double-Enter (or Enter then click) before
+  // the busy state flushes would fire two invites for the same address. A ref
+  // blocks the second call immediately (state is async). (audit wiq542bfj)
+  const invitingRef = useRef(false);
   const handleInvite = useCallback(async (): Promise<void> => {
-    if (!client) return;
+    if (!client || invitingRef.current) return;
     const trimmed = email.trim();
     if (!EMAIL_RE.test(trimmed)) {
       setNotice({ tone: 'error', text: 'Enter a valid email address.' });
       return;
     }
+    invitingRef.current = true;
     setBusy(true);
     setNotice(null);
     try {
@@ -85,6 +104,7 @@ export function TeamView(): JSX.Element {
     } catch (err) {
       setNotice({ tone: 'error', text: friendlyTeamError(err, 'Could not send the invite.') });
     } finally {
+      invitingRef.current = false;
       setBusy(false);
     }
   }, [client, email, role, refresh]);
@@ -96,6 +116,9 @@ export function TeamView(): JSX.Element {
         confirmLabel: 'Remove',
       });
       if (!ok) return;
+      // Clear any stale invite notice so a prior "Invite sent" success banner
+      // doesn't linger beside this unrelated remove action. (audit wiq542bfj)
+      setNotice(null);
       setRemovingId(m.id);
       try {
         await client.team.removeMember(m.id);
@@ -169,6 +192,18 @@ export function TeamView(): JSX.Element {
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
           <SkeletonRows rows={3} label="Loading your team…" />
+        ) : loadError !== null ? (
+          <div className="flex flex-col items-start gap-3 rounded-lg border border-surface-divider bg-surface-raised p-6">
+            <h3 className="text-sm font-semibold text-ink-primary">Couldn&apos;t load your team</h3>
+            <p className="max-w-md text-sm text-ink-secondary">{loadError}</p>
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-hover"
+            >
+              Try again
+            </button>
+          </div>
         ) : (
           <div className="flex flex-col gap-4">
             {invites.length > 0 ? (
