@@ -83,11 +83,18 @@ let sid = null;
 let browser = null;
 let exitCode = 0;
 try {
-  // 1. profile + proxy (mirror a GUI launch).
-  const profs = await fetch(`${BASE}/v1/profiles?limit=5`, { headers: H }).then(jres);
-  const prof = (Array.isArray(profs.body?.data) ? profs.body.data : [])[0];
+  // 1. profile + proxy (mirror a GUI launch). --profile <id> targets a specific profile
+  //    (default = first) — used to disambiguate profile-state vs box-wide stream failures.
+  const profs = await fetch(`${BASE}/v1/profiles?limit=20`, { headers: H }).then(jres);
+  const profRows = Array.isArray(profs.body?.data) ? profs.body.data : [];
+  const profArg = getOpt('--profile', '');
+  const prof = profArg ? profRows.find((p) => p.id === profArg) : profRows[0];
   if (!prof?.id) {
-    console.error('No profiles on this account — cannot launch.');
+    console.error(
+      profArg
+        ? `Profile ${profArg} not found on this account.`
+        : 'No profiles on this account — cannot launch.',
+    );
     process.exit(1);
   }
   console.log(`profile: ${prof.id} (${prof.archetype ?? '?'})`);
@@ -502,9 +509,63 @@ try {
     return { label: 'stuck-finger', verdict, flung: Math.abs(delta) > NOISE };
   }
 
+  // FLOOD: stress the box's serial WD-inject FIFO to reproduce/verify the "keeps scrolling a
+  // minute" runaway (founder). Burst MANY touchMoves from inside the page (faster than the box
+  // injects), STOP, then sample luma for ~6s and measure the DRAIN — how long the page keeps
+  // moving after input ends. Pre-coalescer: the FIFO drains for seconds (the runaway).
+  // Post-coalescer (drop-intermediate + inject-latest): settles ~immediately.
+  async function runFlood() {
+    console.log('\n=== FLOOD (runaway / FIFO-backlog drain test) ===');
+    const sent = await page.evaluate(async () => {
+      const room = window.__dsRoom;
+      const enc = new TextEncoder();
+      const pub = (ev) =>
+        room.localParticipant.publishData(enc.encode(JSON.stringify(ev)), { reliable: true });
+      let y = 700;
+      let id = 9000;
+      let n = 0;
+      await pub({ type: 'touchStart', x: 200, y, touchId: id });
+      for (let i = 0; i < 300; i++) {
+        y -= 8;
+        if (y < 110) {
+          await pub({ type: 'touchEnd', x: 200, y, touchId: id });
+          y = 700;
+          id += 1;
+          await pub({ type: 'touchStart', x: 200, y, touchId: id });
+        } else {
+          await pub({ type: 'touchMove', x: 200, y, touchId: id });
+          n += 1;
+        }
+      }
+      await pub({ type: 'touchEnd', x: 200, y, touchId: id });
+      return n;
+    });
+    console.log(`  flooded ${sent} touchMoves back-to-back; sampling drain ~6s…`);
+    const samples = [];
+    for (let i = 0; i < 30; i++) {
+      await sleep(200);
+      samples.push(await luma());
+    }
+    let lastChange = 0;
+    for (let i = 1; i < samples.length; i++) {
+      if (Math.abs(samples[i] - samples[i - 1]) > NOISE) lastChange = i;
+    }
+    const drainMs = lastChange * 200;
+    console.log(`  luma: ${samples.map((s) => s.toFixed(1)).join(' ')}`);
+    console.log(`  DRAIN after last input: ~${drainMs}ms`);
+    const verdict =
+      drainMs <= 600
+        ? `PASS — settled ~${drainMs}ms after input (no FIFO-backlog runaway)`
+        : `RUNAWAY — page kept scrolling ~${drainMs}ms after input stopped (FIFO draining; coalescer not effective)`;
+    console.log(`  VERDICT [flood]: ${verdict}`);
+    return { label: 'flood', verdict, drainMs, runaway: drainMs > 600 };
+  }
+
   const out = [];
   if (E2E) {
     out.push(await runE2E());
+  } else if (MODE === 'flood') {
+    out.push(await runFlood());
   } else {
     if (MODE === 'clean' || MODE === 'both')
       out.push(await runDrag('clean-single-leg', 700, 50, 12, 0)); // 700→100, 600px, one leg
@@ -539,8 +600,18 @@ try {
   } else {
     const cleanBounce = out.some((r) => r.dips > 0);
     const strayBounce = out.some((r) => r.bounce);
+    const floodRunaway = out.some((r) => r.runaway);
     const cleanScrolled = out.filter((r) => r.net !== undefined).every((r) => r.net > NOISE);
-    if (cleanBounce) {
+    if (floodRunaway) {
+      console.log(
+        'A heavy touch-flood kept the page scrolling AFTER input stopped (FIFO-backlog runaway = the "scrolls a minute later"). The box-side coalescer is not effective here.',
+      );
+      exitCode = 6;
+    } else if (out.some((r) => r.label === 'flood')) {
+      console.log(
+        'A heavy touch-flood settled promptly after input stopped — the box drops intermediate moves (no FIFO-backlog runaway). Coalescer verified on the live box.',
+      );
+    } else if (cleanBounce) {
       console.log('A clean monotonic drag itself bounced => fork mishandles even clean input.');
       exitCode = 3;
     } else if (strayBounce) {
