@@ -40,13 +40,71 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     const cfg = (await svc.resolveForDispatch({
       proxyId: row.id,
       accountId: ACCT_A,
-    })) as SocksProxyConfig | null;
+    })) as (SocksProxyConfig & { udp_capable?: boolean | null }) | null;
     expect(cfg).not.toBeNull();
     expect(cfg?.host).toBe('203.0.113.10');
     expect(cfg?.port).toBe(1080);
     expect(cfg?.username).toBe('user');
     expect(cfg?.password).toBe('hunter2');
     expect(cfg?.require_remote_dns).toBe(true);
+  });
+
+  // Proxy UDP pre-detection (A3 W2756): resolveForDispatch emits a VERIFIED,
+  // FRESH (within the 7-day TTL) udp_capable on the wire so the harness can skip
+  // the per-session ~3s probe; stale/absent → omitted → fork async-probe (today).
+  const recentIso = (): string => new Date(Date.now() - 60_000).toISOString();
+  const staleIso = (): string => new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+
+  it('udp_capable: a FRESH verified TRUE is emitted on the wire', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await seed(repo, ACCT_A, {
+      config: { udp_capable: true, udp_verified_at: recentIso() },
+    });
+    const cfg = (await svc.resolveForDispatch({
+      proxyId: row.id,
+      accountId: ACCT_A,
+    })) as (SocksProxyConfig & { udp_capable?: boolean | null }) | null;
+    expect(cfg?.udp_capable).toBe(true);
+  });
+
+  it('udp_capable: a FRESH verified FALSE (TCP-only) is emitted so the fork skips the probe + disables h3', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await seed(repo, ACCT_A, {
+      config: { udp_capable: false, udp_verified_at: recentIso() },
+    });
+    const cfg = (await svc.resolveForDispatch({
+      proxyId: row.id,
+      accountId: ACCT_A,
+    })) as (SocksProxyConfig & { udp_capable?: boolean | null }) | null;
+    expect(cfg?.udp_capable).toBe(false);
+  });
+
+  it('udp_capable: a STALE verified value (older than the 7-day TTL) is OMITTED → fork re-probes', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await seed(repo, ACCT_A, {
+      config: { udp_capable: true, udp_verified_at: staleIso() },
+    });
+    const cfg = (await svc.resolveForDispatch({
+      proxyId: row.id,
+      accountId: ACCT_A,
+    })) as (SocksProxyConfig & { udp_capable?: boolean | null }) | null;
+    expect(cfg).not.toBeNull();
+    expect(cfg?.udp_capable).toBeUndefined();
+  });
+
+  it('udp_capable: ABSENT (no verified value — the default) is OMITTED → fork async-probe = today’s safe behavior', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await seed(repo, ACCT_A);
+    const cfg = (await svc.resolveForDispatch({
+      proxyId: row.id,
+      accountId: ACCT_A,
+    })) as (SocksProxyConfig & { udp_capable?: boolean | null }) | null;
+    expect(cfg).not.toBeNull();
+    expect(cfg?.udp_capable).toBeUndefined();
   });
 
   it('OWNER SCOPING: account B cannot resolve account A’s proxy (null, never decrypts)', async () => {
@@ -86,7 +144,7 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     const cfg = (await svc.resolveForDispatch({
       proxyId: row.id,
       accountId: ACCT_A,
-    })) as SocksProxyConfig | null;
+    })) as (SocksProxyConfig & { udp_capable?: boolean | null }) | null;
     expect(cfg?.password).toBeUndefined();
     expect(cfg?.host).toBe('203.0.113.10');
   });
@@ -98,7 +156,7 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     const cfg = (await svc.resolveForDispatch({
       proxyId: row.id,
       accountId: ACCT_A,
-    })) as SocksProxyConfig | null;
+    })) as (SocksProxyConfig & { udp_capable?: boolean | null }) | null;
     expect(cfg?.password).toBeUndefined();
     expect(cfg?.username).toBeUndefined();
   });

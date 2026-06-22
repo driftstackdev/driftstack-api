@@ -21,6 +21,29 @@ export class UnsafeProxyHostError extends Error {
   }
 }
 
+/** 7-day TTL for a verified per-proxy UDP capability (A3 W2756). A proxy's
+ *  UDP_ASSOCIATE support is stable, but a customer can reconfigure the exit, so a
+ *  verified value older than this is treated as unknown (→ omit → the fork
+ *  re-probes). */
+const UDP_CAPABLE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Read a FRESH verified UDP capability off a proxy row's `config` jsonb. Returns
+ *  the bool only when `config.udp_capable` is a real bool AND `config.udp_verified_at`
+ *  is an ISO timestamp within the TTL; otherwise undefined (→ resolveForDispatch
+ *  omits `udp_capable` → harness leaves DRIFTSTACK_PROXY_UDP_CAPABLE unset → the
+ *  fork's async probe = today's safe default). The value is only ever WRITTEN from a
+ *  real data-path probe (the deferred Swift probe-writer; A3 to spec the
+ *  server→harness control-command), never from a customer claim. */
+function freshUdpCapable(config: Record<string, unknown>): boolean | undefined {
+  const cap = config['udp_capable'];
+  const at = config['udp_verified_at'];
+  if (typeof cap !== 'boolean' || typeof at !== 'string') return undefined;
+  const verifiedMs = Date.parse(at);
+  if (Number.isNaN(verifiedMs)) return undefined;
+  if (Date.now() - verifiedMs > UDP_CAPABLE_TTL_MS) return undefined;
+  return cap;
+}
+
 export class AccountProxiesService {
   constructor(
     private readonly repo: AccountProxiesRepo,
@@ -44,7 +67,7 @@ export class AccountProxiesService {
   async resolveForDispatch(args: {
     proxyId: string;
     accountId: string;
-  }): Promise<SocksProxyConfig | InlineVpnProxyWire | null> {
+  }): Promise<(SocksProxyConfig & { udp_capable?: boolean | null }) | InlineVpnProxyWire | null> {
     const row = await this.repo.findById({ id: args.proxyId, accountId: args.accountId });
     if (row === null) return null;
     // The host (socks5 host / VPN endpoint host) was validated at create; re-assert
@@ -64,10 +87,15 @@ export class AccountProxiesService {
         'utf8',
       );
     }
+    // Proxy UDP pre-detection (A3 W2756): emit the verified capability when fresh
+    // so the harness can skip the per-session ~3s probe; omitted (→ fork async-probe
+    // = today's behavior) until the deferred probe-writer populates config.
+    const udpCapable = freshUdpCapable(row.config);
     return {
       host: row.host,
       port: row.port,
       udp_associate: true,
+      ...(udpCapable !== undefined ? { udp_capable: udpCapable } : {}),
       // Resolve DNS through the proxy, not the local host — avoids a DNS leak
       // that would reveal the real egress (the egress design's default intent).
       require_remote_dns: true,

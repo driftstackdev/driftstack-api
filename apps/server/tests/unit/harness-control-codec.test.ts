@@ -236,6 +236,20 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
     expect(decodeWireData(a.inlineProxyConfig as string)).toEqual(proxy);
   });
 
+  it('inlineProxyConfig carries the wire-ONLY udp_capable (A3 W2756 proxy pre-detection) — the extended wire schema keeps it; the plain SocksProxyConfig schema would strip it', () => {
+    const proxy = {
+      host: 'proxy.example.com',
+      port: 1080,
+      udp_associate: true,
+      // The verified per-proxy capability — server-built, harness maps it to
+      // DRIFTSTACK_PROXY_UDP_CAPABLE. It must survive the wire encoding.
+      udp_capable: true,
+      require_remote_dns: false,
+    };
+    const a = serializeSessionAssign({ ...base, inlineProxyConfig: proxy });
+    expect(decodeWireData(a.inlineProxyConfig as string)).toEqual(proxy);
+  });
+
   it('inlineProxyConfig (VPN) → base64 of the FLAT wire (A3 W2163: type + sibling fields, NOT nested)', () => {
     const wg = {
       type: 'wireguard' as const,

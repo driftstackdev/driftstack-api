@@ -43,6 +43,17 @@ import {
   type SocksProxyConfig,
   type InlineVpnProxyWire,
 } from '@driftstack/api-types';
+import { z } from 'zod';
+
+/** Proxy UDP pre-detection (A3 W2756) — the dispatch WIRE carries a verified
+ *  per-proxy `udp_capable` that the harness maps to env DRIFTSTACK_PROXY_UDP_CAPABLE.
+ *  It is INTERNAL to the server->harness wire ONLY: kept OFF the customer-facing
+ *  SocksProxyConfigSchema (which feeds the public OpenAPI via SessionEgressConfig)
+ *  so a customer can never claim it. resolveForDispatch is the sole writer, from a
+ *  real data-path probe. Extending here keeps it out of the customer surface. */
+const SocksProxyConfigWireSchema = SocksProxyConfigSchema.extend({
+  udp_capable: z.boolean().nullable().optional(),
+});
 
 /** Thrown when an inbound envelope's base64/JSON `Data` field is malformed —
  *  a harness↔server protocol violation, surfaced rather than silently dropped. */
@@ -163,7 +174,7 @@ export function serializeSessionAssign(args: {
       }
       inlineProxyConfig = encodeWireData(parsed.data);
     } else {
-      const parsed = SocksProxyConfigSchema.safeParse(args.inlineProxyConfig);
+      const parsed = SocksProxyConfigWireSchema.safeParse(args.inlineProxyConfig);
       if (!parsed.success) {
         throw new HarnessWireCodecError(
           `inlineProxyConfig failed the SocksProxyConfig contract before assign: ${parsed.error.message}`,
