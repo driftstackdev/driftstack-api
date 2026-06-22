@@ -511,19 +511,39 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       }
       send({ type: 'touchEnd', x: p.x, y: devY(p.y), touchId: g.touchId }, true);
     };
-    // Wheel/trackpad scroll → a CONTINUOUS touch drag (touchStream), NOT a per-event
-    // `swipe`. The fork scrolls per-move (scrollBy) for touchMoves but applies its OWN
-    // momentum to EVERY `swipe` (BehavioralRhythm.swipeMomentumPath, A3 W2736) — so a
-    // trackpad firing ~100 wheel events/sec became ~100 overlapping momentum swipes →
-    // jumpy + overshoot/"randomly scrolls back up" (founder 2026-06-21). One virtual
-    // finger (down → move per wheel delta → up after a pause) gives a smooth, 1:1,
-    // momentum-free scroll. Scrolling content DOWN (deltaY>0) = finger swipes UP (y↓).
-    // When the finger nears an edge we lift + re-centre (like a real re-swipe) so a
-    // long continuous scroll never pins at the edge (the page scroll position persists
-    // across the re-anchor; only the touch origin moves).
+    // Wheel/trackpad scroll → a CONTINUOUS touch drag on ONE virtual finger, NOT a
+    // per-event `swipe` (the fork momentum-glides every `swipe` → overlapping glides =
+    // jumpy/overshoot, W2736). The founder scrolls with a MacBook TRACKPAD (A3 W2764):
+    // two-finger scroll fires HIGH-FREQUENCY `wheel` events INCLUDING the OS inertial
+    // momentum stream after the fingers lift ("not even moving my finger and it
+    // scrolls"). Two smoothness rules:
+    //   1. rAF-COALESCE: accumulate wheel deltas + emit ONE evenly-timed touchMove per
+    //      animation frame. A touchMove PER wheel event floods the box's serial inject
+    //      path → bursty/jerky; one-per-frame is smooth. Delta beyond the per-frame
+    //      cap CARRIES to the next frame, so a fast flick scrolls its FULL distance
+    //      smoothly — no per-event ±120 clamp (that made "big scroll only moves a bit").
+    //   2. The OS momentum is ALREADY in the wheel stream, so the fork must NOT add its
+    //      own touchEnd momentum on THIS path (would double it — A3 keeps Step-B fork
+    //      momentum to genuine finger-touch only).
+    // Content DOWN (deltaY>0) = finger swipes UP (y↓). Near an edge we lift + re-centre
+    // at the CURSOR x (page scroll position persists; only the touch origin moves) so a
+    // long scroll never pins AND the hit-tested scroller stays consistent.
     let wheelDrag: { touchId: number; x: number; y: number } | null = null;
     let wheelTimer = 0;
+    let wheelRaf = 0;
+    let wheelPendingDx = 0;
+    let wheelPendingDy = 0;
+    let wheelCursorX = 0;
+    // Per-frame applied-delta cap ≤ the virtual finger's travel from centre, so a
+    // single frame never needs an intra-frame re-centre; the remainder carries.
+    const WHEEL_MAX_FRAME_DELTA = 320;
     const endWheelDrag = (): void => {
+      if (wheelRaf !== 0) {
+        cancelAnimationFrame(wheelRaf);
+        wheelRaf = 0;
+      }
+      wheelPendingDx = 0;
+      wheelPendingDy = 0;
       if (wheelDrag === null) return;
       send(
         {
@@ -543,6 +563,46 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       send({ type: 'touchStart', x: wd.x, y: devY(wd.y), touchId }, true);
       return wd;
     };
+    const flushWheel = (): void => {
+      wheelRaf = 0;
+      // A flush = activity → cancel any pending idle-end; re-armed below if the stream
+      // has actually stopped.
+      window.clearTimeout(wheelTimer);
+      if (Math.abs(wheelPendingDx) < 0.5 && Math.abs(wheelPendingDy) < 0.5) {
+        wheelPendingDx = 0;
+        wheelPendingDy = 0;
+        return;
+      }
+      const vw = video.videoWidth || 402;
+      const vh = video.videoHeight || 874;
+      const margin = 48;
+      const cap = (d: number): number =>
+        Math.max(-WHEEL_MAX_FRAME_DELTA, Math.min(WHEEL_MAX_FRAME_DELTA, d));
+      const dx = cap(wheelPendingDx);
+      const dy = cap(wheelPendingDy);
+      // Carry the remainder so a fast flick scrolls its full distance over frames.
+      wheelPendingDx -= dx;
+      wheelPendingDy -= dy;
+      let w = wheelDrag ?? startWheelDrag(wheelCursorX, Math.round(vh / 2));
+      let nx = w.x - dx;
+      let ny = w.y - dy;
+      if (ny < margin || ny > vh - margin || nx < margin || nx > vw - margin) {
+        endWheelDrag();
+        w = startWheelDrag(wheelCursorX, Math.round(vh / 2));
+        nx = w.x - dx;
+        ny = w.y - dy;
+      }
+      w.x = clampX(nx);
+      w.y = clampY(ny);
+      send({ type: 'touchMove', x: w.x, y: devY(w.y), touchId: w.touchId }, false);
+      // Carry remaining → keep draining next frame; else arm the idle-end (110ms of no
+      // wheel events = the stream, incl OS momentum, has stopped).
+      if (Math.abs(wheelPendingDx) >= 0.5 || Math.abs(wheelPendingDy) >= 0.5) {
+        wheelRaf = requestAnimationFrame(flushWheel);
+      } else {
+        wheelTimer = window.setTimeout(endWheelDrag, 110);
+      }
+    };
     const onWheel = (e: WheelEvent): void => {
       // A held mouse gesture owns the single virtual finger — ignore the wheel until
       // it releases, so a click-drag + trackpad scroll can't put a SECOND concurrent
@@ -550,27 +610,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       if (active.current !== null) return;
       const p = pointerToViewport(e, video);
       if (p === null) return;
-      const vw = video.videoWidth || 402;
-      const vh = video.videoHeight || 874;
-      const margin = 48;
-      const clampDelta = (d: number): number => Math.max(-120, Math.min(120, d));
-      const dx = clampDelta(e.deltaX);
-      const dy = clampDelta(e.deltaY);
-      let w = wheelDrag ?? startWheelDrag(p.x, Math.round(vh / 2));
-      let nx = w.x - dx;
-      let ny = w.y - dy;
-      // Re-centre before pinning at an edge so a long continuous scroll keeps going.
-      if (ny < margin || ny > vh - margin || nx < margin || nx > vw - margin) {
-        endWheelDrag();
-        w = startWheelDrag(Math.round(vw / 2), Math.round(vh / 2));
-        nx = w.x - dx;
-        ny = w.y - dy;
-      }
-      w.x = clampX(nx);
-      w.y = clampY(ny);
-      send({ type: 'touchMove', x: w.x, y: devY(w.y), touchId: w.touchId }, false);
-      window.clearTimeout(wheelTimer);
-      wheelTimer = window.setTimeout(endWheelDrag, 110);
+      wheelCursorX = clampX(p.x);
+      wheelPendingDx += e.deltaX;
+      wheelPendingDy += e.deltaY;
+      if (wheelRaf === 0) wheelRaf = requestAnimationFrame(flushWheel);
     };
     // True when focus is in an editable element (a text field / textarea /
     // contenteditable). The keyboard listeners are bound on `window`, so without

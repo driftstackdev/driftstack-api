@@ -12,7 +12,7 @@
 // to a stubbed <video> and we dispatch real MouseEvents (with controlled
 // timeStamps) + assert the emitted InputEvent stream. sendInputEvent is mocked.
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
 
 const sendInputEvent = vi.fn(() => Promise.resolve());
@@ -86,10 +86,37 @@ function fireWheel(el: HTMLElement, deltaX: number, deltaY: number): void {
   );
 }
 
+// The wheel→touch converter coalesces deltas + flushes on requestAnimationFrame.
+// jsdom's rAF is async; queue the callbacks + drain them on demand so the tests can
+// flush the coalescer deterministically (this MODELS production: many wheel events
+// within one frame → a single coalesced touchMove).
+let rafQueue: FrameRequestCallback[] = [];
+function flushRaf(maxFrames = 30): void {
+  let n = 0;
+  while (rafQueue.length > 0 && n++ < maxFrames) {
+    const batch = rafQueue;
+    rafQueue = [];
+    for (const cb of batch) cb(0);
+  }
+}
+
 describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
   beforeEach(() => {
     sendInputEvent.mockClear();
     document.body.innerHTML = '';
+    // The wheel→touch converter coalesces deltas + flushes on requestAnimationFrame;
+    // jsdom's rAF is async, so run it synchronously here. In production multiple wheel
+    // events within one real frame coalesce to a single touchMove; the synchronous
+    // stub makes each fireWheel flush its accumulated delta so the tests stay sync.
+    rafQueue = [];
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback): number => {
+      rafQueue.push(cb);
+      return rafQueue.length;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('STILL TAP: press + release with no move → exactly touchStart then touchEnd at the press point (devY-compensated y), no touchMove', () => {
@@ -201,6 +228,7 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
   it('WHEEL scroll → a touchStream drag (touchStart+touchMove), NOT a swipe (no fork momentum stacking)', () => {
     const video = mountCapture();
     fireWheel(video, 0, 100); // scroll content down
+    flushRaf();
     const types = emittedTypes();
     expect(types).toContain('touchStart');
     expect(types).toContain('touchMove');
@@ -214,9 +242,16 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
   it('WHEEL scroll stays a continuous drag across many events (one touchStart, many moves) — no per-event swipe spam', () => {
     const video = mountCapture();
     for (let i = 0; i < 6; i++) fireWheel(video, 0, 40);
-    expect(eventsOfType('touchStart').length).toBe(1); // one finger, not 6
-    expect(eventsOfType('touchMove').length).toBeGreaterThanOrEqual(6);
+    flushRaf();
+    // ONE finger (not 6), and the 6 wheel events COALESCE into a continuous touchMove
+    // stream (≥1 move — production merges events within a frame), never per-event
+    // `swipe` spam. The cumulative scroll (6×40 down = finger moved UP) is preserved.
+    expect(eventsOfType('touchStart').length).toBe(1);
+    const moves = eventsOfType('touchMove') as (InputEvent & { y: number })[];
+    expect(moves.length).toBeGreaterThanOrEqual(1);
     expect(emittedTypes()).not.toContain('swipe');
+    const ts0 = eventsOfType('touchStart')[0] as InputEvent & { y: number };
+    expect(moves.at(-1)!.y).toBeLessThan(ts0.y);
   });
 
   it('WHEEL during a COMMITTED mouse drag is IGNORED — no second concurrent finger (audit: spurious pinch)', () => {
@@ -232,6 +267,7 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
   it('a new mouse PRESS lifts an in-flight wheel-scroll finger (audit: no stuck second touch)', () => {
     const video = mountCapture();
     fireWheel(video, 0, 60); // starts a wheel drag — wheel finger held down
+    flushRaf(); // flush the coalescer so the wheel finger is actually down
     sendInputEvent.mockClear();
     fireMouse(video, 'mousedown', 150, 300, 2000); // press within the 110ms wheel-idle window
     // onMouseDown calls endWheelDrag → a touchEnd lifts the lingering wheel finger.
