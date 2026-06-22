@@ -318,6 +318,59 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.statusCode).toBe(404);
   });
 
+  // audit wxzlp9yiz #4 — the session-scoped routes (GET/page-state/transcript/
+  // gui-control-key/input-event/mode/takeover/handback/message/DELETE/resume)
+  // compared ownership against ctx.account.id ONLY, so a team admin who launched
+  // a session UNDER the owner (X-Driftstack-Account, which the GUI/SDK/dashboard
+  // send for workspace switching) was LOCKED OUT of reading/controlling/deleting
+  // their own launch. callerCanAccessAgentSession() now grants access to the
+  // session owner OR an admin member of it (membership resolved server-side from
+  // ctx.teams — the header can't forge it). This pins the end-to-end positive
+  // (admin in: READ + DELETE); the negative branches (non-admin out, non-member
+  // out) are pinned in the helper unit test (agent-sessions-caller-access) — an
+  // integration 404 can't distinguish "blocked" from "not found" (same
+  // anti-enumeration message) and the auth-cache defeats mid-test role-switching.
+  it('Teams #4: an ADMIN member can READ + DELETE the session they launched under the owner (was 404-locked-out)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      { membershipId: TEAM_MEMBERSHIP_ID, ownerAccountId: TEAM_OWNER_ID, role: 'admin' },
+    ]);
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${TEAM_OWNER_ID}`,
+      },
+      payload: { token_budget: 50_000 },
+    });
+    expect(created.statusCode).toBe(201);
+    const body = created.json<{ id: string; account_id: string }>();
+    // Precondition: the session is owned by the OWNER, not the calling member.
+    expect(body.account_id).toBe(TEAM_OWNER_ID);
+    expect(body.account_id).not.toBe(fx.accountId);
+    // READ — was 404 before the fix.
+    const got = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${body.id}`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${TEAM_OWNER_ID}`,
+      },
+    });
+    expect(got.statusCode).toBe(200);
+    // DELETE — the admin can also end the session they launched.
+    const del = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/agent-sessions/${body.id}`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${TEAM_OWNER_ID}`,
+      },
+    });
+    expect(del.statusCode).toBe(204);
+  });
+
   it('W393 POST /:id/resume → 202 for an owned active session; 404 unknown; 409 terminal', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({
@@ -601,7 +654,7 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
       url: '/v1/agent-sessions/agt_inmem_99999999/transcript',
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
-    // The gate (`session === null || session.accountId !== ctx.account.id`)
+    // The gate (`session === null || !callerCanAccessAgentSession(ctx, session.accountId)`)
     // throws NotFoundError BEFORE reply.raw.writeHead, so this is a normal
     // problem+json 404 — not an opened text/event-stream.
     expect(res.statusCode).toBe(404);

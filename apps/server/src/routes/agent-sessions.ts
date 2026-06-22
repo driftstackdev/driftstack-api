@@ -190,6 +190,28 @@ function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['accoun
   return request.account;
 }
 
+/**
+ * True when the caller (account context `ctx`) may act on an agent session owned
+ * by `ownerAccountId`: they ARE that account (self), OR are an ADMIN team-member
+ * of it. `ctx.teams` is resolved server-side by requireAuth from the DB, so the
+ * X-Driftstack-Account header (which the GUI/SDK/dashboard send for workspace
+ * switching) can't forge membership. This lets a team admin read/control/delete
+ * the sessions they launched on the team owner — mirroring the create handler's
+ * team-RBAC (resolveEffectiveAccount, which gates launch to admins). Non-admin
+ * members + unrelated accounts get false → the route's existing 404 (audit
+ * wxzlp9yiz #4: a team admin who launched on an owner was locked out of every
+ * session-scoped route because they all compared against ctx.account.id only).
+ * Purely additive: self is the unchanged fast path; nothing widens for non-admins.
+ */
+export function callerCanAccessAgentSession(
+  ctx: NonNullable<FastifyRequest['account']>,
+  ownerAccountId: string,
+): boolean {
+  if (ownerAccountId === ctx.account.id) return true;
+  const membership = ctx.teams.find((t) => t.ownerAccountId === ownerAccountId);
+  return membership !== undefined && membership.role === 'admin';
+}
+
 interface PublicAgentSession {
   id: string;
   account_id: string;
@@ -1261,7 +1283,7 @@ export function registerAgentSessionsRoutes(
       // account-ownership check (it never sees any other session).
       if (req.guiControlKeyAuthorized !== true) {
         const ctx = requireCtx(req);
-        if (rec.accountId !== ctx.account.id) {
+        if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
@@ -1294,7 +1316,7 @@ export function registerAgentSessionsRoutes(
       // the account-ownership check (same as GET /:id).
       if (req.guiControlKeyAuthorized !== true) {
         const ctx = requireCtx(req);
-        if (rec.accountId !== ctx.account.id) {
+        if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
@@ -1318,7 +1340,7 @@ export function registerAgentSessionsRoutes(
       async (req, reply) => {
         const ctx = requireCtx(req);
         const session = await sessions.get(req.params.id);
-        if (session === null || session.accountId !== ctx.account.id) {
+        if (session === null || !callerCanAccessAgentSession(ctx, session.accountId)) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
         const lastEventIdHeader = req.headers['last-event-id'];
@@ -1413,7 +1435,7 @@ export function registerAgentSessionsRoutes(
       async (req) => {
         const ctx = requireCtx(req);
         const rec = await sessions.get(req.params.id);
-        if (rec === null || rec.accountId !== ctx.account.id) {
+        if (rec === null || !callerCanAccessAgentSession(ctx, rec.accountId)) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
         const now = new Date();
@@ -1495,7 +1517,7 @@ export function registerAgentSessionsRoutes(
       }
       if (req.guiControlKeyAuthorized !== true) {
         const ctx = requireCtx(req);
-        if (rec.accountId !== ctx.account.id) {
+        if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
@@ -1666,7 +1688,7 @@ export function registerAgentSessionsRoutes(
       }
       if (req.guiControlKeyAuthorized !== true) {
         const ctx = requireCtx(req);
-        if (rec.accountId !== ctx.account.id) {
+        if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
@@ -1731,7 +1753,7 @@ export function registerAgentSessionsRoutes(
         }
         if (req.guiControlKeyAuthorized !== true) {
           const ctx = requireCtx(req);
-          if (rec.accountId !== ctx.account.id) {
+          if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
             throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
           }
         }
@@ -1840,7 +1862,7 @@ export function registerAgentSessionsRoutes(
         }
         if (req.guiControlKeyAuthorized !== true) {
           const ctx = requireCtx(req);
-          if (rec.accountId !== ctx.account.id) {
+          if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
             throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
           }
         }
@@ -1940,7 +1962,7 @@ export function registerAgentSessionsRoutes(
       }
       if (req.guiControlKeyAuthorized !== true) {
         const ctx = requireCtx(req);
-        if (pre.accountId !== ctx.account.id) {
+        if (!callerCanAccessAgentSession(ctx, pre.accountId)) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
@@ -2216,7 +2238,7 @@ export function registerAgentSessionsRoutes(
       }
       if (req.guiControlKeyAuthorized !== true) {
         const ctx = requireCtx(req);
-        if (pre.accountId !== ctx.account.id) {
+        if (!callerCanAccessAgentSession(ctx, pre.accountId)) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
@@ -2279,7 +2301,7 @@ export function registerAgentSessionsRoutes(
       const parsed = ResumeSessionRequestSchema.safeParse(req.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
       const rec = await sessions.get(req.params.id);
-      if (rec === null || rec.accountId !== ctx.account.id) {
+      if (rec === null || !callerCanAccessAgentSession(ctx, rec.accountId)) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
       }
       // A harness challenge-pause leaves the server status 'active' (the pause is
