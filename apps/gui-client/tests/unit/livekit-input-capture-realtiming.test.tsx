@@ -132,4 +132,52 @@ describe('useInputCapture — FAITHFUL real-timing macOS trackpad scroll', () =>
     // NOT one-per-burst fragmentation (the bug was 9 for one scroll).
     expect(starts.length).toBeLessThanOrEqual(3);
   });
+
+  it('a sub-0.5 wheel frame after the idle-end is armed still ENDS the finger — no stuck touch (#1)', () => {
+    const video = mountCapture();
+    vi.useFakeTimers();
+    // Real scroll burst → starts a drag and (on the last drained flush) arms the 320ms idle-end.
+    for (const dy of [8, 22, 30, 18]) {
+      fireWheel(video, 0, dy);
+      vi.advanceTimersByTime(12);
+    }
+    vi.advanceTimersByTime(40); // burst paused (< 320ms idle) → finger still down, idle-end armed
+    // A tiny sub-0.5 stray frame (momentum tail) → schedules a rAF whose flush clears the idle-end.
+    fireWheel(video, 0, 0.3);
+    vi.advanceTimersByTime(20); // rAF fires the sub-0.5 flush (the previously-buggy early return)
+    vi.advanceTimersByTime(400); // > idle: the re-armed end MUST fire — else the finger stays down
+    const evs = emitted();
+    const starts = evs.filter((e) => e.type === 'touchStart').length;
+    const ends = evs.filter((e) => e.type === 'touchEnd').length;
+    expect(starts).toBeGreaterThan(0);
+    expect(
+      ends,
+      'every touch leg must be ended; a stuck finger leaves a touchStart with no matching touchEnd',
+    ).toBe(starts);
+  });
+
+  it('a hard vertical reversal re-locks on the VERTICAL axis, not sideways (#6)', () => {
+    const video = mountCapture();
+    vi.useFakeTimers();
+    // Short down-scroll (within the ~389px runway → no re-centre reset) WITH a steady horizontal
+    // drift, so a buggy reversal that carried the off-axis accumulator could re-lock horizontally.
+    for (let i = 0; i < 6; i++) {
+      fireWheel(video, 30, 40);
+      vi.advanceTimersByTime(12);
+    }
+    sendInputEvent.mockClear(); // focus on the post-reversal emissions
+    // Hard reversal UP (> WHEEL_REVERSAL_PX give-back), purely vertical.
+    for (let i = 0; i < 4; i++) {
+      fireWheel(video, 0, -50);
+      vi.advanceTimersByTime(12);
+    }
+    vi.advanceTimersByTime(400);
+    const moves = emitted().filter((e) => e.type === 'touchMove');
+    if (moves.length >= 2) {
+      const xs = new Set(moves.map((m) => m.x));
+      const ys = new Set(moves.map((m) => m.y));
+      expect(ys.size, 'reversal leg should travel vertically (y varies)').toBeGreaterThan(1);
+      expect(xs.size, 'reversal leg should NOT travel horizontally (x stays pinned)').toBe(1);
+    }
+  });
 });
