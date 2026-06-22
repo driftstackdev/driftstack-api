@@ -45,6 +45,10 @@ const TOOLBAR_H = 34;
 const BROWSER_BAR_H = 40; // dedicated browser-mode address bar (its own row)
 const BEZEL_PAD = 20; // p-[10px] × 2
 const STATUS_STRIP_H = 40;
+// The iPhone CSS-logical width of the launch archetype (iphone17). Used by the
+// "actual size" reset (Cmd+0) so the device renders at true iPhone-logical px,
+// not whatever width the window happens to have been dragged to.
+const DEVICE_LOGICAL_WIDTH = 402;
 
 interface SessionQuery {
   info: LiveKitInfo | null;
@@ -1368,6 +1372,43 @@ export function SimulatorWindow(): JSX.Element {
       }
     });
   };
+  // Snap the device content back to the iPhone CSS-logical width (Cmd+0, the
+  // standard "actual size"). fitWindow PRESERVES the current width, so once the
+  // window has been dragged large it stays large ("the webkit browser is suddenly
+  // larger than our output", founder 2026-06-22) — this is the one-gesture way back
+  // to true iPhone-logical size. Mirrors fitWindow's screen-clamp + read-back.
+  const resetToActualSize = (): void => {
+    void withCurrentWindow(async (win) => {
+      const { LogicalSize } = await import('@tauri-apps/api/dpi');
+      const factor = await win.scaleFactor();
+      const aspect = sizingAspect();
+      const chrome = TOOLBAR_H + (browserMode ? BROWSER_BAR_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
+      // Target device-content width = the iPhone CSS-logical width (its long edge
+      // when rotated to landscape), then the window adds the bezel padding.
+      const targetContentW = landscapeRef.current
+        ? Math.round(DEVICE_LOGICAL_WIDTH / deviceAspectRef.current)
+        : DEVICE_LOGICAL_WIDTH;
+      let width = targetContentW + BEZEL_PAD;
+      let height = Math.round(chrome + (width - BEZEL_PAD) / aspect);
+      // An iPhone is taller than many laptop work areas; if the ideal height would
+      // overflow, cap it and derive the width from the aspect so the device still
+      // fills the frame edge-to-edge (same guarantee fitWindow makes).
+      const avail = typeof window !== 'undefined' ? (window.screen?.availHeight ?? 0) : 0;
+      if (avail > 0 && height > avail - 24) {
+        height = avail - 24;
+        width = Math.round((height - chrome) * aspect + BEZEL_PAD);
+      }
+      await win.setSize(new LogicalSize(width, Math.round(height)));
+      await new Promise((resolve) => setTimeout(resolve, 90));
+      const after = await win.innerSize();
+      const realH = Math.round(after.height / factor);
+      const realW = Math.round(after.width / factor);
+      const needW = Math.round((realH - chrome) * aspect + BEZEL_PAD);
+      if (needW > 0 && Math.abs(realW - needW) > 2) {
+        await win.setSize(new LogicalSize(needW, realH));
+      }
+    });
+  };
   const toggleBrowserMode = (): void => {
     const next = !browserMode;
     setBrowserMode(next);
@@ -1392,6 +1433,20 @@ export function SimulatorWindow(): JSX.Element {
     if (info === null) return;
     const t = window.setTimeout(() => fitWindow(browserMode), 0);
     return () => window.clearTimeout(t);
+  }, [browserMode, info]);
+
+  // Cmd+0 / Ctrl+0 — the standard "actual size" gesture snaps the sim back to true
+  // iPhone-logical size (founder 2026-06-22: window dragged larger than the output).
+  useEffect(() => {
+    if (info === null) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === '0' || e.code === 'Digit0')) {
+        e.preventDefault();
+        resetToActualSize();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
   }, [browserMode, info]);
 
   // Aspect-lock manual resizing (founder 2026-06-21 "if i double click it fully
