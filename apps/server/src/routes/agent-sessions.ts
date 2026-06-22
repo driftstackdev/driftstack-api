@@ -532,6 +532,13 @@ export interface SessionDispatchConfig {
   proxy: SocksProxyConfig;
 }
 
+/** Idle-timeout for MANUAL (GUI) sessions (A3 W2813 idleTimeoutSeconds knob). A manual
+ *  session is interactively WATCHED — the operator may read/watch without touching for a
+ *  while — so the box's ~300s default reaps it under the user. 30 min balances that UX
+ *  against holding a fleet slot for a truly-abandoned tab. ai/pair sessions keep the box
+ *  default (they stay active via API intents). Value is a sensible default; A3 can tune. */
+export const MANUAL_SESSION_IDLE_TIMEOUT_SECONDS = 1800;
+
 /**
  * Dispatch a `sessionAssign` to the LiveKit-owning fleet node on
  * session-create, so the harness spawns the browser + captures + publishes.
@@ -587,6 +594,11 @@ export async function dispatchSessionAssignOnCreate(args: {
   // when absent. Already http(s)-validated at the route; serializeSessionAssign
   // re-validates at the wire.
   initialUrl?: string;
+  // Per-session idle-timeout override (A3 W2813 knob). The route sets a generous
+  // value for manual (GUI) sessions so a sim the operator is WATCHING but not
+  // touching is not idle_timeout-reaped at the box default (~300s); absent → the
+  // box default (correct for ai/pair API-driven sessions, which stay active).
+  idleTimeoutSeconds?: number;
 }): Promise<void> {
   const {
     sessionId,
@@ -604,6 +616,7 @@ export async function dispatchSessionAssignOnCreate(args: {
     agentSessions,
     accountRegion,
     initialUrl,
+    idleTimeoutSeconds,
   } = args;
   if (
     fleetControlRegistry === undefined ||
@@ -723,6 +736,7 @@ export async function dispatchSessionAssignOnCreate(args: {
         expiresAt: new Date(nowMs + ttlSeconds * 1000).toISOString(),
       },
       ...(profile !== undefined ? { profile } : {}),
+      ...(idleTimeoutSeconds !== undefined ? { idleTimeoutSeconds } : {}),
     });
     conn.sendSessionAssign(assign);
     const dispatchedNodeId = mac.nodeId ?? mac.id;
@@ -1257,6 +1271,12 @@ export function registerAgentSessionsRoutes(
         // default; omitted when absent so the fallback applies. The harness opens
         // this URL on session launch (inert until the box honors initialUrl).
         ...(parsed.data.initial_url !== undefined ? { initialUrl: parsed.data.initial_url } : {}),
+        // Manual (GUI) sessions are interactively WATCHED — give them a generous idle
+        // timeout so a sim the operator watches without touching isn't reaped at the box
+        // ~300s default (A3 W2813 knob). ai/pair stay on the box default (API-driven).
+        ...(created.mode === 'manual'
+          ? { idleTimeoutSeconds: MANUAL_SESSION_IDLE_TIMEOUT_SECONDS }
+          : {}),
       });
       // Slice 6 follow-up 2026-05-20 — agent-session create audit. Best-
       // effort emit; audit failures don't break the create. Distinct

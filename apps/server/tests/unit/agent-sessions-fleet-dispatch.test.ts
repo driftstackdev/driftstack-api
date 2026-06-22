@@ -140,6 +140,41 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect(frame.initialUrl).toBe(DISPATCH.initialUrl);
   });
 
+  it('idleTimeoutSeconds (manual-session knob, A3 W2813) rides the assign when passed', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_idle',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      logger: logger(),
+      idleTimeoutSeconds: 1800,
+    });
+    expect(sent).toHaveLength(1);
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame.idleTimeoutSeconds).toBe(1800);
+  });
+
+  it('absent idleTimeoutSeconds → omitted from the assign (ai/pair keep the box default)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_noidle',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      logger: logger(),
+    });
+    expect(sent).toHaveLength(1);
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame.idleTimeoutSeconds).toBeUndefined();
+  });
+
   it('region-aware: an EU viewer routes to the EU node (region threaded to findNearestWithLivekit), not the US node', async () => {
     const sentEu: string[] = [];
     const sentUs: string[] = [];
