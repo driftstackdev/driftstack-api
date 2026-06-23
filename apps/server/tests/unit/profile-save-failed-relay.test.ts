@@ -31,7 +31,7 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
     const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9' }) };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(2) };
     const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
-    relay(FRAME);
+    relay(FRAME, 'node_1');
     await flush();
     expect(sessions.get).toHaveBeenCalledWith('agt_1');
     expect(webhooks.enqueueEvent).toHaveBeenCalledWith('acc_9', 'session.profile_save_failed', {
@@ -47,7 +47,7 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
     const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
     const { detail: _detail, ...noDetail } = FRAME;
-    relay({ ...noDetail, reason: 'too_large' });
+    relay({ ...noDetail, reason: 'too_large' }, 'node_1');
     await flush();
     expect(webhooks.enqueueEvent).toHaveBeenCalledWith('acc_9', 'session.profile_save_failed', {
       session_id: 'agt_1',
@@ -60,7 +60,7 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
     const sessions = { get: vi.fn().mockResolvedValue(null) };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(0) };
     const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
-    relay(FRAME);
+    relay(FRAME, 'node_1');
     await flush();
     expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
   });
@@ -69,7 +69,7 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
     const sessions = { get: vi.fn().mockRejectedValue(new Error('db down')) };
     const webhooks = { enqueueEvent: vi.fn() };
     const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
-    expect(() => relay(FRAME)).not.toThrow();
+    expect(() => relay(FRAME, 'node_1')).not.toThrow();
     await flush();
     expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
   });

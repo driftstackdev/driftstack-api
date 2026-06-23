@@ -27,7 +27,7 @@ describe('W393 makeChallengeRelay', () => {
     const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9' }) };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(2) };
     const relay = makeChallengeRelay(sessions, webhooks, logger);
-    relay(FRAME);
+    relay(FRAME, 'node_1');
     await flush();
     expect(sessions.get).toHaveBeenCalledWith('ses_1');
     expect(webhooks.enqueueEvent).toHaveBeenCalledWith('acc_9', 'session.challenge_detected', {
@@ -41,7 +41,7 @@ describe('W393 makeChallengeRelay', () => {
     const sessions = { get: vi.fn().mockResolvedValue(null) };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(0) };
     const relay = makeChallengeRelay(sessions, webhooks, logger);
-    relay(FRAME);
+    relay(FRAME, 'node_1');
     await flush();
     expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
   });
@@ -50,7 +50,7 @@ describe('W393 makeChallengeRelay', () => {
     const sessions = { get: vi.fn().mockRejectedValue(new Error('db down')) };
     const webhooks = { enqueueEvent: vi.fn() };
     const relay = makeChallengeRelay(sessions, webhooks, logger);
-    expect(() => relay(FRAME)).not.toThrow();
+    expect(() => relay(FRAME, 'node_1')).not.toThrow();
     await flush();
     expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
   });
