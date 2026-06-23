@@ -147,22 +147,24 @@ def test_retry_recovers_after_transient_network_failure() -> None:
     """The SDK's default retry policy recovers from a transient network blip.
 
     Network errors map to TransportError, which is in the default
-    retryable set. The SDK retries, the second attempt succeeds, the
-    customer never sees the blip.
+    retryable set. For an idempotent request (here a GET) the SDK
+    retries, the second attempt succeeds, the customer never sees the
+    blip. (A non-idempotent keyless POST is deliberately NOT retried —
+    see ``tests/test_http_retry_gate.py``.)
     """
     session = _session_fixture()
 
     with respx.mock(base_url=BASE) as mock:
         # First call raises a connection error; second succeeds.
         # respx routes pop side_effects FIFO.
-        mock.post("/v1/sessions").mock(
+        mock.get(f"/v1/sessions/{session['id']}").mock(
             side_effect=[
                 httpx.ConnectError("connection refused"),
-                httpx.Response(201, json=session),
+                httpx.Response(200, json=session),
             ]
         )
         # Tight retry so the test runs fast.
         retry = RetryConfig(max_retries=2, initial_delay_ms=1, max_delay_ms=2)
         with Driftstack(api_key=API_KEY, base_url=BASE, retry=retry) as client:
-            s = client.sessions.create()
+            s = client.sessions.get(session["id"])
             assert str(s.id) == session["id"]

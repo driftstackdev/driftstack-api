@@ -9,9 +9,10 @@ mint duplicate orders.
 
 V-666.BU — ``list`` accepts ``cursor`` for cursor-pagination;
 ``iterate`` walks every page until ``next_cursor`` is null. The
-response envelope is ``{"orders": [...], "next_cursor": ...}``, which
-is why this resource hand-rolls iteration rather than using the
-shared ``iterate_paginated`` helper (that one keys off ``data``).
+response envelope keys its rows off ``orders`` (not the standard
+``data``), so iteration adapts the page shape and delegates to the
+shared :func:`iterate_paginated` helper — that way this endpoint gets
+the same non-advancing-cursor guard as every other list.
 
 Crypto payments are non-refundable.
 """
@@ -23,6 +24,7 @@ from typing import Any
 from urllib.parse import quote, urlencode
 
 from driftstack.http import AsyncHttpClient, HttpClient
+from driftstack.pagination import aiterate_paginated, iterate_paginated
 from driftstack.resources._common import coerce_body
 
 
@@ -78,23 +80,17 @@ class CryptoOrdersResource:
         """V-666.C — mint a new crypto order.
 
         Pass ``idempotency_key`` to dedupe network retries — the server
-        returns the original order on replay, never a second one.
+        returns the original order on replay, never a second one. With a
+        key the HTTP layer is allowed to retry transient failures safely;
+        without one this create is sent exactly once (no double-submit).
         """
-        # The wrapped HttpClient.request() doesn't accept arbitrary
-        # headers, so we drive the underlying httpx.Client directly for
-        # the one-shot Idempotency-Key case. Falls back to the standard
-        # path when no header is needed.
-        if idempotency_key is None:
-            return self._http.request(
-                "POST",
-                "/v1/billing/crypto-checkout",
-                json_body=coerce_body(body),
-            )
-        return _post_with_headers(
-            self._http,
+        return self._http.request(
+            "POST",
             "/v1/billing/crypto-checkout",
             json_body=coerce_body(body),
-            headers={"idempotency-key": idempotency_key},
+            extra_headers=(
+                {"idempotency-key": idempotency_key} if idempotency_key is not None else None
+            ),
         )
 
     def list(
@@ -134,23 +130,19 @@ class CryptoOrdersResource:
         single page).
         """
 
-        def _walk() -> Iterator[dict[str, Any]]:
-            cursor: str | None = None
-            while True:
-                page = self.list(
-                    limit=limit,
-                    status=status,
-                    cursor=cursor,
-                    created_after=created_after,
-                    created_before=created_before,
-                )
-                yield from page.get("orders", [])
-                next_cursor = page.get("next_cursor")
-                if next_cursor is None:
-                    return
-                cursor = next_cursor
+        def _fetch(cursor: str | None) -> dict[str, Any]:
+            page = self.list(
+                limit=limit,
+                status=status,
+                cursor=cursor,
+                created_after=created_after,
+                created_before=created_before,
+            )
+            # Adapt the crypto envelope (`orders`) onto the shared
+            # paginator's expected `data` key so it gets the guard.
+            return {"data": page.get("orders", []), "next_cursor": page.get("next_cursor")}
 
-        return _walk()
+        return iterate_paginated(_fetch)
 
     def get(self, order_id: str) -> dict[str, Any]:
         """V-666.G — read a single order envelope."""
@@ -201,17 +193,13 @@ class AsyncCryptoOrdersResource:
         *,
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
-        if idempotency_key is None:
-            return await self._http.request(
-                "POST",
-                "/v1/billing/crypto-checkout",
-                json_body=coerce_body(body),
-            )
-        return await _apost_with_headers(
-            self._http,
+        return await self._http.request(
+            "POST",
             "/v1/billing/crypto-checkout",
             json_body=coerce_body(body),
-            headers={"idempotency-key": idempotency_key},
+            extra_headers=(
+                {"idempotency-key": idempotency_key} if idempotency_key is not None else None
+            ),
         )
 
     async def list(
@@ -242,24 +230,19 @@ class AsyncCryptoOrdersResource:
         created_after: str | None = None,
         created_before: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        async def _walk() -> AsyncIterator[dict[str, Any]]:
-            cursor: str | None = None
-            while True:
-                page = await self.list(
-                    limit=limit,
-                    status=status,
-                    cursor=cursor,
-                    created_after=created_after,
-                    created_before=created_before,
-                )
-                for order in page.get("orders", []):
-                    yield order
-                next_cursor = page.get("next_cursor")
-                if next_cursor is None:
-                    return
-                cursor = next_cursor
+        async def _fetch(cursor: str | None) -> dict[str, Any]:
+            page = await self.list(
+                limit=limit,
+                status=status,
+                cursor=cursor,
+                created_after=created_after,
+                created_before=created_before,
+            )
+            # Adapt the crypto envelope (`orders`) onto the shared
+            # paginator's expected `data` key so it gets the guard.
+            return {"data": page.get("orders", []), "next_cursor": page.get("next_cursor")}
 
-        return _walk()
+        return aiterate_paginated(_fetch)
 
     async def get(self, order_id: str) -> dict[str, Any]:
         return await self._http.request(
@@ -285,56 +268,3 @@ class AsyncCryptoOrdersResource:
             "GET",
             f"/v1/billing/crypto-orders/{quote(order_id, safe='')}/receipt",
         )
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# Idempotency-Key header escape hatch.
-#
-# HttpClient.request() doesn't accept arbitrary headers — adding the
-# parameter to every resource would broaden the public surface and the
-# only place we need it today is create_checkout (V-666.AO). Drive the
-# underlying httpx.Client here, reusing the same auth + UA the
-# wrapper builds; the wrapper's retry/error mapping is bypassed
-# deliberately for these requests (idempotent retries should come from
-# the customer's outer retry loop, not the SDK).
-# ──────────────────────────────────────────────────────────────────────────
-
-
-def _post_with_headers(
-    http: HttpClient,
-    path: str,
-    *,
-    json_body: Any,
-    headers: dict[str, str],
-) -> Any:
-    from driftstack.http import _build_headers, _decode_or_raise  # noqa: PLC0415
-
-    merged = _build_headers(http._api_key, has_body=json_body is not None)  # noqa: SLF001
-    merged.update(headers)
-    response = http._client.request(  # noqa: SLF001
-        "POST",
-        http._base_url + path,  # noqa: SLF001
-        json=json_body,
-        headers=merged,
-    )
-    return _decode_or_raise(response)
-
-
-async def _apost_with_headers(
-    http: AsyncHttpClient,
-    path: str,
-    *,
-    json_body: Any,
-    headers: dict[str, str],
-) -> Any:
-    from driftstack.http import _build_headers, _decode_or_raise  # noqa: PLC0415
-
-    merged = _build_headers(http._api_key, has_body=json_body is not None)  # noqa: SLF001
-    merged.update(headers)
-    response = await http._client.request(  # noqa: SLF001
-        "POST",
-        http._base_url + path,  # noqa: SLF001
-        json=json_body,
-        headers=merged,
-    )
-    return _decode_or_raise(response)

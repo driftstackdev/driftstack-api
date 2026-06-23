@@ -37,6 +37,26 @@ from driftstack.retry import RetryConfig, with_retry, with_retry_async
 DEFAULT_TIMEOUT_S = 30.0
 USER_AGENT = f"driftstack-sdk-python/{__version__}"
 
+# HTTP methods that are idempotent by RFC 7231 semantics — always safe to
+# auto-retry. POST and PATCH are excluded; they're only retried when the
+# caller supplies an Idempotency-Key (see :func:`_is_retry_safe`).
+_IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "PUT", "DELETE", "OPTIONS", "TRACE"})
+
+
+def _is_retry_safe(method: str, headers: dict[str, str]) -> bool:
+    """Whether a request may be transparently retried by the SDK.
+
+    True for idempotent methods, or for any method carrying an
+    ``Idempotency-Key`` header (case-insensitive). A non-idempotent
+    POST/PATCH without a key is NOT retried: a transient 5xx / network
+    blip on a create may already have been applied server-side, so a
+    retry would mint a duplicate. With a key the server replays the
+    original response, so the retry is safe.
+    """
+    if method.upper() in _IDEMPOTENT_METHODS:
+        return True
+    return any(k.lower() == "idempotency-key" for k in headers)
+
 
 def _build_headers(
     api_key: str, has_body: bool, effective_account: str | None = None
@@ -246,6 +266,11 @@ class HttpClient:
 
             return _decode_or_raise(response)
 
+        # Retry SAFETY gate — only auto-retry idempotent requests (or a
+        # POST/PATCH carrying an Idempotency-Key); a keyless create must
+        # not be retried or a transient blip could double-submit it.
+        if not _is_retry_safe(method, headers):
+            return _do()
         return with_retry(_do, retry or self._retry)
 
 
@@ -319,6 +344,9 @@ class AsyncHttpClient:
 
             return _decode_or_raise(response)
 
+        # Retry SAFETY gate — see the sync :meth:`HttpClient.request`.
+        if not _is_retry_safe(method, headers):
+            return await _do()
         return await with_retry_async(_do, retry or self._retry)
 
 

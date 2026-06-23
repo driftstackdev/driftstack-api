@@ -173,12 +173,39 @@ type requestOptions struct {
 	headers map[string]string
 }
 
-// do executes a single request with retry. Returns nil on success
-// (with out populated when non-nil) or a typed Driftstack error.
+// do executes a request with retry. Returns nil on success (with out
+// populated when non-nil) or a typed Driftstack error.
+//
+// Retry SAFETY gate: only idempotent methods (or a POST/PATCH carrying an
+// Idempotency-Key) are auto-retried. A keyless create is sent exactly once
+// — a transient 5xx / network blip might already have been applied
+// server-side, so retrying it could double-submit.
 func (c *Client) do(ctx context.Context, opts requestOptions) error {
+	if !isRetrySafe(opts.method, opts.headers) {
+		return c.doOnce(ctx, opts)
+	}
 	return withRetry(ctx, c.retry, func() error {
 		return c.doOnce(ctx, opts)
 	})
+}
+
+// isRetrySafe reports whether a request may be transparently retried.
+// True for methods that are idempotent by RFC 7231 semantics, or for any
+// method carrying an Idempotency-Key header (case-insensitive) — the
+// server replays the original response on that key, so a retry can't
+// double-submit.
+func isRetrySafe(method string, headers map[string]string) bool {
+	switch strings.ToUpper(method) {
+	case http.MethodGet, http.MethodHead, http.MethodPut, http.MethodDelete,
+		http.MethodOptions, http.MethodTrace:
+		return true
+	}
+	for k := range headers {
+		if strings.EqualFold(k, "Idempotency-Key") {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Client) doOnce(ctx context.Context, opts requestOptions) error {

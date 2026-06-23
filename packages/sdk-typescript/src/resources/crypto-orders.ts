@@ -17,6 +17,7 @@ import type {
   UpdateCryptoOrderNoteRequest,
 } from '@driftstack/api-types';
 import type { HttpClient } from '../http.js';
+import { iteratePaginated } from '../pagination.js';
 
 export interface CreateCryptoCheckoutOptions {
   /** V-666.AO — idempotency key. The SDK passes it as the Idempotency-Key header. */
@@ -84,19 +85,23 @@ export class CryptoOrdersResource {
    * Accepts the same options as `list()` minus `cursor` (the
    * iterator manages cursors internally).
    */
-  async *listAll(
+  listAll(
     opts: Omit<ListCryptoOrdersOptions, 'cursor'> = {},
   ): AsyncGenerator<CryptoOrderEnvelope, void, void> {
-    let cursor: string | undefined;
-    while (true) {
-      const page = await this.list({
+    // Delegate to the shared paginator so this endpoint gets the same
+    // non-advancing-cursor guard as every other list (a server/proxy/cache
+    // bug that re-emits the same cursor would otherwise spin forever).
+    // The crypto envelope keys its rows off `orders` (not the standard
+    // `data`), so adapt the page shape in the fetch closure.
+    return iteratePaginated<CryptoOrderEnvelope>((cursor) =>
+      this.list({
         ...opts,
-        ...(cursor !== undefined ? { cursor } : {}),
-      });
-      for (const order of page.orders) yield order;
-      if (page.next_cursor === null || page.next_cursor === undefined) return;
-      cursor = page.next_cursor;
-    }
+        ...(cursor !== null ? { cursor } : {}),
+      }).then((page) => ({
+        data: page.orders,
+        next_cursor: page.next_cursor ?? null,
+      })),
+    );
   }
 
   /** V-666.G — read a single order envelope. */

@@ -265,8 +265,11 @@ func TestWebhooks_ListDeliveries_StatusFilter(t *testing.T) {
 	}
 }
 
-func TestRetryRecoversFromTransientNetworkBlip(t *testing.T) {
-	t.Parallel()
+// blipServer returns a test server whose first call fails the connection
+// (hijack + close) and whose subsequent calls succeed with `body`. It
+// reports the call count via the returned pointer.
+func blipServer(t *testing.T, status int, body any) (*httptest.Server, *int) {
+	t.Helper()
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
@@ -279,25 +282,73 @@ func TestRetryRecoversFromTransientNetworkBlip(t *testing.T) {
 			return
 		}
 		w.Header().Set("content-type", "application/json")
-		w.WriteHeader(201)
-		_ = json.NewEncoder(w).Encode(sessionFixture())
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(body)
 	}))
 	t.Cleanup(srv.Close)
+	return srv, &calls
+}
 
+func fastRetryClient(t *testing.T, baseURL string) *Client {
+	t.Helper()
 	client := New("ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		WithBaseURL(srv.URL),
+		WithBaseURL(baseURL),
 		WithRetry(RetryConfig{MaxRetries: 2, InitialDelay: 1 * 1000 * 1000, MaxDelay: 2 * 1000 * 1000}),
 	)
 	t.Cleanup(func() { _ = client.Close() })
+	return client
+}
 
-	got, err := client.Sessions.Create(context.Background(), nil)
+func TestRetryRecoversFromTransientNetworkBlip(t *testing.T) {
+	t.Parallel()
+	// A GET is idempotent → the retry loop runs and recovers from the blip.
+	srv, calls := blipServer(t, 200, sessionFixture())
+	client := fastRetryClient(t, srv.URL)
+
+	got, err := client.Sessions.Get(context.Background(), "ses_x")
 	if err != nil {
-		t.Fatalf("expected retry to succeed, got %v after %d calls", err, calls)
+		t.Fatalf("expected retry to succeed, got %v after %d calls", err, *calls)
 	}
 	if got.ID == "" {
 		t.Errorf("empty session")
 	}
-	if calls != 2 {
-		t.Errorf("calls=%d, want 2 (one fail + one success)", calls)
+	if *calls != 2 {
+		t.Errorf("calls=%d, want 2 (one fail + one success)", *calls)
+	}
+}
+
+// A keyless POST (non-idempotent create) must NOT be auto-retried — a
+// transient blip might already have been applied server-side, so a retry
+// could double-submit. The blip surfaces to the caller after one attempt.
+func TestKeylessPostIsNotRetried(t *testing.T) {
+	t.Parallel()
+	srv, calls := blipServer(t, 201, sessionFixture())
+	client := fastRetryClient(t, srv.URL)
+
+	_, err := client.Sessions.Create(context.Background(), nil)
+	if err == nil {
+		t.Fatalf("expected the transient blip to surface (no retry), got nil after %d calls", *calls)
+	}
+	if *calls != 1 {
+		t.Errorf("calls=%d, want 1 (keyless POST must not retry)", *calls)
+	}
+}
+
+// A POST carrying an Idempotency-Key IS retry-safe — the server replays
+// the original response on the key, so the loop recovers from the blip.
+func TestKeyedPostIsRetried(t *testing.T) {
+	t.Parallel()
+	srv, calls := blipServer(t, 201, map[string]string{"id": "agt_x"})
+	client := fastRetryClient(t, srv.URL)
+
+	key := "idem-abc-123"
+	_, err := client.AgentSessions.Create(
+		context.Background(), nil, &CreateOptions{IdempotencyKey: key},
+	)
+	if err != nil {
+		t.Fatalf("expected keyed retry to succeed, got %v after %d calls", err, *calls)
+	}
+	if *calls != 2 {
+		t.Errorf("calls=%d, want 2 (keyed POST may retry)", *calls)
 	}
 }

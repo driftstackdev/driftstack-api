@@ -52,6 +52,18 @@ export class HttpClient {
     const timeoutMs = opts.timeoutMs ?? this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const url = this.buildUrl(opts.path, opts.query);
 
+    // Retry SAFETY gate. Idempotent methods are always safe to re-attempt;
+    // a non-idempotent POST/PATCH is only safe when it carries an
+    // Idempotency-Key (the server replays the original response on that
+    // key — apps/server billing-crypto — so a retry can't double-submit).
+    // Without a key, a transient 5xx / network blip on a create may already
+    // have been applied server-side, so retrying would mint a duplicate;
+    // force a single attempt instead.
+    const baseRetry = opts.retry ?? this.config.retry;
+    const retryConfig: RetryConfig | undefined = isRetrySafe(opts.method, opts.headers)
+      ? baseRetry
+      : { ...baseRetry, maxAttempts: 0 };
+
     return withRetry(async () => {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -126,7 +138,7 @@ export class HttpClient {
       } finally {
         clearTimeout(timer);
       }
-    }, opts.retry ?? this.config.retry);
+    }, retryConfig);
   }
 
   private buildUrl(path: string, query?: Record<string, string | number | undefined>): string {
@@ -145,6 +157,25 @@ export class HttpClient {
     }
     return url.toString();
   }
+}
+
+/**
+ * HTTP methods that are idempotent by RFC 7231 semantics — always safe to
+ * auto-retry. POST and PATCH are deliberately excluded; they're only
+ * retried when the caller supplies an Idempotency-Key (see `isRetrySafe`).
+ */
+const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS', 'TRACE']);
+
+/**
+ * Whether a request may be transparently retried by the SDK. True for
+ * idempotent methods, or for any method carrying an `Idempotency-Key`
+ * header (case-insensitive). Guards against double-submitting a
+ * non-idempotent create on a transient 5xx / network error.
+ */
+function isRetrySafe(method: string, headers?: Record<string, string>): boolean {
+  if (IDEMPOTENT_METHODS.has(method.toUpperCase())) return true;
+  if (headers === undefined) return false;
+  return Object.keys(headers).some((k) => k.toLowerCase() === 'idempotency-key');
 }
 
 function isProblem(x: unknown): x is Problem {

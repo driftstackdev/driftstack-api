@@ -364,3 +364,84 @@ describe('HttpClient — API key never leaks into thrown errors', () => {
     assertNoKey(err);
   });
 });
+
+// Retry SAFETY gate: only idempotent methods (or a POST/PATCH carrying an
+// Idempotency-Key) are auto-retried. A keyless create must be sent exactly
+// once — a transient 5xx / network blip might already have been applied
+// server-side, so retrying would double-submit it.
+describe('HttpClient — retry-safety gate', () => {
+  // Fast retry config: 2 retries, no real sleep.
+  const FAST_RETRY = { maxAttempts: 2, sleep: async () => {} } as const;
+
+  /** A fetch that always returns `status` (non-JSON body → TransportError, retryable) and counts attempts. */
+  function countingFetch(status: number): { fetch: typeof fetch; calls: () => number } {
+    let n = 0;
+    const f: typeof fetch = async () => {
+      n += 1;
+      await Promise.resolve();
+      return new Response('boom', { status });
+    };
+    return { fetch: f, calls: () => n };
+  }
+
+  it('retries an idempotent GET on a transient 5xx (1 + maxAttempts)', async () => {
+    const cf = countingFetch(503);
+    const http = new HttpClient({
+      apiKey: 'k',
+      baseUrl: 'http://api.test',
+      fetch: cf.fetch,
+      retry: FAST_RETRY,
+    });
+    await expect(http.request({ method: 'GET', path: '/v1/x' })).rejects.toBeInstanceOf(
+      TransportError,
+    );
+    expect(cf.calls()).toBe(3);
+  });
+
+  it('does NOT retry a keyless POST (avoids double-submitting a create)', async () => {
+    const cf = countingFetch(503);
+    const http = new HttpClient({
+      apiKey: 'k',
+      baseUrl: 'http://api.test',
+      fetch: cf.fetch,
+      retry: FAST_RETRY,
+    });
+    await expect(
+      http.request({ method: 'POST', path: '/v1/x', body: { a: 1 } }),
+    ).rejects.toBeInstanceOf(TransportError);
+    expect(cf.calls()).toBe(1);
+  });
+
+  it('retries a POST that carries an Idempotency-Key (server replays on the key)', async () => {
+    const cf = countingFetch(503);
+    const http = new HttpClient({
+      apiKey: 'k',
+      baseUrl: 'http://api.test',
+      fetch: cf.fetch,
+      retry: FAST_RETRY,
+    });
+    await expect(
+      http.request({
+        method: 'POST',
+        path: '/v1/x',
+        body: { a: 1 },
+        headers: { 'Idempotency-Key': 'k-1' },
+      }),
+    ).rejects.toBeInstanceOf(TransportError);
+    expect(cf.calls()).toBe(3);
+  });
+
+  it('matches the Idempotency-Key header case-insensitively', async () => {
+    const cf = countingFetch(503);
+    const http = new HttpClient({
+      apiKey: 'k',
+      baseUrl: 'http://api.test',
+      fetch: cf.fetch,
+      retry: FAST_RETRY,
+    });
+    await expect(
+      http.request({ method: 'POST', path: '/v1/x', headers: { 'idempotency-key': 'k-1' } }),
+    ).rejects.toBeInstanceOf(TransportError);
+    expect(cf.calls()).toBe(3);
+  });
+});
