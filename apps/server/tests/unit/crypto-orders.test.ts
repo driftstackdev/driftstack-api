@@ -136,7 +136,7 @@ describe('applyIpnStatus — paid side-effects fire EXACTLY once across re-deliv
       webhooks: {
         enqueueEvent: (accountId, eventType) => {
           if (eventType === 'crypto.order.paid') paidWebhooks.push(accountId);
-          return Promise.resolve();
+          return Promise.resolve(0);
         },
       },
       paidEmailNotifier: {
