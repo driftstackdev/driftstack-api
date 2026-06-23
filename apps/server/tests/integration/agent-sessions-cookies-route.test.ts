@@ -161,3 +161,64 @@ describe('GET /v1/agent-sessions/:id/cookies (wired)', () => {
     expect(body.reason).toMatch(/no cookie store/);
   });
 });
+
+// The cookies route exposes httpOnly cookies, so its per-session gui_control_key
+// boundary matters: a key authorizes ONLY the one session it was minted for, and
+// a wrong/cross-session/missing key 401s (never falls through to another
+// session's jar). Mirrors the GET /:id control-auth pins.
+describe('GET /v1/agent-sessions/:id/cookies gui_control_key auth', () => {
+  const GCK_HEADER = 'x-driftstack-gui-control-key';
+  let fx: TestAppFixture;
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  async function mintKey(sessionId: string): Promise<string> {
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${sessionId}/gui-control-key`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    return res.json<{ gui_control_key: string }>().gui_control_key;
+  }
+
+  it('a control key reads its OWN session cookies (no account Authorization header)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
+    const id = await createSession(fx);
+    const key = await mintKey(id);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}/cookies`,
+      headers: { [GCK_HEADER]: key },
+    });
+    // Authorized → reaches the handler → a discriminated 200 (unavailable here,
+    // since no node is connected) rather than a 401.
+    expect(res.statusCode).toBe(200);
+    expect(res.json<CookiesBody>().status).toBe('unavailable');
+  });
+
+  it('a control key minted for session A is REJECTED on session B (401 — never leaks B’s jar)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
+    const idA = await createSession(fx);
+    const idB = await createSession(fx);
+    const keyA = await mintKey(idA);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${idB}/cookies`,
+      headers: { [GCK_HEADER]: keyA },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('a missing/garbage control key with NO account auth 401s (never falls through)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
+    const id = await createSession(fx);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}/cookies`,
+      headers: { [GCK_HEADER]: 'gck_not_a_real_key' },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});
