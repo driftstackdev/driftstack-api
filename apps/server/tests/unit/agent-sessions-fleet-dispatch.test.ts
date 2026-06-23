@@ -300,7 +300,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect(after!.nodeId).toBeNull();
   });
 
-  it('best-effort: a setNodeId failure is swallowed (dispatch + session-create unaffected)', async () => {
+  it('a setNodeId failure SKIPS the assign (no owned-but-NULL window) — resolves + logs, never throws', async () => {
     const sent: string[] = [];
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
@@ -319,9 +319,39 @@ describe('dispatchSessionAssignOnCreate', () => {
         logger: log,
       }),
     ).resolves.toBeUndefined();
-    // The assign STILL went out (the dispatch is the customer-facing effect);
-    // the node_id persistence failure is logged, never thrown.
-    expect(sent).toHaveLength(1);
+    // review w7eu5sw7n: node_id is persisted BEFORE the assign. If the persist
+    // fails we must NOT send the assign — doing so would leave the session
+    // status='active' with node_id=NULL while a node owns it, and the
+    // terminal-close cross-node guard ALLOWS a close on a NULL owner (so another
+    // node could close it) + the disconnect reaper can't attribute it. So the
+    // dispatch is SKIPPED (no assign), the failure is logged, never thrown; the
+    // session stays unowned for the 12h orphan_reap backstop.
+    expect(sent).toHaveLength(0);
+    expect(log.warn).toHaveBeenCalled();
+  });
+
+  it('a setNodeId null return (row deleted mid-dispatch) SKIPS the assign', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const log = logger();
+    const deletedSessions = {
+      // setNodeId returns null when the id lost a race with DELETE → the session
+      // is gone; there is nothing to dispatch.
+      setNodeId: () => Promise.resolve(null),
+    } as unknown as InMemoryAgentSessionsRepo;
+    await expect(
+      dispatchSessionAssignOnCreate({
+        sessionId: 'agt_deleted_mid_dispatch',
+        fleetControlRegistry: registry,
+        fleetNodesRepo: repoReturning(macWithLivekit()),
+        livekitSecretEncryptionKey: KEY,
+        sessionDispatch: DISPATCH,
+        agentSessions: deletedSessions,
+        logger: log,
+      }),
+    ).resolves.toBeUndefined();
+    expect(sent).toHaveLength(0);
     expect(log.warn).toHaveBeenCalled();
   });
 

@@ -751,18 +751,26 @@ export async function dispatchSessionAssignOnCreate(args: {
       ...(profile !== undefined ? { profile } : {}),
       ...(idleTimeoutSeconds !== undefined ? { idleTimeoutSeconds } : {}),
     });
-    conn.sendSessionAssign(assign);
     const dispatchedNodeId = mac.nodeId ?? mac.id;
-    // Worker-disconnect fix (2026-06-19) — persist session→node so the
-    // disconnect reaper can close THIS node's active sessions when it drops.
-    // The registry key is what the reaper sees on unregister, so we store the
-    // SAME value the dispatch resolved the connection by. Best-effort: a write
-    // failure must not break the dispatch (the 12h orphan_reap is still the
-    // backstop), so swallow + log. setNodeId returns null for an id that lost a
-    // race with DELETE — harmless, nothing to reap then.
+    // Worker-disconnect fix (2026-06-19) — persist session→node so the disconnect
+    // reaper can close THIS node's active sessions when it drops. The registry key
+    // is what the reaper sees on unregister, so we store the SAME value the dispatch
+    // resolved the connection by.
+    //
+    // Persist BEFORE sending the assign (review w7eu5sw7n). If the assign went first,
+    // the row is status='active' with node_id=NULL until this DB write commits — and
+    // the terminal-close cross-node guard ALLOWS a close on a NULL node_id (legacy /
+    // manual rows), so in that window another authenticated node could close this
+    // owned session, and a swallowed write failure would strand it active+NULL
+    // forever (a phantom concurrency slot the disconnect-reaper can't attribute).
+    // So: persist first; if the write fails or the row was deleted mid-dispatch, do
+    // NOT send the assign — leave the session unowned (no node holds it) for the 12h
+    // orphan_reap backstop, never owned-but-NULL. setNodeId returns null when the id
+    // lost a race with DELETE (session gone → nothing to dispatch).
     if (agentSessions !== undefined) {
+      let persisted: Awaited<ReturnType<typeof agentSessions.setNodeId>>;
       try {
-        await agentSessions.setNodeId(sessionId, dispatchedNodeId);
+        persisted = await agentSessions.setNodeId(sessionId, dispatchedNodeId);
       } catch (err) {
         logger?.warn(
           {
@@ -771,10 +779,19 @@ export async function dispatchSessionAssignOnCreate(args: {
             nodeId: dispatchedNodeId,
             err: err instanceof Error ? err.message : String(err),
           },
-          'persisting session node_id failed (dispatch unaffected; 12h orphan_reap backstop holds)',
+          'persisting session node_id failed; skipping dispatch (avoids owned-but-NULL window; orphan_reap backstop holds)',
         );
+        return;
+      }
+      if (persisted === null) {
+        logger?.warn(
+          { component: 'fleet-session-dispatch', sessionId },
+          'session row absent at node_id persist (deleted mid-dispatch); skipping assign',
+        );
+        return;
       }
     }
+    conn.sendSessionAssign(assign);
     logger?.info(
       { component: 'fleet-session-dispatch', sessionId, nodeId: dispatchedNodeId },
       'dispatched sessionAssign to fleet node',
