@@ -29,6 +29,7 @@ import { formatSessionDiagnostics } from '../lib/session-diagnostics';
 import {
   getAgentSession,
   getAgentSessionPageState,
+  getAgentSessionCookies,
   setSessionMode,
   takeoverSession,
   handbackSession,
@@ -37,6 +38,7 @@ import {
   AgentSessionControlError,
   type SessionMode,
   type ControlAuth,
+  type SessionCookie,
 } from '../lib/agent-session-control';
 
 /** Frame chrome heights (px) used to derive the window size from the device's
@@ -1650,6 +1652,49 @@ export function SimulatorWindow(): JSX.Element {
     };
   }, [sessionId, controlAuth, room, browserMode]);
 
+  // Founder #48 — live cookie-jar view. Polls GET /v1/agent-sessions/:id/cookies
+  // ONLY while the session-info / diagnostics panel is open (no background load on
+  // a panel nobody's looking at). `cookies` = the live jar (ok); `cookiesNote` = a
+  // calm "pending data source" line for every inert state (control plane off /
+  // node offline / node not yet serving cookies / gated 503). Best-effort + guarded
+  // — a transient/gated failure just keeps the pending note, never throws.
+  const [cookies, setCookies] = useState<SessionCookie[] | null>(null);
+  const [cookiesNote, setCookiesNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!infoOpen || sessionId === '' || room === null) return;
+    let cancelled = false;
+    const tick = (): void => {
+      void getAgentSessionCookies(sessionId, controlAuth)
+        .then((res) => {
+          if (cancelled) return;
+          if (res.status === 'ok') {
+            setCookies(res.cookies ?? []);
+            setCookiesNote(null);
+          } else {
+            setCookies(null);
+            setCookiesNote(
+              res.status === 'timeout'
+                ? 'waiting for the device…'
+                : (res.reason ?? 'not available yet'),
+            );
+          }
+        })
+        .catch(() => {
+          if (cancelled) return;
+          // Gated 503 / 404 / network — the cookies view isn't live on this
+          // build/box yet. Show the calm pending note rather than an error.
+          setCookies(null);
+          setCookiesNote('pending — live cookie view ships with the next device update');
+        });
+    };
+    tick();
+    const handle = window.setInterval(tick, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(handle);
+    };
+  }, [infoOpen, sessionId, controlAuth, room]);
+
   // iOS TAP cursor (founder 2026-06-17: "standard is full control + iOS TAP
   // cursor"): a short-lived ring at the tap point, so a click on the screen
   // reads as a deliberate iOS touch. Capture-phase + purely visual (never
@@ -2159,7 +2204,21 @@ export function SimulatorWindow(): JSX.Element {
                   data-component="simulator-info-overlay"
                   className="absolute right-2 top-12 z-10 w-52 rounded-lg border border-white/15 bg-black/80 p-3 font-mono text-[10px] leading-relaxed text-white/80 backdrop-blur"
                 >
-                  <div className="mb-1 font-sans text-[11px] font-semibold text-white">Session</div>
+                  {/* #48 — the founder asked for a close on diagnostics ("there's
+                      no close diagnostics"). ✕ dismisses the overlay (same as
+                      re-toggling Session info), so it's never stuck open. */}
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-sans text-[11px] font-semibold text-white">Session</span>
+                    <button
+                      type="button"
+                      aria-label="Close diagnostics"
+                      title="Close"
+                      onClick={() => setInfoOpen(false)}
+                      className="-mr-1 rounded px-1 text-[13px] leading-none text-white/50 transition hover:bg-white/10 hover:text-white"
+                    >
+                      ✕
+                    </button>
+                  </div>
                   {profileName !== '' && <div className="truncate">profile {profileName}</div>}
                   <div className="truncate">device {deviceName}</div>
                   <div className="truncate">
@@ -2234,6 +2293,44 @@ export function SimulatorWindow(): JSX.Element {
                     <div className="truncate text-white/40">
                       build {typeof __BUILD_STAMP__ !== 'undefined' ? __BUILD_STAMP__ : 'dev'}
                     </div>
+                  </div>
+                  {/* #48 — live cookie jar for the current page (httpOnly included),
+                      pulled from the running session over the control plane. Shows a
+                      calm "pending" line until the device build serves cookies; the
+                      cross-domain whole-jar arrives later as a transparent upgrade
+                      ("this page" → "all"). Polls only while this panel is open. */}
+                  <div
+                    data-component="simulator-cookies"
+                    className="mt-1.5 border-t border-white/15 pt-1.5"
+                  >
+                    <div className="mb-0.5 flex items-center justify-between">
+                      <span className="font-sans text-[11px] font-semibold text-white">
+                        Cookies
+                        {cookies !== null && (
+                          <span className="text-white/40"> · {cookies.length}</span>
+                        )}
+                      </span>
+                      <span className="font-sans text-[9px] text-white/30">this page</span>
+                    </div>
+                    {cookies === null ? (
+                      <div className="text-white/40">{cookiesNote ?? 'loading…'}</div>
+                    ) : cookies.length === 0 ? (
+                      <div className="text-white/40">no cookies on this page</div>
+                    ) : (
+                      <div className="max-h-32 space-y-0.5 overflow-y-auto pr-1">
+                        {cookies.map((c, i) => (
+                          <div key={`${c.domain}|${c.name}|${i}`} className="truncate">
+                            <span className="text-white/50">{c.domain}</span>{' '}
+                            <span className="text-emerald-300/80">{c.name}</span>
+                            <span className="text-white/30">=</span>
+                            <span className="text-white/70">{c.value}</span>
+                            {c.httpOnly === true && (
+                              <span className="text-white/30"> · httpOnly</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   {/* #48 item 2 — copy the whole snapshot above as paste-ready
                       text for a support request / bug report. */}
