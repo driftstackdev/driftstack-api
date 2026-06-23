@@ -451,7 +451,20 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         const cx = Math.max(r.left, Math.min(r.right, e.clientX));
         const cy = Math.max(r.top, Math.min(r.bottom, e.clientY));
         p = pointerToViewport({ clientX: cx, clientY: cy } as MouseEvent, video);
-        if (p === null) return;
+        if (p === null) {
+          // The clamped EDGE point can land in a sub-pixel object-contain bar (W2820 #3:
+          // the element's on-screen aspect can drift a hair from the logical 402×874 when
+          // the SFU downscales the track to a not-exactly-402:874 even resolution), so
+          // pointerToViewport returns null exactly at the edge — which would re-freeze the
+          // committed drag the clamp exists to keep alive (audit S1). Fall back to a direct
+          // rect-fraction map clamped to the logical frame so the scroll never freezes.
+          p = {
+            x: Math.round(Math.max(0, Math.min(1, (cx - r.left) / r.width)) * DEVICE_LOGICAL_WIDTH),
+            y: Math.round(
+              Math.max(0, Math.min(1, (cy - r.top) / r.height)) * DEVICE_LOGICAL_HEIGHT,
+            ),
+          };
+        }
       }
       if (!g.committed) {
         const far = distSq(p.x, p.y, g.startX, g.startY);
