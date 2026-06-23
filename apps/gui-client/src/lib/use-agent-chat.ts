@@ -15,7 +15,7 @@
 // Agent-1's real webkit driver lands — so the Claude PLAN is real but the
 // browser ACTIONS are simulated. The hook is agnostic; the view labels it.
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AgentMessageResponse,
   AgentSession,
@@ -136,6 +136,17 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     cancelGenRef.current += 1;
     setSending(false);
   }, []);
+  // Invalidate the in-flight generation on unmount so a reply that resolves after
+  // the view is gone (App.tsx remounts CurrentView per view.kind, unmounting this
+  // hook on a sidebar switch) discards instead of setState-ing a dead component —
+  // and so a partial send isn't left looking in-flight (adversarial review
+  // w6sdz15an #2). (A true request abort via AbortSignal is a follow-up.)
+  useEffect(
+    () => () => {
+      cancelGenRef.current += 1;
+    },
+    [],
+  );
 
   const post = useCallback(
     async (
@@ -159,11 +170,25 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       // Capture this send's cancel-generation; if Stop bumps it before we
       // resolve, the result is discarded (the user moved on).
       const gen = cancelGenRef.current;
+      let appendedUserTurnId: number | null = null;
       if (options?.appendUserTurn !== false) {
         // Append the user turn immediately for responsiveness.
-        setTurns((t) => [...t, { id: nextId(), role: 'user', text: userMessage }]);
+        appendedUserTurnId = nextId();
+        const uid = appendedUserTurnId;
+        setTurns((t) => [...t, { id: uid, role: 'user', text: userMessage }]);
       }
       setLastUserMessage(userMessage);
+      // Drop the optimistic user bubble on any NON-success outcome (Stop / error)
+      // so the transcript never persists an unanswered "complete" turn (#3) and the
+      // composer draft that submit() restores on a falsey result isn't a duplicate
+      // of a kept bubble (#4). The bubble survives only when the agent actually
+      // replies (the success path). No-op for approval re-sends (appendUserTurn:
+      // false) and after a chat switch (those turns were already cleared by reset).
+      const rollbackUserTurn = (): void => {
+        if (appendedUserTurnId === null) return;
+        const uid = appendedUserTurnId;
+        setTurns((t) => t.filter((x) => x.id !== uid));
+      };
       try {
         let sid = session?.id ?? null;
         if (sid === null) {
@@ -173,6 +198,16 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
             ...(opts.tokenBudget !== undefined ? { token_budget: opts.tokenBudget } : {}),
             ...(opts.profileId !== undefined ? { profile_id: opts.profileId } : {}),
           });
+          // Stop/reset/restore (a chat switch or New chat) may have happened while
+          // create() was in flight. Without this guard, setSession(created) would
+          // attach THIS abandoned chat's server session to whatever chat is now
+          // active → the next message posts to the WRONG session (cross-chat
+          // transcript + token-budget bleed). Mirror the post-message gen guards
+          // (adversarial review w6sdz15an #1).
+          if (cancelGenRef.current !== gen) {
+            rollbackUserTurn();
+            return false;
+          }
           setSession(created);
           sid = created.id;
         }
@@ -181,11 +216,18 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
             ? { approveConsequentialActions: approvals }
             : {}),
         });
-        if (cancelGenRef.current !== gen) return false; // user hit Stop — discard
+        if (cancelGenRef.current !== gen) {
+          rollbackUserTurn(); // user hit Stop — discard the reply + the orphan bubble
+          return false;
+        }
         setSession(response.session);
         setTurns((t) => [...t, { id: nextId(), role: 'agent', response }]);
         return true;
       } catch (err) {
+        // Roll back the optimistic user bubble whether this was a Stop or a real
+        // failure — submit() restores the draft on a falsey result, so keeping the
+        // bubble would duplicate it; the error banner (real failure) explains it.
+        rollbackUserTurn();
         if (cancelGenRef.current !== gen) return false; // cancelled — swallow the error
         setError(friendlyChatError(err));
         return false;
