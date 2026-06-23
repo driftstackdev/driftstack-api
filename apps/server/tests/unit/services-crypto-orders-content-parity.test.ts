@@ -153,11 +153,14 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
     expect(body).toMatch(
       /V-666\.J — customer-initiated cancel on a pending order\. Only\s*\n?\s*\*\s*`pending` orders can be cancelled; once a payment has been seen\s*\n?\s*\*\s*\(confirming\/partial\) the cancellation must go through support/,
     );
+    // #7 — cancelOrder is row-locked (withOrderLock) so a concurrent IPN can't clobber
+    // it; the ownership + pending guards run against the LOCKED committed row.
+    expect(body).toMatch(/return this\.opts\.repo\.withOrderLock</);
     expect(body).toMatch(
-      /if \(order === null \|\| order\.account_id !== args\.account_id\) return null;/,
+      /if \(order\.account_id !== args\.account_id\) \{\s*\n?\s*return \{ updated: null, result: null \};/,
     );
     expect(body).toMatch(
-      /if \(order\.status !== 'pending'\) \{\s*\n?\s*return \{ ok: 'not_cancellable', reason: order\.status \};/,
+      /if \(order\.status !== 'pending'\) \{\s*\n?\s*return \{ updated: null, result: \{ ok: 'not_cancellable' as const, reason: order\.status \} \};/,
     );
     expect(body).toMatch(
       /events: \[\.\.\.order\.events, \{ status: 'cancelled', at: now, source: 'cancel' \}\],/,

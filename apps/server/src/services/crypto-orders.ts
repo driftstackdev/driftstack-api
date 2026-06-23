@@ -485,17 +485,14 @@ export class CryptoOrdersService {
     order_id: string;
     internal_note: string | null;
   }): Promise<CryptoOrder | null> {
-    const order = await this.opts.repo.getById(args.order_id);
-    if (order === null) return null;
-    const normalised =
-      args.internal_note === null || args.internal_note.length === 0 ? null : args.internal_note;
-    const updated: CryptoOrder = {
-      ...order,
-      internal_note: normalised,
-      updated_at: this.nowFn(),
-    };
-    await this.opts.repo.upsert(updated);
-    return updated;
+    const now = this.nowFn();
+    // #7 — locked read-modify-write (admin path; no ownership scope).
+    return this.opts.repo.withOrderLock(args.order_id, (order) => {
+      const normalised =
+        args.internal_note === null || args.internal_note.length === 0 ? null : args.internal_note;
+      const updated: CryptoOrder = { ...order, internal_note: normalised, updated_at: now };
+      return { updated, result: updated };
+    });
   }
 
   /**
@@ -509,17 +506,16 @@ export class CryptoOrdersService {
     account_id: string;
     customer_note: string | null;
   }): Promise<CryptoOrder | null> {
-    const order = await this.opts.repo.getById(args.order_id);
-    if (order === null || order.account_id !== args.account_id) return null;
-    const normalised =
-      args.customer_note === null || args.customer_note.length === 0 ? null : args.customer_note;
-    const updated: CryptoOrder = {
-      ...order,
-      customer_note: normalised,
-      updated_at: this.nowFn(),
-    };
-    await this.opts.repo.upsert(updated);
-    return updated;
+    const now = this.nowFn();
+    // #7 — locked read-modify-write so a concurrent IPN can't carry a stale status/
+    // events snapshot back over the note write (and vice-versa).
+    return this.opts.repo.withOrderLock(args.order_id, (order) => {
+      if (order.account_id !== args.account_id) return { updated: null, result: null };
+      const normalised =
+        args.customer_note === null || args.customer_note.length === 0 ? null : args.customer_note;
+      const updated: CryptoOrder = { ...order, customer_note: normalised, updated_at: now };
+      return { updated, result: updated };
+    });
   }
 
   async getById(orderId: string): Promise<CryptoOrder | null> {
@@ -711,20 +707,28 @@ export class CryptoOrdersService {
     | { ok: 'not_cancellable'; reason: CryptoOrderStatus }
     | null
   > {
-    const order = await this.opts.repo.getById(args.order_id);
-    if (order === null || order.account_id !== args.account_id) return null;
-    if (order.status !== 'pending') {
-      return { ok: 'not_cancellable', reason: order.status };
-    }
     const now = this.nowFn();
-    const updated: CryptoOrder = {
-      ...order,
-      status: 'cancelled',
-      events: [...order.events, { status: 'cancelled', at: now, source: 'cancel' }],
-      updated_at: now,
-    };
-    await this.opts.repo.upsert(updated);
-    return { ok: 'cancelled', order: updated };
+    // #7 — lock the row so a concurrent IPN/note edit can't clobber the cancel, and the
+    // 'pending' + ownership guards are re-checked against the LOCKED committed row.
+    return this.opts.repo.withOrderLock<
+      | { ok: 'cancelled'; order: CryptoOrder }
+      | { ok: 'not_cancellable'; reason: CryptoOrderStatus }
+      | null
+    >(args.order_id, (order) => {
+      if (order.account_id !== args.account_id) {
+        return { updated: null, result: null };
+      }
+      if (order.status !== 'pending') {
+        return { updated: null, result: { ok: 'not_cancellable' as const, reason: order.status } };
+      }
+      const updated: CryptoOrder = {
+        ...order,
+        status: 'cancelled',
+        events: [...order.events, { status: 'cancelled', at: now, source: 'cancel' }],
+        updated_at: now,
+      };
+      return { updated, result: { ok: 'cancelled' as const, order: updated } };
+    });
   }
 
   /**
