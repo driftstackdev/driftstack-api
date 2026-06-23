@@ -307,6 +307,22 @@ export function AgentSessionPanel({
           style={{ height: `${(110 / 874) * 100}%` }}
         />
       )}
+      {/* TOP band cover (founder "white space above the output, still not fixed"; A3 W2813
+          root-cause via box gold-truth log). The fork window is 402x838 captured at 1×;
+          SCStream scalesToFit composites it into the 402x874 profile → an 18px letterbox
+          top + the 32px iOS titleInset = a 50px non-web WHITE band at y 0-50 (the SCStream
+          bg-fill crashed the daemon in W2766, so it can't be painted box-side). Mask it
+          bezel-black, symmetric with the 110px bottom (50+110 = 160 = 874 − 714 web). The
+          top 50px carries NO web pixels (web starts at y=50) so this is content-safe;
+          pointer-events-none → taps pass through to the screen-host unchanged. */}
+      {coverChromeBand && (
+        <div
+          aria-hidden="true"
+          data-component="chrome-band-cover-top"
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 rounded-t-lg bg-black"
+          style={{ height: `${(50 / 874) * 100}%` }}
+        />
+      )}
       {/* W617 — connected but nothing publishing: waiting spinner first,
           then the honest no-worker overlay with the parent's fallback. */}
       {state.kind === 'connected' && publisher !== 'publishing' && (
