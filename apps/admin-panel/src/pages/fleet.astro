@@ -88,6 +88,42 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!iso) return '—';
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
       }
+      // Derived live-state from last_seen_at — the RELIABLE liveness signal. The
+      // "Connected" column is the in-memory WS bool, which resets to unknown on
+      // every server restart (prod redeploys frequently), so a beating node can
+      // briefly read "offline" there. last_seen_at is DB-persisted + bumped every
+      // ~10s heartbeat, so the relative age answers "is this worker alive RIGHT
+      // NOW": <30s = live, <2m = lagging, older / never = stale/down.
+      function fmtFreshness(iso) {
+        if (!iso) return { text: 'never', cls: 'bg-red-50 text-red-700' };
+        const ageMs = Date.now() - new Date(iso).getTime();
+        if (!(ageMs >= 0)) return { text: 'just now', cls: 'bg-emerald-50 text-emerald-700' };
+        const s = Math.floor(ageMs / 1000);
+        let text;
+        if (s < 60) text = s + 's ago';
+        else if (s < 3600) text = Math.floor(s / 60) + 'm ago';
+        else if (s < 86400) text = Math.floor(s / 3600) + 'h ago';
+        else text = Math.floor(s / 86400) + 'd ago';
+        const cls =
+          s < 30
+            ? 'bg-emerald-50 text-emerald-700'
+            : s < 120
+              ? 'bg-amber-50 text-amber-700'
+              : 'bg-red-50 text-red-700';
+        return { text, cls };
+      }
+      function freshnessBadge(iso) {
+        const f = fmtFreshness(iso);
+        return (
+          '<span class="rounded-full px-2 py-0.5 text-xs ' +
+          f.cls +
+          '" title="' +
+          escapeHtml(fmtIso(iso)) +
+          '">' +
+          escapeHtml(f.text) +
+          '</span>'
+        );
+      }
       function fmtPct(n) {
         return typeof n === 'number' ? Math.round(n) + '%' : '—';
       }
@@ -188,8 +224,8 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<td class="px-4 py-3 font-mono text-xs text-tk-ink-3">' +
           escapeHtml((n.last_heartbeat && n.last_heartbeat.harnessVersion) || '—') +
           '</td>' +
-          '<td class="px-4 py-3 text-tk-ink-2">' +
-          escapeHtml(fmtIso(n.last_seen_at)) +
+          '<td class="px-4 py-3">' +
+          freshnessBadge(n.last_seen_at) +
           '</td>' +
           '</tr>'
         );
