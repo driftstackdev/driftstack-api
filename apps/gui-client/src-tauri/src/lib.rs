@@ -129,8 +129,20 @@ pub fn run() {
             // main GUI (never launched with this arg).
             if let Some(arg) = std::env::args().find(|a| a.starts_with("--ds-session=")) {
                 let b64 = arg.trim_start_matches("--ds-session=").to_string();
-                if let Some(win) = app.get_webview_window("main") {
-                    let _ = win.eval(&format!("window.location.search = atob('{b64}')"));
+                // SECURITY (audit wf_aa84c103): validate against the strict base64
+                // alphabet BEFORE interpolating into the eval'd JS string literal. A
+                // quote/backslash/newline in the arg would otherwise break out of the
+                // string and run arbitrary JS in the privileged (csp:null) webview that
+                // can invoke secret_load/sim_key_take → keychain API key + control-key
+                // exfil. The single-instance relaunch path already guards this (the
+                // `is_valid_b64_payload` filter above); setup() MUST too — the base64
+                // alphabet contains no JS-breaking chars, so this fully closes the
+                // breakout. (is_valid_b64_payload is unit-tested against the exact
+                // `'); alert(1) //` payload below.)
+                if is_valid_b64_payload(&b64) {
+                    if let Some(win) = app.get_webview_window("main") {
+                        let _ = win.eval(&format!("window.location.search = atob('{b64}')"));
+                    }
                 }
             }
             // Multi-window simulator (founder 2026-06-23): record which session `main`
