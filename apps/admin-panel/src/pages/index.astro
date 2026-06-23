@@ -933,9 +933,21 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (deleteBtn) {
             const name = deleteBtn.getAttribute('data-delete-secret');
             if (!window.confirm('Delete secret "' + name + '"? This is audited and irreversible.')) return;
+            // Reject on non-2xx + surface the outcome — the old
+            // `.then(fetchSecrets).catch(() => {})` ran on a 4xx/5xx the same as on
+            // success and swallowed network errors, so a FAILED delete of an
+            // owner secret looked like it succeeded (adversarial review wlcfjoxqq #7).
+            const dstatus = root.querySelector('[data-field="secret-set-status"]');
             void authedFetch('/v1/admin/owner/secrets/' + encodeURIComponent(name), { method: 'DELETE' })
-              .then(() => fetchSecrets())
-              .catch(() => {});
+              .then((r) => {
+                if (!r.ok) return Promise.reject(new Error('HTTP ' + r.status));
+                if (dstatus) dstatus.textContent = 'Deleted "' + name + '".';
+                return fetchSecrets();
+              })
+              .catch((err) => {
+                const msg = err && err.message ? err.message : 'network error';
+                if (dstatus) dstatus.textContent = 'Delete failed (' + msg + ').';
+              });
           }
         });
       }

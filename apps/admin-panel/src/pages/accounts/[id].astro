@@ -606,6 +606,14 @@ const accountId = account.id;
           { placeholder: 'e.g. api_starter', confirmLabel: 'Change tier' },
         );
         if (!tier) return;
+        // Applies immediately to the customer's billing/feature tier; confirm the
+        // resolved value so a valid-but-wrong typed tier isn't applied silently from
+        // a single prompt entry (adversarial review wlcfjoxqq #2).
+        const proceed = await window.driftstackConfirm(
+          'Change this account’s tier to "' + tier.trim() + '"? This applies immediately.',
+          { confirmLabel: 'Change tier' },
+        );
+        if (!proceed) return;
         const reason =
           (await window.driftstackPrompt('Reason for tier change (optional, max 500 chars):', {
             placeholder: 'optional',
@@ -631,6 +639,15 @@ const accountId = account.id;
       }
 
       async function suspend() {
+        // Destructive — revokes ALL active sessions + API keys until unsuspend. Gate
+        // on a real yes/no confirm FIRST; the optional reason prompt alone let an
+        // accidental Enter / single-click suspend a live account (adversarial review
+        // wlcfjoxqq #1). Mirrors the panel's other destructive actions.
+        const proceed = await window.driftstackConfirm(
+          'Suspend this account? This revokes all active sessions and API keys until you unsuspend.',
+          { confirmLabel: 'Suspend' },
+        );
+        if (!proceed) return;
         const reason =
           (await window.driftstackPrompt(
             'Reason for suspending this account (optional, max 500 chars):',
