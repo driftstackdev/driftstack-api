@@ -91,6 +91,19 @@ export interface CryptoOrdersRepo {
   upsert(order: CryptoOrder): Promise<void>;
   getById(orderId: string): Promise<CryptoOrder | null>;
   /**
+   * Serialize a read-modify-write on ONE order. The DB impl takes a row-level
+   * lock (SELECT … FOR UPDATE) inside a transaction, hands the locked committed
+   * snapshot to `fn`, persists `fn`'s `updated` (skips the write when `fn` returns
+   * `updated: null`), and returns `fn`'s `result`. Returns null if the order does
+   * not exist. Closes the IPN dup-fire (#3) + note/cancel lost-update (#7) races:
+   * the transition decision is computed against the LOCKED row, and the caller
+   * fires side-effects OUTSIDE the lock gated on `result`.
+   */
+  withOrderLock<T>(
+    orderId: string,
+    fn: (locked: CryptoOrder) => { updated: CryptoOrder | null; result: T },
+  ): Promise<T | null>;
+  /**
    * Admin / ops list. Filters by accountId when supplied; limits to
    * `limit` rows (default 50) ordered by created_at DESC.
    */
@@ -114,6 +127,19 @@ export class InMemoryCryptoOrdersRepo implements CryptoOrdersRepo {
   // eslint-disable-next-line @typescript-eslint/require-await
   async getById(orderId: string): Promise<CryptoOrder | null> {
     return this.orders.get(orderId) ?? null;
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async withOrderLock<T>(
+    orderId: string,
+    fn: (locked: CryptoOrder) => { updated: CryptoOrder | null; result: T },
+  ): Promise<T | null> {
+    // Single-threaded JS → the read-modify-write is already atomic; this mirrors
+    // the DB impl's contract (locked snapshot → fn → conditional write → result).
+    const order = this.orders.get(orderId);
+    if (order === undefined) return null;
+    const { updated, result } = fn(order);
+    if (updated !== null) this.orders.set(orderId, updated);
+    return result;
   }
   // eslint-disable-next-line @typescript-eslint/require-await
   async listAll(opts: { accountId?: string; limit?: number } = {}): Promise<CryptoOrder[]> {
@@ -1054,86 +1080,92 @@ export class CryptoOrdersService {
     payment_id: string;
     provider_status: string;
   }): Promise<CryptoOrder | null> {
-    const order = await this.opts.repo.getById(args.order_id);
-    if (order === null) return null;
+    const now = this.nowFn();
     const mapped = mapNowpaymentsStatus(args.provider_status);
-    if (mapped === null) return order; // unknown status: leave state alone, record payment_id only.
-    if (isTerminalForward(order.status, mapped)) {
-      const now = this.nowFn();
-      // V-666.AT — only append an event when the status actually
-      // changes; a repeat IPN that's a same-state refresh updates
-      // the row's updated_at without bloating the event log.
-      const events =
-        order.status === mapped
-          ? order.events
-          : [...order.events, { status: mapped, at: now, source: 'ipn' as const }];
-      const updated: CryptoOrder = {
-        ...order,
-        payment_id: order.payment_id ?? args.payment_id,
-        status: mapped,
-        events,
-        updated_at: now,
-      };
-      await this.opts.repo.upsert(updated);
-      // V-666.AN — fire crypto.order.failed on the IPN-driven
-      // pending/confirming/partial → failed transition. The
-      // prior-status check skips the (rejected) failed→failed retry
-      // case isTerminalForward would otherwise treat as a no-op
-      // refresh.
-      if (order.status !== 'failed' && mapped === 'failed') {
-        await this.emitFailedTransition(updated, 'ipn');
+    // #3 — lock the order row and decide the transition against the LOCKED committed
+    // snapshot, so concurrent / re-delivered IPNs serialize and only the WINNING
+    // transition writes + (below, OUTSIDE the lock) fires the paid/failed side-effects
+    // exactly once. Previously the read-modify-write was unlocked: two same-order IPNs
+    // both read pre-paid, both upserted, both fired the webhook + receipt email.
+    const outcome = await this.opts.repo.withOrderLock(args.order_id, (order) => {
+      if (mapped === null) {
+        // Unknown provider status: leave state alone (no write).
+        return { updated: null, result: { order, firePaid: false, fireFailed: false } };
       }
-      // V-666.I — fire crypto.order.paid when transitioning INTO the
-      // paid state. Skipped when the order was already paid (re-deliver
-      // of the same IPN). Skipped when no emitter is wired. Best-effort:
-      // an emission failure is swallowed so the IPN ack stays 200.
-      if (order.status !== 'paid' && mapped === 'paid' && updated.account_id !== null) {
-        const paidAtIso = new Date(updated.updated_at).toISOString();
-        if (this.opts.webhooks !== undefined) {
-          try {
-            await this.opts.webhooks.enqueueEvent(updated.account_id, 'crypto.order.paid', {
-              order_id: updated.order_id,
-              product: updated.product,
-              price_cents: updated.price_cents,
-              price_currency: updated.price_currency,
-              payment_id: updated.payment_id,
-              paid_at: paidAtIso,
-            });
-          } catch {
-            /* swallow */
-          }
-        }
-        // V-666.R — paid-receipt email scaffold. Fired in parallel with
-        // the webhook above; failures swallowed so the IPN ack still 200s.
-        if (this.opts.paidEmailNotifier !== undefined) {
-          try {
-            await this.opts.paidEmailNotifier.notifyOrderPaid({
-              account_id: updated.account_id,
-              order_id: updated.order_id,
-              product: updated.product,
-              price_cents: updated.price_cents,
-              price_currency: updated.price_currency,
-              payment_id: updated.payment_id,
-              paid_at: paidAtIso,
-            });
-          } catch {
-            /* swallow */
-          }
+      if (isTerminalForward(order.status, mapped)) {
+        // V-666.AT — append an event only on an actual status change; a same-state
+        // refresh just bumps updated_at.
+        const events =
+          order.status === mapped
+            ? order.events
+            : [...order.events, { status: mapped, at: now, source: 'ipn' as const }];
+        const updated: CryptoOrder = {
+          ...order,
+          payment_id: order.payment_id ?? args.payment_id,
+          status: mapped,
+          events,
+          updated_at: now,
+        };
+        return {
+          updated,
+          result: {
+            order: updated,
+            // Prior-status checks read the LOCKED status → a re-delivered IPN that
+            // finds the order already failed/paid does NOT re-fire the side-effects.
+            fireFailed: order.status !== 'failed' && mapped === 'failed',
+            firePaid: order.status !== 'paid' && mapped === 'paid' && updated.account_id !== null,
+          },
+        };
+      }
+      // No-op transition: record the payment_id if we didn't have it yet.
+      if (order.payment_id === null) {
+        const updated: CryptoOrder = { ...order, payment_id: args.payment_id, updated_at: now };
+        return { updated, result: { order: updated, firePaid: false, fireFailed: false } };
+      }
+      return { updated: null, result: { order, firePaid: false, fireFailed: false } };
+    });
+    if (outcome === null) return null; // order not found
+
+    // Side-effects fire OUTSIDE the lock, gated on the atomic transition decision.
+    if (outcome.fireFailed) {
+      // V-666.AN — crypto.order.failed on the IPN-driven →failed transition.
+      await this.emitFailedTransition(outcome.order, 'ipn');
+    }
+    // V-666.I/R — crypto.order.paid webhook + receipt email on the →paid transition.
+    // Best-effort: emission failures are swallowed so the IPN ack stays 200.
+    if (outcome.firePaid && outcome.order.account_id !== null) {
+      const paidAtIso = new Date(outcome.order.updated_at).toISOString();
+      if (this.opts.webhooks !== undefined) {
+        try {
+          await this.opts.webhooks.enqueueEvent(outcome.order.account_id, 'crypto.order.paid', {
+            order_id: outcome.order.order_id,
+            product: outcome.order.product,
+            price_cents: outcome.order.price_cents,
+            price_currency: outcome.order.price_currency,
+            payment_id: outcome.order.payment_id,
+            paid_at: paidAtIso,
+          });
+        } catch {
+          /* swallow */
         }
       }
-      return updated;
+      if (this.opts.paidEmailNotifier !== undefined) {
+        try {
+          await this.opts.paidEmailNotifier.notifyOrderPaid({
+            account_id: outcome.order.account_id,
+            order_id: outcome.order.order_id,
+            product: outcome.order.product,
+            price_cents: outcome.order.price_cents,
+            price_currency: outcome.order.price_currency,
+            payment_id: outcome.order.payment_id,
+            paid_at: paidAtIso,
+          });
+        } catch {
+          /* swallow */
+        }
+      }
     }
-    // No-op transition. Record the payment_id if we didn't have it yet.
-    if (order.payment_id === null) {
-      const updated: CryptoOrder = {
-        ...order,
-        payment_id: args.payment_id,
-        updated_at: this.nowFn(),
-      };
-      await this.opts.repo.upsert(updated);
-      return updated;
-    }
-    return order;
+    return outcome.order;
   }
 
   /**

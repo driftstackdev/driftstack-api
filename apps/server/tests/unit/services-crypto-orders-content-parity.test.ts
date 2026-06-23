@@ -197,25 +197,26 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
       /Idempotent: receiving the same paid IPN twice is a no-op\.\s*\n?\s*\*\s*Reverse transitions \(paid → pending\) are rejected/,
     );
     expect(body).toMatch(
-      /\/\/ V-666\.AT — only append an event when the status actually\s*\n?\s*\/\/ changes; a repeat IPN that's a same-state refresh updates\s*\n?\s*\/\/ the row's updated_at without bloating the event log\./,
+      /\/\/ V-666\.AT — append an event only on an actual status change; a same-state\s*\n?\s*\/\/ refresh just bumps updated_at\./,
     );
     expect(body).toMatch(
       /const events =\s*\n?\s*order\.status === mapped\s*\n?\s*\?\s*order\.events\s*\n?\s*:\s*\[\.\.\.order\.events, \{ status: mapped, at: now, source: 'ipn' as const \}\];/,
     );
-    expect(body).toMatch(
-      /\/\/ No-op transition\. Record the payment_id if we didn't have it yet\./,
-    );
+    expect(body).toMatch(/\/\/ No-op transition: record the payment_id if we didn't have it yet\./);
+    // #3 — the read-modify-write is row-locked (SELECT … FOR UPDATE via withOrderLock)
+    // so concurrent / re-delivered IPNs serialize + decide against the committed row.
+    expect(body).toMatch(/await this\.opts\.repo\.withOrderLock\(args\.order_id,/);
   });
 
   it('V-666.I crypto.order.paid emission: only when transitioning INTO paid (skip re-deliver) + account_id non-null + payload 6-field', () => {
     expect(body).toMatch(
-      /\/\/ V-666\.I — fire crypto\.order\.paid when transitioning INTO the\s*\n?\s*\/\/ paid state\. Skipped when the order was already paid \(re-deliver\s*\n?\s*\/\/ of the same IPN\)\./,
+      /\/\/ V-666\.I\/R — crypto\.order\.paid webhook \+ receipt email on the →paid transition\./,
     );
     expect(body).toMatch(
-      /if \(order\.status !== 'paid' && mapped === 'paid' && updated\.account_id !== null\) \{/,
+      /firePaid: order\.status !== 'paid' && mapped === 'paid' && updated\.account_id !== null,/,
     );
     expect(body).toMatch(
-      /await this\.opts\.webhooks\.enqueueEvent\(updated\.account_id, 'crypto\.order\.paid', \{\s*\n?\s*order_id: updated\.order_id,\s*\n?\s*product: updated\.product,\s*\n?\s*price_cents: updated\.price_cents,\s*\n?\s*price_currency: updated\.price_currency,\s*\n?\s*payment_id: updated\.payment_id,\s*\n?\s*paid_at: paidAtIso,/,
+      /await this\.opts\.webhooks\.enqueueEvent\(outcome\.order\.account_id, 'crypto\.order\.paid', \{\s*\n?\s*order_id: outcome\.order\.order_id,\s*\n?\s*product: outcome\.order\.product,\s*\n?\s*price_cents: outcome\.order\.price_cents,\s*\n?\s*price_currency: outcome\.order\.price_currency,\s*\n?\s*payment_id: outcome\.order\.payment_id,\s*\n?\s*paid_at: paidAtIso,/,
     );
   });
 

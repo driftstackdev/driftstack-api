@@ -125,6 +125,51 @@ describe('V-666.B applyIpnStatus — forward transitions', () => {
   });
 });
 
+describe('applyIpnStatus — paid side-effects fire EXACTLY once across re-delivery (audit #3, withOrderLock)', () => {
+  it('the paid webhook + receipt email fire only on the winning transition, not on a re-delivered paid IPN', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const paidWebhooks: string[] = [];
+    const emails: string[] = [];
+    const svc = new CryptoOrdersService({
+      repo,
+      nowFn: () => 5_000,
+      webhooks: {
+        enqueueEvent: (accountId, eventType) => {
+          if (eventType === 'crypto.order.paid') paidWebhooks.push(accountId);
+          return Promise.resolve();
+        },
+      },
+      paidEmailNotifier: {
+        notifyOrderPaid: (intent) => {
+          emails.push(intent.order_id);
+          return Promise.resolve();
+        },
+      },
+    });
+    await svc.create({
+      order_id: 'ord_fire',
+      account_id: 'acc_x',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    // First 'finished' IPN → transition to paid → fires once.
+    await svc.applyIpnStatus({
+      order_id: 'ord_fire',
+      payment_id: 'np',
+      provider_status: 'finished',
+    });
+    // Re-delivered 'finished' IPN (already paid in the LOCKED row) → must NOT re-fire.
+    await svc.applyIpnStatus({
+      order_id: 'ord_fire',
+      payment_id: 'np',
+      provider_status: 'finished',
+    });
+    expect(paidWebhooks).toEqual(['acc_x']); // exactly one webhook
+    expect(emails).toEqual(['ord_fire']); // exactly one receipt email
+  });
+});
+
 describe('V-666.B applyIpnStatus — terminal-state guards', () => {
   async function seedPaid(): Promise<{ svc: CryptoOrdersService }> {
     const repo = new InMemoryCryptoOrdersRepo();

@@ -85,6 +85,43 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
     return rows[0] ? rowToEnvelope(rows[0]) : null;
   }
 
+  // Row-level locked read-modify-write (mirrors stripe-webhooks-repo.setAccountTier).
+  // Closes the IPN dup-fire (#3) + note/cancel lost-update (#7) races: the decision is
+  // computed against the SELECT … FOR UPDATE snapshot, so concurrent IPNs/edits serialize
+  // and only the winner writes/fires side-effects. Skips the write when fn returns
+  // `updated: null` (the no-op branches). The SET clause matches upsert's update set.
+  async withOrderLock<T>(
+    orderId: string,
+    fn: (locked: CryptoOrder) => { updated: CryptoOrder | null; result: T },
+  ): Promise<T | null> {
+    return this.database.db.transaction(async (tx) => {
+      const rows = await tx
+        .select()
+        .from(cryptoOrders)
+        .where(eq(cryptoOrders.orderId, orderId))
+        .for('update')
+        .limit(1);
+      if (rows[0] === undefined) return null;
+      const locked = rowToEnvelope(rows[0]);
+      const { updated, result } = fn(locked);
+      if (updated !== null) {
+        await tx
+          .update(cryptoOrders)
+          .set({
+            accountId: updated.account_id,
+            paymentId: updated.payment_id,
+            status: updated.status,
+            customerNote: updated.customer_note,
+            internalNote: updated.internal_note,
+            events: updated.events,
+            updatedAt: new Date(updated.updated_at),
+          })
+          .where(eq(cryptoOrders.orderId, orderId));
+      }
+      return result;
+    });
+  }
+
   async listAll(opts: { accountId?: string; limit?: number } = {}): Promise<CryptoOrder[]> {
     const limit = opts.limit ?? 50;
     const where =
