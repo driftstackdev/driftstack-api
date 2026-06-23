@@ -180,6 +180,20 @@ const apiBaseUrl = resolveApiBaseUrl();
         });
       }
 
+      // audit w2flmiw48 #4 — the account-email header was seeded from MOCK_ACCOUNT and
+      // never overwritten by live data (every customer saw the mock email). Populate it
+      // from /account/me; leave the placeholder on failure / no token.
+      if (token) {
+        authedFetch('/v1/account/me')
+          .then((r) => (r.ok ? r.json() : null))
+          .then((me) => {
+            if (me && me.email) setText('account-email', 'Account · ' + me.email);
+          })
+          .catch(() => {
+            /* leave the placeholder */
+          });
+      }
+
       // Wire action buttons regardless of token state — they show a
       // banner if no token rather than silently no-oping.
       const portalBtn = root.querySelector('[data-action="portal"]');

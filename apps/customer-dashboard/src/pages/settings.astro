@@ -815,6 +815,17 @@ const EMAIL_EVENTS = [
             if (me.timezone) profileTzInput.value = me.timezone;
             if (profileSlugInput && me.slug) profileSlugInput.value = me.slug;
             if (profileRegionInput && me.region) profileRegionInput.value = me.region;
+            // audit w2flmiw48 #3 — the email field + header account-id were seeded from
+            // MOCK_ACCOUNT and never overwritten by live data (so every customer saw the
+            // mock account's email/id). Populate them from /account/me.
+            if (me.email) {
+              const emailInput = document.getElementById('email');
+              if (emailInput) emailInput.value = me.email;
+            }
+            if (me.id) {
+              const headerAcct = document.querySelector('[data-field="header-account"]');
+              if (headerAcct) headerAcct.textContent = 'Account · ' + me.id.slice(0, 16) + '…';
+            }
             // V-352b — initial avatar preview.
             setAvatarPreview(me.avatar_url || null);
           })

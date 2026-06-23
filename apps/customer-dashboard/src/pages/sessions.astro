@@ -410,6 +410,10 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       // didn't copy it the first time).
       (function showFirstKeyReveal() {
         const stashedKey = sessionStorage.getItem('ds_first_api_key_plaintext');
+        // audit w2flmiw48 #8 — read-then-immediately-clear so the plaintext key doesn't
+        // linger in sessionStorage across reloads / tab navigations (it survived until an
+        // explicit dismiss before). The reveal still renders from the closure variable.
+        sessionStorage.removeItem('ds_first_api_key_plaintext');
         if (!stashedKey) return;
         const reveal = root.querySelector('[data-first-key-reveal]');
         const plaintextEl = root.querySelector('[data-first-key-plaintext]');
