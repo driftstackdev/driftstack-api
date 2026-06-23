@@ -111,6 +111,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             const session = body.session || {};
             if (session.token) {
               localStorage.setItem('ds_web_session_token', session.token);
+              // audit w2flmiw48 #2 — clear the previous user's per-session overrides
+              // (acting-as + staff/team flags) so a fresh session can't inherit them.
+              localStorage.removeItem('ds_act_as_account');
+              localStorage.removeItem('ds_is_team_user');
+              localStorage.removeItem('ds_is_staff_user');
             }
             // Open-redirect guard for ?next= — reduce to a SAME-ORIGIN relative path
             // (else '/'), so a magic-link can't bounce a just-authenticated user off-site

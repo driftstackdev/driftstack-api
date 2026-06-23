@@ -85,7 +85,7 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
 
   it("Success path (W528: shared completeSession for plain login + MFA challenge): session.token → localStorage.setItem('ds_web_session_token', ...) + window.location.href = next ? next : '/' — pinned so the post-login redirect honors next= but falls back to dashboard root", () => {
     expect(body).toMatch(
-      /function completeSession\(body\) \{\s*\n?\s*const session = \(body && body\.session\) \|\| \{\};\s*\n?\s*if \(session\.token\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);\s*\n?\s*\}/,
+      /function completeSession\(body\) \{\s*\n?\s*const session = \(body && body\.session\) \|\| \{\};\s*\n?\s*if \(session\.token\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?localStorage\.removeItem\('ds_act_as_account'\);[\s\S]*?localStorage\.removeItem\('ds_is_staff_user'\);\s*\n?\s*\}/,
     );
     expect(body).toMatch(/window\.location\.href = next \? next : '\/';/);
   });

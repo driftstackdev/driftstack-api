@@ -70,7 +70,7 @@ describe('W492.A apps/customer-dashboard/src/pages/reset-password.astro content 
 
   it("Auto-login on success: const session = body.session || {}; if session.token → localStorage.setItem('ds_web_session_token', session.token) + redirect to '/' — pinned so the customer doesn't get bounced back to /login after a successful reset (the V-079 server returns a fresh session expressly to avoid the double-step UX)", () => {
     expect(body).toMatch(
-      /const session = body\.session \|\| \{\};\s*\n?\s*if \(session\.token\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);\s*\n?\s*\}\s*\n?\s*window\.location\.href = '\/';/,
+      /const session = body\.session \|\| \{\};\s*\n?\s*if \(session\.token\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?localStorage\.removeItem\('ds_act_as_account'\);[\s\S]*?localStorage\.removeItem\('ds_is_staff_user'\);\s*\n?\s*\}\s*\n?\s*window\.location\.href = '\/';/,
     );
   });
 

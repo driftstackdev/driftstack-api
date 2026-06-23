@@ -52,7 +52,7 @@ describe('customer-dashboard/pages/auth/magic-link content parity', () => {
 
   it('ds_web_session_token localStorage write framing pinned: \'if (session.token) { localStorage.setItem("ds_web_session_token", session.token); }\' — pinned so the canonical localStorage key contract stays documented (drift to a different key would orphan the signed-in state across other pages reading this same key)', () => {
     expect(body).toMatch(
-      /const session = body\.session \|\| \{\};\s*\n?\s*if \(session\.token\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);\s*\n?\s*\}/,
+      /const session = body\.session \|\| \{\};\s*\n?\s*if \(session\.token\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);[\s\S]*?localStorage\.removeItem\('ds_act_as_account'\);[\s\S]*?localStorage\.removeItem\('ds_is_staff_user'\);\s*\n?\s*\}/,
     );
   });
 
