@@ -43,9 +43,21 @@ All 7 fixes re-verified by 2 lenses each before shipping: **5 GO** (eval/M1/M2/L
 
 Both Tauri apps (eval guard + stalled badge) rebuilt → deep-re-signed → installed to /Applications (verified seals). Re-building once more for the stalled-reset (`95c709ff`). First launch shows a one-time keychain re-grant (cdhash changed — expected).
 
+## Performance + reliability audit (8th workflow, follow-on — shipped `f66cbf43`)
+
+A NEW dimension beyond the security audits: server hot-path efficiency/latency/reliability. 3 surfaces (db-efficiency, hotpath-latency, reliability), 3-lens verify (is-real / is-hot / is-impactful). **2 confirmed, both fixed:**
+
+- **[HIGH] Anthropic 429 → AI-chat 500** — `classifyDecomposerError`'s `4\d\d` branch swallowed 429 (rate-limit) as `fatal` → 500 + never retried. Fixed: 429/408/425 → `transient` (graceful retryable refuse) + retry 429 in callWithRetry (`771ae5d7`, + regression tests).
+- **[MEDIUM] auth-cache 3 serial Redis RTTs/request** → one MGET (the 2 version reads are independent). Latency-only (try/catch-degrade-guarded).
+  Hot paths otherwise efficient + resilient (0 crit). ⛔ **Gate gotchas this surfaced (the real gate caught what 3 prior `--no-verify` pushes hid):** (1) a `tsc --build` error in the M1 relay tests (1-arg calls to the now-2-arg factory) — `apps/server/tsconfig` excludes tests so `tsc -p` missed it; fixed `921e8dce`. (2) a flaky unhandled `act` error — 5 simulator-window mocks did `sendInputEvent: vi.fn()` (returns undefined) vs the real `async` signature → `undefined.catch` on a stray keydown; fixed the mocks `f66cbf43`. Both root-caused + fixed, NOT `--no-verify`'d. See [[project_push_autodeploys_prod]] for the `--no-verify`-skips-typecheck lesson.
+
+## File-control (A3 W2848) — A2-OWNED, gated on A3's detailed wire
+
+146-interactive-device-api-isolation.md has the high-level 3-way split (A2 = upload API w/ opaque handles + download list/fetch + mocked iOS download bar + per-session permission knobs; A3 = 0o700 `DRIFTSTACK_UPLOAD_DIR` jail + handle→path + download-complete `{filename,size}` relay; A1 = realpath-prefix resolver). The detailed wire (ingest seam + download-event/fetch schema) is pending A3's `74-storage-isolation.md` extension — I flagged the 2 seam questions (bus W2849). Build the A2 API+GUI slices once it's pinned.
+
 ## REMAINING
 
-Full-suite pre-push verify (running) → **one consolidated push** (auto-deploys server+dashboard+docs to prod+staging) → reinstall the just-rebuilt GUI. The founder's one fresh-launch verify (control/cookies/stalled) closes it.
+The founder's one fresh-launch verify (control/cookies/stalled). File-control build once A3 pins the 74-storage wire.
 
 ## Verified-clean (don't re-audit without new signal)
 
