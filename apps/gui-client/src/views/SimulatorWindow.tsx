@@ -116,6 +116,14 @@ function readPersistedControlKey(sessionId: string): string {
   }
 }
 
+/** Build the ControlAuth, attaching the handed-off API host so the separate
+ *  app's control calls target the right server with no store-timing race
+ *  (founder 2026-06-23). `controlKey===''` → null (in-app window / no key). */
+function controlAuthWith(controlKey: string, baseUrl: string): ControlAuth {
+  if (controlKey === '') return null;
+  return baseUrl !== '' ? { controlKey, baseUrl } : { controlKey };
+}
+
 function infoFromQuery(search: string = window.location.search): SessionQuery {
   const q = new URLSearchParams(search);
   const ws_url = q.get('ws');
@@ -1020,7 +1028,7 @@ export function SimulatorWindow(): JSX.Element {
   // path and only OVERRIDES when it actually returns a key. null → use the
   // API key (in-app window). Re-loaded when the session switches.
   const [controlAuth, setControlAuth] = useState<ControlAuth>(() =>
-    controlKey !== '' ? { controlKey } : null,
+    controlAuthWith(controlKey, baseUrl),
   );
   useEffect(() => {
     // A new room/session starts with a clean control-health slate — never carry
@@ -1039,7 +1047,7 @@ export function SimulatorWindow(): JSX.Element {
           const { invoke } = await import('@tauri-apps/api/core');
           const fromFile = await invoke<string | null>('sim_key_take', { sessionId });
           if (!cancelled && typeof fromFile === 'string' && fromFile.length > 0) {
-            setControlAuth({ controlKey: fromFile });
+            setControlAuth(controlAuthWith(fromFile, baseUrl));
             // Persist so a later REOPEN of this session (temp file already consumed,
             // no fresh ck=) can restore the key (founder 2026-06-23 control-failed).
             persistControlKey(sessionId, fromFile);
@@ -1053,7 +1061,7 @@ export function SimulatorWindow(): JSX.Element {
       if (cancelled) return;
       // Query-param handoff (sandboxed launch) — persist it for reopens too.
       if (controlKey !== '') {
-        setControlAuth({ controlKey });
+        setControlAuth(controlAuthWith(controlKey, baseUrl));
         persistControlKey(sessionId, controlKey);
         return;
       }
@@ -1065,12 +1073,12 @@ export function SimulatorWindow(): JSX.Element {
       // stale (>24h TTL) key just 401s, which now degrades to Manual rather than a
       // blocking error.
       const stored = readPersistedControlKey(sessionId);
-      setControlAuth(stored !== '' ? { controlKey: stored } : null);
+      setControlAuth(controlAuthWith(stored, baseUrl));
     })();
     return () => {
       cancelled = true;
     };
-  }, [sessionId, controlKey]);
+  }, [sessionId, controlKey, baseUrl]);
   // Relaunch session-switch listener (Tauri-only). The Rust side validated the
   // b64 payload before emitting; decode it the same way the initial launch does
   // (atob → query string) and re-parse. Also sync window.history so a later

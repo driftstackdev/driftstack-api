@@ -211,6 +211,15 @@ describe('agent-session-control transport', () => {
     });
   });
 
+  it('ControlAuth.baseUrl overrides the store baseUrl (separate app targets the handed-off host, not localhost)', async () => {
+    mockFetch.mockResolvedValue(ok({ status: 'ok', cookies: [] }));
+    // The separate app's store would default to localhost; the launch hands off
+    // the real host on ControlAuth so the request targets it (race-free).
+    await getAgentSessionCookies('agt_1', { controlKey: 'gck_x', baseUrl: 'https://real.host' });
+    const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://real.host/v1/agent-sessions/agt_1/cookies');
+  });
+
   it('getAgentSessionCookies sends the control-key header (separate Simulator app)', async () => {
     mockFetch.mockResolvedValue(ok({ status: 'timeout', cookies: null }));
     const res = await getAgentSessionCookies('agt_1', { controlKey: 'gck_cook' });

@@ -25,8 +25,13 @@ export type SessionMode = 'ai' | 'manual' | 'pair';
 
 /** Per-session control credential, threaded from the simulator entry
  *  (sim_key_take / query param) through SimulatorWindow into each
- *  control call. `null` → use the account API key (in-app window). */
-export type ControlAuth = { controlKey: string } | null;
+ *  control call. `null` → use the account API key (in-app window).
+ *  `baseUrl` (founder 2026-06-23) — the PUBLIC API host handed off at launch.
+ *  The SEPARATE Simulator app's settings store may be empty (→ loadSettings
+ *  defaults to localhost:3000), so carrying the host HERE makes every control
+ *  call target the right server with NO store-timing race. Omitted (in-app
+ *  window) → fall back to settings.baseUrl. */
+export type ControlAuth = { controlKey: string; baseUrl?: string } | null;
 
 /** The slice of agent-session state the simulator control panel reads. */
 export interface AgentSessionControlState {
@@ -75,7 +80,14 @@ async function authedFetch(path: string, init: RequestInit, auth: ControlAuth): 
   } else {
     throw new AgentSessionControlError('API key not configured', 0, 'auth_missing');
   }
-  const baseUrl = settings.baseUrl.replace(/\/+$/, '');
+  // Prefer the base URL handed off WITH the control credential (separate app —
+  // its own store may be empty/localhost); fall back to the configured store
+  // baseUrl (in-app window). Race-free: no dependency on a just-persisted store.
+  const rawBase =
+    auth !== null && typeof auth.baseUrl === 'string' && auth.baseUrl.length > 0
+      ? auth.baseUrl
+      : settings.baseUrl;
+  const baseUrl = rawBase.replace(/\/+$/, '');
   const res = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
