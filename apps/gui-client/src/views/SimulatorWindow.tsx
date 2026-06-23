@@ -25,6 +25,7 @@ import { useConnectionStats } from '../lib/livekit-connection-stats';
 import { useRecordings } from '../lib/recordings';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
+import { formatSessionDiagnostics } from '../lib/session-diagnostics';
 import {
   getAgentSession,
   getAgentSessionPageState,
@@ -1283,6 +1284,39 @@ export function SimulatorWindow(): JSX.Element {
   // WebRTC transport diagnostics (relay/tcp? loss? freezes?) — founder's
   // "is it slow because we're on TCP?" question. Read-only stats poll.
   const conn = useConnectionStats({ room, enabled: room !== null });
+  // #48 item 2 — "Copy diagnostics": a paste-ready snapshot of the session-info
+  // overlay (the founder keeps reporting streaming/latency issues and needs the
+  // exact figures for a bug report). formatSessionDiagnostics is pure + tested;
+  // clipboard write mirrors the address-bar copyUrl idiom (silent on failure).
+  const [diagCopied, setDiagCopied] = useState(false);
+  const copyDiagnostics = (): void => {
+    const text = formatSessionDiagnostics({
+      sessionId,
+      profileName,
+      deviceName,
+      link: info ? wsHost(info.ws_url) : null,
+      egress: proxyLabel,
+      fps,
+      latencyMs: latency.rttMs,
+      linkRttMs: conn.rttMs,
+      transport: conn.transport,
+      relayed: conn.relayed,
+      decodeFps: conn.decodeFps,
+      packetLossPct: conn.packetLossPct,
+      jitterMs: conn.jitterMs,
+      freezeCount: conn.freezeCount,
+      build: typeof __BUILD_STAMP__ !== 'undefined' ? __BUILD_STAMP__ : 'dev',
+    });
+    void navigator.clipboard?.writeText(text).then(
+      () => {
+        setDiagCopied(true);
+        window.setTimeout(() => setDiagCopied(false), 1200);
+      },
+      () => {
+        /* clipboard blocked — silent */
+      },
+    );
+  };
   const [landscape, setLandscape] = useState(false);
   // Pin = always-on-top (the floating-iPhone default). Unpinned the window
   // behaves like a normal sibling window (Cmd+` cycling, Mission Control,
@@ -2177,6 +2211,16 @@ export function SimulatorWindow(): JSX.Element {
                       build {typeof __BUILD_STAMP__ !== 'undefined' ? __BUILD_STAMP__ : 'dev'}
                     </div>
                   </div>
+                  {/* #48 item 2 — copy the whole snapshot above as paste-ready
+                      text for a support request / bug report. */}
+                  <button
+                    type="button"
+                    data-action="copy-diagnostics"
+                    onClick={copyDiagnostics}
+                    className="mt-1.5 w-full rounded border border-white/15 px-2 py-1 text-center font-sans text-[10px] text-white/70 transition hover:bg-white/10 hover:text-white"
+                  >
+                    {diagCopied ? 'Copied ✓' : 'Copy diagnostics'}
+                  </button>
                 </div>
               )}
               <div
