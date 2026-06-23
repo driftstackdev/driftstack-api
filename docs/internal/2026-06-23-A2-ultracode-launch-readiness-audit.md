@@ -28,13 +28,24 @@ Founder enabled **ultracode** ("most exhaustive, correct answer; token cost not 
 - `1e6687a7` server M1/M2/L1 (M1 reviewed incl. bootstrap wiring: `makeSessionPageStateRelay` + `isCrossNodeSpoof`; M2 `scrubNodeDiagnostics`; L1 SSE backpressure + concurrency cap)
 - `148981a2` pageState `stalled` contract (A3 W2845) + `a051b83e` its regression test — GUI "Reconnecting — page unresponsive" badge over the last frame
 - `a9271aec` base= launch-handoff regression test (already pushed)
+- `140a2b83` LiveKit token mint bound to `session.node_id` (new `getDetailByNodeIdOrId`; fixes wrong-Mac token in a multi-LiveKit-box fleet; 61 tests incl. binding scenarios)
+- `5d4b7eb8` SDK+dashboard: MFA local-QR (seed no longer leaves origin, verified bit-for-bit vs qrcode@1.5.4) + SDK retry-safety gate (idempotent/keyed-only) + Python crypto inversion + pagination-guard parity + unified retry defaults
+- `204d123d` re-pinned the 8 cross-SDK content-parity drift guards to the new SDK design
+- `b315074c` docs: corrected the documented retry defaults (250/8000 → unified 200/10000) in README + /sdk/installation + 4 pins
+- `95c709ff` pre-push hardening (from adversarial verify w83xq1aht): SSE slot-leak window (acquire slot after cleanup wired) + stalled-badge reset on session-swap/navigate
 - driftstack `8f4e1aaab` — bus reply A2 W2846 (A3 unblocked on `stalled`)
 
-## PENDING (in flight at time of writing)
+## Pre-push adversarial verification (w83xq1aht)
 
-1. **SDK/dashboard fix-fork** — implements the 5 SDK/dashboard findings (MFA client-side QR; SDK retry only on idempotency-keyed POSTs; pagination guard parity; retry-defaults unify).
-2. **LiveKit-binding fix-fork** — bind the token mint to `session.nodeId` (fall back to `findNearestWithLivekit` only when NULL); needs a `node_id`-keyed fleet-nodes lookup.
-3. After both: review → commit → **one consolidated push** (auto-deploys prod+staging) → **GUI rebuild + install** (eval guard + stalled badge are Tauri; per `feedback_gui_built_not_installed_install_it`).
+All 7 fixes re-verified by 2 lenses each before shipping: **5 GO** (eval/M1/M2/LiveKit/SDK), **2 low follow-ups found + fixed** (the SSE slot-leak + stalled reset above). No blocker survived.
+
+## GUI shipped
+
+Both Tauri apps (eval guard + stalled badge) rebuilt → deep-re-signed → installed to /Applications (verified seals). Re-building once more for the stalled-reset (`95c709ff`). First launch shows a one-time keychain re-grant (cdhash changed — expected).
+
+## REMAINING
+
+Full-suite pre-push verify (running) → **one consolidated push** (auto-deploys server+dashboard+docs to prod+staging) → reinstall the just-rebuilt GUI. The founder's one fresh-launch verify (control/cookies/stalled) closes it.
 
 ## Verified-clean (don't re-audit without new signal)
 
