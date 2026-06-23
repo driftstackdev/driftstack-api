@@ -268,7 +268,12 @@ export function AgentSessionPanel({
       // <video> then fills this iPhone-aspect box exactly. The aspect is the
       // LIVE stream's once metadata arrives (effectiveAspectRatio), so the box
       // tracks the real archetype.
-      className="relative h-full max-h-full max-w-full overflow-hidden rounded-lg border border-white/10 bg-black"
+      // No white border (founder 2026-06-23 "white border around the view, looks
+      // bad" + A3 W2827): when the live aspect makes the <video> object-contain
+      // SMALLER than this box, a white rim outlined the shrunken view. bg-black +
+      // no border → the iPhone view sits flush in bezel-black; any object-contain
+      // margin reads as bezel, not a light frame.
+      className="relative h-full max-h-full max-w-full overflow-hidden rounded-lg bg-black"
       style={{ aspectRatio: effectiveAspectRatio.toString() }}
     >
       <video

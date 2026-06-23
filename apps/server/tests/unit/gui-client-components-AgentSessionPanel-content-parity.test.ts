@@ -63,9 +63,13 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
   });
 
   it('Scale-to-fit container sizing pinned: the panel box is `h-full max-h-full max-w-full` + aspectRatio style (fills available HEIGHT, derives width from the iPhone aspect, centered by the parent), NOT `w-full`. Drift back to w-full re-introduces the stretched-giant view (height = width × 2.17 on a wide window); the <video> object-contain fills the box exactly', () => {
+    // No white border (founder 2026-06-23 / A3 W2827): a white rim outlined the
+    // object-contain-shrunken view. bg-black + no border → flush in bezel-black.
     expect(body).toMatch(
-      /className="relative h-full max-h-full max-w-full overflow-hidden rounded-lg border border-white\/10 bg-black"/,
+      /className="relative h-full max-h-full max-w-full overflow-hidden rounded-lg bg-black"/,
     );
+    // Guard the regression: the panel box must NOT carry a white border again.
+    expect(body).not.toMatch(/border border-white\/10 bg-black"/);
     expect(body).toMatch(/style=\{\{ aspectRatio: effectiveAspectRatio\.toString\(\) \}\}/);
     // The video fills its (now correctly-sized) box and letterboxes via object-contain.
     expect(body).toMatch(/className="h-full w-full object-contain"/);

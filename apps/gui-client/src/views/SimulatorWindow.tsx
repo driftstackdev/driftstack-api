@@ -2151,7 +2151,10 @@ export function SimulatorWindow(): JSX.Element {
                 <div
                   ref={screenHostRef}
                   data-component="simulator-screen-host"
-                  className={`relative min-h-0 flex-1 ${controlMode === 'ai' ? '' : 'cursor-none'}`}
+                  // bg-black so any object-contain margin around the aspect-locked
+                  // video reads as bezel-black, never a light see-through border
+                  // (founder 2026-06-23 white-border / A3 W2827).
+                  className={`relative min-h-0 flex-1 bg-black ${controlMode === 'ai' ? '' : 'cursor-none'}`}
                   onPointerDownCapture={showTap}
                   onPointerMove={moveTouchPoint}
                   onPointerEnter={moveTouchPoint}
