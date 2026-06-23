@@ -161,13 +161,13 @@ describe('SimulatorWindow — floating iPhone', () => {
         <SimulatorWindow />
       </RecordingsProvider>,
     );
-    const wrap = container.querySelector('[data-component="simulator-toolbar-wrap"]');
-    const panel = wrap?.querySelector('[data-component="simulator-controls"]');
-    // Open by default so the GUI Address bar is found (the founder kept tapping
-    // the non-interactive rendered Safari pill instead).
-    expect(panel).not.toBeNull();
-    // The Address bar is the FIRST control in the panel (most prominent).
-    expect(panel?.firstElementChild?.getAttribute('data-component')).toBe('simulator-address');
+    // Option B: the chevron now reveals a docked right DRAWER (a sibling of the
+    // device), not the old in-toolbar dropdown. It auto-opens for a fresh user.
+    const drawer = container.querySelector('[data-component="simulator-drawer"]');
+    expect(drawer).not.toBeNull();
+    // The GUI Address bar is present in the drawer (browser-mode off) so the
+    // founder finds it instead of tapping the non-interactive rendered Safari pill.
+    expect(drawer?.querySelector('[data-component="simulator-address"]')).not.toBeNull();
   });
 
   it('shows a LOUD transport-fallback badge when the WebRTC media is relayed / TCP (the #1 latency suspect — A3 wmdoil11r)', () => {
@@ -234,7 +234,9 @@ describe('SimulatorWindow — floating iPhone', () => {
     const chevron = wrap?.querySelector('[aria-label="Show controls"]');
     expect(chevron).not.toBeNull();
     fireEvent.click(chevron as Element);
-    const panel = wrap?.querySelector('[data-component="simulator-controls"]');
+    // Option B: the chevron reveals the docked right DRAWER (a sibling of the
+    // device), not the old in-toolbar dropdown.
+    const panel = container.querySelector('[data-component="simulator-drawer"]');
     expect(panel).not.toBeNull();
     // The Mode segmented control is the hero (replaces the old static "Full
     // control" line) — the three modes are present as a radio group.
@@ -242,16 +244,18 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(panel?.querySelector('[aria-label="Agent mode"]')).not.toBeNull();
     expect(panel?.querySelector('[aria-label="Pair mode"]')).not.toBeNull();
     expect(panel?.querySelector('[aria-label="Manual mode"]')).not.toBeNull();
-    // The labelled controls now live here (clearer than the old icon-only bar).
+    // The labelled controls live in the drawer's Controls section.
     expect(
       panel?.querySelector('[aria-label="Rotate to landscape"], [aria-label="Rotate to portrait"]'),
     ).not.toBeNull();
-    // Pin toggle (always-on-top) — defaults pinned (the floating-iPhone vision).
-    // The window opens NOT always-on-top by default now (a normal, switchable,
-    // minimizable window — founder 2026-06-18 "should show in the taskbar"), so
-    // the pin control reads "Pin on top"; the toggle floats it on demand.
+    // Pin toggle (always-on-top) — the window opens NOT always-on-top by default
+    // (a normal, switchable, minimizable window), so the pin control reads "Pin
+    // on top"; the toggle floats it on demand.
     expect(panel?.querySelector('[aria-label="Pin on top"]')).not.toBeNull();
-    expect(panel?.querySelector('[aria-label="Session info"]')).not.toBeNull();
+    // Diagnostics is now an always-shown drawer section (with a ✕ to close the
+    // drawer) — it replaces the old "Session info" toggle that opened an overlay.
+    expect(panel?.querySelector('[data-component="drawer-diagnostics"]')).not.toBeNull();
+    expect(panel?.querySelector('[aria-label="Close drawer"]')).not.toBeNull();
   });
 
   it('brands the toolbar: Drift mark + profile name (primary) with the device muted beside it', () => {
@@ -286,7 +290,7 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(toolbar?.textContent).not.toContain('·');
   });
 
-  it('the expanded control panel dismisses on an outside pointer-down', () => {
+  it('the expanded control DRAWER closes on Escape (docked panel — not on an outside pointer-down)', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
     const { container } = render(
       <RecordingsProvider>
@@ -295,10 +299,14 @@ describe('SimulatorWindow — floating iPhone', () => {
     );
     const wrap = container.querySelector('[data-component="simulator-toolbar-wrap"]');
     fireEvent.click(wrap?.querySelector('[aria-label="Show controls"]') as Element);
-    expect(wrap?.querySelector('[data-component="simulator-controls"]')).not.toBeNull();
-    // A pointer-down outside the toolbar wrap collapses the panel.
+    expect(container.querySelector('[data-component="simulator-drawer"]')).not.toBeNull();
+    // Option B: the drawer is DOCKED (a sibling of the device), so it does NOT
+    // dismiss on an outside pointer-down (that would close it on its own clicks).
     fireEvent.pointerDown(document.body);
-    expect(wrap?.querySelector('[data-component="simulator-controls"]')).toBeNull();
+    expect(container.querySelector('[data-component="simulator-drawer"]')).not.toBeNull();
+    // Escape closes it.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(container.querySelector('[data-component="simulator-drawer"]')).toBeNull();
   });
 
   it('iOS tap cursor: a pointer-down on the screen blooms a tap-ripple ring (purely visual — never intercepts the tap)', () => {
@@ -372,7 +380,7 @@ describe('SimulatorWindow — floating iPhone', () => {
     );
     const wrap = container.querySelector('[data-component="simulator-toolbar-wrap"]');
     fireEvent.click(wrap?.querySelector('[aria-label="Show controls"]') as Element);
-    const panel = wrap?.querySelector('[data-component="simulator-controls"]');
+    const panel = container.querySelector('[data-component="simulator-drawer"]');
     expect(panel?.querySelector('[aria-label="End session"]')).not.toBeNull();
   });
 
@@ -387,7 +395,7 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(container.querySelector('[data-component="simulator-running-indicator"]')).toBeNull();
     const wrap = container.querySelector('[data-component="simulator-toolbar-wrap"]');
     fireEvent.click(wrap?.querySelector('[aria-label="Show controls"]') as Element);
-    const panel = wrap?.querySelector('[data-component="simulator-controls"]');
+    const panel = container.querySelector('[data-component="simulator-drawer"]');
     expect(panel?.querySelector('[aria-label="End session"]')).toBeNull();
   });
 

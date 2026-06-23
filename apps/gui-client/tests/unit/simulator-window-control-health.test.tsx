@@ -77,6 +77,9 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
 vi.mock('../../src/lib/agent-session-control', () => ({
   getAgentSession: () => new Promise(() => {}),
   getAgentSessionPageState: () => Promise.resolve(null),
+  // The cookies drawer poll (founder #48) calls this once the room connects; the
+  // mock must export it or the poll's tick throws + crashes the component.
+  getAgentSessionCookies: () => Promise.resolve({ status: 'unavailable', cookies: null }),
   setSessionMode: vi.fn(),
   takeoverSession: vi.fn(),
   handbackSession: vi.fn(),
