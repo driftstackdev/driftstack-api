@@ -302,6 +302,26 @@ export async function saveSettings(s: DriftstackSettings): Promise<void> {
   return settingsWriteLock(() => saveSettingsUnlocked(s));
 }
 
+/**
+ * Founder 2026-06-23 — seed JUST the API base URL into the store, preserving every
+ * other key (apiKeys map / theme / startUrl). The SEPARATE Simulator app starts
+ * with an EMPTY store → loadSettings() falls back to DEFAULT_SETTINGS.baseUrl
+ * (`http://localhost:3000`), so its control HTTP calls (mode / End-session /
+ * cookies) all hit localhost and fail — even though the per-session control key
+ * arrives via `ck=`. The launch now hands off the real `base=` (the PUBLIC API
+ * host, non-secret); SimulatorWindow persists it here on mount so authedFetch
+ * targets the right server. Merge-only (no keychain touch); no-op when unchanged.
+ */
+export async function persistBaseUrl(baseUrl: string): Promise<void> {
+  if (baseUrl === '') return;
+  return settingsWriteLock(async () => {
+    const persisted = (await getStore().get<PersistedSettings>(SETTINGS_KEY)) ?? {};
+    if (persisted.baseUrl === baseUrl) return; // already correct — skip the write
+    await getStore().set(SETTINGS_KEY, { ...persisted, baseUrl });
+    await getStore().save();
+  });
+}
+
 async function saveSettingsUnlocked(s: DriftstackSettings): Promise<void> {
   const useKeychain = useKeychainForBaseUrl(s.baseUrl);
   const hasKey = s.apiKey !== null && s.apiKey.length > 0;

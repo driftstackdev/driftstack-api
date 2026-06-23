@@ -26,6 +26,7 @@ import { useRecordings } from '../lib/recordings';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
+import { persistBaseUrl } from '../lib/settings';
 import {
   getAgentSession,
   getAgentSessionPageState,
@@ -77,6 +78,12 @@ interface SessionQuery {
    *  without waiting on the Rust location.search reload. Empty string → no key
    *  from the query (in-app window → fall back to the account API key). */
   controlKey: string;
+  /** PUBLIC API base URL handed off at launch (`base=`). The SEPARATE Simulator
+   *  app's own store may be empty → loadSettings() would default to
+   *  localhost:3000 and every control call fails. SimulatorWindow persists this
+   *  on mount so authedFetch targets the right server (founder 2026-06-23). Empty
+   *  → leave the app's own configured baseUrl alone. */
+  baseUrl: string;
 }
 
 /** Parse the simulator session from a query string. Defaults to the window's
@@ -122,8 +129,19 @@ function infoFromQuery(search: string = window.location.search): SessionQuery {
   // Sandboxed-fallback control key (see SessionQuery.controlKey). The
   // non-sandboxed handoff is the 0600 temp file, read via sim_key_take.
   const controlKey = q.get('ck') ?? '';
+  // PUBLIC API host handed off at launch (see SessionQuery.baseUrl).
+  const baseUrl = q.get('base') ?? '';
   if (ws_url === null || token === null || ws_url === '' || token === '') {
-    return { info: null, deviceName, profileName, proxyLabel, sessionId, countryCode, controlKey };
+    return {
+      info: null,
+      deviceName,
+      profileName,
+      proxyLabel,
+      sessionId,
+      countryCode,
+      controlKey,
+      baseUrl,
+    };
   }
   // LiveKitInfo carries ws_url + token (the only fields the panel/connect read);
   // room_name is informational. Cast is safe — the panel reads ws_url/token only.
@@ -135,6 +153,7 @@ function infoFromQuery(search: string = window.location.search): SessionQuery {
     sessionId,
     countryCode,
     controlKey,
+    baseUrl,
   };
 }
 
@@ -979,7 +998,17 @@ export function SimulatorWindow(): JSX.Element {
   // Room), and the listener below re-parses the payload exactly like the initial
   // location.search and updates this state.
   const [query, setQuery] = useState<SessionQuery>(() => infoFromQuery());
-  const { info, deviceName, profileName, proxyLabel, sessionId, countryCode, controlKey } = query;
+  const { info, deviceName, profileName, proxyLabel, sessionId, countryCode, controlKey, baseUrl } =
+    query;
+  // Founder 2026-06-23 — the separate Simulator app starts with an empty settings
+  // store (baseUrl → localhost:3000 default), so its control HTTP calls fail. The
+  // launch hands off the real API host via `base=`; persist it so authedFetch
+  // (loadSettings().baseUrl) targets the right server. Runs on mount + whenever a
+  // relaunch swaps in a fresh base. Non-secret; merge-only; no-op when unchanged.
+  useEffect(() => {
+    if (baseUrl === '') return;
+    void persistBaseUrl(baseUrl);
+  }, [baseUrl]);
   // Per-session control credential. The SEPARATE simulator app can't
   // read the main app's keychain, so it authorizes the control
   // endpoints with the per-session gui_control_key instead of the

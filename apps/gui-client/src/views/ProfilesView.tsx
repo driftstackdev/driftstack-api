@@ -879,6 +879,9 @@ export function ProfilesView({
         deviceName: formatDeviceName(reopened?.archetype ?? ''),
         profileName: reopened?.name,
         countryCode: reopenCountry,
+        // Hand off the API host so the separate app's control calls hit the real
+        // server (its store may be empty → defaults to localhost) — founder 2026-06-23.
+        baseUrl: settings.baseUrl,
         ...(reopenControlKey !== undefined ? { controlKey: reopenControlKey } : {}),
         ...(reopenProxy !== null
           ? { proxyLabel: `${reopenProxy.label} · ${reopenProxy.host}:${String(reopenProxy.port)}` }
@@ -1462,6 +1465,9 @@ export function ProfilesView({
           deviceName: formatDeviceName(profile.archetype),
           profileName: profile.name,
           countryCode: launchCountry,
+          // Hand off the API host so the separate app's control calls hit the real
+          // server (its store may be empty → defaults to localhost) — founder 2026-06-23.
+          baseUrl: settings.baseUrl,
           ...(controlKey !== undefined ? { controlKey } : {}),
           ...(launchProxy !== null
             ? {

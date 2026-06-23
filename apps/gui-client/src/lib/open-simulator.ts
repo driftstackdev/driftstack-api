@@ -41,6 +41,12 @@ export interface OpenSimulatorArgs {
    *  (only works for the in-process window, which shares the keychain).
    *  This is NOT the account API key. */
   controlKey?: string;
+  /** The PUBLIC API base URL (e.g. https://api.driftstack.dev). The SEPARATE
+   *  Simulator app has its OWN (often empty) settings store → without this it
+   *  falls back to localhost:3000 and every control call (mode / End-session /
+   *  cookies) fails. Handed off here (non-secret) + persisted by SimulatorWindow
+   *  on mount so authedFetch targets the right server (founder 2026-06-23). */
+  baseUrl?: string;
 }
 
 export interface OpenSimulatorResult {
@@ -62,6 +68,7 @@ export async function openSimulatorWindow({
   proxyLabel,
   countryCode,
   controlKey,
+  baseUrl,
 }: OpenSimulatorArgs): Promise<OpenSimulatorResult> {
   // Tauri-only — guard so a browser preview doesn't throw on the dynamic import.
   if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
@@ -109,6 +116,10 @@ export async function openSimulatorWindow({
     // The 0600 temp-file handoff (sim_key_write/sim_key_take) is kept as a
     // secondary path. Empty when no control key is available (in-app window).
     ck: controlKey ?? '',
+    // PUBLIC API host for the separate app (its store may be empty → would
+    // default to localhost:3000 and fail every control call). Non-secret;
+    // SimulatorWindow persists it on mount. Empty → the app keeps its own store.
+    base: baseUrl ?? '',
   });
 
   // Stage 2 — prefer the SEPARATE "Driftstack Simulator" app (its own Dock icon,
