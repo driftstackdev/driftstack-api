@@ -24,6 +24,7 @@ import {
   PauseSessionSchema,
   ResumeSessionSchema,
   ControlCommandSchema,
+  CookiesRequestSchema,
   HARNESS_INTENT_PARAM_SCHEMAS,
   type IntentDispatch,
   type IntentResultEnvelope,
@@ -33,6 +34,7 @@ import {
   type ResumeSession,
   type ControlCommand,
   type ControlCommandKind,
+  type CookiesRequest,
   type SessionAssignTransportMode,
   type HarnessIntentName,
   type HarnessErrorCode,
@@ -283,6 +285,23 @@ export function serializeControlCommand(args: {
     type: 'controlCommand',
     command: args.command,
     ...(args.reason !== undefined ? { reason: args.reason } : {}),
+  });
+}
+
+/**
+ * Founder #48 (cookies live-view) — build a wire-ready `cookiesRequest` to PULL a
+ * session's full cookie jar over that node's own WSS. Correlated by `requestId`
+ * (the harness echoes it on the `cookiesResult` reply, A2 W2816 / A3 W2817 PULL
+ * contract). Re-validated so a malformed envelope never leaves the server.
+ */
+export function serializeCookiesRequest(args: {
+  requestId: string;
+  sessionId: string;
+}): CookiesRequest {
+  return CookiesRequestSchema.parse({
+    type: 'cookiesRequest',
+    requestId: args.requestId,
+    sessionId: args.sessionId,
   });
 }
 

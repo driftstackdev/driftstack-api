@@ -658,13 +658,54 @@ export const PageStateFrameSchema = z.object({
 });
 export type PageStateFrame = z.infer<typeof PageStateFrameSchema>;
 
+// ── Cookies PULL (A2 W2816 / founder #48 "see all cookies, live") ─────
+// CP→node REQUEST (`serializeCookiesRequest`): GET /v1/agent-sessions/:id/cookies
+// issues this over the node's LIVE control WSS, keyed by `requestId`; A3's harness
+// `getAllCookies` WD-extension (pending) returns the full jar via the `cookiesResult`
+// below. NOT in HarnessOutbound (that's node→CP); this is CP→node like controlCommand.
+export const CookiesRequestSchema = z
+  .object({
+    type: z.literal('cookiesRequest'),
+    requestId: z.string().min(1),
+    sessionId: z.string().min(1),
+  })
+  .strict();
+export type CookiesRequest = z.infer<typeof CookiesRequestSchema>;
+
+// One cookie from the session's WKWebsiteDataStore.httpCookieStore (incl. httpOnly).
+const CookieSchema = z.object({
+  domain: z.string(),
+  name: z.string(),
+  value: z.string(),
+  path: z.string().optional(),
+  expires: z.number().nullable().optional(),
+  httpOnly: z.boolean().optional(),
+  secure: z.boolean().optional(),
+  sameSite: z.enum(['Strict', 'Lax', 'None']).nullable().optional(),
+});
+export type Cookie = z.infer<typeof CookieSchema>;
+
+// node→CP RESULT: echoes `requestId`. SUCCESS → `cookies` is the full jar; FAILURE
+// (unknown/inactive session, fork-ext error) → `error` set, and the CP fast-fails the
+// pending request. Plain object (lenient forward-compat), like the sibling frames.
+export const CookiesResultSchema = z.object({
+  type: z.literal('cookiesResult'),
+  requestId: z.string().min(1),
+  sessionId: z.string().min(1),
+  cookies: z.array(CookieSchema).optional(),
+  error: z.string().optional(),
+});
+export type CookiesResult = z.infer<typeof CookiesResultSchema>;
+
 // ── HarnessOutbound union (server DECODES) ────────────────────────────
-// All 9 variants pinned. intentResult + sessionStatus are consumed precisely;
+// All 10 variants pinned. intentResult + sessionStatus are consumed precisely;
 // heartbeat / capabilityReport / errorEvent / profileSaved / challengeDetected
 // / pageState / profileSaveFailed are accepted (typed) + routed where a
 // consumer is wired (profileSaved consumer = step (d); challengeDetected relay
 // → session.challenge_detected W393; pageState → SessionPageStateStore W650;
-// profileSaveFailed relay → session.profile_save_failed, A3 W1364).
+// profileSaveFailed relay → session.profile_save_failed, A3 W1364). cookiesResult
+// (founder #48) is correlated by `requestId` inside the connection's
+// CookiesRequestCorrelator — it settles a pending GET /:id/cookies request.
 export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   IntentResultEnvelopeSchema,
   SessionStatusSchema,
@@ -675,6 +716,7 @@ export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   ChallengeDetectedSchema,
   PageStateFrameSchema,
   ProfileSaveFailedSchema,
+  CookiesResultSchema,
 ]);
 export type HarnessOutbound = z.infer<typeof HarnessOutboundSchema>;
 export type ProfileSaved = z.infer<typeof ProfileSavedSchema>;

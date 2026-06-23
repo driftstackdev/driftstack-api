@@ -34,6 +34,12 @@ import {
   type SessionStatus,
 } from '../schemas/harness-control-protocol.js';
 import { IntentDispatchCorrelator, type DispatchTransport } from './harness-dispatch-correlator.js';
+import {
+  CookiesRequestCorrelator,
+  type CookiesTransport,
+  type CookiesOutcome,
+} from './cookies-request-correlator.js';
+import { serializeCookiesRequest } from './harness-control-codec.js';
 
 /** What the WS route hands in: a function that writes a string frame to the
  *  node's socket (the route adapts the real `ws.send`). */
@@ -46,6 +52,9 @@ export type FleetNodeSocketSend = (data: string) => void;
  */
 export class FleetControlConnection {
   readonly correlator: IntentDispatchCorrelator;
+  /** Founder #48 — correlates GET /:id/cookies pulls (cookiesRequest → cookiesResult)
+   *  over this node's socket, keyed by requestId. Owned here like `correlator`. */
+  readonly cookiesCorrelator: CookiesRequestCorrelator;
   private readonly send: FleetNodeSocketSend;
   private readonly onProfileSaved?: (frame: ProfileSaved) => void;
   private readonly onChallengeDetected?: (frame: ChallengeDetected) => void;
@@ -73,6 +82,25 @@ export class FleetControlConnection {
     this.onSessionStatus = onSessionStatus;
     const transport: DispatchTransport = { send: (d) => send(JSON.stringify(d)) };
     this.correlator = new IntentDispatchCorrelator(transport);
+    const cookiesTransport: CookiesTransport = { send: (r) => send(JSON.stringify(r)) };
+    this.cookiesCorrelator = new CookiesRequestCorrelator(cookiesTransport);
+  }
+
+  /**
+   * Founder #48 — PULL this session's full cookie jar over the node's live WSS.
+   * Sends a `cookiesRequest` (correlated by `requestId`) and awaits the matching
+   * `cookiesResult`; resolves a uniform CookiesOutcome (ok / error / timeout) and
+   * NEVER rejects, so the route maps each case to a response. `requestId` is
+   * caller-generated (the route mints a uuid) so the correlation key stays
+   * testable + injectable.
+   */
+  requestCookies(
+    requestId: string,
+    sessionId: string,
+    timeoutMs?: number,
+  ): Promise<CookiesOutcome> {
+    const req = serializeCookiesRequest({ requestId, sessionId });
+    return this.cookiesCorrelator.request(req, timeoutMs);
   }
 
   /**
@@ -202,6 +230,14 @@ export class FleetControlConnection {
           // like the others.
           this.onProfileSaveFailed?.(frame);
           break;
+        case 'cookiesResult':
+          // Founder #48 — settles the pending GET /:id/cookies request keyed by
+          // requestId (the harness echoes it). Self-contained request/reply: no
+          // injected consumer (unlike the fire-and-forget frames above) — the
+          // awaiting route holds the promise via the connection's cookies
+          // correlator. An unknown/stale requestId is a no-op (already settled).
+          this.cookiesCorrelator.onResultFrame(frame);
+          break;
         case 'heartbeat':
           // Liveness + fleet telemetry (file-48 §A5, fleet-admin-panel-design
           // Phase 0). SECURITY: cross-check the frame's self-reported macNodeId
@@ -238,9 +274,11 @@ export class FleetControlConnection {
     }
   }
 
-  /** The socket closed/errored: fail every in-flight dispatch on this node. */
+  /** The socket closed/errored: fail every in-flight dispatch + cookies pull on
+   *  this node (so an awaiting GET /:id/cookies resolves immediately, not at timeout). */
   close(reason: string): void {
     this.correlator.failAll(reason);
+    this.cookiesCorrelator.failAll(reason);
   }
 }
 

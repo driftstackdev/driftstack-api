@@ -17,7 +17,7 @@
 // v0 launch — tier-derived caps land in B3 (separate slice). Founder
 // reviews this constant before flipping the gate on.
 
-import { timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -1445,6 +1445,76 @@ export function registerAgentSessionsRoutes(
     },
   );
 
+  // Founder #48 — live cookie-jar view for the simulator drawer. PULLs the
+  // running session's full cookie jar (incl. httpOnly) over the node's live
+  // control WSS via the connection's CookiesRequestCorrelator (cookiesRequest →
+  // cookiesResult, A2 W2816 / A3 W2817). Returns a DISCRIMINATED body (200 in
+  // every case) — mirroring GET /:id/page-state's "null when not wired" style —
+  // so the GUI Cookies panel renders without treating expected-inert states as
+  // HTTP errors (avoids Sentry noise while A3's harness `getAllCookies`
+  // WD-extension is pending; until it lands, a wired+live request resolves
+  // `timeout`, which the drawer shows as "pending data source").
+  //   status:'ok'          → cookies: Cookie[]   (the live jar)
+  //   status:'unavailable' → cookies: null       (not wired / not live / node offline)
+  //   status:'timeout'     → cookies: null       (node didn't reply — A3 handler pending)
+  //   status:'error'       → cookies: null        (node reported a failure; reason set)
+  app.get<{ Params: { id: string } }>(
+    '/v1/agent-sessions/:id/cookies',
+    // Same control-auth path as GET /:id/page-state: the SEPARATE Simulator app
+    // has only a per-session gui_control_key, not an account Bearer key. 'read'
+    // is the floor for the account path.
+    { preHandler: [controlKeyOrAccountAuth('read'), app.rateLimit('global')] },
+    async (req) => {
+      const rec = await sessions.get(req.params.id);
+      if (rec === null) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      // Account path: enforce ownership. Control-key path: already decrypt-matched
+      // against THIS `:id` session in the preHandler (same as GET /:id).
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+      }
+      // Control plane not wired (stateless deploy / no fleet registry).
+      if (fleetControlRegistry === undefined) {
+        return {
+          cookies: null,
+          status: 'unavailable' as const,
+          reason: 'fleet control plane not enabled',
+        };
+      }
+      // Cookies are read LIVE from the running session's jar — a closed or
+      // never-dispatched session has none to read.
+      if (rec.status !== 'active' || rec.nodeId === null || rec.nodeId === undefined) {
+        return {
+          cookies: null,
+          status: 'unavailable' as const,
+          reason: 'session is not live on a node',
+        };
+      }
+      // The registry is keyed by the authed node_id (the JWT iss) — the same id
+      // persisted to agent_sessions.node_id on dispatch — so resolve directly.
+      const conn = fleetControlRegistry.get(rec.nodeId);
+      if (conn === undefined) {
+        return {
+          cookies: null,
+          status: 'unavailable' as const,
+          reason: 'session node is not connected',
+        };
+      }
+      const outcome = await conn.requestCookies(randomUUID(), rec.id);
+      if (outcome.status === 'ok') {
+        return { cookies: outcome.cookies, status: 'ok' as const };
+      }
+      if (outcome.status === 'error') {
+        return { cookies: null, status: 'error' as const, reason: outcome.message };
+      }
+      return { cookies: null, status: 'timeout' as const };
+    },
+  );
+
   // Arc 2 sub-slice 8.3 (v2-#8) — SSE transcript stream. Registers
   // only when the event bus is wired (the live-stream functionality
   // is opt-in deploy-side). Last-Event-ID resumes from a prior
@@ -2490,6 +2560,9 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   // W650/A3-W1254 — the page-state read is gated too (machine-readable 503, not
   // a bare 404) so the GUI overlay's poll surfaces the documented activation state.
   app.get('/v1/agent-sessions/:id/page-state', stub);
+  // Founder #48 — the cookies read is gated too (machine-readable 503, not a bare
+  // 404) so the GUI Cookies panel surfaces the documented activation state.
+  app.get('/v1/agent-sessions/:id/cookies', stub);
   app.post('/v1/agent-sessions/:id/message', stub);
   app.delete('/v1/agent-sessions/:id', stub);
   // Arc 2 sub-slice 8.9 (v2-#8) — pair-mode routes must also return
