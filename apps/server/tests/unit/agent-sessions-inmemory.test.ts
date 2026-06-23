@@ -415,4 +415,30 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
     expect(rest).toBe(1); // only aKeep was left active on node-A
     expect((await repo.get(aKeep.id))!.status).toBe('closed');
   });
+
+  it('W2820 closeActiveByNodeExcept minIdleMs: spares a RECENTLY-touched session (a just-dispatched new-boot session) even when absent from keepIds', async () => {
+    let now = new Date('2026-06-23T00:00:00Z');
+    const repo = new InMemoryAgentSessionsRepo(() => now);
+
+    // An OLD orphan on node-A (assigned long ago, untouched since).
+    const old = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    await repo.setNodeId(old.id, 'node-A'); // updatedAt = 00:00:00
+
+    // 40s later a NEW session is dispatched to the same node (setNodeId bumps updatedAt).
+    now = new Date('2026-06-23T00:00:40Z');
+    const fresh = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    await repo.setNodeId(fresh.id, 'node-A'); // updatedAt = 00:00:40
+
+    // Restart sweep at 00:00:41 with a 30s recency window, empty keepIds (the fresh
+    // session hasn't been reaffirmed yet — the exact W2820 race).
+    now = new Date('2026-06-23T00:00:41Z');
+    const closed = await repo.closeActiveByNodeExcept('node-A', [], 'worker-restarted', {
+      minIdleMs: 30_000,
+    });
+
+    // Only the OLD orphan (idle 41s > 30s) is swept; the FRESH session (idle 1s) is spared.
+    expect(closed).toBe(1);
+    expect((await repo.get(old.id))!.status).toBe('closed');
+    expect((await repo.get(fresh.id))!.status).toBe('active'); // NOT a false close
+  });
 });

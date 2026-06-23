@@ -305,22 +305,29 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     nodeId: string,
     keepIds: readonly string[],
     reason: string,
+    opts: { minIdleMs?: number } = {},
   ): Promise<number> {
     // A2 W2813 bootId consumer — close a restarted node's still-active sessions
-    // EXCEPT the ids the new boot reaffirmed in its heartbeat (keepIds), so a
-    // session freshly assigned to the new process is never swept. Same invariant
-    // as closeActiveByNode (status='active' AND node_id=nodeId; NULL node_id never
-    // matches `eq`). keepIds empty ⇒ no NOT-IN clause ⇒ identical to
-    // closeActiveByNode. Single atomic UPDATE; idempotent.
+    // EXCEPT the ids the new boot reaffirmed in its heartbeat (keepIds). Same
+    // invariant as closeActiveByNode (status='active' AND node_id=nodeId; NULL
+    // node_id never matches `eq`). Single atomic UPDATE; idempotent.
+    //
+    // RECENCY GUARD (W2820, review wxbkih0x2): `keepIds` ALONE is NOT a sufficient
+    // safety net. A session dispatched to the NEW boot commits setNodeId (row
+    // active+node_id, updatedAt=now) BEFORE the harness reports it in
+    // activeSessionStates (the assign is fire-and-forget; the harness echoes it
+    // only on a LATER beat), so a just-assigned LIVE session is absent from keepIds
+    // on the bootId-change beat and would be wrongly closed. `minIdleMs` fences
+    // that out: only sweep sessions whose `updatedAt` is OLDER than now−minIdleMs.
+    // setNodeId bumps updatedAt, so a freshly-assigned session (updatedAt≈now) is
+    // never eligible; a genuine orphan (untouched since before the restart) is. A
+    // recently-active old-boot orphan that escapes the window is left to the
+    // disconnect reaper / 12h orphan_reap — SAFE (never a false close of a live row).
     const now = this.clock();
-    const where =
-      keepIds.length === 0
-        ? and(eq(agentSessions.status, 'active'), eq(agentSessions.nodeId, nodeId))
-        : and(
-            eq(agentSessions.status, 'active'),
-            eq(agentSessions.nodeId, nodeId),
-            notInArray(agentSessions.id, [...keepIds]),
-          );
+    const minIdleMs = opts.minIdleMs ?? 0;
+    const conds = [eq(agentSessions.status, 'active'), eq(agentSessions.nodeId, nodeId)];
+    if (keepIds.length > 0) conds.push(notInArray(agentSessions.id, [...keepIds]));
+    if (minIdleMs > 0) conds.push(lt(agentSessions.updatedAt, new Date(now.getTime() - minIdleMs)));
     const updated = await this.database.db
       .update(agentSessions)
       .set({
@@ -329,7 +336,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
         closedAt: now,
         updatedAt: now,
       })
-      .where(where)
+      .where(and(...conds))
       .returning({ id: agentSessions.id });
     return updated.length;
   }

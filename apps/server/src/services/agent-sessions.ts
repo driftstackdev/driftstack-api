@@ -227,6 +227,7 @@ export interface AgentSessionsRepo {
     nodeId: string,
     keepIds: readonly string[],
     reason: string,
+    opts?: { minIdleMs?: number },
   ): Promise<number>;
 
   /**
@@ -503,15 +504,20 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     nodeId: string,
     keepIds: readonly string[],
     reason: string,
+    opts: { minIdleMs?: number } = {},
   ): Promise<number> {
     const now = this.clock();
+    const minIdleMs = opts.minIdleMs ?? 0;
+    const cutoff = now.getTime() - minIdleMs;
     const keep = new Set(keepIds);
     let closed = 0;
     for (const [id, rec] of this.records) {
       // Same INVARIANT as closeActiveByNode, plus: skip ids the restarted boot
-      // reaffirmed (keepIds) so a session freshly assigned to the new process is
-      // never swept.
+      // reaffirmed (keepIds) AND skip rows touched within minIdleMs (the W2820
+      // recency guard — a just-assigned new-boot session has updatedAt≈now and is
+      // not yet in keepIds, so without this it would be wrongly closed).
       if (rec.status !== 'active' || rec.nodeId !== nodeId || keep.has(id)) continue;
+      if (minIdleMs > 0 && rec.updatedAt.getTime() >= cutoff) continue;
       this.records.set(id, {
         ...rec,
         status: 'closed',

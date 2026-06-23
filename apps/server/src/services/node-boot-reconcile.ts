@@ -14,11 +14,9 @@
 // for sessions the worker REPORTS active that the CP holds terminal — the reverse case).
 //
 // The bootId CHANGE is the precise signal: same node id, new process ⇒ its old sessions
-// are gone. We then close the sessions the CP still holds active for that node, EXCEPT the
-// ones the NEW boot reaffirms in this beat's `activeSessionStates` (a session freshly
-// assigned to the new process — reported active/provisioning). That keep-set makes the
-// sweep safe against the reconnect→first-beat new-session race: a just-dispatched session
-// is reaffirmed by the node, so it's never swept.
+// are gone. We then close the sessions the CP still holds active for that node, EXCEPT
+// (a) the ones the NEW boot reaffirms in this beat's `activeSessionStates`, and (b) any
+// session touched within the recency window (`minIdleMs`).
 //
 // SAFE BY DESIGN:
 //   - fires ONLY on a CONFIRMED change (a previously-recorded bootId that now differs) —
@@ -26,7 +24,16 @@
 //     records only, never closes, so a CP restart can't mass-close the fleet;
 //   - the close is node-scoped + status='active'-anchored (closeActiveByNodeExcept) → never
 //     touches another node's or an already-closed session;
-//   - reaffirmed (kept) ids exclude the new boot's live sessions → no new-session race kill;
+//   - ⭐ RECENCY GUARD (W2820, review wxbkih0x2): `keepIds` ALONE is NOT enough. A session
+//     dispatched to the NEW boot commits setNodeId (row active + node_id + updatedAt=now)
+//     BEFORE the harness echoes it in activeSessionStates (the assign is fire-and-forget;
+//     it shows up only on a LATER beat). So on the bootId-change beat that LIVE just-assigned
+//     session is absent from keepIds and WOULD be wrongly closed. The fix: only sweep rows
+//     whose `updatedAt` is older than `minIdleMs` — setNodeId bumps updatedAt, so a freshly-
+//     assigned session (updatedAt≈now) is NEVER eligible. With A3's W2828 fast reconnect
+//     re-announce the change is detected ~1s after reconnect, when any just-assigned session
+//     is still well inside the window. A recently-active OLD-boot orphan that escapes the
+//     window is left to the disconnect reaper / 12h orphan_reap — SAFE (never a false close);
 //   - best-effort off the receive loop: a throw is swallowed+logged; the disconnect reaper +
 //     12h orphan_reap remain the backstops.
 
@@ -35,6 +42,15 @@ import type { Logger } from '../lib/logger.js';
 /** closed_reason stamped on sessions swept by a node restart (bootId change). */
 export const WORKER_RESTARTED_CLOSE_REASON = 'worker-restarted';
 
+/**
+ * Recency window (W2820): a session must have been untouched (updatedAt older than this)
+ * to be sweep-eligible on a restart. Comfortably longer than the assign→first-reaffirming-
+ * beat round-trip (~one ~10s heartbeat interval + provisioning slack) so a just-dispatched
+ * LIVE session — whose updatedAt≈now from setNodeId — is never closed. The cost is that a
+ * genuine orphan younger than this lingers one extra reaper cycle: acceptable (safety first).
+ */
+export const WORKER_RESTART_SWEEP_MIN_IDLE_MS = 30_000;
+
 export interface NodeBootReconcileDeps {
   /** Just the node-scoped close primitive — keeps this helper decoupled + unit-testable. */
   readonly agentSessions: {
@@ -42,6 +58,7 @@ export interface NodeBootReconcileDeps {
       nodeId: string,
       keepIds: readonly string[],
       reason: string,
+      opts?: { minIdleMs?: number },
     ): Promise<number>;
   };
   readonly macNodeId: string;
@@ -80,6 +97,7 @@ export async function reconcileNodeBootChange(deps: NodeBootReconcileDeps): Prom
       macNodeId,
       reaffirmedSessionIds,
       WORKER_RESTARTED_CLOSE_REASON,
+      { minIdleMs: WORKER_RESTART_SWEEP_MIN_IDLE_MS },
     );
     logger.info(
       {

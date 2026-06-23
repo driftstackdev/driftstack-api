@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   reconcileNodeBootChange,
   WORKER_RESTARTED_CLOSE_REASON,
+  WORKER_RESTART_SWEEP_MIN_IDLE_MS,
 } from '../../src/services/node-boot-reconcile.js';
+
+// The consumer always passes the recency-guard window (W2820) as the 4th arg.
+const SWEEP_OPTS = { minIdleMs: WORKER_RESTART_SWEEP_MIN_IDLE_MS };
 
 const logger = { info: vi.fn(), warn: vi.fn() } as never;
 
@@ -76,6 +80,7 @@ describe('reconcileNodeBootChange (CP bootId consumer, A2 W2813)', () => {
       'node-a',
       ['s-new'],
       WORKER_RESTARTED_CLOSE_REASON,
+      SWEEP_OPTS,
     );
     expect(map.get('node-a')).toBe('boot-2'); // new bootId recorded
   });
@@ -95,6 +100,7 @@ describe('reconcileNodeBootChange (CP bootId consumer, A2 W2813)', () => {
       'node-a',
       [],
       WORKER_RESTARTED_CLOSE_REASON,
+      SWEEP_OPTS,
     );
   });
 
@@ -118,6 +124,7 @@ describe('reconcileNodeBootChange (CP bootId consumer, A2 W2813)', () => {
       'node-a',
       expect.anything(),
       WORKER_RESTARTED_CLOSE_REASON,
+      SWEEP_OPTS,
     );
     expect(map.get('node-b')).toBe('boot-x');
   });
