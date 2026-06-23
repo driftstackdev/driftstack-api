@@ -232,6 +232,48 @@ export async function getAgentSessionCookies(
   };
 }
 
+/** The OPAQUE handle the server returns for an uploaded file (matches the server
+ *  UploadHandleSchema). `id` is a server/harness-internal ref — NEVER a disk path;
+ *  the GUI lists files by this + hands it to a page's file-chooser. Founder
+ *  "control files" / A3 W2851. */
+export interface SessionFileHandle {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+}
+
+/** Discriminated result of POST /v1/agent-sessions/:id/files so the picker renders
+ *  inert states (control plane off / session not live / node offline) calmly.
+ *  `ok` → `handle` is the uploaded-file ref; every other status → `handle` is null. */
+export interface UploadFileResult {
+  status: 'ok' | 'unavailable' | 'timeout' | 'error';
+  handle: SessionFileHandle | null;
+  reason?: string;
+}
+
+/** Upload a file's bytes (base64) into the running session's isolated upload jail
+ *  and get back an opaque handle to drive a page's <input type=file> (A3 W2851).
+ *  Throws (via authedFetch) on a non-2xx — the gated 503 / a 404 / a 400 (empty or
+ *  >64 MiB) — so the caller surfaces those; a 200 always carries a discriminated body.
+ *  Pre-validate size client-side to avoid the 64 MiB 400. */
+export async function uploadAgentSessionFile(
+  id: string,
+  file: { name: string; mime: string; dataB64: string },
+  auth: ControlAuth = null,
+): Promise<UploadFileResult> {
+  const body = (await authedFetch(
+    `/v1/agent-sessions/${encodeURIComponent(id)}/files`,
+    { method: 'POST', body: JSON.stringify(file) },
+    auth,
+  )) as Partial<UploadFileResult>;
+  return {
+    status: body.status ?? 'error',
+    handle: body.handle ?? null,
+    ...(body.reason !== undefined ? { reason: body.reason } : {}),
+  };
+}
+
 /** POST a new control mode; returns the resulting mode + pair state. */
 export async function setSessionMode(
   id: string,

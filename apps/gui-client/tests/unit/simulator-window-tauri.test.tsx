@@ -37,6 +37,7 @@ vi.mock('../../src/lib/livekit', () => ({
 let sessionMode: 'ai' | 'manual' | 'pair' = 'manual';
 const endAgentSession = vi.fn<(id: string, auth: unknown) => Promise<void>>().mockResolvedValue();
 vi.mock('../../src/lib/agent-session-control', () => ({
+  uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
   getAgentSession: () => Promise.resolve({ mode: sessionMode, pairKind: null }),
   getAgentSessionPageState: () => Promise.resolve(null),
   setSessionMode: vi.fn(),

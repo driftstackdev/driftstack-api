@@ -31,6 +31,7 @@ import {
   getAgentSession,
   getAgentSessionPageState,
   getAgentSessionCookies,
+  uploadAgentSessionFile,
   setSessionMode,
   takeoverSession,
   handbackSession,
@@ -40,6 +41,7 @@ import {
   type SessionMode,
   type ControlAuth,
   type SessionCookie,
+  type SessionFileHandle,
 } from '../lib/agent-session-control';
 
 /** Frame chrome heights (px) used to derive the window size from the device's
@@ -1672,6 +1674,62 @@ export function SimulatorWindow(): JSX.Element {
     };
   }, [toolbarExpanded, sessionId, controlAuth, room]);
 
+  // File-control upload (A3 W2851 / founder "control files"). Upload a file's bytes
+  // (base64) into the running session's isolated 0o700 jail → get an OPAQUE handle
+  // the customer can hand to a page's <input type=file>. Upload-only here; the
+  // file-chooser handle-pick DRIVE (when a page opens a chooser) is A3's next
+  // harness piece, so we just collect handles for now.
+  const [files, setFiles] = useState<SessionFileHandle[]>([]);
+  const [uploadNote, setUploadNote] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const onUploadFile = (file: File): void => {
+    if (file.size > 64 * 1024 * 1024) {
+      setUploadNote(`${file.name} is too large (max 64 MiB).`);
+      return;
+    }
+    setUploading(true);
+    setUploadNote(null);
+    const reader = new FileReader();
+    reader.onerror = (): void => {
+      setUploading(false);
+      setUploadNote('Could not read the file.');
+    };
+    reader.onload = (): void => {
+      // readAsDataURL → "data:<mime>;base64,<b64>"; take the part after the comma.
+      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+      const dataB64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+      void uploadAgentSessionFile(
+        sessionId,
+        { name: file.name, mime: file.type || 'application/octet-stream', dataB64 },
+        controlAuth,
+      )
+        .then((res) => {
+          const h = res.handle;
+          if (res.status === 'ok' && h !== null) {
+            setFiles((prev) => [h, ...prev]);
+            setUploadNote(null);
+          } else if (res.status === 'unavailable') {
+            setUploadNote('Upload pending — file control ships with the next device update.');
+          } else if (res.status === 'timeout') {
+            setUploadNote("Upload timed out — the device didn't respond.");
+          } else {
+            setUploadNote(
+              res.reason !== undefined ? `Upload failed: ${res.reason}` : 'Upload failed.',
+            );
+          }
+        })
+        .catch(() => {
+          // Gated 503 / 404 / network — file control isn't live on this build/box yet.
+          setUploadNote('Upload pending — file control ships with the next device update.');
+        })
+        .finally(() => {
+          setUploading(false);
+        });
+    };
+    reader.readAsDataURL(file);
+  };
+
   // iOS TAP cursor (founder 2026-06-17: "standard is full control + iOS TAP
   // cursor"): a short-lived ring at the tap point, so a click on the screen
   // reads as a deliberate iOS touch. Capture-phase + purely visual (never
@@ -2500,6 +2558,60 @@ export function SimulatorWindow(): JSX.Element {
                           {c.httpOnly === true && (
                             <span className="text-white/30"> · httpOnly</span>
                           )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                {/* Files — upload a file into the session's isolated 0o700 jail; the
+                  OPAQUE handle drives a page's <input type=file> (A3 W2851 / founder
+                  "control files"). Upload-only for now — the file-chooser handle-pick
+                  drive (when a page opens a chooser) is A3's next harness piece. */}
+                <section
+                  data-component="simulator-files"
+                  className="shrink-0 rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
+                >
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-sans text-[11px] font-semibold text-white">
+                      Files
+                      {files.length > 0 && <span className="text-white/40"> · {files.length}</span>}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="Upload file"
+                      title="Upload a file into the session"
+                      disabled={uploading || sessionId === ''}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="rounded border border-white/15 bg-white/5 px-2 py-0.5 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
+                    >
+                      {uploading ? 'Uploading…' : '+ Upload'}
+                    </button>
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) onUploadFile(f);
+                      e.target.value = '';
+                    }}
+                  />
+                  {uploadNote !== null && (
+                    <div className="mb-1 text-amber-300/80">{uploadNote}</div>
+                  )}
+                  {files.length === 0 ? (
+                    <div className="text-white/40">no files uploaded</div>
+                  ) : (
+                    <div className="max-h-40 space-y-0.5 overflow-y-auto pr-1">
+                      {files.map((f) => (
+                        <div key={f.id} className="truncate">
+                          <span className="text-emerald-300/80">{f.name}</span>
+                          <span className="text-white/30">
+                            {' '}
+                            · {Math.max(1, Math.round(f.size / 1024))} KB
+                          </span>
                         </div>
                       ))}
                     </div>

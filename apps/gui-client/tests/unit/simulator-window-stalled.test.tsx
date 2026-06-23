@@ -44,6 +44,7 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
 // Control transport — manual mode (full chrome). The page-state POLL resolves null
 // so ONLY the data channel drives the badge in these tests (deterministic).
 vi.mock('../../src/lib/agent-session-control', () => ({
+  uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
   getAgentSession: () => Promise.resolve({ mode: 'manual', pairKind: null }),
   getAgentSessionPageState: () => Promise.resolve(null),
   getAgentSessionCookies: () => Promise.resolve({ status: 'unavailable', cookies: null }),

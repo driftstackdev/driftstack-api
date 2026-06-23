@@ -75,6 +75,7 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
 // Control transport stays pending so a control round-trip can't itself clear the
 // badge — isolates the room-recovery reset path.
 vi.mock('../../src/lib/agent-session-control', () => ({
+  uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
   getAgentSession: () => new Promise(() => {}),
   getAgentSessionPageState: () => Promise.resolve(null),
   // The cookies drawer poll (founder #48) calls this once the room connects; the
