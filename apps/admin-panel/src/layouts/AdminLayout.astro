@@ -251,10 +251,16 @@ const navItems = [
               var cancel = overlay.querySelector('[data-ds-confirm-cancel]');
               if (msg) msg.textContent = message;
               if (ok) ok.textContent = (opts && opts.confirmLabel) || 'Confirm';
+              // W2820 (review wxbkih0x2): a DESTRUCTIVE confirm must not be firable by a
+              // stray Enter on the auto-focused OK button. When opts.destructive, focus
+              // Cancel instead and swallow Enter (see onKey) so the operator MUST click OK
+              // — making the fleet-control "a real OK click, not Enter" guarantee true.
+              var destructive = !!(opts && opts.destructive);
               var prevFocus = document.activeElement;
               overlay.classList.remove('hidden');
               document.body.style.overflow = 'hidden';
-              if (ok && ok.focus) ok.focus();
+              if (destructive) { if (cancel && cancel.focus) cancel.focus(); }
+              else if (ok && ok.focus) ok.focus();
               function done(result) {
                 overlay.classList.add('hidden');
                 document.body.style.overflow = '';
@@ -270,6 +276,8 @@ const navItems = [
               function onOverlay(e) { if (e.target === overlay) done(false); }
               function onKey(e) {
                 if (e.key === 'Escape') { done(false); return; }
+                // Destructive confirms require an explicit OK CLICK — Enter never confirms.
+                if (destructive && e.key === 'Enter') { e.preventDefault(); return; }
                 if (e.key === 'Tab') {
                   var f = [cancel, ok].filter(function (el) { return el; });
                   if (!f.length) return;

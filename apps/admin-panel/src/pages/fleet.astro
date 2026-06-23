@@ -325,6 +325,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       // driftstackConfirm (a real OK click — NOT an Enter-fires prompt — so a stray
       // keypress can't restart a worker). The listener is delegated on `tbody` so it
       // survives the 15s auto-refresh innerHTML swap.
+      // W2820 — true while a control action (confirm dialog open OR request in flight) is
+      // running, so the 15s auto-refresh skips its table rebuild and doesn't detach the
+      // button / re-render mid-action.
+      let controlInFlight = false;
       function controlActionLabel(cmd) {
         return cmd.charAt(0).toUpperCase() + cmd.slice(1);
       }
@@ -339,13 +343,25 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
       async function runControl(nodeId, cmd, btn) {
         if (!token) return;
-        const confirmFn = window.driftstackConfirm;
-        const proceed = confirmFn
-          ? await confirmFn(controlConfirmMessage(cmd), { confirmLabel: controlActionLabel(cmd) })
-          : window.confirm(controlConfirmMessage(cmd));
-        if (!proceed) return;
-        if (btn) btn.disabled = true;
+        // W2820 (review wxbkih0x2): mark in-flight BEFORE the confirm await so the 15s
+        // auto-refresh (below) does NOT rebuild the table — which would detach `btn`
+        // (making btn.disabled a no-op on the visible row) and let the same command be
+        // re-issued. The finally clears it on every exit path (incl. a cancel).
+        controlInFlight = true;
         try {
+          const confirmFn = window.driftstackConfirm;
+          // drain/restart end-or-finish in-flight sessions → destructive: focus Cancel +
+          // Enter can't confirm (the modal's W2820 destructive mode). cordon/uncordon are
+          // reversible, so they keep the normal Enter-confirms behaviour.
+          const destructive = cmd === 'drain' || cmd === 'restart';
+          const proceed = confirmFn
+            ? await confirmFn(controlConfirmMessage(cmd), {
+                confirmLabel: controlActionLabel(cmd),
+                destructive,
+              })
+            : window.confirm(controlConfirmMessage(cmd));
+          if (!proceed) return;
+          if (btn) btn.disabled = true;
           const r = await fetch(
             apiBaseUrl + '/v1/mac-nodes/' + encodeURIComponent(nodeId) + '/control',
             {
@@ -382,6 +398,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           );
         } finally {
           if (btn) btn.disabled = false;
+          controlInFlight = false;
         }
       }
       if (tbody) {
@@ -404,6 +421,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       // row swap. No teardown needed — the page is a full document, the
       // interval dies with it on navigation away.
       setInterval(function () {
+        if (controlInFlight) return; // W2820 — don't rebuild the table mid control-action
         void load();
       }, 15000);
     })();
