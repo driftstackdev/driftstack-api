@@ -1192,7 +1192,7 @@ export function SimulatorWindow(): JSX.Element {
           // Garbled payload — ignore; the current session keeps streaming.
         }
       });
-    })();
+    })().catch(() => undefined); // listen()/import() unavailable (non-Tauri / mock) — no-op
     return () => {
       unlisten?.();
     };
@@ -1769,11 +1769,26 @@ export function SimulatorWindow(): JSX.Element {
     setRoom(r);
     if (r !== null) setControlUnreachable(false);
   }, []);
+  // Keep the current session + busy state readable from late async callbacks so a
+  // getAgentSession result can't apply to the WRONG session (in-place relaunch
+  // swaps sessionId without remount) or clobber an in-flight mode mutation —
+  // either would let a stale 'manual' mode make window-close wrongly END the
+  // now-active agent session (adversarial review wza0t39g8 #2/#3).
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+  const controlBusyRef = useRef(controlBusy);
+  controlBusyRef.current = controlBusy;
   const refreshControl = useCallback((): void => {
     if (sessionId === '') return;
+    const reqSessionId = sessionId; // epoch: the session this fetch is for
     setControlError(null); // clear any prior failure while this attempt is in flight
     void getAgentSession(sessionId, controlAuth)
       .then((s) => {
+        // Drop a result that resolved after the window swapped to another session
+        // OR while a mode mutation (onSetMode) is in flight — applying a stale mode
+        // would clobber the optimistic/confirmed mutation and could make
+        // window-close end the wrong session.
+        if (reqSessionId !== sessionIdRef.current || controlBusyRef.current) return;
         setControlMode(s.mode);
         setPairKind(s.pairKind);
         // A successful control round-trip proves the session is reachable —
@@ -1785,6 +1800,7 @@ export function SimulatorWindow(): JSX.Element {
         // forever — the panel shows a "controls unavailable — Retry" state and
         // the Retry re-runs this fetch (founder 2026-06-18). Mode stays null so
         // the optimistic mode UI isn't faked; controlError drives the caption.
+        if (reqSessionId !== sessionIdRef.current) return;
         setControlError(controlErrorMessage(err));
       });
   }, [sessionId, controlAuth]);
@@ -1810,11 +1826,12 @@ export function SimulatorWindow(): JSX.Element {
       return;
     }
     let unlisten: (() => void) | undefined;
+    let disposed = false;
     let closing = false;
     void (async () => {
       const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
       const win = getCurrentWebviewWindow();
-      unlisten = await win.onCloseRequested(async (event) => {
+      const stop = await win.onCloseRequested(async (event) => {
         if (closing) return;
         closing = true;
         // Manual → end the session before closing; agent-driven (ai/pair) or
@@ -1836,8 +1853,15 @@ export function SimulatorWindow(): JSX.Element {
         // Non-manual: don't preventDefault — let the default close proceed; the
         // agent session keeps running in the background.
       });
+      // If the effect was torn down before this async registration resolved, the
+      // cleanup's unlisten?.() already ran as a no-op — unregister now so the
+      // handler can't leak + accumulate (and later fire with a stale controlMode,
+      // wrongly ending a session). Mirrors the onResized effect's disposed guard.
+      if (disposed) stop();
+      else unlisten = stop;
     })().catch(() => undefined); // window API unavailable (non-Tauri / mock) — no close handler
     return () => {
+      disposed = true;
       unlisten?.();
     };
   }, [sessionId, controlAuth, controlMode]);
