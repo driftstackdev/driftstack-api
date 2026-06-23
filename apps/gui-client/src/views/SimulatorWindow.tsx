@@ -124,6 +124,19 @@ function controlAuthWith(controlKey: string, baseUrl: string): ControlAuth {
   return baseUrl !== '' ? { controlKey, baseUrl } : { controlKey };
 }
 
+/** Drop the persisted key once the session is explicitly ended — the 24h
+ *  credential is useless after the session is DELETE'd, and clearing it stops
+ *  the per-session entries from accumulating unbounded in localStorage (review
+ *  a482b Low-(a)). Best-effort. */
+function clearPersistedControlKey(sessionId: string): void {
+  if (sessionId === '') return;
+  try {
+    localStorage.removeItem(GCK_STORE_PREFIX + sessionId);
+  } catch {
+    /* storage disabled — nothing to clear */
+  }
+}
+
 function infoFromQuery(search: string = window.location.search): SessionQuery {
   const q = new URLSearchParams(search);
   const ws_url = q.get('ws');
@@ -1932,6 +1945,9 @@ export function SimulatorWindow(): JSX.Element {
   const onEndSession = (): void => {
     if (sessionId === '' || controlBusy) return;
     setControlBusy(true);
+    // The session is ending either way — drop its persisted control key so the
+    // 24h credential doesn't linger in localStorage + entries don't accumulate.
+    clearPersistedControlKey(sessionId);
     void endAgentSession(sessionId, controlAuth)
       .then(() => {
         void withCurrentWindow((w) => w.destroy());
