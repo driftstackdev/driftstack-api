@@ -102,4 +102,26 @@ describe('openSimulatorWindow — session handoff payload', () => {
     const q = launchedQuery();
     expect(q.get('ck')).toBe('gck_secret');
   });
+
+  it('hands the API base URL off in the query payload (base=) so the separate app targets the real server, not localhost (founder 2026-06-23 control-failed root)', () => {
+    // The SEPARATE Simulator app has its OWN (often empty) settings store →
+    // loadSettings() defaults baseUrl to localhost:3000, so every control call
+    // (mode / End-session / cookies) failed before reaching prod. The launch now
+    // hands off the PUBLIC API host (non-secret); SimulatorWindow persists it +
+    // carries it on ControlAuth so authedFetch targets the real server.
+    return openSimulatorWindow({
+      sessionId: 'agt_b',
+      info,
+      countryCode: 'US',
+      baseUrl: 'https://api.driftstack.dev',
+    }).then(() => {
+      expect(launchedQuery().get('base')).toBe('https://api.driftstack.dev');
+    });
+  });
+
+  it('omits the base URL (empty) when none is provided → the app keeps its own configured baseUrl', () => {
+    return openSimulatorWindow({ sessionId: 'agt_nb', info, countryCode: 'US' }).then(() => {
+      expect(launchedQuery().get('base')).toBe('');
+    });
+  });
 });
