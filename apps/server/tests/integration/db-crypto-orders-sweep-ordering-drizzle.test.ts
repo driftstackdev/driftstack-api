@@ -82,7 +82,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         await client!`
           INSERT INTO crypto_orders
             (order_id, product, price_cents, price_currency, status, events, created_at, updated_at)
-          VALUES (${orderId}, 'solo_manual', 7900, 'EUR', ${status}, '[]'::jsonb, ${at}, ${at})`;
+          VALUES (${orderId}, 'solo_manual', 7900, 'EUR', ${status}, '[]'::jsonb, ${at.toISOString()}, ${at.toISOString()})`;
         return orderId;
       }
 

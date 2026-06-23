@@ -105,7 +105,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       ): Promise<string> {
         const [row] = await client!`
           INSERT INTO sessions (account_id, api_key_id, driver_session_id, status, created_at)
-          VALUES (${accountId}, ${apiKeyId}, ${`drv_${randomUUID()}`}, ${status}, ${createdAt})
+          VALUES (${accountId}, ${apiKeyId}, ${`drv_${randomUUID()}`}, ${status}, ${createdAt.toISOString()})
           RETURNING id`;
         return row?.id as string;
       }
