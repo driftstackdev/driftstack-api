@@ -35,8 +35,8 @@ const client = new Driftstack({
   timeoutMs: 30_000,
   retry: {
     maxAttempts: 3,
-    initialDelayMs: 250,
-    maxDelayMs: 8_000,
+    initialDelayMs: 200,
+    maxDelayMs: 10_000,
   },
 });
 ```

@@ -3,7 +3,7 @@
 // like "the defaults" to a reader:
 //
 //   timeoutMs: 30_000,
-//   retry: { maxAttempts: 3, initialDelayMs: 250, maxDelayMs: 8_000 }
+//   retry: { maxAttempts: 3, initialDelayMs: 200, maxDelayMs: 10_000 }
 //
 // If the SDK's DEFAULTS drift away from these (e.g. we lower
 // maxAttempts to 2), the snippet keeps quietly showing the old
@@ -33,8 +33,8 @@ describe('W339.C /sdk/installation retry+timeout defaults parity', () => {
     // DEFAULTS is module-local in retry.ts; grep the literal so the
     // test still catches drift without needing a public re-export.
     expect(retry).toMatch(/maxAttempts:\s*3\b/);
-    expect(retry).toMatch(/initialDelayMs:\s*250\b/);
-    expect(retry).toMatch(/maxDelayMs:\s*8_000/);
+    expect(retry).toMatch(/initialDelayMs:\s*200\b/);
+    expect(retry).toMatch(/maxDelayMs:\s*10_000/);
   });
 
   it('page cites timeoutMs: 30_000 and the SDK comment confirms 30000 is the default', () => {
@@ -45,8 +45,8 @@ describe('W339.C /sdk/installation retry+timeout defaults parity', () => {
 
   it('page cites retry maxAttempts/initialDelayMs/maxDelayMs matching DEFAULTS', () => {
     expect(page).toMatch(/maxAttempts:\s*3\b/);
-    expect(page).toMatch(/initialDelayMs:\s*250\b/);
-    expect(page).toMatch(/maxDelayMs:\s*8_000/);
+    expect(page).toMatch(/initialDelayMs:\s*200\b/);
+    expect(page).toMatch(/maxDelayMs:\s*10_000/);
   });
 
   it('page cites baseUrl: "https://api.driftstack.dev" matching DEFAULT_BASE_URL', () => {

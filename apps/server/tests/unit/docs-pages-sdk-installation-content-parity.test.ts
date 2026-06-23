@@ -68,8 +68,8 @@ describe('W778 docs /sdk/installation content parity', () => {
     expect(p).toMatch(/baseUrl: 'https:\/\/api\.driftstack\.dev'/);
     expect(p).toMatch(/timeoutMs: 30_000,/);
     expect(p).toMatch(/maxAttempts: 3,/);
-    expect(p).toMatch(/initialDelayMs: 250,/);
-    expect(p).toMatch(/maxDelayMs: 8_000,/);
+    expect(p).toMatch(/initialDelayMs: 200,/);
+    expect(p).toMatch(/maxDelayMs: 10_000,/);
   });
 
   it('CRITICAL TS resource catalog pinned — 16 resources matching the W775 SDK-index identical-resource-shapes claim. Drift to dropping a resource would silently break SDK consumers.', () => {

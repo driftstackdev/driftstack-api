@@ -73,8 +73,8 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(body).toMatch(/baseUrl: 'https:\/\/api\.driftstack\.dev', \/\/ optional override/);
     expect(body).toMatch(/timeoutMs: 30_000, \/\/ per-request timeout/);
     expect(body).toMatch(/maxAttempts: 3,/);
-    expect(body).toMatch(/initialDelayMs: 250,/);
-    expect(body).toMatch(/maxDelayMs: 8_000,/);
+    expect(body).toMatch(/initialDelayMs: 200,/);
+    expect(body).toMatch(/maxDelayMs: 10_000,/);
     expect(body).toMatch(/^## Resources$/m);
     expect(body).toMatch(/client\.sessions\.create\(body\?\)/);
     expect(body).toMatch(/client\.sessions\.navigate\(id, body\)/);

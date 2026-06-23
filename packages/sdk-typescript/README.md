@@ -39,8 +39,8 @@ new Driftstack({
   retry: {
     // retry policy (defaults shown)
     maxAttempts: 3,
-    initialDelayMs: 250,
-    maxDelayMs: 8_000,
+    initialDelayMs: 200,
+    maxDelayMs: 10_000,
   },
 });
 ```

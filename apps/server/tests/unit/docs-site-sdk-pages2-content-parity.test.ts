@@ -34,8 +34,8 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
     expect(body).toMatch(/baseUrl: 'https:\/\/api\.driftstack\.dev', \/\/ optional override/);
     expect(body).toMatch(/timeoutMs: 30_000,/);
     expect(body).toMatch(/maxAttempts: 3,/);
-    expect(body).toMatch(/initialDelayMs: 250,/);
-    expect(body).toMatch(/maxDelayMs: 8_000,/);
+    expect(body).toMatch(/initialDelayMs: 200,/);
+    expect(body).toMatch(/maxDelayMs: 10_000,/);
     expect(body).toMatch(/client\.sessions\.create\(body\?\);/);
     expect(body).toMatch(/client\.profileSnapshots\.restore\(snapshotId, body\?\);/);
     expect(body).toMatch(/client\.apiKeys\.rotate\(id\); \/\/ 24-hour grace on prior key/);
