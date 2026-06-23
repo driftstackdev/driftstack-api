@@ -105,6 +105,14 @@ export function classifyUnsafeHost(
   }
   // IPv4-mapped IPv6 (e.g. ::ffff:10.0.0.5) — a private-IPv4 smuggling vector.
   if (host.startsWith('::ffff:')) return 'private';
+  // IPv4-COMPATIBLE IPv6 (`::a.b.c.d`, RFC 4291 §2.5.5.1) — the deprecated sibling
+  // of the ::ffff: mapped form above. Node canonicalises it WITHOUT the `ffff`
+  // hextet (`::169.254.169.254` → `::a9fe:a9fe`), so the prefix check above AND the
+  // BlockList below both miss it, yet the OS can route to the embedded IPv4 (here
+  // cloud metadata). No legit webhook/proxy target uses the ::/96 block (same
+  // rationale as ::ffff:/NAT64/6to4), so reject any ::-prefixed address that embeds
+  // an IPv4 in its low 32 bits. (`::` bare doesn't match → handled by the BlockList.)
+  if (/^::([0-9a-f]{1,4}:)?[0-9a-f]{1,4}$/.test(host)) return 'private';
   const family = isIP(host); // 0 = DNS name, 4, or 6
   // Numeric/hex/octal encodings read as DNS names to isIP but decode to an
   // address downstream — reject outright.

@@ -146,6 +146,19 @@ describe('classifyUnsafeHost — raw-host SSRF (proxy/egress path, no URL normal
     expect(classifyUnsafeHost('2002:7f00:1::'), '6to4→127.0.0.1').toBe('private');
   });
 
+  // Adversarial review w0p7zonl7: the IPv4-COMPATIBLE form (::a.b.c.d, RFC4291
+  // §2.5.5.1) is the deprecated sibling of ::ffff: mapped — Node canonicalises it
+  // WITHOUT the `ffff` hextet (::169.254.169.254 → ::a9fe:a9fe), so it slipped both
+  // the ::ffff: prefix check and the BlockList. Must be rejected like its siblings.
+  it('blocks IPv4-compatible IPv6 (::a.b.c.d) — the deprecated ::ffff: sibling', () => {
+    expect(classifyUnsafeHost('::169.254.169.254'), 'IPv4-compatible→metadata').toBe('private');
+    expect(classifyUnsafeHost('::127.0.0.1'), 'IPv4-compatible→loopback').toBe('private');
+    expect(classifyUnsafeHost('::10.0.0.1'), 'IPv4-compatible→RFC1918').toBe('private');
+    expect(classifyUnsafeHost('::a9fe:a9fe'), 'already-canonical IPv4-compatible→metadata').toBe(
+      'private',
+    );
+  });
+
   it('does NOT false-positive on public IPv6 / IPv4 / hostnames', () => {
     expect(classifyUnsafeHost('2606:4700:4700::1111')).toBeNull(); // Cloudflare public IPv6
     expect(classifyUnsafeHost('8.8.8.8')).toBeNull(); // public IPv4 (no all-IPv4 quirk)
