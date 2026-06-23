@@ -16,7 +16,7 @@ const sendNavigate = vi.fn(() => Promise.resolve());
 vi.mock('../../src/lib/livekit', () => ({
   createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
   connectToAgentSession: () => new Promise(() => {}),
-  sendInputEvent: vi.fn(),
+  sendInputEvent: vi.fn(() => Promise.resolve()),
   sendNavigate,
   RoomEvent: {
     TrackSubscribed: 'trackSubscribed',

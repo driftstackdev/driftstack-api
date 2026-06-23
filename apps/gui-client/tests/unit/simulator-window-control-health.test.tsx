@@ -42,7 +42,7 @@ beforeEach(() => {
 vi.mock('../../src/lib/livekit', () => ({
   createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
   connectToAgentSession: () => new Promise(() => {}),
-  sendInputEvent: vi.fn(),
+  sendInputEvent: vi.fn(() => Promise.resolve()),
   sendNavigate: vi.fn(() => Promise.resolve()),
   RoomEvent: {
     TrackSubscribed: 'trackSubscribed',

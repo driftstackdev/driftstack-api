@@ -9,7 +9,7 @@ import { render, fireEvent } from '@testing-library/react';
 vi.mock('../../src/lib/livekit', () => ({
   createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
   connectToAgentSession: () => new Promise(() => {}), // stays connecting
-  sendInputEvent: vi.fn(),
+  sendInputEvent: vi.fn(() => Promise.resolve()),
   RoomEvent: {
     TrackSubscribed: 'trackSubscribed',
     Disconnected: 'disconnected',
