@@ -167,3 +167,45 @@ describe('closeAgentSessionOnTerminalStatus (A3 W2682)', () => {
     expect(warned).toHaveLength(1);
   });
 });
+
+describe('closeAgentSessionOnTerminalStatus — cross-node ownership guard (audit #5)', () => {
+  it('DROPS a terminal frame from a NON-owning node (node_id set + differs) — session stays active', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const created = await repo.create({ accountId: 'acct_1', tokenBudgetTotal: 1000 });
+    await repo.setNodeId(created.id, 'node-A'); // owned by node-A
+    await closeAgentSessionOnTerminalStatus({
+      agentSessions: repo,
+      frame: terminalFrame(created.id, 'ended', 'idle_timeout'),
+      reportingNodeId: 'node-B', // a DIFFERENT node reports it terminal → spoof
+      logger: noopLogger,
+    });
+    const after = await repo.get(created.id);
+    expect(after?.status).toBe('active'); // not closed by the rogue node
+  });
+
+  it('CLOSES a terminal frame from the OWNING node', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const created = await repo.create({ accountId: 'acct_1', tokenBudgetTotal: 1000 });
+    await repo.setNodeId(created.id, 'node-A');
+    await closeAgentSessionOnTerminalStatus({
+      agentSessions: repo,
+      frame: terminalFrame(created.id, 'ended', 'idle_timeout'),
+      reportingNodeId: 'node-A', // the owning node
+      logger: noopLogger,
+    });
+    expect((await repo.get(created.id))?.status).toBe('closed');
+  });
+
+  it('ALLOWS a terminal frame when node_id is NULL (legacy/never-dispatched) — no teardown regression', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const created = await repo.create({ accountId: 'acct_1', tokenBudgetTotal: 1000 });
+    // node_id left NULL (no setNodeId). The guard must NOT drop this.
+    await closeAgentSessionOnTerminalStatus({
+      agentSessions: repo,
+      frame: terminalFrame(created.id, 'ended', 'idle_timeout'),
+      reportingNodeId: 'node-B',
+      logger: noopLogger,
+    });
+    expect((await repo.get(created.id))?.status).toBe('closed');
+  });
+});

@@ -1487,10 +1487,11 @@ export async function createProductionDeps(
             // Fire-and-forget off the receive loop (the helper swallows+logs
             // internally + is idempotent via an 'active'-guard); the
             // worker-disconnect reaper + 12h orphan_reap stay the backstops.
-            (frame) =>
+            (frame, reportingNodeId) =>
               void closeAgentSessionOnTerminalStatus({
                 agentSessions: agentSessionsRepo,
                 frame,
+                reportingNodeId,
                 logger,
                 livenessStore: sessionLivenessStore,
               }),

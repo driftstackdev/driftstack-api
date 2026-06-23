@@ -52,7 +52,7 @@ export class FleetControlConnection {
   private readonly onPageState?: (frame: PageStateFrame) => void;
   private readonly onProfileSaveFailed?: (frame: ProfileSaveFailed) => void;
   private readonly onHeartbeat?: (frame: Heartbeat) => void;
-  private readonly onSessionStatus?: (frame: SessionStatus) => void;
+  private readonly onSessionStatus?: (frame: SessionStatus, reportingNodeId: string) => void;
 
   constructor(
     readonly nodeId: string,
@@ -62,7 +62,7 @@ export class FleetControlConnection {
     onPageState?: (frame: PageStateFrame) => void,
     onProfileSaveFailed?: (frame: ProfileSaveFailed) => void,
     onHeartbeat?: (frame: Heartbeat) => void,
-    onSessionStatus?: (frame: SessionStatus) => void,
+    onSessionStatus?: (frame: SessionStatus, reportingNodeId: string) => void,
   ) {
     this.send = send;
     this.onProfileSaved = onProfileSaved;
@@ -165,7 +165,10 @@ export class FleetControlConnection {
           // above: an `errored` frame can both fast-fail an in-flight dispatch
           // AND close its row. Absent consumer (stateless deploy) → ignored.
           if (TERMINAL_SESSION_STATUSES.has(frame.status)) {
-            this.onSessionStatus?.(frame);
+            // #5 — pass the connection's authenticated nodeId so the consumer can
+            // verify the session belongs to THIS node before closing it (a rogue node
+            // must not be able to close/error another node's session).
+            this.onSessionStatus?.(frame, this.nodeId);
           }
           break;
         case 'profileSaved':
@@ -287,7 +290,7 @@ export class FleetControlRegistry {
      * behaviour. Wired in bootstrap to close the matching agent_sessions row
      * (see closeAgentSessionOnTerminalStatus).
      */
-    private readonly onSessionStatus?: (frame: SessionStatus) => void,
+    private readonly onSessionStatus?: (frame: SessionStatus, reportingNodeId: string) => void,
   ) {}
 
   register(nodeId: string, send: FleetNodeSocketSend): FleetControlConnection {

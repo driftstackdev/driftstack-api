@@ -40,6 +40,13 @@ export interface CloseAgentSessionOnTerminalStatusDeps {
   readonly agentSessions: AgentSessionsRepo;
   /** The terminal `sessionStatus` frame (status ∈ TERMINAL_SESSION_STATUSES). */
   readonly frame: SessionStatus;
+  /**
+   * #5 — the reporting connection's authenticated nodeId. When set, the close is
+   * gated on the session belonging to THIS node (cross-node spoof guard): a rogue
+   * node can't close/error another node's session. Optional for backwards-compat;
+   * undefined → no node gate (legacy callers).
+   */
+  readonly reportingNodeId?: string;
   readonly logger: Logger;
   /**
    * Optional per-session liveness store — drop the ended session's entry
@@ -58,10 +65,31 @@ export interface CloseAgentSessionOnTerminalStatusDeps {
 export async function closeAgentSessionOnTerminalStatus(
   deps: CloseAgentSessionOnTerminalStatusDeps,
 ): Promise<void> {
-  const { agentSessions, frame, logger, livenessStore } = deps;
+  const { agentSessions, frame, reportingNodeId, logger, livenessStore } = deps;
   const reason = frame.reason ?? `session-${frame.status}`;
   try {
     const existing = await agentSessions.get(frame.sessionId);
+    // #5 — only the session's OWNING node may terminate it. Drop ONLY on a CONFIRMED
+    // cross-node mismatch (the row's node_id is set AND differs from the reporting
+    // node); a NULL node_id (legacy / never-dispatched / manual session) is ALLOWED, or
+    // legit teardown regresses. An absent reportingNodeId (legacy caller) → no gate.
+    if (
+      existing &&
+      reportingNodeId !== undefined &&
+      existing.nodeId !== null &&
+      existing.nodeId !== reportingNodeId
+    ) {
+      logger.warn?.(
+        {
+          component: 'agent-session-terminal-close',
+          sessionId: frame.sessionId,
+          ownerNodeId: existing.nodeId,
+          reportingNodeId,
+        },
+        'dropped terminal sessionStatus from a non-owning node (cross-node spoof guard)',
+      );
+      return;
+    }
     // 'active'-guard = idempotent: a duplicate terminal frame, or a row already
     // closed by DELETE / a backstop reaper, is a no-op (closeWithReason on a
     // non-active row would just re-stamp it / not exist).
