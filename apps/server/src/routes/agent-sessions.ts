@@ -77,6 +77,7 @@ import {
 import {
   BundledLlmBudgetExhaustedError,
   BundledLlmConsentRequiredError,
+  BadRequestError,
   ByokAnthropicRequiredError,
   ConflictError,
   ConcurrencyLimitError,
@@ -1532,6 +1533,102 @@ export function registerAgentSessionsRoutes(
     },
   );
 
+  // File-control upload (A3 W2851 / founder "control files"). Relays the customer's
+  // file bytes (base64) into the running session's isolated 0o700 upload jail over
+  // the node's live control WSS (uploadFile → uploadResult), returning an OPAQUE
+  // handle {id,name,mime,size} the GUI uses to drive a page's <input type=file> —
+  // the harness maps id→jailed path internally; a worker disk path is NEVER exposed.
+  // Mirrors POST semantics of the cookies pull: same control-auth + ownership, a
+  // DISCRIMINATED 200 body in every relay case (ok / unavailable / timeout / error)
+  // so the GUI renders expected-inert states without HTTP-error noise. Client-side
+  // validation failures (malformed body / empty / >64 MiB) are 400s.
+  const UPLOAD_MAX_FILE_BYTES = 64 * 1024 * 1024; // harness cap (W2851)
+  // 64 MiB raw → ~85.4 MiB base64; allow that + the JSON envelope with margin.
+  // Beyond this Fastify 413s before the handler; the handler is the authoritative
+  // 64-MiB-decoded enforcer.
+  const UPLOAD_MAX_BODY_BYTES = 96 * 1024 * 1024;
+  const UploadFileBodySchema = z.object({
+    name: z.string().min(1).max(255),
+    mime: z.string().min(1).max(255),
+    dataB64: z.string().min(1),
+  });
+  app.post<{ Params: { id: string } }>(
+    '/v1/agent-sessions/:id/files',
+    // Upload is a WRITE (it mutates the session's upload jail). Same control-auth
+    // path as the cookies pull: the separate Simulator app holds only a per-session
+    // gui_control_key, not an account Bearer.
+    {
+      preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')],
+      bodyLimit: UPLOAD_MAX_BODY_BYTES,
+    },
+    async (req) => {
+      const rec = await sessions.get(req.params.id);
+      if (rec === null) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      // Account path: enforce ownership. Control-key path: already decrypt-matched
+      // against THIS `:id` in the preHandler (same as GET /:id/cookies).
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+      }
+      const parsed = UploadFileBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // Decode to validate base64 + enforce the 64 MiB cap on the DECODED size
+      // (a client error → 400, NOT a discriminated relay status). Buffer.from is
+      // lenient (tolerates whitespace-wrapped base64); re-encoding to clean base64
+      // for the wire guarantees the harness's strict decoder accepts it.
+      const bytes = Buffer.from(parsed.data.dataB64, 'base64');
+      if (bytes.length === 0) {
+        throw new BadRequestError('Uploaded file is empty (dataB64 decoded to 0 bytes).');
+      }
+      if (bytes.length > UPLOAD_MAX_FILE_BYTES) {
+        throw new BadRequestError('Uploaded file is too large. Max 64 MiB.');
+      }
+      // Control plane not wired (stateless deploy / no fleet registry).
+      if (fleetControlRegistry === undefined) {
+        return {
+          handle: null,
+          status: 'unavailable' as const,
+          reason: 'fleet control plane not enabled',
+        };
+      }
+      // The upload targets the LIVE session's jail — a closed or never-dispatched
+      // session has none.
+      if (rec.status !== 'active' || rec.nodeId === null || rec.nodeId === undefined) {
+        return {
+          handle: null,
+          status: 'unavailable' as const,
+          reason: 'session is not live on a node',
+        };
+      }
+      const conn = fleetControlRegistry.get(rec.nodeId);
+      if (conn === undefined) {
+        return {
+          handle: null,
+          status: 'unavailable' as const,
+          reason: 'session node is not connected',
+        };
+      }
+      const outcome = await conn.requestUpload(
+        randomUUID(),
+        rec.id,
+        parsed.data.name,
+        parsed.data.mime,
+        bytes.toString('base64'),
+      );
+      if (outcome.status === 'ok') {
+        return { handle: outcome.handle, status: 'ok' as const };
+      }
+      if (outcome.status === 'error') {
+        return { handle: null, status: 'error' as const, reason: outcome.message };
+      }
+      return { handle: null, status: 'timeout' as const };
+    },
+  );
+
   // Arc 2 sub-slice 8.3 (v2-#8) — SSE transcript stream. Registers
   // only when the event bus is wired (the live-stream functionality
   // is opt-in deploy-side). Last-Event-ID resumes from a prior
@@ -2580,6 +2677,9 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   // Founder #48 — the cookies read is gated too (machine-readable 503, not a bare
   // 404) so the GUI Cookies panel surfaces the documented activation state.
   app.get('/v1/agent-sessions/:id/cookies', stub);
+  // File-control (A3 W2851) — the upload write is gated too (machine-readable 503)
+  // so the GUI file picker surfaces the documented activation state.
+  app.post('/v1/agent-sessions/:id/files', stub);
   app.post('/v1/agent-sessions/:id/message', stub);
   app.delete('/v1/agent-sessions/:id', stub);
   // Arc 2 sub-slice 8.9 (v2-#8) — pair-mode routes must also return

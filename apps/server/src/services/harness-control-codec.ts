@@ -25,6 +25,7 @@ import {
   ResumeSessionSchema,
   ControlCommandSchema,
   CookiesRequestSchema,
+  UploadFileRequestSchema,
   HARNESS_INTENT_PARAM_SCHEMAS,
   type IntentDispatch,
   type IntentResultEnvelope,
@@ -35,6 +36,7 @@ import {
   type ControlCommand,
   type ControlCommandKind,
   type CookiesRequest,
+  type UploadFileRequest,
   type SessionAssignTransportMode,
   type HarnessIntentName,
   type HarnessErrorCode,
@@ -302,6 +304,30 @@ export function serializeCookiesRequest(args: {
     type: 'cookiesRequest',
     requestId: args.requestId,
     sessionId: args.sessionId,
+  });
+}
+
+/**
+ * File-control (A3 W2851) — build a wire-ready `uploadFile` to relay a customer's
+ * file bytes (base64) into the session's isolated upload jail over that node's WSS.
+ * Correlated by `requestId` (the harness echoes it on the `uploadResult` reply).
+ * Re-validated so a malformed envelope never leaves the server. The 64 MiB cap is
+ * enforced route-side before this is called (and again harness-side).
+ */
+export function serializeUploadFile(args: {
+  requestId: string;
+  sessionId: string;
+  name: string;
+  mime: string;
+  dataB64: string;
+}): UploadFileRequest {
+  return UploadFileRequestSchema.parse({
+    type: 'uploadFile',
+    requestId: args.requestId,
+    sessionId: args.sessionId,
+    name: args.name,
+    mime: args.mime,
+    dataB64: args.dataB64,
   });
 }
 

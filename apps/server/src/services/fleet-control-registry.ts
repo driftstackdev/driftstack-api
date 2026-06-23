@@ -39,7 +39,12 @@ import {
   type CookiesTransport,
   type CookiesOutcome,
 } from './cookies-request-correlator.js';
-import { serializeCookiesRequest } from './harness-control-codec.js';
+import {
+  UploadRequestCorrelator,
+  type UploadTransport,
+  type UploadOutcome,
+} from './upload-request-correlator.js';
+import { serializeCookiesRequest, serializeUploadFile } from './harness-control-codec.js';
 
 /** What the WS route hands in: a function that writes a string frame to the
  *  node's socket (the route adapts the real `ws.send`). */
@@ -55,6 +60,9 @@ export class FleetControlConnection {
   /** Founder #48 — correlates GET /:id/cookies pulls (cookiesRequest → cookiesResult)
    *  over this node's socket, keyed by requestId. Owned here like `correlator`. */
   readonly cookiesCorrelator: CookiesRequestCorrelator;
+  /** File-control (A3 W2851) — correlates POST /:id/files uploads (uploadFile →
+   *  uploadResult) over this node's socket, keyed by requestId. Owned like above. */
+  readonly uploadCorrelator: UploadRequestCorrelator;
   private readonly send: FleetNodeSocketSend;
   private readonly onProfileSaved?: (frame: ProfileSaved) => void;
   // audit M1 — the cross-node frames now carry the connection's authenticated
@@ -93,6 +101,28 @@ export class FleetControlConnection {
     this.correlator = new IntentDispatchCorrelator(transport);
     const cookiesTransport: CookiesTransport = { send: (r) => send(JSON.stringify(r)) };
     this.cookiesCorrelator = new CookiesRequestCorrelator(cookiesTransport);
+    const uploadTransport: UploadTransport = { send: (r) => send(JSON.stringify(r)) };
+    this.uploadCorrelator = new UploadRequestCorrelator(uploadTransport);
+  }
+
+  /**
+   * File-control (A3 W2851) — relay a customer's file bytes (base64) into the
+   * session's isolated upload jail over the node's live WSS. Sends an `uploadFile`
+   * (correlated by `requestId`) and awaits the matching `uploadResult`; resolves a
+   * uniform UploadOutcome (ok / error / timeout) and NEVER rejects. `requestId` is
+   * caller-generated (the route mints a uuid) so the key stays testable. The 64 MiB
+   * cap is enforced route-side before this is called.
+   */
+  requestUpload(
+    requestId: string,
+    sessionId: string,
+    name: string,
+    mime: string,
+    dataB64: string,
+    timeoutMs?: number,
+  ): Promise<UploadOutcome> {
+    const req = serializeUploadFile({ requestId, sessionId, name, mime, dataB64 });
+    return this.uploadCorrelator.request(req, timeoutMs);
   }
 
   /**
@@ -253,6 +283,13 @@ export class FleetControlConnection {
           // correlator. An unknown/stale requestId is a no-op (already settled).
           this.cookiesCorrelator.onResultFrame(frame);
           break;
+        case 'uploadResult':
+          // File-control (A3 W2851) — settles the pending POST /:id/files request
+          // keyed by requestId (the harness echoes it). Self-contained request/reply
+          // like cookiesResult: no injected consumer; the awaiting route holds the
+          // promise via the connection's upload correlator. Unknown id → no-op.
+          this.uploadCorrelator.onResultFrame(frame);
+          break;
         case 'heartbeat':
           // Liveness + fleet telemetry (file-48 §A5, fleet-admin-panel-design
           // Phase 0). SECURITY: cross-check the frame's self-reported macNodeId
@@ -294,6 +331,7 @@ export class FleetControlConnection {
   close(reason: string): void {
     this.correlator.failAll(reason);
     this.cookiesCorrelator.failAll(reason);
+    this.uploadCorrelator.failAll(reason);
   }
 }
 

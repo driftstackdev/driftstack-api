@@ -707,8 +707,50 @@ export const CookiesResultSchema = z.object({
 });
 export type CookiesResult = z.infer<typeof CookiesResultSchema>;
 
+// ── File UPLOAD (A3 W2851 / founder "control files") ──────────────────
+// CP→node REQUEST (`serializeUploadFile`): POST /v1/agent-sessions/:id/files relays
+// the customer's file bytes (base64) over the node's LIVE control WSS, keyed by
+// `requestId`; the harness writes them into the per-session 0o700 upload jail
+// (DRIFTSTACK_UPLOAD_DIR, a hostile `name` reduced to a bare basename) and replies
+// with the `uploadResult` below. NOT in HarnessOutbound (that's node→CP); this is
+// CP→node like cookiesRequest. 64 MiB cap (enforced route-side + harness-side).
+export const UploadFileRequestSchema = z
+  .object({
+    type: z.literal('uploadFile'),
+    requestId: z.string().min(1),
+    sessionId: z.string().min(1),
+    name: z.string().min(1),
+    mime: z.string().min(1),
+    dataB64: z.string().min(1),
+  })
+  .strict();
+export type UploadFileRequest = z.infer<typeof UploadFileRequestSchema>;
+
+// The OPAQUE handle the harness returns — id maps (harness-side only) to the
+// jailed on-disk path; a worker filesystem path is NEVER on the wire or exposed
+// to the customer. The GUI drives a page's <input type=file> by `id`.
+const UploadHandleSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  mime: z.string(),
+  size: z.number(),
+});
+export type UploadHandle = z.infer<typeof UploadHandleSchema>;
+
+// node→CP RESULT: echoes `requestId`. SUCCESS → `handle`; FAILURE → `error` ∈
+// {unknown or inactive session, invalid base64 payload, file too large (>64MiB),
+// upload write failed}. Plain object (lenient forward-compat), like cookiesResult.
+export const UploadResultSchema = z.object({
+  type: z.literal('uploadResult'),
+  requestId: z.string().min(1),
+  sessionId: z.string().min(1),
+  handle: UploadHandleSchema.optional(),
+  error: z.string().optional(),
+});
+export type UploadResult = z.infer<typeof UploadResultSchema>;
+
 // ── HarnessOutbound union (server DECODES) ────────────────────────────
-// All 10 variants pinned. intentResult + sessionStatus are consumed precisely;
+// All 11 variants pinned. intentResult + sessionStatus are consumed precisely;
 // heartbeat / capabilityReport / errorEvent / profileSaved / challengeDetected
 // / pageState / profileSaveFailed are accepted (typed) + routed where a
 // consumer is wired (profileSaved consumer = step (d); challengeDetected relay
@@ -716,6 +758,9 @@ export type CookiesResult = z.infer<typeof CookiesResultSchema>;
 // profileSaveFailed relay → session.profile_save_failed, A3 W1364). cookiesResult
 // (founder #48) is correlated by `requestId` inside the connection's
 // CookiesRequestCorrelator — it settles a pending GET /:id/cookies request.
+// uploadResult (A3 W2851, file-control) is likewise correlated by `requestId`
+// inside the connection's UploadRequestCorrelator — it settles a pending POST
+// /:id/files request.
 export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   IntentResultEnvelopeSchema,
   SessionStatusSchema,
@@ -727,6 +772,7 @@ export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   PageStateFrameSchema,
   ProfileSaveFailedSchema,
   CookiesResultSchema,
+  UploadResultSchema,
 ]);
 export type HarnessOutbound = z.infer<typeof HarnessOutboundSchema>;
 export type ProfileSaved = z.infer<typeof ProfileSavedSchema>;
