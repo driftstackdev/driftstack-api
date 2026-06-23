@@ -120,7 +120,7 @@ describe('W588.A packages/sdk-go/client.go content parity', () => {
     );
   });
 
-  it('requestOptions struct + do() with withRetry wrap + doOnce() context-cancellation surfaces as ctx.Err() + 8MB body cap + headers (Authorization Bearer + Accept + UA + conditional Content-Type + per-request extra headers V-666.AO)', () => {
+  it('requestOptions struct + do() with the retry-SAFETY gate (audit 2026-06-23): isRetrySafe(method, headers) ? withRetry-wrap : single doOnce — a keyless non-idempotent POST is sent exactly once (no double-submit), idempotent methods + keyed POST/PATCH still retry. doOnce() context-cancellation surfaces as ctx.Err() + 8MB body cap + headers (Authorization Bearer + Accept + UA + conditional Content-Type + per-request extra headers V-666.AO)', () => {
     expect(body).toMatch(
       /^type requestOptions struct \{\s*\n\s*method\s+string\s*\n\s*path\s+string\s*\n\s*query\s+url\.Values\s*\n\s*body\s+any \/\/ marshalled to JSON when non-nil\s*\n\s*out\s+any \/\/ pointer the JSON response is decoded into; pass nil for 204\./m,
     );
@@ -129,8 +129,11 @@ describe('W588.A packages/sdk-go/client.go content parity', () => {
     expect(body).toMatch(/\/\/ for one-shot needs like Idempotency-Key \(V-666\.AO\)\./);
     expect(body).toMatch(/headers map\[string\]string/);
     expect(body).toMatch(
-      /func \(c \*Client\) do\(ctx context\.Context, opts requestOptions\) error \{\s*\n\s*return withRetry\(ctx, c\.retry, func\(\) error \{\s*\n\s*return c\.doOnce\(ctx, opts\)\s*\n\s*\}\)\s*\n\}/,
+      /func \(c \*Client\) do\(ctx context\.Context, opts requestOptions\) error \{\s*\n\s*if !isRetrySafe\(opts\.method, opts\.headers\) \{\s*\n\s*return c\.doOnce\(ctx, opts\)\s*\n\s*\}\s*\n\s*return withRetry\(ctx, c\.retry, func\(\) error \{\s*\n\s*return c\.doOnce\(ctx, opts\)\s*\n\s*\}\)\s*\n\}/,
     );
+    // The retry-safety gate predicate itself (idempotent methods OR an
+    // Idempotency-Key header) — the audit-2026-06-23 double-submit guard.
+    expect(body).toMatch(/func isRetrySafe\(method string, headers map\[string\]string\) bool \{/);
     expect(body).toMatch(/req\.Header\.Set\("Authorization", "Bearer "\+c\.apiKey\)/);
     expect(body).toMatch(/req\.Header\.Set\("Accept", "application\/json"\)/);
     expect(body).toMatch(/req\.Header\.Set\("User-Agent", c\.userAgent\(\)\)/);

@@ -84,9 +84,9 @@ describe('W815 cross-SDK retry policy parity', () => {
 
   // ─── Initial backoff + cap defaults ───────────────────────────
 
-  it('CRITICAL retry-config initial-backoff + max-cap defaults pinned. TS: initialDelayMs 250 + maxDelayMs 8000. Python: initial_delay_ms 200 + max_delay_ms 10000. Go: 200ms + 10s. The 200/10000 ratio matches across Py + Go; TS is slightly tighter (legacy initial choice). Drift to different defaults would create cross-SDK divergence under burst conditions.', () => {
-    expect(read(TS)).toMatch(/initialDelayMs: 250,/);
-    expect(read(TS)).toMatch(/maxDelayMs: 8_000,/);
+  it('CRITICAL retry-config initial-backoff + max-cap defaults pinned. UNIFIED 200/10000 across all 3 SDKs — TS: initialDelayMs 200 + maxDelayMs 10000. Python: initial_delay_ms 200 + max_delay_ms 10000. Go: 200ms + 10s. (TS was 250/8000, aligned to Go/Python in the 2026-06-23 audit so the cross-SDK comments are true.) Drift to different defaults would create cross-SDK divergence under burst conditions.', () => {
+    expect(read(TS)).toMatch(/initialDelayMs: 200,/);
+    expect(read(TS)).toMatch(/maxDelayMs: 10_000,/);
     expect(read(PY)).toMatch(/initial_delay_ms: int = 200/);
     expect(read(PY)).toMatch(/max_delay_ms: int = 10_000/);
     expect(read(GO)).toMatch(/InitialDelay: +200 \* time\.Millisecond,/);

@@ -171,8 +171,12 @@ describe('W423.B packages/sdk-typescript/src/http.ts content parity', () => {
     expect(body).toMatch(/\} finally \{\s*\n?\s*clearTimeout\(timer\);\s*\n?\s*\}/);
   });
 
-  it("Per-request retry override — `withRetry(..., opts.retry ?? this.config.retry)` second argument. CRITICAL: `??` (not `||`) so a deliberately-empty retry config (`{}`) doesn't fall through to the config retry. Drift would let per-call disable-retry intent be silently overridden.", () => {
-    expect(body).toMatch(/\}, opts\.retry \?\? this\.config\.retry\);/);
+  it("Per-request retry override + retry-SAFETY gate — `const baseRetry = opts.retry ?? this.config.retry` (CRITICAL `??` not `||`, so a deliberately-empty retry config `{}` doesn't fall through to the config retry); then the audit-2026-06-23 gate `isRetrySafe(opts.method, opts.headers) ? baseRetry : { ...baseRetry, maxAttempts: 0 }` forces a SINGLE attempt for a non-idempotent keyless POST (no double-submit on a transient 5xx); the resolved retryConfig is passed as withRetry's 2nd arg. Drift to dropping the gate would let a transient failure double-submit a create; drift to `||` would override per-call disable-retry intent.", () => {
+    expect(body).toMatch(/const baseRetry = opts\.retry \?\? this\.config\.retry;/);
+    expect(body).toMatch(
+      /const retryConfig: RetryConfig \| undefined = isRetrySafe\(opts\.method, opts\.headers\)\s*\n?\s*\? baseRetry\s*\n?\s*: \{ \.\.\.baseRetry, maxAttempts: 0 \};/,
+    );
+    expect(body).toMatch(/\}, retryConfig\);/);
   });
 
   it('CRITICAL buildUrl helper — `new URL(this.config.baseUrl + path)` (concat, NOT `new URL(path, base)` which would drop a self-hosted base path prefix; mirrors Python/Go) + query-iteration with `if (v !== undefined) url.searchParams.set(k, String(v))`. The `!== undefined` filter (not falsy check) ensures `query: { limit: 0 }` is sent (drift to `if (v)` would drop limit:0). String(v) coerces numbers to string for URLSearchParams compatibility. Discrete pins (not one chained block regex) per the no-long-chain-regex lesson.', () => {

@@ -117,8 +117,11 @@ describe('W683 cross-SDK V-666.AO Idempotency-Key parity', () => {
     // sdk-go: `if opts != nil && opts.IdempotencyKey != nil { req.headers = ... }`
     expect(go).toMatch(/if opts != nil && opts\.IdempotencyKey != nil/);
 
-    // sdk-python: `if idempotency_key is None:` early-return fast-path + else _post_with_headers branch.
-    expect(py).toMatch(/if idempotency_key is None:/);
+    // sdk-python: conditional extra_headers on the standard request() call
+    // (audit 2026-06-23 removed the if-None early-return + _post_with_headers escape hatch).
+    expect(py).toMatch(
+      /extra_headers=\(\s*\n\s*\{"idempotency-key": idempotency_key\} if idempotency_key is not None else None\s*\n\s*\)/,
+    );
   });
 
   it('CRITICAL 24h dedup window mentioned in sdk-go comment. The server-side dedup window is 24h — drift to a longer window would let stale idempotency keys collide with new requests (e.g. customer re-uses a key from a year ago); drift to a shorter window would lose the dedup for legitimate retries.', () => {
@@ -136,10 +139,13 @@ describe('W683 cross-SDK V-666.AO Idempotency-Key parity', () => {
     ).toBeGreaterThanOrEqual(2);
   });
 
-  it('Header escape-hatch rationale pinned in sdk-python — "HttpClient.request() doesn\'t accept arbitrary headers — adding the parameter to every resource would broaden the public surface and the only place we need it today is create_checkout (V-666.AO). Drive the underlying httpx.Client here." This load-bearing rationale prevents future maintainers from "fixing" the escape hatch back to the wrapper (which would defeat the purpose of containing the broader-surface change).', () => {
+  it('sdk-python idempotency-key now rides the standard request(extra_headers=...) path (audit 2026-06-23 — the _post_with_headers escape hatch AND its "request() doesn\'t accept arbitrary headers" rationale were removed; request() does accept extra_headers). Retry-safety is the request-agnostic gate in the HTTP layer (a keyless create is single-shot), NOT a per-resource bypass. NEGATIVE guard: drift back to a per-resource httpx bypass would re-open the non-idempotent-retry surface the audit closed.', () => {
     const py = read(PY_CRYPTO);
-    expect(py).toMatch(/HttpClient\.request\(\) doesn't accept arbitrary headers/);
-    expect(py).toMatch(/only place we need it today is create_checkout \(V-666\.AO\)/);
+    expect(py).not.toMatch(/_post_with_headers/);
+    expect(py).not.toMatch(/doesn't accept arbitrary headers/);
+    expect(py).toMatch(
+      /extra_headers=\(\s*\n\s*\{"idempotency-key": idempotency_key\} if idempotency_key is not None else None\s*\n\s*\)/,
+    );
   });
 
   it('test file metadata — file exists at canonical path', () => {

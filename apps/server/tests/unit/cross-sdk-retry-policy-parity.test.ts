@@ -8,8 +8,8 @@
 //   - Honor 429 Retry-After hint (server-supplied wait wins over
 //     exponential)
 //   - Cap each sleep at maxDelay (prevents pathological cases)
-//   - 4 total tries (initial + 3 retries) — but the constants differ
-//     between SDKs (TS uses 250ms/8s, Go/Python use 200ms/10s)
+//   - 4 total tries (initial + 3 retries) — constants now UNIFIED
+//     across SDKs (all use 200ms/10s; TS aligned to Go/Python 2026-06-23)
 //   - Retry on transient: RateLimitError + TransportError + 5xx
 //   - DON\'T retry on 4xx (except 429)
 //
@@ -92,7 +92,7 @@ describe('W679 cross-SDK retry-policy semantics parity', () => {
     expect(ts).toMatch(/do NOT retry on 4xx/);
   });
 
-  it('CRITICAL maxDelay cap on each sleep pinned in all 3 SDKs. Caps the exponential growth at a fixed ceiling (prevents pathological "wait 4 hours" scenarios after 10 retries). Each SDK uses a different ceiling (TS 8s, Go/Python 10s) but the CAP semantics are shared.', () => {
+  it('CRITICAL maxDelay cap on each sleep pinned in all 3 SDKs. Caps the exponential growth at a fixed ceiling (prevents pathological "wait 4 hours" scenarios after 10 retries). All 3 SDKs now share the same 10s ceiling (TS unified to Go/Python per the 2026-06-23 audit); the CAP semantics are shared.', () => {
     const ts = read(TS_RETRY);
     const go = read(GO_RETRY);
     const py = read(PY_RETRY);
@@ -108,14 +108,14 @@ describe('W679 cross-SDK retry-policy semantics parity', () => {
     expect(py).toMatch(/max_delay_ms/);
   });
 
-  it("Per-SDK numeric defaults — intentionally DIFFERENT across SDKs. sdk-typescript: initialDelayMs=250 + maxDelayMs=8_000. sdk-go: InitialDelay=200ms + MaxDelay=10s. sdk-python: initial_delay_ms=200 + max_delay_ms=10_000. Drift to MATCHING constants is fine; drift to a different per-SDK default that's wildly out of range (e.g. TS to 60s default) would silently change the customer's retry latency.", () => {
+  it("Cross-SDK numeric defaults — now UNIFIED at initial 200ms + max 10_000ms across all 3 SDKs (TS aligned to Go/Python per the 2026-06-23 audit; was 250/8_000). sdk-typescript: initialDelayMs=200 + maxDelayMs=10_000. sdk-go: InitialDelay=200ms + MaxDelay=10s. sdk-python: initial_delay_ms=200 + max_delay_ms=10_000. Drift to a per-SDK default that's wildly out of range (e.g. TS to 60s default) would silently change the customer's retry latency.", () => {
     const ts = read(TS_RETRY);
     const go = read(GO_RETRY);
     const py = read(PY_RETRY);
 
-    // sdk-typescript: 250ms initial + 8_000ms max.
-    expect(ts).toMatch(/initialDelayMs: 250/);
-    expect(ts).toMatch(/maxDelayMs: 8_000/);
+    // sdk-typescript: 200ms initial + 10_000ms max (unified with Go/Python).
+    expect(ts).toMatch(/initialDelayMs: 200/);
+    expect(ts).toMatch(/maxDelayMs: 10_000/);
 
     // sdk-go: 200 * time.Millisecond + 10 * time.Second.
     expect(go).toMatch(/200 ?\* ?time\.Millisecond/);

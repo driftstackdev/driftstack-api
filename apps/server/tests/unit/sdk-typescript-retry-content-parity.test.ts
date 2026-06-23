@@ -6,12 +6,12 @@
 // blocks + pins previously-implicit invariants:
 //
 //   • CRITICAL Default policy pinned per-line: 4 total tries (3
-//     retries + 1 initial) + 250ms initial backoff doubling up to
-//     8s cap + full jitter + Retry-After honor + retry network/5xx
+//     retries + 1 initial) + 200ms initial backoff doubling up to
+//     10s cap + full jitter + Retry-After honor + retry network/5xx
 //     NOT 4xx (except 429). Drift to over-retrying 4xx would blast
 //     the server with auth failures.
 //   • DEFAULTS constant pinned per-field (maxAttempts:3 +
-//     initialDelayMs:250 + maxDelayMs:8_000 with numeric separator).
+//     initialDelayMs:200 + maxDelayMs:10_000 with numeric separator).
 //     Drift to a higher maxDelay would let stuck flows wait minutes.
 //   • RetryConfig 5-field shape — 3 numeric defaults + 2 test-seam
 //     overrides (rng + sleep). Test-seam framing pinned: "Test
@@ -56,9 +56,9 @@ describe('W422.B packages/sdk-typescript/src/retry.ts content parity', () => {
     );
   });
 
-  it('CRITICAL default policy pinned per-line — 5 bullet points: (1) "Up to 3 retry attempts (4 total tries) on transient failures"; (2) "Initial backoff 250 ms, doubling each attempt, cap 8 s"; (3) "Random jitter in [0, computed delay] (full jitter)" — the "full jitter" wording matters because half-jitter / decorrelated-jitter / equal-jitter are alternative AWS-style policies; (4) "Honour Retry-After when the error is a RateLimitError or 429"; (5) "Retry on network errors and 5xx; do NOT retry on 4xx (except 429)". CRITICAL: bullet 5 is the load-bearing policy — drift to retrying 4xx would blast the server with auth failures.', () => {
+  it('CRITICAL default policy pinned per-line — 5 bullet points: (1) "Up to 3 retry attempts (4 total tries) on transient failures"; (2) "Initial backoff 200 ms, doubling each attempt, cap 10 s"; (3) "Random jitter in [0, computed delay] (full jitter)" — the "full jitter" wording matters because half-jitter / decorrelated-jitter / equal-jitter are alternative AWS-style policies; (4) "Honour Retry-After when the error is a RateLimitError or 429"; (5) "Retry on network errors and 5xx; do NOT retry on 4xx (except 429)". CRITICAL: bullet 5 is the load-bearing policy — drift to retrying 4xx would blast the server with auth failures.', () => {
     expect(body).toMatch(
-      /\/\/ Default policy:\s*\n?\s*\/\/\s*- Up to 3 retry attempts \(4 total tries\) on transient failures\s*\n?\s*\/\/\s*- Initial backoff 250 ms, doubling each attempt, cap 8 s\s*\n?\s*\/\/\s*- Random jitter in \[0, computed delay\] \(full jitter\)\s*\n?\s*\/\/\s*- Honour Retry-After when the error is a RateLimitError or 429\s*\n?\s*\/\/\s*- Retry on network errors and 5xx; do NOT retry on 4xx \(except 429\)/,
+      /\/\/ Default policy \(kept in lockstep with the Python \+ Go SDKs —\s*\n?\s*\/\/\s*3 retries, 200 ms initial, 10 s cap\):\s*\n?\s*\/\/\s*- Up to 3 retry attempts \(4 total tries\) on transient failures\s*\n?\s*\/\/\s*- Initial backoff 200 ms, doubling each attempt, cap 10 s\s*\n?\s*\/\/\s*- Random jitter in \[0, computed delay\] \(full jitter\)\s*\n?\s*\/\/\s*- Honour Retry-After when the error is a RateLimitError or 429\s*\n?\s*\/\/\s*- Retry on network errors and 5xx; do NOT retry on 4xx \(except 429\)/,
     );
   });
 
@@ -68,15 +68,15 @@ describe('W422.B packages/sdk-typescript/src/retry.ts content parity', () => {
     );
   });
 
-  it('RetryConfig interface — 5-field shape with all OPTIONAL. JSDoc defaults pinned (3 / 250 / 8000) so customers can read the values without grep-ing the implementation. test-seam framing pinned on rng + sleep ("Test override") so future maintainers know NOT to surface these in production docs.', () => {
+  it('RetryConfig interface — 5-field shape with all OPTIONAL. JSDoc defaults pinned (3 / 200 / 10000) so customers can read the values without grep-ing the implementation. test-seam framing pinned on rng + sleep ("Test override") so future maintainers know NOT to surface these in production docs.', () => {
     expect(body).toMatch(
-      /export interface RetryConfig \{\s*\n?\s*\/\*\* Max retry attempts \(in addition to the initial try\)\. Default 3\. \*\/\s*\n?\s*maxAttempts\?: number;\s*\n?\s*\/\*\* Initial backoff in ms\. Default 250\. \*\/\s*\n?\s*initialDelayMs\?: number;\s*\n?\s*\/\*\* Backoff cap in ms\. Default 8000\. \*\/\s*\n?\s*maxDelayMs\?: number;\s*\n?\s*\/\*\* Random source for jitter; defaults to Math\.random\. Test override\. \*\/\s*\n?\s*rng\?: \(\) => number;\s*\n?\s*\/\*\* Sleep function; defaults to setTimeout\. Test override\. \*\/\s*\n?\s*sleep\?: \(ms: number\) => Promise<void>;\s*\n?\s*\}/,
+      /export interface RetryConfig \{\s*\n?\s*\/\*\* Max retry attempts \(in addition to the initial try\)\. Default 3\. \*\/\s*\n?\s*maxAttempts\?: number;\s*\n?\s*\/\*\* Initial backoff in ms\. Default 200\. \*\/\s*\n?\s*initialDelayMs\?: number;\s*\n?\s*\/\*\* Backoff cap in ms\. Default 10000\. \*\/\s*\n?\s*maxDelayMs\?: number;\s*\n?\s*\/\*\* Random source for jitter; defaults to Math\.random\. Test override\. \*\/\s*\n?\s*rng\?: \(\) => number;\s*\n?\s*\/\*\* Sleep function; defaults to setTimeout\. Test override\. \*\/\s*\n?\s*sleep\?: \(ms: number\) => Promise<void>;\s*\n?\s*\}/,
     );
   });
 
-  it('CRITICAL DEFAULTS constant — 3-field shape (maxAttempts:3 + initialDelayMs:250 + maxDelayMs:8_000). The numeric separator `8_000` is pinned (NOT `8000`) — it makes the value scannable at a glance. Drift to a higher maxDelayMs (e.g. 60_000) would let stuck flows wait full minutes between attempts.', () => {
+  it('CRITICAL DEFAULTS constant — 3-field shape (maxAttempts:3 + initialDelayMs:200 + maxDelayMs:10_000, unified across TS/Python/Go per the audit). The numeric separator `10_000` is pinned (NOT `10000`) — it makes the value scannable at a glance. Drift to a higher maxDelayMs (e.g. 60_000) would let stuck flows wait full minutes between attempts.', () => {
     expect(body).toMatch(
-      /const DEFAULTS = \{\s*\n?\s*maxAttempts: 3,\s*\n?\s*initialDelayMs: 250,\s*\n?\s*maxDelayMs: 8_000,\s*\n?\s*\};/,
+      /const DEFAULTS = \{\s*\n?\s*maxAttempts: 3,\s*\n?\s*initialDelayMs: 200,\s*\n?\s*maxDelayMs: 10_000,\s*\n?\s*\};/,
     );
   });
 

@@ -116,7 +116,7 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
     );
   });
 
-  it('CRITICAL V-666.BU listAll verb — AsyncGenerator<CryptoOrderEnvelope, void, void>. Internal cursor management via `Omit<ListCryptoOrdersOptions, "cursor">` — callers MUST NOT pass cursor (the type system rejects it at compile time). "Yields the envelope of each order one at a time so consumers can break early" framing pinned. Termination on EITHER null OR undefined next_cursor (defensive against server-side absence-vs-null differences).', () => {
+  it('CRITICAL V-666.BU listAll verb — a method returning AsyncGenerator<CryptoOrderEnvelope, void, void> that DELEGATES to the shared iteratePaginated helper (audit 2026-06-23 — was an inline async* while-loop), so it inherits the non-advancing-cursor guard every other list has. Internal cursor management via `Omit<ListCryptoOrdersOptions, "cursor">` — callers MUST NOT pass cursor (the type system rejects it at compile time). The crypto envelope keys rows off `orders`, so the fetch closure adapts orders→data + `next_cursor ?? null`. Drift to dropping the adapter or the shared helper would re-introduce the unguarded loop / iterate an empty list.', () => {
     expect(body).toMatch(
       /\*\s*V-666\.BU — async generator that walks every page until the\s*\n?\s*\*\s*server stops emitting a next_cursor\. Yields the envelope of\s*\n?\s*\*\s*each order one at a time so consumers can break early\./,
     );
@@ -124,8 +124,10 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
       /\*\s*Accepts the same options as `list\(\)` minus `cursor` \(the\s*\n?\s*\*\s*iterator manages cursors internally\)\./,
     );
     expect(body).toMatch(
-      /async \*listAll\(\s*\n?\s*opts: Omit<ListCryptoOrdersOptions, 'cursor'> = \{\},\s*\n?\s*\): AsyncGenerator<CryptoOrderEnvelope, void, void> \{\s*\n?\s*let cursor: string \| undefined;\s*\n?\s*while \(true\) \{\s*\n?\s*const page = await this\.list\(\{\s*\n?\s*\.\.\.opts,\s*\n?\s*\.\.\.\(cursor !== undefined \? \{ cursor \} : \{\}\),\s*\n?\s*\}\);\s*\n?\s*for \(const order of page\.orders\) yield order;\s*\n?\s*if \(page\.next_cursor === null \|\| page\.next_cursor === undefined\) return;\s*\n?\s*cursor = page\.next_cursor;\s*\n?\s*\}\s*\n?\s*\}/,
+      /listAll\(\s*\n?\s*opts: Omit<ListCryptoOrdersOptions, 'cursor'> = \{\},\s*\n?\s*\): AsyncGenerator<CryptoOrderEnvelope, void, void> \{[\s\S]*?return iteratePaginated<CryptoOrderEnvelope>\(\(cursor\) =>\s*\n?\s*this\.list\(\{\s*\n?\s*\.\.\.opts,\s*\n?\s*\.\.\.\(cursor !== null \? \{ cursor \} : \{\}\),\s*\n?\s*\}\)\.then\(\(page\) => \(\{\s*\n?\s*data: page\.orders,\s*\n?\s*next_cursor: page\.next_cursor \?\? null,\s*\n?\s*\}\)\),\s*\n?\s*\);/,
     );
+    // The shared paginator must actually be imported (the delegation target).
+    expect(body).toMatch(/import \{ iteratePaginated \} from '\.\.\/pagination\.js';/);
   });
 
   it('V-666.G get verb — GET /v1/billing/crypto-orders/${encodeURIComponent(orderId)} → Promise<CryptoOrderEnvelope>. Single-line minimalist implementation; encodeURIComponent wrapping prevents path traversal via maliciously-crafted orderIds.', () => {
