@@ -23,7 +23,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
-import { mintLivekitToken } from '../lib/livekit-token.js';
+import { mintLivekitToken, resolveSessionPublisherNode } from '../lib/livekit-token.js';
 import { decryptLivekitSecret } from '../lib/livekit-secret-encryption.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { FeatureUnavailableError } from '../lib/errors.js';
@@ -108,14 +108,20 @@ export function registerAgentSessionsLivekitTokenRoute(
         throw new ForbiddenError(`Cannot mint LiveKit token for ${session.status} agent session.`);
       }
 
-      // Region-aware Mac selection — parity with session-create
-      // (findNearestWithLivekit(accountRegion)). Prefer a node in the customer's
-      // region so a token RE-MINT doesn't pin e.g. an EU viewer to a far (US) box
-      // and add a needless transatlantic media hop. Falls back to any node when
-      // there's no regional match (single-region fleet → unchanged).
-      // Per-session Mac assignment is a follow-up slice; once agent_sessions tracks
-      // the assigned Mac this becomes getDetail(session.assignedMacNodeId).
-      const mac = await fleetNodesRepo.findNearestWithLivekit(ctx.account.region);
+      // Bind the token to the Mac that ACTUALLY publishes this session's stream
+      // (agent_sessions.node_id, set at dispatch) — NOT the region's
+      // most-recently-LiveKit-registered Mac (findNearestWithLivekit). Once a region
+      // has >=2 LiveKit boxes, the latter resolves the WRONG Mac → the viewer joins
+      // an empty room on that box (black screen) and the input DataChannel never
+      // reaches the publishing Mac. resolveSessionPublisherNode falls back to the
+      // region-nearest node only for a NULL/legacy node_id or a bound node that lost
+      // its creds (logged). Mirrors the close path's node binding.
+      const mac = await resolveSessionPublisherNode(
+        fleetNodesRepo,
+        session.nodeId,
+        ctx.account.region,
+        req.log,
+      );
       if (mac === null || mac.livekit === null) {
         bump('no_mac');
         throw new FeatureUnavailableError(

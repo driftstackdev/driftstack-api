@@ -11,7 +11,7 @@
 // InMemory variant to grow too; the operator routes only run against
 // the Drizzle path so this asymmetry is intentional.
 
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { fleetNodes } from './schema.js';
 import type { FleetNodePublicKey, FleetNodesRepo } from '../services/fleet-node-auth.js';
@@ -194,6 +194,26 @@ export class DrizzleFleetNodesRepo implements FleetNodesRepo {
       .select()
       .from(fleetNodes)
       .where(eq(fleetNodes.id, nodeId))
+      .limit(1);
+    const row = rows[0];
+    return row ? rowToDetail(row) : null;
+  }
+
+  /** Resolve a NON-REVOKED node by the value persisted in agent_sessions.node_id.
+   *  Dispatch writes that column as `mac.nodeId ?? mac.id` — the human node_id for
+   *  a registered Mac, or the uuid PK as a legacy fallback — so this matches EITHER
+   *  column. Used to bind a session's LiveKit token to the Mac that ACTUALLY
+   *  publishes its stream (the token must not re-pick "most-recently-registered"
+   *  via findNearestWithLivekit, which returns the wrong Mac the instant a region
+   *  has >=2 LiveKit boxes). Returns null when neither column matches a live row. */
+  async getDetailByNodeIdOrId(key: string): Promise<FleetNodeDetail | null> {
+    const rows = await this.database.db
+      .select()
+      .from(fleetNodes)
+      .where(
+        and(isNull(fleetNodes.revokedAt), or(eq(fleetNodes.nodeId, key), eq(fleetNodes.id, key))),
+      )
+      .orderBy(desc(fleetNodes.livekitRegisteredAt))
       .limit(1);
     const row = rows[0];
     return row ? rowToDetail(row) : null;

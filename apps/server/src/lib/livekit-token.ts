@@ -19,6 +19,38 @@
 // /v1/sessions/:id/livekit-token route at app.ts stays unregistered.
 
 import { createHmac } from 'node:crypto';
+import type { DrizzleFleetNodesRepo, FleetNodeDetail } from '../db/fleet-nodes-repo.js';
+
+/**
+ * Resolve the fleet node whose LiveKit credentials should sign a session's
+ * SUBSCRIBER token (gui-client viewer). Binds to the session's persisted
+ * `node_id` — the Mac the harness was dispatched to and PUBLISHES from — so the
+ * token is signed by + points at the SAME Mac that holds the video room. The
+ * naive `findNearestWithLivekit(region)` ("most-recently-LiveKit-registered in
+ * region") returns the WRONG Mac the instant a region has >=2 LiveKit boxes (or a
+ * creds rotation lands between the publisher dispatch and the subscriber mint) →
+ * the viewer joins an empty room on the wrong box: black screen + the input
+ * DataChannel never reaches the publishing Mac. Falls back to the region-nearest
+ * node ONLY for a NULL/legacy (never-dispatched) `node_id`, or if the bound node
+ * has vanished / lost its creds (logged, never thrown — a degraded view beats a
+ * 500). Mirrors the binding the close path (dispatchSessionEndOnClose) already does.
+ */
+export async function resolveSessionPublisherNode(
+  fleetNodesRepo: Pick<DrizzleFleetNodesRepo, 'getDetailByNodeIdOrId' | 'findNearestWithLivekit'>,
+  sessionNodeId: string | null | undefined,
+  region: string | null | undefined,
+  logger?: { warn: (obj: unknown, msg: string) => void },
+): Promise<FleetNodeDetail | null> {
+  if (sessionNodeId != null && sessionNodeId !== '') {
+    const bound = await fleetNodesRepo.getDetailByNodeIdOrId(sessionNodeId);
+    if (bound !== null && bound.livekit !== null) return bound;
+    logger?.warn(
+      { component: 'livekit-token', boundNodeId: sessionNodeId, boundNodeFound: bound !== null },
+      'session-bound LiveKit node missing or has no credentials; falling back to region-nearest node',
+    );
+  }
+  return fleetNodesRepo.findNearestWithLivekit(region);
+}
 
 export interface VideoGrant {
   /** Room name the token grants access to. */

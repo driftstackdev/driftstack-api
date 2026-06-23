@@ -91,18 +91,27 @@ function makeStubAgentSessionsRepo(session: AgentSessionRecord | null): AgentSes
   } as unknown as AgentSessionsRepo;
 }
 
-function makeStubFleetRepo(mac: FleetNodeDetail | null): DrizzleFleetNodesRepo {
+function makeStubFleetRepo(
+  mac: FleetNodeDetail | null,
+  boundMacs?: Record<string, FleetNodeDetail | null>,
+): DrizzleFleetNodesRepo {
   return {
     findAnyWithLivekit: () => Promise.resolve(mac),
     // maybeMintLivekit is now region-aware (consistent with the publisher
-    // dispatch); the stub returns the same node regardless of region.
+    // dispatch); the stub returns the same `nearest` node regardless of region.
     findNearestWithLivekit: () => Promise.resolve(mac),
+    // Audit fix: the re-mint binds to the session's node_id via this lookup.
+    // The stub resolves from an injected map (keyed by the session's node_id);
+    // unknown keys → null (→ resolveSessionPublisherNode falls back to nearest).
+    getDetailByNodeIdOrId: (key: string) => Promise.resolve(boundMacs?.[key] ?? null),
   } as unknown as DrizzleFleetNodesRepo;
 }
 
 async function buildApp(args: {
   session: AgentSessionRecord | null;
   mac: FleetNodeDetail | null;
+  /** Optional node_id → bound Mac map, resolved by getDetailByNodeIdOrId. */
+  boundMacs?: Record<string, FleetNodeDetail | null>;
   encryptionKey: string;
   callerAccountId?: string;
   metrics?: MetricsRegistry;
@@ -125,7 +134,7 @@ async function buildApp(args: {
   // pass; the stub just satisfies the decorator at registration.
   app.decorate('requireScope', () => async () => {});
   registerAgentSessionsLivekitTokenRoute(app, {
-    fleetNodesRepo: makeStubFleetRepo(args.mac),
+    fleetNodesRepo: makeStubFleetRepo(args.mac, args.boundMacs),
     agentSessionsRepo: makeStubAgentSessionsRepo(args.session),
     encryptionKey: args.encryptionKey,
     ...(args.metrics !== undefined ? { metrics: args.metrics } : {}),
@@ -184,6 +193,84 @@ describe('LK.3 — POST /v1/agent-sessions/:id/livekit-token', () => {
     expect(new Date(body.expires_at).getTime()).toBeGreaterThan(
       Date.now() + (LIVEKIT_TOKEN_TTL_SECONDS - 60) * 1000,
     );
+    await app.close();
+  });
+
+  it('200 — binds the token to the session node_id (the PUBLISHING Mac), NOT the most-recently-registered Mac (multi-LiveKit-box correctness)', async () => {
+    // Mac-A publishes this session (agent_sessions.node_id = mac-A-01). Mac-B is
+    // more-recently LiveKit-registered, so findNearestWithLivekit would hand the
+    // viewer Mac-B's token → empty room on Mac-B (black screen + dead control).
+    const macA: FleetNodeDetail = {
+      ...makeMac({
+        encryptionKey: key,
+        apiKey: 'lk_api_A',
+        wsUrl: 'wss://mac-A.driftstack.dev:8443',
+      }),
+      id: 'fleet_mac_A',
+      nodeId: 'mac-A-01',
+    };
+    const macB: FleetNodeDetail = {
+      ...makeMac({
+        encryptionKey: key,
+        apiKey: 'lk_api_B',
+        wsUrl: 'wss://mac-B.driftstack.dev:8443',
+      }),
+      id: 'fleet_mac_B',
+      nodeId: 'mac-B-02',
+    };
+    const app = await buildApp({
+      session: makeSession({ nodeId: 'mac-A-01' }),
+      mac: macB, // findNearestWithLivekit returns the WRONG (latest-registered) Mac
+      boundMacs: { 'mac-A-01': macA }, // the session's bound, publishing Mac
+      encryptionKey: key,
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${SESSION_ID}/livekit-token`,
+    });
+    expect(res.statusCode).toBe(200);
+    // The ws_url must be Mac-A's (the publishing box), never Mac-B's.
+    expect(res.json<Record<string, string>>().ws_url).toBe('wss://mac-A.driftstack.dev:8443');
+    await app.close();
+  });
+
+  it('200 — falls back to findNearestWithLivekit when node_id is NULL (legacy / not-yet-dispatched session)', async () => {
+    const nearest = makeMac({ encryptionKey: key, wsUrl: 'wss://nearest.driftstack.dev:8443' });
+    const app = await buildApp({
+      session: makeSession({ nodeId: null }),
+      mac: nearest,
+      boundMacs: {}, // nothing bound → getDetailByNodeIdOrId returns null
+      encryptionKey: key,
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${SESSION_ID}/livekit-token`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<Record<string, string>>().ws_url).toBe('wss://nearest.driftstack.dev:8443');
+    await app.close();
+  });
+
+  it('200 — bound node exists but has no LiveKit creds → falls back to region-nearest (graceful, not a 500)', async () => {
+    const nearest = makeMac({ encryptionKey: key, wsUrl: 'wss://nearest.driftstack.dev:8443' });
+    const boundNoCreds: FleetNodeDetail = {
+      ...makeMac({ encryptionKey: key }),
+      id: 'fleet_mac_X',
+      nodeId: 'mac-X',
+      livekit: null,
+    };
+    const app = await buildApp({
+      session: makeSession({ nodeId: 'mac-X' }),
+      mac: nearest,
+      boundMacs: { 'mac-X': boundNoCreds },
+      encryptionKey: key,
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${SESSION_ID}/livekit-token`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<Record<string, string>>().ws_url).toBe('wss://nearest.driftstack.dev:8443');
     await app.close();
   });
 
