@@ -1899,7 +1899,18 @@ export function SimulatorWindow(): JSX.Element {
       .then(() => {
         void withCurrentWindow((w) => w.destroy());
       })
-      .catch(noticeControlError)
+      .catch(() => {
+        // Control HTTP couldn't reach the server to DELETE the session (e.g. a
+        // reopened window with no control key). Closing the window still ENDS the
+        // session: dropping the LiveKit connection trips the worker-disconnect
+        // reaper, which closes it on the box. So End-session does the right thing
+        // even without control auth, instead of a dead "control request failed"
+        // (founder 2026-06-23 "still cant end session"). Best-effort notice first.
+        setNotice('Ending — closing the window (the session will stop on the box).');
+        window.setTimeout(() => {
+          void withCurrentWindow((w) => w.destroy());
+        }, 600);
+      })
       .finally(() => setControlBusy(false));
   };
   // Address-bar navigation (founder 2026-06-19: "can't press the URL bar"). The
@@ -2169,7 +2180,10 @@ export function SimulatorWindow(): JSX.Element {
               >
                 {/* Session — mode switch + (ai/pair) the agent composer. The rail is
                   wider than the old dropdown, so this IS the "bigger AI chat". */}
-                <section data-component="drawer-session" className="rounded-lg bg-black/20 pb-1">
+                <section
+                  data-component="drawer-session"
+                  className="shrink-0 rounded-lg bg-black/20 pb-1"
+                >
                   <div className="px-3 pt-2 font-sans text-[11px] font-semibold text-white/90">
                     Session
                   </div>
@@ -2191,7 +2205,7 @@ export function SimulatorWindow(): JSX.Element {
                 {/* Controls — the address bar (non-browser-mode) + window toggles. */}
                 <section
                   data-component="drawer-controls"
-                  className="overflow-hidden rounded-lg bg-black/20 py-1"
+                  className="shrink-0 rounded-lg bg-black/20 py-1"
                 >
                   <div className="px-3 pb-0.5 pt-1 font-sans text-[11px] font-semibold text-white/90">
                     Controls
@@ -2271,7 +2285,7 @@ export function SimulatorWindow(): JSX.Element {
                   (founder: "there's no close diagnostics"). */}
                 <section
                   data-component="drawer-diagnostics"
-                  className="rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
+                  className="shrink-0 rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
                 >
                   <div className="mb-1 flex items-center justify-between">
                     <span className="font-sans text-[11px] font-semibold text-white">
@@ -2366,7 +2380,7 @@ export function SimulatorWindow(): JSX.Element {
                   Cross-domain whole-jar arrives later ("this page" → "all"). */}
                 <section
                   data-component="simulator-cookies"
-                  className="rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
+                  className="shrink-0 rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
                 >
                   <div className="mb-0.5 flex items-center justify-between">
                     <span className="font-sans text-[11px] font-semibold text-white">
@@ -2407,7 +2421,7 @@ export function SimulatorWindow(): JSX.Element {
                     title="End the session — stops the worker and tears down the browser"
                     disabled={controlBusy}
                     onClick={onEndSession}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11.5px] text-red-300 transition-colors hover:bg-red-500/20 disabled:opacity-50"
+                    className="flex w-full shrink-0 items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11.5px] text-red-300 transition-colors hover:bg-red-500/20 disabled:opacity-50"
                   >
                     <span aria-hidden="true">{controlBusy ? '…' : '◼'}</span>
                     <span>{controlBusy ? 'Ending…' : 'End session'}</span>
