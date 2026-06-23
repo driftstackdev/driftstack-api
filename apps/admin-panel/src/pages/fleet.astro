@@ -47,11 +47,12 @@ const apiBaseUrl = resolveApiBaseUrl();
             <th class="px-4 py-3">Uptime</th>
             <th class="px-4 py-3">Harness</th>
             <th class="px-4 py-3">Last seen</th>
+            <th class="px-4 py-3">Controls</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100" data-list="fleet">
           <tr>
-            <td colspan="11" class="px-4 py-8 text-center text-sm text-tk-ink-3">Loading…</td>
+            <td colspan="12" class="px-4 py-8 text-center text-sm text-tk-ink-3">Loading…</td>
           </tr>
         </tbody>
       </table>
@@ -227,7 +228,38 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<td class="px-4 py-3">' +
           freshnessBadge(n.last_seen_at) +
           '</td>' +
+          '<td class="px-4 py-3">' +
+          controlButtons(n) +
+          '</td>' +
           '</tr>'
+        );
+      }
+
+      // The per-row control buttons. A dash (no buttons) when the node holds no
+      // live control-plane connection — the command is delivered over that WS, so
+      // it would 409 otherwise. data-* attributes feed the delegated click handler.
+      function controlButtons(n) {
+        if (n.connected !== true) {
+          return '<span class="text-xs text-tk-ink-3" title="Controls need a live control-plane connection">—</span>';
+        }
+        const mk = (cmd, label, cls) =>
+          '<button type="button" data-control="' +
+          cmd +
+          '" data-node-id="' +
+          escapeHtml(n.id) +
+          '" class="mr-1 mb-1 inline-block rounded px-2 py-0.5 text-xs font-medium ' +
+          cls +
+          '">' +
+          label +
+          '</button>';
+        const neutral = 'bg-tk-hover text-tk-ink-2 hover:bg-slate-200';
+        const warn = 'bg-amber-50 text-amber-700 hover:bg-amber-100';
+        const danger = 'bg-red-50 text-red-700 hover:bg-red-100';
+        return (
+          mk('cordon', 'Cordon', warn) +
+          mk('uncordon', 'Uncordon', neutral) +
+          mk('drain', 'Drain', warn) +
+          mk('restart', 'Restart', danger)
         );
       }
 
@@ -235,7 +267,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!token) {
           if (tbody)
             tbody.innerHTML =
-              '<tr><td colspan="11" class="px-4 py-8 text-center text-sm text-tk-ink-3">Sign in as a staff admin to view the fleet.</td></tr>';
+              '<tr><td colspan="12" class="px-4 py-8 text-center text-sm text-tk-ink-3">Sign in as a staff admin to view the fleet.</td></tr>';
           return Promise.resolve();
         }
         return fetch(apiBaseUrl + '/v1/mac-nodes', {
@@ -251,7 +283,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (tbody) {
               if (rows.length === 0) {
                 tbody.innerHTML =
-                  '<tr><td colspan="11" class="px-4 py-8 text-center text-sm text-tk-ink-3">No fleet nodes registered yet. Start a Mac worker (harness with DRIFTSTACK_ENABLE_DRIVE_BRIDGE=1) and it will appear here once it registers.</td></tr>';
+                  '<tr><td colspan="12" class="px-4 py-8 text-center text-sm text-tk-ink-3">No fleet nodes registered yet. Start a Mac worker (harness with DRIFTSTACK_ENABLE_DRIVE_BRIDGE=1) and it will appear here once it registers.</td></tr>';
               } else {
                 tbody.innerHTML = rows.map(rowHtml).join('');
               }
@@ -273,7 +305,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             // W604 discipline: never leave fabricated rows; show honest state.
             if (tbody)
               tbody.innerHTML =
-                '<tr><td colspan="11" class="px-4 py-8 text-center text-sm text-tk-ink-3">Could not load fleet nodes. Resolve the error above and retry.</td></tr>';
+                '<tr><td colspan="12" class="px-4 py-8 text-center text-sm text-tk-ink-3">Could not load fleet nodes. Resolve the error above and retry.</td></tr>';
             if (footnote) footnote.textContent = '';
             if (msg === 'forbidden') {
               showBanner(
@@ -283,6 +315,85 @@ const apiBaseUrl = resolveApiBaseUrl();
               showBanner('Could not load fleet nodes — ' + msg + '.');
             }
           });
+      }
+
+      // W631 — per-node fleet control actions (founder "ship them now", 2026-06-23).
+      // Cordon / uncordon / drain / restart via POST /v1/mac-nodes/:id/control (staff
+      // admin scope). The harness acks 202 and applies the command on its own loop, so
+      // we surface "sent" + refresh — never claim instant effect. Destructive actions
+      // (drain / restart finish-or-end in-flight sessions) are gated behind an explicit
+      // driftstackConfirm (a real OK click — NOT an Enter-fires prompt — so a stray
+      // keypress can't restart a worker). The listener is delegated on `tbody` so it
+      // survives the 15s auto-refresh innerHTML swap.
+      function controlActionLabel(cmd) {
+        return cmd.charAt(0).toUpperCase() + cmd.slice(1);
+      }
+      function controlConfirmMessage(cmd) {
+        if (cmd === 'restart')
+          return 'Restart this worker? It drains (lets active sessions finish) then exits and respawns — any in-flight session on this node is ended.';
+        if (cmd === 'drain')
+          return 'Drain this worker? It stops accepting new sessions and goes idle once the active ones finish.';
+        if (cmd === 'cordon')
+          return 'Cordon this worker? It stops accepting NEW sessions; active ones keep running.';
+        return 'Uncordon this worker? It resumes accepting new sessions.';
+      }
+      async function runControl(nodeId, cmd, btn) {
+        if (!token) return;
+        const confirmFn = window.driftstackConfirm;
+        const proceed = confirmFn
+          ? await confirmFn(controlConfirmMessage(cmd), { confirmLabel: controlActionLabel(cmd) })
+          : window.confirm(controlConfirmMessage(cmd));
+        if (!proceed) return;
+        if (btn) btn.disabled = true;
+        try {
+          const r = await fetch(
+            apiBaseUrl + '/v1/mac-nodes/' + encodeURIComponent(nodeId) + '/control',
+            {
+              method: 'POST',
+              headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ command: cmd }),
+            },
+          );
+          if (r.status === 202) {
+            showBanner(
+              controlActionLabel(cmd) +
+                ' sent to ' +
+                nodeId +
+                ' — the node applies it asynchronously (watch Health / Last seen).',
+            );
+            await load();
+          } else if (r.status === 409) {
+            showBanner('Cannot ' + cmd + ': node is not connected to the control plane.');
+          } else if (r.status === 404) {
+            showBanner('Cannot ' + cmd + ': node not found (it may have de-registered).');
+          } else if (r.status === 403) {
+            showBanner('Cannot ' + cmd + ': staff admin scope required.');
+          } else if (r.status === 503) {
+            showBanner('Cannot ' + cmd + ': fleet control is not available on this server.');
+          } else {
+            showBanner('Cannot ' + cmd + ' — HTTP ' + r.status + '.');
+          }
+        } catch (err) {
+          showBanner(
+            'Control request failed — ' +
+              (err && err.message ? err.message : 'network error') +
+              '.',
+          );
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      }
+      if (tbody) {
+        tbody.addEventListener('click', function (e) {
+          const target = e.target;
+          const btn = target && target.closest ? target.closest('button[data-control]') : null;
+          if (!btn) return;
+          const cmd = btn.getAttribute('data-control');
+          const nodeId = btn.getAttribute('data-node-id');
+          if (!cmd || !nodeId) return;
+          void runControl(nodeId, cmd, btn);
+        });
       }
 
       void load();
