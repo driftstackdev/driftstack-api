@@ -114,10 +114,15 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
       try {
         const page = await client.sessions.list();
         setState((s) => ({
+          ...s,
           sessions: page.data,
           refreshedAt: Date.now(),
           loading: false,
-          error: s.error,
+          // Clear any prior error — a successful list() proves the list is
+          // reachable, so a stale "Could not load" banner must not stay pinned
+          // after a transient poll failure recovers (adversarial review w410wv3eq;
+          // mirrors SessionsHistoryView's success path which sets error: null).
+          error: null,
         }));
       } catch (err) {
         setState((s) => ({

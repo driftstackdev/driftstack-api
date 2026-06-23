@@ -755,7 +755,11 @@ export function ProfilesView({
   }, [refresh]);
 
   async function handleDelete(id: string): Promise<void> {
-    if (!client) return;
+    // Don't delete a profile while ANY action is in flight (esp. a launch of this
+    // profile): the grid card's Delete row only checked p.running, so a delete
+    // could race an in-flight launch before node_id/running was set (adversarial
+    // review w410wv3eq #4). Mirror handleClone's single-flight guard.
+    if (!client || busyId !== null) return;
     // Founder 2026-06-16 — confirm before a single-profile delete (the bulk bar
     // already confirms; the per-row/card delete did not). Profile delete is a
     // permanent server hard-delete (the identity's cookies/storage/fingerprint
@@ -1362,7 +1366,13 @@ export function ProfilesView({
     profile: Profile,
     opts: { skipProxyDownConfirm?: boolean } = {},
   ): Promise<void> {
-    if (!client) return;
+    // Single-flight on the shared busyId (mirrors handleClone): without this, two
+    // different rows could launch concurrently (a second row's Launch stays enabled
+    // while the first is in flight) → an extra billed session + the busyId/
+    // "Launching…" indicator clobbered (adversarial review w410wv3eq #1/#5). The
+    // bulk loop is unaffected — it awaits each handleLaunch sequentially, so busyId
+    // is null at the start of each iteration.
+    if (!client || busyId !== null) return;
     setBusyId(profile.id);
     try {
       const proxy = pickProxy(profile.id);
