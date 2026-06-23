@@ -263,7 +263,7 @@ export function DeviceToolbar({
       <div
         onPointerDown={startToolbarDrag}
         data-component="simulator-toolbar"
-        className="flex h-[34px] w-full items-center justify-between rounded-t-[16px] bg-[#1d1e24] px-3 ring-1 ring-white/[0.12] backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_-1px_0_rgba(0,0,0,0.45)]"
+        className="flex h-[34px] w-full items-center gap-2 rounded-t-[16px] bg-[#1d1e24] px-3 ring-1 ring-white/[0.12] backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_-1px_0_rgba(0,0,0,0.45)]"
       >
         {/* Left — window controls. The window is BORDERLESS (the iPhone look),
             so these ARE the only close/minimize affordance. */}
@@ -288,14 +288,16 @@ export function DeviceToolbar({
             toolbar, so the identity stays here in every mode. */}
         <div
           data-tauri-drag-region
-          className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5"
+          className="pointer-events-none flex min-w-0 flex-1 items-center justify-center gap-1.5"
         >
           <DriftMark />
           <span className="max-w-[140px] truncate text-[11px] font-semibold tracking-tight text-white/85">
             {profileName !== '' ? profileName : deviceName}
           </span>
           {profileName !== '' && (
-            <span className="text-[11px] tracking-tight text-white/45">· {deviceName}</span>
+            <span className="hidden truncate text-[11px] tracking-tight text-white/45 sm:inline">
+              · {deviceName}
+            </span>
           )}
         </div>
         {/* Right — quick Record + the expand chevron. The window-controls
@@ -351,7 +353,9 @@ export function DeviceToolbar({
               strokeLinejoin="round"
               className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
             >
-              <path d="M6 9l6 6 6-6" />
+              {/* Right-pointing ›: the panel is a RIGHT drawer now (Option B), so
+                  the chevron opens to the right (rotates to ‹ to close). */}
+              <path d="M9 18l6-6-6-6" />
             </svg>
           </button>
         </div>
@@ -1706,12 +1710,19 @@ export function SimulatorWindow(): JSX.Element {
         setControlUnreachable(false);
       })
       .catch((err: unknown) => {
-        // Surface the failure instead of leaving the panel stuck on "Connecting…"
-        // forever — the panel shows a "controls unavailable — Retry" state and
-        // the Retry re-runs this fetch (founder 2026-06-18). Mode stays null so
-        // the optimistic mode UI isn't faked; controlError drives the caption.
         if (reqSessionId !== sessionIdRef.current) return;
-        setControlError(controlErrorMessage(err));
+        // The control HTTP API is unreachable (e.g. the separate Simulator app's
+        // per-session control key didn't reach this window). Manual control still
+        // works over the LiveKit data channel, so DEFAULT to 'manual' + a soft note
+        // rather than a blocking "controls unavailable — Retry" error (founder
+        // 2026-06-23: "should just be on manual unless changed" + "I can control
+        // manually just fine"). An explicit mode CHANGE that fails still surfaces
+        // its own error via noticeControlError. The root key-handoff fix is tracked
+        // separately; this keeps the panel usable meanwhile.
+        setControlMode((prev) => prev ?? 'manual');
+        setControlError(null);
+        // Log for diagnostics without scaring the operator.
+        console.warn('[simulator] control fetch failed; defaulting to manual:', err);
       });
   }, [sessionId, controlAuth]);
   // Seed on mount + re-read whenever the panel opens (cheap, no idle polling).
