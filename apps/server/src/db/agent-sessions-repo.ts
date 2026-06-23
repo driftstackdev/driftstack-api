@@ -29,7 +29,7 @@
 // db-agent-sessions-concurrency-drizzle.test.ts (CI; skips locally w/o DB).
 
 import { randomUUID } from 'node:crypto';
-import { and, count, desc, eq, lt } from 'drizzle-orm';
+import { and, count, desc, eq, lt, notInArray } from 'drizzle-orm';
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import type { Database } from './client.js';
 import { agentSessions } from './schema.js';
@@ -297,6 +297,39 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
         updatedAt: now,
       })
       .where(and(eq(agentSessions.status, 'active'), eq(agentSessions.nodeId, nodeId)))
+      .returning({ id: agentSessions.id });
+    return updated.length;
+  }
+
+  async closeActiveByNodeExcept(
+    nodeId: string,
+    keepIds: readonly string[],
+    reason: string,
+  ): Promise<number> {
+    // A2 W2813 bootId consumer — close a restarted node's still-active sessions
+    // EXCEPT the ids the new boot reaffirmed in its heartbeat (keepIds), so a
+    // session freshly assigned to the new process is never swept. Same invariant
+    // as closeActiveByNode (status='active' AND node_id=nodeId; NULL node_id never
+    // matches `eq`). keepIds empty ⇒ no NOT-IN clause ⇒ identical to
+    // closeActiveByNode. Single atomic UPDATE; idempotent.
+    const now = this.clock();
+    const where =
+      keepIds.length === 0
+        ? and(eq(agentSessions.status, 'active'), eq(agentSessions.nodeId, nodeId))
+        : and(
+            eq(agentSessions.status, 'active'),
+            eq(agentSessions.nodeId, nodeId),
+            notInArray(agentSessions.id, [...keepIds]),
+          );
+    const updated = await this.database.db
+      .update(agentSessions)
+      .set({
+        status: 'closed',
+        closedReason: reason,
+        closedAt: now,
+        updatedAt: now,
+      })
+      .where(where)
       .returning({ id: agentSessions.id });
     return updated.length;
   }

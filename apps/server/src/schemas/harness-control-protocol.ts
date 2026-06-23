@@ -479,6 +479,16 @@ export const HeartbeatSchema = z.object({
   maxConcurrent: z.number().int().nonnegative().optional(),
   /** Daemon uptime (s, monotonic from process start) — uptime + silent-restart detection (A3-3). */
   uptimeSeconds: z.number().nonnegative().optional(),
+  /**
+   * Per-PROCESS boot identity (A3 W2827 — `ProcessInfo.processInfo.globallyUniqueString`,
+   * captured once per daemon process). A CHANGE for a node across beats = the daemon
+   * RESTARTED (its prior in-memory sessions are gone) vs an unchanged value across a
+   * connection gap = a mere reconnect. The CP's bootId consumer (A2 W2813) uses a change
+   * to expire that node's previously-assigned sessions the new boot does NOT reaffirm.
+   * OPTIONAL + omit-when-nil on the producer; DECLARED here (was silently .strip()ped)
+   * so the consumer can read it.
+   */
+  bootId: z.string().min(1).max(256).optional(),
   /** "draining" when shedding (SIGUSR1 / scheduled restart), else absent = serving (A3-2). */
   drainState: z.string().optional(),
   /** Rolling-1h session-outcome tally (reason→count); A2 owns success/crash categorization (A3-5). */

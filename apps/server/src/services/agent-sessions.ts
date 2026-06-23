@@ -212,6 +212,24 @@ export interface AgentSessionsRepo {
   closeActiveByNode(nodeId: string, reason: string): Promise<number>;
 
   /**
+   * Node-restart variant of {@link closeActiveByNode} (A2 W2813 bootId consumer):
+   * close a node's still-active sessions EXCEPT those whose id is in `keepIds`.
+   * Used when a daemon's `bootId` changes (it restarted, A3 W2827): its prior
+   * in-memory sessions are gone, so the CP closes the ones it still holds active
+   * for that node — but NOT any the restarted boot REAFFIRMS in its heartbeat
+   * `activeSessionStates` (a session freshly assigned to the new boot, which the
+   * node reports as active/provisioning), so a just-dispatched session is never
+   * killed by the restart sweep. Same CRITICAL INVARIANT as closeActiveByNode
+   * (status='active' AND node_id=nodeId; NULL node_id never matches). `keepIds`
+   * empty ⇒ identical to closeActiveByNode. Idempotent.
+   */
+  closeActiveByNodeExcept(
+    nodeId: string,
+    keepIds: readonly string[],
+    reason: string,
+  ): Promise<number>;
+
+  /**
    * v2-#19 — Stripe-pattern idempotency lookup. Scoped per-account so
    * customer A's "key=foo" cannot collide with customer B's "key=foo"
    * (mirrors the partial unique index from migration 0047). Returns
@@ -469,6 +487,31 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       // rows, already-closed rows, and never-dispatched (nodeId=null) rows are
       // skipped — exactly the closeActiveByNode contract.
       if (rec.status !== 'active' || rec.nodeId !== nodeId) continue;
+      this.records.set(id, {
+        ...rec,
+        status: 'closed',
+        closedReason: reason,
+        closedAt: rec.closedAt ?? now,
+        updatedAt: now,
+      });
+      closed += 1;
+    }
+    return Promise.resolve(closed);
+  }
+
+  closeActiveByNodeExcept(
+    nodeId: string,
+    keepIds: readonly string[],
+    reason: string,
+  ): Promise<number> {
+    const now = this.clock();
+    const keep = new Set(keepIds);
+    let closed = 0;
+    for (const [id, rec] of this.records) {
+      // Same INVARIANT as closeActiveByNode, plus: skip ids the restarted boot
+      // reaffirmed (keepIds) so a session freshly assigned to the new process is
+      // never swept.
+      if (rec.status !== 'active' || rec.nodeId !== nodeId || keep.has(id)) continue;
       this.records.set(id, {
         ...rec,
         status: 'closed',

@@ -36,6 +36,7 @@ import { makeChallengeRelay } from '../services/challenge-relay.js';
 import { makeProfileSaveFailedRelay } from '../services/profile-save-failed-relay.js';
 import { closeAgentSessionOnTerminalStatus } from '../services/agent-session-terminal-close.js';
 import { reconcileWorkerReportedOrphans } from '../services/cp-daemon-reconcile.js';
+import { reconcileNodeBootChange } from '../services/node-boot-reconcile.js';
 import { serializeSessionEnd } from '../services/harness-control-codec.js';
 import { RedisFleetNonceCache } from '../lib/redis-fleet-nonce-cache.js';
 import { DrizzleAtlasPriorityEventsRepo } from '../db/atlas-priority-events-repo.js';
@@ -1334,6 +1335,11 @@ export async function createProductionDeps(
   // (`fleetRegistryHolder.current = new FleetControlRegistry(...)`) and read only at
   // heartbeat fire-time (long after construction completes).
   const fleetRegistryHolder: { current?: FleetControlRegistry } = {};
+  // W2813 — last-seen per-process bootId per node, for the CP bootId consumer (restart
+  // detection). Process-lifetime map; reset on CP restart is intentional (the consumer
+  // records-only on the first beat after a reset, so it never mass-closes — see
+  // node-boot-reconcile.ts). Read+mutated only in the heartbeat handler below.
+  const bootIdByNode = new Map<string, string>();
   const fleetControlPlaneDeps = config.fleetControlPlaneEnabled
     ? (() => {
         const fleetNonceCache = new RedisFleetNonceCache(redis);
@@ -1473,6 +1479,18 @@ export async function createProductionDeps(
                   logger,
                 });
               }
+              // W2813 bootId consumer — track per-process bootId; on a CHANGE (daemon
+              // restart) close this node's CP-active sessions the new boot doesn't
+              // reaffirm. Runs every beat (OUTSIDE the activeSessionStates guard — a
+              // just-restarted node may report zero sessions); self-guards on bootId absent.
+              void reconcileNodeBootChange({
+                agentSessions: agentSessionsRepo,
+                macNodeId: frame.macNodeId,
+                bootId: frame.bootId,
+                reaffirmedSessionIds: Object.keys(frame.activeSessionStates ?? {}),
+                bootIdByNode,
+                logger,
+              });
             },
             // Worker-disconnect fix (2026-06-19) — liveness hooks (positional
             // args 6 + 7): a (re)connect CANCELS the node's pending grace timer;

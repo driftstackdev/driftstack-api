@@ -381,4 +381,38 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
     // Idempotent — a second close on the same node closes nothing new.
     expect(await repo.closeActiveByNode('node-A', 'worker-disconnected')).toBe(0);
   });
+
+  it('W2813 closeActiveByNodeExcept: closes this node’s active sessions EXCEPT the reaffirmed ids; another node + a kept id survive; empty keep-set == closeActiveByNode', async () => {
+    let now = new Date('2026-06-23T00:00:00Z');
+    const repo = new InMemoryAgentSessionsRepo(() => now);
+
+    // node-A: three active sessions — a1/a2 orphaned by the restart, aKeep reaffirmed.
+    const a1 = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    const a2 = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    const aKeep = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    await repo.setNodeId(a1.id, 'node-A');
+    await repo.setNodeId(a2.id, 'node-A');
+    await repo.setNodeId(aKeep.id, 'node-A');
+
+    // node-B active session — another node, must survive.
+    const b1 = await repo.create({ accountId: 'acc_2', tokenBudgetTotal: 100 });
+    await repo.setNodeId(b1.id, 'node-B');
+
+    now = new Date('2026-06-23T00:05:00Z');
+    const closed = await repo.closeActiveByNodeExcept('node-A', [aKeep.id], 'worker-restarted');
+    expect(closed).toBe(2);
+
+    expect((await repo.get(a1.id))!.status).toBe('closed');
+    expect((await repo.get(a1.id))!.closedReason).toBe('worker-restarted');
+    expect((await repo.get(a2.id))!.status).toBe('closed');
+    // Reaffirmed session NOT swept — the new boot still has it.
+    expect((await repo.get(aKeep.id))!.status).toBe('active');
+    // Another node untouched.
+    expect((await repo.get(b1.id))!.status).toBe('active');
+
+    // Empty keep-set behaves exactly like closeActiveByNode (sweeps the rest).
+    const rest = await repo.closeActiveByNodeExcept('node-A', [], 'worker-restarted');
+    expect(rest).toBe(1); // only aKeep was left active on node-A
+    expect((await repo.get(aKeep.id))!.status).toBe('closed');
+  });
 });

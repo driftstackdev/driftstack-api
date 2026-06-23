@@ -91,7 +91,7 @@ describe('services/agent-sessions content parity', () => {
     expect(body).toMatch(/updatedAt: Date;/);
   });
 
-  it("AgentSessionsRepo 12-method surface pinned: create + get + listByAccount + appendTranscript + debitTokens + closeWithReason + reapOrphanedActiveBefore + setNodeId + closeActiveByNode + findByIdempotencyKey + setPairModeState + setGuiControlKey. Drift to dropping a method would break the contract that lets the executor + dashboard chat UI work against either InMemoryRepo or DrizzleRepo without knowing which backend they're talking to", () => {
+  it("AgentSessionsRepo 13-method surface pinned: create + get + listByAccount + appendTranscript + debitTokens + closeWithReason + reapOrphanedActiveBefore + setNodeId + closeActiveByNode + closeActiveByNodeExcept + findByIdempotencyKey + setPairModeState + setGuiControlKey. Drift to dropping a method would break the contract that lets the executor + dashboard chat UI work against either InMemoryRepo or DrizzleRepo without knowing which backend they're talking to", () => {
     expect(body).toMatch(/export interface AgentSessionsRepo \{/);
     expect(body).toMatch(/create\(args: CreateAgentSessionArgs\): Promise<AgentSessionRecord>;/);
     expect(body).toMatch(/get\(id: string\): Promise<AgentSessionRecord \| null>;/);
@@ -113,6 +113,10 @@ describe('services/agent-sessions content parity', () => {
       /setNodeId\(id: string, nodeId: string\): Promise<AgentSessionRecord \| null>;/,
     );
     expect(body).toMatch(/closeActiveByNode\(nodeId: string, reason: string\): Promise<number>;/);
+    // W2813 bootId consumer — node-restart variant that keeps the new boot's
+    // reaffirmed sessions. Method-name + keep-set pin (may wrap across lines).
+    expect(body).toMatch(/closeActiveByNodeExcept\(/);
+    expect(body).toMatch(/keepIds: readonly string\[\]/);
     expect(body).toMatch(
       /findByIdempotencyKey\(\s*\n?\s*accountId: string,\s*\n?\s*idempotencyKey: string,\s*\n?\s*\): Promise<AgentSessionRecord \| null>;/,
     );
