@@ -52,6 +52,13 @@ const STATUS_STRIP_H = 40;
 // "actual size" reset (Cmd+0) so the device renders at true iPhone-logical px,
 // not whatever width the window happens to have been dragged to.
 const DEVICE_LOGICAL_WIDTH = 402;
+// Option B (founder 2026-06-23) — the chevron toggle reveals a wide right DRAWER
+// (Session · Controls · Diagnostics · Cookies). When open, the WINDOW widens by
+// exactly this much; the phone keeps its size. The window-sizing math always
+// derives the phone dims from (windowWidth − drawerExtra) and adds drawerExtra
+// back, so the drawer never letterboxes the device (the prior "window larger than
+// output" hazard). Reversible: closing removes the extra width exactly.
+const DRAWER_W = 264;
 
 interface SessionQuery {
   info: LiveKitInfo | null;
@@ -208,91 +215,36 @@ function DriftMark(): JSX.Element {
 export function DeviceToolbar({
   deviceName,
   profileName,
-  landscape,
-  pinned,
-  infoOpen,
   expanded,
-  onToggleRotate,
-  onTogglePinned,
-  onToggleInfo,
   onToggleExpanded,
   recording,
   onToggleRecord,
-  mode,
-  pairKind,
-  controlBusy,
-  composerText,
-  controlError,
-  onRetryControl,
-  onSetMode,
-  onTakeover,
-  onHandback,
-  onComposerChange,
-  onSendMessage,
-  canNavigate,
-  onNavigate,
-  browserMode,
-  onToggleBrowserMode,
   running,
-  onEndSession,
 }: {
   deviceName: string;
   profileName: string;
-  landscape: boolean;
-  pinned: boolean;
-  infoOpen: boolean;
+  /** True when the right control DRAWER is open (Option B). The chevron toggles
+   *  it; the drawer itself + the controls it holds live in the main layout
+   *  (SimulatorWindow), not in this thin toolbar. */
   expanded: boolean;
-  onToggleRotate: () => void;
-  onTogglePinned: () => void;
-  onToggleInfo: () => void;
   onToggleExpanded: () => void;
   recording: boolean;
   onToggleRecord: () => void;
-  mode: SessionMode | null;
-  pairKind: string | null;
-  controlBusy: boolean;
-  composerText: string;
-  controlError: string | null;
-  onRetryControl: () => void;
-  onSetMode: (m: SessionMode) => void;
-  onTakeover: () => void;
-  onHandback: () => void;
-  onComposerChange: (v: string) => void;
-  onSendMessage: () => void;
-  /** True when a control channel (LiveKit room) is connected so a navigate can
-   *  ride it — the address bar is disabled otherwise. */
-  canNavigate: boolean;
-  /** Submit an address-bar URL → the data-channel navigate. */
-  onNavigate: (url: string) => void;
-  /** Browser mode (founder 2026-06-21): toolbar center becomes a native address
-   *  field instead of the device identity, so URL control doesn't depend on the
-   *  un-tappable rendered iOS chrome. */
-  browserMode: boolean;
-  onToggleBrowserMode: () => void;
   /** True when a live agent session is bound to this window — drives the running
-   *  indicator + enables the explicit End-session control (founder Track A). */
+   *  indicator. */
   running: boolean;
-  /** End (DELETE) the agent session — the explicit Stop, distinct from the
-   *  mode-aware window-close (which only HIDES the window in ai/pair). */
-  onEndSession: () => void;
 }): JSX.Element {
-  // Dismiss the expanded control panel on an outside pointer-down or Escape, so
-  // it doesn't linger over the screen after you've picked (or skipped) a control.
+  // Escape closes the drawer (it's a docked side panel now, NOT an overlay — so
+  // an outside-pointer-down must NOT close it, or every tap on the phone would
+  // collapse it). Keyboard-only dismiss.
   const wrapRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!expanded) return;
-    const onPointerDown = (e: PointerEvent): void => {
-      if (wrapRef.current !== null && !wrapRef.current.contains(e.target as Node)) {
-        onToggleExpanded();
-      }
-    };
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onToggleExpanded();
     };
-    document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('keydown', onKey);
     };
   }, [expanded, onToggleExpanded]);
@@ -404,137 +356,6 @@ export function DeviceToolbar({
           </button>
         </div>
       </div>
-      {/* Expandable control panel — an ABSOLUTE dropdown so it never changes the
-          toolbar height (the window-sizing math in handleVideoDimensions depends
-          on the fixed TOOLBAR_H). Clear LABELLED rows, led by the control-mode
-          line so the default "full control + iOS tap" is obvious. */}
-      {expanded && (
-        <div
-          data-tauri-drag-region="false"
-          data-component="simulator-controls"
-          className="absolute right-2 top-full z-30 mt-1 w-56 overflow-hidden rounded-xl border border-white/[0.12] bg-[#1d1e24] py-1 shadow-[0_8px_16px_rgba(0,0,0,0.3),0_18px_40px_rgba(0,0,0,0.55)] backdrop-blur-2xl"
-        >
-          {/* Address bar FIRST — it's the control the founder looks for (the
-              rendered Safari URL pill is non-interactive fork chrome). In browser
-              mode the toolbar already hosts the address field, so skip it here to
-              avoid two URL bars. */}
-          {!browserMode && <NavigateAddressBar canNavigate={canNavigate} onNavigate={onNavigate} />}
-          <SessionControlSection
-            mode={mode}
-            pairKind={pairKind}
-            busy={controlBusy}
-            composerText={composerText}
-            controlError={controlError}
-            onRetryControl={onRetryControl}
-            onSetMode={onSetMode}
-            onTakeover={onTakeover}
-            onHandback={onHandback}
-            onComposerChange={onComposerChange}
-            onSendMessage={onSendMessage}
-          />
-          <LabeledControl
-            label={browserMode ? 'Browser mode: on' : 'Browser mode'}
-            hint={
-              browserMode
-                ? 'URL bar lives in the toolbar'
-                : 'Type URLs in the toolbar, not the phone'
-            }
-            active={browserMode}
-            onClick={onToggleBrowserMode}
-            glyph={
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="9" />
-                <path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18" />
-              </svg>
-            }
-          />
-          <LabeledControl
-            label={landscape ? 'Rotate to portrait' : 'Rotate to landscape'}
-            active={landscape}
-            onClick={onToggleRotate}
-            glyph={
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M23 4v6h-6" />
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-              </svg>
-            }
-          />
-          <LabeledControl
-            label={pinned ? 'Unpin from top' : 'Pin on top'}
-            hint={pinned ? 'Behave like a normal window' : 'Float above everything'}
-            active={pinned}
-            onClick={onTogglePinned}
-            glyph={
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M12 17v5" />
-                <path d="M9 3h6l-1 7 3 3H7l3-3z" />
-              </svg>
-            }
-          />
-          <LabeledControl
-            label="Session info"
-            active={infoOpen}
-            // #48 item 3 — close the expanded control panel when opening the info
-            // overlay so the overlay's text doesn't render on top of the still-open
-            // panel (founder: "if I press session info, the text overlaps with the open
-            // toggle"). Selecting a menu row closes the menu, the standard behaviour.
-            onClick={() => {
-              onToggleInfo();
-              if (expanded) onToggleExpanded();
-            }}
-            glyph={<span className="text-[13px] leading-none">ⓘ</span>}
-          />
-          {/* Explicit Stop/End (founder Track A) — a true Stop for the agent
-              session, distinct from the mode-aware window-close (ai/pair close
-              only HIDES the window). Ends the session everywhere; danger-styled.
-              `controlBusy` gates it so a double-click can't double-DELETE. */}
-          {running && (
-            <>
-              <div className="mx-3 my-1 h-px bg-white/10" aria-hidden="true" />
-              <button
-                type="button"
-                aria-label="End session"
-                title="End the session — stops the worker and tears down the browser"
-                disabled={controlBusy}
-                onClick={onEndSession}
-                className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[11.5px] text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
-              >
-                <span className="w-4 shrink-0 text-center leading-none" aria-hidden="true">
-                  {controlBusy ? '…' : '◼'}
-                </span>
-                <span className="leading-none">{controlBusy ? 'Ending…' : 'End session'}</span>
-              </button>
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -1329,7 +1150,6 @@ export function SimulatorWindow(): JSX.Element {
   // window by default; the pin toggle floats it on top on demand).
   const [pinned, setPinned] = useState(false);
   // Cockpit info overlay (demo-concepts arc): session facts at a glance.
-  const [infoOpen, setInfoOpen] = useState(false);
   // Expandable control panel — collapsed by default so the window is phone-only
   // (founder 2026-06-17); the chevron reveals the labelled control rows. EXCEPT
   // until the user has navigated at least once: A3's tap-path investigation
@@ -1348,6 +1168,13 @@ export function SimulatorWindow(): JSX.Element {
       return false;
     }
   });
+  // Option B — extra window width contributed by the open right DRAWER. Kept
+  // current every render (like landscapeRef) so the window-sizing closures
+  // (fitWindow / resetToActualSize / the onResized aspect-lock / refitForDrawer)
+  // ALWAYS read the live value without re-subscribing. Window width = phoneW +
+  // drawerExtra; phone dims are derived from (windowWidth − drawerExtra).
+  const drawerExtraRef = useRef(0);
+  drawerExtraRef.current = toolbarExpanded ? DRAWER_W : 0;
 
   // Browser mode (founder 2026-06-21, greenlit) — a native GUI URL bar in the
   // toolbar instead of relying on the rendered iOS-Safari chrome (which the page
@@ -1389,27 +1216,32 @@ export function SimulatorWindow(): JSX.Element {
       const size = await win.innerSize();
       const curWidth = Math.round(size.width / factor);
       const aspect = sizingAspect(); // videoW / videoH (inverted in landscape)
+      // Option B — the open drawer occupies a fixed slice of the window width; the
+      // PHONE is everything left of it. Derive the device dims from (window − drawer)
+      // and add the drawer back, so the drawer never letterboxes the device.
+      const drawerExtra = drawerExtraRef.current;
+      const phoneW = curWidth - drawerExtra;
       const chrome = TOOLBAR_H + (browserModeOn ? BROWSER_BAR_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
       // The device screen-area must match the video aspect or the video
-      // object-contains with side gaps. Height for a width = chrome + (w-bezel)/aspect.
+      // object-contains with side gaps. Height for a phone width = chrome + (w-bezel)/aspect.
       // First pass: ask for that height, pre-capped to the screen work area (a hint).
       const avail = typeof window !== 'undefined' ? (window.screen?.availHeight ?? 0) : 0;
-      let height = Math.round(chrome + (curWidth - BEZEL_PAD) / aspect);
-      let width = curWidth;
+      let height = Math.round(chrome + (phoneW - BEZEL_PAD) / aspect);
+      let width = curWidth; // = phoneW + drawerExtra, preserved
       if (avail > 0 && height > avail - 24) {
         height = avail - 24;
-        width = Math.round((height - chrome) * aspect + BEZEL_PAD);
+        width = Math.round((height - chrome) * aspect + BEZEL_PAD) + drawerExtra;
       }
       await win.setSize(new LogicalSize(width, Math.round(height)));
       // GUARANTEE — independent of any screen-size guess: macOS clamps a window to
       // the work area, which would re-letterbox the device with side gaps. Read back
       // the ACTUAL size; if the height got clamped, derive the WIDTH from that real
-      // height so the device fills the frame edge-to-edge on ANY screen.
+      // height (plus the drawer) so the device fills the frame edge-to-edge on ANY screen.
       await new Promise((resolve) => setTimeout(resolve, 90));
       const after = await win.innerSize();
       const realH = Math.round(after.height / factor);
       const realW = Math.round(after.width / factor);
-      const needW = Math.round((realH - chrome) * aspect + BEZEL_PAD);
+      const needW = Math.round((realH - chrome) * aspect + BEZEL_PAD) + drawerExtra;
       if (needW > 0 && Math.abs(realW - needW) > 2) {
         await win.setSize(new LogicalSize(needW, realH));
       }
@@ -1427,26 +1259,29 @@ export function SimulatorWindow(): JSX.Element {
       const aspect = sizingAspect();
       const chrome = TOOLBAR_H + (browserMode ? BROWSER_BAR_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
       // Target device-content width = the iPhone CSS-logical width (its long edge
-      // when rotated to landscape), then the window adds the bezel padding.
+      // when rotated to landscape), then the window adds the bezel padding + (if
+      // open) the right drawer's fixed width.
+      const drawerExtra = drawerExtraRef.current;
       const targetContentW = landscapeRef.current
         ? Math.round(DEVICE_LOGICAL_WIDTH / deviceAspectRef.current)
         : DEVICE_LOGICAL_WIDTH;
-      let width = targetContentW + BEZEL_PAD;
-      let height = Math.round(chrome + (width - BEZEL_PAD) / aspect);
+      const phoneW = targetContentW + BEZEL_PAD;
+      let width = phoneW + drawerExtra;
+      let height = Math.round(chrome + (phoneW - BEZEL_PAD) / aspect);
       // An iPhone is taller than many laptop work areas; if the ideal height would
       // overflow, cap it and derive the width from the aspect so the device still
       // fills the frame edge-to-edge (same guarantee fitWindow makes).
       const avail = typeof window !== 'undefined' ? (window.screen?.availHeight ?? 0) : 0;
       if (avail > 0 && height > avail - 24) {
         height = avail - 24;
-        width = Math.round((height - chrome) * aspect + BEZEL_PAD);
+        width = Math.round((height - chrome) * aspect + BEZEL_PAD) + drawerExtra;
       }
       await win.setSize(new LogicalSize(width, Math.round(height)));
       await new Promise((resolve) => setTimeout(resolve, 90));
       const after = await win.innerSize();
       const realH = Math.round(after.height / factor);
       const realW = Math.round(after.width / factor);
-      const needW = Math.round((realH - chrome) * aspect + BEZEL_PAD);
+      const needW = Math.round((realH - chrome) * aspect + BEZEL_PAD) + drawerExtra;
       if (needW > 0 && Math.abs(realW - needW) > 2) {
         await win.setSize(new LogicalSize(needW, realH));
       }
@@ -1463,6 +1298,23 @@ export function SimulatorWindow(): JSX.Element {
     // Re-fit the whole window (not a naive ±bar-height bump, which could overflow
     // the screen and re-introduce the side-gap letterbox).
     fitWindow(next);
+  };
+  // Option B — widen/narrow the window by DRAWER_W when the drawer opens/closes.
+  // HEIGHT-driven (keep the height, re-derive the phone width, add the drawer) —
+  // distinct from the width-preserving fitWindow, which would mis-read the phone
+  // width on toggle (curWidth still reflects the OLD drawer state). The onResized
+  // aspect-lock uses the same needW formula, so it reads this as on-aspect → no fight.
+  const refitForDrawer = (): void => {
+    void withCurrentWindow(async (win) => {
+      const { LogicalSize } = await import('@tauri-apps/api/dpi');
+      const factor = await win.scaleFactor();
+      const size = await win.innerSize();
+      const h = Math.round(size.height / factor);
+      const aspect = sizingAspect();
+      const chrome = TOOLBAR_H + (browserMode ? BROWSER_BAR_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
+      const width = Math.round((h - chrome) * aspect + BEZEL_PAD) + drawerExtraRef.current;
+      if (width > 0) await win.setSize(new LogicalSize(width, h));
+    });
   };
 
   // Belt-and-suspenders: fit the window when the session first renders AND whenever
@@ -1491,6 +1343,15 @@ export function SimulatorWindow(): JSX.Element {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [browserMode, info]);
+
+  // Option B — widen/narrow the window when the right drawer opens/closes
+  // (drawerExtraRef is already updated render-time before this effect fires). Runs
+  // after paint so the aside's layout width is applied first.
+  useEffect(() => {
+    if (info === null) return;
+    const t = window.setTimeout(() => refitForDrawer(), 0);
+    return () => window.clearTimeout(t);
+  }, [toolbarExpanded, info]);
 
   // Aspect-lock manual resizing (founder 2026-06-21 "if i double click it fully
   // maximizes, looks strange"): the device video is aspect-locked, so any resize
@@ -1523,7 +1384,11 @@ export function SimulatorWindow(): JSX.Element {
                 const aspect = sizingAspect();
                 const chrome =
                   TOOLBAR_H + (browserMode ? BROWSER_BAR_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
-                const needW = Math.round((h - chrome) * aspect + BEZEL_PAD);
+                // Window width = phone width (aspect-locked to the height) + the open
+                // drawer's fixed width, so a manual resize scales the PHONE and never
+                // eats the drawer.
+                const needW =
+                  Math.round((h - chrome) * aspect + BEZEL_PAD) + drawerExtraRef.current;
                 if (needW > 0 && Math.abs(w - needW) > 4) {
                   await win.setSize(new LogicalSize(needW, h));
                 }
@@ -1661,7 +1526,7 @@ export function SimulatorWindow(): JSX.Element {
   const [cookies, setCookies] = useState<SessionCookie[] | null>(null);
   const [cookiesNote, setCookiesNote] = useState<string | null>(null);
   useEffect(() => {
-    if (!infoOpen || sessionId === '' || room === null) return;
+    if (!toolbarExpanded || sessionId === '' || room === null) return;
     let cancelled = false;
     const tick = (): void => {
       void getAgentSessionCookies(sessionId, controlAuth)
@@ -1693,7 +1558,7 @@ export function SimulatorWindow(): JSX.Element {
       cancelled = true;
       window.clearInterval(handle);
     };
-  }, [infoOpen, sessionId, controlAuth, room]);
+  }, [toolbarExpanded, sessionId, controlAuth, room]);
 
   // iOS TAP cursor (founder 2026-06-17: "standard is full control + iOS TAP
   // cursor"): a short-lived ring at the tap point, so a click on the screen
@@ -2110,33 +1975,11 @@ export function SimulatorWindow(): JSX.Element {
           <DeviceToolbar
             deviceName={deviceName}
             profileName={profileName}
-            landscape={landscape}
-            pinned={pinned}
-            infoOpen={infoOpen}
             expanded={toolbarExpanded}
-            onToggleRotate={toggleRotate}
-            onTogglePinned={togglePinned}
-            onToggleInfo={() => setInfoOpen((v) => !v)}
             onToggleExpanded={() => setToolbarExpanded((v) => !v)}
             recording={recordingId !== null}
             onToggleRecord={toggleRecord}
-            mode={controlMode}
-            pairKind={pairKind}
-            controlBusy={controlBusy}
-            composerText={composerText}
-            controlError={controlError}
-            onRetryControl={refreshControl}
-            onSetMode={onSetMode}
-            onTakeover={onTakeover}
-            onHandback={onHandback}
-            onComposerChange={setComposerText}
-            onSendMessage={onSendMessage}
-            canNavigate={room !== null}
-            onNavigate={onNavigate}
-            browserMode={browserMode}
-            onToggleBrowserMode={toggleBrowserMode}
             running={sessionId !== ''}
-            onEndSession={onEndSession}
           />
           {browserMode && (
             <BrowserBar
@@ -2147,73 +1990,245 @@ export function SimulatorWindow(): JSX.Element {
               loadProgress={loadProgress}
             />
           )}
-          {/* Device body — the bezel. data-tauri-drag-region makes the frame a
+          {/* Option B body — the device and (when the drawer is open) the wide
+              right control rail, side by side. The toolbar + browser bar stay
+              full-width above; the window-sizing math keeps device width = window −
+              drawer, so the drawer never letterboxes the phone. */}
+          <div data-component="simulator-body" className="flex min-h-0 w-full flex-1 flex-row">
+            {/* Device body — the bezel. data-tauri-drag-region makes the frame a
               window-drag handle; the inner screen overrides it so taps reach the
-              device. flex-1 fills the height below the toolbar. */}
-          <div
-            data-tauri-drag-region
-            data-component="simulator-device"
-            className="relative flex min-h-0 flex-1 w-full flex-col rounded-b-[2.75rem] bg-gradient-to-b from-[#1b1c20] via-[#0d0e11] to-[#08090b] p-[10px] shadow-2xl ring-1 ring-white/[0.12]"
-          >
-            {/* Screen — status strip on top (with the dynamic island), the live
+              device. flex-1 fills the width left of the drawer. */}
+            <div
+              data-tauri-drag-region
+              data-component="simulator-device"
+              className="relative flex min-h-0 min-w-0 flex-1 flex-col rounded-b-[2.75rem] bg-gradient-to-b from-[#1b1c20] via-[#0d0e11] to-[#08090b] p-[10px] shadow-2xl ring-1 ring-white/[0.12]"
+            >
+              {/* Screen — status strip on top (with the dynamic island), the live
                 video BELOW it (never overlapped). NOT a drag region except the
                 strip itself (taps on the video control the device). */}
-            <div
-              data-tauri-drag-region="false"
-              data-component="simulator-screen"
-              className="relative flex flex-1 flex-col overflow-hidden rounded-[2.1rem] bg-black shadow-[inset_0_0_0_1px_rgba(0,0,0,0.9),inset_0_0_12px_rgba(0,0,0,0.55)]"
-            >
-              <IosStatusBar />
-              {notice !== null && (
-                <div
-                  role="status"
-                  className="absolute left-1/2 top-12 z-20 -translate-x-1/2 rounded-full bg-black/80 px-3 py-1 font-mono text-[10px] text-white/90 backdrop-blur"
-                >
-                  {notice}
-                </div>
-              )}
-              {controlUnreachable && (
-                <div
-                  role="status"
-                  data-component="control-unreachable-badge"
-                  className="absolute left-1/2 top-20 z-20 -translate-x-1/2 rounded-full bg-amber-500/90 px-3 py-1 text-[10px] font-medium text-black shadow"
-                >
-                  Control may not be reaching the device
-                </div>
-              )}
-              {/* LOUD transport-fallback badge (A3 wmdoil11r rec (a)): WebRTC
+              <div
+                data-tauri-drag-region="false"
+                data-component="simulator-screen"
+                className="relative flex flex-1 flex-col overflow-hidden rounded-[2.1rem] bg-black shadow-[inset_0_0_0_1px_rgba(0,0,0,0.9),inset_0_0_12px_rgba(0,0,0,0.55)]"
+              >
+                <IosStatusBar />
+                {notice !== null && (
+                  <div
+                    role="status"
+                    className="absolute left-1/2 top-12 z-20 -translate-x-1/2 rounded-full bg-black/80 px-3 py-1 font-mono text-[10px] text-white/90 backdrop-blur"
+                  >
+                    {notice}
+                  </div>
+                )}
+                {controlUnreachable && (
+                  <div
+                    role="status"
+                    data-component="control-unreachable-badge"
+                    className="absolute left-1/2 top-20 z-20 -translate-x-1/2 rounded-full bg-amber-500/90 px-3 py-1 text-[10px] font-medium text-black shadow"
+                  >
+                    Control may not be reaching the device
+                  </div>
+                )}
+                {/* LOUD transport-fallback badge (A3 wmdoil11r rec (a)): WebRTC
                   silently falls back to a TCP/TURN relay when direct UDP is
                   blocked (box firewall / NAT / ISP) — head-of-line blocking makes
                   real-time video feel "1000× slower". Surface it prominently
                   (NOT only in the info overlay) so a relayed session is never
                   silently slow — this is the #1 latency suspect. */}
-              {(conn.transport === 'tcp' || conn.relayed === true) && (
+                {(conn.transport === 'tcp' || conn.relayed === true) && (
+                  <div
+                    role="status"
+                    data-component="transport-fallback-badge"
+                    title="The video is going through a TCP/TURN relay because direct UDP is blocked (firewall / NAT / ISP). Real-time video over TCP head-of-line-blocks, which feels very slow. Fix: open the box UDP port range to your network, or use a closer (EU) box."
+                    className="absolute left-1/2 top-32 z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-rose-600/90 px-3 py-1 text-[10px] font-semibold text-white shadow"
+                  >
+                    ⚠ Slow link — video{' '}
+                    {conn.relayed === true ? 'relayed' : `over ${conn.transport?.toUpperCase()}`}{' '}
+                    (UDP blocked)
+                  </div>
+                )}
                 <div
-                  role="status"
-                  data-component="transport-fallback-badge"
-                  title="The video is going through a TCP/TURN relay because direct UDP is blocked (firewall / NAT / ISP). Real-time video over TCP head-of-line-blocks, which feels very slow. Fix: open the box UDP port range to your network, or use a closer (EU) box."
-                  className="absolute left-1/2 top-32 z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-rose-600/90 px-3 py-1 text-[10px] font-semibold text-white shadow"
+                  ref={screenHostRef}
+                  data-component="simulator-screen-host"
+                  className={`relative min-h-0 flex-1 ${controlMode === 'ai' ? '' : 'cursor-none'}`}
+                  onPointerDownCapture={showTap}
+                  onPointerMove={moveTouchPoint}
+                  onPointerEnter={moveTouchPoint}
+                  onPointerLeave={hideTouchPoint}
+                  onPointerUp={() => setTouchPressed(false)}
                 >
-                  ⚠ Slow link — video{' '}
-                  {conn.relayed === true ? 'relayed' : `over ${conn.transport?.toUpperCase()}`} (UDP
-                  blocked)
+                  <AgentSessionPanel
+                    info={info}
+                    // The box hides the iOS-Safari URL bar fleet-wide
+                    // (DRIFTSTACK_SAFARI_CHROME_HIDDEN, founder "remove the url bar");
+                    // mask the ~110px freed band at the capture bottom (A3 W2784).
+                    coverChromeBand
+                    // Forward mouse/keyboard to the device only in manual/pair
+                    // mode; in AI mode the agent is driving, so local input would
+                    // fight it.
+                    interactive={controlMode !== 'ai'}
+                    onVideoDimensions={handleVideoDimensions}
+                    onRoom={handleRoom}
+                    onPublishError={() => setControlUnreachable(true)}
+                    onVideoEl={(el) => {
+                      videoElRef.current = el;
+                      if (el !== null) armFpsCounter(el);
+                    }}
+                  />
+                  {/* iOS touch-point cursor — a soft fingertip dot that tracks the
+                    pointer over the screen (the PC arrow is hidden via cursor-none
+                    on the host). Shrinks + brightens on press. pointer-events-none
+                    so it never intercepts the real tap. */}
+                  {touchPoint !== null && controlMode !== 'ai' && (
+                    <span
+                      data-component="touch-cursor"
+                      aria-hidden="true"
+                      className={`ds-touch-dot pointer-events-none absolute z-20 ${
+                        touchPressed ? 'ds-touch-dot--pressed' : ''
+                      }`}
+                      style={{ left: touchPoint.x, top: touchPoint.y }}
+                    />
+                  )}
+                  {/* iOS tap cursor — a ring that blooms at each tap point then
+                    fades. pointer-events-none so it never intercepts the tap. */}
+                  {taps.map((t) => (
+                    <span
+                      key={t.id}
+                      data-component="tap-ripple"
+                      aria-hidden="true"
+                      className="ds-tap-ring pointer-events-none absolute z-20 h-9 w-9 rounded-full border-2 border-white/80"
+                      style={{ left: t.x, top: t.y }}
+                    />
+                  ))}
                 </div>
-              )}
-              {infoOpen && (
-                <div
-                  data-component="simulator-info-overlay"
-                  className="absolute right-2 top-12 z-10 w-52 rounded-lg border border-white/15 bg-black/80 p-3 font-mono text-[10px] leading-relaxed text-white/80 backdrop-blur"
+              </div>
+            </div>
+            {/* Option B right DRAWER (founder 2026-06-23) — revealed by the chevron;
+              the window widens by DRAWER_W so the rail sits beside the phone, not
+              over it. Sections: Session · Controls · Diagnostics(✕) · Cookies · End.
+              NOT a drag region (its controls must be clickable); scrolls when the
+              rail is taller than the phone. */}
+            {toolbarExpanded && (
+              <aside
+                data-tauri-drag-region="false"
+                data-component="simulator-drawer"
+                className="flex w-[264px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-white/[0.12] bg-[#1d1e24] p-2.5 text-[11.5px]"
+              >
+                {/* Session — mode switch + (ai/pair) the agent composer. The rail is
+                  wider than the old dropdown, so this IS the "bigger AI chat". */}
+                <section data-component="drawer-session" className="rounded-lg bg-black/20 pb-1">
+                  <div className="px-3 pt-2 font-sans text-[11px] font-semibold text-white/90">
+                    Session
+                  </div>
+                  <SessionControlSection
+                    mode={controlMode}
+                    pairKind={pairKind}
+                    busy={controlBusy}
+                    composerText={composerText}
+                    controlError={controlError}
+                    onRetryControl={refreshControl}
+                    onSetMode={onSetMode}
+                    onTakeover={onTakeover}
+                    onHandback={onHandback}
+                    onComposerChange={setComposerText}
+                    onSendMessage={onSendMessage}
+                  />
+                </section>
+
+                {/* Controls — the address bar (non-browser-mode) + window toggles. */}
+                <section
+                  data-component="drawer-controls"
+                  className="overflow-hidden rounded-lg bg-black/20 py-1"
                 >
-                  {/* #48 — the founder asked for a close on diagnostics ("there's
-                      no close diagnostics"). ✕ dismisses the overlay (same as
-                      re-toggling Session info), so it's never stuck open. */}
+                  <div className="px-3 pb-0.5 pt-1 font-sans text-[11px] font-semibold text-white/90">
+                    Controls
+                  </div>
+                  {!browserMode && (
+                    <NavigateAddressBar canNavigate={room !== null} onNavigate={onNavigate} />
+                  )}
+                  <LabeledControl
+                    label={browserMode ? 'Browser mode: on' : 'Browser mode'}
+                    hint={
+                      browserMode
+                        ? 'URL bar lives in the toolbar'
+                        : 'Type URLs in the toolbar, not the phone'
+                    }
+                    active={browserMode}
+                    onClick={toggleBrowserMode}
+                    glyph={
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18" />
+                      </svg>
+                    }
+                  />
+                  <LabeledControl
+                    label={landscape ? 'Rotate to portrait' : 'Rotate to landscape'}
+                    active={landscape}
+                    onClick={toggleRotate}
+                    glyph={
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M23 4v6h-6" />
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                      </svg>
+                    }
+                  />
+                  <LabeledControl
+                    label={pinned ? 'Unpin from top' : 'Pin on top'}
+                    hint={pinned ? 'Behave like a normal window' : 'Float above everything'}
+                    active={pinned}
+                    onClick={togglePinned}
+                    glyph={
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M12 17v5" />
+                        <path d="M9 3h6l-1 7 3 3H7l3-3z" />
+                      </svg>
+                    }
+                  />
+                </section>
+
+                {/* Diagnostics — the session facts + Copy; ✕ closes the drawer
+                  (founder: "there's no close diagnostics"). */}
+                <section
+                  data-component="drawer-diagnostics"
+                  className="rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
+                >
                   <div className="mb-1 flex items-center justify-between">
-                    <span className="font-sans text-[11px] font-semibold text-white">Session</span>
+                    <span className="font-sans text-[11px] font-semibold text-white">
+                      Diagnostics
+                    </span>
                     <button
                       type="button"
-                      aria-label="Close diagnostics"
+                      aria-label="Close drawer"
                       title="Close"
-                      onClick={() => setInfoOpen(false)}
+                      onClick={() => setToolbarExpanded(false)}
                       className="-mr-1 rounded px-1 text-[13px] leading-none text-white/50 transition hover:bg-white/10 hover:text-white"
                     >
                       ✕
@@ -2228,10 +2243,6 @@ export function SimulatorWindow(): JSX.Element {
                   <div className="truncate">
                     {fps !== null && <span>{fps} fps · </span>}
                     latency{' '}
-                    {/* Prefer the app-level DataChannel ping RTT; if the box isn't
-                        echoing it, fall back to the REAL media/candidate-pair RTT
-                        (conn.rttMs) so a true number always shows (the EU→US link
-                        latency the founder feels), not a permanent "measuring…". */}
                     {latency.rttMs !== null ? (
                       <span className={latency.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'}>
                         {latency.rttMs} ms
@@ -2244,8 +2255,6 @@ export function SimulatorWindow(): JSX.Element {
                       <span className="text-white/50">measuring…</span>
                     )}
                   </div>
-                  {/* WebRTC transport diagnostics — answers "are we on TCP / relayed?"
-                      + shows the loss/freezes/decode-fps that explain a worse-than-RDP feel. */}
                   <div className="truncate">
                     transport{' '}
                     {conn.transport !== null ? (
@@ -2285,55 +2294,10 @@ export function SimulatorWindow(): JSX.Element {
                     <div className="font-sans text-[11px] font-semibold text-white">Identity</div>
                     <div className="truncate">engine-deep · bit-exact device</div>
                     <div className="truncate">input human-cadence native</div>
-                    {/* Build stamp — baked in at vite build time so the running
-                        build is verifiable at a glance (ends the stale-build
-                        "no change" confusion: a relaunch before a rebuild
-                        finishes shows the OLD stamp). Guarded for vitest, where
-                        the define is absent. */}
                     <div className="truncate text-white/40">
                       build {typeof __BUILD_STAMP__ !== 'undefined' ? __BUILD_STAMP__ : 'dev'}
                     </div>
                   </div>
-                  {/* #48 — live cookie jar for the current page (httpOnly included),
-                      pulled from the running session over the control plane. Shows a
-                      calm "pending" line until the device build serves cookies; the
-                      cross-domain whole-jar arrives later as a transparent upgrade
-                      ("this page" → "all"). Polls only while this panel is open. */}
-                  <div
-                    data-component="simulator-cookies"
-                    className="mt-1.5 border-t border-white/15 pt-1.5"
-                  >
-                    <div className="mb-0.5 flex items-center justify-between">
-                      <span className="font-sans text-[11px] font-semibold text-white">
-                        Cookies
-                        {cookies !== null && (
-                          <span className="text-white/40"> · {cookies.length}</span>
-                        )}
-                      </span>
-                      <span className="font-sans text-[9px] text-white/30">this page</span>
-                    </div>
-                    {cookies === null ? (
-                      <div className="text-white/40">{cookiesNote ?? 'loading…'}</div>
-                    ) : cookies.length === 0 ? (
-                      <div className="text-white/40">no cookies on this page</div>
-                    ) : (
-                      <div className="max-h-32 space-y-0.5 overflow-y-auto pr-1">
-                        {cookies.map((c, i) => (
-                          <div key={`${c.domain}|${c.name}|${i}`} className="truncate">
-                            <span className="text-white/50">{c.domain}</span>{' '}
-                            <span className="text-emerald-300/80">{c.name}</span>
-                            <span className="text-white/30">=</span>
-                            <span className="text-white/70">{c.value}</span>
-                            {c.httpOnly === true && (
-                              <span className="text-white/30"> · httpOnly</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {/* #48 item 2 — copy the whole snapshot above as paste-ready
-                      text for a support request / bug report. */}
                   <button
                     type="button"
                     data-action="copy-diagnostics"
@@ -2342,63 +2306,62 @@ export function SimulatorWindow(): JSX.Element {
                   >
                     {diagCopied ? 'Copied ✓' : 'Copy diagnostics'}
                   </button>
-                </div>
-              )}
-              <div
-                ref={screenHostRef}
-                data-component="simulator-screen-host"
-                className={`relative min-h-0 flex-1 ${controlMode === 'ai' ? '' : 'cursor-none'}`}
-                onPointerDownCapture={showTap}
-                onPointerMove={moveTouchPoint}
-                onPointerEnter={moveTouchPoint}
-                onPointerLeave={hideTouchPoint}
-                onPointerUp={() => setTouchPressed(false)}
-              >
-                <AgentSessionPanel
-                  info={info}
-                  // The box hides the iOS-Safari URL bar fleet-wide
-                  // (DRIFTSTACK_SAFARI_CHROME_HIDDEN, founder "remove the url bar");
-                  // mask the ~110px freed band at the capture bottom (A3 W2784).
-                  coverChromeBand
-                  // Forward mouse/keyboard to the device only in manual/pair
-                  // mode; in AI mode the agent is driving, so local input would
-                  // fight it.
-                  interactive={controlMode !== 'ai'}
-                  onVideoDimensions={handleVideoDimensions}
-                  onRoom={handleRoom}
-                  onPublishError={() => setControlUnreachable(true)}
-                  onVideoEl={(el) => {
-                    videoElRef.current = el;
-                    if (el !== null) armFpsCounter(el);
-                  }}
-                />
-                {/* iOS touch-point cursor — a soft fingertip dot that tracks the
-                    pointer over the screen (the PC arrow is hidden via cursor-none
-                    on the host). Shrinks + brightens on press. pointer-events-none
-                    so it never intercepts the real tap. */}
-                {touchPoint !== null && controlMode !== 'ai' && (
-                  <span
-                    data-component="touch-cursor"
-                    aria-hidden="true"
-                    className={`ds-touch-dot pointer-events-none absolute z-20 ${
-                      touchPressed ? 'ds-touch-dot--pressed' : ''
-                    }`}
-                    style={{ left: touchPoint.x, top: touchPoint.y }}
-                  />
+                </section>
+
+                {/* Cookies — live jar for the current page (httpOnly included), pulled
+                  over the control plane; "pending" until the device build serves it.
+                  Cross-domain whole-jar arrives later ("this page" → "all"). */}
+                <section
+                  data-component="simulator-cookies"
+                  className="rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
+                >
+                  <div className="mb-0.5 flex items-center justify-between">
+                    <span className="font-sans text-[11px] font-semibold text-white">
+                      Cookies
+                      {cookies !== null && (
+                        <span className="text-white/40"> · {cookies.length}</span>
+                      )}
+                    </span>
+                    <span className="font-sans text-[9px] text-white/30">this page</span>
+                  </div>
+                  {cookies === null ? (
+                    <div className="text-white/40">{cookiesNote ?? 'loading…'}</div>
+                  ) : cookies.length === 0 ? (
+                    <div className="text-white/40">no cookies on this page</div>
+                  ) : (
+                    <div className="max-h-40 space-y-0.5 overflow-y-auto pr-1">
+                      {cookies.map((c, i) => (
+                        <div key={`${c.domain}|${c.name}|${i}`} className="truncate">
+                          <span className="text-white/50">{c.domain}</span>{' '}
+                          <span className="text-emerald-300/80">{c.name}</span>
+                          <span className="text-white/30">=</span>
+                          <span className="text-white/70">{c.value}</span>
+                          {c.httpOnly === true && (
+                            <span className="text-white/30"> · httpOnly</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                {/* Explicit Stop/End — a true Stop (distinct from window-close, which
+                  only HIDES the window in ai/pair). controlBusy gates a double-DELETE. */}
+                {sessionId !== '' && (
+                  <button
+                    type="button"
+                    aria-label="End session"
+                    title="End the session — stops the worker and tears down the browser"
+                    disabled={controlBusy}
+                    onClick={onEndSession}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11.5px] text-red-300 transition-colors hover:bg-red-500/20 disabled:opacity-50"
+                  >
+                    <span aria-hidden="true">{controlBusy ? '…' : '◼'}</span>
+                    <span>{controlBusy ? 'Ending…' : 'End session'}</span>
+                  </button>
                 )}
-                {/* iOS tap cursor — a ring that blooms at each tap point then
-                    fades. pointer-events-none so it never intercepts the tap. */}
-                {taps.map((t) => (
-                  <span
-                    key={t.id}
-                    data-component="tap-ripple"
-                    aria-hidden="true"
-                    className="ds-tap-ring pointer-events-none absolute z-20 h-9 w-9 rounded-full border-2 border-white/80"
-                    style={{ left: t.x, top: t.y }}
-                  />
-                ))}
-              </div>
-            </div>
+              </aside>
+            )}
           </div>
         </div>
       )}

@@ -216,105 +216,39 @@ export function Gallery(): JSX.Element {
           <DeviceToolbar
             deviceName="iPhone 17"
             profileName="amsterdam shopper"
-            landscape={false}
-            pinned
-            infoOpen={false}
             expanded={false}
-            onToggleRotate={noop}
-            onTogglePinned={noop}
-            onToggleInfo={noop}
             onToggleExpanded={noop}
             recording={false}
             onToggleRecord={noop}
-            mode="pair"
-            pairKind={null}
-            controlBusy={false}
-            composerText=""
-            controlError={null}
-            onRetryControl={noop}
-            onSetMode={noop}
-            onTakeover={noop}
-            onHandback={noop}
-            onComposerChange={noop}
-            onSendMessage={noop}
-            canNavigate={false}
-            onNavigate={noop}
-            browserMode={false}
-            onToggleBrowserMode={noop}
             running={false}
-            onEndSession={noop}
           />
         </div>
         <div className="w-72 pb-48">
           <span className="mb-1 block text-2xs uppercase tracking-wide text-ink-muted">
-            expanded
+            expanded (drawer open)
           </span>
           <DeviceToolbar
             deviceName="iPhone 17"
             profileName="amsterdam shopper"
-            landscape={false}
-            pinned
-            infoOpen={false}
             expanded
-            onToggleRotate={noop}
-            onTogglePinned={noop}
-            onToggleInfo={noop}
             onToggleExpanded={noop}
             recording={false}
             onToggleRecord={noop}
-            mode="pair"
-            pairKind={null}
-            controlBusy={false}
-            composerText=""
-            controlError={null}
-            onRetryControl={noop}
-            onSetMode={noop}
-            onTakeover={noop}
-            onHandback={noop}
-            onComposerChange={noop}
-            onSendMessage={noop}
-            canNavigate
-            onNavigate={noop}
-            browserMode={false}
-            onToggleBrowserMode={noop}
             running
-            onEndSession={noop}
           />
         </div>
         <div className="w-72">
           <span className="mb-1 block text-2xs uppercase tracking-wide text-ink-muted">
-            browser mode
+            recording
           </span>
           <DeviceToolbar
             deviceName="iPhone 17"
             profileName="amsterdam shopper"
-            landscape={false}
-            pinned
-            infoOpen={false}
             expanded={false}
-            onToggleRotate={noop}
-            onTogglePinned={noop}
-            onToggleInfo={noop}
             onToggleExpanded={noop}
-            recording={false}
+            recording
             onToggleRecord={noop}
-            mode="pair"
-            pairKind={null}
-            controlBusy={false}
-            composerText=""
-            controlError={null}
-            onRetryControl={noop}
-            onSetMode={noop}
-            onTakeover={noop}
-            onHandback={noop}
-            onComposerChange={noop}
-            onSendMessage={noop}
-            canNavigate
-            onNavigate={noop}
-            browserMode
-            onToggleBrowserMode={noop}
             running
-            onEndSession={noop}
           />
         </div>
       </div>
