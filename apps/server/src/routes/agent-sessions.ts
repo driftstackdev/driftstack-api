@@ -79,6 +79,7 @@ import {
   BundledLlmConsentRequiredError,
   ByokAnthropicRequiredError,
   ConflictError,
+  ConcurrencyLimitError,
   FeatureUnavailableError,
   ForbiddenError,
   NotFoundError,
@@ -1211,6 +1212,15 @@ export function registerAgentSessionsRoutes(
           const livekit = await maybeMintLivekit(existing.id, ownerAccountId, ctx.account.region);
           return reply.code(201).send(publicAgentSession(existing, livekit, sessionLivenessStore));
         }
+      }
+      // #8 — per-account active-session cap. Placed AFTER the idempotency replay above
+      // (a retry of an existing session already returned 201), so only a genuinely NEW
+      // create is gated — bounds unbounded row creation + one account monopolising fleet
+      // slots. Conservative fixed v1 ceiling; tier-derivation is a follow-up.
+      const MAX_ACTIVE_AGENT_SESSIONS_PER_ACCOUNT = 100;
+      const activeAgentSessions = await sessions.countActive(ownerAccountId);
+      if (activeAgentSessions >= MAX_ACTIVE_AGENT_SESSIONS_PER_ACCOUNT) {
+        throw new ConcurrencyLimitError(activeAgentSessions, MAX_ACTIVE_AGENT_SESSIONS_PER_ACCOUNT);
       }
       let created: AgentSessionRecord;
       try {

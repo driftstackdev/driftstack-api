@@ -58,6 +58,9 @@ async function buildApp(opts: { createError: Error; winner: AgentSessionRecord |
       findCalls += 1;
       return Promise.resolve(findCalls === 1 ? null : opts.winner);
     },
+    // audit #8 — the create handler now checks the per-account active-session cap
+    // before create; 0 keeps this race test exercising the conflict path, not the cap.
+    countActive: () => Promise.resolve(0),
     create: () => Promise.reject(opts.createError),
   } as unknown as AgentSessionsRepo;
 

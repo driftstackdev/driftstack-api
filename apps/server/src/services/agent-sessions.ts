@@ -169,6 +169,11 @@ export interface AgentSessionsRepo {
   debitTokens(id: string, tokens: number): Promise<AgentSessionRecord>;
   closeWithReason(id: string, reason: string): Promise<AgentSessionRecord>;
 
+  /** Count of an account's currently-active sessions — bounds the per-account
+   *  concurrent-session cap so one account can't create unbounded rows / monopolise
+   *  fleet slots (audit #8). */
+  countActive(accountId: string): Promise<number>;
+
   /**
    * Orphaned-session backstop — bulk-close every session still
    * `status='active'` whose `created_at` is strictly before `cutoff`,
@@ -313,6 +318,14 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
 
   get(id: string): Promise<AgentSessionRecord | null> {
     return Promise.resolve(this.records.get(id) ?? null);
+  }
+
+  countActive(accountId: string): Promise<number> {
+    let n = 0;
+    for (const rec of this.records.values()) {
+      if (rec.accountId === accountId && rec.status === 'active') n += 1;
+    }
+    return Promise.resolve(n);
   }
 
   listByAccount(

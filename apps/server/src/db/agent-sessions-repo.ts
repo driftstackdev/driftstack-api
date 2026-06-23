@@ -29,7 +29,7 @@
 // db-agent-sessions-concurrency-drizzle.test.ts (CI; skips locally w/o DB).
 
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, count, desc, eq, lt } from 'drizzle-orm';
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import type { Database } from './client.js';
 import { agentSessions } from './schema.js';
@@ -142,6 +142,14 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       .orderBy(desc(agentSessions.createdAt), desc(agentSessions.id));
     const rows = opts?.limit !== undefined ? await base.limit(opts.limit) : await base;
     return rows.map(rowToRecord);
+  }
+
+  async countActive(accountId: string): Promise<number> {
+    const rows = await this.database.db
+      .select({ n: count() })
+      .from(agentSessions)
+      .where(and(eq(agentSessions.accountId, accountId), eq(agentSessions.status, 'active')));
+    return rows[0]?.n ?? 0;
   }
 
   async appendTranscript(id: string, entry: TranscriptEntry): Promise<AgentSessionRecord> {
