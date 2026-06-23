@@ -83,6 +83,32 @@ interface SessionQuery {
  *  own `location.search`; the relaunch `ds-session` event passes a fresh query
  *  string so the window can switch session IN PLACE (without a reload that
  *  would tear down the live LiveKit Room). */
+// Per-session gui_control_key persistence (founder 2026-06-23 "control request
+// failed always"). The separate Simulator app receives its control key ONCE at
+// launch (via the sandboxed `ck=` query OR the single-use temp file). A reopened
+// or relaunched window arrives with neither → controlAuth was null → every control
+// HTTP call (mode / End-session / cookies) failed while manual (LiveKit) kept
+// working. Persisting the key (app-local, same risk class as the query/temp-file
+// handoff; 24h server TTL, a stale one just 401s → graceful manual) lets a reopen
+// restore it. Keyed by the agt_<uuid> session id.
+const GCK_STORE_PREFIX = 'ds-gck-';
+function persistControlKey(sessionId: string, key: string): void {
+  if (sessionId === '' || key === '') return;
+  try {
+    localStorage.setItem(GCK_STORE_PREFIX + sessionId, key);
+  } catch {
+    /* storage disabled — the key just won't survive a reopen */
+  }
+}
+function readPersistedControlKey(sessionId: string): string {
+  if (sessionId === '') return '';
+  try {
+    return localStorage.getItem(GCK_STORE_PREFIX + sessionId) ?? '';
+  } catch {
+    return '';
+  }
+}
+
 function infoFromQuery(search: string = window.location.search): SessionQuery {
   const q = new URLSearchParams(search);
   const ws_url = q.get('ws');
@@ -985,6 +1011,9 @@ export function SimulatorWindow(): JSX.Element {
           const fromFile = await invoke<string | null>('sim_key_take', { sessionId });
           if (!cancelled && typeof fromFile === 'string' && fromFile.length > 0) {
             setControlAuth({ controlKey: fromFile });
+            // Persist so a later REOPEN of this session (temp file already consumed,
+            // no fresh ck=) can restore the key (founder 2026-06-23 control-failed).
+            persistControlKey(sessionId, fromFile);
             return;
           }
         } catch {
@@ -992,9 +1021,22 @@ export function SimulatorWindow(): JSX.Element {
           // to the query param (sandboxed) or API key (in-app).
         }
       }
-      if (!cancelled) {
-        setControlAuth(controlKey !== '' ? { controlKey } : null);
+      if (cancelled) return;
+      // Query-param handoff (sandboxed launch) — persist it for reopens too.
+      if (controlKey !== '') {
+        setControlAuth({ controlKey });
+        persistControlKey(sessionId, controlKey);
+        return;
       }
+      // REOPEN survival (founder 2026-06-23): a relaunched/reopened separate-app
+      // window arrives with NO fresh ck= and the single-use temp file already
+      // consumed → controlAuth would be null and every control HTTP call
+      // (mode / End-session / cookies) would fail, even though manual still works
+      // over LiveKit. Restore the per-session key persisted from a prior launch. A
+      // stale (>24h TTL) key just 401s, which now degrades to Manual rather than a
+      // blocking error.
+      const stored = readPersistedControlKey(sessionId);
+      setControlAuth(stored !== '' ? { controlKey: stored } : null);
     })();
     return () => {
       cancelled = true;
