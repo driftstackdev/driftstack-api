@@ -55,7 +55,11 @@ test('POST /v1/sessions: 201 with full shape', async ({ request }) => {
   const body = (await res.json()) as Record<string, unknown>;
   expect(body.id).toMatch(/^ses_[0-9a-f-]{36}$/);
   expect(body.status).toBe('ready');
-  expect(body.archetype).toBe('iphone16pro_ios18_7_safari26_4');
+  // Default archetype was upgraded iphone16pro→iphone17 (migration 0072); the
+  // sessions table DEFAULT is 'iphone17_ios18_7_safari26_4'. This e2e assertion
+  // went stale undetected because the e2e job was SKIPPED for the whole window CI
+  // was red on the core test job (e2e only runs once that job passes).
+  expect(body.archetype).toBe('iphone17_ios18_7_safari26_4');
   expect(body.label).toBe('demo');
 });
 
