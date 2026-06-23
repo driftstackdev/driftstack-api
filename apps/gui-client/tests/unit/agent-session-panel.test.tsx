@@ -58,7 +58,7 @@ describe('AgentSessionPanel overlay UX', () => {
     expect(container.querySelector('[data-action="reconnect-stream"]')).toBeNull();
   });
 
-  it('adopts the stream REAL aspect on loadedmetadata + reports dimensions (archetype-driven sizing)', () => {
+  it('keeps the FIXED canonical box aspect on loadedmetadata (NOT the SFU-drifted live aspect) + still reports real dims for the window resize (A3 W2840)', () => {
     connectMock.mockReset();
     connectMock.mockReturnValueOnce(new Promise(() => {}));
     const dims: Array<[number, number]> = [];
@@ -67,15 +67,17 @@ describe('AgentSessionPanel overlay UX', () => {
     );
     const panel = container.querySelector('[data-component="agent-session-panel"]') as HTMLElement;
     const video = container.querySelector('video') as HTMLVideoElement;
-    // Pre-metadata: the static fallback aspect (iPhone 16 Pro geometry).
+    // The box aspect is the fixed canonical device aspect (402:874 ≡ 1206/2622).
     expect(panel.style.aspectRatio).toBe((1206 / 2622).toString());
-    // jsdom videos have no real dimensions — simulate the metadata arriving
-    // with a DIFFERENT archetype's resolution (e.g. a hypothetical 1320×2868).
+    // Simulate metadata arriving with a SFU-downscaled, slightly-off resolution.
     Object.defineProperty(video, 'videoWidth', { configurable: true, value: 1320 });
     Object.defineProperty(video, 'videoHeight', { configurable: true, value: 2868 });
     fireEvent.loadedMetadata(video);
-    // The live aspect wins over the static prop; the parent hears the dims.
-    expect(panel.style.aspectRatio).toBe((1320 / 2868).toString());
+    // Founder 2026-06-23 / A3 W2840: the box must NOT adopt the drifted live aspect
+    // (that letterboxed the view inside the exactly-402:874 host → "iPhone smaller").
+    // It stays the canonical aspect; the <video> object-contain absorbs the drift.
+    // The real dims still flow to the parent's one-time WINDOW resize.
+    expect(panel.style.aspectRatio).toBe((1206 / 2622).toString());
     expect(dims).toEqual([[1320, 2868]]);
   });
 

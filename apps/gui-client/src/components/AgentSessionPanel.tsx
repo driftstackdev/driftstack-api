@@ -125,13 +125,17 @@ export function AgentSessionPanel({
   // effect keyed on the ref would attach to the stale (null) element.
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const [state, setState] = useState<LivekitConnectionState>({ kind: 'idle' });
-  // Live aspect — the stream's REAL dimensions (loadedmetadata) win over the
-  // static prop, so EVERY archetype renders its true proportions (many
-  // archetypes incoming; no hardcoded per-device table). The prop/constant
-  // stays as the pre-metadata fallback so the box has a sane shape while
-  // connecting.
-  const [liveAspect, setLiveAspect] = useState<number | null>(null);
-  const effectiveAspectRatio = liveAspect ?? aspectRatio;
+  // Box aspect = the FIXED canonical device aspect (402:874 ≡ 1206/2622), NOT the
+  // live track aspect. Founder 2026-06-23 "iPhone rendered smaller for no reason"
+  // + A3 W2840: the SFU downscales the published 402×874 track to a not-exactly-
+  // 402:874 EVEN resolution, so `videoWidth/videoHeight` ≈ but ≠ 402:874. Driving
+  // the box from that drifted live aspect, while `fitWindow` sizes the screen-host
+  // to EXACTLY 402:874, made the box `object-contain` letterbox a few px INSIDE
+  // its area → a slightly-shrunken view. Locking the box to the canonical aspect
+  // makes box == host; the tiny SFU drift is absorbed sub-pixel by the <video>'s
+  // object-contain. The real dims still drive the one-time WINDOW resize via
+  // onVideoDimensions below — that path is unchanged.
+  const effectiveAspectRatio = aspectRatio;
   // Simulator control: the live LiveKit room is lifted to state so the
   // input-capture hook can publish on its DataChannel. In `interactive` mode
   // (the dedicated floating-iPhone window) capture is on — the window IS the
@@ -293,8 +297,8 @@ export function AgentSessionPanel({
           // window resizes itself to match).
           const el = e.currentTarget;
           if (el.videoWidth > 0 && el.videoHeight > 0) {
-            const next = el.videoWidth / el.videoHeight;
-            setLiveAspect((prev) => (prev === next ? prev : next));
+            // Real dims drive ONLY the one-time window resize (not the box aspect,
+            // which is the fixed canonical 402:874 — see effectiveAspectRatio).
             onVideoDimensions?.(el.videoWidth, el.videoHeight);
           }
         }}

@@ -77,13 +77,16 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).not.toMatch(/className="relative w-full overflow-hidden/);
   });
 
-  it('Live-aspect mechanism pinned: the stream REAL dimensions (loadedmetadata videoWidth/videoHeight) win over the static aspectRatio prop (effectiveAspectRatio = liveAspect ?? aspectRatio), and onVideoDimensions reports them to the parent (the simulator window resizes to the archetype). Drift back to prop-only would hardcode every future archetype to the 16-Pro shape', () => {
-    expect(body).toMatch(/const \[liveAspect, setLiveAspect\] = useState<number \| null>\(null\);/);
-    expect(body).toMatch(/const effectiveAspectRatio = liveAspect \?\? aspectRatio;/);
+  it('Fixed-canonical box aspect pinned (founder 2026-06-23 / A3 W2840): the box aspect is the FIXED canonical device aspect (effectiveAspectRatio = aspectRatio, default 1206/2622 ≡ 402:874), NOT the SFU-downscaled live track aspect — driving the box from videoWidth/videoHeight (≈ but ≠ 402:874) letterboxed the view a few px inside the exactly-402:874 screen-host = "iPhone rendered smaller". The <video> object-contain absorbs the tiny SFU drift sub-pixel. onVideoDimensions still reports the REAL dims for the one-time WINDOW resize. Regression-guard: do NOT revert the BOX aspect to liveAspect.', () => {
+    expect(body).toMatch(/const effectiveAspectRatio = aspectRatio;/);
+    expect(body).toMatch(/style=\{\{ aspectRatio: effectiveAspectRatio\.toString\(\) \}\}/);
+    // The real dims still flow to the parent's window-resize (NOT the box aspect).
     expect(body).toMatch(/onLoadedMetadata=\{/);
-    expect(body).toMatch(/el\.videoWidth \/ el\.videoHeight/);
     expect(body).toMatch(/onVideoDimensions\?\.\(el\.videoWidth, el\.videoHeight\);/);
     expect(body).toMatch(/onVideoDimensions\?: \(width: number, height: number\) => void;/);
+    // Guard the regression: the box aspect must NOT be driven by the live track
+    // aspect again (that reintroduces the SFU-drift letterbox / shrunken view).
+    expect(body).not.toMatch(/effectiveAspectRatio = liveAspect/);
   });
 
   it('LiveKitInfo import from @driftstack/sdk pinned: drift to a local-only type would break the cross-package single-source-of-truth for the LiveKit join-info wire shape', () => {
