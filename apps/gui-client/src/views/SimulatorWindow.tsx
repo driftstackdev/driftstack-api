@@ -498,7 +498,14 @@ export function DeviceToolbar({
           <LabeledControl
             label="Session info"
             active={infoOpen}
-            onClick={onToggleInfo}
+            // #48 item 3 — close the expanded control panel when opening the info
+            // overlay so the overlay's text doesn't render on top of the still-open
+            // panel (founder: "if I press session info, the text overlaps with the open
+            // toggle"). Selecting a menu row closes the menu, the standard behaviour.
+            onClick={() => {
+              onToggleInfo();
+              if (expanded) onToggleExpanded();
+            }}
             glyph={<span className="text-[13px] leading-none">ⓘ</span>}
           />
           {/* Explicit Stop/End (founder Track A) — a true Stop for the agent
