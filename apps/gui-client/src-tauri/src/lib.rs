@@ -43,23 +43,44 @@ pub fn run() {
         // focus + unminimize the existing main window instead of spawning a
         // duplicate.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            use tauri::{Emitter, Manager};
-            if let Some(win) = app.get_webview_window("main") {
-                // Stage 2 (separate Driftstack Simulator app): a relaunch carrying
-                // a new `--ds-session=<b64 query string>` re-points the already-open
-                // window at that session. No-op for the main GUI (never launched
-                // with this arg). See docs/internal/2026-06-18-separate-simulator-app-plan.md.
-                //
-                // RELAUNCH path: emit a `ds-session` event (NOT a location.search
-                // navigation). Re-navigating reloads the whole SPA, tearing down
-                // the live LiveKit Room mid-session (founder-hit). The SPA listens
-                // and switches the connected session IN PLACE. Guard against an
-                // empty/garbled payload so we never emit a session-less event.
-                if let Some(arg) = argv.iter().find(|a| a.starts_with("--ds-session=")) {
-                    let b64 = arg.trim_start_matches("--ds-session=");
-                    if is_valid_b64_payload(b64) {
-                        let _ = win.emit("ds-session", b64);
+            use tauri::Manager;
+            // The relaunch's session payload (b64, ps-safe — carries the LiveKit token)
+            // + the plain, non-secret session label (window key).
+            let b64 = argv
+                .iter()
+                .find(|a| a.starts_with("--ds-session="))
+                .map(|a| a.trim_start_matches("--ds-session=").to_string())
+                .filter(|p| is_valid_b64_payload(p));
+            let label = argv
+                .iter()
+                .find(|a| a.starts_with("--ds-label="))
+                .map(|a| a.trim_start_matches("--ds-label=").to_string())
+                .filter(|l| is_safe_session_label(l));
+
+            // MULTI-WINDOW simulator (founder 2026-06-23: "can't open multiple iPhones at
+            // once, only 1 window opens"). A 2nd launch opens a NEW iPhone window for the
+            // new session instead of re-pointing the single window; re-opening a session
+            // focuses its existing window. The main GUI (different identifier, never
+            // launched with --ds-session) keeps the focus-the-existing-window behaviour.
+            if app.config().identifier == "dev.driftstack.simulator" {
+                match (b64.as_deref(), label.as_deref()) {
+                    (Some(payload), Some(lbl)) => open_or_focus_sim_window(app, lbl, payload),
+                    _ => {
+                        if let Some(win) = app.webview_windows().values().next() {
+                            let _ = win.unminimize();
+                            let _ = win.set_focus();
+                        }
                     }
+                }
+                return;
+            }
+
+            // Main GUI: focus the existing window (legacy re-point via event if a
+            // payload rode along — preserved for the in-app simulator path).
+            if let Some(win) = app.get_webview_window("main") {
+                use tauri::Emitter;
+                if let Some(payload) = b64.as_deref() {
+                    let _ = win.emit("ds-session", payload);
                 }
                 let _ = win.unminimize();
                 let _ = win.show();
@@ -87,6 +108,9 @@ pub fn run() {
         // launches are collapsed by the single-instance plugin above
         // (which focuses the existing window).
         .plugin(tauri_plugin_deep_link::init())
+        // Multi-window simulator (founder 2026-06-23): tracks which session the
+        // config-created `main` window holds, so a re-open focuses it vs. duplicating.
+        .manage(MainSession(std::sync::Mutex::new(None)))
         // W434 (founder W232 item b) — macOS WKWebView blank-until-redraw on the
         // Overlay-titlebar window: the packaged release `.app` mounts + polls the
         // backend but the webview never composites (blank window) until a redraw
@@ -109,6 +133,17 @@ pub fn run() {
                     let _ = win.eval(&format!("window.location.search = atob('{b64}')"));
                 }
             }
+            // Multi-window simulator (founder 2026-06-23): record which session `main`
+            // holds, so a re-open of that SAME session focuses `main` instead of opening a
+            // duplicate window (open_or_focus_sim_window checks this).
+            if let Some(arg) = std::env::args().find(|a| a.starts_with("--ds-label=")) {
+                let lbl = arg.trim_start_matches("--ds-label=").to_string();
+                if is_safe_session_label(&lbl) {
+                    if let Ok(mut g) = app.state::<MainSession>().0.lock() {
+                        *g = Some(lbl);
+                    }
+                }
+            }
             #[cfg(target_os = "macos")]
             {
                 if let Some(win) = app.get_webview_window("main") {
@@ -126,12 +161,9 @@ pub fn run() {
             // doesn't match we attach nothing and behaviour is unchanged.
             if app.config().identifier == "dev.driftstack.simulator" {
                 if let Some(win) = app.get_webview_window("main") {
-                    let handle = app.handle().clone();
-                    win.on_window_event(move |event| {
-                        if matches!(event, tauri::WindowEvent::Destroyed) {
-                            handle.exit(0);
-                        }
-                    });
+                    // Multi-window: quit only when the LAST simulator window closes (not
+                    // on `main`'s close), so closing one iPhone doesn't kill the others.
+                    attach_quit_when_last_window_closes(app.handle().clone(), &win);
                 }
             }
             Ok(())
@@ -167,6 +199,99 @@ fn is_valid_b64_payload(payload: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'=')
 }
 
+/// A `--ds-label` (session id, e.g. `agt_<uuid>`) is the KEY for a per-session simulator
+/// window (`sim-<label>`). Validate it's a safe, bounded, window-label-legal token before
+/// we use it in a window label / lookup (multi-window, founder 2026-06-23).
+fn is_safe_session_label(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 64
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'_' || b == b'-')
+}
+
+/// The session label held by the simulator app's config-created `main` window (the FIRST
+/// session). Lets the single-instance handler FOCUS `main` rather than open a duplicate
+/// window when that same session is re-opened (multi-window, founder 2026-06-23).
+struct MainSession(std::sync::Mutex<Option<String>>);
+
+/// Multi-window simulator: open a NEW per-session iPhone window for `label`, or focus the
+/// existing one (`main` for the first session, else `sim-<label>`). The b64 query (ps-safe
+/// over the launch arg) is decoded HERE and baked into the new window's internal URL — which
+/// is NOT argv-visible — so the window loads the session directly with no eval-timing race.
+/// Window props mirror tauri.simulator.conf.json's `main`; windows cascade so they don't
+/// stack exactly. Best-effort: a build failure is logged, never panics. (founder 2026-06-23)
+fn open_or_focus_sim_window(app: &tauri::AppHandle, label: &str, b64: &str) {
+    use base64::Engine;
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    // First session lives in `main` — focus it instead of duplicating.
+    let is_main_session = app
+        .state::<MainSession>()
+        .0
+        .lock()
+        .map(|g| g.as_deref() == Some(label))
+        .unwrap_or(false);
+    if is_main_session {
+        if let Some(win) = app.get_webview_window("main") {
+            let _ = win.unminimize();
+            let _ = win.set_focus();
+        }
+        return;
+    }
+    let win_label = format!("sim-{label}");
+    if let Some(win) = app.get_webview_window(&win_label) {
+        let _ = win.unminimize();
+        let _ = win.set_focus();
+        return;
+    }
+    let query = base64::engine::general_purpose::STANDARD
+        .decode(b64)
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .unwrap_or_else(|| "window=simulator".to_string());
+    let count = app.webview_windows().len() as f64;
+    let off = 30.0 * count;
+    match WebviewWindowBuilder::new(
+        app,
+        &win_label,
+        WebviewUrl::App(format!("index.html?{query}").into()),
+    )
+    .title("Driftstack Simulator")
+    .inner_size(330.0, 718.0)
+    .min_inner_size(280.0, 560.0)
+    .resizable(true)
+    .maximizable(false)
+    .decorations(false)
+    .transparent(true)
+    .shadow(false)
+    .position(120.0 + off, 120.0 + off)
+    .build()
+    {
+        Ok(win) => attach_quit_when_last_window_closes(app.clone(), &win),
+        Err(e) => eprintln!("[simulator] failed to open session window {win_label}: {e}"),
+    }
+}
+
+/// Quit the simulator process when the LAST window closes (founder 2026-06-23 multi-window:
+/// closing one iPhone must not kill the others, and a borderless macOS app with no windows
+/// would otherwise linger with a dead Dock icon). On a window's `Destroyed`, exit only if no
+/// OTHER simulator window remains (excludes this one by label, robust to map-update timing).
+fn attach_quit_when_last_window_closes(app: tauri::AppHandle, win: &tauri::WebviewWindow) {
+    use tauri::Manager;
+    let label = win.label().to_string();
+    win.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            let others = app
+                .webview_windows()
+                .into_keys()
+                .filter(|k| *k != label)
+                .count();
+            if others == 0 {
+                app.exit(0);
+            }
+        }
+    });
+}
+
 /// Health probe — the React shell calls this to confirm the Rust
 /// backend is alive.
 #[tauri::command]
@@ -182,13 +307,16 @@ fn ping() -> &'static str {
 /// (`KEYRING_SERVICE`) with a one-time macOS allow prompt. `payload` is the
 /// base64 of the simulator query string (window=simulator&ws=…&token=…).
 #[tauri::command]
-fn launch_simulator(payload: String) -> Result<(), String> {
+fn launch_simulator(payload: String, session_label: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let app_path = "/Applications/Driftstack Simulator.app";
         if !std::path::Path::new(app_path).exists() {
             return Err("Driftstack Simulator.app is not installed".to_string());
         }
+        // `--ds-label` = the plain (non-secret) session id, the per-session window KEY
+        // (multi-window, founder 2026-06-23). The single-instance handler opens/focuses
+        // one window per label. `--ds-session` stays the b64 (ps-safe) payload.
         std::process::Command::new("open")
             .args([
                 "-n",
@@ -196,6 +324,7 @@ fn launch_simulator(payload: String) -> Result<(), String> {
                 app_path,
                 "--args",
                 &format!("--ds-session={payload}"),
+                &format!("--ds-label={session_label}"),
             ])
             .spawn()
             .map_err(|e| e.to_string())?;
@@ -203,7 +332,7 @@ fn launch_simulator(payload: String) -> Result<(), String> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = payload;
+        let _ = (payload, session_label);
         Err("the separate simulator app is macOS-only".to_string())
     }
 }

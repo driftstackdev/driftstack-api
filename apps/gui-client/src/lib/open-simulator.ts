@@ -137,7 +137,10 @@ export async function openSimulatorWindow({
         // ignore — non-fatal; the simulator degrades to API-key auth.
       }
     }
-    await invoke('launch_simulator', { payload: btoa(params.toString()) });
+    // `sessionLabel` (the plain session id) is the per-session window KEY in the
+    // separate app (multi-window, founder 2026-06-23): each session opens/focuses its
+    // own iPhone window. `payload` stays the b64 (ps-safe) handoff.
+    await invoke('launch_simulator', { payload: btoa(params.toString()), sessionLabel: sessionId });
     return { opened: true };
   } catch {
     // not installed / non-macOS / spawn failed → in-process window fallback.

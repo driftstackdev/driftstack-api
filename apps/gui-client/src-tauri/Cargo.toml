@@ -16,6 +16,10 @@ tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
 tauri = { version = "2.0", features = ["macos-private-api"] }
+# Decode the `--ds-session` b64 launch payload (multi-window simulator, founder
+# 2026-06-23) so a new per-session window loads the session via its (non-argv)
+# internal URL — no eval-timing race.
+base64 = "0.22"
 tauri-plugin-shell = "2.0"
 tauri-plugin-store = "2.0"
 tauri-plugin-fs = "2.0"
