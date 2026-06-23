@@ -264,7 +264,11 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
         return JSON.parse(bodyText) as AnthropicResponseJson;
       }
 
-      if (res.status >= 500 && attempt < MAX_RETRIES_5XX) {
+      // Retry transient throttles too, not just 5xx: a 429 (rate-limit) is
+      // recoverable with backoff. If the retries still exhaust on a 429,
+      // classifyDecomposerError treats it as transient → the turn degrades to a
+      // retryable refuse (session kept alive), NOT a customer-facing 500.
+      if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES_5XX) {
         attempt++;
         await sleep(this.retryBackoffMs);
         continue;

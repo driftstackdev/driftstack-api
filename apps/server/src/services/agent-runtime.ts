@@ -439,7 +439,14 @@ export function classifyDecomposerError(err: unknown): 'transient' | 'fatal' {
   const msg = err.message;
   // Anthropic 5xx after retry → transient
   if (/Anthropic API 5\d\d/.test(msg)) return 'transient';
-  // Anthropic 4xx → fatal (credential / quota / validation)
+  // Anthropic 429 (rate-limit) / 408 (request-timeout) / 425 (too-early) → transient,
+  // NOT fatal: these are throttle/transient upstream signals (esp. 429 when concurrent
+  // chat turns push the shared key over its org rate limit at peak), so degrade to a
+  // retryable refuse + keep the session alive — NOT a hard 500. MUST precede the
+  // 4xx→fatal branch below (which would otherwise swallow 429). callWithRetry also
+  // now retries 429. (529 overloaded already matches the 5xx branch above.)
+  if (/Anthropic API (429|408|425)/.test(msg)) return 'transient';
+  // Anthropic 4xx → fatal (credential / validation / bad-request)
   if (/Anthropic API 4\d\d/.test(msg)) return 'fatal';
   // Malformed Anthropic response → fatal
   if (

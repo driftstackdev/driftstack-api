@@ -489,6 +489,19 @@ describe('Q.1.b classifyDecomposerError', () => {
     expect(classifyDecomposerError(new Error('Anthropic API 502: bad gateway'))).toBe('transient');
   });
 
+  it('Anthropic 429 (rate-limit) → transient, NOT fatal (perf audit wb91zynsu): a throttle must degrade to a retryable refuse, not 500 the chat turn — must win over the 4xx→fatal branch', () => {
+    expect(classifyDecomposerError(new Error('Anthropic API 429: rate_limit_error'))).toBe(
+      'transient',
+    );
+  });
+
+  it('Anthropic 408 / 425 → transient (timeout / too-early are recoverable)', () => {
+    expect(classifyDecomposerError(new Error('Anthropic API 408: request timeout'))).toBe(
+      'transient',
+    );
+    expect(classifyDecomposerError(new Error('Anthropic API 425: too early'))).toBe('transient');
+  });
+
   it('Anthropic 401 → fatal (credential)', () => {
     expect(classifyDecomposerError(new Error('Anthropic API 401: invalid api key'))).toBe('fatal');
   });

@@ -266,14 +266,23 @@ export class RedisAuthCache implements AuthCache {
       const raw = await this.redis.get(KEY_ENTRY(plaintextSha256));
       if (!raw) return null;
       const entry = JSON.parse(raw) as CachedEntry;
-      const accountVersionRaw = await this.redis.get(KEY_ACCOUNT_VERSION(entry.context.account.id));
+      // One round-trip for both independent version counters (they depend only on
+      // `entry`): collapse the two serial reads into a single MGET — 3 Redis RTTs
+      // → 2 on the hottest path (every authed request; prod Redis is Upstash over
+      // TLS, so RTT dominates). Trade-off: the key-version read now always executes
+      // even when the account-version check below would short-circuit — one
+      // redundant read only in the rare invalidation case, saving an RTT on every
+      // cache HIT (the common case). [perf audit wb91zynsu]
+      const [accountVersionRaw, keyVersionRaw] = await this.redis.mget(
+        KEY_ACCOUNT_VERSION(entry.context.account.id),
+        KEY_KEY_VERSION(entry.context.apiKey.id),
+      );
       const currentAccountVersion = accountVersionRaw ? Number(accountVersionRaw) : 0;
       if (currentAccountVersion !== entry.accountVersion) return null;
       // V-247 — key-version gate. Pre-V-247 entries (`keyVersion` absent)
       // treat as version 0; post-V-247 entries always have it. Either way
       // a revocation INCR makes the current value diverge from the cached
       // value → null → falls through to scrypt + DB check → RevokedKeyError.
-      const keyVersionRaw = await this.redis.get(KEY_KEY_VERSION(entry.context.apiKey.id));
       const currentKeyVersion = keyVersionRaw ? Number(keyVersionRaw) : 0;
       const cachedKeyVersion = entry.keyVersion ?? 0;
       if (currentKeyVersion !== cachedKeyVersion) return null;
