@@ -5,6 +5,7 @@
 // "launch / stop / status" so this lib supplies the GUI-side glue.
 
 import { LazyStore } from '@tauri-apps/plugin-store';
+import { makeWriteLock } from './store-write-lock';
 
 export interface ProfileBinding {
   /** Driftstack profile UUID. */
@@ -25,6 +26,15 @@ function getStore(): LazyStore {
   if (store === null) store = new LazyStore(STORE_FILE);
   return store;
 }
+
+// Serialize the read-modify-write mutations (adversarial review w410wv3eq #6 —
+// every other shared store already locks). Without this, two concurrent mutations
+// (e.g. markLaunched racing setDefaultProxy) both read the old list and the second
+// save clobbers the first's change. The PUBLIC mutations take the lock around their
+// full get→upsert; the private upsertBinding stays lock-free (only called inside a
+// locked section — a nested lock would deadlock). Reads (list/getBinding) are
+// lock-free.
+const writeLock = makeWriteLock();
 
 function isBinding(value: unknown): value is ProfileBinding {
   if (typeof value !== 'object' || value === null) return false;
@@ -57,41 +67,49 @@ async function upsertBinding(b: ProfileBinding): Promise<void> {
 }
 
 export async function setDefaultProxy(profileId: string, proxyId: string | null): Promise<void> {
-  const existing = await getBinding(profileId);
-  await upsertBinding({
-    profileId,
-    defaultProxyId: proxyId,
-    currentSessionId: existing?.currentSessionId ?? null,
-    lastLaunchedAt: existing?.lastLaunchedAt ?? null,
+  return writeLock(async () => {
+    const existing = await getBinding(profileId);
+    await upsertBinding({
+      profileId,
+      defaultProxyId: proxyId,
+      currentSessionId: existing?.currentSessionId ?? null,
+      lastLaunchedAt: existing?.lastLaunchedAt ?? null,
+    });
   });
 }
 
 export async function markLaunched(profileId: string, sessionId: string): Promise<void> {
-  const existing = await getBinding(profileId);
-  await upsertBinding({
-    profileId,
-    defaultProxyId: existing?.defaultProxyId ?? null,
-    currentSessionId: sessionId,
-    lastLaunchedAt: new Date().toISOString(),
+  return writeLock(async () => {
+    const existing = await getBinding(profileId);
+    await upsertBinding({
+      profileId,
+      defaultProxyId: existing?.defaultProxyId ?? null,
+      currentSessionId: sessionId,
+      lastLaunchedAt: new Date().toISOString(),
+    });
   });
 }
 
 export async function clearSession(profileId: string): Promise<void> {
-  const existing = await getBinding(profileId);
-  if (existing === null) return;
-  await upsertBinding({
-    profileId,
-    defaultProxyId: existing.defaultProxyId,
-    currentSessionId: null,
-    lastLaunchedAt: existing.lastLaunchedAt,
+  return writeLock(async () => {
+    const existing = await getBinding(profileId);
+    if (existing === null) return;
+    await upsertBinding({
+      profileId,
+      defaultProxyId: existing.defaultProxyId,
+      currentSessionId: null,
+      lastLaunchedAt: existing.lastLaunchedAt,
+    });
   });
 }
 
 export async function deleteBinding(profileId: string): Promise<void> {
-  const all = await listBindings();
-  await getStore().set(
-    KEY,
-    all.filter((b) => b.profileId !== profileId),
-  );
-  await getStore().save();
+  return writeLock(async () => {
+    const all = await listBindings();
+    await getStore().set(
+      KEY,
+      all.filter((b) => b.profileId !== profileId),
+    );
+    await getStore().save();
+  });
 }

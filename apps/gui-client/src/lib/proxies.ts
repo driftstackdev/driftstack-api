@@ -22,6 +22,7 @@ import type {
   OpenVpnConfigInput,
   WireGuardConfigInput,
 } from './account-proxies';
+import { makeWriteLock } from './store-write-lock';
 
 export interface ProxyConfig {
   id: string;
@@ -68,6 +69,13 @@ function getStore(): LazyStore {
   return store;
 }
 
+// Serialize the read-modify-write mutations (adversarial review w410wv3eq #6 —
+// every other shared store already locks). Without this, two concurrent mutations
+// (e.g. rapid add/edit) both read the old list and the second persist clobbers the
+// first's change. PUBLIC mutations lock around their full list→modify→persist; the
+// private persist() + the listProxies() read stay lock-free.
+const writeLock = makeWriteLock();
+
 export async function listProxies(): Promise<ProxyConfig[]> {
   const value = await getStore().get<ProxyConfig[]>(PROXIES_KEY);
   if (!Array.isArray(value)) return [];
@@ -75,61 +83,69 @@ export async function listProxies(): Promise<ProxyConfig[]> {
 }
 
 export async function addProxy(draft: ProxyDraft): Promise<ProxyConfig> {
-  const all = await listProxies();
-  const next: ProxyConfig = {
-    id: mintId(),
-    label: draft.label,
-    host: draft.host,
-    port: draft.port,
-    username: draft.username,
-    password: draft.password,
-    createdAt: new Date().toISOString(),
-    ...(draft.scheme !== undefined ? { scheme: draft.scheme } : {}),
-    ...(draft.openvpn !== undefined ? { openvpn: draft.openvpn } : {}),
-    ...(draft.wireguard !== undefined ? { wireguard: draft.wireguard } : {}),
-  };
-  await persist([...all, next]);
-  return next;
+  return writeLock(async () => {
+    const all = await listProxies();
+    const next: ProxyConfig = {
+      id: mintId(),
+      label: draft.label,
+      host: draft.host,
+      port: draft.port,
+      username: draft.username,
+      password: draft.password,
+      createdAt: new Date().toISOString(),
+      ...(draft.scheme !== undefined ? { scheme: draft.scheme } : {}),
+      ...(draft.openvpn !== undefined ? { openvpn: draft.openvpn } : {}),
+      ...(draft.wireguard !== undefined ? { wireguard: draft.wireguard } : {}),
+    };
+    await persist([...all, next]);
+    return next;
+  });
 }
 
 export async function updateProxy(id: string, patch: ProxyDraft): Promise<ProxyConfig | null> {
-  const all = await listProxies();
-  const idx = all.findIndex((p) => p.id === id);
-  if (idx < 0) return null;
-  const updated: ProxyConfig = {
-    ...(all[idx] as ProxyConfig),
-    label: patch.label,
-    host: patch.host,
-    port: patch.port,
-    username: patch.username,
-    password: patch.password,
-    ...(patch.scheme !== undefined ? { scheme: patch.scheme } : {}),
-    // VPN blocks: a patch carrying one replaces it; absent leaves the stored one.
-    ...(patch.openvpn !== undefined ? { openvpn: patch.openvpn } : {}),
-    ...(patch.wireguard !== undefined ? { wireguard: patch.wireguard } : {}),
-  };
-  const next = [...all];
-  next[idx] = updated;
-  await persist(next);
-  return updated;
+  return writeLock(async () => {
+    const all = await listProxies();
+    const idx = all.findIndex((p) => p.id === id);
+    if (idx < 0) return null;
+    const updated: ProxyConfig = {
+      ...(all[idx] as ProxyConfig),
+      label: patch.label,
+      host: patch.host,
+      port: patch.port,
+      username: patch.username,
+      password: patch.password,
+      ...(patch.scheme !== undefined ? { scheme: patch.scheme } : {}),
+      // VPN blocks: a patch carrying one replaces it; absent leaves the stored one.
+      ...(patch.openvpn !== undefined ? { openvpn: patch.openvpn } : {}),
+      ...(patch.wireguard !== undefined ? { wireguard: patch.wireguard } : {}),
+    };
+    const next = [...all];
+    next[idx] = updated;
+    await persist(next);
+    return updated;
+  });
 }
 
 export async function removeProxy(id: string): Promise<void> {
-  const all = await listProxies();
-  await persist(all.filter((p) => p.id !== id));
+  return writeLock(async () => {
+    const all = await listProxies();
+    await persist(all.filter((p) => p.id !== id));
+  });
 }
 
 /** Record the server-side account_proxies id for a local proxy (set on first
  *  launch-sync). No-op if the local proxy is gone. Returns the updated row. */
 export async function setProxyServerId(id: string, serverId: string): Promise<ProxyConfig | null> {
-  const all = await listProxies();
-  const idx = all.findIndex((p) => p.id === id);
-  if (idx < 0) return null;
-  const updated: ProxyConfig = { ...(all[idx] as ProxyConfig), serverId };
-  const next = [...all];
-  next[idx] = updated;
-  await persist(next);
-  return updated;
+  return writeLock(async () => {
+    const all = await listProxies();
+    const idx = all.findIndex((p) => p.id === id);
+    if (idx < 0) return null;
+    const updated: ProxyConfig = { ...(all[idx] as ProxyConfig), serverId };
+    const next = [...all];
+    next[idx] = updated;
+    await persist(next);
+    return updated;
+  });
 }
 
 async function persist(proxies: ProxyConfig[]): Promise<void> {

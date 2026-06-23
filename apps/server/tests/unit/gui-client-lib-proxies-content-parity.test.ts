@@ -112,16 +112,16 @@ describe('W467.B apps/gui-client/src/lib/proxies.ts content parity', () => {
 
   it('addProxy: mintId() + new Date().toISOString() + persist([...all, next]); updateProxy: findIndex; idx < 0 → null; spread merge + persist; removeProxy: filter !== id + persist', () => {
     expect(body).toMatch(
-      /export async function addProxy\(draft: ProxyDraft\): Promise<ProxyConfig> \{\s*\n?\s*const all = await listProxies\(\);\s*\n?\s*const next: ProxyConfig = \{\s*\n?\s*id: mintId\(\),\s*\n?\s*label: draft\.label,\s*\n?\s*host: draft\.host,\s*\n?\s*port: draft\.port,\s*\n?\s*username: draft\.username,\s*\n?\s*password: draft\.password,\s*\n?\s*createdAt: new Date\(\)\.toISOString\(\),/,
+      /export async function addProxy\(draft: ProxyDraft\): Promise<ProxyConfig> \{\s*\n?\s*return writeLock\(async \(\) => \{\s*\n?\s*const all = await listProxies\(\);\s*\n?\s*const next: ProxyConfig = \{\s*\n?\s*id: mintId\(\),\s*\n?\s*label: draft\.label,\s*\n?\s*host: draft\.host,\s*\n?\s*port: draft\.port,\s*\n?\s*username: draft\.username,\s*\n?\s*password: draft\.password,\s*\n?\s*createdAt: new Date\(\)\.toISOString\(\),/,
     );
     // OVPN/WG arc — addProxy carries the optional scheme + VPN blocks through.
     expect(body).toContain('await persist([...all, next]);');
     expect(body).toContain('? { scheme: draft.scheme }');
     expect(body).toMatch(
-      /export async function updateProxy\(id: string, patch: ProxyDraft\): Promise<ProxyConfig \| null> \{\s*\n?\s*const all = await listProxies\(\);\s*\n?\s*const idx = all\.findIndex\(\(p\) => p\.id === id\);\s*\n?\s*if \(idx < 0\) return null;/,
+      /export async function updateProxy\(id: string, patch: ProxyDraft\): Promise<ProxyConfig \| null> \{\s*\n?\s*return writeLock\(async \(\) => \{\s*\n?\s*const all = await listProxies\(\);\s*\n?\s*const idx = all\.findIndex\(\(p\) => p\.id === id\);\s*\n?\s*if \(idx < 0\) return null;/,
     );
     expect(body).toMatch(
-      /export async function removeProxy\(id: string\): Promise<void> \{\s*\n?\s*const all = await listProxies\(\);\s*\n?\s*await persist\(all\.filter\(\(p\) => p\.id !== id\)\);\s*\n?\s*\}/,
+      /export async function removeProxy\(id: string\): Promise<void> \{\s*\n?\s*return writeLock\(async \(\) => \{\s*\n?\s*const all = await listProxies\(\);\s*\n?\s*await persist\(all\.filter\(\(p\) => p\.id !== id\)\);\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
   });
 
