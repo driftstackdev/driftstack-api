@@ -637,7 +637,17 @@ export type ProfileSaveFailed = z.infer<typeof ProfileSaveFailedSchema>;
 export const PageStateFrameSchema = z.object({
   type: z.literal('pageState'),
   sessionId: z.string().min(1),
-  state: z.enum(['loading', 'loaded', 'errored']),
+  // A3 W2845 — `stalled` added alongside loading/loaded/errored: the harness
+  // `sweepStreamingHealth` watchdog detected a frozen-but-alive renderer (hung JS
+  // / compositor deadlock — NOT a crash, so no crash-marker; the LiveKit pump
+  // re-feeds the last frame forever so the stream still reports `live`). The
+  // harness emits pageState{state:'stalled', url:<current>} on a sustained
+  // zero-real-frame-delta + unresponsive-renderer probe, and pageState{state:
+  // 'loaded'} when frames resume. The GUI renders a non-black "reconnecting —
+  // page unresponsive" indicator OVER the last (frozen) frame, NOT the black
+  // no-publisher overlay (that's 'never published'). Distinct from `errored` (a
+  // hard page error) and `loading` (a navigation in flight).
+  state: z.enum(['loading', 'loaded', 'errored', 'stalled']),
   // A3 W2730 (authoritative wire spec — Swift encodeIfPresent → nil keys are
   // OMITTED, not null): `url` is absent on reload, `title` only on 'loaded',
   // `error` only on 'errored', and `http_status` is NEVER emitted. The previous

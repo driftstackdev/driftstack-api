@@ -168,7 +168,11 @@ export async function getAgentSession(
  *  the LiveKit data channel (A3 W2730), so the GUI POLLS this. null when nothing
  *  has been reported yet (or the control plane is absent). */
 export interface AgentPageState {
-  state: 'loading' | 'loaded' | 'errored';
+  // 'stalled' (A3 W2845): the device's renderer froze (hung JS / compositor
+  // deadlock) — the stream still flows (last frame repeating) but the page is
+  // unresponsive. The GUI shows a "reconnecting — page unresponsive" indicator
+  // over the (still-visible) last frame, NOT a black screen.
+  state: 'loading' | 'loaded' | 'errored' | 'stalled';
   url: string | null;
   error: { kind?: string; message?: string } | null;
 }

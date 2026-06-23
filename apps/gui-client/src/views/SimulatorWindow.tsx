@@ -1514,6 +1514,13 @@ export function SimulatorWindow(): JSX.Element {
   const [liveUrl, setLiveUrl] = useState('');
   const [pageLoading, setPageLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState<number | null>(null);
+  // 'stalled' (A3 W2845): the device renderer froze (hung JS / compositor
+  // deadlock) — the LiveKit stream still reports `live` (the pump repeats the
+  // last frame), so the GUI can't detect it from the track. The harness watchdog
+  // reports it via pageState{state:'stalled'}; we surface a "reconnecting —
+  // page unresponsive" badge over the (still-visible) last frame, cleared when
+  // the box reports any non-stalled state again.
+  const [pageStalled, setPageStalled] = useState(false);
   const loadWatchdogRef = useRef<number | null>(null);
   // Timestamp of the last operator navigate. The ~2s page-state poll can fire before
   // the box has seen a just-submitted navigate and would read the PREVIOUS page as
@@ -1547,9 +1554,15 @@ export function SimulatorWindow(): JSX.Element {
         // page-state REST endpoint is stubbed, so the channel is the only live
         // source — keying only on type:'page_state' silently dropped every event.
         const isHarnessState =
-          msg.state === 'loading' || msg.state === 'loaded' || msg.state === 'errored';
+          msg.state === 'loading' ||
+          msg.state === 'loaded' ||
+          msg.state === 'errored' ||
+          msg.state === 'stalled';
         if (msg.type !== 'page_state' && !isHarnessState) return;
         if (typeof msg.url === 'string' && msg.url !== '') setLiveUrl(msg.url);
+        // A3 W2845 — a 'stalled' frame surfaces the frozen-renderer badge; any
+        // other harness state clears it (the page is responsive again).
+        if (isHarnessState) setPageStalled(msg.state === 'stalled');
         const loading = isHarnessState ? msg.state === 'loading' : msg.loading;
         if (typeof loading === 'boolean') {
           setPageLoading(loading);
@@ -1593,6 +1606,9 @@ export function SimulatorWindow(): JSX.Element {
         .then((ps) => {
           if (cancelled || ps === null) return;
           if (typeof ps.url === 'string' && ps.url !== '') setLiveUrl(ps.url);
+          // A3 W2845 — surface/clear the frozen-renderer badge from the poll too
+          // (independent of the loading grace window; a stall is real regardless).
+          setPageStalled(ps.state === 'stalled');
           const loading = ps.state === 'loading';
           // Don't let a stale 'loaded' (the box hasn't seen our just-submitted
           // navigate yet) kill the optimistic spinner. Within the grace window after
@@ -2144,6 +2160,21 @@ export function SimulatorWindow(): JSX.Element {
                     className="absolute left-1/2 top-20 z-20 -translate-x-1/2 rounded-full bg-amber-500/90 px-3 py-1 text-[10px] font-medium text-black shadow"
                   >
                     Control may not be reaching the device
+                  </div>
+                )}
+                {/* A3 W2845 — frozen-renderer ("stalled") badge. The page hung
+                  (the last frame is still showing, the stream still reports live),
+                  so we overlay a calm reconnecting indicator on the visible frame
+                  rather than blanking to black. Cleared the moment the box reports
+                  any non-stalled page state. */}
+                {pageStalled && (
+                  <div
+                    role="status"
+                    data-component="page-stalled-badge"
+                    className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-black/75 px-4 py-2 text-[11px] font-medium text-white shadow-lg backdrop-blur"
+                  >
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                    Reconnecting — page unresponsive
                   </div>
                 )}
                 {/* LOUD transport-fallback badge (A3 wmdoil11r rec (a)): WebRTC

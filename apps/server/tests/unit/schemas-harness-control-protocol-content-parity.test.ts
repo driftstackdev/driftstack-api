@@ -294,7 +294,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     // schema now carries comments + prettier may reflow it). Key relaxations:
     expect(body).toContain('export const PageStateFrameSchema = z.object({');
     expect(body).toContain("type: z.literal('pageState'),");
-    expect(body).toContain("state: z.enum(['loading', 'loaded', 'errored']),");
+    expect(body).toContain("state: z.enum(['loading', 'loaded', 'errored', 'stalled']),");
     expect(body).toContain('url: z.string().nullable().optional(),');
     expect(body).toContain('title: z.string().nullable().optional(),');
     expect(body).toContain('kind: z.string().min(1),');
@@ -345,6 +345,16 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
         sessionId: 'agt_1',
         state: 'errored',
         error: { kind: 'tls', message: 'x' },
+      }).success,
+    ).toBe(true);
+    // stalled (A3 W2845): a frozen-but-alive renderer — url present, NO error.
+    // Was rejected by the closed enum before the add → frame silently dropped.
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'pageState',
+        sessionId: 'agt_1',
+        state: 'stalled',
+        url: 'https://example.com/app',
       }).success,
     ).toBe(true);
     // http_status, if ever present, must be null — a numeric status is rejected.
