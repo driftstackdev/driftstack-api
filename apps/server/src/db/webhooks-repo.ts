@@ -371,7 +371,13 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
           deliveredAt: opts.at,
           updatedAt: new Date(),
         })
-        .where(eq(webhookDeliveries.id, deliveryId))
+        // Fence on in_flight (review wjf04whfl #1): the worker only writes for a row
+        // it claimed in_flight, so if a >5min-stalled worker's record* lands after
+        // another tick reclaimed + finalized the row, this matches 0 rows → the
+        // `if (!updated) return` below makes it a no-op. Without the fence a stale
+        // write could resurrect a delivered row to DLQ + bump the endpoint failure
+        // counter toward the spurious 50-failure auto-disable.
+        .where(and(eq(webhookDeliveries.id, deliveryId), eq(webhookDeliveries.status, 'in_flight')))
         .returning({ webhookId: webhookDeliveries.webhookId });
       if (!updated) return;
       await tx
@@ -407,7 +413,13 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
           lastError: opts.lastError,
           updatedAt: new Date(),
         })
-        .where(eq(webhookDeliveries.id, deliveryId))
+        // Fence on in_flight (review wjf04whfl #1): the worker only writes for a row
+        // it claimed in_flight, so if a >5min-stalled worker's record* lands after
+        // another tick reclaimed + finalized the row, this matches 0 rows → the
+        // `if (!updated) return` below makes it a no-op. Without the fence a stale
+        // write could resurrect a delivered row to DLQ + bump the endpoint failure
+        // counter toward the spurious 50-failure auto-disable.
+        .where(and(eq(webhookDeliveries.id, deliveryId), eq(webhookDeliveries.status, 'in_flight')))
         .returning({ webhookId: webhookDeliveries.webhookId });
       if (!updated) return;
       await tx
@@ -434,7 +446,13 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
           lastError: opts.lastError,
           updatedAt: opts.at,
         })
-        .where(eq(webhookDeliveries.id, deliveryId))
+        // Fence on in_flight (review wjf04whfl #1): the worker only writes for a row
+        // it claimed in_flight, so if a >5min-stalled worker's record* lands after
+        // another tick reclaimed + finalized the row, this matches 0 rows → the
+        // `if (!updated) return` below makes it a no-op. Without the fence a stale
+        // write could resurrect a delivered row to DLQ + bump the endpoint failure
+        // counter toward the spurious 50-failure auto-disable.
+        .where(and(eq(webhookDeliveries.id, deliveryId), eq(webhookDeliveries.status, 'in_flight')))
         .returning({ webhookId: webhookDeliveries.webhookId });
       if (!updated) return;
       await tx
