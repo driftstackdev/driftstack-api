@@ -38,7 +38,9 @@ describe('#190 magic-link consume page parity', () => {
 
   it('honours ?next= round-trip; otherwise lands on /', () => {
     expect(body).toMatch(/params\.get\(\s*['"]next['"]\s*\)/);
-    expect(body).toMatch(/window\.location\.href\s*=\s*next\s*\?\s*next\s*:\s*['"]\/['"]/);
+    // audit w2flmiw48 #5-7 — open-redirect-guarded via safeNextPath (was raw next ? next : '/').
+    expect(body).toMatch(/window\.location\.href\s*=\s*safeNextPath\(/);
+    expect(body).toMatch(/const safeNextPath = \(next, origin\) =>/);
   });
 
   it('fallback form is hidden by default and revealed when no URL token', () => {

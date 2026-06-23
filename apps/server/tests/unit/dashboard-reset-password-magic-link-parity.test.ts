@@ -129,8 +129,12 @@ describe('W736 reset-password + magic-link dashboard pages parity', () => {
     const m = read(MAGIC);
 
     expect(m).toMatch(/const params = new URLSearchParams\(window\.location\.search\)/);
-    expect(m).toMatch(/const next = params\.get\('next'\)/);
-    expect(m).toMatch(/window\.location\.href = next \? next : '\/'/);
+    // audit w2flmiw48 #5-7 — magic-link now matches the verify-email safeNextPath guard
+    // (was a raw `next ? next : '/'` open redirect).
+    expect(m).toMatch(/const safeNextPath = \(next, origin\) =>/);
+    expect(m).toMatch(
+      /window\.location\.href = safeNextPath\(params\.get\('next'\), window\.location\.origin\)/,
+    );
 
     // V-079 framing notes the next=round-trip in docstring.
     expect(m).toMatch(

@@ -70,7 +70,10 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
 
   it('success: localStorage ds_web_session_token + ?next= round-trip (falls back to /)', () => {
     expect(body).toMatch(/localStorage\.setItem\('ds_web_session_token', session\.token\)/);
-    expect(body).toMatch(/window\.location\.href = next \? next : '\/'/);
+    // audit w2flmiw48 #5-7 — open-redirect-guarded: navigates via safeNextPath, not raw next.
+    expect(body).toMatch(
+      /window\.location\.href = safeNextPath\(params\.get\('next'\), window\.location\.origin\)/,
+    );
   });
 
   it('error path: fallback form revealed + banner shown (retry by paste)', () => {

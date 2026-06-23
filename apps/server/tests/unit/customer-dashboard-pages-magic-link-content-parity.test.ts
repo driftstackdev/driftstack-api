@@ -56,10 +56,11 @@ describe('customer-dashboard/pages/auth/magic-link content parity', () => {
     );
   });
 
-  it("?next= round-trip framing pinned: params.get('next') + window.location.href = next ? next : '/'. Drift to ignoring ?next would lose the original-entry-point on a magic-link click after a 401-bounce", () => {
+  it("?next= round-trip is open-redirect-guarded via safeNextPath (audit w2flmiw48 #5-7 — was a raw next ? next : '/' open redirect). Same-origin relative path only, else '/'.", () => {
     expect(body).toMatch(
-      /const params = new URLSearchParams\(window\.location\.search\);\s*\n?\s*const next = params\.get\('next'\);\s*\n?\s*window\.location\.href = next \? next : '\/';/,
+      /const params = new URLSearchParams\(window\.location\.search\);\s*\n?\s*window\.location\.href = safeNextPath\(params\.get\('next'\), window\.location\.origin\);/,
     );
+    expect(body).toMatch(/const safeNextPath = \(next, origin\) =>/);
   });
 
   it("fetch POST /v1/auth/magic-link/consume + credentials:'include' + body:JSON.stringify({token:token}) framing pinned. Drift to dropping credentials:'include' would prevent the server's Set-Cookie response from landing", () => {

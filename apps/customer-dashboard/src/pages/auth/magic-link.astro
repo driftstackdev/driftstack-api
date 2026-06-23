@@ -112,9 +112,25 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (session.token) {
               localStorage.setItem('ds_web_session_token', session.token);
             }
+            // Open-redirect guard for ?next= — reduce to a SAME-ORIGIN relative path
+            // (else '/'), so a magic-link can't bounce a just-authenticated user off-site
+            // to a phishing page. Inline copy of src/lib/safe-next.ts (unit-tested),
+            // matching login.astro/verify-email.astro; an is:inline script can't import.
+            const safeNextPath = (next, origin) => {
+              if (typeof next !== 'string' || next.length === 0) return '/';
+              let u;
+              try {
+                u = new URL(next, origin);
+              } catch (e) {
+                return '/';
+              }
+              if (u.origin !== origin) return '/';
+              const p = u.pathname + u.search + u.hash;
+              if (p.indexOf('/') !== 0 || p.indexOf('//') === 0 || p.indexOf('/\\') === 0) return '/';
+              return p;
+            };
             const params = new URLSearchParams(window.location.search);
-            const next = params.get('next');
-            window.location.href = next ? next : '/';
+            window.location.href = safeNextPath(params.get('next'), window.location.origin);
           })
           .catch((err) => {
             showFallbackForm(token);

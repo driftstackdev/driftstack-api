@@ -869,6 +869,45 @@ const navSections: NavSection[] = [
             if (ownerEl) ownerEl.textContent = active;
           }
 
+          // 2026-06-22 (dashboard audit #1) — wire Sign out UNCONDITIONALLY here, before
+          // the /account/me fetch and its early-returns. Previously the handler was bound
+          // only inside the fetch's success .then, so a non-401 error (5xx / network) — or
+          // a missing picker/wrap element — left it unwired and clicking Sign out silently
+          // no-op'd, leaving a valid session token in localStorage (shared-machine takeover
+          // risk). Token is read at click time so it is always current.
+          const signOutBtnEl = document.querySelector('[data-signout]');
+          if (signOutBtnEl) {
+            signOutBtnEl.addEventListener('click', function () {
+              let t = '';
+              try {
+                t = localStorage.getItem('ds_web_session_token') || '';
+              } catch (_) {
+                /* swallow */
+              }
+              try {
+                fetch(apiBaseUrl + '/v1/auth/logout', {
+                  method: 'POST',
+                  headers: { authorization: 'Bearer ' + t },
+                  credentials: 'include',
+                  keepalive: true,
+                }).catch(function () {
+                  /* fire-and-forget */
+                });
+              } catch (_) {
+                /* swallow */
+              }
+              try {
+                localStorage.removeItem('ds_web_session_token');
+                localStorage.removeItem('ds_is_team_user');
+                localStorage.removeItem('ds_is_staff_user');
+                localStorage.removeItem('ds_act_as_account');
+              } catch (_) {
+                /* swallow */
+              }
+              window.location.href = '/login';
+            });
+          }
+
           // Fetch /v1/account/me to populate the picker. Quiet failure:
           // no token / network blip leaves the picker hidden (no
           // regression from pre-V-331 behaviour).
@@ -943,37 +982,8 @@ const navSections: NavSection[] = [
                 sa.classList.remove('hidden');
               }
 
-              // 2026-05-21 — sign-out wiring. Clears every dashboard-scoped
-              // localStorage key (session token + cached staff/team flags +
-              // acting-as override) and redirects to /login. Fire-and-forget
-              // POST to /v1/auth/logout so the server can invalidate the
-              // session row even if the request fails locally.
-              const signOutBtn = document.querySelector('[data-signout]');
-              if (signOutBtn) {
-                signOutBtn.addEventListener('click', function () {
-                  try {
-                    fetch(apiBaseUrl + '/v1/auth/logout', {
-                      method: 'POST',
-                      headers: { authorization: 'Bearer ' + (token || '') },
-                      credentials: 'include',
-                      keepalive: true,
-                    }).catch(function () {
-                      /* fire-and-forget */
-                    });
-                  } catch (_) {
-                    /* swallow */
-                  }
-                  try {
-                    localStorage.removeItem('ds_web_session_token');
-                    localStorage.removeItem('ds_is_team_user');
-                    localStorage.removeItem('ds_is_staff_user');
-                    localStorage.removeItem('ds_act_as_account');
-                  } catch (_) {
-                    /* swallow */
-                  }
-                  window.location.href = '/login';
-                });
-              }
+              // Sign-out wiring moved ABOVE the /account/me fetch (dashboard audit #1) so
+              // it binds unconditionally — not gated on the fetch success / picker el.
 
               // 2026-05-21 — operator-UI polish wave: fill the per-nav-item
               // count badges from the same /account/me payload. Profiles
