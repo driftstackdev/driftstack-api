@@ -95,7 +95,12 @@ export function registerAccountNotificationsRoutes(
           });
         return;
       }
-      activeByAccount.set(accountId, active + 1);
+      // NOTE: the concurrency slot is acquired LATER — just before reply.hijack(),
+      // once the stream is fully wired + cleanup is registered — NOT here. Acquiring
+      // it before the close/error handlers exist meant a synchronous setup failure
+      // (e.g. writeHead/write on a socket the client destroyed between the cap check
+      // and here) would increment the counter with no cleanup ever wired to
+      // decrement it → that account permanently loses a slot (audit pre-push, w83xq1aht).
 
       reply.raw.writeHead(200, {
         'content-type': 'text/event-stream; charset=utf-8',
@@ -141,6 +146,10 @@ export function registerAccountNotificationsRoutes(
       };
       req.raw.on('close', cleanup);
       req.raw.on('error', cleanup);
+      // Acquire the concurrency slot now that the stream is fully established and
+      // cleanup() is wired to release it — so a setup failure above can never leak
+      // a slot. Synchronous from the cap check to here (no await), so no race.
+      activeByAccount.set(accountId, active + 1);
       reply.hijack();
     },
   );

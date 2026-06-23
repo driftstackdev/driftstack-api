@@ -1754,6 +1754,10 @@ export function SimulatorWindow(): JSX.Element {
     setLiveUrl('');
     setPageLoading(false);
     setLoadProgress(null);
+    // A3 W2845 / audit pre-push (w83xq1aht): clear the frozen-renderer badge on a
+    // per-session reset so a previous session's "stalled" overlay can't persist
+    // over a NEW session's live frame after an in-place session swap.
+    setPageStalled(false);
   }, [sessionId, stopRecording]);
   // Control-channel load state for the panel caption (founder 2026-06-18: the
   // mode toggle was stuck "Connecting…" forever when getAgentSession failed and
@@ -2012,6 +2016,9 @@ export function SimulatorWindow(): JSX.Element {
     setLiveUrl(url);
     setPageLoading(true);
     setLoadProgress(null);
+    // An operator navigate optimistically clears the frozen-renderer badge — the
+    // page is being driven again; the box re-asserts 'stalled' if it's still frozen.
+    setPageStalled(false);
     lastNavAtRef.current = Date.now();
     clearLoadWatchdog();
     loadWatchdogRef.current = window.setTimeout(() => {
