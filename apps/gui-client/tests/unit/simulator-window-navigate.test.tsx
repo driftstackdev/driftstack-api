@@ -72,6 +72,18 @@ function renderSim() {
   );
 }
 
+// Open the expandable control panel ONLY if it's currently collapsed. The panel
+// defaults to EXPANDED until the first navigate (SimulatorWindow reads
+// localStorage['ds-sim-navigated']), so depending on prior state the chevron may
+// already read "Hide controls". The old `click([aria-label="Show controls"])`
+// assumed collapsed-start and hit `null` → threw under CI's --coverage worker
+// scheduling (the file passes locally + in isolation). Tolerate both states so the
+// tests are order-/state-independent; either way the panel ends up open.
+function openControlPanel(container: HTMLElement): void {
+  const show = container.querySelector('[aria-label="Show controls"]');
+  if (show) fireEvent.click(show);
+}
+
 describe('SimulatorWindow — address bar navigate', () => {
   beforeEach(() => {
     sendNavigate.mockClear();
@@ -80,7 +92,7 @@ describe('SimulatorWindow — address bar navigate', () => {
   it('expanding the panel reveals an address bar; submitting a URL publishes {type:navigate} via the data channel', () => {
     const { container } = renderSim();
     // Open the control panel (the address bar lives in the expandable area).
-    fireEvent.click(container.querySelector('[aria-label="Show controls"]') as Element);
+    openControlPanel(container);
     const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
     expect(addressInput).not.toBeNull();
     // Type a scheme-less host + submit the form.
@@ -93,7 +105,7 @@ describe('SimulatorWindow — address bar navigate', () => {
 
   it('typing a non-URL search query publishes a navigate to a web search (omnibox)', () => {
     const { container } = renderSim();
-    fireEvent.click(container.querySelector('[aria-label="Show controls"]') as Element);
+    openControlPanel(container);
     const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
     fireEvent.change(addressInput, { target: { value: 'driftstack pricing' } });
     fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
@@ -105,7 +117,7 @@ describe('SimulatorWindow — address bar navigate', () => {
 
   it('passes an explicit https URL through unchanged', () => {
     const { container } = renderSim();
-    fireEvent.click(container.querySelector('[aria-label="Show controls"]') as Element);
+    openControlPanel(container);
     const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
     fireEvent.change(addressInput, { target: { value: 'https://news.example.org/page' } });
     fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
@@ -114,7 +126,7 @@ describe('SimulatorWindow — address bar navigate', () => {
 
   it('does NOT emit a navigate for an explicit non-http(s) scheme (the harness re-validates too)', () => {
     const { container } = renderSim();
-    fireEvent.click(container.querySelector('[aria-label="Show controls"]') as Element);
+    openControlPanel(container);
     const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
     // file:// scheme — dropped client-side (defense in depth). A bare-colon
     // pseudo-scheme without // would instead be searched as harmless text; an
