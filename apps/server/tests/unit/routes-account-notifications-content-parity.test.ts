@@ -73,13 +73,36 @@ describe('routes/account-notifications.ts content parity', () => {
     expect(body).toMatch(/heartbeat\.unref\(\);/);
   });
 
-  it('cleanup on disconnect: req.raw close + error → clearInterval + unsubscribe + reply.raw.end()', () => {
+  it('cleanup on disconnect: req.raw close + error → idempotent clearInterval + unsubscribe + per-account decrement + reply.raw.end()', () => {
     expect(body).toMatch(/req\.raw\.on\('close', cleanup\);/);
     expect(body).toMatch(/req\.raw\.on\('error', cleanup\);/);
-    expect(body).toMatch(
-      /const cleanup = \(\): void => \{\s*\n?\s*clearInterval\(heartbeat\);\s*\n?\s*unsubscribe\(\);\s*\n?\s*reply\.raw\.end\(\);\s*\n?\s*\}/,
-    );
+    // L1 — cleanup is now idempotent (closed-guard) because the backpressure
+    // guard can fire it concurrently with the close/error handlers.
+    expect(body).toMatch(/let closed = false;/);
+    expect(body).toMatch(/const cleanup = \(\): void => \{/);
+    expect(body).toMatch(/if \(closed\) return;\s*\n?\s*closed = true;/);
+    expect(body).toMatch(/clearInterval\(heartbeat\);/);
+    expect(body).toMatch(/unsubscribe\(\);/);
+    expect(body).toMatch(/reply\.raw\.end\(\);/);
     expect(body).toMatch(/reply\.hijack\(\);/);
+  });
+
+  it('L1 — backpressure cap (MAX_SSE_BUFFER_BYTES) closes a stalled stream, mirroring the transcript SSE', () => {
+    expect(body).toMatch(/const MAX_SSE_BUFFER_BYTES = 4_000_000;/);
+    expect(body).toMatch(/if \(reply\.raw\.writableLength > MAX_SSE_BUFFER_BYTES\) cleanup\(\);/);
+  });
+
+  it('L1 — per-account concurrency ceiling: 429 at the cap, increment on accept, decrement in cleanup', () => {
+    expect(body).toMatch(/const DEFAULT_MAX_SSE_PER_ACCOUNT = 10;/);
+    expect(body).toMatch(
+      /const maxStreamsPerAccount = opts\.maxStreamsPerAccount \?\? DEFAULT_MAX_SSE_PER_ACCOUNT;/,
+    );
+    expect(body).toMatch(/const activeByAccount = new Map<string, number>\(\);/);
+    expect(body).toMatch(/if \(active >= maxStreamsPerAccount\) \{/);
+    expect(body).toMatch(/\.code\(429\)/);
+    expect(body).toMatch(/too_many_notification_streams/);
+    expect(body).toMatch(/activeByAccount\.set\(accountId, active \+ 1\);/);
+    expect(body).toMatch(/const remaining = \(activeByAccount\.get\(accountId\) \?\? 1\) - 1;/);
   });
 
   it('file exists at canonical path', () => {

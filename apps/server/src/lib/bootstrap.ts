@@ -34,6 +34,7 @@ import { SessionLivenessStore } from '../services/session-liveness-store.js';
 import { makeProfileSavedPersister } from '../services/profile-store.js';
 import { makeChallengeRelay } from '../services/challenge-relay.js';
 import { makeProfileSaveFailedRelay } from '../services/profile-save-failed-relay.js';
+import { makeSessionPageStateRelay } from '../services/session-page-state-relay.js';
 import { closeAgentSessionOnTerminalStatus } from '../services/agent-session-terminal-close.js';
 import { reconcileWorkerReportedOrphans } from '../services/cp-daemon-reconcile.js';
 import { reconcileNodeBootChange } from '../services/node-boot-reconcile.js';
@@ -1413,7 +1414,8 @@ export async function createProductionDeps(
             makeChallengeRelay(agentSessionsRepo, webhooksService, logger),
             // W650/A3-W1254: a pageState frame (agent-initiated navigate) → store
             // the latest per agent session for GET /v1/agent-sessions/:id/page-state.
-            (frame) => sessionPageStateStore.set(frame),
+            // audit M1 — gated so a non-owning node can't fake another session's overlay.
+            makeSessionPageStateRelay(agentSessionsRepo, sessionPageStateStore, logger),
             // A3 W1364: a profileSaveFailed frame (save-back failed at teardown)
             // → relay as the customer-facing session.profile_save_failed webhook.
             makeProfileSaveFailedRelay(agentSessionsRepo, webhooksService, logger),

@@ -391,6 +391,52 @@ describe('FleetControlConnection', () => {
     ).not.toThrow();
   });
 
+  // audit M1 — the challenge / pageState / profileSaveFailed hooks must receive
+  // the CONNECTION's JWT-authenticated nodeId as the 2nd arg so the consumer can
+  // drop a frame spoofed for another node's session. Verify the threading here
+  // (the gate logic itself is unit-tested per-relay).
+  it('M1 — threads the connection nodeId to onChallengeDetected / onPageState / onProfileSaveFailed', () => {
+    const challengeArgs: unknown[][] = [];
+    const pageStateArgs: unknown[][] = [];
+    const profileFailArgs: unknown[][] = [];
+    const conn = new FleetControlConnection(
+      'node-77',
+      () => {},
+      undefined, // onProfileSaved
+      (...a) => challengeArgs.push(a), // onChallengeDetected
+      (...a) => pageStateArgs.push(a), // onPageState
+      (...a) => profileFailArgs.push(a), // onProfileSaveFailed
+    );
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'challengeDetected',
+        sessionId: 's',
+        challengeId: 'c',
+        challenge: { type: 'datadome', confidence: 0.9 },
+      }),
+    );
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'pageState',
+        sessionId: 'agt_x',
+        state: 'loaded',
+        url: 'u',
+        error: null,
+      }),
+    );
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'profileSaveFailed',
+        sessionId: 'agt_x',
+        profile_id: 'p',
+        reason: 'upload_failed',
+      }),
+    );
+    expect(challengeArgs[0]?.[1]).toBe('node-77');
+    expect(pageStateArgs[0]?.[1]).toBe('node-77');
+    expect(profileFailArgs[0]?.[1]).toBe('node-77');
+  });
+
   it('a throwing handler on a VALID frame does NOT escape handleInbound (receive-loop + process survive — defence-in-depth)', () => {
     // The route feeds handleInbound from a `socket.on('message')` listener, where
     // an uncaught synchronous throw surfaces as a process-level uncaughtException.

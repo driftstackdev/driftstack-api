@@ -19,11 +19,14 @@
 import type { ChallengeDetected } from '../schemas/harness-control-protocol.js';
 import type { WebhookEventType } from './webhooks.js';
 import type { Logger } from '../lib/logger.js';
+import { isCrossNodeSpoof } from './fleet-session-ownership.js';
+import { scrubNodeDiagnostics } from './scrub-node-diagnostics.js';
 
 /** Narrow structural deps so the relay is unit-testable without standing up the
- *  full repo / WebhooksService (the real instances satisfy these). */
+ *  full repo / WebhooksService (the real instances satisfy these). `nodeId` is the
+ *  session's owning node — the audit-M1 cross-node gate; the real repo returns it. */
 interface ChallengeRelaySessions {
-  get(id: string): Promise<{ accountId: string } | null>;
+  get(id: string): Promise<{ accountId: string; nodeId: string | null } | null>;
 }
 interface ChallengeRelayWebhooks {
   enqueueEvent(
@@ -42,8 +45,8 @@ export function makeChallengeRelay(
   sessions: ChallengeRelaySessions,
   webhooks: ChallengeRelayWebhooks,
   logger: Logger,
-): (frame: ChallengeDetected) => void {
-  return (frame: ChallengeDetected): void => {
+): (frame: ChallengeDetected, reportingNodeId: string) => void {
+  return (frame: ChallengeDetected, reportingNodeId: string): void => {
     void sessions
       .get(frame.sessionId)
       .then((session) => {
@@ -58,11 +61,31 @@ export function makeChallengeRelay(
           );
           return;
         }
+        // audit M1 — only the session's OWNING node may fire its challenge
+        // webhook. Drop a frame from a non-owning node (cross-node spoof).
+        if (isCrossNodeSpoof(session.nodeId, reportingNodeId)) {
+          logger.warn(
+            {
+              component: 'challenge-relay',
+              sessionId: frame.sessionId,
+              ownerNodeId: session.nodeId,
+              reportingNodeId,
+            },
+            'dropped challengeDetected from a non-owning node (cross-node spoof guard)',
+          );
+          return;
+        }
+        // audit M2 — scrub the node's real egress IP (W1859 `direct=<node-ip>`)
+        // from the free-form challenge.detail before it reaches the customer webhook.
+        const challenge =
+          typeof frame.challenge.detail === 'string'
+            ? { ...frame.challenge, detail: scrubNodeDiagnostics(frame.challenge.detail) }
+            : frame.challenge;
         return webhooks
           .enqueueEvent(session.accountId, 'session.challenge_detected', {
             session_id: frame.sessionId,
             challenge_id: frame.challengeId,
-            challenge: frame.challenge,
+            challenge,
           })
           .then((endpoints) => {
             logger.info(

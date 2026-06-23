@@ -57,9 +57,18 @@ export class FleetControlConnection {
   readonly cookiesCorrelator: CookiesRequestCorrelator;
   private readonly send: FleetNodeSocketSend;
   private readonly onProfileSaved?: (frame: ProfileSaved) => void;
-  private readonly onChallengeDetected?: (frame: ChallengeDetected) => void;
-  private readonly onPageState?: (frame: PageStateFrame) => void;
-  private readonly onProfileSaveFailed?: (frame: ProfileSaveFailed) => void;
+  // audit M1 — the cross-node frames now carry the connection's authenticated
+  // reportingNodeId so the consumer can drop a frame spoofed for another node's
+  // session (mirrors onSessionStatus, hardened earlier as #5).
+  private readonly onChallengeDetected?: (
+    frame: ChallengeDetected,
+    reportingNodeId: string,
+  ) => void;
+  private readonly onPageState?: (frame: PageStateFrame, reportingNodeId: string) => void;
+  private readonly onProfileSaveFailed?: (
+    frame: ProfileSaveFailed,
+    reportingNodeId: string,
+  ) => void;
   private readonly onHeartbeat?: (frame: Heartbeat) => void;
   private readonly onSessionStatus?: (frame: SessionStatus, reportingNodeId: string) => void;
 
@@ -67,9 +76,9 @@ export class FleetControlConnection {
     readonly nodeId: string,
     send: FleetNodeSocketSend,
     onProfileSaved?: (frame: ProfileSaved) => void,
-    onChallengeDetected?: (frame: ChallengeDetected) => void,
-    onPageState?: (frame: PageStateFrame) => void,
-    onProfileSaveFailed?: (frame: ProfileSaveFailed) => void,
+    onChallengeDetected?: (frame: ChallengeDetected, reportingNodeId: string) => void,
+    onPageState?: (frame: PageStateFrame, reportingNodeId: string) => void,
+    onProfileSaveFailed?: (frame: ProfileSaveFailed, reportingNodeId: string) => void,
     onHeartbeat?: (frame: Heartbeat) => void,
     onSessionStatus?: (frame: SessionStatus, reportingNodeId: string) => void,
   ) {
@@ -212,7 +221,9 @@ export class FleetControlConnection {
           // bot-check + auto-paused the session. Relay to the customer via the
           // injected consumer (→ session.challenge_detected SSE + webhook). Absent
           // consumer (not yet wired / stateless deploy) → ignored, like profileSaved.
-          this.onChallengeDetected?.(frame);
+          // audit M1 — pass the authenticated nodeId so the relay drops a frame
+          // spoofed for another node's session (cross-node spoof guard).
+          this.onChallengeDetected?.(frame, this.nodeId);
           break;
         case 'pageState':
           // Page lifecycle on an agent-initiated navigate (A3 W1240/W1254):
@@ -220,7 +231,9 @@ export class FleetControlConnection {
           // consumer stores the latest per session so GET /v1/agent-sessions/
           // :id/page-state serves the GUI loading-bar/error-overlay. Absent
           // consumer (stateless deploy) → ignored, like the others.
-          this.onPageState?.(frame);
+          // audit M1 — pass the authenticated nodeId so the store-writer drops a
+          // pageState spoofed for another node's session (cross-node spoof guard).
+          this.onPageState?.(frame, this.nodeId);
           break;
         case 'profileSaveFailed':
           // Profile save-back failed at session teardown (A3 W1364): relay to
@@ -228,7 +241,9 @@ export class FleetControlConnection {
           // reliance is informed (terminal — no retry path; session itself
           // stays SUCCEEDED). Absent consumer (stateless deploy) → ignored,
           // like the others.
-          this.onProfileSaveFailed?.(frame);
+          // audit M1 — pass the authenticated nodeId so the relay drops a frame
+          // spoofed for another node's session (cross-node spoof guard).
+          this.onProfileSaveFailed?.(frame, this.nodeId);
           break;
         case 'cookiesResult':
           // Founder #48 — settles the pending GET /:id/cookies request keyed by
@@ -304,9 +319,17 @@ export class FleetControlRegistry {
    */
   constructor(
     private readonly onProfileSaved?: (frame: ProfileSaved) => void,
-    private readonly onChallengeDetected?: (frame: ChallengeDetected) => void,
-    private readonly onPageState?: (frame: PageStateFrame) => void,
-    private readonly onProfileSaveFailed?: (frame: ProfileSaveFailed) => void,
+    // audit M1 — these three carry the reporting node's authenticated id so the
+    // consumer can drop a cross-node-spoofed frame (see fleet-session-ownership).
+    private readonly onChallengeDetected?: (
+      frame: ChallengeDetected,
+      reportingNodeId: string,
+    ) => void,
+    private readonly onPageState?: (frame: PageStateFrame, reportingNodeId: string) => void,
+    private readonly onProfileSaveFailed?: (
+      frame: ProfileSaveFailed,
+      reportingNodeId: string,
+    ) => void,
     private readonly onHeartbeat?: (frame: Heartbeat) => void,
     /**
      * Worker-disconnect fix (2026-06-19) — liveness hooks for the

@@ -20,11 +20,14 @@
 import type { ProfileSaveFailed } from '../schemas/harness-control-protocol.js';
 import type { WebhookEventType } from './webhooks.js';
 import type { Logger } from '../lib/logger.js';
+import { isCrossNodeSpoof } from './fleet-session-ownership.js';
+import { scrubNodeDiagnostics } from './scrub-node-diagnostics.js';
 
 /** Narrow structural deps so the relay is unit-testable without standing up the
- *  full repo / WebhooksService (the real instances satisfy these). */
+ *  full repo / WebhooksService (the real instances satisfy these). `nodeId` is the
+ *  session's owning node — the audit-M1 cross-node gate; the real repo returns it. */
 interface ProfileSaveFailedRelaySessions {
-  get(id: string): Promise<{ accountId: string } | null>;
+  get(id: string): Promise<{ accountId: string; nodeId: string | null } | null>;
 }
 interface ProfileSaveFailedRelayWebhooks {
   enqueueEvent(
@@ -43,8 +46,8 @@ export function makeProfileSaveFailedRelay(
   sessions: ProfileSaveFailedRelaySessions,
   webhooks: ProfileSaveFailedRelayWebhooks,
   logger: Logger,
-): (frame: ProfileSaveFailed) => void {
-  return (frame: ProfileSaveFailed): void => {
+): (frame: ProfileSaveFailed, reportingNodeId: string) => void {
+  return (frame: ProfileSaveFailed, reportingNodeId: string): void => {
     void sessions
       .get(frame.sessionId)
       .then((session) => {
@@ -60,12 +63,28 @@ export function makeProfileSaveFailedRelay(
           );
           return;
         }
+        // audit M1 — only the session's OWNING node may fire its save-failed
+        // webhook. Drop a frame from a non-owning node (cross-node spoof).
+        if (isCrossNodeSpoof(session.nodeId, reportingNodeId)) {
+          logger.warn(
+            {
+              component: 'profile-save-failed-relay',
+              sessionId: frame.sessionId,
+              ownerNodeId: session.nodeId,
+              reportingNodeId,
+            },
+            'dropped profileSaveFailed from a non-owning node (cross-node spoof guard)',
+          );
+          return;
+        }
         return webhooks
           .enqueueEvent(session.accountId, 'session.profile_save_failed', {
             session_id: frame.sessionId,
             profile_id: frame.profile_id,
             reason: frame.reason,
-            ...(frame.detail !== undefined ? { detail: frame.detail } : {}),
+            // audit M2 — scrub the node's real egress IP (W1859 `direct=<node-ip>`)
+            // from the free-form detail before it reaches the customer webhook.
+            ...(frame.detail !== undefined ? { detail: scrubNodeDiagnostics(frame.detail) } : {}),
           })
           .then((endpoints) => {
             logger.info(

@@ -340,7 +340,11 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toContain('agentSessions: agentSessionsRepo,');
     expect(body).toContain('profiles: profilesRepo,');
     expect(body).toContain('makeChallengeRelay(agentSessionsRepo, webhooksService, logger)');
-    expect(body).toContain('(frame) => sessionPageStateStore.set(frame)');
+    // audit M1 — the pageState consumer is now a node-ownership-gated relay
+    // (was a bare `(frame) => sessionPageStateStore.set(frame)`).
+    expect(body).toContain(
+      'makeSessionPageStateRelay(agentSessionsRepo, sessionPageStateStore, logger)',
+    );
     expect(body).toContain(
       'makeProfileSaveFailedRelay(agentSessionsRepo, webhooksService, logger)',
     );

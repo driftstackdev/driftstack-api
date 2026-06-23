@@ -73,4 +73,45 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
     await flush();
     expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
   });
+
+  // audit M1 — cross-node ownership gate (the frame's sessionId is attacker-
+  // controllable; only the OWNING node may fire its webhook).
+  it('M1 — enqueues when the reporting node OWNS the session', async () => {
+    const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node-1' }) };
+    const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
+    const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
+    relay(FRAME, 'node-1');
+    await flush();
+    expect(webhooks.enqueueEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('M1 — DROPS (no webhook) when a NON-owning node reports the save failure', async () => {
+    const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node-1' }) };
+    const webhooks = { enqueueEvent: vi.fn() };
+    const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
+    relay(FRAME, 'node-evil');
+    await flush();
+    expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
+  });
+
+  it('M1 — a NULL node_id session is NOT gated', async () => {
+    const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: null }) };
+    const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
+    const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
+    relay(FRAME, 'node-anything');
+    await flush();
+    expect(webhooks.enqueueEvent).toHaveBeenCalledTimes(1);
+  });
+
+  // audit M2 — scrub the node egress IP from the free-form detail before the webhook.
+  it('M2 — scrubs the node egress IP (direct=<node-ip>) from detail', async () => {
+    const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node-1' }) };
+    const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
+    const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
+    relay({ ...FRAME, detail: 'egress lost direct=10.0.0.7' }, 'node-1');
+    await flush();
+    const enqueued = webhooks.enqueueEvent.mock.calls[0]?.[2] as { detail: string };
+    expect(enqueued.detail).not.toContain('10.0.0.7');
+    expect(enqueued.detail).toContain('direct=[redacted]');
+  });
 });

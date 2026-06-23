@@ -42,9 +42,18 @@ export interface AccountNotificationsRoutesOptions {
    *  writes raw headers, bypassing the @fastify/cors onSend hook, so it must
    *  set Access-Control-Allow-Origin itself or EventSource is blocked. */
   cors?: CorsAllowDeps;
+  /** L1 — max concurrent notification streams per account (DoS ceiling).
+   *  Defaults to 10 — one GUI app instance opens one stream, so 10 covers
+   *  multiple devices/tabs while bounding a buggy/abusive fan-out. Test seam. */
+  maxStreamsPerAccount?: number;
 }
 
 const DEFAULT_HEARTBEAT_MS = 25_000;
+const DEFAULT_MAX_SSE_PER_ACCOUNT = 10;
+// L1 — backpressure high-water mark, mirroring the transcript SSE (agent-sessions
+// W383). A stalled client (TCP window full) would otherwise let published events
+// buffer unboundedly in the socket (reply.raw.writableLength grows → server OOM).
+const MAX_SSE_BUFFER_BYTES = 4_000_000;
 
 export function registerAccountNotificationsRoutes(
   app: FastifyInstance,
@@ -53,6 +62,10 @@ export function registerAccountNotificationsRoutes(
   const bus = opts.notificationBus;
   if (bus === undefined) return; // opt-in wire-up; absent → no route
   const heartbeatMs = opts.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
+  const maxStreamsPerAccount = opts.maxStreamsPerAccount ?? DEFAULT_MAX_SSE_PER_ACCOUNT;
+  // L1 — active SSE count per account (this app instance), bounded by the ceiling
+  // above. Incremented when a stream is accepted, decremented in its cleanup.
+  const activeByAccount = new Map<string, number>();
 
   app.get<{ Querystring: { ds_token?: string } }>(
     '/v1/account/me/notifications',
@@ -63,6 +76,26 @@ export function registerAccountNotificationsRoutes(
     (req, reply) => {
       const ctx = requireCtx(req);
       const accountId = ctx.account.id;
+
+      // L1 — per-account concurrency ceiling. Each GUI app instance opens ONE
+      // notification stream; the cap bounds a buggy/abusive client (or a
+      // credential-sharing fan-out) from pinning unbounded sockets + bus
+      // subscriptions on one account. At the cap we refuse the NEW stream with
+      // 429 (the client backs off + retries) rather than evicting a live one.
+      const active = activeByAccount.get(accountId) ?? 0;
+      if (active >= maxStreamsPerAccount) {
+        void reply
+          .code(429)
+          .header('retry-after', '30')
+          .send({
+            error: {
+              code: 'too_many_notification_streams',
+              message: `at most ${maxStreamsPerAccount} concurrent notification streams per account`,
+            },
+          });
+        return;
+      }
+      activeByAccount.set(accountId, active + 1);
 
       reply.raw.writeHead(200, {
         'content-type': 'text/event-stream; charset=utf-8',
@@ -81,6 +114,10 @@ export function registerAccountNotificationsRoutes(
         // addEventListener('cost.threshold_alert', …) etc.
         reply.raw.write(`event: ${event.kind}\n`);
         reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+        // L1 — past the high-water mark a stalled client is buffering unboundedly;
+        // close the stream (EventSource auto-reconnects; the bus is live so no
+        // durable event is lost). A healthy client drains and never trips this.
+        if (reply.raw.writableLength > MAX_SSE_BUFFER_BYTES) cleanup();
       });
 
       const heartbeat = setInterval(() => {
@@ -88,9 +125,18 @@ export function registerAccountNotificationsRoutes(
       }, heartbeatMs);
       heartbeat.unref();
 
+      let closed = false;
       const cleanup = (): void => {
+        // Idempotent — invoked from the backpressure guard above AND the
+        // close/error handlers below; double-end / double-unsubscribe /
+        // double-decrement is avoided so the paths can't race.
+        if (closed) return;
+        closed = true;
         clearInterval(heartbeat);
         unsubscribe();
+        const remaining = (activeByAccount.get(accountId) ?? 1) - 1;
+        if (remaining <= 0) activeByAccount.delete(accountId);
+        else activeByAccount.set(accountId, remaining);
         reply.raw.end();
       };
       req.raw.on('close', cleanup);

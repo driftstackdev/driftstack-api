@@ -54,4 +54,58 @@ describe('W393 makeChallengeRelay', () => {
     await flush();
     expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
   });
+
+  // audit M1 — cross-node ownership gate. The frame's sessionId is attacker-
+  // controllable; only the session's OWNING node may fire its webhook.
+  it('M1 — enqueues when the reporting node OWNS the session', async () => {
+    const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node-1' }) };
+    const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
+    const relay = makeChallengeRelay(sessions, webhooks, logger);
+    relay(FRAME, 'node-1');
+    await flush();
+    expect(webhooks.enqueueEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('M1 — DROPS (no webhook) when a NON-owning node reports the challenge', async () => {
+    const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node-1' }) };
+    const webhooks = { enqueueEvent: vi.fn() };
+    const relay = makeChallengeRelay(sessions, webhooks, logger);
+    relay(FRAME, 'node-evil');
+    await flush();
+    expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
+  });
+
+  it('M1 — a NULL node_id session (legacy / never-dispatched / manual) is NOT gated', async () => {
+    const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: null }) };
+    const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
+    const relay = makeChallengeRelay(sessions, webhooks, logger);
+    relay(FRAME, 'node-anything');
+    await flush();
+    expect(webhooks.enqueueEvent).toHaveBeenCalledTimes(1);
+  });
+
+  // audit M2 — scrub the node's real egress IP (W1859 `direct=<node-ip>`) from
+  // the free-form challenge.detail before it crosses to the customer webhook.
+  it('M2 — scrubs the node egress IP from challenge.detail before the webhook', async () => {
+    const frame: ChallengeDetected = {
+      ...FRAME,
+      challenge: {
+        type: 'datadome',
+        confidence: 0.9,
+        detail: 'blocked proxied=1.2.3.4 direct=10.0.0.7',
+      },
+    };
+    const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node-1' }) };
+    const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
+    const relay = makeChallengeRelay(sessions, webhooks, logger);
+    relay(frame, 'node-1');
+    await flush();
+    const enqueued = webhooks.enqueueEvent.mock.calls[0]?.[2] as {
+      challenge: { detail: string };
+    };
+    expect(enqueued.challenge.detail).not.toContain('10.0.0.7');
+    expect(enqueued.challenge.detail).toContain('direct=[redacted]');
+    // bare IPv4 (the customer's own proxied= exit) is also redacted (defence-in-depth).
+    expect(enqueued.challenge.detail).not.toContain('1.2.3.4');
+  });
 });
