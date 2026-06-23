@@ -16,6 +16,7 @@ import {
   sendAgentMessage,
   endAgentSession,
   mintGuiControlKey,
+  getAgentSessionCookies,
   AgentSessionControlError,
 } from '../../src/lib/agent-session-control';
 
@@ -182,6 +183,42 @@ describe('agent-session-control transport', () => {
   it('mintGuiControlKey returns null (never throws) on a non-2xx so the launch degrades gracefully', async () => {
     mockFetch.mockResolvedValue(fail(404, 'https://errors.driftstack.dev/not-found', 'gone'));
     expect(await mintGuiControlKey('https://api.test', 'ds_test', 'agt_7')).toBeNull();
+  });
+
+  // Founder #48 — live cookie-jar pull (the drawer's Cookies section data source).
+
+  it('getAgentSessionCookies GETs /:id/cookies + returns the ok jar', async () => {
+    const jar = [
+      { domain: '.example.com', name: 'sid', value: 'abc', httpOnly: true, sameSite: 'Lax' },
+    ];
+    mockFetch.mockResolvedValue(ok({ status: 'ok', cookies: jar }));
+    const res = await getAgentSessionCookies('agt_1');
+    expect(res).toEqual({ status: 'ok', cookies: jar });
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.test/v1/agent-sessions/agt_1/cookies');
+    expect(init.method).toBe('GET');
+  });
+
+  it('getAgentSessionCookies passes through an inert discriminated body ({status,reason}, cookies:null)', async () => {
+    mockFetch.mockResolvedValue(
+      ok({ status: 'unavailable', cookies: null, reason: 'session node is not connected' }),
+    );
+    const res = await getAgentSessionCookies('agt_1');
+    expect(res).toEqual({
+      status: 'unavailable',
+      cookies: null,
+      reason: 'session node is not connected',
+    });
+  });
+
+  it('getAgentSessionCookies sends the control-key header (separate Simulator app)', async () => {
+    mockFetch.mockResolvedValue(ok({ status: 'timeout', cookies: null }));
+    const res = await getAgentSessionCookies('agt_1', { controlKey: 'gck_cook' });
+    expect(res).toEqual({ status: 'timeout', cookies: null });
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers['x-driftstack-gui-control-key']).toBe('gck_cook');
+    expect(headers.Authorization).toBeUndefined();
   });
 
   // W2679 — the GUI-side page-state probe (getPageState) is GONE: the server now

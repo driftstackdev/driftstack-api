@@ -172,6 +172,50 @@ export async function getAgentSessionPageState(
   return body.page_state ?? null;
 }
 
+/** One cookie from the live session jar (matches the server CookieSchema —
+ *  `expires` is unix-ms or null/omitted for session cookies, `sameSite` is
+ *  capitalized from NSHTTPCookieSameSitePolicy). Founder #48. */
+export interface SessionCookie {
+  domain: string;
+  name: string;
+  value: string;
+  path?: string;
+  expires?: number | null;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: 'Strict' | 'Lax' | 'None' | null;
+}
+
+/** Discriminated result of GET /v1/agent-sessions/:id/cookies so the drawer can
+ *  render inert states (control plane off / session not live / node offline /
+ *  node not yet serving cookies) as a calm "pending" rather than an error.
+ *  `ok` → `cookies` is the jar; every other status → `cookies` is null. */
+export interface SessionCookiesResult {
+  status: 'ok' | 'unavailable' | 'timeout' | 'error';
+  cookies: SessionCookie[] | null;
+  reason?: string;
+}
+
+/** Pull the running session's live cookie jar (founder #48). Throws (via
+ *  authedFetch) on a non-2xx — e.g. the gated 503 or a 404 — so the caller's
+ *  poll `.catch()` maps that to the "pending data source" state, exactly like
+ *  the page-state poll. A 200 always carries a discriminated body. */
+export async function getAgentSessionCookies(
+  id: string,
+  auth: ControlAuth = null,
+): Promise<SessionCookiesResult> {
+  const body = (await authedFetch(
+    `/v1/agent-sessions/${encodeURIComponent(id)}/cookies`,
+    { method: 'GET' },
+    auth,
+  )) as Partial<SessionCookiesResult>;
+  return {
+    status: body.status ?? 'error',
+    cookies: Array.isArray(body.cookies) ? body.cookies : null,
+    ...(body.reason !== undefined ? { reason: body.reason } : {}),
+  };
+}
+
 /** POST a new control mode; returns the resulting mode + pair state. */
 export async function setSessionMode(
   id: string,
