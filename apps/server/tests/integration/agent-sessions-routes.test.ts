@@ -498,6 +498,43 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(post.statusCode).toBe(409);
   });
 
+  it('DELETE is idempotent — a second DELETE on an already-closed session → 204, no error (W2820 #1)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const id = create.json<{ id: string }>().id;
+
+    const first = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(first.statusCode).toBe(204);
+
+    // Second DELETE on the already-'closed' row short-circuits to 204 WITHOUT re-closing
+    // (which would clobber closedReason + emit a duplicate destroy audit + re-dispatch
+    // sessionEnd). It must not 404 or 500.
+    const second = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(second.statusCode).toBe(204);
+
+    // The session is still readable + still closed (the idempotent path didn't error it out).
+    const read = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(read.statusCode).toBe(200);
+    expect(read.json<{ status: string }>().status).toBe('closed');
+  });
+
   it('clarify path: short task → 200 with kind:clarify + clarifying_question', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({

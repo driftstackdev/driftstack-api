@@ -1340,6 +1340,11 @@ export async function createProductionDeps(
   // records-only on the first beat after a reset, so it never mass-closes — see
   // node-boot-reconcile.ts). Read+mutated only in the heartbeat handler below.
   const bootIdByNode = new Map<string, string>();
+  // W2821 — per-node deadline (server-time ms) for the bootId consumer's post-restart
+  // re-sweep window (audit w93vi1teq #2: re-check recency-skipped young orphans on later
+  // beats instead of leaking them to the 12h reap). Bounded by fleet size; the consumer
+  // clears entries once each window elapses.
+  const restartSweepUntil = new Map<string, number>();
   const fleetControlPlaneDeps = config.fleetControlPlaneEnabled
     ? (() => {
         const fleetNonceCache = new RedisFleetNonceCache(redis);
@@ -1489,6 +1494,8 @@ export async function createProductionDeps(
                 bootId: frame.bootId,
                 reaffirmedSessionIds: Object.keys(frame.activeSessionStates ?? {}),
                 bootIdByNode,
+                restartSweepUntil,
+                now: Date.now(),
                 logger,
               });
             },

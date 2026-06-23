@@ -2363,6 +2363,17 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
+      // Idempotent DELETE: if the session is ALREADY closed (by the customer
+      // earlier, a reaper, or a worker terminal-close), return 204 WITHOUT
+      // re-closing. closeWithReason is not status-anchored, so re-closing would
+      // clobber the real closedReason (e.g. 'worker-disconnected' → 'customer-closed',
+      // losing the teardown cause), emit a DUPLICATE agent_session.destroyed audit,
+      // and re-dispatch a redundant sessionEnd to an already-dead node
+      // (audit w93vi1teq #1). A 'paused' session is still closeable — only an
+      // already-'closed' row short-circuits.
+      if (pre.status === 'closed') {
+        return reply.code(204).send();
+      }
       // Audit attribution: the session's owning account. Identical to
       // ctx.account.id on the account path, and the only meaningful
       // account on the control-key path (no request-account context).
