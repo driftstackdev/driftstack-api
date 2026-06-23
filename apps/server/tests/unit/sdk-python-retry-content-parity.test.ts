@@ -55,7 +55,7 @@ describe('W586.A packages/sdk-python/src/driftstack/retry.py content parity', ()
     // (Python attributes a bare string literal to the preceding assignment).
     // `enabled` documents the on/off switch; `retryable_errors` documents the set.
     expect(body).toMatch(
-      /enabled: bool = True\n\s*"""If True, retry on TransportError \+ InternalError \(5xx\) \+ RateLimitError\. If False, never retry\."""/,
+      /enabled: bool = True\n\s*"""If True, retry on TransportError \+ InternalError \(5xx\) \+ RateLimitError\.\s*\n?\s*If False, never retry\."""/,
     );
     expect(body).toMatch(
       /retryable_errors: tuple\[type\[BaseException\], \.\.\.\] = field\(\s*\n\s*default_factory=lambda: \(TransportError, RateLimitError, InternalError\)\s*\n\s*\)\n\s*"""Errors that ARE retryable when retries are enabled\."""/,

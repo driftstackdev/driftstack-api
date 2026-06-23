@@ -35,7 +35,8 @@ class RetryConfig:
     max_delay_ms: int = 10_000
     backoff_multiplier: float = 2.0
     enabled: bool = True
-    """If True, retry on TransportError + InternalError (5xx) + RateLimitError. If False, never retry."""
+    """If True, retry on TransportError + InternalError (5xx) + RateLimitError.
+    If False, never retry."""
     retryable_errors: tuple[type[BaseException], ...] = field(
         default_factory=lambda: (TransportError, RateLimitError, InternalError)
     )
