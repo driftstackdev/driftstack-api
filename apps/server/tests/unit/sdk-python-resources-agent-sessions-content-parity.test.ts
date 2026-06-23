@@ -62,7 +62,7 @@ describe('sdk-python resources/agent_sessions content parity', () => {
     expect(body).toMatch(/def get\(self, agent_session_id: str\) -> dict\[str, Any\]:/);
     expect(body).toMatch(/def list\(self\) -> dict\[str, Any\]:/);
     expect(body).toMatch(
-      /def message\(\s*\n?\s*self,\s*\n?\s*agent_session_id: str,\s*\n?\s*user_message: str,\s*\n?\s*\*,\s*\n?\s*byok_api_key: str \| None = None,\s*\n?\s*approve_consequential_actions: list\[dict\[str, str\]\] \| None = None,\s*\n?\s*\) -> dict\[str, Any\]:/,
+      /def message\(\s*\n?\s*self,\s*\n?\s*agent_session_id: str,\s*\n?\s*user_message: str,\s*\n?\s*\*,\s*\n?\s*byok_api_key: str \| None = None,\s*\n?\s*approve_consequential_actions: builtins\.list\[dict\[str, str\]\] \| None = None,\s*\n?\s*\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(/def close\(self, agent_session_id: str\) -> None:/);
     expect(body).toMatch(

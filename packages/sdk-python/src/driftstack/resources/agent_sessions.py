@@ -12,6 +12,7 @@ Discriminated message response: branch on ``["kind"]`` —
 
 from __future__ import annotations
 
+import builtins
 from typing import Any, Literal, TypedDict
 from urllib.parse import quote
 
@@ -121,7 +122,7 @@ class AgentSessionsResource:
         user_message: str,
         *,
         byok_api_key: str | None = None,
-        approve_consequential_actions: list[dict[str, str]] | None = None,
+        approve_consequential_actions: builtins.list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         """Run one decompose→execute turn against the agent session.
 
@@ -364,7 +365,7 @@ class AsyncAgentSessionsResource:
         user_message: str,
         *,
         byok_api_key: str | None = None,
-        approve_consequential_actions: list[dict[str, str]] | None = None,
+        approve_consequential_actions: builtins.list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         """Async counterpart to AgentSessionsResource.message.
 
