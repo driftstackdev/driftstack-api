@@ -67,10 +67,17 @@ describe('LK.6.d — useInputCapture hook', () => {
     expect(inline + multiline).toBeGreaterThanOrEqual(5);
   });
 
-  it('coordinate translation converts browser px → video.videoWidth/Height logical px', () => {
+  it('coordinate translation maps browser px → the FIXED 402×874 logical device frame, NOT the SFU-downscaled track px (founder tap-offset fix / A3 W2811)', () => {
+    // The element-offset math stays.
     expect(body).toMatch(/event\.clientX - rect\.left/);
-    expect(body).toMatch(/video\.videoWidth \|\| rect\.width/);
-    expect(body).toMatch(/video\.videoHeight \|\| rect\.height/);
+    // Scale against the fixed logical device frame (402×874), NEVER
+    // video.videoWidth/Height: the SFU REMB-downscales the published track under
+    // bandwidth pressure, which (pre-fix) halved every coord on a throttle so a
+    // tap landed high-and-left ("above where I tap"), snapping back on recovery.
+    expect(body).toMatch(/const DEVICE_LOGICAL_WIDTH = 402/);
+    expect(body).toMatch(/const DEVICE_LOGICAL_HEIGHT = 874/);
+    expect(body).toMatch(/const nw = logical\.width/);
+    expect(body).toMatch(/const nh = logical\.height/);
   });
 
   it('mouseButton() restricts to 0|1|2 (left/middle/right) matching Quartz', () => {

@@ -65,21 +65,44 @@ export interface UseInputCaptureOpts {
   onPublishError?: () => void;
 }
 
-/** Map a browser pointer event to the video's intrinsic logical
- *  coordinate space. Returns null when the element isn't sized
- *  yet (race on first mount).
+/** The archetype's FIXED logical device-CSS-px screen (iPhone 17 = 402×874).
+ *  A3 W2811: the Mac touch injector addresses the CSS content viewport in this
+ *  fixed space, NOT the streamed track's pixel size. The SFU REMB-downscales the
+ *  published track under bandwidth pressure (e.g. to ~200×436), so any coordinate
+ *  derived from video.videoWidth/Height halves on a throttle. Map against this
+ *  constant instead so the touch space is invariant to the track resolution.
+ *  v1 constant for iphone17 (the only shipped archetype); thread a per-archetype
+ *  size through `logical` below when a second device profile ships. */
+const DEVICE_LOGICAL_WIDTH = 402;
+const DEVICE_LOGICAL_HEIGHT = 874;
+
+/** Map a browser pointer event to the FIXED logical device-CSS-px frame
+ *  (402×874 — the space the Mac touch injector expects, A3 W2811), object-
+ *  contain-aware. Returns null when the element isn't sized yet (race on first
+ *  mount) or the pointer is in a letterbox/pillarbox bar (off-surface).
  *
- *  Exported (alongside `modifiersFromEvent` and `mouseButton`) so
- *  pure-function unit tests can pin the coordinate math without
- *  spinning up jsdom + a fake LiveKit Room. */
+ *  The `logical` size is a parameter (default 402×874) so a future archetype can
+ *  pass its own screen size and the pure unit tests can pin the object-contain
+ *  math at any size. Crucially it does NOT read video.videoWidth/Height for the
+ *  scale: the SFU downscales the track, and pre-2026-06-23 that made a tap land
+ *  high-and-left ("above where I tap") whenever the track was throttled, snapping
+ *  back when it recovered (founder 2026-06-23; root-caused A3 W2811).
+ *
+ *  Exported (alongside `modifiersFromEvent` and `mouseButton`) so pure-function
+ *  unit tests can pin the coordinate math without jsdom + a fake LiveKit Room. */
 export function pointerToViewport(
   event: PointerEvent | MouseEvent | WheelEvent,
   video: HTMLVideoElement,
+  logical: { width: number; height: number } = {
+    width: DEVICE_LOGICAL_WIDTH,
+    height: DEVICE_LOGICAL_HEIGHT,
+  },
 ): { x: number; y: number } | null {
   const rect = video.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) return null;
-  const nw = video.videoWidth || rect.width;
-  const nh = video.videoHeight || rect.height;
+  // FIXED logical frame, not the (SFU-downscaled) track px — see above + A3 W2811.
+  const nw = logical.width;
+  const nh = logical.height;
   // object-contain: the stream is scaled to fit the element while
   // preserving aspect ratio, so when the stream aspect differs from the
   // element aspect it is bar-boxed within the rect. Compute the displayed
@@ -328,14 +351,12 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // Clamp a glide point inside the video — a flick path extends past where the
     // finger lifted, so this keeps us from sending a wild off-surface touch (read
     // live: the video's intrinsic size may not be known at effect-setup time).
-    const clampX = (v: number): number => {
-      const w = video.videoWidth || 0;
-      return w > 0 ? Math.max(0, Math.min(w, v)) : Math.max(0, v);
-    };
-    const clampY = (v: number): number => {
-      const h = video.videoHeight || 0;
-      return h > 0 ? Math.max(0, Math.min(h, v)) : Math.max(0, v);
-    };
+    // Clamp a glide/scroll point inside the FIXED logical device frame (402×874),
+    // NOT video.videoWidth/Height — the SFU downscales the track, so clamping to
+    // the track px would shrink the usable surface on a throttle (same root cause
+    // as the pointerToViewport fix, A3 W2811).
+    const clampX = (v: number): number => Math.max(0, Math.min(DEVICE_LOGICAL_WIDTH, v));
+    const clampY = (v: number): number => Math.max(0, Math.min(DEVICE_LOGICAL_HEIGHT, v));
     // Halt an in-flight inertial glide. endTouch=true lifts the gliding finger (a
     // new press mid-glide, like tapping to stop iOS momentum); teardown passes
     // false (just clear the timer — the room is going away).
@@ -626,8 +647,9 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         }
         return;
       }
-      const vw = video.videoWidth || 402;
-      const vh = video.videoHeight || 874;
+      // Fixed logical device frame (NOT the SFU-downscaled track px — A3 W2811).
+      const vw = DEVICE_LOGICAL_WIDTH;
+      const vh = DEVICE_LOGICAL_HEIGHT;
       const margin = 48;
       const cap = (d: number): number =>
         Math.max(-WHEEL_MAX_FRAME_DELTA, Math.min(WHEEL_MAX_FRAME_DELTA, d));
