@@ -3070,7 +3070,12 @@ export function SimulatorWindow(): JSX.Element {
             <aside
               data-tauri-drag-region="false"
               data-component="simulator-drawer"
-              className="flex shrink-0 flex-row overflow-hidden border-l border-white/[0.12] bg-[#1d1e24] text-[11.5px]"
+              /* NOT overflow-hidden: the rail icons' hover-tooltip flyouts extend LEFT
+                 (over the phone edge) past the rail and were being CLIPPED here (founder:
+                 "still don't see hoverable icon"). The rail + panel children are
+                 fixed-width and self-clip (the panel is its own overflow-hidden), so the
+                 aside doesn't need to clip — dropping it lets the tooltips show. */
+              className="flex shrink-0 flex-row border-l border-white/[0.12] bg-[#1d1e24] text-[11.5px]"
             >
               {/* The RAIL — always visible. Top: one icon per section (the active one
                 highlighted only while its pane is open). Bottom: a separator + the
