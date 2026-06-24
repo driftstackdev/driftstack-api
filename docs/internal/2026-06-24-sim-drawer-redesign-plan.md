@@ -1,6 +1,20 @@
 # Simulator Control-Drawer Redesign — Plan (2026-06-24)
 
-Founder ask: the sim control drawer is "kinda messy" + more is coming (permission knobs, tabs, profile mgmt) → icons + expandable/accordion, clean + scalable. Produced by a 3-approach design judge-panel (wqcnooeza). Task #50. **Planning only — implementation held for founder review + after current tasks.**
+Founder ask: the sim control drawer is "kinda messy" + more is coming (permission knobs, tabs, profile mgmt) → icons + expandable/accordion, clean + scalable. Produced by a 3-approach design judge-panel (wqcnooeza). Task #50.
+
+## ✅ APPROVED — build this (founder, 2026-06-24, after 2 interactive HTML demos)
+
+The judge-panel recommended Approach A, but **the founder picked Approach B (icon rail + single content pane)** + a fancy treatment, then approved the full mock ("it all looks great, approve it all"). **Final design to build:**
+
+- **Shell = Approach B:** a slim left **icon rail** (one glyph per section) + a single **content pane** showing the active section; **status strip pinned on top** (Manual · link · transport · fps · latency · egress · ✕) + **End-session pinned footer**. `activePane` persisted in `localStorage['ds-sim-drawer-pane']`. Drawer ~300px (was 264 — confirm `fitWindow` math; the iPhone view stays pristine/untouched).
+- **Every pane is "fancy"** (cards, stat tiles, nice toggles, sparkline on latency) — not just Cookies.
+- **🍪 Cookies pane (hero):** per-domain expandable groups (favicon chip + domain + count + chevron), per-cookie flags (🔒 Secure / HttpOnly / SameSite=… / ⏱ expiry / 3rd-party), search, this-page/all-domains scope, a pulsing **● live** indicator, and **realtime ⬇ Export / ⬆ Import** of the jar.
+  - **Export = pure A2** (I have the jar via getAgentSessionCookies → `downloadBlob` as cookies.json). Ship now.
+  - **Import (set cookies on the live session) = NEW A3 wire** (`setCookies` → box WKHTTPCookieStore.setCookie) — scope + flag A3 (mirrors the upload/download wires). The button ships disabled-with-tooltip until the wire lands.
+- **⏺ Recording pane (founder add):** a DEDICATED pane (not a stray indicator dot) with full controls — Start/Stop record (elapsed + frames + size while recording), auto-record + retention toggles, and the saved-recordings list (Export ⬇ / Play ▶ / Delete ×, reusing the #36 recordings store/export). The rail's Recording icon shows a **red pulse when recording** (the glanceable indicator, replacing the old dot).
+- **Rail sections:** Session · Controls · Diagnostics · Cookies · Files · Downloads · Recording (+ future: Permissions/Tabs/Profile/Logs slot in as one more rail icon + pane).
+- **Perf:** poll cookies/downloads **only when their pane is active** (`activePane==='cookies'` etc.), not whenever the drawer is open.
+- Demos: `scratchpad/cookies-demo.html` (approved) + `scratchpad/drawer-full-demo.html` (full, approved).
 
 ## Ranking
 
