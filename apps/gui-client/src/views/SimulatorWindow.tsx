@@ -576,9 +576,8 @@ function DrawerRailButton({
       data-component={`sim-rail-${pane}`}
       aria-label={title}
       aria-pressed={active}
-      title={title}
       onClick={() => onSelect(pane)}
-      className={`relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+      className={`group relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
         active
           ? 'bg-accent/20 text-accent ring-1 ring-accent/40'
           : 'text-ink-secondary hover:bg-white/10 hover:text-ink-primary'
@@ -603,6 +602,16 @@ function DrawerRailButton({
           className="absolute right-1 top-1 h-1.5 w-1.5 animate-pulse rounded-full bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.9)]"
         />
       )}
+      {/* Custom hover label — the native title= tooltip is unreliable/slow in the Tauri
+          WKWebView (founder couldn't see what an icon was for), so show an IMMEDIATE
+          flyout to the LEFT (over the phone edge, so it never clips at the window edge)
+          naming the section. pointer-events-none so it never blocks the icon click. */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute right-full top-1/2 z-50 mr-2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-md bg-[#1d1e24] px-2 py-1 text-xs font-medium text-ink-primary opacity-0 shadow-lg ring-1 ring-white/15 transition-all duration-100 group-hover:translate-x-0 group-hover:opacity-100"
+      >
+        {title}
+      </span>
     </button>
   );
 }
