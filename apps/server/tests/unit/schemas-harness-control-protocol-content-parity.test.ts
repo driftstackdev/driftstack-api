@@ -47,6 +47,7 @@ import {
   IntentResultEnvelopeSchema,
   SessionAssignSchema,
   SessionEndSchema,
+  SetCookiesRequestSchema,
   HarnessErrorCodeSchema,
   HarnessOutboundSchema,
 } from '../../src/schemas/harness-control-protocol.js';
@@ -225,11 +226,23 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       /export const TERMINAL_SESSION_STATUSES = new Set<string>\(\['ended', 'errored'\]\);/,
     );
     expect(body).toMatch(
-      /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*ProfileSavedSchema,\s*\n?\s*ChallengeDetectedSchema,\s*\n?\s*PageStateFrameSchema,\s*\n?\s*ProfileSaveFailedSchema,\s*\n?\s*CookiesResultSchema,\s*\n?\s*UploadResultSchema,\s*\n?\s*DownloadsListResultSchema,\s*\n?\s*DownloadDataResultSchema,\s*\n?\s*\]\);/,
+      /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*ProfileSavedSchema,\s*\n?\s*ChallengeDetectedSchema,\s*\n?\s*PageStateFrameSchema,\s*\n?\s*ProfileSaveFailedSchema,\s*\n?\s*CookiesResultSchema,\s*\n?\s*SetCookiesResultSchema,\s*\n?\s*UploadResultSchema,\s*\n?\s*DownloadsListResultSchema,\s*\n?\s*DownloadDataResultSchema,\s*\n?\s*\]\);/,
     );
     // ControlInbound.sessionEnd — the trivial W122 teardown envelope (source-pinned).
     expect(body).toMatch(
       /export const SessionEndSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('sessionEnd'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
+    );
+  });
+
+  it('cookie-import frames pinned: setCookies (CP→node, strict, reuses CookieSchema) + setCookiesResult (node→CP, in union)', () => {
+    // CP→node REQUEST — strict, carries the jar as z.array(CookieSchema) (no
+    // divergent Cookie shape — the import is the write-twin of the read).
+    expect(body).toMatch(
+      /export const SetCookiesRequestSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('setCookies'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*cookies: z\.array\(CookieSchema\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
+    );
+    // node→CP RESULT — ok?/error?, lenient forward-compat like cookiesResult.
+    expect(body).toMatch(
+      /export const SetCookiesResultSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('setCookiesResult'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*ok: z\.boolean\(\)\.optional\(\),\s*\n?\s*error: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
     );
   });
 
@@ -597,6 +610,78 @@ describe('harness-control-protocol behavioral contract', () => {
     // strict: no stray fields (would silently diverge from the harness decoder).
     expect(
       SessionEndSchema.safeParse({ type: 'sessionEnd', sessionId: 'agt_1', reason: 'x' }).success,
+    ).toBe(false);
+  });
+
+  it('cookie-import behavioral: setCookies (CP→node) strict + jar reuses CookieSchema; setCookiesResult parses through the outbound union', () => {
+    // CP→node setCookies — requires type/requestId/sessionId/cookies; cookies is the
+    // shared CookieSchema (a read/Export jar round-trips 1:1).
+    const jar = [
+      {
+        domain: '.example.com',
+        name: 'sid',
+        value: 'abc',
+        httpOnly: true,
+        secure: true,
+        sameSite: 'Lax',
+      },
+      { domain: 'example.com', name: 'pref', value: 'dark' },
+    ];
+    expect(
+      SetCookiesRequestSchema.safeParse({
+        type: 'setCookies',
+        requestId: 'rq_1',
+        sessionId: 'agt_1',
+        cookies: jar,
+      }).success,
+    ).toBe(true);
+    // missing cookies → rejected; strict envelope rejects a stray key.
+    expect(
+      SetCookiesRequestSchema.safeParse({
+        type: 'setCookies',
+        requestId: 'rq_1',
+        sessionId: 'agt_1',
+      }).success,
+    ).toBe(false);
+    expect(
+      SetCookiesRequestSchema.safeParse({
+        type: 'setCookies',
+        requestId: 'rq_1',
+        sessionId: 'agt_1',
+        cookies: jar,
+        bogus: 1,
+      }).success,
+    ).toBe(false);
+    // a cookie missing the required value → rejected (shares CookieSchema).
+    expect(
+      SetCookiesRequestSchema.safeParse({
+        type: 'setCookies',
+        requestId: 'rq_1',
+        sessionId: 'agt_1',
+        cookies: [{ domain: 'x', name: 'y' }],
+      }).success,
+    ).toBe(false);
+    // node→CP setCookiesResult parses through the outbound union (ok + error shapes).
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'setCookiesResult',
+        requestId: 'rq_1',
+        sessionId: 'agt_1',
+        ok: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'setCookiesResult',
+        requestId: 'rq_1',
+        sessionId: 'agt_1',
+        error: 'session not found',
+      }).success,
+    ).toBe(true);
+    // requestId required.
+    expect(
+      HarnessOutboundSchema.safeParse({ type: 'setCookiesResult', sessionId: 'agt_1', ok: true })
+        .success,
     ).toBe(false);
   });
 

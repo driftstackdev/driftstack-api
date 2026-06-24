@@ -40,6 +40,11 @@ import {
   type CookiesOutcome,
 } from './cookies-request-correlator.js';
 import {
+  SetCookiesRequestCorrelator,
+  type SetCookiesTransport,
+  type SetCookiesOutcome,
+} from './set-cookies-request-correlator.js';
+import {
   UploadRequestCorrelator,
   type UploadTransport,
   type UploadOutcome,
@@ -51,11 +56,13 @@ import {
 } from './download-request-correlator.js';
 import {
   serializeCookiesRequest,
+  serializeSetCookies,
   serializeUploadFile,
   serializeListDownloads,
   serializeFetchDownload,
   serializeSessionEnd,
 } from './harness-control-codec.js';
+import type { Cookie } from '../schemas/harness-control-protocol.js';
 
 /** What the WS route hands in: a function that writes a string frame to the
  *  node's socket (the route adapts the real `ws.send`). */
@@ -71,6 +78,10 @@ export class FleetControlConnection {
   /** Founder #48 — correlates GET /:id/cookies pulls (cookiesRequest → cookiesResult)
    *  over this node's socket, keyed by requestId. Owned here like `correlator`. */
   readonly cookiesCorrelator: CookiesRequestCorrelator;
+  /** Cookie-import — correlates POST /:id/cookies/set writes (setCookies →
+   *  setCookiesResult) over this node's socket, keyed by requestId. The write-twin
+   *  of cookiesCorrelator; owned here like above. */
+  readonly setCookiesCorrelator: SetCookiesRequestCorrelator;
   /** File-control (A3 W2851) — correlates POST /:id/files uploads (uploadFile →
    *  uploadResult) over this node's socket, keyed by requestId. Owned like above. */
   readonly uploadCorrelator: UploadRequestCorrelator;
@@ -116,6 +127,8 @@ export class FleetControlConnection {
     this.correlator = new IntentDispatchCorrelator(transport);
     const cookiesTransport: CookiesTransport = { send: (r) => send(JSON.stringify(r)) };
     this.cookiesCorrelator = new CookiesRequestCorrelator(cookiesTransport);
+    const setCookiesTransport: SetCookiesTransport = { send: (r) => send(JSON.stringify(r)) };
+    this.setCookiesCorrelator = new SetCookiesRequestCorrelator(setCookiesTransport);
     const uploadTransport: UploadTransport = { send: (r) => send(JSON.stringify(r)) };
     this.uploadCorrelator = new UploadRequestCorrelator(uploadTransport);
     const downloadTransport: DownloadTransport = {
@@ -191,6 +204,25 @@ export class FleetControlConnection {
   ): Promise<CookiesOutcome> {
     const req = serializeCookiesRequest({ requestId, sessionId });
     return this.cookiesCorrelator.request(req, timeoutMs);
+  }
+
+  /**
+   * Cookie-import — WRITE a customer's exported jar into this session's cookie
+   * store over the node's live WSS. The write-twin of requestCookies: sends a
+   * `setCookies` (correlated by `requestId`) and awaits the matching
+   * `setCookiesResult`; resolves a uniform SetCookiesOutcome (ok / error / timeout)
+   * and NEVER rejects, so the route maps each case to a response. `requestId` is
+   * caller-generated (the route mints a uuid) so the key stays testable. `cookies`
+   * is the EXACT CookieSchema jar shape the read/Export emits (round-trips 1:1).
+   */
+  setCookies(
+    requestId: string,
+    sessionId: string,
+    cookies: Cookie[],
+    timeoutMs?: number,
+  ): Promise<SetCookiesOutcome> {
+    const req = serializeSetCookies({ requestId, sessionId, cookies });
+    return this.setCookiesCorrelator.request(req, timeoutMs);
   }
 
   /**
@@ -334,6 +366,14 @@ export class FleetControlConnection {
           // correlator. An unknown/stale requestId is a no-op (already settled).
           this.cookiesCorrelator.onResultFrame(frame);
           break;
+        case 'setCookiesResult':
+          // Cookie-import — settles the pending POST /:id/cookies/set request keyed
+          // by requestId (the harness echoes it). Self-contained request/reply like
+          // cookiesResult/uploadResult: no injected consumer; the awaiting route
+          // holds the promise via the connection's set-cookies correlator. An
+          // unknown/stale requestId is a no-op (already settled).
+          this.setCookiesCorrelator.onResultFrame(frame);
+          break;
         case 'uploadResult':
           // File-control (A3 W2851) — settles the pending POST /:id/files request
           // keyed by requestId (the harness echoes it). Self-contained request/reply
@@ -386,11 +426,13 @@ export class FleetControlConnection {
     }
   }
 
-  /** The socket closed/errored: fail every in-flight dispatch + cookies pull on
-   *  this node (so an awaiting GET /:id/cookies resolves immediately, not at timeout). */
+  /** The socket closed/errored: fail every in-flight dispatch + cookies pull +
+   *  cookie-import + upload + download on this node (so an awaiting request resolves
+   *  immediately, not at timeout). */
   close(reason: string): void {
     this.correlator.failAll(reason);
     this.cookiesCorrelator.failAll(reason);
+    this.setCookiesCorrelator.failAll(reason);
     this.uploadCorrelator.failAll(reason);
     this.downloadCorrelator.failAll(reason);
   }

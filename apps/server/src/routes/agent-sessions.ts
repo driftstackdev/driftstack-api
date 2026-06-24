@@ -63,6 +63,7 @@ import {
   serializeResumeSession,
 } from '../services/harness-control-codec.js';
 import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
+import { CookieSchema } from '../schemas/harness-control-protocol.js';
 import type { SessionPageStateStore } from '../services/session-page-state-store.js';
 import type {
   SessionLivenessStore,
@@ -1555,6 +1556,79 @@ export function registerAgentSessionsRoutes(
     },
   );
 
+  // Cookie-IMPORT — the WRITE-twin of GET /:id/cookies. Relays a customer's exported
+  // jar (the EXACT CookieSchema shape the read/Export emits — a cookies.json
+  // round-trips 1:1) into the running session's cookie store over the node's live
+  // control WSS (setCookies → setCookiesResult). Returns a DISCRIMINATED 200 body in
+  // every relay case (ok / unavailable / timeout / error), mirroring the upload route,
+  // so the GUI renders expected-inert states without HTTP-error noise. Malformed body
+  // (not an array of cookies) is a 422. Ships gated-inert until A3's harness setCookies
+  // WD-extension lands: until then a live node never replies → status:'timeout', which
+  // the GUI surfaces — and a not-live/offline session → status:'unavailable'.
+  //   status:'ok'          → write applied
+  //   status:'unavailable' → not wired / not live / node offline
+  //   status:'timeout'     → node didn't reply (A3 handler pending)
+  //   status:'error'       → node reported a failure (reason set)
+  const SetCookiesBodySchema = z.object({
+    // The customer's exported jar — same CookieSchema the read/Export emits, so a
+    // round-tripped cookies.json validates with no divergent shape. A bounded count
+    // keeps one request from flooding the box (a real jar is well under this).
+    cookies: z.array(CookieSchema).min(1).max(2000),
+  });
+  app.post<{ Params: { id: string } }>(
+    '/v1/agent-sessions/:id/cookies/set',
+    // Import is a WRITE (it mutates the session's cookie store). Same control-auth
+    // path as the upload route: the separate Simulator app holds only a per-session
+    // gui_control_key, not an account Bearer.
+    { preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')] },
+    async (req) => {
+      const rec = await sessions.get(req.params.id);
+      if (rec === null) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      // Account path: enforce ownership. Control-key path: already decrypt-matched
+      // against THIS `:id` in the preHandler (same as POST /:id/files).
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+      }
+      const parsed = SetCookiesBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // Control plane not wired (stateless deploy / no fleet registry).
+      if (fleetControlRegistry === undefined) {
+        return {
+          status: 'unavailable' as const,
+          reason: 'fleet control plane not enabled',
+        };
+      }
+      // The write targets the LIVE session's cookie store — a closed or
+      // never-dispatched session has none.
+      if (rec.status !== 'active' || rec.nodeId === null || rec.nodeId === undefined) {
+        return {
+          status: 'unavailable' as const,
+          reason: 'session is not live on a node',
+        };
+      }
+      const conn = fleetControlRegistry.get(rec.nodeId);
+      if (conn === undefined) {
+        return {
+          status: 'unavailable' as const,
+          reason: 'session node is not connected',
+        };
+      }
+      const outcome = await conn.setCookies(randomUUID(), rec.id, parsed.data.cookies);
+      if (outcome.status === 'ok') {
+        return { status: 'ok' as const };
+      }
+      if (outcome.status === 'error') {
+        return { status: 'error' as const, reason: outcome.message };
+      }
+      return { status: 'timeout' as const };
+    },
+  );
+
   // File-control upload (A3 W2851 / founder "control files"). Relays the customer's
   // file bytes (base64) into the running session's isolated 0o700 upload jail over
   // the node's live control WSS (uploadFile → uploadResult), returning an OPAQUE
@@ -2857,6 +2931,9 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   // Founder #48 — the cookies read is gated too (machine-readable 503, not a bare
   // 404) so the GUI Cookies panel surfaces the documented activation state.
   app.get('/v1/agent-sessions/:id/cookies', stub);
+  // Cookie-import — the cookies WRITE (import) is gated too (machine-readable 503,
+  // not a bare 404) so the GUI Cookies panel's Import surfaces the documented state.
+  app.post('/v1/agent-sessions/:id/cookies/set', stub);
   // File-control (A3 W2851) — the upload write is gated too (machine-readable 503)
   // so the GUI file picker surfaces the documented activation state.
   app.post('/v1/agent-sessions/:id/files', stub);

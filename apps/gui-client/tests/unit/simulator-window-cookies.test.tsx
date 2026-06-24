@@ -10,6 +10,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/react';
 
 const cookiesMock = vi.fn();
+const setCookiesMock = vi.fn();
 const downloadBlobMock = vi.fn();
 
 vi.mock('../../src/lib/livekit', () => ({
@@ -44,6 +45,7 @@ vi.mock('../../src/lib/agent-session-control', () => ({
   getAgentSession: () => Promise.resolve({ mode: 'manual', pairKind: null }),
   getAgentSessionPageState: () => Promise.resolve(null),
   getAgentSessionCookies: (...a: unknown[]) => cookiesMock(...a) as unknown,
+  setAgentSessionCookies: (...a: unknown[]) => setCookiesMock(...a) as unknown,
   uploadAgentSessionFile: () => Promise.resolve({ status: 'unavailable', handle: null }),
   listAgentSessionDownloads: () => Promise.resolve({ status: 'unavailable', files: null }),
   fetchAgentSessionDownload: () => Promise.resolve({ status: 'unavailable', file: null }),
@@ -84,6 +86,7 @@ const YEAR_FROM_NOW = Math.floor(Date.now() / 1000) + 400 * 24 * 3600;
 describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
   beforeEach(() => {
     cookiesMock.mockReset();
+    setCookiesMock.mockReset();
     downloadBlobMock.mockReset();
   });
 
@@ -141,7 +144,7 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
     expect(pane.textContent).toContain('⏱ 1y');
   });
 
-  it('Export downloads the jar as JSON; Import is disabled (pending A3)', async () => {
+  it('Export downloads the jar as JSON; Import is now ENABLED (the set-cookies wire is wired)', async () => {
     cookiesMock.mockResolvedValue({
       status: 'ok',
       cookies: [{ domain: 'example.com', name: 'sid', value: 'abc', secure: true, expires: null }],
@@ -160,12 +163,112 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
     expect(filename).toBe('cookies-agt_ck.json');
     expect(blob).toBeInstanceOf(Blob);
 
-    // Import stays disabled with the "next device update" affordance.
+    // Import is now enabled (a live session) + targets a real import, not the
+    // "next device update" placeholder title.
     const importBtn = container.querySelector(
       '[data-action="import-cookies"]',
     ) as HTMLButtonElement;
-    expect(importBtn.disabled).toBe(true);
-    expect(importBtn.getAttribute('title')).toContain('next device update');
+    expect(importBtn.disabled).toBe(false);
+    expect(importBtn.getAttribute('title')).toContain('Import a cookies.json');
+  });
+
+  it('Import reads a valid cookies.json, validates it, and calls setAgentSessionCookies → success note', async () => {
+    cookiesMock.mockResolvedValue({ status: 'ok', cookies: [] });
+    setCookiesMock.mockResolvedValue({ status: 'ok' });
+    const { container } = renderSim();
+    openCookies(container);
+
+    const input = (await waitFor(() => {
+      const i = container.querySelector('[data-component="simulator-cookies-import-input"]');
+      if (!i) throw new Error('not yet');
+      return i;
+    })) as HTMLInputElement;
+
+    const jar = [
+      {
+        domain: '.example.com',
+        name: 'sid',
+        value: 'abc',
+        httpOnly: true,
+        secure: true,
+        sameSite: 'Lax',
+      },
+      { domain: 'example.com', name: 'pref', value: 'dark' },
+    ];
+    const file = new File([JSON.stringify(jar)], 'cookies.json', { type: 'application/json' });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      const note = container.querySelector('[data-component="simulator-cookies-import-note"]');
+      if (!note || !note.textContent?.includes('Imported')) throw new Error('not yet');
+      return note;
+    });
+    // Called with the session id + the validated jar (round-trips 1:1).
+    expect(setCookiesMock).toHaveBeenCalledTimes(1);
+    const [calledId, calledJar] = setCookiesMock.mock.calls[0] as [string, unknown[]];
+    expect(calledId).toBe('agt_ck');
+    expect(calledJar).toEqual(jar);
+    const note = container.querySelector(
+      '[data-component="simulator-cookies-import-note"]',
+    ) as HTMLElement;
+    expect(note.textContent).toContain('Imported 2 cookies');
+  });
+
+  it('Import rejects a non-cookies file shape WITHOUT calling the server (clear validation note)', async () => {
+    cookiesMock.mockResolvedValue({ status: 'ok', cookies: [] });
+    const { container } = renderSim();
+    openCookies(container);
+
+    const input = (await waitFor(() => {
+      const i = container.querySelector('[data-component="simulator-cookies-import-input"]');
+      if (!i) throw new Error('not yet');
+      return i;
+    })) as HTMLInputElement;
+
+    // An array, but the entries are not cookies (no string domain/name/value).
+    const bad = new File([JSON.stringify([{ foo: 1 }])], 'bad.json', { type: 'application/json' });
+    fireEvent.change(input, { target: { files: [bad] } });
+
+    await waitFor(() => {
+      const note = container.querySelector('[data-component="simulator-cookies-import-note"]');
+      if (!note || !note.textContent?.includes('not a valid cookies file'.toLowerCase())) {
+        // case-insensitive substring check below; here just wait for any note text
+        if (!note || note.textContent === '') throw new Error('not yet');
+      }
+      return note;
+    });
+    const note = container.querySelector(
+      '[data-component="simulator-cookies-import-note"]',
+    ) as HTMLElement;
+    expect(note.textContent?.toLowerCase()).toContain('not a valid cookies file');
+    expect(setCookiesMock).not.toHaveBeenCalled();
+  });
+
+  it('Import surfaces the calm "next device update" note when the box half is not live (unavailable)', async () => {
+    cookiesMock.mockResolvedValue({ status: 'ok', cookies: [] });
+    setCookiesMock.mockResolvedValue({
+      status: 'unavailable',
+      reason: 'session is not live on a node',
+    });
+    const { container } = renderSim();
+    openCookies(container);
+
+    const input = (await waitFor(() => {
+      const i = container.querySelector('[data-component="simulator-cookies-import-input"]');
+      if (!i) throw new Error('not yet');
+      return i;
+    })) as HTMLInputElement;
+
+    const jar = [{ domain: 'example.com', name: 'sid', value: 'abc' }];
+    const file = new File([JSON.stringify(jar)], 'cookies.json', { type: 'application/json' });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      const note = container.querySelector('[data-component="simulator-cookies-import-note"]');
+      if (!note || !note.textContent?.includes('next device update')) throw new Error('not yet');
+      return note;
+    });
+    expect(setCookiesMock).toHaveBeenCalledTimes(1);
   });
 
   it('search filters by cookie name or domain', async () => {

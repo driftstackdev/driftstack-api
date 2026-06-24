@@ -39,6 +39,7 @@ import {
   getAgentSession,
   getAgentSessionPageState,
   getAgentSessionCookies,
+  setAgentSessionCookies,
   uploadAgentSessionFile,
   listAgentSessionDownloads,
   fetchAgentSessionDownload,
@@ -1241,24 +1242,59 @@ function CookieFlag({
   );
 }
 
+/** Validate a parsed cookies.json into a SessionCookie[] — accepts the exact shape
+ *  Export emits (an array whose every entry has string domain/name/value). Returns
+ *  the typed array or null when the shape is wrong (so the Import button can surface
+ *  a clear "not a valid cookies file" rather than POSTing garbage). Optional fields
+ *  are passed through verbatim; the server's CookieSchema is the authoritative
+ *  validator (this is the client-side shape pre-check the task asks for). */
+function parseImportedCookies(raw: unknown): SessionCookie[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const out: SessionCookie[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) return null;
+    const c = entry as Record<string, unknown>;
+    if (typeof c.domain !== 'string' || typeof c.name !== 'string' || typeof c.value !== 'string') {
+      return null;
+    }
+    const cookie: SessionCookie = { domain: c.domain, name: c.name, value: c.value };
+    if (typeof c.path === 'string') cookie.path = c.path;
+    if (typeof c.expires === 'number' || c.expires === null) cookie.expires = c.expires;
+    if (typeof c.httpOnly === 'boolean') cookie.httpOnly = c.httpOnly;
+    if (typeof c.secure === 'boolean') cookie.secure = c.secure;
+    if (c.sameSite === 'Strict' || c.sameSite === 'Lax' || c.sameSite === 'None')
+      cookie.sameSite = c.sameSite;
+    out.push(cookie);
+  }
+  return out;
+}
+
 /**
  * The fancy Cookies pane body — a self-contained sub-component so its local
  * search + per-domain open-state hooks live OUTSIDE the conditionally-rendered
  * branch in SimulatorWindow (hooks must be unconditional). Renders the inert
  * states (null → calm note; [] → "no cookies") and, when populated, the live
- * per-domain expandable jar with Export. Import is disabled (pending A3).
+ * per-domain expandable jar with Export. Import reads a cookies.json, validates
+ * the shape, and writes it into the live session over the control plane (the
+ * write-twin of the cookies read); it no-ops gracefully ("ships with the next
+ * device update") until A3's harness setCookies extension lands.
  */
 function CookiesPane({
   cookies,
   cookiesNote,
   sessionId,
+  controlAuth,
 }: {
   cookies: SessionCookie[] | null;
   cookiesNote: string | null;
   sessionId: string;
+  controlAuth: ControlAuth;
 }): JSX.Element {
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [importing, setImporting] = useState(false);
+  const [importNote, setImportNote] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const query = search.trim().toLowerCase();
   const groups = cookies === null ? [] : groupCookiesByDomain(cookies);
@@ -1289,6 +1325,63 @@ function CookiesPane({
       new Blob([JSON.stringify(cookies ?? [], null, 2)], { type: 'application/json' }),
     );
   };
+
+  // Import: read the chosen .json as text → JSON.parse → shape-validate an array of
+  // cookies → write into the live session over the control plane. Surfaces success /
+  // the failure reason / the calm "ships with the next device update" only for the
+  // gated-inert (status:'unavailable') state — so it no-ops gracefully until the box
+  // half lands. Mirrors the upload pane's FileReader idiom (readAsText vs DataURL).
+  const onImportFile = (file: File): void => {
+    setImporting(true);
+    setImportNote(null);
+    const reader = new FileReader();
+    reader.onerror = (): void => {
+      setImporting(false);
+      setImportNote('Could not read the file.');
+    };
+    reader.onload = (): void => {
+      const text = typeof reader.result === 'string' ? reader.result : '';
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        setImporting(false);
+        setImportNote('That file is not valid JSON.');
+        return;
+      }
+      const validated = parseImportedCookies(parsed);
+      if (validated === null) {
+        setImporting(false);
+        setImportNote('Not a valid cookies file (expected an array of cookies).');
+        return;
+      }
+      void setAgentSessionCookies(sessionId, validated, controlAuth)
+        .then((res) => {
+          if (res.status === 'ok') {
+            setImportNote(
+              `Imported ${validated.length} cookie${validated.length === 1 ? '' : 's'}.`,
+            );
+          } else if (res.status === 'unavailable') {
+            setImportNote('Import pending — cookie import ships with the next device update.');
+          } else if (res.status === 'timeout') {
+            setImportNote("Import timed out — the device didn't respond.");
+          } else {
+            setImportNote(
+              res.reason !== undefined ? `Import failed: ${res.reason}` : 'Import failed.',
+            );
+          }
+        })
+        .catch(() => {
+          // Gated 503 / 404 / network — cookie import isn't live on this build/box yet.
+          setImportNote('Import pending — cookie import ships with the next device update.');
+        })
+        .finally(() => {
+          setImporting(false);
+        });
+    };
+    reader.readAsText(file);
+  };
+  const canImport = sessionId !== '' && !importing;
 
   return (
     <section
@@ -1329,14 +1422,39 @@ function CookiesPane({
             type="button"
             data-action="import-cookies"
             aria-label="Import cookies"
-            title="Import ships with the next device update"
-            disabled
-            className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-0.5 font-sans text-[10px] text-white/80 transition-colors disabled:opacity-40"
+            title="Import a cookies.json into the session"
+            disabled={!canImport}
+            onClick={() => importInputRef.current?.click()}
+            className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-0.5 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
           >
-            <span aria-hidden="true">⬆</span> Import
+            <span aria-hidden="true">⬆</span> {importing ? 'Importing…' : 'Import'}
           </button>
+          {/* Hidden native picker — the Import button is a styled trigger over it.
+            Restricted to JSON; the onChange reads + validates + writes via onImportFile. */}
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".json,application/json"
+            data-component="simulator-cookies-import-input"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onImportFile(f);
+              e.target.value = '';
+            }}
+          />
         </span>
       </div>
+
+      {/* Import outcome — success / validation error / the calm pending note. */}
+      {importNote !== null && (
+        <div
+          data-component="simulator-cookies-import-note"
+          className="border-b border-white/10 px-3 py-1.5 font-mono text-[10px] text-amber-300/80"
+        >
+          {importNote}
+        </div>
+      )}
 
       {/* Search — filters by cookie name OR domain. */}
       {cookies !== null && cookies.length > 0 && (
@@ -3357,6 +3475,7 @@ export function SimulatorWindow(): JSX.Element {
                         cookies={cookies}
                         cookiesNote={cookiesNote}
                         sessionId={sessionId}
+                        controlAuth={controlAuth}
                       />
                     )}
 

@@ -683,7 +683,9 @@ export const CookiesRequestSchema = z
 export type CookiesRequest = z.infer<typeof CookiesRequestSchema>;
 
 // One cookie from the session's WKWebsiteDataStore.httpCookieStore (incl. httpOnly).
-const CookieSchema = z.object({
+// Exported so the cookie-import route can validate the customer's uploaded jar
+// against the SAME shape the read/Export emits (no divergent Cookie definition).
+export const CookieSchema = z.object({
   domain: z.string(),
   name: z.string(),
   value: z.string(),
@@ -706,6 +708,37 @@ export const CookiesResultSchema = z.object({
   error: z.string().optional(),
 });
 export type CookiesResult = z.infer<typeof CookiesResultSchema>;
+
+// ── Cookies IMPORT / WRITE (founder cookie-import — the write-twin of the PULL) ──
+// CP→node REQUEST (`serializeSetCookies`): POST /v1/agent-sessions/:id/cookies/set
+// relays a customer's exported jar (the EXACT CookieSchema shape the PULL/Export
+// emits — a cookies.json round-trips 1:1) over the node's LIVE control WSS, keyed by
+// `requestId`; A3's harness `setCookies` WD-extension (pending) writes each cookie
+// into the session's WKWebsiteDataStore.httpCookieStore and replies with the
+// `setCookiesResult` below. NOT in HarnessOutbound (that's node→CP); this is CP→node
+// like cookiesRequest / uploadFile. `cookies` REUSES CookieSchema verbatim (the
+// import + the read share one jar shape — no divergent Cookie definition).
+export const SetCookiesRequestSchema = z
+  .object({
+    type: z.literal('setCookies'),
+    requestId: z.string().min(1),
+    sessionId: z.string().min(1),
+    cookies: z.array(CookieSchema),
+  })
+  .strict();
+export type SetCookiesRequest = z.infer<typeof SetCookiesRequestSchema>;
+
+// node→CP RESULT: echoes `requestId`. SUCCESS (full write) → `ok:true`; FAILURE
+// (unknown/inactive session, write-fail) → `error` set, and the CP fast-fails the
+// pending request. Plain object (lenient forward-compat), like the sibling frames.
+export const SetCookiesResultSchema = z.object({
+  type: z.literal('setCookiesResult'),
+  requestId: z.string().min(1),
+  sessionId: z.string().min(1),
+  ok: z.boolean().optional(),
+  error: z.string().optional(),
+});
+export type SetCookiesResult = z.infer<typeof SetCookiesResultSchema>;
 
 // ── File UPLOAD (A3 W2851 / founder "control files") ──────────────────
 // CP→node REQUEST (`serializeUploadFile`): POST /v1/agent-sessions/:id/files relays
@@ -819,7 +852,9 @@ export type DownloadDataResult = z.infer<typeof DownloadDataResultSchema>;
 // CookiesRequestCorrelator — it settles a pending GET /:id/cookies request.
 // uploadResult (A3 W2851, file-control) is likewise correlated by `requestId`
 // inside the connection's UploadRequestCorrelator — it settles a pending POST
-// /:id/files request.
+// /:id/files request. setCookiesResult (cookie-import) is the write-twin of
+// cookiesResult — correlated by `requestId` inside the connection's
+// SetCookiesRequestCorrelator, settling a pending POST /:id/cookies/set.
 export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   IntentResultEnvelopeSchema,
   SessionStatusSchema,
@@ -831,6 +866,7 @@ export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   PageStateFrameSchema,
   ProfileSaveFailedSchema,
   CookiesResultSchema,
+  SetCookiesResultSchema,
   UploadResultSchema,
   DownloadsListResultSchema,
   DownloadDataResultSchema,

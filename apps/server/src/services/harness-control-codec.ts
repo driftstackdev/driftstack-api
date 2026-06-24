@@ -25,6 +25,7 @@ import {
   ResumeSessionSchema,
   ControlCommandSchema,
   CookiesRequestSchema,
+  SetCookiesRequestSchema,
   UploadFileRequestSchema,
   ListDownloadsRequestSchema,
   FetchDownloadRequestSchema,
@@ -38,6 +39,8 @@ import {
   type ControlCommand,
   type ControlCommandKind,
   type CookiesRequest,
+  type SetCookiesRequest,
+  type Cookie,
   type UploadFileRequest,
   type ListDownloadsRequest,
   type FetchDownloadRequest,
@@ -308,6 +311,27 @@ export function serializeCookiesRequest(args: {
     type: 'cookiesRequest',
     requestId: args.requestId,
     sessionId: args.sessionId,
+  });
+}
+
+/**
+ * Cookie-import — build a wire-ready `setCookies` to WRITE a customer's exported
+ * jar into the session's WKWebsiteDataStore.httpCookieStore over that node's WSS.
+ * The write-twin of serializeCookiesRequest; `cookies` is the EXACT CookieSchema
+ * shape the PULL/Export emits (a cookies.json round-trips 1:1). Correlated by
+ * `requestId` (the harness echoes it on the `setCookiesResult` reply). Re-validated
+ * so a malformed envelope never leaves the server.
+ */
+export function serializeSetCookies(args: {
+  requestId: string;
+  sessionId: string;
+  cookies: Cookie[];
+}): SetCookiesRequest {
+  return SetCookiesRequestSchema.parse({
+    type: 'setCookies',
+    requestId: args.requestId,
+    sessionId: args.sessionId,
+    cookies: args.cookies,
   });
 }
 

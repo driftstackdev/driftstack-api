@@ -232,6 +232,37 @@ export async function getAgentSessionCookies(
   };
 }
 
+/** Discriminated result of POST /v1/agent-sessions/:id/cookies/set (cookie-import —
+ *  the write-twin of getAgentSessionCookies). `ok` → the jar was written; every
+ *  other status is an inert/failure state the Import button surfaces calmly
+ *  ('unavailable' → "ships with the next device update"). */
+export interface SetCookiesResult {
+  status: 'ok' | 'unavailable' | 'timeout' | 'error';
+  reason?: string;
+}
+
+/** Import a customer's exported cookie jar into the running session's cookie store
+ *  (the write-twin of getAgentSessionCookies; mirrors uploadAgentSessionFile). The
+ *  `cookies` are the EXACT SessionCookie shape Export emits, so an exported
+ *  cookies.json round-trips 1:1. Throws (via authedFetch) on a non-2xx — the gated
+ *  503 / a 404 / a 422 (malformed jar) — so the caller surfaces those; a 200 always
+ *  carries a discriminated body. */
+export async function setAgentSessionCookies(
+  id: string,
+  cookies: SessionCookie[],
+  auth: ControlAuth = null,
+): Promise<SetCookiesResult> {
+  const body = (await authedFetch(
+    `/v1/agent-sessions/${encodeURIComponent(id)}/cookies/set`,
+    { method: 'POST', body: JSON.stringify({ cookies }) },
+    auth,
+  )) as Partial<SetCookiesResult>;
+  return {
+    status: body.status ?? 'error',
+    ...(body.reason !== undefined ? { reason: body.reason } : {}),
+  };
+}
+
 /** The OPAQUE handle the server returns for an uploaded file (matches the server
  *  UploadHandleSchema). `id` is a server/harness-internal ref — NEVER a disk path;
  *  the GUI lists files by this + hands it to a page's file-chooser. Founder
