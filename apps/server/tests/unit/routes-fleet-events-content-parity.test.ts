@@ -53,7 +53,7 @@ describe('routes/fleet-events content parity', () => {
     // harness caps inline outputData at 8 MiB → ~10.7 MiB base64 wire; 16 MiB headroom).
     expect(body).toMatch(/const FLEET_WS_MAX_PAYLOAD_BYTES = 16 \* 1024 \* 1024;/);
     expect(body).toMatch(
-      /await app\.register\(websocketPlugin, \{\s*options: \{ maxPayload: FLEET_WS_MAX_PAYLOAD_BYTES, autoPong: false \},\s*\}\);/,
+      /await app\.register\(websocketPlugin, \{\s*options: \{ maxPayload: FLEET_WS_MAX_PAYLOAD_BYTES \},\s*\}\);/,
     );
     expect(body).toMatch(/'\/v1\/fleet\/events',/);
     expect(body).toMatch(/websocket: true,/);
@@ -66,18 +66,17 @@ describe('routes/fleet-events content parity', () => {
     expect(body).toContain('{ auth: deps.auth, logger: req.log },');
   });
 
-  it('handler wiring pinned: register node by nodeId; route inbound messages; explicit PONG of inbound pings (autoPong:false) + 30s keepalive ping with NO terminate(); clearInterval + unregister on close + error', () => {
+  it('handler wiring pinned: register node by nodeId; route inbound messages; explicit PONG of inbound pings (+ ws auto-pong) + 30s keepalive ping with NO terminate(); clearInterval + unregister on close + error', () => {
     expect(body).toMatch(
       /const conn = deps\.registry\.register\(nodeId, \(data\) => socket\.send\(data\)\);/,
     );
     expect(body).toMatch(
       /socket\.on\('message', \(data: WsMessageData\) => conn\.handleInbound\(messageToString\(data\)\)\);/,
     );
-    // autoPong:false + an explicit ping->pong handler is the single guaranteed
-    // source of pongs for the node's keepalive ping; a 30s server->node ping
-    // keeps the direction warm. Must NOT terminate() — that RST surfaces as the
-    // box's ENOTCONN/Code-57 flap (a missed pong is not proof of death).
-    expect(body).toContain('autoPong: false');
+    // ws default auto-pong answers the node's ping; the explicit ping->pong
+    // handler is a logged backup; a 30s server->node ping keeps the direction
+    // warm. Must NOT terminate() — that RST surfaces as the box's ENOTCONN/Code-57
+    // flap (a missed pong is not proof of death).
     expect(body).toContain("socket.on('ping'");
     expect(body).toContain('socket.pong();');
     expect(body).toContain('socket.ping();');

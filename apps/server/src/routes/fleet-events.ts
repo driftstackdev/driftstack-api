@@ -80,11 +80,12 @@ export async function registerFleetEventsRoutes(
   // base64-encoded on the wire (~×1.33 → ~10.7 MiB) + a small JSON envelope.
   // 16 MiB clears that with headroom while cutting the ws default (100 MiB) ~6×.
   const FLEET_WS_MAX_PAYLOAD_BYTES = 16 * 1024 * 1024;
-  // autoPong:false — the handler PONGs inbound pings explicitly (single,
-  // greppable source) so a node keepalive ping is always answered even if a
-  // future ws/plugin default changes; see the socket.on('ping') handler below.
+  // Rely on ws's default auto-pong (autoPong defaults true) to answer the node's
+  // keepalive ping; the explicit socket.on('ping')->pong below is a logged backup.
+  // (autoPong is a ws *WebSocket* option, not a WebSocketServer option, so it
+  // can't be forced here via the plugin's server options regardless.)
   await app.register(websocketPlugin, {
-    options: { maxPayload: FLEET_WS_MAX_PAYLOAD_BYTES, autoPong: false },
+    options: { maxPayload: FLEET_WS_MAX_PAYLOAD_BYTES },
   });
 
   app.get(
@@ -111,6 +112,8 @@ export async function registerFleetEventsRoutes(
         return;
       }
       const conn = deps.registry.register(nodeId, (data) => socket.send(data));
+      // TEMP [fleet-diag] (W2893) — root-causing the -1011 silent-link flap; remove once closed.
+      req.log.info({ nodeId }, '[fleet-diag] node connected (fleet WS upgraded)');
       socket.on('message', (data: WsMessageData) => conn.handleInbound(messageToString(data)));
       // Explicitly PONG every inbound ping from the node. With autoPong:false in
       // the plugin options, ws no longer auto-replies, so this is the single,
@@ -121,6 +124,7 @@ export async function registerFleetEventsRoutes(
       socket.on('ping', () => {
         try {
           socket.pong();
+          req.log.info({ nodeId }, '[fleet-diag] pong sent (replied to node ping)');
         } catch {
           // socket already closing — ignore
         }
@@ -136,6 +140,7 @@ export async function registerFleetEventsRoutes(
       const keepalive = setInterval(() => {
         try {
           socket.ping();
+          req.log.info({ nodeId }, '[fleet-diag] keepalive ping sent');
         } catch {
           // socket already closing — ignore
         }
