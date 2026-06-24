@@ -44,7 +44,17 @@ import {
   type UploadTransport,
   type UploadOutcome,
 } from './upload-request-correlator.js';
-import { serializeCookiesRequest, serializeUploadFile } from './harness-control-codec.js';
+import {
+  DownloadRequestCorrelator,
+  type DownloadTransport,
+  type DownloadOutcome,
+} from './download-request-correlator.js';
+import {
+  serializeCookiesRequest,
+  serializeUploadFile,
+  serializeListDownloads,
+  serializeFetchDownload,
+} from './harness-control-codec.js';
 
 /** What the WS route hands in: a function that writes a string frame to the
  *  node's socket (the route adapts the real `ws.send`). */
@@ -63,6 +73,10 @@ export class FleetControlConnection {
   /** File-control (A3 W2851) — correlates POST /:id/files uploads (uploadFile →
    *  uploadResult) over this node's socket, keyed by requestId. Owned like above. */
   readonly uploadCorrelator: UploadRequestCorrelator;
+  /** File-control (A3 W2856) — correlates GET /:id/downloads list + fetch
+   *  (listDownloads→downloadsList, fetchDownload→downloadData) over this node's
+   *  socket, keyed by requestId. Owned like above. */
+  readonly downloadCorrelator: DownloadRequestCorrelator;
   private readonly send: FleetNodeSocketSend;
   private readonly onProfileSaved?: (frame: ProfileSaved) => void;
   // audit M1 — the cross-node frames now carry the connection's authenticated
@@ -103,6 +117,42 @@ export class FleetControlConnection {
     this.cookiesCorrelator = new CookiesRequestCorrelator(cookiesTransport);
     const uploadTransport: UploadTransport = { send: (r) => send(JSON.stringify(r)) };
     this.uploadCorrelator = new UploadRequestCorrelator(uploadTransport);
+    const downloadTransport: DownloadTransport = {
+      sendList: (r) => send(JSON.stringify(r)),
+      sendFetch: (r) => send(JSON.stringify(r)),
+    };
+    this.downloadCorrelator = new DownloadRequestCorrelator(downloadTransport);
+  }
+
+  /**
+   * File-control (A3 W2856) — LIST the files in this session's download jail over
+   * the node's live WSS. Sends a `listDownloads` (correlated by `requestId`) and
+   * awaits the matching `downloadsList`; resolves a uniform DownloadOutcome and
+   * NEVER rejects. `requestId` is caller-minted (route uuid) so the key stays testable.
+   */
+  requestDownloadList(
+    requestId: string,
+    sessionId: string,
+    timeoutMs?: number,
+  ): Promise<DownloadOutcome> {
+    const req = serializeListDownloads({ requestId, sessionId });
+    return this.downloadCorrelator.requestList(req, timeoutMs);
+  }
+
+  /**
+   * File-control (A3 W2856) — FETCH one jailed file's bytes (base64) by basename over
+   * the node's live WSS. Sends a `fetchDownload` (correlated by `requestId`) and
+   * awaits the matching `downloadData`; resolves a uniform DownloadOutcome and NEVER
+   * rejects. The harness re-sanitizes `name` to a basename + jail-confines it.
+   */
+  requestDownloadFetch(
+    requestId: string,
+    sessionId: string,
+    name: string,
+    timeoutMs?: number,
+  ): Promise<DownloadOutcome> {
+    const req = serializeFetchDownload({ requestId, sessionId, name });
+    return this.downloadCorrelator.requestFetch(req, timeoutMs);
   }
 
   /**
@@ -290,6 +340,15 @@ export class FleetControlConnection {
           // promise via the connection's upload correlator. Unknown id → no-op.
           this.uploadCorrelator.onResultFrame(frame);
           break;
+        case 'downloadsList':
+        case 'downloadData':
+          // File-control (A3 W2856) — settles the pending GET /:id/downloads list
+          // OR fetch request keyed by requestId (the harness echoes it). One
+          // correlator handles both: the frame `type` discriminates the outcome.
+          // Self-contained request/reply like cookiesResult/uploadResult; unknown
+          // id → no-op (already settled).
+          this.downloadCorrelator.onResultFrame(frame);
+          break;
         case 'heartbeat':
           // Liveness + fleet telemetry (file-48 §A5, fleet-admin-panel-design
           // Phase 0). SECURITY: cross-check the frame's self-reported macNodeId
@@ -332,6 +391,7 @@ export class FleetControlConnection {
     this.correlator.failAll(reason);
     this.cookiesCorrelator.failAll(reason);
     this.uploadCorrelator.failAll(reason);
+    this.downloadCorrelator.failAll(reason);
   }
 }
 

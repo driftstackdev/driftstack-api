@@ -26,6 +26,8 @@ import {
   ControlCommandSchema,
   CookiesRequestSchema,
   UploadFileRequestSchema,
+  ListDownloadsRequestSchema,
+  FetchDownloadRequestSchema,
   HARNESS_INTENT_PARAM_SCHEMAS,
   type IntentDispatch,
   type IntentResultEnvelope,
@@ -37,6 +39,8 @@ import {
   type ControlCommandKind,
   type CookiesRequest,
   type UploadFileRequest,
+  type ListDownloadsRequest,
+  type FetchDownloadRequest,
   type SessionAssignTransportMode,
   type HarnessIntentName,
   type HarnessErrorCode,
@@ -328,6 +332,40 @@ export function serializeUploadFile(args: {
     name: args.name,
     mime: args.mime,
     dataB64: args.dataB64,
+  });
+}
+
+/**
+ * File-control download (A3 W2856) — build a wire-ready `listDownloads` asking the
+ * node for the files in the session's download jail. Correlated by `requestId` (the
+ * harness echoes it on the `downloadsList` reply). Re-validated before it leaves.
+ */
+export function serializeListDownloads(args: {
+  requestId: string;
+  sessionId: string;
+}): ListDownloadsRequest {
+  return ListDownloadsRequestSchema.parse({
+    type: 'listDownloads',
+    requestId: args.requestId,
+    sessionId: args.sessionId,
+  });
+}
+
+/**
+ * File-control download (A3 W2856) — build a wire-ready `fetchDownload` to pull one
+ * jailed file's bytes (base64) by basename. Correlated by `requestId`; 64 MiB cap +
+ * basename re-sanitization + jail-confinement enforced harness-side.
+ */
+export function serializeFetchDownload(args: {
+  requestId: string;
+  sessionId: string;
+  name: string;
+}): FetchDownloadRequest {
+  return FetchDownloadRequestSchema.parse({
+    type: 'fetchDownload',
+    requestId: args.requestId,
+    sessionId: args.sessionId,
+    name: args.name,
   });
 }
 

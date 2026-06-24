@@ -749,8 +749,67 @@ export const UploadResultSchema = z.object({
 });
 export type UploadResult = z.infer<typeof UploadResultSchema>;
 
+// ── File DOWNLOAD (A3 W2856 / founder "control files") ────────────────
+// Poll model (mirrors cookies — no push event). A page's download-delegate writes
+// files strictly inside the per-session 0o700 download jail (DRIFTSTACK_DOWNLOAD_DIR,
+// never ~/Downloads); these list + fetch them, keyed by `requestId`. CP→node REQUESTS
+// (serialized by the codec) — NOT in HarnessOutbound (those are the node→CP results).
+//   listDownloads → downloadsList ;  fetchDownload(name) → downloadData (64 MiB cap).
+export const ListDownloadsRequestSchema = z
+  .object({
+    type: z.literal('listDownloads'),
+    requestId: z.string().min(1),
+    sessionId: z.string().min(1),
+  })
+  .strict();
+export type ListDownloadsRequest = z.infer<typeof ListDownloadsRequestSchema>;
+
+export const FetchDownloadRequestSchema = z
+  .object({
+    type: z.literal('fetchDownload'),
+    requestId: z.string().min(1),
+    sessionId: z.string().min(1),
+    // A basename the customer picked from a prior downloadsList; the harness
+    // re-sanitizes to a basename + confines it to the jail (defense in depth).
+    name: z.string().min(1),
+  })
+  .strict();
+export type FetchDownloadRequest = z.infer<typeof FetchDownloadRequestSchema>;
+
+// One file in the session's download jail — `name` is a bare basename (never a path).
+const DownloadEntrySchema = z.object({
+  name: z.string(),
+  size: z.number(),
+  mime: z.string().optional(),
+});
+export type DownloadEntry = z.infer<typeof DownloadEntrySchema>;
+
+// node→CP RESULT: echoes `requestId`. SUCCESS → `files` (possibly empty = "no
+// downloads yet"); FAILURE → `error`. Plain object (lenient), like cookiesResult.
+export const DownloadsListResultSchema = z.object({
+  type: z.literal('downloadsList'),
+  requestId: z.string().min(1),
+  sessionId: z.string().min(1),
+  files: z.array(DownloadEntrySchema).optional(),
+  error: z.string().optional(),
+});
+export type DownloadsListResult = z.infer<typeof DownloadsListResultSchema>;
+
+// node→CP RESULT: echoes `requestId`. SUCCESS → `mime` + `dataB64` (base64 bytes,
+// 64 MiB cap, jail-confined); FAILURE → `error` (not found / too large / read failed).
+export const DownloadDataResultSchema = z.object({
+  type: z.literal('downloadData'),
+  requestId: z.string().min(1),
+  sessionId: z.string().min(1),
+  name: z.string(),
+  mime: z.string().optional(),
+  dataB64: z.string().optional(),
+  error: z.string().optional(),
+});
+export type DownloadDataResult = z.infer<typeof DownloadDataResultSchema>;
+
 // ── HarnessOutbound union (server DECODES) ────────────────────────────
-// All 11 variants pinned. intentResult + sessionStatus are consumed precisely;
+// All 13 variants pinned. intentResult + sessionStatus are consumed precisely;
 // heartbeat / capabilityReport / errorEvent / profileSaved / challengeDetected
 // / pageState / profileSaveFailed are accepted (typed) + routed where a
 // consumer is wired (profileSaved consumer = step (d); challengeDetected relay
@@ -773,6 +832,8 @@ export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   ProfileSaveFailedSchema,
   CookiesResultSchema,
   UploadResultSchema,
+  DownloadsListResultSchema,
+  DownloadDataResultSchema,
 ]);
 export type HarnessOutbound = z.infer<typeof HarnessOutboundSchema>;
 export type ProfileSaved = z.infer<typeof ProfileSavedSchema>;

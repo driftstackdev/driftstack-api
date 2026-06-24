@@ -225,7 +225,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       /export const TERMINAL_SESSION_STATUSES = new Set<string>\(\['ended', 'errored'\]\);/,
     );
     expect(body).toMatch(
-      /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*ProfileSavedSchema,\s*\n?\s*ChallengeDetectedSchema,\s*\n?\s*PageStateFrameSchema,\s*\n?\s*ProfileSaveFailedSchema,\s*\n?\s*CookiesResultSchema,\s*\n?\s*UploadResultSchema,\s*\n?\s*\]\);/,
+      /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*ProfileSavedSchema,\s*\n?\s*ChallengeDetectedSchema,\s*\n?\s*PageStateFrameSchema,\s*\n?\s*ProfileSaveFailedSchema,\s*\n?\s*CookiesResultSchema,\s*\n?\s*UploadResultSchema,\s*\n?\s*DownloadsListResultSchema,\s*\n?\s*DownloadDataResultSchema,\s*\n?\s*\]\);/,
     );
     // ControlInbound.sessionEnd — the trivial W122 teardown envelope (source-pinned).
     expect(body).toMatch(

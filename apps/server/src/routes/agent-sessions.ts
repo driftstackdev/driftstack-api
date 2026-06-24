@@ -1658,6 +1658,133 @@ export function registerAgentSessionsRoutes(
     },
   );
 
+  // File-control download LIST (A3 W2856 / founder "control files"). Lists the files
+  // a page wrote into the session's isolated 0o700 download jail (never ~/Downloads).
+  // Read-scope; SAME control-auth + ownership + discriminated-200 shape as GET
+  // /:id/cookies. `files: []` (status ok) = "no downloads yet" (jail empty until the
+  // fork download-delegate populates it). Names are bare basenames, never paths.
+  app.get<{ Params: { id: string } }>(
+    '/v1/agent-sessions/:id/downloads',
+    { preHandler: [controlKeyOrAccountAuth('read'), app.rateLimit('global')] },
+    async (req) => {
+      const rec = await sessions.get(req.params.id);
+      if (rec === null) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+      }
+      if (fleetControlRegistry === undefined) {
+        return {
+          files: null,
+          status: 'unavailable' as const,
+          reason: 'fleet control plane not enabled',
+        };
+      }
+      if (rec.status !== 'active' || rec.nodeId === null || rec.nodeId === undefined) {
+        return {
+          files: null,
+          status: 'unavailable' as const,
+          reason: 'session is not live on a node',
+        };
+      }
+      const conn = fleetControlRegistry.get(rec.nodeId);
+      if (conn === undefined) {
+        return {
+          files: null,
+          status: 'unavailable' as const,
+          reason: 'session node is not connected',
+        };
+      }
+      const outcome = await conn.requestDownloadList(randomUUID(), rec.id);
+      if (outcome.status === 'list') {
+        return { files: outcome.files, status: 'ok' as const };
+      }
+      if (outcome.status === 'error') {
+        return { files: null, status: 'error' as const, reason: outcome.message };
+      }
+      if (outcome.status === 'data') {
+        // A fetch reply for a list request — never expected; treat as a failure.
+        return {
+          files: null,
+          status: 'error' as const,
+          reason: 'unexpected data frame for list request',
+        };
+      }
+      return { files: null, status: 'timeout' as const };
+    },
+  );
+
+  // File-control download FETCH (A3 W2856). Pulls one jailed file's bytes (base64)
+  // by basename (`?name=`). Read-scope; discriminated 200. The harness re-sanitizes
+  // `name` to a basename + jail-confines it (defense in depth) and caps at 64 MiB.
+  const DownloadFetchQuerySchema = z.object({ name: z.string().min(1).max(255) });
+  app.get<{ Params: { id: string }; Querystring: { name?: string } }>(
+    '/v1/agent-sessions/:id/downloads/content',
+    { preHandler: [controlKeyOrAccountAuth('read'), app.rateLimit('global')] },
+    async (req) => {
+      const q = DownloadFetchQuerySchema.safeParse(req.query ?? {});
+      if (!q.success) throw new ValidationError(q.error.flatten());
+      const rec = await sessions.get(req.params.id);
+      if (rec === null) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+      }
+      if (fleetControlRegistry === undefined) {
+        return {
+          file: null,
+          status: 'unavailable' as const,
+          reason: 'fleet control plane not enabled',
+        };
+      }
+      if (rec.status !== 'active' || rec.nodeId === null || rec.nodeId === undefined) {
+        return {
+          file: null,
+          status: 'unavailable' as const,
+          reason: 'session is not live on a node',
+        };
+      }
+      const conn = fleetControlRegistry.get(rec.nodeId);
+      if (conn === undefined) {
+        return {
+          file: null,
+          status: 'unavailable' as const,
+          reason: 'session node is not connected',
+        };
+      }
+      const outcome = await conn.requestDownloadFetch(randomUUID(), rec.id, q.data.name);
+      if (outcome.status === 'data') {
+        return {
+          file: {
+            name: outcome.name,
+            mime: outcome.mime ?? 'application/octet-stream',
+            dataB64: outcome.dataB64,
+          },
+          status: 'ok' as const,
+        };
+      }
+      if (outcome.status === 'error') {
+        return { file: null, status: 'error' as const, reason: outcome.message };
+      }
+      if (outcome.status === 'list') {
+        return {
+          file: null,
+          status: 'error' as const,
+          reason: 'unexpected list frame for fetch request',
+        };
+      }
+      return { file: null, status: 'timeout' as const };
+    },
+  );
+
   // Arc 2 sub-slice 8.3 (v2-#8) — SSE transcript stream. Registers
   // only when the event bus is wired (the live-stream functionality
   // is opt-in deploy-side). Last-Event-ID resumes from a prior
@@ -2709,6 +2836,10 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   // File-control (A3 W2851) — the upload write is gated too (machine-readable 503)
   // so the GUI file picker surfaces the documented activation state.
   app.post('/v1/agent-sessions/:id/files', stub);
+  // File-control download (A3 W2856) — list + fetch gated too (machine-readable 503)
+  // so the GUI download bar surfaces the documented activation state.
+  app.get('/v1/agent-sessions/:id/downloads', stub);
+  app.get('/v1/agent-sessions/:id/downloads/content', stub);
   app.post('/v1/agent-sessions/:id/message', stub);
   app.delete('/v1/agent-sessions/:id', stub);
   // Arc 2 sub-slice 8.9 (v2-#8) — pair-mode routes must also return
