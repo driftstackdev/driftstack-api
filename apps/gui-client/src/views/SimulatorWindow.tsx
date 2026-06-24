@@ -264,6 +264,35 @@ function formatRecBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/** A glanceable file-type glyph + accent color for the Files / Downloads cards
+ *  (mirrors the approved drawer-full-demo's file cards). Purely cosmetic — keyed
+ *  off the mime type with a filename-extension fallback; never affects behavior. */
+function fileGlyph(name: string, mime?: string): { icon: string; color: string } {
+  const m = (mime ?? '').toLowerCase();
+  const ext = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLowerCase() : '';
+  if (m.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext))
+    return { icon: '🖼️', color: '#c4b5fd' };
+  if (m === 'application/pdf' || ext === 'pdf') return { icon: '📄', color: '#7dd3fc' };
+  if (m.startsWith('video/') || ['mp4', 'mov', 'webm', 'mkv'].includes(ext))
+    return { icon: '🎬', color: '#f87171' };
+  if (m.startsWith('audio/') || ['mp3', 'wav', 'm4a', 'aac'].includes(ext))
+    return { icon: '🎵', color: '#34d399' };
+  if (
+    m.startsWith('text/') ||
+    ['txt', 'json', 'csv', 'md', 'xml', 'html', 'js', 'ts'].includes(ext)
+  )
+    return { icon: '📝', color: '#34d8c4' };
+  if (['zip', 'gz', 'tar', 'rar', '7z'].includes(ext)) return { icon: '🗜️', color: '#fbbf24' };
+  return { icon: '📦', color: '#7dd3fc' };
+}
+
+/** KB/MB size for a file/download card — same KB rounding the panes used before
+ *  (≥1 KB floor), promoting to MB once over ~1 MB for readability. */
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 /** iOS-style h:mm (12-hour, no leading zero, no AM/PM — matches the iOS status
  *  bar). The streamed screen is web content with no device clock of its own. */
 function formatStatusTime(d: Date): string {
@@ -2182,6 +2211,8 @@ export function SimulatorWindow(): JSX.Element {
   const [files, setFiles] = useState<SessionFileHandle[]>([]);
   const [uploadNote, setUploadNote] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  // Visual-only: highlight the drop-zone while a file is dragged over it.
+  const [fileDragOver, setFileDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const onUploadFile = (file: File): void => {
     if (file.size > 64 * 1024 * 1024) {
@@ -3112,100 +3143,189 @@ export function SimulatorWindow(): JSX.Element {
 
                     {/* Diagnostics — the session facts + Copy. (The drawer-close ✕
                       now lives in the pinned status strip.) */}
-                    {activePane === 'diagnostics' && (
-                      <section
-                        data-component="drawer-diagnostics"
-                        className="rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
-                      >
-                        <div className="mb-1 font-sans text-[11px] font-semibold text-white">
-                          Diagnostics
-                        </div>
-                        {profileName !== '' && (
-                          <div className="truncate">profile {profileName}</div>
-                        )}
-                        <div className="truncate">device {deviceName}</div>
-                        <div className="truncate">
-                          link {info ? wsHost(info.ws_url) : 'not connected'}
-                        </div>
-                        {proxyLabel !== '' && (
-                          <div className="truncate">egress 🌍 {proxyLabel}</div>
-                        )}
-                        <div className="truncate">
-                          {fps !== null && <span>{fps} fps · </span>}
-                          latency{' '}
-                          {latency.rttMs !== null ? (
-                            <span
-                              className={
-                                latency.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'
-                              }
-                            >
-                              {latency.rttMs} ms
-                            </span>
-                          ) : conn.rttMs !== null ? (
-                            <span
-                              className={conn.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'}
-                            >
-                              {conn.rttMs} ms (link)
-                            </span>
-                          ) : (
-                            <span className="text-white/50">measuring…</span>
-                          )}
-                        </div>
-                        <div className="truncate">
-                          transport{' '}
-                          {conn.transport !== null ? (
-                            <span
-                              className={
-                                conn.transport === 'udp' && conn.relayed !== true
-                                  ? 'text-emerald-300'
-                                  : 'text-rose-300'
-                              }
-                            >
-                              {conn.transport}
-                              {conn.relayed ? ' · relay ⚠' : ' · direct'}
-                            </span>
-                          ) : (
-                            <span className="text-white/50">measuring…</span>
-                          )}
-                        </div>
-                        {(conn.decodeFps !== null ||
-                          conn.packetLossPct !== null ||
-                          conn.freezeCount !== null) && (
-                          <div className="truncate text-white/70">
-                            {conn.decodeFps !== null && <span>decode {conn.decodeFps} fps · </span>}
-                            {conn.packetLossPct !== null && (
-                              <span className={conn.packetLossPct > 1 ? 'text-amber-300' : ''}>
-                                loss {conn.packetLossPct}% ·{' '}
+                    {activePane === 'diagnostics' &&
+                      (() => {
+                        // The latency value the strip/Copy report, with its
+                        // health color preserved (emerald < 150ms, else amber).
+                        const rttMs = latency.rttMs !== null ? latency.rttMs : conn.rttMs;
+                        const rttFromLink = latency.rttMs === null && conn.rttMs !== null;
+                        const rttHealthy = rttMs !== null && rttMs < 150;
+                        return (
+                          <section
+                            data-component="drawer-diagnostics"
+                            className="space-y-2.5 text-[11px] text-white/80"
+                          >
+                            <div className="flex items-center gap-2 font-sans text-[11px] font-semibold text-white">
+                              <span aria-hidden="true" className="text-accent">
+                                <svg
+                                  width="14"
+                                  height="14"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <polyline points="3,13 8,13 11,5 14,19 16,13 21,13" />
+                                </svg>
                               </span>
+                              <span>Diagnostics</span>
+                              <button
+                                type="button"
+                                data-action="copy-diagnostics"
+                                onClick={copyDiagnostics}
+                                className="ml-auto inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-white/80 transition-colors hover:bg-white/10"
+                              >
+                                <span aria-hidden="true">⧉</span>
+                                {diagCopied ? 'Copied ✓' : 'Copy'}
+                              </button>
+                            </div>
+
+                            {/* 2-up stat tiles — Render fps + Latency (with sparkline). */}
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
+                                <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                  Render
+                                </div>
+                                <div className="mt-0.5 text-[16px] font-bold leading-none">
+                                  {fps !== null ? fps : '—'}
+                                  <span className="ml-0.5 text-[10px] font-medium text-white/45">
+                                    fps
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
+                                <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                  Latency
+                                </div>
+                                {rttMs !== null ? (
+                                  <>
+                                    <div
+                                      className={`mt-0.5 text-[16px] font-bold leading-none ${
+                                        rttHealthy ? 'text-emerald-300' : 'text-amber-300'
+                                      }`}
+                                    >
+                                      {rttMs}
+                                      <span className="ml-0.5 text-[10px] font-medium text-white/45">
+                                        ms{rttFromLink ? ' (link)' : ''}
+                                      </span>
+                                    </div>
+                                    <svg
+                                      className="mt-1 h-[18px] w-full"
+                                      viewBox="0 0 100 22"
+                                      preserveAspectRatio="none"
+                                      aria-hidden="true"
+                                    >
+                                      <polyline
+                                        points="0,16 14,12 28,15 42,8 56,11 70,7 84,10 100,6"
+                                        fill="none"
+                                        stroke={rttHealthy ? '#34d399' : '#fbbf24'}
+                                        strokeWidth="1.5"
+                                      />
+                                    </svg>
+                                  </>
+                                ) : (
+                                  <div className="mt-0.5 text-[11px] text-white/50">measuring…</div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Transport + decode/loss/jitter/freeze line (preserved). */}
+                            <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2 font-mono text-[10px] leading-relaxed">
+                              <div className="font-sans text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                Transport
+                              </div>
+                              <div className="mt-0.5 truncate">
+                                {conn.transport !== null ? (
+                                  <span
+                                    className={
+                                      conn.transport === 'udp' && conn.relayed !== true
+                                        ? 'text-emerald-300'
+                                        : 'text-rose-300'
+                                    }
+                                  >
+                                    {conn.transport}
+                                    {conn.relayed ? ' · relay ⚠' : ' · direct'}
+                                  </span>
+                                ) : (
+                                  <span className="text-white/50">measuring…</span>
+                                )}
+                              </div>
+                              {(conn.decodeFps !== null ||
+                                conn.packetLossPct !== null ||
+                                conn.freezeCount !== null) && (
+                                <div className="mt-1 truncate text-white/70">
+                                  {conn.decodeFps !== null && (
+                                    <span>decode {conn.decodeFps} fps · </span>
+                                  )}
+                                  {conn.packetLossPct !== null && (
+                                    <span
+                                      className={conn.packetLossPct > 1 ? 'text-amber-300' : ''}
+                                    >
+                                      loss {conn.packetLossPct}% ·{' '}
+                                    </span>
+                                  )}
+                                  {conn.jitterMs !== null && (
+                                    <span>jitter {conn.jitterMs}ms · </span>
+                                  )}
+                                  {conn.freezeCount !== null && (
+                                    <span className={conn.freezeCount > 0 ? 'text-amber-300' : ''}>
+                                      freezes {conn.freezeCount}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Info cards — Profile / Device / Link / Egress (preserved values). */}
+                            {profileName !== '' && (
+                              <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
+                                <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                  Profile
+                                </div>
+                                <div className="mt-0.5 truncate">{profileName}</div>
+                              </div>
                             )}
-                            {conn.jitterMs !== null && <span>jitter {conn.jitterMs}ms · </span>}
-                            {conn.freezeCount !== null && (
-                              <span className={conn.freezeCount > 0 ? 'text-amber-300' : ''}>
-                                freezes {conn.freezeCount}
-                              </span>
+                            <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
+                              <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                Device
+                              </div>
+                              <div className="mt-0.5 truncate">{deviceName}</div>
+                            </div>
+                            <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
+                              <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                Link
+                              </div>
+                              <div className="mt-0.5 truncate">
+                                {info ? wsHost(info.ws_url) : 'not connected'}
+                                {info && <span className="text-emerald-300"> · ws ✓</span>}
+                              </div>
+                            </div>
+                            {proxyLabel !== '' && (
+                              <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
+                                <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                  Egress
+                                </div>
+                                <div className="mt-0.5 truncate">🌍 {proxyLabel}</div>
+                              </div>
                             )}
-                          </div>
-                        )}
-                        <div className="mt-1.5 border-t border-white/15 pt-1.5">
-                          <div className="font-sans text-[11px] font-semibold text-white">
-                            Identity
-                          </div>
-                          <div className="truncate">engine-deep · bit-exact device</div>
-                          <div className="truncate">input human-cadence native</div>
-                          <div className="truncate text-white/40">
-                            build {typeof __BUILD_STAMP__ !== 'undefined' ? __BUILD_STAMP__ : 'dev'}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          data-action="copy-diagnostics"
-                          onClick={copyDiagnostics}
-                          className="mt-1.5 w-full rounded border border-white/15 px-2 py-1 text-center font-sans text-[10px] text-white/70 transition hover:bg-white/10 hover:text-white"
-                        >
-                          {diagCopied ? 'Copied ✓' : 'Copy diagnostics'}
-                        </button>
-                      </section>
-                    )}
+
+                            {/* Identity facts (preserved). */}
+                            <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2 font-mono text-[10px] leading-relaxed text-white/80">
+                              <div className="font-sans text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                Identity
+                              </div>
+                              <div className="mt-0.5 truncate">engine-deep · bit-exact device</div>
+                              <div className="truncate">input human-cadence native</div>
+                              <div className="truncate text-white/40">
+                                build{' '}
+                                {typeof __BUILD_STAMP__ !== 'undefined' ? __BUILD_STAMP__ : 'dev'}
+                              </div>
+                            </div>
+                          </section>
+                        );
+                      })()}
 
                     {/* Cookies — live jar for the current page (httpOnly included), pulled
                       over the control plane; "pending" until the device build serves it.
@@ -3225,26 +3345,34 @@ export function SimulatorWindow(): JSX.Element {
                     {activePane === 'files' && (
                       <section
                         data-component="simulator-files"
-                        className="rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
+                        className="space-y-2.5 text-[11px] text-white/80"
                       >
-                        <div className="mb-1 flex items-center justify-between">
-                          <span className="font-sans text-[11px] font-semibold text-white">
-                            Files
-                            {files.length > 0 && (
-                              <span className="text-white/40"> · {files.length}</span>
-                            )}
+                        <div className="flex items-center gap-2 font-sans text-[11px] font-semibold text-white">
+                          <span aria-hidden="true" className="text-accent">
+                            <svg
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M4 15v4h16v-4" />
+                              <line x1="12" y1="3" x2="12" y2="14" />
+                              <polyline points="8,7 12,3 16,7" />
+                            </svg>
                           </span>
-                          <button
-                            type="button"
-                            aria-label="Upload file"
-                            title="Upload a file into the session"
-                            disabled={uploading || sessionId === ''}
-                            onClick={() => fileInputRef.current?.click()}
-                            className="rounded border border-white/15 bg-white/5 px-2 py-0.5 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
-                          >
-                            {uploading ? 'Uploading…' : '+ Upload'}
-                          </button>
+                          <span>Files</span>
+                          {files.length > 0 && (
+                            <span className="text-white/40">· {files.length}</span>
+                          )}
                         </div>
+
+                        {/* The hidden native input is the upload mechanism — the
+                          drop-zone below is a styled trigger over it. Behavior
+                          (onUploadFile, 64 MiB guard, opaque-handle list) unchanged. */}
                         <input
                           ref={fileInputRef}
                           type="file"
@@ -3255,22 +3383,83 @@ export function SimulatorWindow(): JSX.Element {
                             e.target.value = '';
                           }}
                         />
+
+                        {/* Dashed drop-zone — click OR drag-and-drop runs the same
+                          upload flow. Disabled (dimmed, non-interactive) while a
+                          previous upload is in flight or before a session is live. */}
+                        <button
+                          type="button"
+                          aria-label="Upload file"
+                          title="Upload a file into the session"
+                          disabled={uploading || sessionId === ''}
+                          onClick={() => fileInputRef.current?.click()}
+                          onDragOver={(e) => {
+                            if (uploading || sessionId === '') return;
+                            e.preventDefault();
+                            setFileDragOver(true);
+                          }}
+                          onDragLeave={() => setFileDragOver(false)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setFileDragOver(false);
+                            if (uploading || sessionId === '') return;
+                            const f = e.dataTransfer.files?.[0];
+                            if (f) onUploadFile(f);
+                          }}
+                          className={`flex w-full flex-col items-center gap-1 rounded-xl border border-dashed px-4 py-5 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                            fileDragOver
+                              ? 'border-accent bg-accent/5 text-accent'
+                              : 'border-white/15 text-white/45 hover:border-accent hover:bg-accent/5 hover:text-accent'
+                          }`}
+                        >
+                          <span aria-hidden="true" className="text-[15px] leading-none">
+                            ⬆
+                          </span>
+                          <span className="text-[11.5px] font-medium">
+                            {uploading ? 'Uploading…' : 'Drop a file or click to upload'}
+                          </span>
+                          <span className="text-[10px] text-white/35">
+                            → feeds the page&apos;s file picker · max 64 MiB
+                          </span>
+                        </button>
+
                         {uploadNote !== null && (
-                          <div className="mb-1 text-amber-300/80">{uploadNote}</div>
+                          <div className="font-mono text-[10px] text-amber-300/80">
+                            {uploadNote}
+                          </div>
                         )}
+
                         {files.length === 0 ? (
-                          <div className="text-white/40">no files uploaded</div>
+                          <div className="font-mono text-[10px] text-white/40">
+                            no files uploaded
+                          </div>
                         ) : (
-                          <div className="max-h-40 space-y-0.5 overflow-y-auto pr-1">
-                            {files.map((f) => (
-                              <div key={f.id} className="truncate">
-                                <span className="text-emerald-300/80">{f.name}</span>
-                                <span className="text-white/30">
-                                  {' '}
-                                  · {Math.max(1, Math.round(f.size / 1024))} KB
-                                </span>
-                              </div>
-                            ))}
+                          <div className="max-h-48 space-y-2 overflow-y-auto pr-0.5">
+                            {files.map((f) => {
+                              const g = fileGlyph(f.name, f.mime);
+                              return (
+                                <div
+                                  key={f.id}
+                                  className="flex items-center gap-2.5 rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2"
+                                >
+                                  <span
+                                    aria-hidden="true"
+                                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[13px]"
+                                    style={{ backgroundColor: `${g.color}22`, color: g.color }}
+                                  >
+                                    {g.icon}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate text-[11.5px] font-semibold text-white">
+                                      {f.name}
+                                    </div>
+                                    <div className="truncate text-[10px] text-white/40">
+                                      {formatFileSize(f.size)} · uploaded
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </section>
@@ -3282,44 +3471,87 @@ export function SimulatorWindow(): JSX.Element {
                     {activePane === 'downloads' && (
                       <section
                         data-component="simulator-downloads"
-                        className="rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
+                        className="space-y-2.5 text-[11px] text-white/80"
                       >
-                        <div className="mb-1 flex items-center justify-between">
-                          <span className="font-sans text-[11px] font-semibold text-white">
-                            Downloads
-                            {downloads !== null && downloads.length > 0 && (
-                              <span className="text-white/40"> · {downloads.length}</span>
-                            )}
+                        <div className="flex items-center gap-2 font-sans text-[11px] font-semibold text-white">
+                          <span aria-hidden="true" className="text-accent">
+                            <svg
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M4 15v4h16v-4" />
+                              <line x1="12" y1="3" x2="12" y2="14" />
+                              <polyline points="8,10 12,14 16,10" />
+                            </svg>
                           </span>
+                          <span>Downloads</span>
+                          {downloads !== null && downloads.length > 0 && (
+                            <span className="text-white/40">· {downloads.length}</span>
+                          )}
+                          {downloads !== null && (
+                            <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold text-emerald-300">
+                              <span
+                                aria-hidden="true"
+                                className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.8)]"
+                              />
+                              live
+                            </span>
+                          )}
                         </div>
+
                         {downloadsNote !== null && (
-                          <div className="mb-1 text-amber-300/80">{downloadsNote}</div>
+                          <div className="font-mono text-[10px] text-amber-300/80">
+                            {downloadsNote}
+                          </div>
                         )}
+
                         {downloads === null || downloads.length === 0 ? (
-                          <div className="text-white/40">no downloads yet</div>
+                          <div className="font-mono text-[10px] text-white/40">
+                            no downloads yet
+                          </div>
                         ) : (
-                          <div className="max-h-40 space-y-0.5 overflow-y-auto pr-1">
-                            {downloads.map((d) => (
-                              <div key={d.name} className="flex items-center justify-between gap-2">
-                                <span className="truncate">
-                                  <span className="text-sky-300/80">{d.name}</span>
-                                  <span className="text-white/30">
-                                    {' '}
-                                    · {Math.max(1, Math.round(d.size / 1024))} KB
-                                  </span>
-                                </span>
-                                <button
-                                  type="button"
-                                  aria-label={`Save ${d.name}`}
-                                  title="Save this file to your machine"
-                                  disabled={downloadingName !== null}
-                                  onClick={() => onDownloadFile(d.name)}
-                                  className="shrink-0 rounded border border-white/15 bg-white/5 px-2 py-0.5 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
+                          <div className="max-h-48 space-y-2 overflow-y-auto pr-0.5">
+                            {downloads.map((d) => {
+                              const g = fileGlyph(d.name, d.mime);
+                              return (
+                                <div
+                                  key={d.name}
+                                  className="flex items-center gap-2.5 rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2"
                                 >
-                                  {downloadingName === d.name ? 'Saving…' : 'Save'}
-                                </button>
-                              </div>
-                            ))}
+                                  <span
+                                    aria-hidden="true"
+                                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[13px]"
+                                    style={{ backgroundColor: `${g.color}22`, color: g.color }}
+                                  >
+                                    {g.icon}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate text-[11.5px] font-semibold text-white">
+                                      {d.name}
+                                    </div>
+                                    <div className="truncate text-[10px] text-white/40">
+                                      {formatFileSize(d.size)}
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    aria-label={`Save ${d.name}`}
+                                    title="Save this file to your machine"
+                                    disabled={downloadingName !== null}
+                                    onClick={() => onDownloadFile(d.name)}
+                                    className="shrink-0 rounded-md border border-white/15 bg-white/5 px-2 py-1 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
+                                  >
+                                    {downloadingName === d.name ? 'Saving…' : '⬇ Save'}
+                                  </button>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </section>
