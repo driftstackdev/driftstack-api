@@ -1,18 +1,16 @@
 // W487.A — drift guard for apps/admin-panel/src/pages/leads.astro.
-// Pre-signup interest tracking page. Drift here either swaps the
-// SOURCE_BADGE/SOURCE_LABEL 4-key catalogue (badges go grey when a
-// new source variant lands without a matching label entry) or
-// drops the audit-log framing ('All actions audit-logged') which
-// is the operator's contract that lead-conversion writes the
-// admin_audit_log.
+// Lead capture isn't wired yet (no /v1/admin/leads route, no leads table).
+// The page previously SSG-rendered fabricated MOCK_LEADS rows with dead
+// /leads/{id} links + dead #convert / #archive anchors (no handlers, no
+// backend), presenting fake records as real ops data. It is now an honest
+// "coming soon" empty state. Drift here either re-introduces the fabricated
+// mock rows / dead action links, or invents an unimplemented backend.
 //
-//   • SOURCE_BADGE + SOURCE_LABEL 4-key catalogue (pricing_cta /
-//     docs_signup / email_inbound / other).
-//   • Convert-to-account + Archive + Email reply per-row actions.
-//   • 'Conversion creates an account row + sends a magic-link
-//     signup email. Archive marks the lead resolved without
-//     account creation. All actions audit-logged.' framing.
-//   • MOCK_LEADS empty-state branch.
+//   • Honest header + subhead (no claim that conversion/archive works).
+//   • "Coming soon" empty-state card explaining there's no backend yet.
+//   • NO MOCK_LEADS import / render.
+//   • NO dead action links (/leads/{id}, #convert-, #archive-, mailto:).
+//   • NO unimplemented audit-log "Conversion creates an account row…" claim.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -30,59 +28,38 @@ function read(p: string): string {
 describe('W487.A apps/admin-panel/src/pages/leads.astro content parity', () => {
   const body = read(LIB);
 
-  it("Page-header framing: 'Leads' h1 + 'Pre-signup interest captured…' subhead. 2026-05-23 — h1 wrapped in oxblood gradient span (admin-panel visual unification); pin loosened to label-presence + subhead anchor.", () => {
+  it("Page-header framing: 'Leads' h1 (oxblood gradient) + honest subhead that the surface 'will appear here once lead capture is wired' (no longer claims active convert/archive) — pinned so the header doesn't promise functionality the backend doesn't have", () => {
     expect(body).toMatch(/<h1 class="text-3xl font-semibold tracking-tight text-tk-ink">/);
     expect(body).toMatch(/>Leads</);
     expect(body).toMatch(
-      /Pre-signup interest captured from the marketing site, docs, and inbound\s*\n?\s*email\. Convert to account or archive once contacted\./,
+      /Pre-signup interest captured from the marketing site, docs, and inbound\s*\n?\s*email will appear here once lead capture is wired\./,
     );
   });
 
-  it("SOURCE_BADGE + SOURCE_LABEL 4-key catalogue: pricing_cta ('Pricing CTA' / oxblood-50) / docs_signup ('Docs signup' / blue-50) / email_inbound ('Email inbound' / emerald-50) / other ('Other' / slate-100) — pinned so the badge colour ↔ label mapping stays in sync (drift to a 3-key catalogue would silently grey out a real source when the lookup falls through)", () => {
+  it("'Coming soon' empty-state card: explains lead capture isn't wired yet (no backend route for leads) so operators don't mistake an empty surface for a broken one — pinned so the page stays an honest not-yet-built state rather than fabricated demo rows", () => {
     expect(body).toMatch(
-      /const SOURCE_BADGE: Record<string, string> = \{\s*\n?\s*pricing_cta: 'bg-tk-accent\/10 text-tk-accent',\s*\n?\s*docs_signup: 'bg-blue-50 text-blue-700',\s*\n?\s*email_inbound: 'bg-emerald-50 text-emerald-700',\s*\n?\s*other: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*\};/,
+      /<h2 class="text-lg font-semibold tracking-tight text-tk-ink">Coming soon<\/h2>/,
     );
     expect(body).toMatch(
-      /const SOURCE_LABEL: Record<string, string> = \{\s*\n?\s*pricing_cta: 'Pricing CTA',\s*\n?\s*docs_signup: 'Docs signup',\s*\n?\s*email_inbound: 'Email inbound',\s*\n?\s*other: 'Other',\s*\n?\s*\};/,
-    );
-  });
-
-  it("Per-row 3-action surface: Convert-to-account → href=#convert-{id} + Archive → href=#archive-{id} + Email reply → mailto:{email} — pinned so the action vocabulary stays consistent (convert / archive / email) and the email-reply path uses the customer's address as a true mailto: link (not an in-app composer that doesn't exist)", () => {
-    expect(body).toMatch(
-      /<a href=\{`#convert-\$\{lead\.id\}`\} class="text-sm text-tk-accent hover:underline">\s*\n?\s*Convert to account →\s*\n?\s*<\/a>/,
-    );
-    expect(body).toMatch(
-      /<a href=\{`#archive-\$\{lead\.id\}`\} class="text-sm text-tk-ink-2 hover:underline">\s*\n?\s*Archive\s*\n?\s*<\/a>/,
-    );
-    expect(body).toMatch(/href=\{`mailto:\$\{lead\.email\}`\}/);
-  });
-
-  it("Empty-state branch: MOCK_LEADS.length === 0 → 'No leads yet' + 'Once the marketing site captures signup intent, leads land here for sales follow-up.' — pinned so operators visiting the page with zero leads see a clear 'this is working, just empty' message instead of a bare empty table that looks broken", () => {
-    expect(body).toMatch(/No leads yet/);
-    expect(body).toMatch(
-      /Once the marketing site captures signup intent, leads land here for\s*\n?\s*sales follow-up\./,
+      /Lead capture isn't wired yet — there's no backend route for leads\. Once\s*\n?\s*the marketing site captures signup intent, leads will land here for\s*\n?\s*sales follow-up\./,
     );
   });
 
-  it("Audit-log framing pinned: 'Conversion creates an account row + sends a magic-link signup email. Archive marks the lead resolved without account creation. All actions audit-logged.' — pinned so the audit-log invariant stays explicit on the page that operators do conversion/archive from (drift to a softer 'logged' phrasing weakens the audit-trail contract)", () => {
-    expect(body).toMatch(
-      /Conversion creates an account row \+ sends a magic-link signup email\.\s*\n?\s*Archive marks the lead resolved without account creation\. All actions\s*\n?\s*audit-logged\./,
-    );
+  it('NO fabricated mock rows: leads.astro must NOT import or render MOCK_LEADS — pinned so the page never SSG-renders fake leads (with real-looking capture dates + emails) into the prod artifact', () => {
+    expect(body).not.toMatch(/MOCK_LEADS/);
+    expect(body).not.toMatch(/from '\.\.\/data\/mocks/);
   });
 
-  it("Filter bar: search input ('Filter by email or notes…') + source <select> with 5 options (All sources / pricing_cta / docs_signup / email_inbound / other) — pinned so the filter taxonomy mirrors the SOURCE_BADGE catalogue (adding a 5th source means the select needs the 5th option too — drift would make the new source unfilterable)", () => {
-    expect(body).toMatch(/placeholder="Filter by email or notes…"/);
-    expect(body).toMatch(/<option value="">All sources<\/option>/);
-    expect(body).toMatch(/<option value="pricing_cta">Pricing CTA<\/option>/);
-    expect(body).toMatch(/<option value="docs_signup">Docs signup<\/option>/);
-    expect(body).toMatch(/<option value="email_inbound">Email inbound<\/option>/);
-    expect(body).toMatch(/<option value="other">Other<\/option>/);
+  it('NO dead action links: no /leads/{id} detail link (no leads/[id].astro exists), no #convert- / #archive- fragment anchors (no handlers), no mailto: per-row action — pinned so the page never ships affordances that go nowhere', () => {
+    expect(body).not.toMatch(/href=\{`\/leads\//);
+    expect(body).not.toMatch(/#convert-/);
+    expect(body).not.toMatch(/#archive-/);
+    expect(body).not.toMatch(/mailto:/);
   });
 
-  it("fmtIso helper: ISO → 'YYYY-MM-DD HH:MM UTC' format (slice(0, 16) + ' UTC') — pinned so the captured-at timestamps stay in a consistent UTC display format across the admin panel (drift to a locale-dependent format would make timestamps interpretation-dependent for ops staff in different timezones)", () => {
-    expect(body).toMatch(
-      /function fmtIso\(iso: string\): string \{\s*\n?\s*return new Date\(iso\)\.toISOString\(\)\.replace\('T', ' '\)\.slice\(0, 16\) \+ ' UTC';\s*\n?\s*\}/,
-    );
+  it("NO unimplemented backend claim: the footnote 'Conversion creates an account row + sends a magic-link signup email…' is gone (it described functionality that doesn't exist) — pinned so the page doesn't document a non-existent feature as if it were live", () => {
+    expect(body).not.toMatch(/Conversion creates an account row/);
+    expect(body).not.toMatch(/sends a magic-link signup email/);
   });
 
   it('file exists at canonical path', () => {

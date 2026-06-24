@@ -5,10 +5,11 @@
 //     admin-rate-limit-overrides.ts.
 //   • DELETE /v1/admin/accounts/:id/quota-override registered
 //     in admin-accounts.ts (the clear-now endpoint).
-//   • Bucket-key footnote lists 'global' + 'session_create' +
-//     'capture' (V-194 documented bucket set).
+//   • Bucket-key footnote lists the canonical enum 'global' +
+//     'sessions:create' + 'agent_sessions:message' (the old
+//     session_create / capture values were rejected by the server).
 //   • BUCKET_LABEL identical between frontmatter + inline
-//     <script>; covers 'global' + 'sessions:create' keys.
+//     <script>; covers all canonical enum keys.
 //   • 14-day default TTL claim pinned (operational expectation
 //     for time-boxed bumps).
 //   • "Permanent overrides allowed but flagged in weekly audit-
@@ -64,12 +65,16 @@ describe('W363.C admin-panel /rate-limit-overrides page content parity', () => {
     expect(body).toMatch(/method: 'DELETE'/);
   });
 
-  it('bucket-key footnote lists global + session_create + capture (V-194 documented set)', () => {
-    // Three known bucket categories the customer-facing
-    // override surface exposes.
+  it('bucket-key footnote lists the canonical enum (global + sessions:create + agent_sessions:message)', () => {
+    // The canonical SetQuotaOverrideRequestSchema bucket keys the
+    // override surface accepts. The prior footnote documented the
+    // (rejected) session_create / capture values, which always 400'd.
     expect(body).toMatch(/<code class="font-mono">global<\/code>/);
-    expect(body).toMatch(/<code class="font-mono">session_create<\/code>/);
-    expect(body).toMatch(/<code class="font-mono">capture<\/code>/);
+    expect(body).toMatch(/<code class="font-mono">sessions:create<\/code>/);
+    expect(body).toMatch(/<code class="font-mono">agent_sessions:message<\/code>/);
+    // Regression guard: the old rejected bucket names must not return.
+    expect(body).not.toMatch(/<code class="font-mono">session_create<\/code>/);
+    expect(body).not.toMatch(/<code class="font-mono">capture<\/code>/);
   });
 
   it('BUCKET_LABEL identical between frontmatter + inline <script>', () => {

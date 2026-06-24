@@ -143,14 +143,16 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     expect(existsSync(resolve(REPO_ROOT, 'apps/admin-panel/src/pages/audit-log.astro'))).toBe(true);
   });
 
-  it('no-token state: shows "preview" banner instead of redirecting away', () => {
-    // V-190 / V-191 — page renders SSR-served mock counts when the
-    // staff visitor has no token; surfaces a "sign-in to see live
-    // data" banner. A future refactor that hard-redirects would
-    // break the offline-preview affordance.
+  it('no-token state: shows "sign-in" banner instead of redirecting away (and clears the mock-derived counts)', () => {
+    // V-190 / V-191 — page surfaces a "sign-in to see live data"
+    // banner when the staff visitor has no token (no hard-redirect).
+    // W604 — the SSR mock-derived account counts / tier bars are now
+    // reset to neutral placeholders (resetMockTiles) so the no-token
+    // state never shows fabricated platform metrics; the banner copy
+    // dropped the now-inaccurate "Showing preview below." clause.
     expect(body).toMatch(/if \(!token\)/);
-    expect(body).toMatch(
-      /Sign in with a staff admin account to see live data\. Showing preview below\./,
-    );
+    expect(body).toMatch(/Sign in with a staff admin account to see live data\./);
+    expect(body).not.toMatch(/Showing preview below\./);
+    expect(body).toMatch(/function resetMockTiles\(\)/);
   });
 });

@@ -38,6 +38,12 @@ const STATUS_BADGE: Record<string, string> = {
   atlas_appended: 'bg-emerald-100 text-emerald-800 font-medium',
   atlas_failed: 'bg-red-100 text-red-800 font-medium',
 };
+
+// Use the env-resolved API origin like every sibling admin page so a
+// staging/local build queries its own environment instead of always
+// hitting PROD (previously this page hardcoded https://api.driftstack.dev).
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <AdminLayout title={PAGE_TITLE}>
@@ -164,7 +170,7 @@ const STATUS_BADGE: Record<string, string> = {
     <p id="status-line" class="mt-2 text-xs text-tk-ink-3"></p>
   </div>
 
-  <script is:inline define:vars={{ STATUS_BADGE }}>
+  <script is:inline define:vars={{ STATUS_BADGE, apiBaseUrl }}>
     const POLL_INTERVAL_MS = 30000;
     const tbody = document.getElementById('queue-tbody');
     const errorBanner = document.getElementById('error-banner');
@@ -219,8 +225,10 @@ const STATUS_BADGE: Record<string, string> = {
       // static Cloudflare Pages project — relative paths 404'd). The
       // staff bearer token lives in ds_web_session_token (set by the
       // SSO bridge); the legacy `ds_admin_session_token` key was never
-      // populated anywhere.
-      const url = 'https://api.driftstack.dev/v1/admin/atlas-priority/queue?' + params.toString();
+      // populated anywhere. Origin comes from resolveApiBaseUrl()
+      // (per-environment) like every sibling page, not a hardcoded prod
+      // host — so a staging/local admin build queries its own env.
+      const url = apiBaseUrl + '/v1/admin/atlas-priority/queue?' + params.toString();
       const token = localStorage.getItem('ds_web_session_token');
       try {
         const res = await fetch(url, {

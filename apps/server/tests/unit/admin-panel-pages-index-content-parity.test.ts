@@ -80,15 +80,11 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
   });
 
   it("403-forbidden + no-token banner branches: 'Sign in with a staff admin account to see live data. Showing preview below.' (no-token) + 'Access denied — admin scope required. You are signed in as a customer account.' (403) + 'Couldn't load overview (msg). Showing preview data below.' (fetch-error) — pinned so the 3-state banner taxonomy stays in sync with the V-190 framing comment", () => {
-    expect(body).toMatch(
-      /showBanner\('Sign in with a staff admin account to see live data\. Showing preview below\.'\);/,
-    );
+    expect(body).toMatch(/showBanner\('Sign in with a staff admin account to see live data\.'\);/);
     expect(body).toMatch(
       /showBanner\(\s*\n?\s*'Access denied — admin scope required\. You are signed in as a customer account\.',\s*\n?\s*\);/,
     );
-    expect(body).toMatch(
-      /showBanner\("Couldn't load overview \(" \+ msg \+ '\)\. Showing preview data below\.'\);/,
-    );
+    expect(body).toMatch(/showBanner\("Couldn't load overview \(" \+ msg \+ '\)\.'\);/);
   });
 
   it("Token storage key 'ds_web_session_token' + authedFetch helper: apiBaseUrl + path + 'authorization: Bearer ' + credentials:'include' — pinned so the customer-dashboard ↔ admin-panel token-storage key stays in sync and the credentials-include flag carries the session cookie (required for V-269 dual-cookie session model on cross-origin admin requests)", () => {

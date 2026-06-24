@@ -2,16 +2,38 @@
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { MOCK_INCIDENTS } from '../../data/mocks.ts';
 
-export function getStaticPaths() {
-  return MOCK_INCIDENTS.map((inc) => ({ params: { id: inc.id } }));
-}
+// V-200* — converted from `getStaticPaths` static enumeration (mock ids
+// only) to SSR via the @astrojs/cloudflare adapter, mirroring the
+// accounts/[id].astro V-200 fix. The page now serves ANY incident id at
+// request time; Cloudflare Pages routes /incidents/<inc_…> to the Worker
+// which renders this template with `Astro.params.id` set. The prior
+// getStaticPaths build-time enumeration 404'd every REAL incident id (only
+// the MOCK_INCIDENTS ids had pages), so the whole incident-management
+// surface (Post update / Mark resolved / Reopen) was dead for live
+// incidents. MOCK_INCIDENTS is now only a paint-shell fallback when the URL
+// id matches a mock entry; non-mock ids render a minimal placeholder shell
+// that the inline script then populates from GET /v1/admin/incidents/:id.
+export const prerender = false;
 
 const { id } = Astro.params;
-const incident = MOCK_INCIDENTS.find((inc) => inc.id === id);
-
-if (!incident) {
-  return Astro.redirect('/incidents');
-}
+const incident = MOCK_INCIDENTS.find((inc) => inc.id === id) ?? {
+  // Placeholder shell when the URL id isn't in the mock list. The inline
+  // script's loadIncident() rewrites every value once the live fetch
+  // completes; what's rendered statically here is the loading / no-token /
+  // fetch-error fallback only. Shell defaults to a non-resolved state so the
+  // Post-update + Mark-resolved forms render in the shell (the script hides
+  // them + reveals the Reopen form once the live status comes back resolved).
+  id: id ?? '',
+  title: 'Incident',
+  description: '',
+  severity: 'minor' as 'minor' | 'major' | 'outage',
+  status: 'investigating' as 'investigating' | 'identified' | 'monitoring' | 'resolved',
+  affectedComponents: [] as string[],
+  public: true,
+  startedAt: new Date().toISOString(),
+  resolvedAt: null as string | null,
+  updates: [] as { id: string; message: string; status: string; postedAt: string }[],
+};
 
 // V-344 — apiBaseUrl exposed to inline script for live form wiring.
 import { resolveApiBaseUrl } from '../../lib/api-base-url';
@@ -47,9 +69,10 @@ const isResolved = incident.status === 'resolved';
       role="status"
     ></div>
 
-    <header class="mt-4 mb-8">
+    <header class="mt-4 mb-8" data-page="admin-incident-detail">
       <div class="flex flex-wrap items-center gap-2">
         <span
+          data-field="severity-badge"
           class:list={[
             'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
             SEVERITY_BADGE[incident.severity] ?? '',
@@ -58,6 +81,7 @@ const isResolved = incident.status === 'resolved';
           {incident.severity}
         </span>
         <span
+          data-field="status-badge"
           class:list={[
             'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
             STATUS_BADGE[incident.status] ?? '',
@@ -65,16 +89,20 @@ const isResolved = incident.status === 'resolved';
         >
           {incident.status}
         </span>
-        {!incident.public && (
-          <span class="inline-flex rounded-full bg-tk-hover px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">
-            private
-          </span>
-        )}
+        <span
+          data-field="private-badge"
+          class:list={[
+            'inline-flex rounded-full bg-tk-hover px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2',
+            incident.public ? 'hidden' : '',
+          ]}
+        >
+          private
+        </span>
       </div>
-      <h1 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink">{incident.title}</h1>
+      <h1 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink" data-field="title">{incident.title}</h1>
       <div class="mt-3 h-px w-16 bg-gradient-to-r from-oxblood-700 to-transparent" aria-hidden="true"></div>
-      <p class="mt-1 font-mono text-xs text-tk-ink-3">{incident.id}</p>
-      <p class="mt-2 text-sm text-tk-ink-3">
+      <p class="mt-1 font-mono text-xs text-tk-ink-3" data-field="id">{incident.id}</p>
+      <p class="mt-2 text-sm text-tk-ink-3" data-field="meta">
         Started {fmtIso(incident.startedAt)}
         {incident.resolvedAt && (
           <>
@@ -99,7 +127,7 @@ const isResolved = incident.status === 'resolved';
             </span>
             Timeline
           </h2>
-      <ol class="mt-4 space-y-4 border-l border-tk-border pl-5">
+      <ol class="mt-4 space-y-4 border-l border-tk-border pl-5" data-list="timeline">
         {incident.updates.map((u) => (
           <li class="relative">
             <span class="absolute -left-[27px] top-1 inline-block h-3 w-3 rounded-full border-2 border-white bg-tk-accent ring-1 ring-tk-accent" />
@@ -120,9 +148,12 @@ const isResolved = incident.status === 'resolved';
       </ol>
     </section>
 
-    {
-      !isResolved && (
-        <>
+    {/* Active-incident forms (Post update + Mark resolved). Always rendered in
+        the DOM now that the page is SSR (the shell can't know the live status
+        at build time); the inline script reveals or hides this group based on
+        the live status returned from GET /v1/admin/incidents/:id. Initial
+        hidden state derives from the shell's isResolved. */}
+    <div data-form-group="active" class:list={[isResolved ? 'hidden' : '']}>
           <!-- Add-update form -->
           <section class="dashboard-card mb-6">
             <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-tk-ink">
@@ -209,17 +240,16 @@ const isResolved = incident.status === 'resolved';
               </div>
             </form>
           </section>
-        </>
-      )
-    }
+    </div>
 
     {/* 2026-05-22 — admin reopen flow for false-alarm correction
         or regression on a previously-resolved issue. Only shows
         when incident is in 'resolved' state. Same body shape as
         the resolve form (just a message); audit-action
-        'incident.reopened' via migration 0063. */}
-    {
-      isResolved && (
+        'incident.reopened' via migration 0063. Always rendered in the SSR
+        DOM; the inline script reveals it only when the live status is
+        resolved (initial hidden state derives from the shell's isResolved). */}
+    <div data-form-group="resolved" class:list={[isResolved ? '' : 'hidden']}>
         <section class="dashboard-card mb-6 border-amber-200 bg-amber-50/30">
           <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-tk-ink">
             <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">
@@ -261,8 +291,7 @@ const isResolved = incident.status === 'resolved';
             </div>
           </form>
         </section>
-      )
-    }
+    </div>
   </div>
 
   <script is:inline define:vars={{ apiBaseUrl, incidentId: incident.id }}>
@@ -293,6 +322,149 @@ const isResolved = incident.status === 'resolved';
         } catch (_) {
           return '';
         }
+      }
+
+      // V-200* — populate the page from the live incident at request time.
+      // The page is now SSR; the SSG body is only a paint shell (especially
+      // for non-mock ids, which previously 404'd entirely). loadIncident()
+      // fetches GET /v1/admin/incidents/:id and rewrites the header, timeline,
+      // and form-group visibility from the live status.
+      const SEVERITY_BADGE = {
+        minor: 'bg-amber-50 text-amber-700',
+        major: 'bg-orange-50 text-orange-700',
+        outage: 'bg-red-50 text-red-700',
+      };
+      const STATUS_BADGE = {
+        investigating: 'bg-amber-50 text-amber-700',
+        identified: 'bg-blue-50 text-blue-700',
+        monitoring: 'bg-indigo-50 text-indigo-700',
+        resolved: 'bg-emerald-50 text-emerald-700',
+      };
+      function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+          if (c === '&') return '&amp;';
+          if (c === '<') return '&lt;';
+          if (c === '>') return '&gt;';
+          if (c === '"') return '&quot;';
+          return '&#39;';
+        });
+      }
+      function fmtIso(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      }
+      function setText(field, text) {
+        const el = document.querySelector('[data-field="' + field + '"]');
+        if (el) el.textContent = text;
+      }
+
+      function applyIncident(inc, updates) {
+        const sevBadge = document.querySelector('[data-field="severity-badge"]');
+        if (sevBadge) {
+          sevBadge.textContent = inc.severity;
+          sevBadge.className =
+            'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
+            (SEVERITY_BADGE[inc.severity] || '');
+        }
+        const statusBadge = document.querySelector('[data-field="status-badge"]');
+        if (statusBadge) {
+          statusBadge.textContent = inc.status;
+          statusBadge.className =
+            'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
+            (STATUS_BADGE[inc.status] || '');
+        }
+        const privBadge = document.querySelector('[data-field="private-badge"]');
+        if (privBadge) {
+          if (inc.public) privBadge.classList.add('hidden');
+          else privBadge.classList.remove('hidden');
+        }
+        setText('title', inc.title);
+        setText('id', inc.id);
+        const meta = document.querySelector('[data-field="meta"]');
+        if (meta) {
+          let metaText = 'Started ' + fmtIso(inc.started_at);
+          if (inc.resolved_at) metaText += ' · resolved ' + fmtIso(inc.resolved_at);
+          const components = inc.affected_components || [];
+          if (components.length > 0) metaText += ' · affecting ' + components.join(', ');
+          meta.textContent = metaText;
+        }
+        const titleEl = document.querySelector('title');
+        if (titleEl) titleEl.textContent = 'Incident · ' + inc.title + ' · Driftstack admin';
+
+        // Timeline.
+        const timeline = document.querySelector('[data-list="timeline"]');
+        if (timeline) {
+          const rows = (updates || [])
+            .map(function (u) {
+              return (
+                '<li class="relative">' +
+                '<span class="absolute -left-[27px] top-1 inline-block h-3 w-3 rounded-full border-2 border-white bg-tk-accent ring-1 ring-tk-accent"></span>' +
+                '<div class="flex items-baseline gap-2">' +
+                '<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
+                (STATUS_BADGE[u.status] || '') +
+                '">' +
+                escapeHtml(u.status) +
+                '</span>' +
+                '<span class="text-xs text-tk-ink-3">' +
+                escapeHtml(fmtIso(u.posted_at)) +
+                '</span></div>' +
+                '<p class="mt-1 text-sm text-tk-ink-2">' +
+                escapeHtml(u.message) +
+                '</p></li>'
+              );
+            })
+            .join('');
+          timeline.innerHTML =
+            rows ||
+            '<li class="text-sm text-tk-ink-3">No timeline updates yet.</li>';
+        }
+
+        // Form-group visibility: active forms (post-update + resolve) when not
+        // resolved; reopen form when resolved.
+        const isResolved = inc.status === 'resolved';
+        const activeGroup = document.querySelector('[data-form-group="active"]');
+        const resolvedGroup = document.querySelector('[data-form-group="resolved"]');
+        if (activeGroup) {
+          if (isResolved) activeGroup.classList.add('hidden');
+          else activeGroup.classList.remove('hidden');
+        }
+        if (resolvedGroup) {
+          if (isResolved) resolvedGroup.classList.remove('hidden');
+          else resolvedGroup.classList.add('hidden');
+        }
+      }
+
+      function loadIncident() {
+        const token = getToken();
+        if (!token) {
+          showBanner('Sign in with a staff admin account to see this incident.', true);
+          return;
+        }
+        fetch(apiBaseUrl + '/v1/admin/incidents/' + encodeURIComponent(incidentId), {
+          headers: { authorization: 'Bearer ' + token },
+        })
+          .then(function (r) {
+            if (r.status === 403) return Promise.reject(new Error('forbidden'));
+            if (r.status === 404) return Promise.reject(new Error('not-found'));
+            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then(function (body) {
+            if (!body || !body.incident) return;
+            applyIncident(body.incident, body.updates || []);
+          })
+          .catch(function (err) {
+            const msg = err && err.message ? err.message : 'network error';
+            if (msg === 'forbidden') {
+              showBanner(
+                'Access denied — admin scope required. You are signed in as a customer account.',
+                true,
+              );
+            } else if (msg === 'not-found') {
+              showBanner('Incident not found.', true);
+            } else {
+              showBanner("Couldn't load incident (" + msg + ').', true);
+            }
+          });
       }
 
       function bind(formId, urlSuffix, includeStatus) {
@@ -361,6 +533,14 @@ const isResolved = incident.status === 'resolved';
       // resolve (just a message field). bind() handles the POST +
       // page reload pattern.
       bind('reopen-form', '/reopen', false);
+
+      // Populate from the live incident at request time, then reveal the page
+      // (AdminLayout opacity-gate). The forms are wired above regardless so
+      // their submit handlers are ready by the time the data lands.
+      loadIncident();
+      if (typeof window.dashboardHydrated === 'function') {
+        window.dashboardHydrated();
+      }
     })();
   </script>
 </AdminLayout>

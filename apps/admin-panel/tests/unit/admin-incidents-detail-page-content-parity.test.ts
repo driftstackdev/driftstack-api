@@ -75,12 +75,24 @@ describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () =
     expect(body).toMatch(/The status page will show a green banner once propagated/);
   });
 
-  it('resolved-incident view hides both forms (isResolved gate)', () => {
-    // The forms only render when !isResolved — pin so a future
-    // refactor doesn't accidentally let operators "un-resolve"
-    // by posting more updates to a closed incident.
+  it('resolved-incident view hides the active forms (isResolved gate, SSR-safe)', () => {
+    // V-200* — the page is now SSR (prerender = false). The shell can't
+    // know the live status at build time, so the Post-update + Mark-
+    // resolved forms live in <div data-form-group="active"> (hidden when
+    // isResolved) and the Reopen form in <div data-form-group="resolved">
+    // (hidden when !isResolved); the inline script flips the .hidden
+    // class from the live status. Pin so a future refactor doesn't let
+    // operators "un-resolve" by posting more updates to a closed incident.
     expect(body).toMatch(/const isResolved = incident\.status === 'resolved'/);
-    expect(body).toMatch(/\{\s*!isResolved && \(/);
+    expect(body).toMatch(
+      /<div data-form-group="active" class:list=\{\[isResolved \? 'hidden' : ''\]\}>/,
+    );
+    expect(body).toMatch(
+      /<div data-form-group="resolved" class:list=\{\[isResolved \? '' : 'hidden'\]\}>/,
+    );
+    // The inline script toggles both groups from the live status.
+    expect(body).toMatch(/document\.querySelector\('\[data-form-group="active"\]'\)/);
+    expect(body).toMatch(/document\.querySelector\('\[data-form-group="resolved"\]'\)/);
   });
 
   it('back-link to /incidents list pinned', () => {

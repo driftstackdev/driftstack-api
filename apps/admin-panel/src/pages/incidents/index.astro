@@ -357,7 +357,14 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
         } catch (_) {
           token = '';
         }
-        if (!token) return;
+        // No token → clear the SSG mock to the real empty state rather than
+        // leaving the fabricated "API server elevated 5xx" major incident on
+        // an incidents/status surface (a false ops signal). rebuild([]) renders
+        // "No open incidents. All systems operational."
+        if (!token) {
+          rebuild([]);
+          return;
+        }
         fetch(apiBaseUrl + '/v1/admin/incidents?scope=all&limit=100', {
           headers: { authorization: 'Bearer ' + token },
         })
@@ -365,11 +372,14 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
             return r.ok ? r.json() : null;
           })
           .then(function (body) {
-            if (!body || !Array.isArray(body.data)) return;
-            rebuild(body.data);
+            // Any non-array / non-ok response → clear the fabricated mock to the
+            // real empty state instead of leaving a fake active incident up.
+            rebuild(body && Array.isArray(body.data) ? body.data : []);
           })
           .catch(function () {
-            /* SSG mock stays */
+            // Network/fetch error → clear the SSG mock so a transient failure
+            // never leaves a fabricated active incident on screen.
+            rebuild([]);
           });
       }
 

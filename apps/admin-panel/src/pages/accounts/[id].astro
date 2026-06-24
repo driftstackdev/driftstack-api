@@ -218,9 +218,13 @@ const accountId = account.id;
               name="bucket_key"
               class="mt-1 block w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
             >
-              <option value="global">global</option>
-              <option value="session_create">session_create</option>
-              <option value="capture">capture</option>
+              {/* Values are the canonical SetQuotaOverrideRequestSchema enum
+                  (api-types/src/admin.ts) — the server 400s on anything else.
+                  The prior `session_create` / `capture` values were rejected,
+                  so only `global` ever POSTed successfully. */}
+              <option value="global">Global</option>
+              <option value="sessions:create">Sessions: create</option>
+              <option value="agent_sessions:message">Agent sessions: message</option>
             </select>
           </label>
           <label class="block text-sm">
@@ -357,8 +361,12 @@ const accountId = account.id;
           )
         }
       </ul>
+      {/* Use the server's filter param name (`target_id`, not `account`) so
+          the audit-log page seeds its filter from the URL and lands on a
+          view scoped to this account. The server strips the acc_ prefix via
+          maybeUuidFromInput, so the prefixed id works once the param matches. */}
       <a
-        href={`/audit-log?account=acc_${account.id}`}
+        href={`/audit-log?target_id=acc_${account.id}`}
         class="mt-4 inline-flex text-sm text-tk-accent hover:underline"
       >
         Full audit log for this account →

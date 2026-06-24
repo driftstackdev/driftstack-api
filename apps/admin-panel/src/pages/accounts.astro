@@ -299,12 +299,20 @@ const apiBaseUrl = resolveApiBaseUrl();
           .catch((err) => {
             if (myReq !== inFlight) return;
             const msg = err && err.message ? err.message : 'network error';
+            // W604 — clear the SSG mock rows on ANY load failure so operators
+            // never triage a fabricated customer list (3 fake accounts with
+            // Open links into mock detail pages) during an API error.
+            if (tbody) {
+              tbody.innerHTML =
+                '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">Could not load accounts. Resolve the error above and retry.</td></tr>';
+            }
+            if (footnote) footnote.textContent = '';
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
               );
             } else {
-              showBanner("Couldn't load accounts (" + msg + '). Showing preview data below.');
+              showBanner("Couldn't load accounts (" + msg + ').');
             }
           })
           .finally(() => {
@@ -317,7 +325,15 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       if (!token) {
-        showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
+        // W604 — clear the SSG mock so the unauthenticated state never shows
+        // fabricated customer accounts with Open links into mock detail pages.
+        if (tbody) {
+          tbody.innerHTML =
+            '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">Sign in with a staff admin account to see accounts.</td></tr>';
+        }
+        if (footnote) footnote.textContent = '';
+        showBanner('Sign in with a staff admin account to see live data.');
+        if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
         return;
       }
 

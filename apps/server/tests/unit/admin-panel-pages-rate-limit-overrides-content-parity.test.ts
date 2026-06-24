@@ -45,9 +45,9 @@ describe('W489.A apps/admin-panel/src/pages/rate-limit-overrides.astro content p
     );
   });
 
-  it("Bucket-key 3-value catalog framing pinned: 'global (whole API), session_create (session creation only), capture (screenshot/DOM/PDF only)' — pinned so operators see the full forward-catalog (not just the 2 deployed today) and know which bucket-key strings the endpoint accepts", () => {
+  it("Bucket-key 3-value catalog framing pinned to the canonical SetQuotaOverrideRequestSchema enum: 'global (whole API), sessions:create (session creation only), agent_sessions:message (agent-session messages only)' — pinned so operators see the bucket-key strings the endpoint actually accepts (the prior session_create/capture values were rejected by the server enum, so the footnote documented buckets that always 400'd)", () => {
     expect(body).toMatch(
-      /Bucket keys: <code class="font-mono">global<\/code>\s*\n?\s*\(whole API\), <code class="font-mono">session_create<\/code> \(session creation\s*\n?\s*only\), <code class="font-mono">capture<\/code> \(screenshot\/DOM\/PDF only\)\./,
+      /Bucket keys: <code class="font-mono">global<\/code>\s*\n?\s*\(whole API\), <code class="font-mono">sessions:create<\/code> \(session creation\s*\n?\s*only\), <code class="font-mono">agent_sessions:message<\/code> \(agent-session\s*\n?\s*messages only\)\./,
     );
   });
 
@@ -60,12 +60,12 @@ describe('W489.A apps/admin-panel/src/pages/rate-limit-overrides.astro content p
     );
   });
 
-  it("BUCKET_LABEL duplicated catalog (frontmatter Record + inline-script const): global → 'Global' + sessions:create → 'Sessions: create' — pinned so the SSG-rendered badge text matches the live-script's rendered badge text (drift between the two would cause a flash-of-mismatched-labels on hydrate)", () => {
+  it("BUCKET_LABEL duplicated catalog (frontmatter Record + inline-script const) covering the full canonical enum: global → 'Global' + sessions:create → 'Sessions: create' + agent_sessions:message → 'Agent sessions: message' — pinned so the SSG-rendered badge text matches the live-script's rendered badge text (drift between the two would cause a flash-of-mismatched-labels on hydrate) AND every enum member has a friendly label (agent_sessions:message previously fell through to the raw key)", () => {
     expect(body).toMatch(
-      /const BUCKET_LABEL: Record<string, string> = \{\s*\n?\s*global: 'Global',\s*\n?\s*'sessions:create': 'Sessions: create',\s*\n?\s*\};/,
+      /const BUCKET_LABEL: Record<string, string> = \{\s*\n?\s*global: 'Global',\s*\n?\s*'sessions:create': 'Sessions: create',\s*\n?\s*'agent_sessions:message': 'Agent sessions: message',\s*\n?\s*\};/,
     );
     expect(body).toMatch(
-      /const BUCKET_LABEL = \{\s*\n?\s*global: 'Global',\s*\n?\s*'sessions:create': 'Sessions: create',\s*\n?\s*\};/,
+      /const BUCKET_LABEL = \{\s*\n?\s*global: 'Global',\s*\n?\s*'sessions:create': 'Sessions: create',\s*\n?\s*'agent_sessions:message': 'Agent sessions: message',\s*\n?\s*\};/,
     );
   });
 

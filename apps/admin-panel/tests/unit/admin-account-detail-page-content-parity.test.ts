@@ -17,8 +17,11 @@
 //     admin.support_note, admin.refund_recorded.
 //   • Rate-limit-override form lives on this page (Decision 4
 //     from founder review) — not on /rate-limit-overrides.
-//   • Bucket select options match V-194 documented set
-//     (global / session_create / capture).
+//   • Bucket select options match the canonical
+//     SetQuotaOverrideRequestSchema enum
+//     (global / sessions:create / agent_sessions:message) — the
+//     server 400s on anything else (the old session_create / capture
+//     values were rejected).
 //   • STATUS_BADGE map covers account-status taxonomy
 //     (active / suspended / deleted) — same set as accounts
 //     list page.
@@ -90,12 +93,17 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
     expect(body).toMatch(/\/v1\/admin\/accounts\/:id\/quota-override/);
   });
 
-  it('bucket-select options match V-194 documented set (global / session_create / capture)', () => {
+  it('bucket-select options match the canonical SetQuotaOverrideRequestSchema enum (global / sessions:create / agent_sessions:message)', () => {
+    // The prior set (global / session_create / capture) was rejected by
+    // the server's Zod enum, so 2 of 3 buckets 400'd; these are the
+    // canonical colonated bucket keys the POST actually accepts.
     const formMatch = body.match(/data-field="override-form"[\s\S]*?<\/form>/);
     expect(formMatch).not.toBeNull();
     const tag = formMatch![0]!;
-    const opts = Array.from(tag.matchAll(/<option value="([a-z_]+)">/g)).map((m) => m[1] as string);
-    expect(opts.sort()).toEqual(['capture', 'global', 'session_create']);
+    const opts = Array.from(tag.matchAll(/<option value="([a-z_:]+)">/g)).map(
+      (m) => m[1] as string,
+    );
+    expect(opts.sort()).toEqual(['agent_sessions:message', 'global', 'sessions:create']);
   });
 
   it('STATUS_BADGE covers active / suspended / deleted (same taxonomy as list page)', () => {

@@ -1,8 +1,11 @@
 // W342.C — drift guard for the admin /rate-limit-overrides page
-// bucket_key taxonomy. Both BUCKET_LABEL maps (frontmatter +
-// inline script) and the MockOverride.bucketKey type union must
-// match the canonical bucket_key enum on the server-side
-// QuotaOverrideAdmin schema: ['global', 'sessions:create'].
+// bucket_key taxonomy. The canonical server-side enum is
+// ['global', 'sessions:create', 'agent_sessions:message']. Both
+// BUCKET_LABEL maps (frontmatter + inline script) must cover the
+// full enum so every bucket renders a friendly label
+// (agent_sessions:message previously fell through to the raw key);
+// the MockOverride.bucketKey type union is a subset (the mock only
+// ever carries 'global' / 'sessions:create').
 //
 // Prior drift caught + fixed by this wave: the page used the
 // (fictional) 'session_create' + 'capture' bucket keys. Both
@@ -52,16 +55,18 @@ describe('W342.C admin /rate-limit-overrides bucket_key parity', () => {
     expect(page).not.toMatch(/'capture':/);
   });
 
-  it("frontmatter BUCKET_LABEL keys are exactly {'global', 'sessions:create'}", () => {
+  it("frontmatter BUCKET_LABEL keys cover the full canonical enum {'global', 'sessions:create', 'agent_sessions:message'}", () => {
+    // Every canonical bucket key needs a friendly label —
+    // agent_sessions:message previously fell through to the raw key.
     const block = page.match(/BUCKET_LABEL:[^={]*=?\s*\{([\s\S]*?)\};/);
     expect(block).not.toBeNull();
     const keys = [...block![1]!.matchAll(/^\s*(?:'([^']+)'|([a-z_]+)):\s*'[^']+',/gm)]
       .map((m) => m[1] ?? m[2]!)
       .sort();
-    expect(keys).toEqual(['global', 'sessions:create']);
+    expect(keys).toEqual(['agent_sessions:message', 'global', 'sessions:create']);
   });
 
-  it("inline-script BUCKET_LABEL keys are exactly {'global', 'sessions:create'}", () => {
+  it("inline-script BUCKET_LABEL keys cover the full canonical enum {'global', 'sessions:create', 'agent_sessions:message'}", () => {
     // Frontmatter declares `const BUCKET_LABEL: Record<…> = { … }`
     // (typed); the inline-script copy is plain JS `const
     // BUCKET_LABEL = { … }`. Grab the second form specifically.
@@ -70,7 +75,7 @@ describe('W342.C admin /rate-limit-overrides bucket_key parity', () => {
     const keys = [...inline![1]!.matchAll(/^\s*(?:'([^']+)'|([a-z_]+)):\s*'[^']+',/gm)]
       .map((m) => m[1] ?? m[2]!)
       .sort();
-    expect(keys).toEqual(['global', 'sessions:create']);
+    expect(keys).toEqual(['agent_sessions:message', 'global', 'sessions:create']);
   });
 
   it('DELETE call still posts bucket_key as the query param name', () => {

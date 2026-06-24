@@ -81,7 +81,14 @@ describe('W352.C admin /incidents/[id] detail page parity', () => {
   });
 
   it('"Private" tag rendered for non-public incidents', () => {
-    expect(body).toMatch(/!incident\.public[\s\S]{0,200}private/);
+    // V-200* — the page is now SSR; the private badge is always in the
+    // DOM with data-field="private-badge", hidden via a class:list
+    // toggle when incident.public (the inline script re-flips it from
+    // the live incident.public). Pin the data-hook + the public-gated
+    // hidden toggle + the "private" label.
+    expect(body).toMatch(/data-field="private-badge"/);
+    expect(body).toMatch(/incident\.public \? 'hidden' : ''/);
+    expect(body).toMatch(/>\s*private\s*</);
   });
 
   it('back-link to /incidents resolves to the list page', () => {

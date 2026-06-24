@@ -40,6 +40,7 @@ const MOCK_OVERRIDES: MockOverride[] = [
 const BUCKET_LABEL: Record<string, string> = {
   global: 'Global',
   'sessions:create': 'Sessions: create',
+  'agent_sessions:message': 'Agent sessions: message',
 };
 
 function fmtIso(iso: string | null): string {
@@ -174,8 +175,9 @@ const apiBaseUrl = resolveApiBaseUrl();
     <p class="mt-8 text-xs text-tk-ink-3">
       New overrides default to 14-day TTL. Permanent overrides allowed but
       flagged in the weekly audit-log review. Bucket keys: <code class="font-mono">global</code>
-      (whole API), <code class="font-mono">session_create</code> (session creation
-      only), <code class="font-mono">capture</code> (screenshot/DOM/PDF only).
+      (whole API), <code class="font-mono">sessions:create</code> (session creation
+      only), <code class="font-mono">agent_sessions:message</code> (agent-session
+      messages only).
     </p>
   </div>
 
@@ -193,6 +195,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const BUCKET_LABEL = {
         global: 'Global',
         'sessions:create': 'Sessions: create',
+        'agent_sessions:message': 'Agent sessions: message',
       };
 
       function showBanner(text) {

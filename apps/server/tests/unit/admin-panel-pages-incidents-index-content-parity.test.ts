@@ -98,11 +98,18 @@ describe('W490.B apps/admin-panel/src/pages/incidents/index.astro content parity
     );
   });
 
-  it("fetchAndRender: GET /v1/admin/incidents?scope=all&limit=100 + Bearer auth + rebuild on success / catch falls back to SSG mock — pinned so a failed live-fetch doesn't blank the page (SSG-mock fallback is the canonical 'no-token / unauthenticated' surface, NOT an empty list)", () => {
+  it("fetchAndRender: GET /v1/admin/incidents?scope=all&limit=100 + Bearer auth + rebuild on success / clears the SSG mock to the real empty state on every failure path (no-token, non-array/non-ok response, network error) — pinned so a transient failure never leaves the fabricated 'API server elevated 5xx' major incident on this incidents/status surface (a false ops signal); rebuild([]) renders 'No open incidents. All systems operational.'", () => {
     expect(body).toMatch(
       /fetch\(apiBaseUrl \+ '\/v1\/admin\/incidents\?scope=all&limit=100', \{\s*\n?\s*headers: \{ authorization: 'Bearer ' \+ token \},\s*\n?\s*\}\)/,
     );
-    expect(body).toMatch(/\/\* SSG mock stays \*\//);
+    // No-token path clears the mock to the empty state.
+    expect(body).toMatch(/if \(!token\) \{\s*\n?\s*rebuild\(\[\]\);\s*\n?\s*return;\s*\n?\s*\}/);
+    // Success/non-ok/non-array response → rebuild with data or [].
+    expect(body).toMatch(/rebuild\(body && Array\.isArray\(body\.data\) \? body\.data : \[\]\);/);
+    // Network error → clear the mock too.
+    expect(body).toMatch(
+      /\.catch\(function \(\) \{\s*\n?\s*\/\/[^\n]*\n?\s*\/\/[^\n]*\n?\s*rebuild\(\[\]\);\s*\n?\s*\}\);/,
+    );
   });
 
   it("Form validation: !title || !description → 'Title + initial update are required.' error banner via showErr + bail — pinned so empty submissions show inline error (drift to letting the request fly with empty body would 422 from the server + operators get a confusing 'invalid request body' instead of a friendly 'title required' message)", () => {

@@ -37,13 +37,11 @@ describe('W490.A apps/admin-panel/src/pages/incidents/[id].astro content parity'
     );
   });
 
-  it("getStaticPaths over MOCK_INCIDENTS + Astro.redirect('/incidents') for missing id — pinned so the SSG path enumeration matches the mock data + a stale URL on a removed mock doesn't 404 (redirects back to the list page instead)", () => {
-    expect(body).toMatch(
-      /export function getStaticPaths\(\) \{\s*\n?\s*return MOCK_INCIDENTS\.map\(\(inc\) => \(\{ params: \{ id: inc\.id \} \}\)\);\s*\n?\s*\}/,
-    );
-    expect(body).toMatch(
-      /if \(!incident\) \{\s*\n?\s*return Astro\.redirect\('\/incidents'\);\s*\n?\s*\}/,
-    );
+  it("V-200* SSR migration: export const prerender = false + MOCK_INCIDENTS.find(...) ?? placeholder shell keyed by Astro.params.id (no getStaticPaths, no Astro.redirect) — pinned so the Worker serves ANY incident id at request time. The prior getStaticPaths enumerated only mock ids, so every REAL incident 404'd and the whole incident-management surface (Post update / Mark resolved / Reopen) was dead. Drift back to getStaticPaths would re-introduce that 404.", () => {
+    expect(body).toMatch(/export const prerender = false;/);
+    expect(body).not.toMatch(/export function getStaticPaths\(\)/);
+    expect(body).not.toMatch(/Astro\.redirect\('\/incidents'\)/);
+    expect(body).toMatch(/const incident = MOCK_INCIDENTS\.find\(\(inc\) => inc\.id === id\) \?\?/);
   });
 
   it("SEVERITY_BADGE 3-tone (minor amber-50 / major orange-50 / outage red-50) + STATUS_BADGE 4-tone (investigating amber-50 / identified blue-50 / monitoring indigo-50 / resolved emerald-50) — pinned so the dual badge taxonomies stay distinct (severity = how bad, status = where in the lifecycle) and don't collide in tone (drift to using emerald for both 'resolved status' AND 'minor severity' would confuse operators)", () => {
@@ -55,9 +53,21 @@ describe('W490.A apps/admin-panel/src/pages/incidents/[id].astro content parity'
     );
   });
 
-  it("isResolved gate: const isResolved = incident.status === 'resolved' + both Post-update + Mark-resolved forms wrapped in {!isResolved && (<>...</>)} — pinned so the forms hide on resolved incidents (drift to showing them would allow operators to post updates / re-resolve already-resolved incidents, creating audit-log noise + potential state corruption)", () => {
+  it("isResolved gate (SSR-safe): const isResolved = incident.status === 'resolved'; the Post-update + Mark-resolved forms live in <div data-form-group=\"active\"> (hidden when isResolved) and the Reopen form in <div data-form-group=\"resolved\"> (hidden when !isResolved). Both groups are always rendered in the SSR DOM (the shell can't know the live status at build time); the inline script's applyIncident() toggles the .hidden class from the live status. Pinned so a resolved incident still can't show the post/resolve forms (state-corruption guard) while the Reopen form becomes reachable for live resolved incidents (previously dead under getStaticPaths).", () => {
     expect(body).toMatch(/const isResolved = incident\.status === 'resolved';/);
-    expect(body).toMatch(/\{\s*\n?\s*!isResolved && \(\s*\n?\s*<>/);
+    expect(body).toMatch(
+      /<div data-form-group="active" class:list=\{\[isResolved \? 'hidden' : ''\]\}>/,
+    );
+    expect(body).toMatch(
+      /<div data-form-group="resolved" class:list=\{\[isResolved \? '' : 'hidden'\]\}>/,
+    );
+    // The inline script toggles both groups from the live status.
+    expect(body).toMatch(
+      /const activeGroup = document\.querySelector\('\[data-form-group="active"\]'\);/,
+    );
+    expect(body).toMatch(
+      /const resolvedGroup = document\.querySelector\('\[data-form-group="resolved"\]'\);/,
+    );
   });
 
   it("Post-update form: <select id='update-status'> with 3 options (Investigating / Identified / Monitoring [selected]) + required <textarea id='update-message'> — pinned so the form's status enum stays a subset of STATUS_BADGE (no 'resolved' option here — that's the separate resolve form) and the message field is required for an audit-log entry to have content", () => {
@@ -95,9 +105,13 @@ describe('W490.A apps/admin-panel/src/pages/incidents/[id].astro content parity'
     );
   });
 
-  it("Private-incident badge: !incident.public → 'private' slate-100 badge alongside severity + status — pinned so internal-only incidents are visually distinguishable from public ones (operators need to know at-a-glance whether their actions affect the status page or stay internal)", () => {
+  it("Private-incident badge: data-field='private-badge' 'private' slate-100 badge alongside severity + status, hidden when incident.public (SSR class:list toggle) + the inline script flips it from the live incident.public — pinned so internal-only incidents are visually distinguishable from public ones (operators need to know at-a-glance whether their actions affect the status page or stay internal)", () => {
+    expect(body).toMatch(/data-field="private-badge"/);
+    expect(body).toMatch(/incident\.public \? 'hidden' : ''/);
+    expect(body).toMatch(/>\s*\n?\s*private\s*\n?\s*<\/span>/);
+    // The inline script toggles the private badge from the live data.
     expect(body).toMatch(
-      /\{!incident\.public && \(\s*\n?\s*<span class="inline-flex rounded-full bg-tk-hover px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">\s*\n?\s*private\s*\n?\s*<\/span>\s*\n?\s*\)\}/,
+      /const privBadge = document\.querySelector\('\[data-field="private-badge"\]'\);/,
     );
   });
 

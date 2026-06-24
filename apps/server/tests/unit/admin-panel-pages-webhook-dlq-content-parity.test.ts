@@ -96,9 +96,7 @@ describe('W488.C apps/admin-panel/src/pages/webhook-dlq.astro content parity', (
   });
 
   it("Banner state taxonomy: no-token / 403 forbidden / fetch-error on load + 'Requeueing N…' / 'Requeued N. Refreshing list…' / 'Couldn't requeue N (msg).' on action — pinned so the 6-state banner vocabulary stays consistent with the rest of the admin pages (drift to a different forbidden message would inconsistently brand the cross-page admin-scope error)", () => {
-    expect(body).toMatch(
-      /showBanner\('Sign in with a staff admin account to see live data\. Showing preview below\.'\);/,
-    );
+    expect(body).toMatch(/showBanner\('Sign in with a staff admin account to see live data\.'\);/);
     expect(body).toMatch(
       /showBanner\(\s*\n?\s*'Access denied — admin scope required\. You are signed in as a customer account\.',\s*\n?\s*\);/,
     );

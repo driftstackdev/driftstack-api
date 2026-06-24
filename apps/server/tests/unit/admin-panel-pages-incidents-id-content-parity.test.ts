@@ -26,16 +26,14 @@ describe('admin-panel incidents/[id] content parity', () => {
     expect(body).toMatch(/\/\/ V-344 — apiBaseUrl exposed to inline script for live form wiring\./);
   });
 
-  it('getStaticPaths SSG pattern pinned: pages built from MOCK_INCIDENTS at build time. Drift to a runtime fetch would convert this admin page from SSG to SSR, changing the deployment shape', () => {
-    expect(body).toMatch(
-      /export function getStaticPaths\(\) \{\s*\n?\s*return MOCK_INCIDENTS\.map\(\(inc\) => \(\{ params: \{ id: inc\.id \} \}\)\);\s*\n?\s*\}/,
-    );
+  it('V-200* SSR pattern pinned: export const prerender = false (Worker serves ANY incident id at request time) + MOCK_INCIDENTS is only a paint-shell fallback (?? placeholder shell keyed by Astro.params.id). The prior getStaticPaths build-time enumeration 404d every REAL incident id (only mock ids had pages), so the incident-management surface was dead for live incidents. Drift back to getStaticPaths would re-introduce that 404.', () => {
+    expect(body).toMatch(/export const prerender = false;/);
+    expect(body).not.toMatch(/export function getStaticPaths\(\)/);
+    expect(body).toMatch(/const incident = MOCK_INCIDENTS\.find\(\(inc\) => inc\.id === id\) \?\?/);
   });
 
-  it('Not-found redirect pinned: when an unknown id lands, redirect to /incidents (not 404). Drift to dropping the redirect would surface a server error on missing-incident lookups', () => {
-    expect(body).toMatch(
-      /if \(!incident\) \{\s*\n?\s*return Astro\.redirect\('\/incidents'\);\s*\n?\s*\}/,
-    );
+  it('No build-time redirect: the SSR page renders a placeholder shell for non-mock ids (then the inline script populates from GET /v1/admin/incidents/:id) rather than redirecting. Drift back to Astro.redirect would re-couple the page to the build-time mock enumeration.', () => {
+    expect(body).not.toMatch(/Astro\.redirect\('\/incidents'\)/);
   });
 
   it('SEVERITY_BADGE 3-state taxonomy pinned: minor (amber) / major (orange) / outage (red). Drift to dropping any severity would orphan that severity from visual styling + create an at-a-glance ambiguity for ops triage', () => {

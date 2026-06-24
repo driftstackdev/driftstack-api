@@ -306,12 +306,25 @@ const apiBaseUrl = resolveApiBaseUrl();
           .catch((err) => {
             if (myReq !== inFlight) return;
             const msg = err && err.message ? err.message : 'network error';
+            // W604 — clear the SSG mock entry on ANY load failure. Leaving the
+            // mock row on screen is dangerous: it renders live Requeue +
+            // (irrecoverable) Discard buttons wired to a FAKE delivery id, so
+            // an admin during a transient API error could fire
+            // POST /admin/webhook-dlq/<mock-id>/discard on an entry that
+            // doesn't exist. Replace with an honest error state.
+            if (emptyRegion) emptyRegion.classList.add('hidden');
+            if (listRegion) listRegion.classList.remove('hidden');
+            if (list) {
+              list.innerHTML =
+                '<li class="rounded-lg border border-tk-border bg-tk-bg p-5 text-sm text-tk-ink-3">Could not load the DLQ — nothing to act on. Resolve the error above and retry.</li>';
+            }
+            if (summary) summary.textContent = '';
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
               );
             } else {
-              showBanner("Couldn't load DLQ (" + msg + '). Showing preview data below.');
+              showBanner("Couldn't load DLQ (" + msg + ').');
             }
           })
           .finally(() => {
@@ -403,7 +416,17 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       if (!token) {
-        showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
+        // W604 — clear the SSG mock so the unauthenticated state never shows a
+        // fabricated DLQ entry with live Requeue/Discard buttons wired to a
+        // FAKE delivery id.
+        if (emptyRegion) emptyRegion.classList.add('hidden');
+        if (listRegion) listRegion.classList.remove('hidden');
+        if (list) {
+          list.innerHTML =
+            '<li class="rounded-lg border border-tk-border bg-tk-bg p-5 text-sm text-tk-ink-3">Sign in with a staff admin account to see the DLQ.</li>';
+        }
+        if (summary) summary.textContent = '';
+        showBanner('Sign in with a staff admin account to see live data.');
         return;
       }
 

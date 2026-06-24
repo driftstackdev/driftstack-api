@@ -77,10 +77,12 @@ describe('W490.C apps/admin-panel/src/pages/accounts/[id].astro content parity',
     );
   });
 
-  it('Override form fields: bucket_key 3-option (global/session_create/capture) + capacity number min=1 step=1 required + refill_per_second min=0.01 step=0.01 required + duration_seconds value=1209600 (14d default) + required reason textarea — pinned so the 14-day default (1209600 = 14×24×3600) stays consistent with the framing comment elsewhere in the codebase', () => {
-    expect(body).toMatch(/<option value="global">global<\/option>/);
-    expect(body).toMatch(/<option value="session_create">session_create<\/option>/);
-    expect(body).toMatch(/<option value="capture">capture<\/option>/);
+  it('Override form fields: bucket_key 3-option matching the canonical SetQuotaOverrideRequestSchema enum (global / sessions:create / agent_sessions:message — the server 400s on anything else; the prior session_create/capture values were rejected) + capacity number min=1 step=1 required + refill_per_second min=0.01 step=0.01 required + duration_seconds value=1209600 (14d default) + required reason textarea — pinned so the 14-day default (1209600 = 14×24×3600) stays consistent + the option values stay canonical so the POST passes validation', () => {
+    expect(body).toMatch(/<option value="global">Global<\/option>/);
+    expect(body).toMatch(/<option value="sessions:create">Sessions: create<\/option>/);
+    expect(body).toMatch(
+      /<option value="agent_sessions:message">Agent sessions: message<\/option>/,
+    );
     expect(body).toMatch(
       /<input\s*\n?\s*type="number"\s*\n?\s*name="capacity"\s*\n?\s*min="1"\s*\n?\s*step="1"\s*\n?\s*required/,
     );
@@ -131,8 +133,8 @@ describe('W490.C apps/admin-panel/src/pages/accounts/[id].astro content parity',
     );
   });
 
-  it("Full-audit-log deep-link: /audit-log?account=acc_{account.id} — pinned so the 'Full audit log for this account →' anchor passes the prefixed account id (the audit-log page expects 'acc_'-prefixed form for filter) and clicking lands on the right pre-filtered audit-log view", () => {
-    expect(body).toMatch(/href=\{`\/audit-log\?account=acc_\$\{account\.id\}`\}/);
+  it("Full-audit-log deep-link: /audit-log?target_id=acc_{account.id} — pinned so the 'Full audit log for this account →' anchor uses the server's filter param name (`target_id`, which admin-audit-log.ts filters by; the prior `account=` param was ignored by both the server route AND the audit-log page) and clicking lands on a view scoped to this account; the server strips the acc_ prefix via maybeUuidFromInput", () => {
+    expect(body).toMatch(/href=\{`\/audit-log\?target_id=acc_\$\{account\.id\}`\}/);
   });
 
   it('file exists at canonical path', () => {

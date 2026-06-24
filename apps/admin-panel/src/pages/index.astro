@@ -624,8 +624,28 @@ const apiBaseUrl = resolveApiBaseUrl();
           .join('');
       }
 
+      // W604 — reset the SSR mock-derived account counts + tier distribution
+      // to neutral placeholders. The Active/Suspended tiles, the "of N total"
+      // annotation, and the tier bars are baked from MOCK_ACCOUNTS (2 active /
+      // 1 suspended / 3 total); leaving them up on a no-token / fetch-error
+      // state shows fabricated platform metrics. (The other tiles —
+      // incidents-open / dlq-depth / signups / sessions — already init to '—'.)
+      function resetMockTiles() {
+        setText('active-accounts', '—');
+        setText('suspended-accounts', '—');
+        setText('total-accounts-annotation', 'of — total');
+        const tierList = root.querySelector('[data-list="tier-distribution"]');
+        if (tierList) {
+          tierList.innerHTML =
+            '<li class="text-xs text-tk-ink-3">No data.</li>';
+        }
+        setText('tier-total', '— total');
+      }
+
       if (!token) {
-        showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
+        resetMockTiles();
+        showBanner('Sign in with a staff admin account to see live data.');
+        if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
         return;
       }
 
@@ -1008,12 +1028,15 @@ const apiBaseUrl = resolveApiBaseUrl();
         .then(() => hideBanner())
         .catch((err) => {
           const msg = err && err.message ? err.message : 'network error';
+          // W604 — clear the SSR mock account counts/tier bars so a transient
+          // overview-fetch failure never leaves fabricated platform metrics up.
+          resetMockTiles();
           if (msg === 'forbidden') {
             showBanner(
               'Access denied — admin scope required. You are signed in as a customer account.',
             );
           } else {
-            showBanner("Couldn't load overview (" + msg + '). Showing preview data below.');
+            showBanner("Couldn't load overview (" + msg + ').');
           }
         })
         .finally(() => {

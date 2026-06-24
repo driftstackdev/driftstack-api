@@ -87,6 +87,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         <option value="success">Success only</option>
         <option value="error">Errors only</option>
       </select>
+      {/* Scoped-target chip: shown when the page is deep-linked with a
+          ?target_id=… (e.g. "Full audit log for this account"). Hidden by
+          default; the inline script reveals + populates it from the URL. */}
+      <span
+        data-field="target-chip"
+        class="hidden inline-flex items-center gap-2 rounded-full bg-tk-accent/10 px-3 py-1 text-xs text-tk-accent"
+      >
+        <span>Filtered to <span class="font-mono" data-field="target-chip-label"></span></span>
+        <button type="button" data-action="clear-target" class="font-medium hover:underline">
+          clear
+        </button>
+      </span>
     </div>
 
     <!-- Audit table -->
@@ -158,6 +170,31 @@ const apiBaseUrl = resolveApiBaseUrl();
       const adminIdEl = root.querySelector('[data-field="admin-id"]');
       const resultEl = root.querySelector('[data-field="result"]');
       const token = localStorage.getItem('ds_web_session_token');
+
+      // Seed the filter from the URL so deep-links like
+      // /audit-log?target_id=acc_<id> (from the per-account detail page) or
+      // /audit-log?admin_id=acc_<id> land on a pre-filtered view rather than
+      // the global unfiltered log. target_id has no visible input, so it's
+      // carried in buildQuery() + surfaced as a "Filtered to … (clear)" chip.
+      const urlParams = new URLSearchParams(window.location.search);
+      if (adminIdEl instanceof HTMLInputElement && urlParams.get('admin_id')) {
+        adminIdEl.value = urlParams.get('admin_id');
+      }
+      if (actionEl instanceof HTMLInputElement && urlParams.get('action')) {
+        actionEl.value = urlParams.get('action');
+      }
+      let targetIdFromUrl = urlParams.get('target_id') || '';
+      const targetChip = root.querySelector('[data-field="target-chip"]');
+      const targetChipLabel = root.querySelector('[data-field="target-chip-label"]');
+      function syncTargetChip() {
+        if (!targetChip) return;
+        if (targetIdFromUrl) {
+          if (targetChipLabel) targetChipLabel.textContent = targetIdFromUrl;
+          targetChip.classList.remove('hidden');
+        } else {
+          targetChip.classList.add('hidden');
+        }
+      }
 
       function showBanner(text) {
         if (!banner) return;
@@ -235,6 +272,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         params.set('limit', '50');
         if (actionEl && actionEl.value.trim()) params.set('action', actionEl.value.trim());
         if (adminIdEl && adminIdEl.value.trim()) params.set('admin_id', adminIdEl.value.trim());
+        // target_id has no visible input; it's carried from the URL deep-link
+        // (server filters by target_id — admin-audit-log.ts maybeUuidFromInput).
+        if (targetIdFromUrl) params.set('target_id', targetIdFromUrl);
         return params;
       }
 
@@ -314,6 +354,18 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (actionEl) actionEl.addEventListener('input', scheduleLoad);
       if (adminIdEl) adminIdEl.addEventListener('input', scheduleLoad);
       if (resultEl) resultEl.addEventListener('change', scheduleLoad);
+
+      // Surface the scoped-target chip on load + let the operator clear it
+      // (drops the target_id filter back to the global log without a reload).
+      syncTargetChip();
+      const clearTargetBtn = root.querySelector('[data-action="clear-target"]');
+      if (clearTargetBtn) {
+        clearTargetBtn.addEventListener('click', () => {
+          targetIdFromUrl = '';
+          syncTargetChip();
+          load();
+        });
+      }
 
       // 2026-05-22 — "/" focuses the action filter (same convention
       // as /accounts 2fe3da4b). Skip when user is already in an
