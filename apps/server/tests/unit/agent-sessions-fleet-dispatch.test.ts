@@ -721,16 +721,25 @@ describe('dispatchSessionEndOnClose', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
-  it('skips when the node is not connected (nothing to tear down server-side)', async () => {
-    const registry = new FleetControlRegistry(); // node never registered
+  it('node not connected — QUEUES the sessionEnd + re-dispatches it on reconnect (founder bug, A3 W2859)', async () => {
+    const registry = new FleetControlRegistry(); // node not connected at close time
     const log = logger();
     await dispatchSessionEndOnClose({
       sessionId: 'agt_close3',
+      nodeId: 'offline-node',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
       logger: log,
     });
+    // The teardown is QUEUED (not lost) so the orphaned browser is torn down on reconnect
+    // — the robust fix for the -1011 WSS-flap symptom. Logged at info, not warn.
+    expect(registry.pendingTeardownCount('offline-node')).toBe(1);
     expect(log.warn).not.toHaveBeenCalled();
+    // The node reconnects → register() drains the queue + re-dispatches the sessionEnd.
+    const sent: string[] = [];
+    registry.register('offline-node', (d) => sent.push(d));
+    expect(registry.pendingTeardownCount('offline-node')).toBe(0);
+    expect(JSON.parse(sent[0]!)).toMatchObject({ type: 'sessionEnd', sessionId: 'agt_close3' });
   });
 
   it('best-effort: a repo failure is swallowed (close must not fail)', async () => {
