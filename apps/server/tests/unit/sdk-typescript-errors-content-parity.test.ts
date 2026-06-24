@@ -86,9 +86,9 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
     }
   });
 
-  it('CRITICAL DriftstackErrorKind union — 25 string-literal values + 3 V-441 closing-parity values + Q.1.d byok_anthropic_required (2026-05-17). Drift to widening the union without coordinated server+client update would break exhaustive switch statements in isRetryable.', () => {
+  it('CRITICAL DriftstackErrorKind union — 26 string-literal values + 3 V-441 closing-parity values + Q.1.d byok_anthropic_required (2026-05-17). Includes `payment_required` (402, bundled-LLM rail). Drift to widening the union without coordinated server+client update would break exhaustive switch statements in isRetryable.', () => {
     expect(body).toMatch(
-      /export type DriftstackErrorKind =\s*\n?\s*\|\s*'bad_request'\s*\n?\s*\|\s*'validation'\s*\n?\s*\|\s*'unauthorized'\s*\n?\s*\|\s*'invalid_key'\s*\n?\s*\|\s*'revoked_key'\s*\n?\s*\|\s*'expired_key'\s*\n?\s*\|\s*'forbidden'\s*\n?\s*\|\s*'not_found'\s*\n?\s*\|\s*'conflict'\s*\n?\s*\|\s*'rate_limited'\s*\n?\s*\|\s*'concurrency_limit'\s*\n?\s*\|\s*'tier_limit'\s*\n?\s*\|\s*'session_destroyed'\s*\n?\s*\|\s*'session_timeout'\s*\n?\s*\|\s*'legal_acceptance_required'\s*\n?\s*\|\s*'driver_error'\s*\n?\s*\|\s*'driver_not_integrated'\s*\n?\s*\|\s*'internal'\s*\n?\s*\|\s*'email_already_registered'\s*\n?\s*\|\s*'invalid_credentials'\s*\n?\s*\|\s*'invalid_auth_token'\s*\n?\s*\|\s*'email_not_verified'/,
+      /export type DriftstackErrorKind =\s*\n?\s*\|\s*'bad_request'\s*\n?\s*\|\s*'validation'\s*\n?\s*\|\s*'unauthorized'\s*\n?\s*\|\s*'invalid_key'\s*\n?\s*\|\s*'revoked_key'\s*\n?\s*\|\s*'expired_key'\s*\n?\s*\|\s*'forbidden'\s*\n?\s*\|\s*'not_found'\s*\n?\s*\|\s*'conflict'\s*\n?\s*\|\s*'payment_required'\s*\n?\s*\|\s*'rate_limited'\s*\n?\s*\|\s*'concurrency_limit'\s*\n?\s*\|\s*'tier_limit'\s*\n?\s*\|\s*'session_destroyed'\s*\n?\s*\|\s*'session_timeout'\s*\n?\s*\|\s*'legal_acceptance_required'\s*\n?\s*\|\s*'driver_error'\s*\n?\s*\|\s*'driver_not_integrated'\s*\n?\s*\|\s*'internal'\s*\n?\s*\|\s*'email_already_registered'\s*\n?\s*\|\s*'invalid_credentials'\s*\n?\s*\|\s*'invalid_auth_token'\s*\n?\s*\|\s*'email_not_verified'/,
     );
     expect(body).toMatch(/\/\/ V-441 — closing problem-type parity with Go \+ Python\./);
     expect(body).toMatch(

@@ -8,7 +8,14 @@
 //   - Initial backoff 200 ms, doubling each attempt, cap 10 s
 //   - Random jitter in [0, computed delay] (full jitter)
 //   - Honour Retry-After when the error is a RateLimitError or 429
-//   - Retry on network errors and 5xx; do NOT retry on 4xx (except 429)
+//   - Retry ONLY transient kinds — transport (network), internal (5xx),
+//     and rate_limited (429). do NOT retry on 4xx (except 429), and do
+//     NOT retry the terminal 5xx kinds DriverError (502),
+//     DriverNotIntegratedError (503), or SessionTimeoutError (504):
+//     retrying an idempotent call there won't help and risks
+//     double-work. This delegates to the public `isRetryable()`
+//     predicate so the loop and that predicate can never drift apart,
+//     and matches the Go (IsRetryable) + Python (is_retryable) SDKs.
 //
 // NOTE: retry-SAFETY (whether a request may be auto-retried at all) lives
 // in the HTTP layer, not here — this loop is request-agnostic. The HTTP
@@ -16,7 +23,7 @@
 // POST/PATCH that carry an Idempotency-Key, so a transient 5xx can never
 // double-submit a non-idempotent create. See `http.ts`.
 
-import { DriftstackError, RateLimitError, TransportError } from './errors.js';
+import { RateLimitError, isRetryable } from './errors.js';
 
 export interface RetryConfig {
   /** Max retry attempts (in addition to the initial try). Default 3. */
@@ -65,15 +72,15 @@ export async function withRetry<T>(
 }
 
 export function shouldRetry(err: unknown): boolean {
-  if (err instanceof RateLimitError) return true;
-  if (err instanceof TransportError) return true;
-  if (err instanceof DriftstackError) {
-    // Retry on 5xx; don't retry on 4xx (except 429, handled above).
-    return err.status >= 500;
-  }
-  // Anything that isn't a DriftstackError shouldn't be retried — it's a
-  // programmer error or unrelated thrown value.
-  return false;
+  // Delegate to the SDK's public `isRetryable()` so the built-in retry
+  // loop and the consumer-facing predicate can never drift apart. Only
+  // transient kinds (transport / internal / rate_limited) are retried —
+  // a 5xx like DriverError (502) / DriverNotIntegratedError (503) /
+  // SessionTimeoutError (504) is terminal for an idempotent call and
+  // must NOT be auto-retried. This also keeps parity with the Go
+  // (IsRetryable) + Python (is_retryable) SDKs, which retry only the
+  // transient set.
+  return isRetryable(err);
 }
 
 function computeDelay(

@@ -8,6 +8,24 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`BadRequestError`** + **`ErrBadRequest`** sentinel — the generic
+  `bad-request` problem-type (HTTP 400, no field-level issues) now maps
+  to a dedicated `BadRequestError` (sibling of `ValidationError`),
+  mirroring the TypeScript + Python SDKs. `validation-failed` continues
+  to map to `ValidationError`.
+
+### Changed
+
+- **Minor behaviour change:** a generic 400 (`bad-request` problem-type)
+  now surfaces as `*BadRequestError` instead of `*ValidationError`.
+  Callers matching `errors.As(err, &ValidationError{})` /
+  `errors.Is(err, ErrValidation)` on a generic 400 should switch to
+  `*BadRequestError` / `ErrBadRequest`. `validation-failed` 400s are
+  unaffected. `IsRetryable` is unaffected (both 400 types stay
+  non-retryable).
+
+### Added
+
 - **`ProxyID`** (`proxy_id`) on the agent-session create request — route
   the session's egress through one of your account proxies (managed at
   `/v1/account/me/proxies`). Must be an owned proxy id (unknown / not-owned

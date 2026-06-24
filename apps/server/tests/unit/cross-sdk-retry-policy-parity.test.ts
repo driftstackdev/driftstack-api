@@ -66,14 +66,15 @@ describe('W679 cross-SDK retry-policy semantics parity', () => {
     expect(py).toMatch(/Retry-After/);
   });
 
-  it('CRITICAL RateLimitError + TransportError retryable across all 3 SDKs. These 2 error classes are unconditionally retryable because they represent transient failures (429 with a hint to retry, or network failure). Drift to making either non-retryable would silently let customers fail-fast on transient errors.', () => {
+  it('CRITICAL RateLimitError + TransportError retryable across all 3 SDKs. These error classes are transient (429 with a retry hint, or network failure) and must stay retryable. sdk-typescript expresses this by delegating shouldRetry to the public isRetryable() (which retries transport / internal / rate_limited) — so TransportError retryability lives in errors.ts:isRetryable, not as a literal instanceof check in retry.ts. Drift to making either non-retryable would silently let customers fail-fast on transient errors.', () => {
     const ts = read(TS_RETRY);
     const go = read(GO_RETRY);
     const py = read(PY_RETRY);
 
-    // sdk-typescript: instanceof RateLimitError return true; instanceof TransportError return true.
+    // sdk-typescript: computeDelay honours RateLimitError; shouldRetry
+    // delegates to isRetryable() (covers transport + internal + rate_limited).
     expect(ts).toMatch(/RateLimitError/);
-    expect(ts).toMatch(/TransportError/);
+    expect(ts).toMatch(/return isRetryable\(err\);/);
 
     // sdk-go: errors.As(err, &RateLimitError{}) etc.
     expect(go).toMatch(/RateLimitError/);
@@ -84,11 +85,12 @@ describe('W679 cross-SDK retry-policy semantics parity', () => {
     expect(py).toMatch(/TransportError/);
   });
 
-  it('CRITICAL retry-set per-SDK — RateLimitError + TransportError are retried in ALL 3 SDKs (the common transient set). sdk-typescript additionally retries 5xx DriftstackError (status>=500); sdk-go + sdk-python treat 5xx as terminal (only RateLimit + Transport). Drift to retrying 4xx in ANY SDK would blast the server with auth failures.', () => {
+  it('CRITICAL retry-set per-SDK — RateLimitError + TransportError + InternalError (5xx) are the transient set retried in ALL 3 SDKs. sdk-typescript delegates shouldRetry to the public isRetryable() (which retries ONLY transport/internal/rate_limited), so it does NOT blanket-retry every status>=500 — the terminal 5xx kinds DriverError(502)/DriverNotIntegrated(503)/SessionTimeout(504) are NOT retried, matching sdk-go (IsRetryable) + sdk-python (is_retryable). Drift to retrying 4xx in ANY SDK would blast the server with auth failures; drift back to a blanket status>=500 would auto-retry terminal driver/timeout failures.', () => {
     const ts = read(TS_RETRY);
 
-    // sdk-typescript-specific: 5xx retry + explicit "do NOT retry on 4xx" comment.
-    expect(ts).toMatch(/status >= 500/);
+    // sdk-typescript: shouldRetry delegates to isRetryable + explicit
+    // "do NOT retry on 4xx" comment is preserved as the stable anchor.
+    expect(ts).toMatch(/return isRetryable\(err\);/);
     expect(ts).toMatch(/do NOT retry on 4xx/);
   });
 

@@ -6,8 +6,8 @@
 //
 //   • apiError base: Status int, ProblemType string, Message,
 //     Problem map[string]any, Cause error; Unwrap returns Cause.
-//   • 22 sentinel errors (errors.New) for errors.Is matching.
-//   • 21 typed-error struct types each embed apiError and have
+//   • 23 sentinel errors (errors.New) for errors.Is matching.
+//   • 22 typed-error struct types each embed apiError and have
 //     Is(target) method routing to sentinel(s).
 //   • Specialised payload structs: RateLimitError.RetryAfterSeconds,
 //     ConcurrencyLimitError.CurrentSessions+Limit, QuotaExceeded.
@@ -53,12 +53,13 @@ describe('W588.C packages/sdk-go/errors.go content parity', () => {
     expect(body).toMatch(/func \(e \*apiError\) Unwrap\(\) error \{ return e\.Cause \}/);
   });
 
-  it('22 sentinel errors pinned (ErrAuth + ErrForbidden + ErrInvalidKey + ErrExpiredKey + ErrRevokedKey + ErrValidation + ErrNotFound + ErrConflict + ErrRateLimit + ErrConcurrencyLimit + ErrQuotaExceeded + ErrSessionDestroyed + ErrSessionTimeout + ErrLegalAcceptanceRequired + ErrDriverError + ErrTransport + V-437 4 auth-flow + V-438 3 closing)', () => {
+  it('23 sentinel errors pinned (ErrAuth + ErrForbidden + ErrInvalidKey + ErrExpiredKey + ErrRevokedKey + ErrBadRequest + ErrValidation + ErrNotFound + ErrConflict + ErrRateLimit + ErrConcurrencyLimit + ErrQuotaExceeded + ErrSessionDestroyed + ErrSessionTimeout + ErrLegalAcceptanceRequired + ErrDriverError + ErrTransport + V-437 4 auth-flow + V-438 3 closing)', () => {
     expect(body).toMatch(/ErrAuth\s+= errors\.New\("authentication failed"\)/);
     expect(body).toMatch(/ErrForbidden\s+= errors\.New\("forbidden"\)/);
     expect(body).toMatch(/ErrInvalidKey\s+= errors\.New\("invalid api key"\)/);
     expect(body).toMatch(/ErrExpiredKey\s+= errors\.New\("api key expired"\)/);
     expect(body).toMatch(/ErrRevokedKey\s+= errors\.New\("api key revoked"\)/);
+    expect(body).toMatch(/ErrBadRequest\s+= errors\.New\("bad request"\)/);
     expect(body).toMatch(/ErrValidation\s+= errors\.New\("validation failed"\)/);
     expect(body).toMatch(/ErrNotFound\s+= errors\.New\("not found"\)/);
     expect(body).toMatch(/ErrConflict\s+= errors\.New\("conflict"\)/);
@@ -83,7 +84,7 @@ describe('W588.C packages/sdk-go/errors.go content parity', () => {
     expect(body).toMatch(/ErrInternal\s+= errors\.New\("internal error"\)/);
   });
 
-  it('21 typed-error structs each embed apiError + Is(target) routing to sentinel(s): AuthError + 4 sub-auths + Validation/NotFound/Conflict/RateLimit/Concurrency/Quota/SessionDestroyed/SessionTimeout/LegalAcceptanceRequired/Driver/Transport/Unknown + V-437 4 + V-438 3', () => {
+  it('22 typed-error structs each embed apiError + Is(target) routing to sentinel(s): AuthError + 4 sub-auths + BadRequest/Validation/NotFound/Conflict/RateLimit/Concurrency/Quota/SessionDestroyed/SessionTimeout/LegalAcceptanceRequired/Driver/Transport/Unknown + V-437 4 + V-438 3', () => {
     expect(body).toMatch(
       /^type AuthError struct \{\s*\n\s*apiError\s*\n\}\s*\n\s*\nfunc \(e \*AuthError\) Is\(target error\) bool \{ return target == ErrAuth \}/m,
     );
@@ -94,6 +95,10 @@ describe('W588.C packages/sdk-go/errors.go content parity', () => {
     expect(body).toMatch(/^type ExpiredKeyError struct\{ apiError \}$/m);
     expect(body).toMatch(/^type RevokedKeyError struct\{ apiError \}$/m);
     expect(body).toMatch(/^type ForbiddenError struct\{ apiError \}$/m);
+    expect(body).toMatch(/^type BadRequestError struct\{ apiError \}$/m);
+    expect(body).toMatch(
+      /func \(e \*BadRequestError\) Is\(target error\) bool \{ return target == ErrBadRequest \}/,
+    );
     expect(body).toMatch(/^type ValidationError struct\{ apiError \}$/m);
     expect(body).toMatch(/^type NotFoundError struct\{ apiError \}$/m);
     expect(body).toMatch(/^type ConflictError struct\{ apiError \}$/m);

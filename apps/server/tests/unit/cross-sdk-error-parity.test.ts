@@ -19,11 +19,15 @@
 // assert the canonical 21-class shared set is a subset of every
 // SDK\'s declared classes. SDK-specific extras are allowed:
 //   - sdk-go has UnknownError + QuotaExceededError + apiError
-//     (the embedded base struct)
+//     (the embedded base struct) + BadRequestError
 //   - sdk-python has SessionNotFoundError (subclass of NotFoundError)
-//     + QuotaExceededError
+//     + QuotaExceededError + BadRequestError
 //   - sdk-typescript has BadRequestError + InternalError +
 //     TierLimitError (some Go/Python equivalents subclass differently)
+//   NOTE: BadRequestError now exists in all 3 SDKs (the generic-400
+//   `bad-request` problem-type maps to it everywhere, distinct from
+//   `validation-failed` → ValidationError); it stays out of the
+//   canonical SHARED set below for backward compat with that pinned set.
 //
 // The 21-shared-class invariant is what threads error handling
 // across the 3 SDKs. Drift to renaming any one in any SDK would
@@ -148,7 +152,7 @@ describe('W675 cross-SDK error-class parity', () => {
     expect(py.size, `sdk-python error class count`).toBeGreaterThanOrEqual(21);
   });
 
-  it("SDK-extras roster pinned per SDK — drift to dropping any extra would silently shrink that SDK's typed-error surface. sdk-typescript: BadRequestError + InternalError + TierLimitError. sdk-go: QuotaExceededError + UnknownError + InternalError + TierLimitError. sdk-python: QuotaExceededError + SessionNotFoundError.", () => {
+  it("SDK-extras roster pinned per SDK — drift to dropping any extra would silently shrink that SDK's typed-error surface. sdk-typescript: BadRequestError + InternalError + TierLimitError. sdk-go: BadRequestError + QuotaExceededError + UnknownError + InternalError + TierLimitError. sdk-python: BadRequestError + QuotaExceededError + SessionNotFoundError. (BadRequestError now exists in ALL 3 SDKs — the generic-400 `bad-request` problem-type maps to it everywhere, distinct from `validation-failed` → ValidationError.)", () => {
     const ts = extractTsErrorClasses(read(TS_ERRORS));
     // sdk-typescript extras: BadRequestError (4xx generic) + InternalError (5xx generic) + TierLimitError.
     expect(ts.has('BadRequestError'), 'sdk-typescript should declare BadRequestError').toBe(true);
@@ -156,13 +160,15 @@ describe('W675 cross-SDK error-class parity', () => {
     expect(ts.has('TierLimitError'), 'sdk-typescript should declare TierLimitError').toBe(true);
 
     const go = extractGoErrorClasses(read(GO_ERRORS));
-    // sdk-go extras: QuotaExceededError + UnknownError + InternalError.
+    // sdk-go extras: BadRequestError + QuotaExceededError + UnknownError + InternalError.
+    expect(go.has('BadRequestError'), 'sdk-go should declare BadRequestError').toBe(true);
     expect(go.has('QuotaExceededError'), 'sdk-go should declare QuotaExceededError').toBe(true);
     expect(go.has('UnknownError'), 'sdk-go should declare UnknownError').toBe(true);
     expect(go.has('InternalError'), 'sdk-go should declare InternalError').toBe(true);
 
     const py = extractPythonErrorClasses(read(PY_ERRORS));
-    // sdk-python extras: QuotaExceededError + SessionNotFoundError (subclass of NotFoundError).
+    // sdk-python extras: BadRequestError + QuotaExceededError + SessionNotFoundError (subclass of NotFoundError).
+    expect(py.has('BadRequestError'), 'sdk-python should declare BadRequestError').toBe(true);
     expect(py.has('QuotaExceededError'), 'sdk-python should declare QuotaExceededError').toBe(true);
     expect(py.has('SessionNotFoundError'), 'sdk-python should declare SessionNotFoundError').toBe(
       true,

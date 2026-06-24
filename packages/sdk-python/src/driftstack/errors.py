@@ -86,8 +86,27 @@ class ForbiddenError(AuthError):
 # ── Validation / domain (400, 404, 409, 410) ──────────────────────────────
 
 
+class BadRequestError(DriftstackError):
+    """A generic malformed request (HTTP 400, ``bad-request`` problem-type)
+    that did NOT carry a field-level validation breakdown.
+
+    Distinguished from :class:`ValidationError` (the ``validation-failed``
+    problem-type, which carries an ``issues`` list) so callers can tell a
+    structural "the server couldn't make sense of this request at all"
+    failure apart from "these specific fields are invalid". Mirrors the
+    TypeScript SDK's ``BadRequestError``. Subclasses ``DriftstackError``
+    directly (NOT ``ValidationError``) so existing ``except DriftstackError``
+    handlers are unaffected."""
+
+
 class ValidationError(DriftstackError):
-    """Request body or query parameters failed schema validation."""
+    """Request body or query parameters failed field-level schema validation
+    (HTTP 400, ``validation-failed`` problem-type).
+
+    The problem document carries an ``issues`` breakdown (read it via
+    ``e.problem.get("issues")``). For a generic 400 with no field-level
+    issues the server emits the ``bad-request`` problem-type, which maps to
+    :class:`BadRequestError` instead."""
 
 
 class NotFoundError(DriftstackError):
@@ -360,7 +379,7 @@ class ByokAnthropicRequiredError(DriftstackError):
 # constants in apps/server/src/lib/problem-types.ts.
 
 PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
-    "https://errors.driftstack.dev/bad-request": ValidationError,
+    "https://errors.driftstack.dev/bad-request": BadRequestError,
     "https://errors.driftstack.dev/unauthorized": AuthError,
     "https://errors.driftstack.dev/forbidden": ForbiddenError,
     "https://errors.driftstack.dev/not-found": NotFoundError,

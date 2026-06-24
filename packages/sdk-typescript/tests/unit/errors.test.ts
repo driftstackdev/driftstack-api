@@ -3,6 +3,8 @@ import { PROBLEM_TYPES } from '@driftstack/api-types';
 import {
   AuthError,
   BadRequestError,
+  BundledLlmBudgetExhaustedError,
+  BundledLlmConsentRequiredError,
   ConcurrencyLimitError,
   DriftstackError,
   EmailAlreadyRegisteredError,
@@ -16,6 +18,8 @@ import {
   isRetryable,
   MfaStepUpRequiredError,
   NotFoundError,
+  PairModeConflictError,
+  PairModeStateInvalidTransitionError,
   RateLimitError,
   TierLimitError,
   TransportError,
@@ -42,6 +46,21 @@ describe('errorFromProblem', () => {
     expect(e).toBeInstanceOf(InvalidKeyError);
   });
 
+  it('maps bad-request → BadRequestError (generic 400, NOT ValidationError)', () => {
+    const e = errorFromProblem(
+      { type: PROBLEM_TYPES.BadRequest, title: 'Bad Request', status: 400 },
+      null,
+    );
+    expect(e).toBeInstanceOf(BadRequestError);
+    expect(e).toBeInstanceOf(DriftstackError);
+    // BadRequestError is a sibling of ValidationError, NOT a parent —
+    // the generic bad-request problem-type must not surface as a
+    // validation failure (which would imply a field-level issues list).
+    expect(e).not.toBeInstanceOf(ValidationError);
+    expect(e.kind).toBe('bad_request');
+    expect(e.status).toBe(400);
+  });
+
   it('maps validation-failed → ValidationError, captures issues', () => {
     const e = errorFromProblem(
       {
@@ -53,6 +72,7 @@ describe('errorFromProblem', () => {
       null,
     );
     expect(e).toBeInstanceOf(ValidationError);
+    expect(e).not.toBeInstanceOf(BadRequestError);
     expect((e as ValidationError).issues).toEqual({ fieldErrors: { url: ['Required'] } });
   });
 
@@ -268,6 +288,83 @@ describe('errorFromProblem — V-441 ops-flow problem types', () => {
     expect(e).toBeInstanceOf(MfaStepUpRequiredError);
     expect(e.kind).toBe('mfa_step_up_required');
     expect(e.status).toBe(403);
+  });
+});
+
+// Bundled-LLM 402 + pair-mode 409 typed errors — the `kind`
+// discriminator must match the HTTP status class: 402 → 'payment_required'
+// (a dedicated union member), 409 → the existing 'conflict' kind. They
+// were previously built with the wrong 'bad_request' kind. isRetryable()
+// keys off transport/internal/rate_limited, so all four stay NON-retryable.
+describe('errorFromProblem — bundled-LLM 402 + pair-mode 409 kind correctness', () => {
+  it('maps bundled-llm-budget-exhausted → BundledLlmBudgetExhaustedError (kind payment_required, status 402)', () => {
+    const e = errorFromProblem(
+      {
+        type: PROBLEM_TYPES.BundledLlmBudgetExhausted,
+        title: 'Bundled-LLM budget exhausted',
+        status: 402,
+        spent_cents: 1500,
+        cap_cents: 1000,
+      },
+      null,
+    );
+    expect(e).toBeInstanceOf(BundledLlmBudgetExhaustedError);
+    expect(e.kind).toBe('payment_required');
+    expect(e.status).toBe(402);
+    expect((e as BundledLlmBudgetExhaustedError).spentCents).toBe(1500);
+    expect((e as BundledLlmBudgetExhaustedError).capCents).toBe(1000);
+    expect(isRetryable(e)).toBe(false);
+  });
+
+  it('maps bundled-llm-consent-required → BundledLlmConsentRequiredError (kind payment_required, status 402)', () => {
+    const e = errorFromProblem(
+      {
+        type: PROBLEM_TYPES.BundledLlmConsentRequired,
+        title: 'Bundled-LLM consent required',
+        status: 402,
+      },
+      null,
+    );
+    expect(e).toBeInstanceOf(BundledLlmConsentRequiredError);
+    expect(e.kind).toBe('payment_required');
+    expect(e.status).toBe(402);
+    expect(isRetryable(e)).toBe(false);
+  });
+
+  it('maps pair-mode-conflict → PairModeConflictError (kind conflict, status 409)', () => {
+    const e = errorFromProblem(
+      {
+        type: PROBLEM_TYPES.PairModeConflict,
+        title: 'Pair-mode takeover conflict',
+        status: 409,
+        winner_client_id: 'client-abc',
+      },
+      null,
+    );
+    expect(e).toBeInstanceOf(PairModeConflictError);
+    expect(e.kind).toBe('conflict');
+    expect(e.status).toBe(409);
+    expect((e as PairModeConflictError).winnerClientId).toBe('client-abc');
+    expect(isRetryable(e)).toBe(false);
+  });
+
+  it('maps pair-mode-invalid-transition → PairModeStateInvalidTransitionError (kind conflict, status 409)', () => {
+    const e = errorFromProblem(
+      {
+        type: PROBLEM_TYPES.PairModeStateInvalidTransition,
+        title: 'Invalid pair-mode transition',
+        status: 409,
+        from: 'ai-driving',
+        transition: 'handback',
+      },
+      null,
+    );
+    expect(e).toBeInstanceOf(PairModeStateInvalidTransitionError);
+    expect(e.kind).toBe('conflict');
+    expect(e.status).toBe(409);
+    expect((e as PairModeStateInvalidTransitionError).from).toBe('ai-driving');
+    expect((e as PairModeStateInvalidTransitionError).transition).toBe('handback');
+    expect(isRetryable(e)).toBe(false);
   });
 });
 

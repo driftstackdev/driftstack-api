@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
-import { DriftstackError, errorFromProblem, TransportError } from '../../src/errors.js';
+import {
+  DriftstackError,
+  errorFromProblem,
+  isRetryable,
+  TransportError,
+} from '../../src/errors.js';
 import { shouldRetry, withRetry } from '../../src/retry.js';
 
 describe('shouldRetry', () => {
@@ -26,6 +31,40 @@ describe('shouldRetry', () => {
       null,
     );
     expect(shouldRetry(v)).toBe(false);
+  });
+
+  it('does NOT retry the terminal 5xx kinds (502 DriverError / 503 DriverNotIntegrated / 504 SessionTimeout)', () => {
+    // Regression: shouldRetry once blanket-retried any DriftstackError
+    // with status >= 500, which contradicted the public isRetryable()
+    // (driver_error / driver_not_integrated / session_timeout are NOT
+    // retryable) and diverged from the Go + Python SDKs. shouldRetry now
+    // delegates to isRetryable, so these terminal 5xx errors are NOT
+    // auto-retried.
+    const driver = errorFromProblem(
+      { type: PROBLEM_TYPES.DriverError, title: 'x', status: 502 },
+      null,
+    );
+    expect(shouldRetry(driver)).toBe(false);
+
+    const notIntegrated = errorFromProblem(
+      { type: PROBLEM_TYPES.DriverNotIntegrated, title: 'x', status: 503 },
+      null,
+    );
+    expect(shouldRetry(notIntegrated)).toBe(false);
+
+    const timeout = errorFromProblem(
+      { type: PROBLEM_TYPES.SessionTimeout, title: 'x', status: 504 },
+      null,
+    );
+    expect(shouldRetry(timeout)).toBe(false);
+  });
+
+  it('agrees with the public isRetryable() predicate (shouldRetry === isRetryable, no drift)', () => {
+    for (const uri of Object.values(PROBLEM_TYPES)) {
+      const e = errorFromProblem({ type: uri, title: 'x', status: 400 }, null);
+      expect(shouldRetry(e)).toBe(isRetryable(e));
+    }
+    expect(shouldRetry(new TransportError('boom'))).toBe(isRetryable(new TransportError('boom')));
   });
 
   it('does NOT retry non-DriftstackError values', () => {

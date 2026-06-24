@@ -44,6 +44,7 @@ export type DriftstackErrorKind =
   | 'forbidden'
   | 'not_found'
   | 'conflict'
+  | 'payment_required'
   | 'rate_limited'
   | 'concurrency_limit'
   | 'tier_limit'
@@ -344,7 +345,7 @@ export class BundledLlmBudgetExhaustedError extends DriftstackError {
   readonly spentCents: number;
   readonly capCents: number;
   constructor(p: Problem) {
-    super(toOpts('bad_request', p));
+    super(toOpts('payment_required', p));
     this.name = 'BundledLlmBudgetExhaustedError';
     this.spentCents = Number((p as { spent_cents?: number }).spent_cents ?? 0);
     this.capCents = Number((p as { cap_cents?: number }).cap_cents ?? 0);
@@ -356,7 +357,7 @@ export class BundledLlmBudgetExhaustedError extends DriftstackError {
 // consent yet. Dashboard surfaces a one-click enable CTA.
 export class BundledLlmConsentRequiredError extends DriftstackError {
   constructor(p: Problem) {
-    super(toOpts('bad_request', p));
+    super(toOpts('payment_required', p));
     this.name = 'BundledLlmConsentRequiredError';
   }
 }
@@ -367,7 +368,7 @@ export class BundledLlmConsentRequiredError extends DriftstackError {
 export class PairModeConflictError extends DriftstackError {
   readonly winnerClientId: string;
   constructor(p: Problem) {
-    super(toOpts('bad_request', p));
+    super(toOpts('conflict', p));
     this.name = 'PairModeConflictError';
     this.winnerClientId = String((p as { winner_client_id?: string }).winner_client_id ?? '');
   }
@@ -379,7 +380,7 @@ export class PairModeStateInvalidTransitionError extends DriftstackError {
   readonly from: string;
   readonly transition: string;
   constructor(p: Problem) {
-    super(toOpts('bad_request', p));
+    super(toOpts('conflict', p));
     this.name = 'PairModeStateInvalidTransitionError';
     this.from = String((p as { from?: string }).from ?? '');
     this.transition = String((p as { transition?: string }).transition ?? '');

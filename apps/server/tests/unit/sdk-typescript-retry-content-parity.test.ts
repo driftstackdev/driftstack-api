@@ -22,10 +22,12 @@
 //     Drift to exclusive would make maxAttempts:3 mean 3 total
 //     tries (off-by-one). Trailing `throw lastErr` after loop is
 //     unreachable but TypeScript requires it for type-narrowing.
-//   • shouldRetry exhaustive 4-branch — RateLimitError true +
-//     TransportError true + DriftstackError status>=500 true +
-//     default false. Drift to retrying non-DriftstackError throws
-//     would hide programmer errors behind 4 retry loops.
+//   • shouldRetry delegates to the public isRetryable() predicate
+//     (one shared retry decision so the loop + the consumer-facing
+//     predicate cannot drift). Retries ONLY transient kinds
+//     (transport / internal / rate_limited); 4xx and the terminal
+//     5xx kinds (DriverError 502 / DriverNotIntegrated 503 /
+//     SessionTimeout 504) are NOT retried — parity with Go + Python.
 //   • computeDelay 2-path:
 //     - RateLimitError with retryAfterSeconds>0 → server-hint
 //       (retryAfterSeconds*1000 + small ≤100ms jitter)
@@ -56,16 +58,14 @@ describe('W422.B packages/sdk-typescript/src/retry.ts content parity', () => {
     );
   });
 
-  it('CRITICAL default policy pinned per-line — 5 bullet points: (1) "Up to 3 retry attempts (4 total tries) on transient failures"; (2) "Initial backoff 200 ms, doubling each attempt, cap 10 s"; (3) "Random jitter in [0, computed delay] (full jitter)" — the "full jitter" wording matters because half-jitter / decorrelated-jitter / equal-jitter are alternative AWS-style policies; (4) "Honour Retry-After when the error is a RateLimitError or 429"; (5) "Retry on network errors and 5xx; do NOT retry on 4xx (except 429)". CRITICAL: bullet 5 is the load-bearing policy — drift to retrying 4xx would blast the server with auth failures.', () => {
+  it('CRITICAL default policy pinned per-line — 5 bullet points: (1) "Up to 3 retry attempts (4 total tries) on transient failures"; (2) "Initial backoff 200 ms, doubling each attempt, cap 10 s"; (3) "Random jitter in [0, computed delay] (full jitter)" — the "full jitter" wording matters because half-jitter / decorrelated-jitter / equal-jitter are alternative AWS-style policies; (4) "Honour Retry-After when the error is a RateLimitError or 429"; (5) "Retry ONLY transient kinds — transport / internal (5xx) / rate_limited; do NOT retry on 4xx (except 429), nor the terminal 5xx kinds DriverError/DriverNotIntegrated/SessionTimeout". CRITICAL: bullet 5 is the load-bearing policy — it delegates to isRetryable() so the loop and the public predicate cannot drift, and it keeps parity with the Go (IsRetryable) + Python (is_retryable) SDKs which retry ONLY the transient set (NOT blanket-5xx). Drift to retrying 4xx would blast the server with auth failures; drift to blanket-5xx would auto-retry terminal driver/timeout failures.', () => {
     expect(body).toMatch(
-      /\/\/ Default policy \(kept in lockstep with the Python \+ Go SDKs —\s*\n?\s*\/\/\s*3 retries, 200 ms initial, 10 s cap\):\s*\n?\s*\/\/\s*- Up to 3 retry attempts \(4 total tries\) on transient failures\s*\n?\s*\/\/\s*- Initial backoff 200 ms, doubling each attempt, cap 10 s\s*\n?\s*\/\/\s*- Random jitter in \[0, computed delay\] \(full jitter\)\s*\n?\s*\/\/\s*- Honour Retry-After when the error is a RateLimitError or 429\s*\n?\s*\/\/\s*- Retry on network errors and 5xx; do NOT retry on 4xx \(except 429\)/,
+      /\/\/ Default policy \(kept in lockstep with the Python \+ Go SDKs —\s*\n?\s*\/\/\s*3 retries, 200 ms initial, 10 s cap\):\s*\n?\s*\/\/\s*- Up to 3 retry attempts \(4 total tries\) on transient failures\s*\n?\s*\/\/\s*- Initial backoff 200 ms, doubling each attempt, cap 10 s\s*\n?\s*\/\/\s*- Random jitter in \[0, computed delay\] \(full jitter\)\s*\n?\s*\/\/\s*- Honour Retry-After when the error is a RateLimitError or 429\s*\n?\s*\/\/\s*- Retry ONLY transient kinds — transport \(network\), internal \(5xx\),\s*\n?\s*\/\/\s*and rate_limited \(429\)\. do NOT retry on 4xx \(except 429\), and do\s*\n?\s*\/\/\s*NOT retry the terminal 5xx kinds DriverError \(502\),\s*\n?\s*\/\/\s*DriverNotIntegratedError \(503\), or SessionTimeoutError \(504\)/,
     );
   });
 
-  it('Imports — 3-error import (DriftstackError + RateLimitError + TransportError) from ./errors.js. CRITICAL: 3 error-class imports are load-bearing for the shouldRetry instanceof checks. Drift to dropping any would silently turn that error class into a non-retried error.', () => {
-    expect(body).toMatch(
-      /import \{ DriftstackError, RateLimitError, TransportError \} from '\.\/errors\.js';/,
-    );
+  it('Imports — RateLimitError (used by computeDelay for the Retry-After path) + isRetryable (shouldRetry delegates to it) from ./errors.js. CRITICAL: shouldRetry now reuses the public isRetryable() predicate so the built-in loop and the consumer-facing predicate cannot drift apart. Drift to re-implementing the retry decision inline would risk that divergence (the bug this fix closed: blanket status>=500 retried terminal DriverError/SessionTimeout).', () => {
+    expect(body).toMatch(/import \{ RateLimitError, isRetryable \} from '\.\/errors\.js';/);
   });
 
   it('RetryConfig interface — 5-field shape with all OPTIONAL. JSDoc defaults pinned (3 / 200 / 10000) so customers can read the values without grep-ing the implementation. test-seam framing pinned on rng + sleep ("Test override") so future maintainers know NOT to surface these in production docs.', () => {
@@ -112,9 +112,9 @@ describe('W422.B packages/sdk-typescript/src/retry.ts content parity', () => {
     );
   });
 
-  it('CRITICAL shouldRetry exhaustive 4-branch decision: (1) RateLimitError → true; (2) TransportError → true; (3) DriftstackError → status>=500 (5xx only, NOT 4xx — except 429 which already caught in branch 1); (4) default → false (programmer error or unrelated thrown value). Drift to making branch 4 true would retry ANY thrown value, hiding programmer errors. Drift to status>=400 in branch 3 would retry 4xx (auth failures, validation errors).', () => {
+  it('CRITICAL shouldRetry delegates to the public isRetryable() — `return isRetryable(err);`. The loop and the consumer-facing predicate share ONE retry decision so they can never drift apart. isRetryable returns true ONLY for transient kinds (transport / internal / rate_limited): a 4xx (validation/auth/etc.) and the terminal 5xx kinds DriverError(502) / DriverNotIntegratedError(503) / SessionTimeoutError(504) are NOT retried — matching the Go (IsRetryable) + Python (is_retryable) SDKs. Drift back to an inline `status >= 500` blanket-retry would re-introduce the bug where idempotent calls auto-retried terminal driver/timeout failures.', () => {
     expect(body).toMatch(
-      /export function shouldRetry\(err: unknown\): boolean \{\s*\n?\s*if \(err instanceof RateLimitError\) return true;\s*\n?\s*if \(err instanceof TransportError\) return true;\s*\n?\s*if \(err instanceof DriftstackError\) \{\s*\n?\s*\/\/ Retry on 5xx; don't retry on 4xx \(except 429, handled above\)\.\s*\n?\s*return err\.status >= 500;\s*\n?\s*\}\s*\n?\s*\/\/ Anything that isn't a DriftstackError shouldn't be retried — it's a\s*\n?\s*\/\/ programmer error or unrelated thrown value\.\s*\n?\s*return false;\s*\n?\s*\}/,
+      /export function shouldRetry\(err: unknown\): boolean \{\s*\n(?:\s*\/\/.*\n)*\s*return isRetryable\(err\);\s*\n\}/,
     );
   });
 

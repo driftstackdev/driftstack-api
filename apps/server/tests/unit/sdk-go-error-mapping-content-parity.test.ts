@@ -23,7 +23,7 @@ describe('W594.A packages/sdk-go/error_mapping.go content parity', () => {
     expect(body).toMatch(/\/\/ problemTypeToFactory maps stable RFC 7807 problem-type URIs to/);
     expect(body).toMatch(/\/\/ constructors that build the right typed error subclass\./);
     expect(body).toMatch(/\/\/ source of truth for "URI → type"; mirrors the TS \+ Python SDKs\./);
-    expect(body).toMatch(/"https:\/\/errors\.driftstack\.dev\/bad-request":\s+buildValidation,/);
+    expect(body).toMatch(/"https:\/\/errors\.driftstack\.dev\/bad-request":\s+buildBadRequest,/);
     expect(body).toMatch(/"https:\/\/errors\.driftstack\.dev\/unauthorized":\s+buildAuth,/);
     expect(body).toMatch(/"https:\/\/errors\.driftstack\.dev\/forbidden":\s+buildForbidden,/);
     expect(body).toMatch(/"https:\/\/errors\.driftstack\.dev\/rate-limited":\s+buildRateLimit,/);
@@ -107,13 +107,14 @@ describe('W594.A packages/sdk-go/error_mapping.go content parity', () => {
     );
   });
 
-  it('transportErrorFromHTTP wraps net-level failure + compile-time sanity asserts every typed error implements error interface (24 types) + http.StatusOK defence-in-depth no-op pinned', () => {
+  it('transportErrorFromHTTP wraps net-level failure + compile-time sanity asserts every typed error implements error interface (25 types) + http.StatusOK defence-in-depth no-op pinned', () => {
     expect(body).toMatch(
       /^func transportErrorFromHTTP\(message string, cause error\) error \{\s*\n\s*return &TransportError\{apiError: apiError\{\s*\n\s*Status:\s+0,\s*\n\s*Message: message,\s*\n\s*Cause:\s+cause,\s*\n\s*\}\}\s*\n\}/m,
     );
     expect(body).toMatch(/\/\/ Compile-time sanity that the error types implement error\./);
     expect(body).toMatch(/_ error = \(\*apiError\)\(nil\)/);
     expect(body).toMatch(/_ error = \(\*AuthError\)\(nil\)/);
+    expect(body).toMatch(/_ error = \(\*BadRequestError\)\(nil\)/);
     expect(body).toMatch(/_ error = \(\*UnknownError\)\(nil\)/);
     expect(body).toMatch(/\/\/ Defence in depth: HTTP status sanity for the few status codes we/);
     expect(body).toMatch(/\/\/ embed in errors via fmt\.Sprintf — keeps us honest if the stdlib/);

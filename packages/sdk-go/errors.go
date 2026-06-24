@@ -50,6 +50,7 @@ var (
 	ErrInvalidKey              = errors.New("invalid api key")
 	ErrExpiredKey              = errors.New("api key expired")
 	ErrRevokedKey              = errors.New("api key revoked")
+	ErrBadRequest              = errors.New("bad request")
 	ErrValidation              = errors.New("validation failed")
 	ErrNotFound                = errors.New("not found")
 	ErrConflict                = errors.New("conflict")
@@ -106,6 +107,16 @@ func (e *RevokedKeyError) Is(target error) bool { return target == ErrRevokedKey
 type ForbiddenError struct{ apiError }
 
 func (e *ForbiddenError) Is(target error) bool { return target == ErrForbidden || target == ErrAuth }
+
+// BadRequestError — 400 with the generic bad-request problem type (no
+// field-level issues breakdown). Distinguished from ValidationError (the
+// validation-failed problem type, which carries an issues list) so callers
+// can tell a structural "couldn't make sense of the request at all"
+// failure apart from "these specific fields are invalid". Mirrors the TS +
+// Python SDKs' BadRequestError.
+type BadRequestError struct{ apiError }
+
+func (e *BadRequestError) Is(target error) bool { return target == ErrBadRequest }
 
 // ValidationError — 400 with the validation-failed problem type.
 type ValidationError struct{ apiError }

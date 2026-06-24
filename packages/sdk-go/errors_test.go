@@ -19,6 +19,7 @@ func TestErrorFromResponseMapsProblemTypes(t *testing.T) {
 		{"https://errors.driftstack.dev/unauthorized", &AuthError{}, ErrAuth},
 		{"https://errors.driftstack.dev/not-found", &NotFoundError{}, ErrNotFound},
 		{"https://errors.driftstack.dev/conflict", &ConflictError{}, ErrConflict},
+		{"https://errors.driftstack.dev/bad-request", &BadRequestError{}, ErrBadRequest},
 		{"https://errors.driftstack.dev/rate-limited", &RateLimitError{}, ErrRateLimit},
 		{"https://errors.driftstack.dev/concurrency-limit", &ConcurrencyLimitError{}, ErrConcurrencyLimit},
 		{"https://errors.driftstack.dev/tier-limit", &QuotaExceededError{}, ErrQuotaExceeded},
@@ -94,6 +95,11 @@ func TestErrorFromResponseMapsProblemTypes(t *testing.T) {
 				if !errors.As(err, &c) {
 					t.Fatalf("errors.As %T failed", tc.want)
 				}
+			case *BadRequestError:
+				var c *BadRequestError
+				if !errors.As(err, &c) {
+					t.Fatalf("errors.As %T failed", tc.want)
+				}
 			case *ValidationError:
 				var c *ValidationError
 				if !errors.As(err, &c) {
@@ -150,6 +156,30 @@ func TestErrorFromResponseMapsProblemTypes(t *testing.T) {
 				t.Errorf("expected errors.Is %v, got %v", tc.isSentinel, err)
 			}
 		})
+	}
+}
+
+func TestBadRequestMapsToBadRequestErrorNotValidation(t *testing.T) {
+	t.Parallel()
+	// The generic bad-request problem-type maps to BadRequestError (a
+	// sibling of ValidationError), NOT ValidationError. Mirrors the TS +
+	// Python SDKs; validation-failed (with an issues breakdown) stays
+	// ValidationError.
+	body := []byte(`{"type":"https://errors.driftstack.dev/bad-request","title":"Bad Request","status":400,"detail":"malformed"}`)
+	err := errorFromResponse(400, body, "")
+	var br *BadRequestError
+	if !errors.As(err, &br) {
+		t.Fatalf("expected *BadRequestError, got %T", err)
+	}
+	var ve *ValidationError
+	if errors.As(err, &ve) {
+		t.Fatal("bad-request must NOT surface as *ValidationError")
+	}
+	if !errors.Is(err, ErrBadRequest) {
+		t.Errorf("expected errors.Is(err, ErrBadRequest)")
+	}
+	if errors.Is(err, ErrValidation) {
+		t.Errorf("bad-request must NOT match ErrValidation sentinel")
 	}
 }
 

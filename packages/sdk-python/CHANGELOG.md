@@ -8,6 +8,23 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `BadRequestError` — the generic `bad-request` problem-type (HTTP 400,
+  no field-level issues) now maps to a dedicated `BadRequestError`
+  (subclasses `DriftstackError` directly, a sibling of `ValidationError`),
+  mirroring the TypeScript + Python error surface. Exported from the
+  package top level (`from driftstack import BadRequestError`).
+  `validation-failed` continues to map to `ValidationError`.
+
+### Changed
+
+- **Minor behaviour change:** a generic 400 (`bad-request` problem-type)
+  now raises `BadRequestError` instead of `ValidationError`. Callers with
+  `except ValidationError` around a generic 400 should switch to
+  `except BadRequestError`. `validation-failed` 400s are unaffected, and
+  `except DriftstackError` catch-alls (and `is_retryable`) are unaffected.
+
+### Added
+
 - `proxy_id` on agent-session create (`agent_sessions.create` body) — route
   the session's egress through one of your account proxies (managed at
   `/v1/account/me/proxies`). Must be an owned proxy id (unknown / not-owned

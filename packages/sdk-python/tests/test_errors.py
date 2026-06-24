@@ -8,6 +8,7 @@ from driftstack import is_retryable
 from driftstack.errors import (
     PROBLEM_TYPE_TO_ERROR,
     AuthError,
+    BadRequestError,
     BundledLlmBudgetExhaustedError,
     ConcurrencyLimitError,
     ConflictError,
@@ -48,6 +49,12 @@ def test_subclass_relationships() -> None:
     assert issubclass(QuotaExceededError, DriftstackError)
     assert issubclass(ConcurrencyLimitError, DriftstackError)
     assert issubclass(ConflictError, DriftstackError)
+    assert issubclass(BadRequestError, DriftstackError)
+    # BadRequestError is a SIBLING of ValidationError (both extend
+    # DriftstackError directly), NOT a parent/child — so `except
+    # DriftstackError` catches both, but neither catches the other.
+    assert not issubclass(BadRequestError, ValidationError)
+    assert not issubclass(ValidationError, BadRequestError)
     assert issubclass(ValidationError, DriftstackError)
     assert issubclass(SessionDestroyedError, DriftstackError)
     assert issubclass(DriverError, DriftstackError)
@@ -79,6 +86,7 @@ def test_every_problem_type_maps_to_a_subclass() -> None:
         ("https://errors.driftstack.dev/unauthorized", AuthError),
         ("https://errors.driftstack.dev/not-found", NotFoundError),
         ("https://errors.driftstack.dev/conflict", ConflictError),
+        ("https://errors.driftstack.dev/bad-request", BadRequestError),
         ("https://errors.driftstack.dev/validation-failed", ValidationError),
         ("https://errors.driftstack.dev/rate-limited", RateLimitError),
         ("https://errors.driftstack.dev/concurrency-limit", ConcurrencyLimitError),
@@ -100,6 +108,22 @@ def test_error_from_response_maps_problem_type(
     assert isinstance(err, expected_cls)
     assert err.message == "oops"
     assert err.problem_type == problem_type
+
+
+def test_bad_request_maps_to_bad_request_error_not_validation() -> None:
+    """The generic `bad-request` problem-type maps to BadRequestError, a
+    sibling of ValidationError — NOT ValidationError itself. This aligns
+    Python with the TS SDK (which has had both classes); `validation-failed`
+    (with a field-level issues list) stays mapped to ValidationError."""
+    body = (
+        '{"type":"https://errors.driftstack.dev/bad-request",'
+        '"title":"Bad Request","status":400,"detail":"malformed"}'
+    )
+    err = _error_from_response_data(status=400, text=body, retry_after_header=None)
+    assert isinstance(err, BadRequestError)
+    assert not isinstance(err, ValidationError)
+    assert err.status == 400
+    assert err.problem_type == "https://errors.driftstack.dev/bad-request"
 
 
 def test_rate_limit_uses_retry_after_header() -> None:

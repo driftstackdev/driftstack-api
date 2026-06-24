@@ -11,7 +11,7 @@ import (
 // constructors that build the right typed error subclass. Single
 // source of truth for "URI → type"; mirrors the TS + Python SDKs.
 var problemTypeToFactory = map[string]func(base apiError, problem map[string]any, retryAfterHeader string) error{
-	"https://errors.driftstack.dev/bad-request":               buildValidation,
+	"https://errors.driftstack.dev/bad-request":               buildBadRequest,
 	"https://errors.driftstack.dev/unauthorized":              buildAuth,
 	"https://errors.driftstack.dev/forbidden":                 buildForbidden,
 	"https://errors.driftstack.dev/not-found":                 buildNotFound,
@@ -122,6 +122,10 @@ func buildRevokedKey(base apiError, _ map[string]any, _ string) error {
 
 func buildForbidden(base apiError, _ map[string]any, _ string) error {
 	return &ForbiddenError{apiError: base}
+}
+
+func buildBadRequest(base apiError, _ map[string]any, _ string) error {
+	return &BadRequestError{apiError: base}
 }
 
 func buildValidation(base apiError, _ map[string]any, _ string) error {
@@ -320,6 +324,7 @@ var (
 	_ error = (*RateLimitError)(nil)
 	_ error = (*ConcurrencyLimitError)(nil)
 	_ error = (*QuotaExceededError)(nil)
+	_ error = (*BadRequestError)(nil)
 	_ error = (*ValidationError)(nil)
 	_ error = (*TransportError)(nil)
 	_ error = (*NotFoundError)(nil)

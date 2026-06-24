@@ -62,10 +62,9 @@ describe('W815 cross-SDK retry policy parity', () => {
 
   // ─── Retryable error set ──────────────────────────────────────
 
-  it('CRITICAL all 3 retry implementations retry TransportError + RateLimitError + InternalError (5xx) — but NOT ValidationError/auth (the infinite-loop class). TS retries status>=500; Python lists them in retryable_errors; Go documents the set.', () => {
-    expect(read(TS)).toMatch(
-      /import \{ DriftstackError, RateLimitError, TransportError \} from '\.\/errors\.js';/,
-    );
+  it('CRITICAL all 3 retry implementations retry the SAME transient set — TransportError + RateLimitError + InternalError (5xx) — but NOT ValidationError/auth NOR the terminal 5xx kinds (DriverError 502 / DriverNotIntegrated 503 / SessionTimeout 504). TS delegates shouldRetry to the public isRetryable() (so the loop and the predicate cannot diverge — the bug this guard now pins closed: a blanket status>=500 retried terminal driver/timeout errors); Python lists the set in retryable_errors; Go documents it.', () => {
+    expect(read(TS)).toMatch(/import \{ RateLimitError, isRetryable \} from '\.\/errors\.js';/);
+    expect(read(TS)).toMatch(/return isRetryable\(err\);/);
     expect(read(PY)).toMatch(
       /retryable_errors: tuple\[type\[BaseException\], \.\.\.\] = field\(\s*\n\s+default_factory=lambda: \(TransportError, RateLimitError, InternalError\)\s*\n\s+\)/,
     );
@@ -76,10 +75,9 @@ describe('W815 cross-SDK retry policy parity', () => {
 
   // ─── Do-not-retry-on-4xx-except-429 framing ───────────────────
 
-  it("CRITICAL TS-only 'Retry on network errors and 5xx; do NOT retry on 4xx (except 429)' framing pinned. This is the load-bearing 'don't retry validation errors' anchor — drift would either retry 401s (silent infinite loops on revoked keys) or stop retrying 5xx (lose transient resilience).", () => {
-    expect(read(TS)).toMatch(
-      /\/\/\s+- Retry on network errors and 5xx; do NOT retry on 4xx \(except 429\)/,
-    );
+  it("CRITICAL TS 'Retry ONLY transient kinds ... do NOT retry on 4xx (except 429)' framing pinned. This is the load-bearing 'don't retry validation errors' anchor — drift would either retry 401s (silent infinite loops on revoked keys) or, if it reverted to a blanket 5xx, auto-retry the terminal driver/timeout 5xx kinds. The 'do NOT retry on 4xx (except 429)' wording is preserved as the stable anchor.", () => {
+    expect(read(TS)).toMatch(/\/\/\s+- Retry ONLY transient kinds/);
+    expect(read(TS)).toMatch(/do NOT retry on 4xx \(except 429\)/);
   });
 
   // ─── Initial backoff + cap defaults ───────────────────────────

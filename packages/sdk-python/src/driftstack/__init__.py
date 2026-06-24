@@ -18,6 +18,7 @@ from driftstack._version import __version__
 from driftstack.client import AsyncDriftstack, Driftstack
 from driftstack.errors import (
     AuthError,
+    BadRequestError,
     BundledLlmBudgetExhaustedError,
     BundledLlmConsentRequiredError,
     ByokAnthropicRequiredError,
@@ -68,6 +69,7 @@ __all__ = [
     "AsyncDriftstack",
     "DriftstackError",
     "AuthError",
+    "BadRequestError",
     "ForbiddenError",
     "InvalidKeyError",
     "ExpiredKeyError",

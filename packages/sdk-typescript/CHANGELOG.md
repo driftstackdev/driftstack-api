@@ -6,6 +6,28 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Retry policy** (`shouldRetry`) no longer auto-retries the terminal
+  5xx errors `DriverError` (502), `DriverNotIntegratedError` (503), and
+  `SessionTimeoutError` (504). It now delegates to the public
+  `isRetryable()` predicate (retry ONLY `transport` / `internal` /
+  `rate_limited` kinds), so the built-in retry loop and `isRetryable()`
+  can no longer drift apart — and it matches the Go (`IsRetryable`) +
+  Python (`is_retryable`) SDKs. Previously these terminal failures were
+  retried on idempotent calls because of a blanket `status >= 500` check.
+
+### Changed
+
+- **Minor behaviour change:** the `kind` discriminator on
+  `BundledLlmBudgetExhaustedError` + `BundledLlmConsentRequiredError`
+  (HTTP 402) is now `'payment_required'` (a new `DriftstackErrorKind`
+  union member) and on `PairModeConflictError` +
+  `PairModeStateInvalidTransitionError` (HTTP 409) is now `'conflict'` —
+  previously all four were mislabelled `'bad_request'`. The error classes,
+  HTTP statuses, typed extension fields, and `isRetryable()` results
+  (still `false` for all four) are unchanged.
+
 ### Added
 
 - `proxy_id` on agent-session create (`CreateAgentSessionRequest`) — route

@@ -79,7 +79,8 @@ describe('W585.B packages/sdk-python/src/driftstack/errors.py content parity', (
     );
   });
 
-  it('Domain pass-through classes: ValidationError + NotFoundError + ConflictError + SessionNotFoundError (inherits NotFoundError) + SessionDestroyedError. Custom subclass-of-subclass: SessionNotFoundError(NotFoundError) so `except NotFoundError` also catches session-specific 404s — drift to inheriting from DriftstackError directly would break the catch hierarchy.', () => {
+  it('Domain pass-through classes: BadRequestError + ValidationError + NotFoundError + ConflictError + SessionNotFoundError (inherits NotFoundError) + SessionDestroyedError. BadRequestError subclasses DriftstackError directly (NOT ValidationError) so `except DriftstackError` handlers are unaffected; the generic-400 `bad-request` problem-type maps to it, distinct from `validation-failed` → ValidationError. Custom subclass-of-subclass: SessionNotFoundError(NotFoundError) so `except NotFoundError` also catches session-specific 404s — drift to inheriting from DriftstackError directly would break the catch hierarchy.', () => {
+    expect(body).toMatch(/^class BadRequestError\(DriftstackError\):$/m);
     expect(body).toMatch(/^class ValidationError\(DriftstackError\):$/m);
     expect(body).toMatch(/^class NotFoundError\(DriftstackError\):$/m);
     expect(body).toMatch(/^class ConflictError\(DriftstackError\):$/m);
@@ -187,7 +188,7 @@ describe('W585.B packages/sdk-python/src/driftstack/errors.py content parity', (
   it('PROBLEM_TYPE_TO_ERROR mapping — 24 problem-type URI → subclass entries. Maps the server constants in apps/server/src/lib/problem-types.ts onto the right Python exception. Every URI is `https://errors.driftstack.dev/<slug>`. The HTTP layer consults this mapping so customers get typed exceptions instead of bare DriftstackError + .problem_type string compare.', () => {
     expect(body).toMatch(/^PROBLEM_TYPE_TO_ERROR: dict\[str, type\[DriftstackError\]\] = \{$/m);
     // RFC-7807 standard problem types.
-    expect(body).toMatch(/"https:\/\/errors\.driftstack\.dev\/bad-request": ValidationError,/);
+    expect(body).toMatch(/"https:\/\/errors\.driftstack\.dev\/bad-request": BadRequestError,/);
     expect(body).toMatch(/"https:\/\/errors\.driftstack\.dev\/unauthorized": AuthError,/);
     expect(body).toMatch(/"https:\/\/errors\.driftstack\.dev\/forbidden": ForbiddenError,/);
     expect(body).toMatch(/"https:\/\/errors\.driftstack\.dev\/not-found": NotFoundError,/);
