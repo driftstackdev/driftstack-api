@@ -1547,6 +1547,13 @@ export function registerAgentSessionsRoutes(
   // Beyond this Fastify 413s before the handler; the handler is the authoritative
   // 64-MiB-decoded enforcer.
   const UPLOAD_MAX_BODY_BYTES = 96 * 1024 * 1024;
+  // Founder safeguard (2026-06-24): per-ACCOUNT cap on CONCURRENT in-flight upload
+  // volume (512 MB), independent of the 64 MiB per-file cap — so one account can't
+  // flood the box/jail with many large simultaneous uploads. Tracked in-memory
+  // per-instance (prod = single node; a multi-instance deploy would move this to
+  // Redis). Reserved on accept, released in the relay's finally (any outcome).
+  const UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES = 512 * 1024 * 1024;
+  const accountUploadInFlightBytes = new Map<string, number>();
   const UploadFileBodySchema = z.object({
     name: z.string().min(1).max(255),
     mime: z.string().min(1).max(255),
@@ -1612,20 +1619,42 @@ export function registerAgentSessionsRoutes(
           reason: 'session node is not connected',
         };
       }
-      const outcome = await conn.requestUpload(
-        randomUUID(),
-        rec.id,
-        parsed.data.name,
-        parsed.data.mime,
-        bytes.toString('base64'),
-      );
-      if (outcome.status === 'ok') {
-        return { handle: outcome.handle, status: 'ok' as const };
+      // Founder safeguard: reject when this upload would push the account's
+      // CONCURRENT in-flight upload bytes past 512 MB (a discriminated error so the
+      // GUI shows the reason, not an HTTP-error). Reserve before relay; release in
+      // the finally regardless of outcome.
+      const acct = rec.accountId;
+      const inFlight = accountUploadInFlightBytes.get(acct) ?? 0;
+      if (inFlight + bytes.length > UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES) {
+        return {
+          handle: null,
+          status: 'error' as const,
+          reason:
+            'account upload limit reached: at most 512 MB of uploads in flight at once — wait for in-progress uploads to finish',
+        };
       }
-      if (outcome.status === 'error') {
-        return { handle: null, status: 'error' as const, reason: outcome.message };
+      accountUploadInFlightBytes.set(acct, inFlight + bytes.length);
+      try {
+        const outcome = await conn.requestUpload(
+          randomUUID(),
+          rec.id,
+          parsed.data.name,
+          parsed.data.mime,
+          bytes.toString('base64'),
+        );
+        if (outcome.status === 'ok') {
+          return { handle: outcome.handle, status: 'ok' as const };
+        }
+        if (outcome.status === 'error') {
+          return { handle: null, status: 'error' as const, reason: outcome.message };
+        }
+        return { handle: null, status: 'timeout' as const };
+      } finally {
+        const cur = accountUploadInFlightBytes.get(acct) ?? bytes.length;
+        const next = cur - bytes.length;
+        if (next <= 0) accountUploadInFlightBytes.delete(acct);
+        else accountUploadInFlightBytes.set(acct, next);
       }
-      return { handle: null, status: 'timeout' as const };
     },
   );
 
