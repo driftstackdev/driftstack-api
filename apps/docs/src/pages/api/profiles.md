@@ -47,6 +47,10 @@ The cap on enterprise tier is negotiated; the API returns
   "name": "production",
   "archetype": "iphone17_ios18_7_safari26_4",
   "description": "primary prod-data scrape profile",
+  "folder": "checkout-flows",
+  "tags": ["prod", "us-east"],
+  "icon": "🛒",
+  "note": "rotate cookies weekly",
   "last_used_at": "2026-05-09T22:00:00.000Z",
   "created_at": "2026-04-15T11:30:00.000Z",
   "updated_at": "2026-05-09T22:00:00.000Z"
@@ -63,6 +67,14 @@ The cap on enterprise tier is negotiated; the API returns
   hold a profile on iOS 17 while you migrate). Once set, the
   archetype is sticky for that profile's lifetime.
 - `description` — free-form, max 2048 chars; nullable.
+- `folder` — optional organising folder name; `null` when the profile
+  isn't filed under a folder.
+- `tags` — array of free-form organising tags; `[]` when none are set.
+- `icon` — optional short emoji shown in the dashboard / GUI; `null`
+  falls back to a monogram. Synced server-side so it follows the
+  account across machines.
+- `note` — optional short inline note; `null` when unset. Synced
+  server-side alongside `icon`.
 - `last_used_at` — touched by SessionsService when a session is
   created against this profile. `null` until first use.
 
@@ -165,7 +177,7 @@ Errors:
   (deliberate anti-enumeration — cross-account `profile_id` is
   indistinguishable from a missing one).
 - Any error the underlying `POST /v1/sessions` can return — most
-  commonly `402` (concurrent-session cap reached) or `503` if the
+  commonly `429` (concurrent-session cap reached) or `503` if the
   EGRESS gate fires on a tier that requires a `proxy` envelope.
 
 ## Clone

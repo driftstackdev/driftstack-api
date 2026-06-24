@@ -26,6 +26,14 @@ Three operational modes:
   then `handback` to return control to AI. State transitions are
   audit-logged.
 
+> **Scope note.** Write operations on agent-session endpoints
+> (create, send-message, input-event, mode/takeover transitions)
+> gate on the broad `write` scope — there is no agent-sessions-specific
+> granular scope. Driver-session routes accept the
+> granular `write:sessions`, but agent sessions do not have a
+> granular equivalent. If you mint a narrow CI key, include the
+> broad `write` scope to call these endpoints.
+
 ## Resource shape
 
 ```json
@@ -387,15 +395,25 @@ desktop-style tooling. `button` is `0` (left), `1` (middle), or `2`
 (right). `modifiers` is an optional array of `cmd / ctrl / shift / option`
 strings.
 
-Response (200):
+Response (200): a discriminated union on `kind`.
+
+For a straight forward-to-harness dispatch (manual mode, or pair
+mode after takeover-grant):
 
 ```json
-{ "ok": true, "duration_ms": 3 }
+{ "kind": "forwarded", "duration_ms": 3 }
 ```
 
-`duration_ms` is server-side dispatch latency, NOT round-trip to
-the harness. Use a separate `ping` event to measure end-to-end
-latency.
+When the first input-event in a pair-mode `ai-driving` session fires
+the takeover-request transition instead of forwarding:
+
+```json
+{ "kind": "pair-mode-takeover-fired", "pair_mode_state": { "kind": "takeover-pending" } }
+```
+
+`duration_ms` (on the `forwarded` branch) is server-side dispatch
+latency, NOT round-trip to the harness. Use a separate `ping` event
+to measure end-to-end latency.
 
 Throttle the client side: the route's rate-limit bucket
 (`agent_sessions:input_event`) is sized for ≤120Hz `mouseMove` /

@@ -50,8 +50,7 @@ with the following envelope:
 {
   "id": "evt_<uuid>",
   "type": "<event-type>",
-  "account_id": "acc_<uuid>",
-  "emitted_at": "2026-05-05T12:34:56.789Z",
+  "created_at": "2026-05-05T12:34:56.789Z",
   "data": {
     /* per-event-type shape, see below */
   }
@@ -62,13 +61,14 @@ Headers:
 
 - `Content-Type: application/json`
 - `X-Driftstack-Signature: t=<unix-seconds>,v1=<hex>` —
-  HMAC-SHA256(`<emitted_at_seconds>.<raw body>`) keyed by the
-  endpoint signing secret. Verification reference:
+  HMAC-SHA256(`<t>.<raw body>`) keyed by the endpoint signing
+  secret, where `<t>` is the `t=<unix-seconds>` value from this
+  same header (NOT a body field). Verification reference:
   `packages/sdk-typescript/src/webhook-signature.ts` (TS),
   `packages/sdk-go/webhook_signature.go` (Go),
   `packages/sdk-python/src/driftstack/webhook_signature.py` (Py).
-- `X-Driftstack-Event-Id: evt_<uuid>` — duplicate of `data.id`,
-  surfaces in HTTP logs without parsing the body.
+- `X-Driftstack-Event-Id: evt_<uuid>` — duplicate of the top-level
+  `id`, surfaces in HTTP logs without parsing the body.
 - `X-Driftstack-Event-Type: <event-type>` — the delivered event
   type (e.g. `session.completed`), so handlers can route without
   parsing the body.
@@ -249,7 +249,7 @@ transitions to a terminal state. Wired end-to-end 2026-05-22
 
 ```json
 {
-  "event_type": "crypto.order.paid",
+  "type": "crypto.order.paid",
   "data": {
     "order_id": "ord_a1b2c3d4e5f6",
     "product": "solo_manual",
@@ -265,7 +265,7 @@ transitions to a terminal state. Wired end-to-end 2026-05-22
 
 ```json
 {
-  "event_type": "crypto.order.failed",
+  "type": "crypto.order.failed",
   "data": {
     "order_id": "ord_a1b2c3d4e5f6",
     "product": "solo_manual",
@@ -306,7 +306,7 @@ and fires once the fleet control plane is live (gated behind
 
 ```json
 {
-  "event_type": "session.challenge_detected",
+  "type": "session.challenge_detected",
   "data": {
     "session_id": "ses_a1b2c3d4e5f6",
     "challenge_id": "chl_9f8e7d6c",
@@ -336,7 +336,7 @@ is wired and fires once the fleet control plane is live (gated behind
 
 ```json
 {
-  "event_type": "session.profile_save_failed",
+  "type": "session.profile_save_failed",
   "data": {
     "session_id": "ses_a1b2c3d4e5f6",
     "profile_id": "prof_1f2e3d4c",
@@ -539,7 +539,9 @@ POST /v1/webhooks
     "api_key.revoked",
     "session.egress_capability_changed",
     "crypto.order.paid",
-    "crypto.order.failed"
+    "crypto.order.failed",
+    "session.challenge_detected",
+    "session.profile_save_failed"
   ]
 }
 ```

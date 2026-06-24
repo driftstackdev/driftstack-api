@@ -230,7 +230,10 @@ describe('W761 docs /api/sessions content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/`POST \/v1\/sessions`/);
-    expect(p).toMatch(/`GET \/v1\/sessions\?limit=50&cursor=<\.\.\.>&status=<\.\.\.>`/);
+    // The List route's PaginationQuerySchema parses only limit + cursor
+    // (no `status` filter) — the example must not advertise &status=.
+    expect(p).toMatch(/`GET \/v1\/sessions\?limit=50&cursor=<\.\.\.>`/);
+    expect(p).not.toMatch(/`GET \/v1\/sessions\?[^`]*&status=/);
     expect(p).toMatch(/`GET \/v1\/sessions\/:id\/state`/);
     expect(p).toMatch(/`POST \/v1\/sessions\/:id\/navigate`/);
     expect(p).toMatch(/`POST \/v1\/sessions\/:id\/interact`/);

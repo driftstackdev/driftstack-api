@@ -156,20 +156,23 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     expect(p).not.toMatch(/trial_pack\./);
   });
 
-  it('CRITICAL evt_<uuid> common-envelope shape pinned — id + type + account_id + emitted_at + data. Drift to a different envelope would break SDK type discriminators.', () => {
+  it('CRITICAL evt_<uuid> common-envelope shape pinned — id + type + created_at + data (the real delivered body; no account_id / emitted_at). Drift to a different envelope would break SDK type discriminators.', () => {
     const p = read(EV);
 
     expect(p).toMatch(/"id": "evt_<uuid>",/);
     expect(p).toMatch(/"type": "<event-type>",/);
-    expect(p).toMatch(/"account_id": "acc_<uuid>",/);
-    expect(p).toMatch(/"emitted_at": "2026-05-05T12:34:56\.789Z",/);
+    expect(p).toMatch(/"created_at": "2026-05-05T12:34:56\.789Z",/);
+    // The wire body (services/webhooks.ts enqueueEvent) carries NO
+    // account_id and NO emitted_at — the timestamp is created_at.
+    expect(p).not.toMatch(/"account_id":/);
+    expect(p).not.toMatch(/"emitted_at":/);
   });
 
-  it("CRITICAL X-Driftstack-Signature header format pinned — 'X-Driftstack-Signature: t=<unix-seconds>,v1=<hex> — HMAC-SHA256(<emitted_at_seconds>.<raw body>) keyed by the endpoint signing secret'. Matches W753 + V-273 webhook-delivery toolkit + the canonical x-driftstack-signature header set by webhook-worker.", () => {
+  it("CRITICAL X-Driftstack-Signature header format pinned — 'X-Driftstack-Signature: t=<unix-seconds>,v1=<hex> — HMAC-SHA256(<t>.<raw body>) keyed by the endpoint signing secret, where <t> is the header value (not a body field)'. Matches W753 + V-273 webhook-delivery toolkit + the canonical x-driftstack-signature header set by webhook-worker + webhook-signing.ts.", () => {
     const p = read(EV);
 
     expect(p).toMatch(
-      /`X-Driftstack-Signature: t=<unix-seconds>,v1=<hex>` —\s*\n?\s+HMAC-SHA256\(`<emitted_at_seconds>\.<raw body>`\) keyed by the\s*\n?\s+endpoint signing secret\./,
+      /`X-Driftstack-Signature: t=<unix-seconds>,v1=<hex>` —\s*\n?\s+HMAC-SHA256\(`<t>\.<raw body>`\) keyed by the endpoint signing\s*\n?\s+secret, where `<t>` is the `t=<unix-seconds>` value from this\s*\n?\s+same header \(NOT a body field\)\./,
     );
     expect(p).toMatch(/Verification reference:/);
     expect(p).toMatch(/`packages\/sdk-typescript\/src\/webhook-signature\.ts`/);
@@ -180,7 +183,7 @@ describe('W787 docs webhooks/ triplet content parity', () => {
   it('CRITICAL X-Driftstack-Event-Id + X-Driftstack-Event-Type headers pinned (the canonical set webhook-worker sends alongside x-driftstack-signature). Drift to dropping would lose log-correlation + handler-routing utility.', () => {
     const p = read(EV);
 
-    expect(p).toMatch(/`X-Driftstack-Event-Id: evt_<uuid>`/);
+    expect(p).toMatch(/`X-Driftstack-Event-Id: evt_<uuid>` — duplicate of the top-level/);
     expect(p).toMatch(/`X-Driftstack-Event-Type: <event-type>` — the delivered event/);
   });
 

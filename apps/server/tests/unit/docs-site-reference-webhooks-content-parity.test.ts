@@ -131,7 +131,10 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(body).toMatch(/^## Common envelope$/m);
     expect(body).toMatch(/"id": "evt_<uuid>"/);
     expect(body).toMatch(/"type": "<event-type>"/);
-    expect(body).toMatch(/"account_id": "acc_<uuid>"/);
+    // The real delivered body (services/webhooks.ts) is { id, type,
+    // created_at, data } — NO account_id, NO emitted_at.
+    expect(body).toMatch(/"created_at": "2026-05-05T12:34:56\.789Z"/);
+    expect(body).not.toMatch(/"account_id":/);
     expect(existsSync(EV)).toBe(true);
   });
 

@@ -60,6 +60,14 @@ There are three categories of scopes, in order of breadth:
 > granular write level. (A broad `admin` key still satisfies `account_owner`
 > via the V-174 alias.)
 
+> **Note — agent-session endpoints require the broad `write` scope.**
+> Driver-session routes accept the granular `write:sessions`, but
+> agent-session endpoints (`/v1/agent-sessions/*` — create,
+> send-message, input-event, mode/takeover transitions) gate on the
+> broad `write` scope. There is no agent-sessions-specific granular
+> scope. If you mint a narrow CI key, include the broad `write` scope
+> to call these endpoints.
+
 ## broad-satisfies-granular rule
 
 A key with a broad scope **satisfies** any granular scope on

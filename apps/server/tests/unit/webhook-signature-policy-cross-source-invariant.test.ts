@@ -96,9 +96,9 @@ describe('W905 webhook signature policy cross-source invariant', () => {
 
   // ─── Docs cross-reference ────────────────────────────────────
 
-  it("CRITICAL apps/docs/src/pages/webhooks/events.md pins 'HMAC-SHA256(<emitted_at_seconds>.<raw body>) keyed by the' framing + 'v1= from the header, recompute HMAC-SHA256(<t>.<body>), constant-' framing. The customer-facing docs match the SDK contract.", () => {
+  it("CRITICAL apps/docs/src/pages/webhooks/events.md pins 'HMAC-SHA256(<t>.<raw body>) keyed by the endpoint signing' framing + 'v1= from the header, recompute HMAC-SHA256(<t>.<body>), constant-' framing. The customer-facing docs match the SDK contract — the signed timestamp is the t= header value (webhook-signing.ts), NOT a body field.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/docs/src/pages/webhooks/events.md'));
-    expect(p).toMatch(/HMAC-SHA256\(`<emitted_at_seconds>\.<raw body>`\) keyed by the/);
+    expect(p).toMatch(/HMAC-SHA256\(`<t>\.<raw body>`\) keyed by the endpoint signing/);
     expect(p).toMatch(/v1=` from the header, recompute HMAC-SHA256\(`<t>\.<body>`\), constant-/);
   });
 

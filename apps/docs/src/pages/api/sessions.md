@@ -127,9 +127,9 @@ Errors:
 
 ## List
 
-`GET /v1/sessions?limit=50&cursor=<...>&status=<...>`
+`GET /v1/sessions?limit=50&cursor=<...>`
 
-Cursor-paginated, newest-first. Optional `status` filter.
+Cursor-paginated, newest-first.
 
 ## Get one
 
