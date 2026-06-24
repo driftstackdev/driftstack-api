@@ -93,6 +93,59 @@ describe('SimulatorWindow — file-download Downloads section (A3 W2856)', () =>
     });
   });
 
+  // Browser-bar download indicator (GUI chrome — like the address bar; never touches
+  // the rendered iPhone/fingerprint). Reuses the SAME `downloads` state the Downloads
+  // pane polls; browser mode is on by default so the indicator shows without opening
+  // the drawer.
+  it('shows a count badge in the browser bar when the session has downloads', async () => {
+    listMock.mockResolvedValue({
+      status: 'ok',
+      files: [
+        { name: 'report.pdf', size: 2048, mime: 'application/pdf' },
+        { name: 'photo.jpg', size: 4096, mime: 'image/jpeg' },
+      ],
+    });
+    const { container } = renderSim();
+    const indicator = await waitFor(() => {
+      const b = container.querySelector('[data-component="simulator-download-indicator"]');
+      expect(b).not.toBeNull();
+      return b as HTMLButtonElement;
+    });
+    expect(indicator.getAttribute('aria-label')).toBe('Downloads (2)');
+    expect(
+      container.querySelector('[data-component="simulator-download-count"]')?.textContent,
+    ).toBe('2');
+  });
+
+  it('clicking the browser-bar indicator opens the Downloads pane', async () => {
+    listMock.mockResolvedValue({
+      status: 'ok',
+      files: [{ name: 'report.pdf', size: 2048, mime: 'application/pdf' }],
+    });
+    const { container } = renderSim();
+    const indicator = await waitFor(() => {
+      const b = container.querySelector('[data-component="simulator-download-indicator"]');
+      expect(b).not.toBeNull();
+      return b as HTMLButtonElement;
+    });
+    // The Downloads pane is not rendered until the indicator is clicked.
+    expect(container.querySelector('[data-component="simulator-downloads"]')).toBeNull();
+    fireEvent.click(indicator);
+    await waitFor(() => {
+      expect(container.querySelector('[data-component="simulator-downloads"]')).not.toBeNull();
+    });
+  });
+
+  it('hides the browser-bar indicator when there are no downloads', async () => {
+    listMock.mockResolvedValue({ status: 'ok', files: [] });
+    const { container } = renderSim();
+    // Let the poll resolve, then confirm the indicator never renders for an empty jar.
+    await waitFor(() => {
+      expect(listMock).toHaveBeenCalled();
+    });
+    expect(container.querySelector('[data-component="simulator-download-indicator"]')).toBeNull();
+  });
+
   it('clicking Save fetches the file bytes by name', async () => {
     listMock.mockResolvedValue({
       status: 'ok',

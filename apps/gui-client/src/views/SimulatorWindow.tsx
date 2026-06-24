@@ -881,6 +881,8 @@ function BrowserBar({
   liveUrl,
   pageLoading,
   loadProgress,
+  downloadCount,
+  onOpenDownloads,
 }: {
   canNavigate: boolean;
   onNavigate: (url: string) => void;
@@ -891,6 +893,12 @@ function BrowserBar({
   liveUrl: string;
   pageLoading: boolean;
   loadProgress: number | null;
+  // Mocked iOS download-bar indicator — GUI chrome only (like the address bar; it
+  // never touches the rendered iPhone/fingerprint). Count of the session's downloads
+  // (reuses the Downloads pane's shared `downloads` state — no second fetch).
+  downloadCount: number;
+  // Opens the Downloads drawer pane (mirrors the rail buttons' pane switch).
+  onOpenDownloads: () => void;
 }): JSX.Element {
   const [draft, setDraft] = useState(liveUrl);
   const [focused, setFocused] = useState(false);
@@ -1140,6 +1148,43 @@ function BrowserBar({
           )}
         </button>
       </form>
+      {/* Mocked iOS download-bar indicator (GUI chrome — like the address bar; never
+          affects the rendered iPhone/fingerprint). A down-arrow-into-tray button with a
+          small count pill; clicking opens the Downloads drawer pane. Hidden when there
+          are no downloads (mirrors copy-URL's disabled-when-empty convention). */}
+      {downloadCount > 0 && (
+        <button
+          type="button"
+          data-component="simulator-download-indicator"
+          aria-label={`Downloads (${downloadCount})`}
+          title={`Downloads (${downloadCount}) — open the Downloads panel`}
+          onClick={onOpenDownloads}
+          className="relative shrink-0 rounded-md p-1 text-ink-secondary transition hover:bg-white/10 hover:text-ink-primary"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M4 15v4h16v-4" />
+            <line x1="12" y1="3" x2="12" y2="14" />
+            <polyline points="8,10 12,14 16,10" />
+          </svg>
+          <span
+            data-component="simulator-download-count"
+            aria-hidden="true"
+            className="absolute -right-1 -top-1 flex min-w-[14px] items-center justify-center rounded-full bg-accent px-1 text-[9px] font-semibold leading-[14px] text-white"
+          >
+            {downloadCount > 99 ? '99+' : downloadCount}
+          </span>
+        </button>
+      )}
       {/* Live loading bar — realistic browser-style trickle (founder W2719/2740).
           Climbs toward ~90% while loading, snaps to 100% + fades on completion. */}
       {barVisible && (
@@ -1943,6 +1988,17 @@ export function SimulatorWindow(): JSX.Element {
       /* storage disabled — nothing to persist */
     }
   };
+  // Force-open a specific pane (the browser-bar download indicator → Downloads).
+  // Unlike selectPane (a rail TOGGLE), this always OPENS the target — an indicator
+  // click should reveal the section, never collapse it. Persists like selectPane.
+  const openPane = (pane: SimDrawerPane): void => {
+    setActivePane(pane);
+    try {
+      localStorage.setItem(SIM_DRAWER_PANE_KEY, pane);
+    } catch {
+      /* storage disabled — the active pane just won't persist across reopens */
+    }
+  };
   // Per-pane "is this section the active pane" booleans — the data/utility polls
   // (cookies / downloads) gate on these so they only fire while their pane is
   // actually shown. Depending on the BOOLEAN (not the whole activePane string)
@@ -2455,11 +2511,17 @@ export function SimulatorWindow(): JSX.Element {
   const [downloads, setDownloads] = useState<SessionDownloadEntry[] | null>(null);
   const [downloadsNote, setDownloadsNote] = useState<string | null>(null);
   const [downloadingName, setDownloadingName] = useState<string | null>(null);
+  // The browser-bar download indicator (GUI chrome — like the address bar; never
+  // touches the rendered iPhone/fingerprint) shows a count badge whenever there are
+  // downloads, so the poll must also run while it's visible (browser mode), not only
+  // while the Downloads PANE is open. ONE poll feeds both — the indicator reuses this
+  // same `downloads` state, no second fetch path.
+  const downloadsPollActive = downloadsPaneActive || browserMode;
   useEffect(() => {
-    // Approach B perf — poll ONLY while the Downloads pane is the active section
-    // (was gated on the whole drawer being open). Cleanup tears the interval
-    // down on switching away; switching back re-fires tick().
-    if (!downloadsPaneActive || sessionId === '' || room === null) return;
+    // Approach B perf — poll while the Downloads pane is the active section OR the
+    // browser-bar indicator is shown (browser mode); single shared interval. Cleanup
+    // tears the interval down on switching away; switching back re-fires tick().
+    if (!downloadsPollActive || sessionId === '' || room === null) return;
     let cancelled = false;
     const tick = (): void => {
       void listAgentSessionDownloads(sessionId, controlAuth)
@@ -2490,7 +2552,7 @@ export function SimulatorWindow(): JSX.Element {
       cancelled = true;
       window.clearInterval(handle);
     };
-  }, [downloadsPaneActive, sessionId, controlAuth, room]);
+  }, [downloadsPollActive, sessionId, controlAuth, room]);
 
   const onDownloadFile = (name: string): void => {
     setDownloadingName(name);
@@ -2998,6 +3060,8 @@ export function SimulatorWindow(): JSX.Element {
               liveUrl={liveUrl}
               pageLoading={pageLoading}
               loadProgress={loadProgress}
+              downloadCount={downloads?.length ?? 0}
+              onOpenDownloads={() => openPane('downloads')}
             />
           )}
           {/* Option B body — the device and (when the drawer is open) the wide
