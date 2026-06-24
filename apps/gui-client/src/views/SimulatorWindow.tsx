@@ -1838,23 +1838,12 @@ export function SimulatorWindow(): JSX.Element {
   // localStorage (NOT cleared by the in-place session-reset, unlike the per-session
   // UI state) so the operator's last-used section survives a relaunch — the stored
   // value is the pane id, or empty/absent for collapsed. Lazy init reads it in a
-  // try/catch (jsdom / private-mode storage can throw); default null (collapsed),
-  // EXCEPT a fresh user who has never navigated auto-opens the Controls pane (where
-  // the GUI Address bar lives) for discoverability (A3 wpiyo8v6x — the founder kept
-  // tapping the un-tappable rendered Safari pill). Self-resolving: the first
-  // successful navigate sets ds-sim-navigated, after which it stays collapsed.
-  const [activePane, setActivePane] = useState<SimDrawerPane | null>(() => {
-    try {
-      const stored = localStorage.getItem(SIM_DRAWER_PANE_KEY);
-      if (stored !== null && (SIM_DRAWER_PANES as readonly string[]).includes(stored))
-        return stored as SimDrawerPane;
-      // Discoverability auto-open: never-navigated → open Controls (its first item
-      // is the Address bar). Otherwise collapsed (rail-only) by default.
-      return localStorage.getItem('ds-sim-navigated') !== '1' ? 'controls' : null;
-    } catch {
-      return null;
-    }
-  });
+  // Founder 2026-06-24: on a fresh open NOTHING is expanded — just the rail icons;
+  // a pane opens ONLY when the operator clicks its icon (no auto-open, no last-used
+  // restore). Hover tooltips on the rail (title=) cover discoverability that the old
+  // auto-open-Controls used to. selectPane still persists the choice for the session,
+  // but the window always starts collapsed (rail-only).
+  const [activePane, setActivePane] = useState<SimDrawerPane | null>(null);
   // Extra window width contributed by the docked drawer. Kept current every render
   // (like landscapeRef) so the window-sizing closures (fitWindow / resetToActualSize
   // / the onResized aspect-lock / refitForDrawer) ALWAYS read the live value without
@@ -2043,9 +2032,21 @@ export function SimulatorWindow(): JSX.Element {
   // letterboxes the device with side gaps (founder: "window larger width than the
   // iphone, because of the url"). fitWindow uses the seeded aspect here, refined by
   // the real stream dimensions later. Runs after paint so innerSize is settled.
+  const didInitialFitRef = useRef(false);
   useEffect(() => {
     if (info === null) return;
-    const t = window.setTimeout(() => fitWindow(browserMode), 0);
+    const isInitial = !didInitialFitRef.current;
+    didInitialFitRef.current = true;
+    const t = window.setTimeout(() => {
+      // FRESH open: size HEIGHT-driven to the iPhone-natural width + the always-docked
+      // rail (resetToActualSize), so the rail is never SUBTRACTED out of the default
+      // 330-wide window into a tiny phone (founder 2026-06-24 "started off really small";
+      // the regression from the rail-always rework — fitWindow does phoneW = curWidth −
+      // drawerExtra, which on the initial default width shrinks the phone). Subsequent
+      // fires (browser-mode toggle / dims refine) PRESERVE the operator's width via fitWindow.
+      if (isInitial) resetToActualSize();
+      else fitWindow(browserMode);
+    }, 0);
     return () => window.clearTimeout(t);
   }, [browserMode, info]);
 

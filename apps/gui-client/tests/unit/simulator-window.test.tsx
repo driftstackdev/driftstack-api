@@ -39,12 +39,10 @@ const { SimulatorWindow } = await import('../../src/views/SimulatorWindow');
 const { RecordingsProvider } = await import('../../src/lib/recordings');
 
 describe('SimulatorWindow — floating iPhone', () => {
-  // The controls panel auto-opens on launch UNTIL the user has navigated once
-  // (discoverability of the Address bar — A3 wpiyo8v6x). jsdom in this project
-  // ships a non-functional localStorage (its methods throw), so install a
-  // working Map-backed one. Most tests below assert the steady-state collapsed
-  // chrome, so default the flag to "navigated"; the discoverability test
-  // overrides it to the fresh-user open path.
+  // The drawer starts COLLAPSED (rail icons only; founder 2026-06-24 — no auto-open).
+  // jsdom in this project ships a non-functional localStorage (its methods throw), so
+  // install a working Map-backed one. (ds-sim-navigated is legacy — it no longer drives
+  // any auto-open; harmless to leave seeded.)
   const lsStore = new Map<string, string>();
   beforeEach(() => {
     mockConn = { ...EMPTY_CONN };
@@ -153,8 +151,11 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(wrap?.querySelector('[data-component="simulator-toolbar"]')).toBe(toolbar);
   });
 
-  it('discoverability: the controls panel auto-opens on launch UNTIL the user navigates, with the Address bar as its first control (A3 wpiyo8v6x)', () => {
-    // A fresh user (never navigated) — the panel should advertise itself.
+  it('starts COLLAPSED on launch — only the rail icons show, nothing auto-opens (founder 2026-06-24); a rail click expands a pane', () => {
+    // Founder: "when started, nothing should be toggled on from these icons." A fresh
+    // user (never navigated) gets ONLY the docked rail — no pane, no Address bar — until
+    // they click a rail icon. (Replaces the old auto-open-Controls discoverability; the
+    // rail's hover tooltips cover that now.)
     localStorage.removeItem('ds-sim-navigated');
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
     const { container } = render(
@@ -162,15 +163,15 @@ describe('SimulatorWindow — floating iPhone', () => {
         <SimulatorWindow />
       </RecordingsProvider>,
     );
-    // Activity-bar drawer: the icon rail is always docked beside the phone; for a
-    // fresh user the Controls pane AUTO-OPENS so the GUI Address bar advertises
-    // itself (browser-mode off) instead of the founder tapping the un-tappable
-    // rendered Safari pill. The rail (drawer) is always present, and the Controls
-    // pane is open without any click.
     const drawer = container.querySelector('[data-component="simulator-drawer"]');
     expect(drawer).not.toBeNull();
+    // The icon rail is always docked beside the phone...
     expect(drawer?.querySelector('[data-component="sim-rail-controls"]')).not.toBeNull();
-    expect(drawer?.querySelector('[data-component="simulator-address"]')).not.toBeNull();
+    // ...but NOTHING is expanded on a fresh open: no Address bar (the Controls pane is closed).
+    expect(container.querySelector('[data-component="simulator-address"]')).toBeNull();
+    // Clicking the Controls rail icon expands its pane → the Address bar appears.
+    fireEvent.click(drawer!.querySelector('[data-component="sim-rail-controls"]')!);
+    expect(container.querySelector('[data-component="simulator-address"]')).not.toBeNull();
   });
 
   it('shows a LOUD transport-fallback badge when the WebRTC media is relayed / TCP (the #1 latency suspect — A3 wmdoil11r)', () => {
