@@ -1569,6 +1569,11 @@ export function registerAgentSessionsRoutes(
   //   status:'unavailable' → not wired / not live / node offline
   //   status:'timeout'     → node didn't reply (A3 handler pending)
   //   status:'error'       → node reported a failure (reason set)
+  // Fastify defaults to a 1 MiB JSON body. A legit token-heavy jar (up to the schema's
+  // .max(2000) cookies with ~KB session-token values) can exceed that and 413 BEFORE the
+  // handler/Zod run — breaking the discriminated-200/clean-422 contract + making .max(2000)
+  // unreachable. Raise to the schema's worst case (mirrors the sibling upload route).
+  const SET_COOKIES_MAX_BODY_BYTES = 8 * 1024 * 1024;
   const SetCookiesBodySchema = z.object({
     // The customer's exported jar — same CookieSchema the read/Export emits, so a
     // round-tripped cookies.json validates with no divergent shape. A bounded count
@@ -1580,7 +1585,10 @@ export function registerAgentSessionsRoutes(
     // Import is a WRITE (it mutates the session's cookie store). Same control-auth
     // path as the upload route: the separate Simulator app holds only a per-session
     // gui_control_key, not an account Bearer.
-    { preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')] },
+    {
+      preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')],
+      bodyLimit: SET_COOKIES_MAX_BODY_BYTES,
+    },
     async (req) => {
       const rec = await sessions.get(req.params.id);
       if (rec === null) {

@@ -120,6 +120,34 @@ ssh "root@$HOST" "
   systemctl reload nginx
 "
 
+# 4b. Fleet control-plane WS vhost (PRODUCTION only) — fleet.driftstack.dev is a DIRECT
+# grey-cloud origin so the long-lived Mac-worker control WS isn't Cloudflare-mangled
+# (the Code=57 / -1011 flap; bus W2863/W2866, the founder's sim-bug fix). Installed only
+# when its Let's Encrypt cert is present (else `nginx -t` would fail on the missing cert
+# and 502 the whole box); the $connection_upgrade map is always safe to drop in. If the
+# cert is absent the workers fall back to the CF-proxied api. and the flap returns — so
+# warn loudly with the one-time provisioning command instead of silently degrading.
+if [ "$ROLE" = production ]; then
+  echo "→ remote: install fleet.driftstack.dev control-WS vhost (cert-guarded)"
+  scp -q infra/nginx/ws_upgrade_map.conf \
+    "root@$HOST:/etc/nginx/conf.d/ws_upgrade_map.conf"
+  scp -q infra/nginx/fleet.driftstack.dev.conf \
+    "root@$HOST:/etc/nginx/sites-available/fleet.driftstack.dev.conf"
+  ssh "root@$HOST" "
+    if [ -f /etc/letsencrypt/live/fleet.driftstack.dev/fullchain.pem ]; then
+      ln -sf /etc/nginx/sites-available/fleet.driftstack.dev.conf \
+             /etc/nginx/sites-enabled/fleet.driftstack.dev.conf
+      nginx -t
+      systemctl reload nginx
+      echo '✓ fleet.driftstack.dev control-WS vhost installed'
+    else
+      echo '⚠ fleet.driftstack.dev LE cert missing — fleet vhost NOT enabled (workers will'
+      echo '  use the CF-proxied api. and the -1011 flap returns). Provision it, then re-run:'
+      echo '    certbot certonly --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cf-dns-creds.ini -d fleet.driftstack.dev'
+    fi
+  "
+fi
+
 # 5. Health probe.
 echo "→ remote: health probe"
 for _i in 1 2 3 4 5; do

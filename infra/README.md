@@ -63,11 +63,13 @@ certbot/LE exception at the origin). To (re)provision on a box:
 4. **Vhost:** `nginx/fleet.driftstack.dev.conf` → `sites-available/` + symlink into `sites-enabled/`; `nginx -t`; `systemctl reload nginx`.
 5. **Daemon:** `DRIFTSTACK_CONTROL_ENDPOINT=wss://fleet.driftstack.dev/v1/fleet/events` (the `configure.sh` default).
 
-⚠️ `deploy-api.sh` installs ONLY the `$NGINX_VHOST` (api/staging) — it does NOT yet
-auto-install the fleet vhost + map (cert provisioning is a prereq it doesn't
-automate). On a fresh box, do the 5 steps above manually, else the workers fall
-back to the CF-proxied `api.` and the flap returns. (Follow-up: teach
-`deploy-api.sh` to install fleet + map when the LE cert is present.)
+`deploy-api.sh production` now **auto-installs the fleet vhost + map** (steps 3–4): it
+scp's both, then symlinks + reloads the vhost **only when the LE cert (step 2) is
+present**, else it skips with a loud warning + the certbot command (an unconditional
+symlink would `nginx -t`-fail on the missing cert and 502 the box). So steps **1 (DNS),
+2 (cert), 5 (daemon endpoint)** remain the one-time manual prerequisites; the map+vhost
+ride the normal deploy. If the cert is absent the workers fall back to the CF-proxied
+`api.` and the -1011 flap returns until you provision it + re-deploy.
 
 ## Sub-processor map
 

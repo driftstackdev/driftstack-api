@@ -56,8 +56,10 @@ export async function authenticateFleetUpgrade(
   // verified 2026-06-18 against the live box: its upgrades hit "Missing
   // Authorization header" while a raw curl carrying the header reached the
   // verifier. Mirrors the SSE `?ds_token=` pattern; the JWT is short-lived
-  // (exp-iat ≤ 300s) + single-use (Redis nonce), and `?ds_token=` is redacted
-  // from logs (redactUrlQueryTokens). A malformed Authorization header still
+  // (exp-iat ≤ 300s) + single-use (Redis nonce), and `?ds_token=` kept out of the Node app's
+  // OWN logs (pino + Sentry) by redactUrlQueryTokens; nginx logs independently upstream,
+  // so the fleet. vhost sets `access_log off` on /v1/fleet/events to keep it off the
+  // nginx access log too. A malformed Authorization header still
   // surfaces its format error (safe — not node-existence-revealing).
   const authHeader = headers.authorization;
   const headerToken = typeof authHeader === 'string' ? extractBearerToken(authHeader) : undefined;
