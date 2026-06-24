@@ -26,6 +26,7 @@ import {
   ControlCommandSchema,
   CookiesRequestSchema,
   SetCookiesRequestSchema,
+  NavigateHistoryRequestSchema,
   UploadFileRequestSchema,
   ListDownloadsRequestSchema,
   FetchDownloadRequestSchema,
@@ -40,6 +41,7 @@ import {
   type ControlCommandKind,
   type CookiesRequest,
   type SetCookiesRequest,
+  type NavigateHistoryRequest,
   type Cookie,
   type UploadFileRequest,
   type ListDownloadsRequest,
@@ -332,6 +334,27 @@ export function serializeSetCookies(args: {
     requestId: args.requestId,
     sessionId: args.sessionId,
     cookies: args.cookies,
+  });
+}
+
+/**
+ * History-navigation (sim back/forward — A3 W2870) — build a wire-ready
+ * `navigateHistory` to step the running session's WebKit back-forward list one entry
+ * in `direction` over that node's live WSS. The sibling of serializeSetCookies;
+ * `direction` is the closed enum ['back','forward']. Correlated by `requestId` (the
+ * harness echoes it on the `navigateHistoryResult` reply). Re-validated so a malformed
+ * envelope never leaves the server.
+ */
+export function serializeNavigateHistory(args: {
+  requestId: string;
+  sessionId: string;
+  direction: 'back' | 'forward';
+}): NavigateHistoryRequest {
+  return NavigateHistoryRequestSchema.parse({
+    type: 'navigateHistory',
+    requestId: args.requestId,
+    sessionId: args.sessionId,
+    direction: args.direction,
   });
 }
 

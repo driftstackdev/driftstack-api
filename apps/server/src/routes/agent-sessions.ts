@@ -1637,6 +1637,79 @@ export function registerAgentSessionsRoutes(
     },
   );
 
+  // Sim browser back/forward (A3 W2870). Steps the running session's WebKit
+  // back-forward list one entry in `direction` over the node's live control WSS
+  // (navigateHistory → navigateHistoryResult). Returns a DISCRIMINATED 200 body in
+  // every relay case (ok / unavailable / timeout / error), mirroring the cookies-import
+  // route, so the GUI's back/forward buttons render expected-inert states without
+  // HTTP-error noise. Malformed body (direction not 'back'|'forward') is a 422. Ships
+  // gated-inert until A3's harness navigateHistory WD-extension lands: until then a live
+  // node never replies → status:'timeout', which the GUI surfaces — and a not-live /
+  // offline session → status:'unavailable'.
+  //   status:'ok'          → step applied
+  //   status:'unavailable' → not wired / not live / node offline
+  //   status:'timeout'     → node didn't reply (A3 handler pending)
+  //   status:'error'       → node reported a failure (reason set)
+  const NavigateHistoryBodySchema = z.object({
+    // The only two history steps; the closed enum mirrors the wire schema.
+    direction: z.enum(['back', 'forward']),
+  });
+  app.post<{ Params: { id: string } }>(
+    '/v1/agent-sessions/:id/history',
+    // A history step drives the LIVE session (state-changing). Same control-auth path
+    // as the cookies-import route: the separate Simulator app holds only a per-session
+    // gui_control_key, not an account Bearer.
+    {
+      preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')],
+    },
+    async (req) => {
+      const rec = await sessions.get(req.params.id);
+      if (rec === null) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      // Account path: enforce ownership. Control-key path: already decrypt-matched
+      // against THIS `:id` in the preHandler (same as POST /:id/cookies/set).
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+      }
+      const parsed = NavigateHistoryBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // Control plane not wired (stateless deploy / no fleet registry).
+      if (fleetControlRegistry === undefined) {
+        return {
+          status: 'unavailable' as const,
+          reason: 'fleet control plane not enabled',
+        };
+      }
+      // The step targets the LIVE session — a closed or never-dispatched session
+      // has no back-forward list to drive.
+      if (rec.status !== 'active' || rec.nodeId === null || rec.nodeId === undefined) {
+        return {
+          status: 'unavailable' as const,
+          reason: 'session is not live on a node',
+        };
+      }
+      const conn = fleetControlRegistry.get(rec.nodeId);
+      if (conn === undefined) {
+        return {
+          status: 'unavailable' as const,
+          reason: 'session node is not connected',
+        };
+      }
+      const outcome = await conn.navigateHistory(randomUUID(), rec.id, parsed.data.direction);
+      if (outcome.status === 'ok') {
+        return { status: 'ok' as const };
+      }
+      if (outcome.status === 'error') {
+        return { status: 'error' as const, reason: outcome.message };
+      }
+      return { status: 'timeout' as const };
+    },
+  );
+
   // File-control upload (A3 W2851 / founder "control files"). Relays the customer's
   // file bytes (base64) into the running session's isolated 0o700 upload jail over
   // the node's live control WSS (uploadFile → uploadResult), returning an OPAQUE
@@ -2942,6 +3015,9 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   // Cookie-import — the cookies WRITE (import) is gated too (machine-readable 503,
   // not a bare 404) so the GUI Cookies panel's Import surfaces the documented state.
   app.post('/v1/agent-sessions/:id/cookies/set', stub);
+  // Sim back/forward (A3 W2870) — the history step is gated too (machine-readable 503,
+  // not a bare 404) so the GUI's back/forward buttons surface the documented state.
+  app.post('/v1/agent-sessions/:id/history', stub);
   // File-control (A3 W2851) — the upload write is gated too (machine-readable 503)
   // so the GUI file picker surfaces the documented activation state.
   app.post('/v1/agent-sessions/:id/files', stub);

@@ -40,6 +40,7 @@ import {
   getAgentSessionPageState,
   getAgentSessionCookies,
   setAgentSessionCookies,
+  navigateAgentSessionHistory,
   uploadAgentSessionFile,
   listAgentSessionDownloads,
   fetchAgentSessionDownload,
@@ -61,6 +62,8 @@ import {
  *  and the in-screen status strip the video sits below. */
 const TOOLBAR_H = 34;
 const BROWSER_BAR_H = 40; // dedicated browser-mode address bar (its own row)
+// flip true when A3's navigateHistory handler deploys — bus W2870
+const BACK_FORWARD_ENABLED = false;
 const BEZEL_PAD = 20; // p-[10px] × 2
 const STATUS_STRIP_H = 40;
 // The iPhone CSS-logical width of the launch archetype (iphone17). Used by the
@@ -874,12 +877,17 @@ function NavigateAddressBar({
 function BrowserBar({
   canNavigate,
   onNavigate,
+  onHistory,
   liveUrl,
   pageLoading,
   loadProgress,
 }: {
   canNavigate: boolean;
   onNavigate: (url: string) => void;
+  // Sim back/forward (A3 W2870) — steps the device's browser history via
+  // navigateAgentSessionHistory. Rendered only when BACK_FORWARD_ENABLED (flag-off
+  // until A3's daemon handler lands).
+  onHistory: (direction: 'back' | 'forward') => void;
   liveUrl: string;
   pageLoading: boolean;
   loadProgress: number | null;
@@ -978,6 +986,56 @@ function BrowserBar({
       data-no-drag
       className="relative flex h-10 w-full shrink-0 items-center gap-2 bg-[#1d1e24] px-3 ring-1 ring-white/[0.10] shadow-[inset_0_-1px_0_rgba(0,0,0,0.45)]"
     >
+      {/* Sim back/forward (A3 W2870) — built but NOT rendered until the wire is live;
+          BACK_FORWARD_ENABLED flips true when A3's navigateHistory handler deploys. */}
+      {BACK_FORWARD_ENABLED && (
+        <>
+          <button
+            type="button"
+            aria-label="Back"
+            title={canNavigate ? 'Back' : 'Connecting…'}
+            disabled={!canNavigate}
+            onClick={() => onHistory('back')}
+            className="shrink-0 rounded-md p-1 text-ink-secondary transition hover:bg-white/10 hover:text-ink-primary disabled:opacity-40"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            aria-label="Forward"
+            title={canNavigate ? 'Forward' : 'Connecting…'}
+            disabled={!canNavigate}
+            onClick={() => onHistory('forward')}
+            className="shrink-0 rounded-md p-1 text-ink-secondary transition hover:bg-white/10 hover:text-ink-primary disabled:opacity-40"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
+        </>
+      )}
       <button
         type="button"
         aria-label="Reload"
@@ -2832,6 +2890,18 @@ export function SimulatorWindow(): JSX.Element {
       clearLoadWatchdog();
     });
   };
+  // Sim back/forward (A3 W2870) — steps the device's browser history one entry over
+  // the control plane (HTTP, unlike navigate which rides the LiveKit data channel; the
+  // history route correlates a navigateHistory → navigateHistoryResult round-trip).
+  // Wired to BrowserBar's gated buttons (BACK_FORWARD_ENABLED, flag-off until A3's
+  // daemon handler lands). No-op until the room is connected.
+  const onHistory = (direction: 'back' | 'forward'): void => {
+    if (room === null || sessionId === '') return;
+    void navigateAgentSessionHistory(sessionId, direction, controlAuth).catch(() => {
+      setNotice(`Could not go ${direction}`);
+      window.setTimeout(() => setNotice(null), 3000);
+    });
+  };
   const togglePinned = (): void => {
     const next = !pinned;
     setPinned(next);
@@ -2924,6 +2994,7 @@ export function SimulatorWindow(): JSX.Element {
             <BrowserBar
               canNavigate={room !== null}
               onNavigate={onNavigate}
+              onHistory={onHistory}
               liveUrl={liveUrl}
               pageLoading={pageLoading}
               loadProgress={loadProgress}

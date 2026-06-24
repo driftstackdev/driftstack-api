@@ -263,6 +263,35 @@ export async function setAgentSessionCookies(
   };
 }
 
+/** Discriminated result of POST /v1/agent-sessions/:id/history (sim back/forward —
+ *  the sibling of setAgentSessionCookies). `ok` → the step was applied; every other
+ *  status is an inert/failure state the back/forward buttons surface calmly
+ *  ('unavailable' → "ships with the next device update"). A3 W2870. */
+export interface NavigateHistoryResult {
+  status: 'ok' | 'unavailable' | 'timeout' | 'error';
+  reason?: string;
+}
+
+/** Step the running session's browser history one entry in `direction` (the sibling
+ *  of setAgentSessionCookies; A3 W2870). Throws (via authedFetch) on a non-2xx — the
+ *  gated 503 / a 404 / a 422 (bad direction) — so the caller surfaces those; a 200
+ *  always carries a discriminated body. */
+export async function navigateAgentSessionHistory(
+  id: string,
+  direction: 'back' | 'forward',
+  auth: ControlAuth = null,
+): Promise<NavigateHistoryResult> {
+  const body = (await authedFetch(
+    `/v1/agent-sessions/${encodeURIComponent(id)}/history`,
+    { method: 'POST', body: JSON.stringify({ direction }) },
+    auth,
+  )) as Partial<NavigateHistoryResult>;
+  return {
+    status: body.status ?? 'error',
+    ...(body.reason !== undefined ? { reason: body.reason } : {}),
+  };
+}
+
 /** The OPAQUE handle the server returns for an uploaded file (matches the server
  *  UploadHandleSchema). `id` is a server/harness-internal ref — NEVER a disk path;
  *  the GUI lists files by this + hands it to a page's file-chooser. Founder

@@ -740,6 +740,37 @@ export const SetCookiesResultSchema = z.object({
 });
 export type SetCookiesResult = z.infer<typeof SetCookiesResultSchema>;
 
+// ── History NAVIGATION (sim browser back/forward — A3 W2870) ──────────
+// CP→node REQUEST (`serializeNavigateHistory`): POST /v1/agent-sessions/:id/history
+// drives the running session's WebKit back-forward list one step in `direction` over
+// the node's LIVE control WSS (navigateHistory → navigateHistoryResult), keyed by
+// `requestId`; A3's harness `navigateHistory` WD-extension (pending) calls goBack/
+// goForward and replies with the `navigateHistoryResult` below. NOT in HarnessOutbound
+// (that's node→CP); this is CP→node like cookiesRequest / setCookies / uploadFile.
+// `direction` is the closed enum ['back','forward'] (the only two history steps).
+export const NavigateHistoryRequestSchema = z
+  .object({
+    type: z.literal('navigateHistory'),
+    requestId: z.string().min(1),
+    sessionId: z.string().min(1),
+    direction: z.enum(['back', 'forward']),
+  })
+  .strict();
+export type NavigateHistoryRequest = z.infer<typeof NavigateHistoryRequestSchema>;
+
+// node→CP RESULT: echoes `requestId`. SUCCESS (the step was applied) → `ok:true`;
+// FAILURE (unknown/inactive session, no entry in that direction, WD error) → `error`
+// set, and the CP fast-fails the pending request. Plain object (lenient forward-compat),
+// like the sibling frames (setCookiesResult).
+export const NavigateHistoryResultSchema = z.object({
+  type: z.literal('navigateHistoryResult'),
+  requestId: z.string().min(1),
+  sessionId: z.string().min(1),
+  ok: z.boolean().optional(),
+  error: z.string().optional(),
+});
+export type NavigateHistoryResult = z.infer<typeof NavigateHistoryResultSchema>;
+
 // ── File UPLOAD (A3 W2851 / founder "control files") ──────────────────
 // CP→node REQUEST (`serializeUploadFile`): POST /v1/agent-sessions/:id/files relays
 // the customer's file bytes (base64) over the node's LIVE control WSS, keyed by
@@ -855,6 +886,9 @@ export type DownloadDataResult = z.infer<typeof DownloadDataResultSchema>;
 // /:id/files request. setCookiesResult (cookie-import) is the write-twin of
 // cookiesResult — correlated by `requestId` inside the connection's
 // SetCookiesRequestCorrelator, settling a pending POST /:id/cookies/set.
+// navigateHistoryResult (sim back/forward, A3 W2870) is likewise the write-twin of
+// setCookiesResult — correlated by `requestId` inside the connection's
+// NavigateHistoryRequestCorrelator, settling a pending POST /:id/history.
 export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   IntentResultEnvelopeSchema,
   SessionStatusSchema,
@@ -867,6 +901,7 @@ export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   ProfileSaveFailedSchema,
   CookiesResultSchema,
   SetCookiesResultSchema,
+  NavigateHistoryResultSchema,
   UploadResultSchema,
   DownloadsListResultSchema,
   DownloadDataResultSchema,

@@ -45,6 +45,11 @@ import {
   type SetCookiesOutcome,
 } from './set-cookies-request-correlator.js';
 import {
+  NavigateHistoryRequestCorrelator,
+  type NavigateHistoryTransport,
+  type NavigateHistoryOutcome,
+} from './navigate-history-request-correlator.js';
+import {
   UploadRequestCorrelator,
   type UploadTransport,
   type UploadOutcome,
@@ -57,6 +62,7 @@ import {
 import {
   serializeCookiesRequest,
   serializeSetCookies,
+  serializeNavigateHistory,
   serializeUploadFile,
   serializeListDownloads,
   serializeFetchDownload,
@@ -82,6 +88,10 @@ export class FleetControlConnection {
    *  setCookiesResult) over this node's socket, keyed by requestId. The write-twin
    *  of cookiesCorrelator; owned here like above. */
   readonly setCookiesCorrelator: SetCookiesRequestCorrelator;
+  /** Sim back/forward (A3 W2870) — correlates POST /:id/history steps (navigateHistory
+   *  → navigateHistoryResult) over this node's socket, keyed by requestId. The sibling
+   *  of setCookiesCorrelator; owned here like above. */
+  readonly navigateHistoryCorrelator: NavigateHistoryRequestCorrelator;
   /** File-control (A3 W2851) — correlates POST /:id/files uploads (uploadFile →
    *  uploadResult) over this node's socket, keyed by requestId. Owned like above. */
   readonly uploadCorrelator: UploadRequestCorrelator;
@@ -129,6 +139,10 @@ export class FleetControlConnection {
     this.cookiesCorrelator = new CookiesRequestCorrelator(cookiesTransport);
     const setCookiesTransport: SetCookiesTransport = { send: (r) => send(JSON.stringify(r)) };
     this.setCookiesCorrelator = new SetCookiesRequestCorrelator(setCookiesTransport);
+    const navigateHistoryTransport: NavigateHistoryTransport = {
+      send: (r) => send(JSON.stringify(r)),
+    };
+    this.navigateHistoryCorrelator = new NavigateHistoryRequestCorrelator(navigateHistoryTransport);
     const uploadTransport: UploadTransport = { send: (r) => send(JSON.stringify(r)) };
     this.uploadCorrelator = new UploadRequestCorrelator(uploadTransport);
     const downloadTransport: DownloadTransport = {
@@ -223,6 +237,24 @@ export class FleetControlConnection {
   ): Promise<SetCookiesOutcome> {
     const req = serializeSetCookies({ requestId, sessionId, cookies });
     return this.setCookiesCorrelator.request(req, timeoutMs);
+  }
+
+  /**
+   * Sim back/forward (A3 W2870) — step the running session's WebKit back-forward
+   * list one entry in `direction` over the node's live WSS. The sibling of
+   * setCookies: sends a `navigateHistory` (correlated by `requestId`) and awaits the
+   * matching `navigateHistoryResult`; resolves a uniform NavigateHistoryOutcome (ok /
+   * error / timeout) and NEVER rejects, so the route maps each case to a response.
+   * `requestId` is caller-generated (the route mints a uuid) so the key stays testable.
+   */
+  navigateHistory(
+    requestId: string,
+    sessionId: string,
+    direction: 'back' | 'forward',
+    timeoutMs?: number,
+  ): Promise<NavigateHistoryOutcome> {
+    const req = serializeNavigateHistory({ requestId, sessionId, direction });
+    return this.navigateHistoryCorrelator.request(req, timeoutMs);
   }
 
   /**
@@ -374,6 +406,14 @@ export class FleetControlConnection {
           // unknown/stale requestId is a no-op (already settled).
           this.setCookiesCorrelator.onResultFrame(frame);
           break;
+        case 'navigateHistoryResult':
+          // Sim back/forward (A3 W2870) — settles the pending POST /:id/history request
+          // keyed by requestId (the harness echoes it). Self-contained request/reply
+          // like setCookiesResult/uploadResult: no injected consumer; the awaiting route
+          // holds the promise via the connection's navigate-history correlator. An
+          // unknown/stale requestId is a no-op (already settled).
+          this.navigateHistoryCorrelator.onResultFrame(frame);
+          break;
         case 'uploadResult':
           // File-control (A3 W2851) — settles the pending POST /:id/files request
           // keyed by requestId (the harness echoes it). Self-contained request/reply
@@ -427,12 +467,13 @@ export class FleetControlConnection {
   }
 
   /** The socket closed/errored: fail every in-flight dispatch + cookies pull +
-   *  cookie-import + upload + download on this node (so an awaiting request resolves
-   *  immediately, not at timeout). */
+   *  cookie-import + history-step + upload + download on this node (so an awaiting
+   *  request resolves immediately, not at timeout). */
   close(reason: string): void {
     this.correlator.failAll(reason);
     this.cookiesCorrelator.failAll(reason);
     this.setCookiesCorrelator.failAll(reason);
+    this.navigateHistoryCorrelator.failAll(reason);
     this.uploadCorrelator.failAll(reason);
     this.downloadCorrelator.failAll(reason);
   }
