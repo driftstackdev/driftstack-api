@@ -63,7 +63,7 @@ import {
 const TOOLBAR_H = 34;
 const BROWSER_BAR_H = 40; // dedicated browser-mode address bar (its own row)
 // flip true when A3's navigateHistory handler deploys — bus W2870
-const BACK_FORWARD_ENABLED = false;
+const BACK_FORWARD_ENABLED = true; // A3 navigateHistory handler deployed (bus W2872; A3 01a5d48f1)
 const BEZEL_PAD = 20; // p-[10px] × 2
 const STATUS_STRIP_H = 40;
 // The iPhone CSS-logical width of the launch archetype (iphone17). Used by the
