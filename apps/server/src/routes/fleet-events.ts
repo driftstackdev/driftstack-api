@@ -50,9 +50,12 @@ type AuthedUpgradeRequest = FastifyRequest & { fleetNodeId?: string };
 // ws.WebSocket is assignable to this (it has these exact methods).
 interface FleetSocket {
   send(data: string): void;
+  ping(): void;
+  terminate(): void;
   on(event: 'message', listener: (data: WsMessageData) => void): void;
   on(event: 'close', listener: () => void): void;
   on(event: 'error', listener: (err: Error) => void): void;
+  on(event: 'pong', listener: () => void): void;
   close(code?: number, reason?: string): void;
 }
 
@@ -104,11 +107,40 @@ export async function registerFleetEventsRoutes(
       }
       const conn = deps.registry.register(nodeId, (data) => socket.send(data));
       socket.on('message', (data: WsMessageData) => conn.handleInbound(messageToString(data)));
+      // Server-side WS keepalive. The server->node direction is silent between
+      // dispatches, so an idle control socket gets reaped by a proxy/NAT idle
+      // timeout (nginx proxy_read_timeout default 60s) -> half-open -> the box
+      // sees -1011 on its next probe and reconnects (a persistent flap). `ws`
+      // does NOT auto-ping; send a protocol ping every 30s (well under 60s) and
+      // terminate a peer that stopped ponging so `close` fires + the box
+      // reconnects cleanly. MUST clearInterval on teardown or a timer leaks per
+      // dead connection. The app-level `heartbeat` JSON frame is node->server
+      // only and does not keep the server->node direction warm.
+      let alive = true;
+      socket.on('pong', () => {
+        alive = true;
+      });
+      const FLEET_WS_KEEPALIVE_MS = 30_000;
+      const keepalive = setInterval(() => {
+        if (!alive) {
+          socket.terminate();
+          return;
+        }
+        alive = false;
+        socket.ping();
+      }, FLEET_WS_KEEPALIVE_MS);
+      const stopKeepalive = (): void => clearInterval(keepalive);
       // Pass `conn` so unregister is identity-checked: a reconnect that already
       // replaced this connection must not be torn down by this socket's lagging
       // close/error event (see FleetControlRegistry.unregister).
-      socket.on('close', () => deps.registry.unregister(nodeId, conn, 'fleet node socket closed'));
-      socket.on('error', () => deps.registry.unregister(nodeId, conn, 'fleet node socket error'));
+      socket.on('close', () => {
+        stopKeepalive();
+        deps.registry.unregister(nodeId, conn, 'fleet node socket closed');
+      });
+      socket.on('error', () => {
+        stopKeepalive();
+        deps.registry.unregister(nodeId, conn, 'fleet node socket error');
+      });
     },
   );
 }

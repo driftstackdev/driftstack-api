@@ -66,15 +66,22 @@ describe('routes/fleet-events content parity', () => {
     expect(body).toContain('{ auth: deps.auth, logger: req.log },');
   });
 
-  it('handler wiring pinned: register the verified node by nodeId; route inbound messages to the connection; unregister on close + error', () => {
+  it('handler wiring pinned: register the verified node by nodeId; route inbound messages to the connection; server-side keepalive ping + stale-terminate; clearInterval + unregister on close + error', () => {
     expect(body).toMatch(
       /const conn = deps\.registry\.register\(nodeId, \(data\) => socket\.send\(data\)\);/,
     );
     expect(body).toMatch(
       /socket\.on\('message', \(data: WsMessageData\) => conn\.handleInbound\(messageToString\(data\)\)\);/,
     );
-    expect(body).toMatch(/socket\.on\('close', \(\) => deps\.registry\.unregister\(nodeId/);
-    expect(body).toMatch(/socket\.on\('error', \(\) => deps\.registry\.unregister\(nodeId/);
+    // Server-side WS keepalive: ping every 30s, terminate a peer that stopped
+    // ponging. Prevents the idle half-open -> proxy/nginx-reap -> box -1011 flap.
+    expect(body).toContain("socket.on('pong'");
+    expect(body).toContain('socket.ping();');
+    expect(body).toContain('socket.terminate();');
+    expect(body).toContain('clearInterval(keepalive)');
+    // close + error stop the keepalive timer, then identity-checked unregister.
+    expect(body).toContain("deps.registry.unregister(nodeId, conn, 'fleet node socket closed')");
+    expect(body).toContain("deps.registry.unregister(nodeId, conn, 'fleet node socket error')");
   });
 
   it('disabled variant pinned: 503 stub with the fleet_nodes-pending detail + design-doc pointer', () => {
