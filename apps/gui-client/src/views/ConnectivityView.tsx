@@ -72,20 +72,12 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
     }
   }
 
-  return (
-    <div className={embedded ? 'flex flex-col gap-4' : 'flex h-full flex-col gap-4 p-6'}>
-      <header className="flex flex-col gap-1">
-        {!embedded && <span className="section-label">Network</span>}
-        {!embedded && (
-          <h2 className="text-lg font-medium tracking-tight text-ink-primary">Connectivity test</h2>
-        )}
-        <p className="max-w-2xl text-sm text-ink-secondary">
-          Authenticates against the configured server and times the round-trip. Use this when a
-          session call starts failing — it isolates whether the issue is the API key, the URL, the
-          server, or your network.
-        </p>
-      </header>
-
+  // Embedded inside Settings' "Connection test" panel, which already provides
+  // the icon-led card chrome — render the lean inline form there. Standalone,
+  // lead with a gradient hero card (icon chip + identity glow) matching the
+  // Command Center / Settings language.
+  const probe = (
+    <>
       <div className="flex flex-col gap-2 max-w-2xl">
         <Row label="API base URL">
           <span className="mono text-ink-secondary">{settings.baseUrl}</span>
@@ -135,6 +127,51 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
       </div>
 
       {result !== null && <ResultBlock result={result} />}
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex flex-col gap-4">{probe}</div>;
+  }
+
+  return (
+    <div className="mx-auto flex h-full w-full max-w-2xl flex-col gap-6 overflow-y-auto p-6">
+      {/* Page hero — gradient + identity glow; an accent icon chip + the
+          Network section label, mirroring the Command Center card language. */}
+      <header className="relative overflow-hidden rounded-2xl border border-surface-divider bg-surface-raised p-5">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full opacity-40 blur-3xl"
+          style={{
+            background: 'radial-gradient(circle, rgb(var(--accent-rgb)/0.55), transparent 70%)',
+          }}
+        />
+        <div className="relative flex flex-wrap items-start gap-4">
+          <span
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent"
+            aria-hidden="true"
+          >
+            <IconActivity />
+          </span>
+          <div className="min-w-0">
+            <span className="section-label text-accent">Network</span>
+            <h2 className="mt-0.5 text-2xl font-semibold tracking-tight text-ink-primary">
+              Connectivity test
+            </h2>
+            <p className="mt-1 max-w-xl text-sm text-ink-secondary">
+              Authenticates against the configured server and times the round-trip. Use this when a
+              session call starts failing — it isolates whether the issue is the API key, the URL,
+              the server, or your network.
+            </p>
+          </div>
+        </div>
+      </header>
+
+      {/* Probe card — the detail rows + run action + result, in the shared
+          rounded card surface. */}
+      <section className="flex flex-col gap-4 rounded-xl border border-surface-divider bg-surface-raised px-5 py-4 shadow-sm">
+        {probe}
+      </section>
     </div>
   );
 }
@@ -151,7 +188,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }):
 function ResultBlock({ result }: { result: CheckResult }): JSX.Element {
   if (result.ok) {
     return (
-      <div className="rounded border border-status-ready/30 bg-status-ready/10 px-4 py-3">
+      <div className="rounded-xl border border-status-ready/30 bg-status-ready/10 px-4 py-3">
         <div className="flex items-center gap-2">
           <span className="status-pip bg-status-ready" />
           <span className="section-label text-status-ready">OK</span>
@@ -162,7 +199,7 @@ function ResultBlock({ result }: { result: CheckResult }): JSX.Element {
     );
   }
   return (
-    <div className="rounded border border-status-error/30 bg-status-error/10 px-4 py-3">
+    <div className="rounded-xl border border-status-error/30 bg-status-error/10 px-4 py-3">
       <div className="flex items-center gap-2">
         <span className="status-pip bg-status-error" />
         <span className="section-label text-status-error">Failed</span>
@@ -173,5 +210,21 @@ function ResultBlock({ result }: { result: CheckResult }): JSX.Element {
       </div>
       <p className="mt-1 text-sm text-ink-primary">{result.detail}</p>
     </div>
+  );
+}
+
+// ─── icons (Lucide-shape, inline, no dependency) — matches CommandCenterView ──
+const stroke = {
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.6,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+};
+function IconActivity(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="17" height="17" {...stroke}>
+      <path d="M1.5 8h2.75l1.5-4.5 3 9 1.5-4.5h4.25" />
+    </svg>
   );
 }

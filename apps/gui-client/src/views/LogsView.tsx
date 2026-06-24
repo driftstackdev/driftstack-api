@@ -104,45 +104,73 @@ export function LogsView(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <header className="flex items-center justify-between gap-4">
-        <div className="flex flex-col gap-0.5">
-          <span className="section-label">Diagnostics</span>
-          <h2 className="text-lg font-medium tracking-tight text-ink-primary">
-            Logs
-            <span className="ml-2 mono text-ink-muted">{entries.length}</span>
-            {errorCount > 0 && (
-              <span className="ml-2 text-sm font-normal text-status-error">
-                {errorCount} {errorCount === 1 ? 'error' : 'errors'}
-              </span>
-            )}
-          </h2>
-          <p className="text-2xs text-ink-muted">
-            Captured console output + uncaught errors for this app session — newest at the bottom.
-            Held in memory (most recent 500); cleared on restart.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={handleCopy}
-            disabled={entries.length === 0}
+      {/* Page hero — an accent icon chip + a radial identity glow, the live
+          entry count / error tally, and the Copy + Clear actions anchored on
+          the right. Matches the Command Center / Settings gradient-card
+          language. */}
+      <header className="relative overflow-hidden rounded-2xl border border-surface-divider bg-surface-raised p-5">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full opacity-40 blur-3xl"
+          style={{
+            background: 'radial-gradient(circle, rgb(var(--accent-rgb)/0.55), transparent 70%)',
+          }}
+        />
+        <div className="relative flex flex-wrap items-start gap-4">
+          <span
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent"
+            aria-hidden="true"
           >
-            {copied ? 'Copied' : 'Copy'}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => clearLogEntries()}
-            disabled={entries.length === 0}
-          >
-            Clear
-          </button>
+            <IconTerminal />
+          </span>
+          <div className="min-w-0">
+            <span className="section-label text-accent">Diagnostics</span>
+            <h2 className="mt-0.5 flex items-baseline gap-2 text-2xl font-semibold tracking-tight text-ink-primary">
+              Logs
+              <span className="mono text-base font-medium text-ink-muted">{entries.length}</span>
+              {errorCount > 0 && (
+                <span className="text-sm font-normal text-status-error">
+                  {errorCount} {errorCount === 1 ? 'error' : 'errors'}
+                </span>
+              )}
+            </h2>
+            <p className="mt-1 text-2xs text-ink-muted">
+              Captured console output + uncaught errors for this app session — newest at the bottom.
+              Held in memory (most recent 500); cleared on restart.
+            </p>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleCopy}
+              disabled={entries.length === 0}
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => clearLogEntries()}
+              disabled={entries.length === 0}
+            >
+              Clear
+            </button>
+          </div>
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-1" role="group" aria-label="Filter by level">
+      {/* Controls — segmented level filter + free-text search, in a raised card
+          matching the hero rhythm. */}
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 shadow-sm">
+        <span aria-hidden="true" className="text-ink-muted">
+          <IconFilter />
+        </span>
+        <div
+          className="flex items-center gap-1 rounded-lg bg-surface-inset p-1"
+          role="group"
+          aria-label="Filter by level"
+        >
           {FILTERS.map((f) => (
             <button
               key={f.id}
@@ -150,8 +178,8 @@ export function LogsView(): JSX.Element {
               aria-pressed={filter === f.id}
               className={
                 filter === f.id
-                  ? 'rounded bg-accent-subtle px-2.5 py-1 text-xs font-medium text-ink-primary'
-                  : 'rounded px-2.5 py-1 text-xs text-ink-muted hover:text-ink-primary'
+                  ? 'rounded-md bg-accent-subtle px-2.5 py-1 text-xs font-medium text-ink-primary shadow-sm'
+                  : 'rounded-md px-2.5 py-1 text-xs text-ink-muted transition-colors hover:text-ink-primary'
               }
               onClick={() => setFilter(f.id)}
             >
@@ -235,5 +263,30 @@ export function LogsView(): JSX.Element {
         </div>
       )}
     </div>
+  );
+}
+
+// ─── icons (Lucide-shape, inline, no dependency) — matches CommandCenterView ──
+const stroke = {
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.6,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+};
+// A terminal/console glyph for the diagnostics hero.
+function IconTerminal(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" {...stroke}>
+      <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.75" />
+      <path d="M4.75 6.25 6.75 8l-2 1.75M8.25 10h3" />
+    </svg>
+  );
+}
+function IconFilter(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
+      <path d="M2 3.5h12L9.25 9v4l-2.5-1.5V9Z" />
+    </svg>
   );
 }

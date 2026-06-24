@@ -154,35 +154,95 @@ export function FleetView(): JSX.Element {
     [members],
   );
 
+  // At-a-glance fleet health, derived purely from the loaded members + their
+  // ping results (no new data / no extra fetch). Drives the icon-led KPI strip.
+  const reachable = members.filter((m) => {
+    const p = pings[m.id];
+    return p !== undefined && p !== 'pending' && p.ok;
+  }).length;
+  const unreachable = members.filter((m) => {
+    const p = pings[m.id];
+    return p !== undefined && p !== 'pending' && !p.ok;
+  }).length;
+  const pinged = reachable + unreachable;
+
   return (
-    <div className="flex h-full flex-col gap-4 p-6">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <span className="section-label">Cluster</span>
-          <h2 className="mt-1 text-lg font-medium tracking-tight text-ink-primary">
-            Mac mini fleet
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm text-ink-secondary">
-            Local-only registry of Driftstack control-plane URLs. Add each Mac mini's API server
-            URL; "Ping all" hits every member's <code className="mono">/version</code> and surfaces
-            reachability, driver mode, and version. The fleet topology lives in this app's settings
-            store; nothing is sent to a server.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => void pingAll()}
-            disabled={members.length === 0}
+    <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-6 overflow-y-auto p-6">
+      {/* Page hero — an accent icon chip + a radial identity glow, the
+          local-only-registry framing, and the Ping all + Add member actions on
+          the right. Matches the Command Center / Settings / Sessions gradient
+          card language. */}
+      <header className="relative overflow-hidden rounded-2xl border border-surface-divider bg-surface-raised p-5">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full opacity-40 blur-3xl"
+          style={{
+            background: 'radial-gradient(circle, rgb(var(--accent-rgb)/0.55), transparent 70%)',
+          }}
+        />
+        <div className="relative flex flex-wrap items-start gap-4">
+          <span
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent"
+            aria-hidden="true"
           >
-            Ping all
-          </button>
-          <button type="button" className="btn-primary" onClick={startCreate}>
-            Add member
-          </button>
+            <IconServer />
+          </span>
+          <div className="min-w-0 flex-1">
+            <span className="section-label text-accent">Cluster</span>
+            <h2 className="mt-0.5 text-2xl font-semibold tracking-tight text-ink-primary">
+              Mac mini fleet
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm text-ink-secondary">
+              Local-only registry of Driftstack control-plane URLs. Add each Mac mini's API server
+              URL; "Ping all" hits every member's <code className="mono">/version</code> and
+              surfaces reachability, driver mode, and version. The fleet topology lives in this
+              app's settings store; nothing is sent to a server.
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => void pingAll()}
+              disabled={members.length === 0}
+            >
+              Ping all
+            </button>
+            <button type="button" className="btn-primary" onClick={startCreate}>
+              Add member
+            </button>
+          </div>
         </div>
       </header>
+
+      {/* Fleet KPI strip — icon-led at-a-glance cards derived from the loaded
+          members + ping results (no new data / no new fetch), matching the
+          Command Center / Sessions stat strips. Only shown once there's a fleet
+          to summarize. */}
+      {sorted.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat icon={<IconServer />} l="Members" value={members.length} sub="registered URLs" />
+          <Stat
+            icon={<IconCheck />}
+            l="Reachable"
+            value={reachable}
+            accent
+            sub={pinged > 0 ? `${pinged} pinged` : 'ping to check'}
+          />
+          <Stat
+            icon={<IconAlert />}
+            l="Unreachable"
+            value={unreachable}
+            sub={unreachable > 0 ? 'needs attention' : 'all healthy'}
+          />
+          <Stat
+            icon={<IconClock />}
+            l="Unpinged"
+            value={Math.max(0, members.length - pinged)}
+            sub={pinged < members.length ? 'run “Ping all”' : 'all checked'}
+          />
+        </div>
+      )}
 
       {actionError !== null && (
         <div
@@ -208,7 +268,7 @@ export function FleetView(): JSX.Element {
             e.preventDefault();
             void submitForm();
           }}
-          className="rounded border border-surface-divider bg-surface-raised p-4"
+          className="rounded-xl border border-surface-divider bg-surface-raised p-4 shadow-sm"
         >
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <Field label="Label" error={form.errors.label}>
@@ -272,63 +332,92 @@ export function FleetView(): JSX.Element {
       )}
 
       {!loading && loadError === null && sorted.length === 0 && !form.visible && (
-        <div className="rounded border border-surface-divider bg-surface-raised p-8 text-center text-sm text-ink-secondary">
-          No fleet members yet. Click "Add member" to register the first Mac mini's API URL.
-        </div>
+        <section className="flex flex-col items-center gap-4 rounded-2xl border border-surface-divider bg-surface-raised px-8 py-12 text-center shadow-sm">
+          <span
+            className="grid h-12 w-12 place-items-center rounded-xl bg-surface-inset text-ink-muted"
+            aria-hidden="true"
+          >
+            <IconServer />
+          </span>
+          <p className="max-w-md text-sm leading-relaxed text-ink-secondary">
+            No fleet members yet. Click "Add member" to register the first Mac mini's API URL.
+          </p>
+        </section>
       )}
 
       {sorted.length > 0 && (
-        <ul className="divide-y divide-surface-divider rounded border border-surface-divider bg-surface-raised">
+        <ul className="divide-y divide-surface-divider overflow-hidden rounded-xl border border-surface-divider bg-surface-raised shadow-sm">
           {sorted.map((m) => {
             const p = pings[m.id];
+            // The leading identity chip is tinted by reachability so a member
+            // reads its state at a glance: ready when its last ping was ok,
+            // error when unreachable, quiet otherwise (unpinged / pinging).
+            const reached = p !== undefined && p !== 'pending' && p.ok;
+            const failed = p !== undefined && p !== 'pending' && !p.ok;
+            const chipClass = reached
+              ? 'bg-status-ready/15 text-status-ready'
+              : failed
+                ? 'bg-status-error/12 text-status-error'
+                : 'bg-surface-inset text-ink-muted';
             return (
-              <li key={m.id} className="flex items-start justify-between gap-4 px-5 py-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-ink-primary">{m.label}</p>
-                    {p === 'pending' && <span className="text-2xs text-ink-muted">pinging…</span>}
+              <li
+                key={m.id}
+                className="flex items-start justify-between gap-4 px-5 py-3.5 transition-colors hover:bg-surface-elevated"
+              >
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <span
+                    className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg ${chipClass}`}
+                    aria-hidden="true"
+                  >
+                    <IconServer />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-ink-primary">{m.label}</p>
+                      {p === 'pending' && <span className="text-2xs text-ink-muted">pinging…</span>}
+                      {p && p !== 'pending' && p.ok && (
+                        <span className="rounded-full bg-status-ready/20 px-2 py-0.5 text-2xs font-medium uppercase tracking-wide text-status-ready">
+                          ok · {p.durationMs}ms
+                        </span>
+                      )}
+                      {p && p !== 'pending' && !p.ok && (
+                        <span className="rounded-full bg-status-error/20 px-2 py-0.5 text-2xs font-medium uppercase tracking-wide text-status-error">
+                          unreachable
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 mono text-2xs text-ink-secondary">{m.baseUrl}</p>
+                    {m.notes !== null && <p className="mt-1 text-2xs text-ink-muted">{m.notes}</p>}
                     {p && p !== 'pending' && p.ok && (
-                      <span className="rounded-full bg-status-ready/20 px-2 py-0.5 text-2xs font-medium uppercase tracking-wide text-status-ready">
-                        ok · {p.durationMs}ms
-                      </span>
+                      <p className="mt-1 text-2xs text-ink-muted">
+                        driver: <span className="mono">{p.driver ?? 'unknown'}</span>
+                        {p.playwrightBrowser ? ` (${p.playwrightBrowser})` : ''}
+                        {p.version ? ` · v${p.version}` : ''}
+                      </p>
                     )}
-                    {p && p !== 'pending' && !p.ok && (
-                      <span className="rounded-full bg-status-error/20 px-2 py-0.5 text-2xs font-medium uppercase tracking-wide text-status-error">
-                        unreachable
-                      </span>
+                    {p && p !== 'pending' && !p.ok && p.error && (
+                      <p className="mt-1 text-2xs text-status-error">{p.error}</p>
                     )}
                   </div>
-                  <p className="mt-1 mono text-2xs text-ink-secondary">{m.baseUrl}</p>
-                  {m.notes !== null && <p className="mt-1 text-2xs text-ink-muted">{m.notes}</p>}
-                  {p && p !== 'pending' && p.ok && (
-                    <p className="mt-1 text-2xs text-ink-muted">
-                      driver: <span className="mono">{p.driver ?? 'unknown'}</span>
-                      {p.playwrightBrowser ? ` (${p.playwrightBrowser})` : ''}
-                      {p.version ? ` · v${p.version}` : ''}
-                    </p>
-                  )}
-                  {p && p !== 'pending' && !p.ok && p.error && (
-                    <p className="mt-1 text-2xs text-status-error">{p.error}</p>
-                  )}
                 </div>
-                <div className="flex shrink-0 gap-2">
+                <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
-                    className="text-2xs text-ink-secondary hover:text-ink-primary"
+                    className="rounded-md px-2 py-1 text-2xs text-ink-secondary transition-colors hover:bg-surface-inset hover:text-ink-primary"
                     onClick={() => void ping(m)}
                   >
                     Ping
                   </button>
                   <button
                     type="button"
-                    className="text-2xs text-ink-secondary hover:text-ink-primary"
+                    className="rounded-md px-2 py-1 text-2xs text-ink-secondary transition-colors hover:bg-surface-inset hover:text-ink-primary"
                     onClick={() => startEdit(m)}
                   >
                     Edit
                   </button>
                   <button
                     type="button"
-                    className="text-2xs text-status-error hover:opacity-80"
+                    className="rounded-md px-2 py-1 text-2xs text-status-error transition-colors hover:bg-status-error/10 hover:opacity-80"
                     onClick={() => void destroy(m)}
                   >
                     Remove
@@ -365,5 +454,90 @@ function Field({
       {children}
       {error !== undefined && <span className="text-2xs text-status-error">{error}</span>}
     </label>
+  );
+}
+
+// Icon-led KPI card — an icon chip + an uppercase label + a big mono numeral +
+// a sub-line, matching the Command Center / Sessions stat strips. `accent`
+// tints the chip + numeral (light → accent, dark → ready) for the highlighted
+// metric. Pure presentation over the derived fleet counts.
+function Stat({
+  icon,
+  l,
+  value,
+  sub,
+  accent,
+}: {
+  icon: React.ReactNode;
+  l: string;
+  value: number;
+  sub: string;
+  accent?: boolean;
+}): JSX.Element {
+  return (
+    <div className="flex flex-col gap-1.5 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 shadow-sm">
+      <div className="flex items-center gap-2">
+        <span
+          className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${
+            accent ? 'bg-accent/15 text-accent' : 'bg-surface-inset text-ink-secondary'
+          }`}
+          aria-hidden="true"
+        >
+          {icon}
+        </span>
+        <span className="section-label">{l}</span>
+      </div>
+      <span
+        className={`mono text-2xl font-semibold leading-none tracking-tight tabular-nums ${
+          accent ? 'text-accent dark:text-status-ready' : 'text-ink-primary'
+        }`}
+      >
+        {value}
+      </span>
+      <span className="text-[10.5px] text-ink-muted">{sub}</span>
+    </div>
+  );
+}
+
+// ─── icons (Lucide-shape, inline, no dependency) — matches CommandCenterView ──
+const stroke = {
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.6,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+};
+// A stacked-server / rack glyph, echoing the Mac mini fleet framing.
+function IconServer(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
+      <rect x="2" y="2.5" width="12" height="4.5" rx="1" />
+      <rect x="2" y="9" width="12" height="4.5" rx="1" />
+      <path d="M4.5 4.75h.01M4.5 11.25h.01" />
+    </svg>
+  );
+}
+function IconCheck(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M5.25 8.25 7.25 10.25 11 6" />
+    </svg>
+  );
+}
+function IconAlert(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
+      <path d="M8 1.75 14.5 13.5H1.5Z" />
+      <path d="M8 6.25v3M8 11.5h.01" />
+    </svg>
+  );
+}
+function IconClock(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M8 4.5V8l2.5 1.5" />
+    </svg>
   );
 }

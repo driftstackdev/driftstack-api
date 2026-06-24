@@ -2,7 +2,11 @@
 // recordings (founder-approved Console restyle of the recordings-gallery
 // visual demo, 2026-06-14: matches ProfilesView/console.html — hero header,
 // gallery cards with hover play affordance, polished empty/loading states,
-// hairline-divided fact rail).
+// hairline-divided fact rail). 2026-06-24: hero upgraded to the gradient
+// identity card shared with Command Center / Sessions / Settings — an
+// accent icon chip + radial glow + section-label + text-2xl title, so the
+// page leads with the same surface language as the rest of the app
+// (presentation-only; the count + live/saved pills are unchanged).
 //
 // Recordings persist to disk (see lib/recordings.tsx — ndjson store,
 // frames hydrate on demand). The playback view is reached via the
@@ -97,38 +101,56 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      {/* HERO — section-label + title + at-a-glance context on the left
-          (console.html .hero). Recordings carry no primary action of their
-          own (they're created from a live session), so the right side holds
-          a quiet live/idle pill rather than a button. */}
-      <header className="flex flex-wrap items-start gap-4 border-b border-surface-divider pb-3">
-        <div className="min-w-0">
-          <span className="section-label">Sessions</span>
-          <h2 className="mt-0.5 flex items-baseline gap-2 text-[19px] font-semibold tracking-tight text-ink-primary">
-            Recordings
-            <span className="mono text-base font-medium text-ink-muted">{list.length}</span>
-          </h2>
-          <p className="mt-0.5 text-xs text-ink-secondary">
-            Recordings persist on this machine (app data); frames load on demand when you open one.
-          </p>
-        </div>
-        {list.length > 0 && (
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            {liveCount > 0 && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-status-busy/30 bg-status-busy/10 px-2.5 py-1 text-2xs font-semibold text-status-busy">
-                <span
-                  aria-hidden="true"
-                  className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-busy"
-                />
-                {liveCount} recording
-              </span>
-            )}
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-surface-divider bg-surface-raised px-2.5 py-1 text-2xs text-ink-secondary">
-              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-status-ready" />
-              {list.length} saved
-            </span>
+      {/* HERO — the gradient identity card shared with Command Center /
+          Sessions / Settings: an accent icon chip + a radial identity glow,
+          the section-label + title + at-a-glance context on the left.
+          Recordings carry no primary action of their own (they're created
+          from a live session), so the right side holds a quiet live/saved
+          pill rather than a button. */}
+      <header className="relative overflow-hidden rounded-2xl border border-surface-divider bg-surface-raised p-5">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full opacity-40 blur-3xl"
+          style={{
+            background: 'radial-gradient(circle, rgb(var(--accent-rgb)/0.55), transparent 70%)',
+          }}
+        />
+        <div className="relative flex flex-wrap items-start gap-4">
+          <span
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent"
+            aria-hidden="true"
+          >
+            <FilmGlyph size={18} />
+          </span>
+          <div className="min-w-0">
+            <span className="section-label text-accent">Sessions</span>
+            <h2 className="mt-0.5 flex items-baseline gap-2 text-2xl font-semibold tracking-tight text-ink-primary">
+              Recordings
+              <span className="mono text-base font-medium text-ink-muted">{list.length}</span>
+            </h2>
+            <p className="mt-1 text-xs text-ink-secondary">
+              Recordings persist on this machine (app data); frames load on demand when you open
+              one.
+            </p>
           </div>
-        )}
+          {list.length > 0 && (
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              {liveCount > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-status-busy/30 bg-status-busy/10 px-2.5 py-1 text-2xs font-semibold text-status-busy">
+                  <span
+                    aria-hidden="true"
+                    className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-busy"
+                  />
+                  {liveCount} recording
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-surface-divider bg-surface-raised px-2.5 py-1 text-2xs text-ink-secondary">
+                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-status-ready" />
+                {list.length} saved
+              </span>
+            </div>
+          )}
+        </div>
       </header>
 
       {list.length === 0 ? (
@@ -154,7 +176,7 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
           {selected && (
             <aside
               data-component="recording-rail"
-              className="flex w-72 shrink-0 flex-col gap-3 self-start rounded-lg border border-surface-divider bg-surface-raised p-4 shadow-sm"
+              className="flex w-72 shrink-0 flex-col gap-3 self-start rounded-xl border border-surface-divider bg-surface-raised p-4 shadow-sm"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="section-label">Now selected</span>
@@ -289,7 +311,7 @@ function RecordingCard({
       type="button"
       data-recording-card={r.id}
       aria-pressed={selected}
-      className={`group relative overflow-hidden rounded-lg border bg-surface-raised text-left transition-all hover:-translate-y-px hover:shadow-md ${
+      className={`group relative overflow-hidden rounded-xl border bg-surface-raised text-left shadow-sm transition-all hover:-translate-y-px hover:shadow-md ${
         selected
           ? 'border-accent ring-1 ring-accent'
           : 'border-surface-divider hover:border-ink-muted/60'
@@ -402,7 +424,7 @@ function GallerySkeleton(): JSX.Element {
         {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={i}
-            className="overflow-hidden rounded-lg border border-surface-divider bg-surface-raised"
+            className="overflow-hidden rounded-xl border border-surface-divider bg-surface-raised shadow-sm"
           >
             <Skeleton className="aspect-[9/12] rounded-none" />
             <div className="flex flex-col gap-1.5 px-3 py-2">

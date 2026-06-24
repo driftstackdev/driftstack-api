@@ -106,7 +106,7 @@ describe('W481.C apps/gui-client/src/views/ConnectivityView.tsx content parity',
       /function Row\(\{ label, children \}: \{ label: string; children: React\.ReactNode \}\): JSX\.Element \{\s*\n?\s*return \(\s*\n?\s*<div className="grid grid-cols-\[10rem_1fr\] items-center gap-3 text-sm">\s*\n?\s*<span className="section-label">\{label\}<\/span>/,
     );
     expect(body).toMatch(
-      /if \(result\.ok\) \{\s*\n?\s*return \(\s*\n?\s*<div className="rounded border border-status-ready\/30 bg-status-ready\/10 px-4 py-3">/,
+      /if \(result\.ok\) \{\s*\n?\s*return \(\s*\n?\s*<div className="rounded-xl border border-status-ready\/30 bg-status-ready\/10 px-4 py-3">/,
     );
     expect(body).toMatch(
       /\{result\.errorKind !== undefined && \(\s*\n?\s*<span className="mono text-2xs text-ink-muted">· \{result\.errorKind\}<\/span>\s*\n?\s*\)\}/,
