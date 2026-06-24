@@ -2081,8 +2081,19 @@ export function SimulatorWindow(): JSX.Element {
   // so only the pane toggle changes the drawer width; drawerExtraRef is already
   // updated render-time before this effect fires). Runs after paint so the aside's
   // layout width is applied first.
+  const didInitialDrawerRef = useRef(false);
   useEffect(() => {
     if (info === null) return;
+    // SKIP the initial mount: the initial-fit effect (resetToActualSize) already owns the
+    // first sizing AND already incorporates the always-docked rail's width. Running
+    // refitForDrawer on mount too RACES it — refitForDrawer is height-driven off the
+    // create-time 718h and lands a tiny ~337px window LAST (during resetToActualSize's
+    // 90ms read-back sleep), clobbering it → the founder's "started off really small"
+    // regression returns. Only refit on a REAL later pane open/close.
+    if (!didInitialDrawerRef.current) {
+      didInitialDrawerRef.current = true;
+      return;
+    }
     const t = window.setTimeout(() => refitForDrawer(), 0);
     return () => window.clearTimeout(t);
   }, [paneOpen, info]);
@@ -2850,14 +2861,15 @@ export function SimulatorWindow(): JSX.Element {
   const toggleRotate = (): void => {
     const next = !landscape;
     setLandscape(next);
-    void withCurrentWindow(async (w) => {
-      const { LogicalSize } = await import('@tauri-apps/api/dpi');
-      const size = await w.innerSize();
-      const factor = await w.scaleFactor();
-      const lw = size.width / factor;
-      const lh = size.height / factor;
-      await w.setSize(new LogicalSize(Math.round(lh), Math.round(lw)));
-    });
+    // Size to the NEW orientation via the landscape-aware sizer (resetToActualSize re-adds
+    // the always-docked rail's drawerExtra HORIZONTALLY + chrome VERTICALLY + clamps to the
+    // screen work area) instead of naively transposing the whole window. The old transpose
+    // (setSize(lh, lw)) folded the horizontal rail/pane width into the vertical height basis
+    // and dropped chrome → an oversized landscape window (badly so with a pane open) and no
+    // screen clamp. Set landscapeRef now so the sizer reads the new orientation immediately
+    // (not next render).
+    landscapeRef.current = next;
+    resetToActualSize();
   };
 
   return (
