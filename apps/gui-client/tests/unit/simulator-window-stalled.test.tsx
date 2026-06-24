@@ -45,6 +45,8 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
 // so ONLY the data channel drives the badge in these tests (deterministic).
 vi.mock('../../src/lib/agent-session-control', () => ({
   uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
+  listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
+  fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),
   getAgentSession: () => Promise.resolve({ mode: 'manual', pairKind: null }),
   getAgentSessionPageState: () => Promise.resolve(null),
   getAgentSessionCookies: () => Promise.resolve({ status: 'unavailable', cookies: null }),

@@ -50,6 +50,8 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
 // The control transport — mode 'manual' so the panel renders the full chrome.
 vi.mock('../../src/lib/agent-session-control', () => ({
   uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
+  listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
+  fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),
   getAgentSession: () => Promise.resolve({ mode: 'manual', pairKind: null }),
   getAgentSessionPageState: () => Promise.resolve(null),
   // The cookies drawer poll (founder #48) calls this once the room connects; the

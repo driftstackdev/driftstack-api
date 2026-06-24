@@ -43,6 +43,8 @@ vi.mock('../../src/lib/agent-session-control', () => ({
   getAgentSessionPageState: () => Promise.resolve(null),
   getAgentSessionCookies: () => Promise.resolve({ status: 'unavailable', cookies: null }),
   uploadAgentSessionFile: (...a: unknown[]) => uploadMock(...a) as unknown,
+  listAgentSessionDownloads: () => Promise.resolve({ status: 'unavailable', files: null }),
+  fetchAgentSessionDownload: () => Promise.resolve({ status: 'unavailable', file: null }),
   setSessionMode: vi.fn(),
   takeoverSession: vi.fn(),
   handbackSession: vi.fn(),

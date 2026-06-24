@@ -274,6 +274,76 @@ export async function uploadAgentSessionFile(
   };
 }
 
+/** A file a page wrote into the running session's download jail (matches the server
+ *  DownloadEntry). `name` is a bare basename — never a path. A3 W2856 / "control files". */
+export interface SessionDownloadEntry {
+  name: string;
+  size: number;
+  mime?: string;
+}
+
+/** Discriminated result of GET /v1/agent-sessions/:id/downloads so the download bar
+ *  renders inert states calmly. `ok` → `files` is the list (possibly empty = "no
+ *  downloads yet"); every other status → `files` is null. */
+export interface DownloadsListResult {
+  status: 'ok' | 'unavailable' | 'timeout' | 'error';
+  files: SessionDownloadEntry[] | null;
+  reason?: string;
+}
+
+/** One fetched file's bytes (base64) + its metadata. */
+export interface SessionDownloadData {
+  name: string;
+  mime: string;
+  dataB64: string;
+}
+
+/** Discriminated result of GET /:id/downloads/content?name=. `ok` → `file`; else null. */
+export interface FetchDownloadResult {
+  status: 'ok' | 'unavailable' | 'timeout' | 'error';
+  file: SessionDownloadData | null;
+  reason?: string;
+}
+
+/** List the files a page wrote into the running session's download jail (A3 W2856).
+ *  Throws (via authedFetch) on a non-2xx (the gated 503 / a 404) so the caller's poll
+ *  `.catch()` maps that to the calm pending state, like the cookies poll. A 200
+ *  always carries a discriminated body; `ok` with an empty list = "no downloads yet". */
+export async function listAgentSessionDownloads(
+  id: string,
+  auth: ControlAuth = null,
+): Promise<DownloadsListResult> {
+  const body = (await authedFetch(
+    `/v1/agent-sessions/${encodeURIComponent(id)}/downloads`,
+    { method: 'GET' },
+    auth,
+  )) as Partial<DownloadsListResult>;
+  return {
+    status: body.status ?? 'error',
+    files: Array.isArray(body.files) ? body.files : null,
+    ...(body.reason !== undefined ? { reason: body.reason } : {}),
+  };
+}
+
+/** Fetch one jailed file's bytes (base64) by basename (A3 W2856). Throws on a non-2xx;
+ *  a 200 carries a discriminated body — `ok` → `file` (the GUI saves it to disk). */
+export async function fetchAgentSessionDownload(
+  id: string,
+  name: string,
+  auth: ControlAuth = null,
+): Promise<FetchDownloadResult> {
+  const body = (await authedFetch(
+    `/v1/agent-sessions/${encodeURIComponent(id)}/downloads/content?name=${encodeURIComponent(name)}`,
+    { method: 'GET' },
+    auth,
+  )) as Partial<FetchDownloadResult>;
+  return {
+    status: body.status ?? 'error',
+    file: body.file ?? null,
+    ...(body.reason !== undefined ? { reason: body.reason } : {}),
+  };
+}
+
 /** POST a new control mode; returns the resulting mode + pair state. */
 export async function setSessionMode(
   id: string,

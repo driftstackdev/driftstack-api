@@ -32,6 +32,8 @@ import {
   getAgentSessionPageState,
   getAgentSessionCookies,
   uploadAgentSessionFile,
+  listAgentSessionDownloads,
+  fetchAgentSessionDownload,
   setSessionMode,
   takeoverSession,
   handbackSession,
@@ -42,6 +44,7 @@ import {
   type ControlAuth,
   type SessionCookie,
   type SessionFileHandle,
+  type SessionDownloadEntry,
 } from '../lib/agent-session-control';
 
 /** Frame chrome heights (px) used to derive the window size from the device's
@@ -1730,6 +1733,87 @@ export function SimulatorWindow(): JSX.Element {
     reader.readAsDataURL(file);
   };
 
+  // File-control DOWNLOAD (A3 W2856). Poll the session's download jar like cookies;
+  // fetching one saves it to the user's machine via an <a download>. The jar is empty
+  // until A3's fork download-delegate populates it → "No downloads yet".
+  const [downloads, setDownloads] = useState<SessionDownloadEntry[] | null>(null);
+  const [downloadsNote, setDownloadsNote] = useState<string | null>(null);
+  const [downloadingName, setDownloadingName] = useState<string | null>(null);
+  useEffect(() => {
+    if (!toolbarExpanded || sessionId === '' || room === null) return;
+    let cancelled = false;
+    const tick = (): void => {
+      void listAgentSessionDownloads(sessionId, controlAuth)
+        .then((res) => {
+          if (cancelled) return;
+          if (res.status === 'ok') {
+            setDownloads(res.files ?? []);
+            setDownloadsNote(null);
+          } else {
+            setDownloads(null);
+            setDownloadsNote(
+              res.status === 'timeout'
+                ? 'waiting for the device…'
+                : (res.reason ?? 'not available yet'),
+            );
+          }
+        })
+        .catch(() => {
+          if (cancelled) return;
+          // Gated 503 / 404 / network — downloads aren't live on this build/box yet.
+          setDownloads(null);
+          setDownloadsNote('pending — downloads ship with the next device update');
+        });
+    };
+    tick();
+    const handle = window.setInterval(tick, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(handle);
+    };
+  }, [toolbarExpanded, sessionId, controlAuth, room]);
+
+  const onDownloadFile = (name: string): void => {
+    setDownloadingName(name);
+    setDownloadsNote(null);
+    void fetchAgentSessionDownload(sessionId, name, controlAuth)
+      .then((res) => {
+        if (res.status === 'ok' && res.file !== null) {
+          // base64 → bytes → Blob → an <a download> click (saves to the user's machine).
+          try {
+            const bin = atob(res.file.dataB64);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+            const blob = new Blob([bytes], { type: res.file.mime || 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = res.file.name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+          } catch {
+            setDownloadsNote('Could not save the file.');
+          }
+        } else if (res.status === 'unavailable') {
+          setDownloadsNote('Downloads pending — file control ships with the next device update.');
+        } else if (res.status === 'timeout') {
+          setDownloadsNote("Download timed out — the device didn't respond.");
+        } else {
+          setDownloadsNote(
+            res.reason !== undefined ? `Download failed: ${res.reason}` : 'Download failed.',
+          );
+        }
+      })
+      .catch(() => {
+        setDownloadsNote('Downloads pending — file control ships with the next device update.');
+      })
+      .finally(() => {
+        setDownloadingName(null);
+      });
+  };
+
   // iOS TAP cursor (founder 2026-06-17: "standard is full control + iOS TAP
   // cursor"): a short-lived ring at the tap point, so a click on the screen
   // reads as a deliberate iOS touch. Capture-phase + purely visual (never
@@ -2612,6 +2696,53 @@ export function SimulatorWindow(): JSX.Element {
                             {' '}
                             · {Math.max(1, Math.round(f.size / 1024))} KB
                           </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                {/* Downloads — files a page wrote into the session's download jail
+                  (A3 W2856 / founder "control files"). Click one to save it to your
+                  machine. Empty until A3's fork download-delegate populates the jail. */}
+                <section
+                  data-component="simulator-downloads"
+                  className="shrink-0 rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
+                >
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="font-sans text-[11px] font-semibold text-white">
+                      Downloads
+                      {downloads !== null && downloads.length > 0 && (
+                        <span className="text-white/40"> · {downloads.length}</span>
+                      )}
+                    </span>
+                  </div>
+                  {downloadsNote !== null && (
+                    <div className="mb-1 text-amber-300/80">{downloadsNote}</div>
+                  )}
+                  {downloads === null || downloads.length === 0 ? (
+                    <div className="text-white/40">no downloads yet</div>
+                  ) : (
+                    <div className="max-h-40 space-y-0.5 overflow-y-auto pr-1">
+                      {downloads.map((d) => (
+                        <div key={d.name} className="flex items-center justify-between gap-2">
+                          <span className="truncate">
+                            <span className="text-sky-300/80">{d.name}</span>
+                            <span className="text-white/30">
+                              {' '}
+                              · {Math.max(1, Math.round(d.size / 1024))} KB
+                            </span>
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={`Save ${d.name}`}
+                            title="Save this file to your machine"
+                            disabled={downloadingName !== null}
+                            onClick={() => onDownloadFile(d.name)}
+                            className="shrink-0 rounded border border-white/15 bg-white/5 px-2 py-0.5 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
+                          >
+                            {downloadingName === d.name ? 'Saving…' : 'Save'}
+                          </button>
                         </div>
                       ))}
                     </div>

@@ -38,6 +38,8 @@ let sessionMode: 'ai' | 'manual' | 'pair' = 'manual';
 const endAgentSession = vi.fn<(id: string, auth: unknown) => Promise<void>>().mockResolvedValue();
 vi.mock('../../src/lib/agent-session-control', () => ({
   uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
+  listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
+  fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),
   getAgentSession: () => Promise.resolve({ mode: sessionMode, pairKind: null }),
   getAgentSessionPageState: () => Promise.resolve(null),
   setSessionMode: vi.fn(),
