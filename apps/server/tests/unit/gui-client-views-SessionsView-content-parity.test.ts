@@ -83,26 +83,46 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
     expect(body).toMatch(/await client\.sessions\.destroy\(id\);/);
   });
 
-  it("New session button: disabled + aria-disabled both gated on busyId === '__create__' || atConcurrentCap; title tooltip for cap surface: 'Concurrent session cap reached ({cap} for {tier}). Destroy a session or upgrade to spawn more.' fallback when atConcurrentCap, undefined otherwise (so screen readers + hover both surface the explanation)", () => {
+  it("New session button: disabled + aria-disabled both gated on busyId === '__create__' || atConcurrentCap; title tooltip for cap surface: 'Concurrent session cap reached ({cap} for {tier}). Destroy a session or upgrade to spawn more.' fallback when atConcurrentCap, undefined otherwise (so screen readers + hover both surface the explanation) — 2026-06-24 GUI restyle: the tooltip string was hoisted into a `capTitle` const (shared verbatim by the hero button + the empty-state's create button so the cap surface is identical wherever New session appears); pin BOTH the const's exact gating/copy AND that the button still wires disabled + aria-disabled + title={capTitle}", () => {
+    // The cap tooltip + its cap/tier interpolation, hoisted into a shared const
+    // so the hero + empty-state create buttons surface an identical explanation.
     expect(body).toMatch(
-      /disabled=\{busyId === '__create__' \|\| atConcurrentCap\}\s*\n?\s*aria-disabled=\{busyId === '__create__' \|\| atConcurrentCap\}\s*\n?\s*title=\{\s*\n?\s*atConcurrentCap\s*\n?\s*\? `Concurrent session cap reached \(\$\{\(concurrentCap \?\? 0\)\.toString\(\)\} for \$\{\s*\n?\s*accountMe\?\.tier \?\? 'this tier'\s*\n?\s*\}\)\. Destroy a session or upgrade to spawn more\.`\s*\n?\s*: undefined\s*\n?\s*\}/,
+      /const capTitle = atConcurrentCap\s*\n?\s*\? `Concurrent session cap reached \(\$\{\(concurrentCap \?\? 0\)\.toString\(\)\} for \$\{\s*\n?\s*accountMe\?\.tier \?\? 'this tier'\s*\n?\s*\}\)\. Destroy a session or upgrade to spawn more\.`\s*\n?\s*: undefined;/,
+    );
+    // The hero's New session button still gates disabled + aria-disabled on the
+    // busy/cap predicate and surfaces the cap tooltip via the shared const.
+    expect(body).toMatch(
+      /disabled=\{busyId === '__create__' \|\| atConcurrentCap\}\s*\n?\s*aria-disabled=\{busyId === '__create__' \|\| atConcurrentCap\}\s*\n?\s*title=\{capTitle\}/,
     );
   });
 
-  it("EmptyConnect subcomponent: 'Not connected' section-label + 'Add an API key to connect to <mono>{baseUrl}</mono>.' + 'Open settings' button + '⌘ ,' keyboard hint — pinned so unauthenticated customer sees a clear path", () => {
+  it("EmptyConnect subcomponent: 'Not connected' section-label + 'Add an API key to connect to <mono>{baseUrl}</mono>.' + 'Open settings' button + '⌘ ,' keyboard hint — pinned so unauthenticated customer sees a clear path; 2026-06-24 GUI restyle: the section-label is now accent-tinted (section-label text-accent) and the copy moved into a hero-style raised card so the <p> is centered (mx-auto max-w-md) — copy + Open-settings/⌘, path unchanged", () => {
+    expect(body).toMatch(/<span className="section-label text-accent">Not connected<\/span>/);
     expect(body).toMatch(
-      /<span className="section-label">Not connected<\/span>\s*\n?\s*<p className="max-w-md text-sm text-ink-secondary">\s*\n?\s*Add an API key to connect to <span className="mono">\{baseUrl\}<\/span>\./,
+      /<p className="mx-auto max-w-md text-sm text-ink-secondary">\s*\n?\s*Add an API key to connect to <span className="mono">\{baseUrl\}<\/span>\./,
     );
     expect(body).toMatch(/or press <span className="mono">⌘ ,<\/span>/);
   });
 
-  it("EmptyList no-sessions branch framing pinned: 'A session is one running iPhone Safari instance. Click New session above to spin one up — sessions show up here with a live status while they run.' + 'Each one uses a concurrent slot until you destroy it or it idle-times-out.' — pinned so customer understands what they're spawning + how it interacts with the cap (Console restyle: the bespoke <h3>/<p> markup became a shared <EmptyState title/description> — same copy + intent, surfaced via the title prop + description prop)", () => {
-    expect(body).toMatch(/title="No active sessions yet"/);
+  it("EmptyList no-sessions branch framing pinned: 'A session is one running iPhone Safari instance. Click New session above to spin one up — sessions show up here with a live status while they run.' + 'Each one uses a concurrent slot until you destroy it or it idle-times-out.' — pinned so customer understands what they're spawning + how it interacts with the cap; 2026-06-24 GUI restyle: the shared <EmptyState title/description> became a bespoke <SessionsEmptyState> raised card whose heading lives in an <h3>No active sessions yet</h3> (title prop gone) + whose create button carries the same cap-gating so the no-sessions screen still surfaces a (gated) New session affordance — same copy + intent", () => {
+    // The heading copy now lives in the SessionsEmptyState card's <h3>.
+    expect(body).toMatch(/<h3 className="[^"]*">\s*\n?\s*No active sessions yet\s*\n?\s*<\/h3>/);
+    // The empty state is rendered for the no-sessions branch and its create
+    // button stays cap-gated (busy/cap predicate) so a customer at the cap can't
+    // click straight into a 402 from the empty screen.
+    expect(body).toMatch(/<SessionsEmptyState/);
     expect(body).toMatch(
-      /A session is one running iPhone Safari instance\. Click New session above to spin one up — sessions show up here with a live status while they run\./,
+      /disabled=\{busyId === '__create__' \|\| atConcurrentCap\}\s*\n?\s*creating=\{busyId === '__create__'\}\s*\n?\s*title=\{capTitle\}/,
+    );
+    // \s+ between words: the copy is verbatim, but it now lives as wrapped JSX
+    // text (not a one-line string prop) so word boundaries can fall on a newline
+    // + indentation. Tolerating whitespace pins the exact copy without pinning
+    // the source line-wrapping.
+    expect(body).toMatch(
+      /A\s+session\s+is\s+one\s+running\s+iPhone\s+Safari\s+instance\.\s+Click\s+New\s+session\s+above\s+to\s+spin\s+one\s+up\s+—\s+sessions\s+show\s+up\s+here\s+with\s+a\s+live\s+status\s+while\s+they\s+run\./,
     );
     expect(body).toMatch(
-      /Each one uses a concurrent slot until you destroy it or it idle-times-out\./,
+      /Each\s+one\s+uses\s+a\s+concurrent\s+slot\s+until\s+you\s+destroy\s+it\s+or\s+it\s+idle-times-out\./,
     );
   });
 

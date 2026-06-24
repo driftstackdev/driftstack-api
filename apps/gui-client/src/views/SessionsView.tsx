@@ -5,12 +5,10 @@
 // unmounts. Failures surface inline rather than via toasts so the
 // founder can debug API issues without losing context.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
-import { EmptyState } from '../components/EmptyState';
 import { RelativeTime } from '../components/RelativeTime';
 import { LiveElapsed } from '../components/LiveElapsed';
-import { SkeletonRows } from '../components/Skeleton';
 import { useSettings } from '../lib/SettingsContext';
 import { useToasts } from '../lib/toasts';
 import { DriftstackError, type Session } from '../lib/client';
@@ -235,101 +233,113 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
   const hasSessions = state.sessions.length > 0;
   const showSkeleton = state.loading && !hasSessions;
 
+  // The primary New-session control, shared verbatim by the hero + the empty
+  // state so behavior (cap-gating, busy label, title) stays identical wherever
+  // it appears. Presentation-only wrapper — no logic change.
+  const capTitle = atConcurrentCap
+    ? `Concurrent session cap reached (${(concurrentCap ?? 0).toString()} for ${
+        accountMe?.tier ?? 'this tier'
+      }). Destroy a session or upgrade to spawn more.`
+    : undefined;
+
   return (
-    <div className="flex h-full flex-col gap-4 p-6">
-      {/* HERO — section-label + title with at-a-glance live/cap context, a
-          live "refreshed" pill, and the primary actions on the right.
-          Mirrors the Profiles hub's hero rhythm so the app reads as one
-          cohesive product. */}
-      <header className="flex flex-wrap items-start gap-4 border-b border-surface-divider pb-3">
-        <div className="min-w-0">
-          <span className="section-label">Sessions</span>
-          <h2 className="mt-0.5 flex items-baseline gap-2 text-[19px] font-semibold tracking-tight text-ink-primary">
-            Active sessions
-            <span className="mono text-sm font-medium text-ink-muted">
-              {concurrentCap !== null && concurrentActive !== null
-                ? `${concurrentActive.toString()} / ${concurrentCap.toString()}`
-                : state.sessions.length.toString()}
-            </span>
-          </h2>
-          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-secondary">
-            <b className="font-semibold text-ink-primary">{activeCount}</b> running
-            <span className="text-surface-divider">·</span>
-            <span className="font-semibold text-status-ready">{counts.ready} ready</span>
-            {counts.busy > 0 && (
-              <>
-                <span className="text-surface-divider">·</span>
-                <span className="font-semibold text-status-busy">{counts.busy} busy</span>
-              </>
-            )}
-            {counts.errored > 0 && (
-              <>
-                <span className="text-surface-divider">·</span>
-                <span className="font-semibold text-status-error">{counts.errored} errored</span>
-              </>
-            )}
-          </p>
-        </div>
-        <div className="ml-auto flex flex-col items-end gap-2">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => void refresh(true)}
-              disabled={state.loading}
-            >
-              {state.loading ? 'Refreshing…' : 'Refresh'}
-            </button>
-            <button
-              type="button"
-              className="btn-primary flex items-center gap-1.5"
-              onClick={() => void handleCreate()}
-              disabled={busyId === '__create__' || atConcurrentCap}
-              aria-disabled={busyId === '__create__' || atConcurrentCap}
-              title={
-                atConcurrentCap
-                  ? `Concurrent session cap reached (${(concurrentCap ?? 0).toString()} for ${
-                      accountMe?.tier ?? 'this tier'
-                    }). Destroy a session or upgrade to spawn more.`
-                  : undefined
-              }
-            >
-              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-                <path
-                  d="M8 3v10M3 8h10"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                />
-              </svg>
-              <span>{busyId === '__create__' ? 'Creating…' : 'New session'}</span>
-            </button>
+    <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-6 overflow-y-auto p-6">
+      {/* Page hero — an accent icon chip + a radial identity glow, the
+          at-a-glance live/cap context line, a live "refreshed" pill, and the
+          primary Refresh + New session actions on the right. Matches the
+          Command Center / Settings gradient-card language. */}
+      <header className="relative overflow-hidden rounded-2xl border border-surface-divider bg-surface-raised p-5">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full opacity-40 blur-3xl"
+          style={{
+            background: 'radial-gradient(circle, rgb(var(--accent-rgb)/0.55), transparent 70%)',
+          }}
+        />
+        <div className="relative flex flex-wrap items-start gap-4">
+          <span
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent"
+            aria-hidden="true"
+          >
+            <IconPhone />
+          </span>
+          <div className="min-w-0">
+            <span className="section-label text-accent">Sessions</span>
+            <h2 className="mt-0.5 flex items-baseline gap-2 text-2xl font-semibold tracking-tight text-ink-primary">
+              Active sessions
+              <span className="mono text-base font-medium text-ink-muted">
+                {concurrentCap !== null && concurrentActive !== null
+                  ? `${concurrentActive.toString()} / ${concurrentCap.toString()}`
+                  : state.sessions.length.toString()}
+              </span>
+            </h2>
+            <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-ink-secondary">
+              <b className="font-semibold text-ink-primary">{activeCount}</b> running
+              <span className="text-surface-divider">·</span>
+              <span className="font-semibold text-status-ready">{counts.ready} ready</span>
+              {counts.busy > 0 && (
+                <>
+                  <span className="text-surface-divider">·</span>
+                  <span className="font-semibold text-status-busy">{counts.busy} busy</span>
+                </>
+              )}
+              {counts.errored > 0 && (
+                <>
+                  <span className="text-surface-divider">·</span>
+                  <span className="font-semibold text-status-error">{counts.errored} errored</span>
+                </>
+              )}
+            </p>
           </div>
-          <div className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-ink-muted">
-            <span
-              aria-hidden="true"
-              className="relative inline-block h-1.5 w-1.5 rounded-full bg-status-ready"
-            >
-              <span className="absolute inset-[-3px] animate-ping rounded-full border border-status-ready opacity-60" />
-            </span>
-            {state.refreshedAt !== null ? (
-              <>
-                Refreshed <span className="mono">{formatTime(state.refreshedAt)}</span> ·
-                auto-refresh {REFRESH_MS / 1000}s
-              </>
-            ) : (
-              <>auto-refresh {REFRESH_MS / 1000}s</>
-            )}
+          <div className="ml-auto flex flex-col items-end gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => void refresh(true)}
+                disabled={state.loading}
+              >
+                {state.loading ? 'Refreshing…' : 'Refresh'}
+              </button>
+              <button
+                type="button"
+                className="btn-primary flex items-center gap-1.5"
+                onClick={() => void handleCreate()}
+                disabled={busyId === '__create__' || atConcurrentCap}
+                aria-disabled={busyId === '__create__' || atConcurrentCap}
+                title={capTitle}
+              >
+                <IconPlus />
+                <span>{busyId === '__create__' ? 'Creating…' : 'New session'}</span>
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-ink-muted">
+              <span
+                aria-hidden="true"
+                className="relative inline-block h-1.5 w-1.5 rounded-full bg-status-ready"
+              >
+                <span className="absolute inset-[-3px] animate-ping rounded-full border border-status-ready opacity-60" />
+              </span>
+              {state.refreshedAt !== null ? (
+                <>
+                  Refreshed <span className="mono">{formatTime(state.refreshedAt)}</span> ·
+                  auto-refresh {REFRESH_MS / 1000}s
+                </>
+              ) : (
+                <>auto-refresh {REFRESH_MS / 1000}s</>
+              )}
+            </div>
           </div>
         </div>
       </header>
 
-      {/* STAT STRIP — Console-density at-a-glance metrics, derived from the
-          live list + account caps (no new data / no new fetch). */}
+      {/* STAT STRIP — icon-led at-a-glance KPI cards derived from the live list
+          + account caps (no new data / no new fetch), matching the Command
+          Center fleet KPI strip. */}
       {hasSessions && (
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-surface-divider bg-surface-divider sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat
+            icon={<IconBolt />}
             l="Active"
             value={activeCount}
             sub={
@@ -338,13 +348,21 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
                 : 'no fixed cap'
             }
           />
-          <Stat l="Ready" value={counts.ready} accent sub={`${counts.busy} busy`} />
           <Stat
+            icon={<IconCheck />}
+            l="Ready"
+            value={counts.ready}
+            accent
+            sub={`${counts.busy} busy`}
+          />
+          <Stat
+            icon={<IconAlert />}
             l="Errored"
             value={counts.errored}
             sub={counts.errored > 0 ? 'needs attention' : 'all healthy'}
           />
           <Stat
+            icon={<IconSlots />}
             l="Slots free"
             value={
               concurrentCap !== null && concurrentActive !== null
@@ -364,32 +382,22 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
       )}
 
       {showSkeleton ? (
-        <div className="flex flex-col gap-3">
-          <SkeletonRows rows={3} label="Fetching the current session list." />
+        <div
+          role="status"
+          aria-label="Fetching the current session list."
+          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+        >
+          <span className="sr-only">Fetching the current session list.</span>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <SessionCardSkeleton key={i} />
+          ))}
         </div>
       ) : !hasSessions ? (
-        <EmptyState
-          icon={<SessionGlyph />}
-          title="No active sessions yet"
-          description="A session is one running iPhone Safari instance. Click New session above to spin one up — sessions show up here with a live status while they run. Each one uses a concurrent slot until you destroy it or it idle-times-out."
-          action={
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => void handleCreate()}
-              disabled={busyId === '__create__' || atConcurrentCap}
-              aria-disabled={busyId === '__create__' || atConcurrentCap}
-              title={
-                atConcurrentCap
-                  ? `Concurrent session cap reached (${(concurrentCap ?? 0).toString()} for ${
-                      accountMe?.tier ?? 'this tier'
-                    }). Destroy a session or upgrade to spawn more.`
-                  : undefined
-              }
-            >
-              {busyId === '__create__' ? 'Creating…' : 'New session'}
-            </button>
-          }
+        <SessionsEmptyState
+          onCreate={() => void handleCreate()}
+          disabled={busyId === '__create__' || atConcurrentCap}
+          creating={busyId === '__create__'}
+          title={capTitle}
         />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -418,20 +426,87 @@ function EmptyConnect({
   onGoToSettings: () => void;
 }): JSX.Element {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 px-8 text-center">
-      <span className="section-label">Not connected</span>
-      <p className="max-w-md text-sm text-ink-secondary">
-        Add an API key to connect to <span className="mono">{baseUrl}</span>.
-      </p>
-      <div className="flex items-center gap-3">
-        <button type="button" className="btn-primary" onClick={onGoToSettings}>
-          Open settings
-        </button>
-        <span className="text-2xs text-ink-muted">
-          or press <span className="mono">⌘ ,</span>
+    <div className="mx-auto flex h-full w-full max-w-5xl flex-col p-6">
+      <section className="relative flex flex-col items-center gap-4 overflow-hidden rounded-2xl border border-surface-divider bg-surface-raised px-8 py-14 text-center">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full opacity-40 blur-3xl"
+          style={{
+            background: 'radial-gradient(circle, rgb(var(--accent-rgb)/0.55), transparent 70%)',
+          }}
+        />
+        <span
+          className="relative grid h-12 w-12 place-items-center rounded-xl bg-accent/15 text-accent"
+          aria-hidden="true"
+        >
+          <IconPhone />
         </span>
-      </div>
+        <div className="relative flex flex-col gap-1">
+          <span className="section-label text-accent">Not connected</span>
+          <h2 className="text-xl font-semibold tracking-tight text-ink-primary">
+            Connect to start sessions
+          </h2>
+          <p className="mx-auto max-w-md text-sm text-ink-secondary">
+            Add an API key to connect to <span className="mono">{baseUrl}</span>.
+          </p>
+        </div>
+        <div className="relative flex items-center gap-3">
+          <button type="button" className="btn-primary" onClick={onGoToSettings}>
+            Open settings
+          </button>
+          <span className="text-2xs text-ink-muted">
+            or press <span className="mono">⌘ ,</span>
+          </span>
+        </div>
+      </section>
     </div>
+  );
+}
+
+// Polished empty state — an accent icon chip + heading + supporting copy + the
+// (cap-gated) create affordance, in a raised card matching the hero rhythm.
+// Preserves the exact create behavior (the button props mirror the hero's).
+function SessionsEmptyState({
+  onCreate,
+  disabled,
+  creating,
+  title,
+}: {
+  onCreate: () => void;
+  disabled: boolean;
+  creating: boolean;
+  title: string | undefined;
+}): JSX.Element {
+  return (
+    <section className="flex flex-col items-center gap-4 rounded-2xl border border-surface-divider bg-surface-raised px-8 py-12 text-center shadow-sm">
+      <span
+        className="grid h-12 w-12 place-items-center rounded-xl bg-surface-inset text-ink-muted"
+        aria-hidden="true"
+      >
+        <IconPhone />
+      </span>
+      <div className="flex flex-col gap-1">
+        <h3 className="text-base font-semibold tracking-tight text-ink-primary">
+          No active sessions yet
+        </h3>
+        <p className="max-w-md text-sm leading-relaxed text-ink-secondary">
+          A session is one running iPhone Safari instance. Click New session above to spin one up —
+          sessions show up here with a live status while they run. Each one uses a concurrent slot
+          until you destroy it or it idle-times-out.
+        </p>
+      </div>
+      <button
+        type="button"
+        className="btn-primary mt-1 flex items-center gap-1.5"
+        onClick={onCreate}
+        disabled={disabled}
+        aria-disabled={disabled}
+        title={title}
+      >
+        <IconPlus />
+        <span>{creating ? 'Creating…' : 'New session'}</span>
+      </button>
+    </section>
   );
 }
 
@@ -452,9 +527,16 @@ function SessionCard({
   const live = session.status === 'ready' || session.status === 'busy';
   const errored = session.status === 'errored';
   const egress = session.egress_capabilities;
+  // The leading identity chip is tinted by health so a card reads its state at a
+  // glance: accent for a live run, error for a fault, quiet for terminal.
+  const chipClass = errored
+    ? 'bg-status-error/12 text-status-error'
+    : live
+      ? 'bg-accent/15 text-accent'
+      : 'bg-surface-inset text-ink-muted';
   return (
     <article
-      className={`group flex flex-col gap-3 rounded-lg border bg-surface-raised p-3.5 shadow-sm transition-all hover:-translate-y-px hover:shadow-md ${
+      className={`group flex flex-col gap-3.5 rounded-xl border bg-surface-raised p-4 shadow-sm transition-all hover:-translate-y-px hover:shadow-md ${
         errored
           ? 'border-status-error/50'
           : live
@@ -462,13 +544,23 @@ function SessionCard({
             : 'border-surface-divider hover:border-ink-muted/60'
       }`}
     >
-      {/* Header: status pill + device/archetype; a live worktimer on the
-          right for running sessions (ticking elapsed since created_at),
-          else the static "created X ago". */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex flex-col gap-1.5">
-          <StatusPill status={session.status} />
-          <span className="mono text-[11px] text-ink-muted">{session.archetype}</span>
+      {/* Header: an accent icon chip leading the identity (label + mono id),
+          with a live worktimer on the right for running sessions (ticking
+          elapsed since created_at), else the static "created X ago". */}
+      <div className="flex items-start gap-3">
+        <span
+          className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${chipClass}`}
+          aria-hidden="true"
+        >
+          <IconPhone />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-semibold tracking-tight text-ink-primary">
+            {session.label ?? 'Untitled session'}
+          </p>
+          <p className="mono mt-0.5 truncate text-[10.5px] text-ink-muted" title={session.id}>
+            {session.id}
+          </p>
         </div>
         <span
           className="shrink-0 whitespace-nowrap text-[10px] text-ink-muted"
@@ -482,21 +574,19 @@ function SessionCard({
         </span>
       </div>
 
-      {/* Identity: label (or fallback) + the mono session id. */}
-      <div className="min-w-0">
-        <p className="truncate text-[13px] font-semibold tracking-tight text-ink-primary">
-          {session.label ?? 'Untitled session'}
-        </p>
-        <p className="mono mt-0.5 truncate text-[10.5px] text-ink-muted" title={session.id}>
-          {session.id}
-        </p>
+      {/* Status + archetype facts row. */}
+      <div className="flex items-center justify-between gap-2">
+        <StatusPill status={session.status} />
+        <span className="mono truncate text-[11px] text-ink-muted" title={session.archetype}>
+          {session.archetype}
+        </span>
       </div>
 
       {/* Egress / proxy detail row — honest: shows the harness-reported
           egress capability when present, else a quiet placeholder. */}
-      <div className="flex items-center gap-2 rounded-lg bg-surface-inset px-2 py-1.5">
-        <span aria-hidden="true" className="text-[13px] leading-none">
-          {egress !== null ? '🌍' : '🔌'}
+      <div className="flex items-center gap-2 rounded-lg bg-surface-inset px-2.5 py-1.5">
+        <span aria-hidden="true" className="text-ink-secondary">
+          {egress !== null ? <IconGlobe /> : <IconPlug />}
         </span>
         {egress !== null ? (
           <>
@@ -554,6 +644,35 @@ function SessionCard({
   );
 }
 
+// Loading placeholder shaped like a SessionCard — chip + identity lines, a facts
+// row, the egress strip, and the action pair — so the list settles in without a
+// layout jump. Static + aria-hidden (the parent carries the status role).
+function SessionCardSkeleton(): JSX.Element {
+  return (
+    <div
+      aria-hidden="true"
+      className="flex flex-col gap-3.5 rounded-xl border border-surface-divider bg-surface-raised p-4 shadow-sm"
+    >
+      <div className="flex items-start gap-3">
+        <div className="h-9 w-9 shrink-0 animate-pulse rounded-lg bg-surface-inset" />
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <div className="h-3.5 w-2/3 animate-pulse rounded bg-surface-inset" />
+          <div className="h-2.5 w-1/2 animate-pulse rounded bg-surface-inset" />
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="h-3 w-16 animate-pulse rounded bg-surface-inset" />
+        <div className="h-3 w-20 animate-pulse rounded bg-surface-inset" />
+      </div>
+      <div className="h-7 w-full animate-pulse rounded-lg bg-surface-inset" />
+      <div className="flex gap-2 pt-0.5">
+        <div className="h-7 flex-1 animate-pulse rounded bg-surface-inset" />
+        <div className="h-7 flex-1 animate-pulse rounded bg-surface-inset" />
+      </div>
+    </div>
+  );
+}
+
 function StatusPill({ status }: { status: Session['status'] }): JSX.Element {
   const dotColor =
     status === 'ready'
@@ -580,25 +699,38 @@ function StatusPill({ status }: { status: Session['status'] }): JSX.Element {
   );
 }
 
-// Console-density stat tile — small uppercase label + a BIG mono numeral
-// + a sub-line. `accent` tints the numeral (light → accent, dark → ready)
-// for the highlighted metric. Pure presentation over derived counts.
+// Icon-led KPI card — an icon chip + an uppercase label + a big mono numeral
+// + a sub-line, matching the Command Center fleet-stat strip. `accent` tints
+// the chip + numeral (light → accent, dark → ready) for the highlighted metric.
+// Pure presentation over derived counts.
 function Stat({
+  icon,
   l,
   value,
   sub,
   accent,
 }: {
+  icon: ReactNode;
   l: string;
   value: number;
   sub: string;
   accent?: boolean;
 }): JSX.Element {
   return (
-    <div className="flex flex-col gap-0.5 bg-surface-base px-4 py-3">
-      <span className="section-label">{l}</span>
+    <div className="flex flex-col gap-1.5 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 shadow-sm">
+      <div className="flex items-center gap-2">
+        <span
+          className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${
+            accent ? 'bg-accent/15 text-accent' : 'bg-surface-inset text-ink-secondary'
+          }`}
+          aria-hidden="true"
+        >
+          {icon}
+        </span>
+        <span className="section-label">{l}</span>
+      </div>
       <span
-        className={`mono text-[26px] font-semibold leading-none tracking-tight tabular-nums ${
+        className={`mono text-2xl font-semibold leading-none tracking-tight tabular-nums ${
           accent ? 'text-accent dark:text-status-ready' : 'text-ink-primary'
         }`}
       >
@@ -609,23 +741,78 @@ function Stat({
   );
 }
 
-// Empty-state glyph — a phone outline, echoing the "one running iPhone
-// Safari instance" framing.
-function SessionGlyph(): JSX.Element {
+// ─── icons (Lucide-shape, inline, no dependency) — matches CommandCenterView ──
+const stroke = {
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.6,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+};
+// A phone outline, echoing the "one running iPhone Safari instance" framing.
+function IconPhone(): JSX.Element {
   return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
-      <line x1="12" y1="18" x2="12" y2="18" />
+    <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
+      <rect x="4.5" y="1.5" width="7" height="13" rx="1.5" />
+      <path d="M7 12.5h2" />
+    </svg>
+  );
+}
+function IconPlus(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" {...stroke}>
+      <path d="M8 3v10M3 8h10" />
+    </svg>
+  );
+}
+function IconBolt(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
+      <path d="M8.5 1.5 3.5 9h3.5l-.5 5.5L12 7H8.5Z" />
+    </svg>
+  );
+}
+function IconCheck(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M5.25 8.25 7.25 10.25 11 6" />
+    </svg>
+  );
+}
+function IconAlert(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
+      <path d="M8 1.75 14.5 13.5H1.5Z" />
+      <path d="M8 6.25v3M8 11.5h.01" />
+    </svg>
+  );
+}
+function IconSlots(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
+      <rect x="2" y="2.5" width="5" height="5" rx="1" />
+      <rect x="9" y="2.5" width="5" height="5" rx="1" />
+      <rect x="2" y="9" width="5" height="5" rx="1" />
+      <path d="M9 11.5h5M11.5 9v5" />
+    </svg>
+  );
+}
+function IconGlobe(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="13" height="13" {...stroke}>
+      <circle cx="8" cy="8" r="5.75" />
+      <path d="M2.25 8h11.5" />
+      <path d="M8 2.25c1.7 2 2.5 4 2.5 5.75S9.7 12 8 13.75C6.3 11.75 5.5 9.75 5.5 8s.8-3.75 2.5-5.75Z" />
+    </svg>
+  );
+}
+function IconPlug(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="13" height="13" {...stroke}>
+      <path d="M6 2v3M10 2v3" />
+      <path d="M4.5 5h7v2a3.5 3.5 0 0 1-7 0Z" />
+      <path d="M8 10.5V14" />
     </svg>
   );
 }
