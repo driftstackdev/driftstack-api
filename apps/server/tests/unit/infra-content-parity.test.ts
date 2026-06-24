@@ -333,7 +333,7 @@ describe('W614 infra/ content parity', () => {
     expect(body).toMatch(/Real client IP — Cloudflare passes it via CF-Connecting-IP\./);
     expect(body).toMatch(/^\s+set_real_ip_from 0\.0\.0\.0\/0;$/m);
     expect(body).toMatch(/^\s+real_ip_header CF-Connecting-IP;$/m);
-    expect(body).toMatch(/^\s+client_max_body_size 4m;$/m);
+    expect(body).toMatch(/^\s+client_max_body_size 100m;$/m);
     expect(body).toMatch(/^\s+client_body_timeout 30s;$/m);
     expect(body).toMatch(/^\s+client_header_timeout 15s;$/m);
     expect(body).toMatch(/^\s+send_timeout 30s;$/m);
@@ -375,7 +375,7 @@ describe('W614 infra/ content parity', () => {
     expect(body).toMatch(/^\s+ssl_protocols TLSv1\.2 TLSv1\.3;$/m);
     expect(body).toMatch(/^\s+set_real_ip_from 0\.0\.0\.0\/0;$/m);
     expect(body).toMatch(/^\s+real_ip_header CF-Connecting-IP;$/m);
-    expect(body).toMatch(/^\s+client_max_body_size 4m;$/m);
+    expect(body).toMatch(/^\s+client_max_body_size 100m;$/m);
     expect(body).toMatch(
       /^\s+access_log \/var\/log\/nginx\/staging\.driftstack\.dev\.access\.log;$/m,
     );

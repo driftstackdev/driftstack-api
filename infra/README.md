@@ -14,7 +14,9 @@ infra/
 │   └── staging.env.template        staging .env shape
 ├── nginx/
 │   ├── api.driftstack.dev.conf     production API vhost (port 80, behind CF proxy)
-│   └── staging.driftstack.dev.conf staging API vhost
+│   ├── staging.driftstack.dev.conf staging API vhost
+│   ├── fleet.driftstack.dev.conf   DIRECT (grey-cloud, NOT CF) fleet-node control WS vhost
+│   └── ws_upgrade_map.conf         $connection_upgrade map (→ /etc/nginx/conf.d/), used by fleet
 ├── systemd/
 │   └── driftstack-api.service      systemd unit, runs as `driftstack` user
 └── hetzner/
@@ -44,6 +46,28 @@ Cloudflare proxied + Universal SSL (publicly-trusted, auto-issued,
 auto-renewed). Origin nginx serves plaintext HTTP on port 80; the
 Cloudflare zone is configured for "Full (strict)" SSL/TLS. No
 certbot / Let's Encrypt at the origin layer for v1.0.
+
+### `fleet.driftstack.dev` exception (grey-cloud, direct origin TLS)
+
+`api.driftstack.dev` is Cloudflare-proxied, and CF mangles the long-lived
+fleet-node **control WebSocket** (`/v1/fleet/events`) — it drops it (Code=57) and
+botches the reconnect handshake (-1011), which flaps the Mac-worker control link
+and breaks session dispatch (cookies/upload/End-session, ~1-min page loads; bus
+W2863, fixed 2026-06-24). So the workers connect to a **DNS-only / grey-cloud**
+subdomain `fleet.driftstack.dev` whose origin terminates TLS directly (the one
+certbot/LE exception at the origin). To (re)provision on a box:
+
+1. **DNS:** `fleet.driftstack.dev` A → origin IP, **DNS-only / grey-cloud** (NOT orange-proxied).
+2. **Cert:** `certbot certonly --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cf-dns-creds.ini -d fleet.driftstack.dev` (auto-renews).
+3. **Map:** `nginx/ws_upgrade_map.conf` → `/etc/nginx/conf.d/` (provides `$connection_upgrade`).
+4. **Vhost:** `nginx/fleet.driftstack.dev.conf` → `sites-available/` + symlink into `sites-enabled/`; `nginx -t`; `systemctl reload nginx`.
+5. **Daemon:** `DRIFTSTACK_CONTROL_ENDPOINT=wss://fleet.driftstack.dev/v1/fleet/events` (the `configure.sh` default).
+
+⚠️ `deploy-api.sh` installs ONLY the `$NGINX_VHOST` (api/staging) — it does NOT yet
+auto-install the fleet vhost + map (cert provisioning is a prereq it doesn't
+automate). On a fresh box, do the 5 steps above manually, else the workers fall
+back to the CF-proxied `api.` and the flap returns. (Follow-up: teach
+`deploy-api.sh` to install fleet + map when the LE cert is present.)
 
 ## Sub-processor map
 
