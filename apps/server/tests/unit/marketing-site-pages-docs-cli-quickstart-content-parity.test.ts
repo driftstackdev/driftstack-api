@@ -122,9 +122,9 @@ describe('W513.A apps/marketing-site/src/pages/docs/cli-quickstart.astro content
     expect(body).toMatch(/<a href="\/docs\/sessions">\/docs\/sessions<\/a>/);
   });
 
-  it('Support 2-channel framing: github.com/driftstack/cli/issues for CLI bugs + developers@driftstack.dev for auth-flow — pinned so the 2-channel routing stays consistent (drift to a different repo URL would create marketing↔GitHub divergence)', () => {
+  it('Support 2-channel framing: github.com/driftstackdev/driftstack-api/issues for CLI bugs + developers@driftstack.dev for auth-flow — pinned so the 2-channel routing stays consistent (drift to a different repo URL would create marketing↔GitHub divergence)', () => {
     expect(body).toMatch(
-      /<a href="https:\/\/github\.com\/driftstack\/cli\/issues">github\.com\/driftstack\/cli<\/a>/,
+      /<a href="https:\/\/github\.com\/driftstackdev\/driftstack-api\/issues">github\.com\/driftstackdev\/driftstack-api<\/a>/,
     );
     expect(body).toMatch(
       /<a href="mailto:developers@driftstack\.dev">developers@driftstack\.dev<\/a>/,

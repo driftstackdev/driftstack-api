@@ -241,6 +241,17 @@ const groups: FaqGroup[] = [
     ],
   },
 ];
+
+// Group-title → slug for deep-linkable FAQ groups (e.g. /faq#acceptable-use,
+// /faq#architecture-sessions). Lowercase, drop '+', map any non-alphanumeric
+// run to a single '-', and trim leading/trailing '-'.
+function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/\+/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 ---
 
 <BaseLayout
@@ -270,7 +281,7 @@ const groups: FaqGroup[] = [
       {
         groups.map((group) => (
           <div class="mb-16">
-            <h2 class="text-2xl font-semibold text-tk-ink">
+            <h2 id={slugify(group.title)} class="scroll-mt-24 text-2xl font-semibold text-tk-ink">
                 {group.title}
               </h2>
             <div class="mt-6 space-y-6">
