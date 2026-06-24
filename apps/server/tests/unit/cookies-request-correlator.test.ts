@@ -81,6 +81,36 @@ describe('CookiesRequestCorrelator', () => {
     expect(await p).toEqual({ status: 'ok', cookies: [] });
   });
 
+  it('DROPS a result whose sessionId mismatches the pending request (cross-session spoof guard)', async () => {
+    const warn = vi.fn();
+    const c = new CookiesRequestCorrelator({ send: () => {} }, { warn } as never);
+    const p = c.request(req('rq_1', 'agt_A'));
+    // Correct requestId but WRONG sessionId (a misrouted/echoed frame for agt_B) →
+    // must NOT settle agt_A's pending request; it stays in-flight.
+    c.onResultFrame(
+      resultFrame('rq_1', {
+        cookies: [{ domain: '.x.com', name: 'leak', value: '1' }],
+        sessionId: 'agt_B',
+      }),
+    );
+    expect(c.inFlight()).toBe(1); // still pending — not settled by the spoofed frame
+    expect(warn).toHaveBeenCalledTimes(1);
+    // The legitimate result (correct sessionId) still settles it.
+    const cookies = [{ domain: '.x.com', name: 'a', value: '1' }];
+    c.onResultFrame(resultFrame('rq_1', { cookies, sessionId: 'agt_A' }));
+    expect(await p).toEqual({ status: 'ok', cookies });
+    expect(c.inFlight()).toBe(0);
+  });
+
+  it('a mismatched-sessionId result drops, leaving the pending request to TIME OUT', async () => {
+    const c = new CookiesRequestCorrelator({ send: () => {} });
+    const p = c.request(req('rq_1', 'agt_A'));
+    c.onResultFrame(resultFrame('rq_1', { cookies: [], sessionId: 'agt_B' }));
+    expect(c.inFlight()).toBe(1);
+    vi.advanceTimersByTime(COOKIES_REQUEST_TIMEOUT_MS);
+    expect(await p).toEqual({ status: 'timeout' });
+  });
+
   it('ignores a non-cookiesResult frame (stays pending → eventually times out)', async () => {
     const c = new CookiesRequestCorrelator({ send: () => {} });
     const p = c.request(req('rq_1'));

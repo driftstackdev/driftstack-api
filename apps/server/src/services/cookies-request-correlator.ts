@@ -18,6 +18,7 @@
 // then a live node never emits `cookiesResult`, so a wired request resolves
 // `timeout` — which the GUI renders as the "pending data source" state.
 
+import type { Logger } from '../lib/logger.js';
 import {
   CookiesResultSchema,
   type CookiesRequest,
@@ -49,7 +50,10 @@ interface PendingCookies {
 export class CookiesRequestCorrelator {
   private readonly pending = new Map<string, PendingCookies>();
 
-  constructor(private readonly transport: CookiesTransport) {}
+  constructor(
+    private readonly transport: CookiesTransport,
+    private readonly logger: Logger | null = null,
+  ) {}
 
   /** Send a cookiesRequest and resolve when its cookiesResult arrives or the
    *  timeout elapses. Never rejects. */
@@ -79,7 +83,26 @@ export class CookiesRequestCorrelator {
   onResultFrame(frame: unknown): void {
     const parsed = CookiesResultSchema.safeParse(frame);
     if (!parsed.success) return; // not a cookiesResult — caller routes other types
-    const { requestId, cookies, error } = parsed.data;
+    const { requestId, sessionId, cookies, error } = parsed.data;
+    // Cross-session spoof guard (audit M1 extended to the correlated reply path):
+    // one FleetControlConnection is per-NODE and a node serves many accounts'
+    // sessions. Settling by requestId ALONE would let a misrouted/echoed result
+    // frame settle another account's pending request with this jar. If the pending
+    // entry's sessionId disagrees with the frame's, DROP it — leave the pending
+    // entry so the legitimate result or the timeout still resolves it.
+    const pending = this.pending.get(requestId);
+    if (pending !== undefined && sessionId !== pending.sessionId) {
+      this.logger?.warn(
+        {
+          component: 'cookies-request-correlator',
+          requestId,
+          frameSessionId: sessionId,
+          pendingSessionId: pending.sessionId,
+        },
+        'dropping cookiesResult: sessionId mismatch (cross-session spoof signal)',
+      );
+      return;
+    }
     if (error !== undefined) {
       this.settle(requestId, { status: 'error', message: error });
       return;

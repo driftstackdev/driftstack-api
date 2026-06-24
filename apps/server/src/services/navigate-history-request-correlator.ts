@@ -17,6 +17,7 @@
 // a live node never emits `navigateHistoryResult`, so a wired request resolves `timeout`
 // — which the GUI renders as the "ships with the next device update" state.
 
+import type { Logger } from '../lib/logger.js';
 import {
   NavigateHistoryResultSchema,
   type NavigateHistoryRequest,
@@ -48,7 +49,10 @@ interface PendingNavigateHistory {
 export class NavigateHistoryRequestCorrelator {
   private readonly pending = new Map<string, PendingNavigateHistory>();
 
-  constructor(private readonly transport: NavigateHistoryTransport) {}
+  constructor(
+    private readonly transport: NavigateHistoryTransport,
+    private readonly logger: Logger | null = null,
+  ) {}
 
   /** Send a navigateHistory and resolve when its navigateHistoryResult arrives or the
    *  timeout elapses. Never rejects. */
@@ -81,7 +85,26 @@ export class NavigateHistoryRequestCorrelator {
   onResultFrame(frame: unknown): void {
     const parsed = NavigateHistoryResultSchema.safeParse(frame);
     if (!parsed.success) return; // not a navigateHistoryResult — caller routes other types
-    const { requestId, ok, error } = parsed.data;
+    const { requestId, sessionId, ok, error } = parsed.data;
+    // Cross-session spoof guard (audit M1 extended to the correlated reply path):
+    // one FleetControlConnection is per-NODE and a node serves many accounts'
+    // sessions. Settling by requestId ALONE would let a misrouted/echoed result
+    // frame settle another account's pending request. If the pending entry's
+    // sessionId disagrees with the frame's, DROP it — leave the pending entry so
+    // the legitimate result or the timeout still resolves it.
+    const pending = this.pending.get(requestId);
+    if (pending !== undefined && sessionId !== pending.sessionId) {
+      this.logger?.warn(
+        {
+          component: 'navigate-history-request-correlator',
+          requestId,
+          frameSessionId: sessionId,
+          pendingSessionId: pending.sessionId,
+        },
+        'dropping navigateHistoryResult: sessionId mismatch (cross-session spoof signal)',
+      );
+      return;
+    }
     if (error !== undefined) {
       this.settle(requestId, { status: 'error', message: error });
       return;

@@ -88,6 +88,30 @@ describe('UploadRequestCorrelator', () => {
     expect(await p).toEqual({ status: 'ok', handle: HANDLE });
   });
 
+  it('DROPS a result whose sessionId mismatches the pending request (cross-session spoof guard)', async () => {
+    const warn = vi.fn();
+    const c = new UploadRequestCorrelator({ send: () => {} }, { warn } as never);
+    const p = c.request(req('rq_1', 'agt_A'));
+    // Correct requestId but WRONG sessionId (a misrouted/echoed frame for agt_B) →
+    // must NOT settle agt_A's pending request with another session's handle.
+    c.onResultFrame(resultFrame('rq_1', { handle: HANDLE, sessionId: 'agt_B' }));
+    expect(c.inFlight()).toBe(1); // still pending — not settled by the spoofed frame
+    expect(warn).toHaveBeenCalledTimes(1);
+    // The legitimate result (correct sessionId) still settles it.
+    c.onResultFrame(resultFrame('rq_1', { handle: HANDLE, sessionId: 'agt_A' }));
+    expect(await p).toEqual({ status: 'ok', handle: HANDLE });
+    expect(c.inFlight()).toBe(0);
+  });
+
+  it('a mismatched-sessionId result drops, leaving the pending request to TIME OUT', async () => {
+    const c = new UploadRequestCorrelator({ send: () => {} });
+    const p = c.request(req('rq_1', 'agt_A'));
+    c.onResultFrame(resultFrame('rq_1', { handle: HANDLE, sessionId: 'agt_B' }));
+    expect(c.inFlight()).toBe(1);
+    vi.advanceTimersByTime(UPLOAD_REQUEST_TIMEOUT_MS);
+    expect(await p).toEqual({ status: 'timeout' });
+  });
+
   it('ignores a non-uploadResult frame (stays pending → eventually times out)', async () => {
     const c = new UploadRequestCorrelator({ send: () => {} });
     const p = c.request(req('rq_1'));

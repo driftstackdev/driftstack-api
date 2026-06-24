@@ -11,6 +11,7 @@
 // response (ok-list / ok-data / error / timeout). The route handles "no live
 // connection / not wired" before ever calling here.
 
+import type { Logger } from '../lib/logger.js';
 import {
   DownloadsListResultSchema,
   DownloadDataResultSchema,
@@ -41,12 +42,19 @@ export type DownloadOutcome =
 interface PendingDownload {
   resolve: (outcome: DownloadOutcome) => void;
   timer: ReturnType<typeof setTimeout>;
+  // The session this request was issued for — stored so onResultFrame can drop a
+  // result frame whose sessionId disagrees (cross-session spoof guard). The list +
+  // data result schemas both carry sessionId, so a single field covers both ops.
+  sessionId: string;
 }
 
 export class DownloadRequestCorrelator {
   private readonly pending = new Map<string, PendingDownload>();
 
-  constructor(private readonly transport: DownloadTransport) {}
+  constructor(
+    private readonly transport: DownloadTransport,
+    private readonly logger: Logger | null = null,
+  ) {}
 
   /** Send a listDownloads and resolve when its downloadsList arrives or it times
    *  out. Never rejects. */
@@ -54,7 +62,9 @@ export class DownloadRequestCorrelator {
     req: ListDownloadsRequest,
     timeoutMs = DOWNLOAD_REQUEST_TIMEOUT_MS,
   ): Promise<DownloadOutcome> {
-    return this.dispatch(req.requestId, timeoutMs, () => this.transport.sendList(req));
+    return this.dispatch(req.requestId, req.sessionId, timeoutMs, () =>
+      this.transport.sendList(req),
+    );
   }
 
   /** Send a fetchDownload and resolve when its downloadData arrives or it times
@@ -63,11 +73,14 @@ export class DownloadRequestCorrelator {
     req: FetchDownloadRequest,
     timeoutMs = DOWNLOAD_REQUEST_TIMEOUT_MS,
   ): Promise<DownloadOutcome> {
-    return this.dispatch(req.requestId, timeoutMs, () => this.transport.sendFetch(req));
+    return this.dispatch(req.requestId, req.sessionId, timeoutMs, () =>
+      this.transport.sendFetch(req),
+    );
   }
 
   private dispatch(
     requestId: string,
+    sessionId: string,
     timeoutMs: number,
     send: () => void,
   ): Promise<DownloadOutcome> {
@@ -75,7 +88,7 @@ export class DownloadRequestCorrelator {
       const timer = setTimeout(() => {
         this.settle(requestId, { status: 'timeout' });
       }, timeoutMs);
-      this.pending.set(requestId, { resolve, timer });
+      this.pending.set(requestId, { resolve, timer, sessionId });
       try {
         send();
       } catch (err) {
@@ -97,14 +110,16 @@ export class DownloadRequestCorrelator {
   onResultFrame(frame: unknown): void {
     const list = DownloadsListResultSchema.safeParse(frame);
     if (list.success) {
-      const { requestId, files, error } = list.data;
+      const { requestId, sessionId, files, error } = list.data;
+      if (this.isCrossSessionSpoof(requestId, sessionId, 'downloadsList')) return;
       if (error !== undefined) this.settle(requestId, { status: 'error', message: error });
       else this.settle(requestId, { status: 'list', files: files ?? [] });
       return;
     }
     const data = DownloadDataResultSchema.safeParse(frame);
     if (data.success) {
-      const { requestId, name, mime, dataB64, error } = data.data;
+      const { requestId, sessionId, name, mime, dataB64, error } = data.data;
+      if (this.isCrossSessionSpoof(requestId, sessionId, 'downloadData')) return;
       if (error !== undefined) {
         this.settle(requestId, { status: 'error', message: error });
         return;
@@ -131,6 +146,31 @@ export class DownloadRequestCorrelator {
   /** Number of in-flight requests (test/inspection helper). */
   inFlight(): number {
     return this.pending.size;
+  }
+
+  /**
+   * Cross-session spoof guard (audit M1 extended to the correlated reply path):
+   * one DownloadRequestCorrelator is owned per-NODE and a node serves many
+   * accounts' sessions. Settling by requestId ALONE would let a misrouted/echoed
+   * result frame settle another account's pending request with this file's bytes.
+   * True (→ DROP, leave the pending entry so the legitimate result or the timeout
+   * still resolves it) when the pending entry exists AND its sessionId disagrees
+   * with the frame's. Logs one warn on a confirmed mismatch.
+   */
+  private isCrossSessionSpoof(requestId: string, sessionId: string, frameType: string): boolean {
+    const pending = this.pending.get(requestId);
+    if (pending === undefined || sessionId === pending.sessionId) return false;
+    this.logger?.warn(
+      {
+        component: 'download-request-correlator',
+        frameType,
+        requestId,
+        frameSessionId: sessionId,
+        pendingSessionId: pending.sessionId,
+      },
+      'dropping download result: sessionId mismatch (cross-session spoof signal)',
+    );
+    return true;
   }
 
   private settle(requestId: string, outcome: DownloadOutcome): void {

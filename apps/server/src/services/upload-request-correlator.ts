@@ -12,6 +12,7 @@
 //   timeout → 200 { handle:null, status:'timeout' }         (node didn't reply in time)
 // (the route handles "no live connection / not wired" before ever calling here).
 
+import type { Logger } from '../lib/logger.js';
 import {
   UploadResultSchema,
   type UploadFileRequest,
@@ -44,7 +45,10 @@ interface PendingUpload {
 export class UploadRequestCorrelator {
   private readonly pending = new Map<string, PendingUpload>();
 
-  constructor(private readonly transport: UploadTransport) {}
+  constructor(
+    private readonly transport: UploadTransport,
+    private readonly logger: Logger | null = null,
+  ) {}
 
   /** Send an uploadFile and resolve when its uploadResult arrives or the timeout
    *  elapses. Never rejects. */
@@ -74,7 +78,26 @@ export class UploadRequestCorrelator {
   onResultFrame(frame: unknown): void {
     const parsed = UploadResultSchema.safeParse(frame);
     if (!parsed.success) return; // not an uploadResult — caller routes other types
-    const { requestId, handle, error } = parsed.data;
+    const { requestId, sessionId, handle, error } = parsed.data;
+    // Cross-session spoof guard (audit M1 extended to the correlated reply path):
+    // one FleetControlConnection is per-NODE and a node serves many accounts'
+    // sessions. Settling by requestId ALONE would let a misrouted/echoed result
+    // frame settle another account's pending request. If the pending entry's
+    // sessionId disagrees with the frame's, DROP it — leave the pending entry so
+    // the legitimate result or the timeout still resolves it.
+    const pending = this.pending.get(requestId);
+    if (pending !== undefined && sessionId !== pending.sessionId) {
+      this.logger?.warn(
+        {
+          component: 'upload-request-correlator',
+          requestId,
+          frameSessionId: sessionId,
+          pendingSessionId: pending.sessionId,
+        },
+        'dropping uploadResult: sessionId mismatch (cross-session spoof signal)',
+      );
+      return;
+    }
     if (error !== undefined) {
       this.settle(requestId, { status: 'error', message: error });
       return;

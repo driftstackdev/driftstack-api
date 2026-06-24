@@ -69,6 +69,7 @@ import {
   serializeSessionEnd,
 } from './harness-control-codec.js';
 import type { Cookie } from '../schemas/harness-control-protocol.js';
+import type { Logger } from '../lib/logger.js';
 
 /** What the WS route hands in: a function that writes a string frame to the
  *  node's socket (the route adapts the real `ws.send`). */
@@ -125,6 +126,11 @@ export class FleetControlConnection {
     onProfileSaveFailed?: (frame: ProfileSaveFailed, reportingNodeId: string) => void,
     onHeartbeat?: (frame: Heartbeat) => void,
     onSessionStatus?: (frame: SessionStatus, reportingNodeId: string) => void,
+    // Optional — threaded into the request correlators so the cross-session spoof
+    // guard (a result frame whose sessionId disagrees with the pending request's)
+    // can log one warn. Omitted (legacy callers / tests) → the guard still DROPS
+    // the frame; it just logs nothing.
+    logger?: Logger | null,
   ) {
     this.send = send;
     this.onProfileSaved = onProfileSaved;
@@ -133,23 +139,27 @@ export class FleetControlConnection {
     this.onProfileSaveFailed = onProfileSaveFailed;
     this.onHeartbeat = onHeartbeat;
     this.onSessionStatus = onSessionStatus;
+    const log = logger ?? null;
     const transport: DispatchTransport = { send: (d) => send(JSON.stringify(d)) };
     this.correlator = new IntentDispatchCorrelator(transport);
     const cookiesTransport: CookiesTransport = { send: (r) => send(JSON.stringify(r)) };
-    this.cookiesCorrelator = new CookiesRequestCorrelator(cookiesTransport);
+    this.cookiesCorrelator = new CookiesRequestCorrelator(cookiesTransport, log);
     const setCookiesTransport: SetCookiesTransport = { send: (r) => send(JSON.stringify(r)) };
-    this.setCookiesCorrelator = new SetCookiesRequestCorrelator(setCookiesTransport);
+    this.setCookiesCorrelator = new SetCookiesRequestCorrelator(setCookiesTransport, log);
     const navigateHistoryTransport: NavigateHistoryTransport = {
       send: (r) => send(JSON.stringify(r)),
     };
-    this.navigateHistoryCorrelator = new NavigateHistoryRequestCorrelator(navigateHistoryTransport);
+    this.navigateHistoryCorrelator = new NavigateHistoryRequestCorrelator(
+      navigateHistoryTransport,
+      log,
+    );
     const uploadTransport: UploadTransport = { send: (r) => send(JSON.stringify(r)) };
-    this.uploadCorrelator = new UploadRequestCorrelator(uploadTransport);
+    this.uploadCorrelator = new UploadRequestCorrelator(uploadTransport, log);
     const downloadTransport: DownloadTransport = {
       sendList: (r) => send(JSON.stringify(r)),
       sendFetch: (r) => send(JSON.stringify(r)),
     };
-    this.downloadCorrelator = new DownloadRequestCorrelator(downloadTransport);
+    this.downloadCorrelator = new DownloadRequestCorrelator(downloadTransport, log);
   }
 
   /**
@@ -545,6 +555,13 @@ export class FleetControlRegistry {
      * (see closeAgentSessionOnTerminalStatus).
      */
     private readonly onSessionStatus?: (frame: SessionStatus, reportingNodeId: string) => void,
+    /**
+     * Optional server logger, threaded into every connection's request
+     * correlators so the cross-session spoof guard can log one warn on a
+     * confirmed sessionId mismatch (a misrouted/echoed result frame). Omitted
+     * (stateless deploy / tests) → the guard still DROPS the frame silently.
+     */
+    private readonly logger?: Logger | null,
   ) {}
 
   register(nodeId: string, send: FleetNodeSocketSend): FleetControlConnection {
@@ -561,6 +578,7 @@ export class FleetControlRegistry {
       this.onProfileSaveFailed,
       this.onHeartbeat,
       this.onSessionStatus,
+      this.logger,
     );
     this.connections.set(nodeId, conn);
     // Worker-disconnect fix — a (re)connect CANCELS any pending grace timer for

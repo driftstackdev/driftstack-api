@@ -1522,6 +1522,10 @@ export async function createProductionDeps(
                 logger,
                 livenessStore: sessionLivenessStore,
               }),
+            // Cross-session spoof guard (audit M1 extended to the correlated reply
+            // path) — threaded into every connection's request correlators so a
+            // dropped result frame (sessionId mismatch) logs one warn.
+            logger,
           )),
           // Local fleet-demo: the config a dispatched session browses with. Only
           // assembled behind FLEET_CONTROL_PLANE_ENABLED (so inert in prod). The

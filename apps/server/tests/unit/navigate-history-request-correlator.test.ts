@@ -92,6 +92,30 @@ describe('NavigateHistoryRequestCorrelator', () => {
     expect(await p).toEqual({ status: 'ok' });
   });
 
+  it('DROPS a result whose sessionId mismatches the pending request (cross-session spoof guard)', async () => {
+    const warn = vi.fn();
+    const c = new NavigateHistoryRequestCorrelator({ send: () => {} }, { warn } as never);
+    const p = c.request(req('rq_1', 'back', 'agt_A'));
+    // Correct requestId but WRONG sessionId (a misrouted/echoed frame for agt_B) →
+    // must NOT settle agt_A's pending step.
+    c.onResultFrame(resultFrame('rq_1', { ok: true, sessionId: 'agt_B' }));
+    expect(c.inFlight()).toBe(1); // still pending — not settled by the spoofed frame
+    expect(warn).toHaveBeenCalledTimes(1);
+    // The legitimate result (correct sessionId) still settles it.
+    c.onResultFrame(resultFrame('rq_1', { ok: true, sessionId: 'agt_A' }));
+    expect(await p).toEqual({ status: 'ok' });
+    expect(c.inFlight()).toBe(0);
+  });
+
+  it('a mismatched-sessionId result drops, leaving the pending request to TIME OUT', async () => {
+    const c = new NavigateHistoryRequestCorrelator({ send: () => {} });
+    const p = c.request(req('rq_1', 'back', 'agt_A'));
+    c.onResultFrame(resultFrame('rq_1', { ok: true, sessionId: 'agt_B' }));
+    expect(c.inFlight()).toBe(1);
+    vi.advanceTimersByTime(NAVIGATE_HISTORY_REQUEST_TIMEOUT_MS);
+    expect(await p).toEqual({ status: 'timeout' });
+  });
+
   it('ignores a non-navigateHistoryResult frame (stays pending → eventually times out)', async () => {
     const c = new NavigateHistoryRequestCorrelator({ send: () => {} });
     const p = c.request(req('rq_1'));
