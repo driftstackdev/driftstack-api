@@ -1149,6 +1149,297 @@ function IosStatusBar(): JSX.Element {
   );
 }
 
+// ── Fancy Cookies pane (founder 2026-06-24, APPROVED) ──────────────────────
+// The Cookies section is a live, per-domain jar (mirrors the approved demo): a
+// pulsing live indicator, Export (works today, client-side) + a disabled Import
+// (the set-cookies wire is pending A3), a client-side search, and per-domain
+// expandable groups with per-cookie flag chips. Pure presentation over the
+// existing `cookies` / `cookiesNote` state — the poll + gating are unchanged.
+
+/** Deterministic favicon-chip background for a domain — a small fixed palette
+ *  (mirrors the demo's colors) keyed by a stable string hash so a domain always
+ *  gets the same chip color across renders/sessions. */
+const COOKIE_FAVICON_COLORS = ['#34d399', '#7dd3fc', '#fbbf24', '#c4b5fd', '#f87171'];
+function cookieFaviconColor(domain: string): string {
+  let hash = 0;
+  for (let i = 0; i < domain.length; i += 1) {
+    hash = (hash * 31 + domain.charCodeAt(i)) | 0;
+  }
+  const idx = Math.abs(hash) % COOKIE_FAVICON_COLORS.length;
+  return COOKIE_FAVICON_COLORS[idx] ?? '#7dd3fc';
+}
+
+/** Format a cookie's expiry as a compact relative string from the REAL field.
+ *  `expires` is a unix epoch that may arrive in SECONDS (~1.7e9) or MS (~1.7e12):
+ *  the lib type doc says ms, but the box wire unit is ambiguous (Swift's
+ *  timeIntervalSince1970 is seconds) and unverifiable against a live jar right now —
+ *  so AUTO-DETECT by magnitude rather than guess (a wrong unit renders a wildly-
+ *  future date). null/undefined = a session cookie. Returns "session" / "expired" /
+ *  the largest sensible unit: `45m` / `3h` / `2d` / `3mo` / `1y`. */
+function formatCookieExpiry(expires: number | null | undefined): string {
+  if (expires === null || expires === undefined) return 'session';
+  // seconds (~1.7e9) → ms; ms (~1.7e12) stays. 1e12 cleanly separates them.
+  const expMs = expires < 1e12 ? expires * 1000 : expires;
+  const ms = expMs - Date.now();
+  if (ms <= 0) return 'expired';
+  const sec = Math.floor(ms / 1000);
+  const min = Math.floor(sec / 60);
+  const hr = Math.floor(min / 60);
+  const day = Math.floor(hr / 24);
+  const mo = Math.floor(day / 30);
+  const yr = Math.floor(day / 365);
+  if (yr >= 1) return `${yr}y`;
+  if (mo >= 1) return `${mo}mo`;
+  if (day >= 1) return `${day}d`;
+  if (hr >= 1) return `${hr}h`;
+  if (min >= 1) return `${min}m`;
+  return `${sec}s`;
+}
+
+/** Group the live jar by the cookie `domain` field, preserving first-seen order
+ *  for both the groups and the cookies within each. */
+function groupCookiesByDomain(
+  cookies: SessionCookie[],
+): { domain: string; cookies: SessionCookie[] }[] {
+  const order: string[] = [];
+  const byDomain = new Map<string, SessionCookie[]>();
+  for (const c of cookies) {
+    const list = byDomain.get(c.domain);
+    if (list === undefined) {
+      order.push(c.domain);
+      byDomain.set(c.domain, [c]);
+    } else {
+      list.push(c);
+    }
+  }
+  return order.map((domain) => ({ domain, cookies: byDomain.get(domain) ?? [] }));
+}
+
+/** One flag chip (Secure / HttpOnly / SameSite / expiry) derived from a cookie's
+ *  REAL fields. Matches the approved demo's chip palette. */
+function CookieFlag({
+  kind,
+  label,
+}: {
+  kind: 'secure' | 'http' | 'ss' | 'exp';
+  label: string;
+}): JSX.Element {
+  const cls = {
+    secure: 'bg-emerald-400/15 text-emerald-300',
+    http: 'bg-sky-400/15 text-sky-300',
+    ss: 'bg-violet-400/15 text-violet-300',
+    exp: 'bg-white/10 text-white/45',
+  }[kind];
+  return (
+    <span className={`rounded px-1.5 py-px text-[8.5px] font-semibold tracking-wide ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
+/**
+ * The fancy Cookies pane body — a self-contained sub-component so its local
+ * search + per-domain open-state hooks live OUTSIDE the conditionally-rendered
+ * branch in SimulatorWindow (hooks must be unconditional). Renders the inert
+ * states (null → calm note; [] → "no cookies") and, when populated, the live
+ * per-domain expandable jar with Export. Import is disabled (pending A3).
+ */
+function CookiesPane({
+  cookies,
+  cookiesNote,
+  sessionId,
+}: {
+  cookies: SessionCookie[] | null;
+  cookiesNote: string | null;
+  sessionId: string;
+}): JSX.Element {
+  const [search, setSearch] = useState('');
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+
+  const query = search.trim().toLowerCase();
+  const groups = cookies === null ? [] : groupCookiesByDomain(cookies);
+  // Filter each group's cookies by name OR its domain, client-side.
+  const filtered = groups
+    .map((g) => ({
+      domain: g.domain,
+      cookies:
+        query === ''
+          ? g.cookies
+          : g.cookies.filter(
+              (c) => c.name.toLowerCase().includes(query) || g.domain.toLowerCase().includes(query),
+            ),
+    }))
+    .filter((g) => g.cookies.length > 0);
+
+  // A group is open when explicitly toggled; otherwise the first group + any
+  // group matching the active search default to expanded.
+  const isOpen = (domain: string, index: number): boolean =>
+    open[domain] ?? (index === 0 || query !== '');
+  const toggle = (domain: string): void =>
+    setOpen((prev) => ({ ...prev, [domain]: !(prev[domain] ?? false) }));
+
+  const canExport = cookies !== null && cookies.length >= 1;
+  const onExport = (): void => {
+    downloadBlob(
+      `cookies-${sessionId !== '' ? sessionId : 'session'}.json`,
+      new Blob([JSON.stringify(cookies ?? [], null, 2)], { type: 'application/json' }),
+    );
+  };
+
+  return (
+    <section
+      data-component="simulator-cookies"
+      className="flex flex-col overflow-hidden rounded-lg bg-black/20"
+    >
+      {/* Header row — title + live indicator + Export / (disabled) Import. */}
+      <div className="flex items-center gap-2 border-b border-white/10 px-3 pb-2 pt-2.5">
+        <span className="flex items-center gap-1.5 font-sans text-[12px] font-semibold text-white">
+          <span aria-hidden="true">🍪</span>
+          Cookies
+        </span>
+        {cookies !== null && (
+          <span
+            data-component="simulator-cookies-live"
+            className="inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-300"
+          >
+            <span
+              aria-hidden="true"
+              className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.8)]"
+            />
+            live
+          </span>
+        )}
+        <span className="ml-auto flex items-center gap-1.5">
+          <button
+            type="button"
+            data-action="export-cookies"
+            aria-label="Export cookies"
+            title="Export the cookie jar as JSON"
+            disabled={!canExport}
+            onClick={onExport}
+            className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-0.5 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
+          >
+            <span aria-hidden="true">⬇</span> Export
+          </button>
+          <button
+            type="button"
+            data-action="import-cookies"
+            aria-label="Import cookies"
+            title="Import ships with the next device update"
+            disabled
+            className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-0.5 font-sans text-[10px] text-white/80 transition-colors disabled:opacity-40"
+          >
+            <span aria-hidden="true">⬆</span> Import
+          </button>
+        </span>
+      </div>
+
+      {/* Search — filters by cookie name OR domain. */}
+      {cookies !== null && cookies.length > 0 && (
+        <div className="px-3 pt-2">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search cookies or domains…"
+            aria-label="Search cookies"
+            spellCheck={false}
+            autoComplete="off"
+            className="w-full rounded-md border border-white/10 bg-black/25 px-2.5 py-1 font-sans text-[11px] text-white/90 placeholder:text-white/30 focus:border-white/25 focus:outline-none"
+          />
+        </div>
+      )}
+
+      {/* Body — inert states, then the per-domain expandable jar. */}
+      <div className="max-h-56 overflow-y-auto px-2 py-2">
+        {cookies === null ? (
+          <div className="px-1 py-1 font-mono text-[10px] text-white/40">
+            {cookiesNote ?? 'loading…'}
+          </div>
+        ) : cookies.length === 0 ? (
+          <div className="px-1 py-1 font-mono text-[10px] text-white/40">
+            no cookies on this page
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="px-1 py-1 font-mono text-[10px] text-white/40">no matching cookies</div>
+        ) : (
+          <div className="space-y-1">
+            {filtered.map((g, i) => {
+              const expanded = isOpen(g.domain, i);
+              return (
+                <div
+                  key={g.domain}
+                  data-component="simulator-cookie-domain"
+                  className="overflow-hidden rounded-lg bg-black/20"
+                >
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    aria-label={`${g.domain} cookies`}
+                    onClick={() => toggle(g.domain)}
+                    className="flex w-full items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-white/5"
+                  >
+                    <span
+                      aria-hidden="true"
+                      style={{ backgroundColor: cookieFaviconColor(g.domain) }}
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded font-sans text-[9px] font-bold text-black/80"
+                    >
+                      {g.domain.charAt(0).toUpperCase()}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-sans text-[11.5px] font-semibold text-white/90">
+                      {g.domain}
+                    </span>
+                    <span className="shrink-0 rounded-full bg-white/10 px-1.5 py-px font-sans text-[9.5px] text-white/50">
+                      {g.cookies.length}
+                    </span>
+                    <svg
+                      width="11"
+                      height="11"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                      className={`shrink-0 text-white/35 transition-transform ${expanded ? 'rotate-90' : ''}`}
+                    >
+                      <path d="M9 18l6-6-6-6" />
+                    </svg>
+                  </button>
+                  {expanded && (
+                    <div className="space-y-1 px-2 pb-2">
+                      {g.cookies.map((c, ci) => (
+                        <div
+                          key={`${c.name}|${ci}`}
+                          className="rounded-md bg-white/[0.025] px-2 py-1.5 transition-colors hover:bg-white/5"
+                        >
+                          <div className="flex items-center gap-1.5 font-mono text-[10.5px]">
+                            <span className="shrink-0 font-semibold text-sky-300">{c.name}</span>
+                            <span className="min-w-0 flex-1 truncate text-white/40">{c.value}</span>
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {c.secure === true && <CookieFlag kind="secure" label="🔒 Secure" />}
+                            {c.httpOnly === true && <CookieFlag kind="http" label="HttpOnly" />}
+                            {c.sameSite !== undefined && c.sameSite !== null && (
+                              <CookieFlag kind="ss" label={`SameSite=${c.sameSite}`} />
+                            )}
+                            <CookieFlag kind="exp" label={`⏱ ${formatCookieExpiry(c.expires)}`} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function SimulatorWindow(): JSX.Element {
   // The session is held in state so the separate Simulator app's RELAUNCH path
   // can switch it in place: the single-instance handler emits a `ds-session`
@@ -2881,39 +3172,11 @@ export function SimulatorWindow(): JSX.Element {
                       over the control plane; "pending" until the device build serves it.
                       Cross-domain whole-jar arrives later ("this page" → "all"). */}
                     {activePane === 'cookies' && (
-                      <section
-                        data-component="simulator-cookies"
-                        className="rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
-                      >
-                        <div className="mb-0.5 flex items-center justify-between">
-                          <span className="font-sans text-[11px] font-semibold text-white">
-                            Cookies
-                            {cookies !== null && (
-                              <span className="text-white/40"> · {cookies.length}</span>
-                            )}
-                          </span>
-                          <span className="font-sans text-[9px] text-white/30">this page</span>
-                        </div>
-                        {cookies === null ? (
-                          <div className="text-white/40">{cookiesNote ?? 'loading…'}</div>
-                        ) : cookies.length === 0 ? (
-                          <div className="text-white/40">no cookies on this page</div>
-                        ) : (
-                          <div className="max-h-40 space-y-0.5 overflow-y-auto pr-1">
-                            {cookies.map((c, i) => (
-                              <div key={`${c.domain}|${c.name}|${i}`} className="truncate">
-                                <span className="text-white/50">{c.domain}</span>{' '}
-                                <span className="text-emerald-300/80">{c.name}</span>
-                                <span className="text-white/30">=</span>
-                                <span className="text-white/70">{c.value}</span>
-                                {c.httpOnly === true && (
-                                  <span className="text-white/30"> · httpOnly</span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </section>
+                      <CookiesPane
+                        cookies={cookies}
+                        cookiesNote={cookiesNote}
+                        sessionId={sessionId}
+                      />
                     )}
 
                     {/* Files — upload a file into the session's isolated 0o700 jail; the
