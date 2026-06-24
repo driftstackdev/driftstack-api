@@ -26,6 +26,7 @@ import { useRecordings } from '../lib/recordings';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
+import { downloadBlob } from '../lib/download';
 import { persistBaseUrl } from '../lib/settings';
 import {
   getAgentSession,
@@ -1779,20 +1780,15 @@ export function SimulatorWindow(): JSX.Element {
     void fetchAgentSessionDownload(sessionId, name, controlAuth)
       .then((res) => {
         if (res.status === 'ok' && res.file !== null) {
-          // base64 → bytes → Blob → an <a download> click (saves to the user's machine).
+          // base64 → bytes → Blob → the shared, Tauri-WKWebView-proven download helper.
           try {
             const bin = atob(res.file.dataB64);
             const bytes = new Uint8Array(bin.length);
             for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
-            const blob = new Blob([bytes], { type: res.file.mime || 'application/octet-stream' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = res.file.name;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            URL.revokeObjectURL(url);
+            downloadBlob(
+              res.file.name,
+              new Blob([bytes], { type: res.file.mime || 'application/octet-stream' }),
+            );
           } catch {
             setDownloadsNote('Could not save the file.');
           }

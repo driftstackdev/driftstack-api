@@ -12,11 +12,12 @@ export function timestampedFilename(prefix: string, ext: string, now: Date): str
   return `${prefix}-${y}-${m}-${d}.${ext}`;
 }
 
-/** Trigger a browser download of `data` serialised as pretty JSON. No-op (safe)
- *  in environments without URL.createObjectURL (e.g. SSR/test stubs). */
-export function downloadJson(filename: string, data: unknown): void {
+/** Trigger a browser download of an arbitrary Blob via the proven blob → object-URL
+ *  → synthesized-anchor-click → revoke pattern (works in the Tauri WKWebView; revoking
+ *  immediately avoids leaking the URL). No-op (safe) where URL.createObjectURL is
+ *  absent (SSR / test stubs). Shared by downloadJson + the simulator download bar. */
+export function downloadBlob(filename: string, blob: Blob): void {
   if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return;
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const objectUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = objectUrl;
@@ -26,4 +27,10 @@ export function downloadJson(filename: string, data: unknown): void {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(objectUrl);
+}
+
+/** Trigger a browser download of `data` serialised as pretty JSON. No-op (safe)
+ *  in environments without URL.createObjectURL (e.g. SSR/test stubs). */
+export function downloadJson(filename: string, data: unknown): void {
+  downloadBlob(filename, new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
 }
