@@ -372,6 +372,14 @@ export interface TestAppOptions {
    * `allowedOrigins` list (CORS_ALLOWED_ORIGINS). Omitted → permissive (default).
    */
   corsStrict?: { dashboardOrigin?: string; allowedOrigins?: string[] };
+  /**
+   * Founder safeguard (2026-06-24) — override the per-account CONCURRENT
+   * in-flight upload cap (bytes) for POST /v1/agent-sessions/:id/files. Lets a
+   * test trip the cap with tiny payloads instead of holding ~512 MB of buffers.
+   * Omitted → the route's 512 MB default. Threaded into AppDeps as
+   * `agentUploadMaxAccountInFlightBytes`.
+   */
+  uploadMaxAccountInFlightBytes?: number;
 }
 
 export interface SeedAdditionalOpts {
@@ -1369,6 +1377,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
           return { agentRuntime, agentSessionsRepo, agentSessionEventBus };
         })()
       : {}),
+    // Founder safeguard (2026-06-24) — per-account in-flight upload cap override
+    // (bytes). Only spread when set so exactOptionalPropertyTypes stays happy;
+    // omitted → the route's 512 MB default. Lets the cap test trip with tiny payloads.
+    ...(opts.uploadMaxAccountInFlightBytes === undefined
+      ? {}
+      : { agentUploadMaxAccountInFlightBytes: opts.uploadMaxAccountInFlightBytes }),
     // Arc 1 sub-slice 6.5 (v2-#6) — bundled-LLM service is always
     // wired (matches the prod bootstrap which constructs it
     // unconditionally). The route layer separately gates the bundled

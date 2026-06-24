@@ -26,6 +26,22 @@ describe('loadConfig', () => {
     expect(cfg.mockNavigateLatencyMs).toBe(50);
   });
 
+  it('agentUploadMaxAccountInFlightBytes — prod default is EXACTLY 512 MiB; AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES tunes it', () => {
+    const base = {
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+    };
+    // Founder safeguard (2026-06-24): the prod default MUST stay 512 MB. This is
+    // a regression gate — externalising the threshold must NOT change the
+    // unset/prod posture (512 * 1024 * 1024 = 536870912).
+    expect(loadConfig(base).agentUploadMaxAccountInFlightBytes).toBe(512 * 1024 * 1024);
+    // Operator override is coerced from the env string to a number.
+    expect(
+      loadConfig({ ...base, AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES: '12288' })
+        .agentUploadMaxAccountInFlightBytes,
+    ).toBe(12_288);
+  });
+
   it('boolean env vars use strict === \'true\' parsing (NOT z.coerce.boolean which makes "false" → true)', () => {
     const base = {
       DATABASE_URL: 'postgres://u:p@localhost:5432/db',

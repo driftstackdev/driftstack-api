@@ -392,6 +392,14 @@ export interface AppDeps {
    */
   agentDecomposerAllowFallback?: boolean;
   /**
+   * Founder safeguard (2026-06-24) — per-account CONCURRENT in-flight upload
+   * cap (bytes) for POST /v1/agent-sessions/:id/files. Sourced from
+   * config.agentUploadMaxAccountInFlightBytes (env
+   * AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES; default 512 MB). Omit → the route
+   * uses its 512 MB default.
+   */
+  agentUploadMaxAccountInFlightBytes?: number;
+  /**
    * Arc 1 sub-slice 6.3 (v2-#6) — bundled-LLM settings reader.
    * When wired (bootstrap-side requires the deploymentFallbackKey
    * to be set; otherwise the bundled-LLM leg has nothing to consume),
@@ -1282,6 +1290,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         ? {
             allowFallbackForUnconfiguredCustomers: deps.agentDecomposerAllowFallback,
           }
+        : {}),
+      // Founder safeguard (2026-06-24) — per-account in-flight upload cap. Config
+      // always provides a value (512 MB default); pass it through when wired so
+      // the route honours an operator-tuned ceiling.
+      ...(deps.agentUploadMaxAccountInFlightBytes !== undefined
+        ? { uploadMaxAccountInFlightBytes: deps.agentUploadMaxAccountInFlightBytes }
         : {}),
       // Arc 1 sub-slice 6.3 (v2-#6) — bundled-LLM consent gate. When
       // wired AND customer has consent=true AND BYOK path didn't

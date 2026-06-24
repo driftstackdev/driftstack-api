@@ -523,6 +523,15 @@ export interface AgentSessionsRoutesDeps {
    * Absent → the dispatch falls back to a DEK-only block (no restore/persist).
    */
   r2?: R2;
+  /**
+   * Founder safeguard (2026-06-24) — per-ACCOUNT cap (bytes) on CONCURRENT
+   * in-flight upload volume for POST /:id/files, independent of the 64 MiB
+   * per-file cap. Sourced from config (AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES;
+   * prod default 512 MB). Test-injectable so unit tests can trip the cap with
+   * tiny payloads instead of holding ~512 MB of buffers. Default 512 * 1024 *
+   * 1024 when omitted (the prod posture, unchanged).
+   */
+  uploadMaxAccountInFlightBytes?: number;
 }
 
 /** Config for the session-create → harness `sessionAssign` dispatch (see
@@ -970,6 +979,7 @@ export function registerAgentSessionsRoutes(
     accountProxiesService,
     driverSessionsRepo,
     r2,
+    uploadMaxAccountInFlightBytes = 512 * 1024 * 1024,
   } = deps;
 
   /** LK.4 — auto-mint a LiveKit token for the just-created (or
@@ -1560,11 +1570,13 @@ export function registerAgentSessionsRoutes(
   // 64-MiB-decoded enforcer.
   const UPLOAD_MAX_BODY_BYTES = 96 * 1024 * 1024;
   // Founder safeguard (2026-06-24): per-ACCOUNT cap on CONCURRENT in-flight upload
-  // volume (512 MB), independent of the 64 MiB per-file cap — so one account can't
-  // flood the box/jail with many large simultaneous uploads. Tracked in-memory
+  // volume (512 MB default), independent of the 64 MiB per-file cap — so one account
+  // can't flood the box/jail with many large simultaneous uploads. Tracked in-memory
   // per-instance (prod = single node; a multi-instance deploy would move this to
-  // Redis). Reserved on accept, released in the relay's finally (any outcome).
-  const UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES = 512 * 1024 * 1024;
+  // Redis). Reserved on accept, released in the relay's finally (any outcome). The
+  // threshold is config-sourced (AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES; default
+  // 512 MB) + test-injectable via deps.uploadMaxAccountInFlightBytes.
+  const UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES = uploadMaxAccountInFlightBytes;
   const accountUploadInFlightBytes = new Map<string, number>();
   const UploadFileBodySchema = z.object({
     name: z.string().min(1).max(255),

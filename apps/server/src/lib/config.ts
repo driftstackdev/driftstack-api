@@ -166,6 +166,17 @@ const ConfigSchema = z.object({
       useFallbackForUnconfiguredCustomers: z.boolean().default(false),
     })
     .optional(),
+  // Founder safeguard (2026-06-24) — per-ACCOUNT cap (bytes) on CONCURRENT
+  // in-flight upload volume for POST /v1/agent-sessions/:id/files, independent
+  // of the 64 MiB per-file cap. Stops one account from flooding the box's
+  // upload jail with many large simultaneous uploads. Default 512 MiB; only
+  // tune via AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES if a deployment needs a
+  // tighter/looser ceiling. coerce.number so the env string parses to a number.
+  agentUploadMaxAccountInFlightBytes: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(512 * 1024 * 1024),
   // V-079: where the user-facing auth-flow links point. The plaintext
   // single-use token gets appended as `?token=<...>` to each. Defaults
   // are dev-friendly localhost URLs; production sets these to the real
@@ -664,6 +675,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
               env.DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK === 'true',
           }
         : undefined,
+    // Founder safeguard (2026-06-24) — per-account in-flight upload cap (bytes).
+    // Raw env passed through; z.coerce.number parses it and the schema default
+    // (512 MiB) applies when AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES is unset.
+    agentUploadMaxAccountInFlightBytes: env.AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES,
     authFlowUrls: deriveAuthFlowUrls(env),
     dashboardOrigin: env.DASHBOARD_ORIGIN,
     mfaEncryptionKey: env.MFA_ENCRYPTION_KEY,

@@ -1697,6 +1697,9 @@ export async function createProductionDeps(
       : {}),
     agentDecomposerAllowFallback:
       config.agentDecomposer?.useFallbackForUnconfiguredCustomers ?? false,
+    // Founder safeguard (2026-06-24) — per-account in-flight upload cap (bytes);
+    // config-defaulted to 512 MB, tunable via AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES.
+    agentUploadMaxAccountInFlightBytes: config.agentUploadMaxAccountInFlightBytes,
     ...(config.stripe?.webhookSecret !== undefined
       ? {
           stripeWebhooksService,
