@@ -1,6 +1,5 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import { MOCK_ACCOUNT } from '../data/mocks.ts';
 
 // V-217 — progressive-enhancement live wiring against:
 //   - /v1/account/email-preferences (V-204) — list + PUT per-event toggles
@@ -12,11 +11,6 @@ import { MOCK_ACCOUNT } from '../data/mocks.ts';
 // sign-ins remain on mock — those wires land in follow-up slices
 // (/v1/account profile endpoint doesn't exist yet; sign-in tracking
 // is a separate concern).
-
-function fmtIso(iso: string | null): string {
-  if (iso === null) return '—';
-  return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
-}
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
@@ -69,7 +63,7 @@ const EMAIL_EVENTS = [
 
     <header class="mb-10">
       <p class="text-sm text-tk-ink-3" data-field="header-account">
-        Account · {MOCK_ACCOUNT.id.slice(0, 16)}…
+        Account
       </p>
       <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Settings</h1>
       <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
@@ -78,52 +72,16 @@ const EMAIL_EVENTS = [
       </p>
     </header>
 
-    {/* 2026-05-23 — icon on the Profile + Security section headers. */}
-    <!-- Profile -->
-    <section class="dashboard-card">
-      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="7" r="4" />
-            <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
-          </svg>
-        </span>
-        Profile
-      </h2>
-      <p class="mt-2 text-sm text-tk-ink-3">
-        Display name + email shown on invoices and webhook delivery audit logs.
-      </p>
-      <div class="mt-6 space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-tk-ink-2" for="name">Name</label>
-          <input
-            id="name"
-            type="text"
-            value={MOCK_ACCOUNT.name ?? ''}
-            class="mt-1 block w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
-          />
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-tk-ink-2" for="email">Email</label>
-          <input
-            id="email"
-            type="email"
-            value={MOCK_ACCOUNT.email}
-            class="mt-1 block w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
-          />
-          <p class="mt-1 text-xs text-tk-ink-3">
-            Verified {fmtIso(MOCK_ACCOUNT.emailVerifiedAt)}. Changing email
-            triggers re-verification.
-          </p>
-        </div>
-        <button class="btn-primary mt-2">Save changes</button>
-        <p class="text-xs text-tk-ink-3">
-          Profile editing endpoint lands as a follow-up slice; saves are
-          currently no-op.
-        </p>
-      </div>
-    </section>
+    {/*
+      2026-06-24 — the legacy "Profile" section (Name + Email inputs seeded
+      from the mock account, with a no-op "Save changes" button) was removed.
+      It was dead scaffolding superseded by the live "Display & locale"
+      section below (data-region="profile"), which wires display name /
+      timezone / slug / region / avatar to PATCH /v1/account/me. The header
+      above shows the live account identity. No mock-account literal ships.
+    */}
 
+    {/* 2026-05-23 — icon on the Security section header. */}
     <!-- Security -->
     <section class="dashboard-card mt-6">
       <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
@@ -815,13 +773,10 @@ const EMAIL_EVENTS = [
             if (me.timezone) profileTzInput.value = me.timezone;
             if (profileSlugInput && me.slug) profileSlugInput.value = me.slug;
             if (profileRegionInput && me.region) profileRegionInput.value = me.region;
-            // audit w2flmiw48 #3 — the email field + header account-id were seeded from
-            // MOCK_ACCOUNT and never overwritten by live data (so every customer saw the
-            // mock account's email/id). Populate them from /account/me.
-            if (me.email) {
-              const emailInput = document.getElementById('email');
-              if (emailInput) emailInput.value = me.email;
-            }
+            // audit w2flmiw48 #3 — the header account-id used to be seeded
+            // from the mock account and never overwritten by live data (so
+            // every customer saw the mock id). Populate it from /account/me.
+            // (The legacy mock-seeded email input was removed 2026-06-24.)
             if (me.id) {
               const headerAcct = document.querySelector('[data-field="header-account"]');
               if (headerAcct) headerAcct.textContent = 'Account · ' + me.id.slice(0, 16) + '…';

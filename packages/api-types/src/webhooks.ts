@@ -130,7 +130,11 @@ export const CreateWebhookRequestSchema = z.object({
   // can't subscribe to `test.ping`; that event is only emitted via the
   // POST /v1/webhooks/:id/test endpoint, regardless of subscription.
   events: z.array(SubscribableWebhookEventTypeSchema).min(1).max(10),
-  description: z.string().max(200).optional(),
+  // Accepts null as well as undefined so the dashboard's create form
+  // can POST `description: null` for a blank description (the route
+  // already normalizes with `body.description ?? null`). Matches the
+  // UpdateWebhookRequestSchema, which is .nullable().optional().
+  description: z.string().max(200).nullable().optional(),
 });
 export type CreateWebhookRequest = z.infer<typeof CreateWebhookRequestSchema>;
 

@@ -91,14 +91,14 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
     );
   });
 
-  it('CreateWebhookRequest: url .refine(starts with https://) + V-356 events SubscribableWebhookEventType .min(1) .max(10) + description max 200 optional; rationale pinned (test.ping not subscribable)', () => {
+  it('CreateWebhookRequest: url .refine(starts with https://) + V-356 events SubscribableWebhookEventType .min(1) .max(10) + description max 200 nullable optional; rationale pinned (test.ping not subscribable)', () => {
     expect(body).toMatch(
       /url: z\s*\n?\s*\.string\(\)\s*\n?\s*\.url\(\)\s*\n?\s*\.refine\(\(u\) => u\.startsWith\('https:\/\/'\), \{\s*\n?\s*message: 'Webhook URL must use https:\/\/',\s*\n?\s*\}\),/,
     );
     expect(body).toMatch(
       /\/\/ V-356 — only subscribable event types accepted on create\. Customers\s*\n?\s*\/\/ can't subscribe to `test\.ping`; that event is only emitted via the\s*\n?\s*\/\/ POST \/v1\/webhooks\/:id\/test endpoint, regardless of subscription\.\s*\n?\s*events: z\.array\(SubscribableWebhookEventTypeSchema\)\.min\(1\)\.max\(10\),/,
     );
-    expect(body).toMatch(/description: z\.string\(\)\.max\(200\)\.optional\(\),/);
+    expect(body).toMatch(/description: z\.string\(\)\.max\(200\)\.nullable\(\)\.optional\(\),/);
   });
 
   it('CreateWebhookResponse: extends WebhookEndpoint + plaintext secret shown ONCE with .describe', () => {

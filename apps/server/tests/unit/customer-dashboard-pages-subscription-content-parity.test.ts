@@ -41,10 +41,18 @@ describe('W493.B apps/customer-dashboard/src/pages/subscription.astro content pa
     );
   });
 
-  it("REASON_LABEL 4-entry enum: signup → 'Initial signup' / upgrade → 'Upgraded' / downgrade → 'Downgraded' / tier_rename → 'Tier renamed (no price change)' — pinned so the lifecycle vocabulary maps to friendly text + the tier_rename label includes the '(no price change)' clarifier (drift to dropping the clarifier would confuse customers who saw a 'rename' as an unexplained event)", () => {
-    expect(body).toMatch(
-      /const REASON_LABEL: Record<MockPlanHistoryEntry\['reason'\], string> = \{\s*\n?\s*signup: 'Initial signup',\s*\n?\s*upgrade: 'Upgraded',\s*\n?\s*downgrade: 'Downgraded',\s*\n?\s*tier_rename: 'Tier renamed \(no price change\)',\s*\n?\s*\};/,
-    );
+  it('Honest empty states: plan history + invoices render neutral empty-state copy (the fabricated PLAN_HISTORY / INVOICES arrays were removed because the API exposes neither; the dashboard must not ship invented dollar amounts, statuses, or dead Download-PDF links)', () => {
+    // Empty-state copy present.
+    expect(body).toMatch(/Plan history isn't available yet\./);
+    expect(body).toMatch(/No invoices yet\./);
+    // The fabricated data + helpers are gone.
+    expect(body).not.toMatch(/const PLAN_HISTORY/);
+    expect(body).not.toMatch(/const INVOICES/);
+    expect(body).not.toMatch(/REASON_LABEL/);
+    expect(body).not.toMatch(/function fmtUsd/);
+    expect(body).not.toMatch(/Download PDF/);
+    expect(body).not.toMatch(/in_test_/);
+    expect(body).not.toMatch(/amount_cents/);
   });
 
   it("Upgrade-vs-downgrade timing framing pinned: 'Upgrades take effect immediately and prorate your remaining period. Downgrades take effect at the end of the current period — you keep your current cap until renewal.' — pinned so the asymmetric timing (immediate-prorate vs end-of-period) survives (drift to symmetric framing would mislead customers who downgrade expecting instant effect)", () => {
@@ -57,34 +65,6 @@ describe('W493.B apps/customer-dashboard/src/pages/subscription.astro content pa
     expect(body).toMatch(/<a href="#upgrade" class="btn-primary">Upgrade plan<\/a>/);
     expect(body).toMatch(/<a href="#downgrade" class="btn-secondary">Downgrade plan<\/a>/);
     expect(body).toMatch(/<a href="#portal" class="btn-secondary">Open Stripe portal<\/a>/);
-  });
-
-  it('Plan history reverse-chronological order: PLAN_HISTORY.slice().reverse() (.slice() preserves immutability before reverse) — pinned so the timeline reads newest-first (drift to forward order would hide the most-recent change below older entries, defeating the at-a-glance purpose)', () => {
-    expect(body).toMatch(/PLAN_HISTORY\.slice\(\)\s*\n?\s*\.reverse\(\)/);
-  });
-
-  it("Plan history from_tier conditional: from_tier !== null → <code>{from}</code> → <code>{to}</code> + from_tier === null → ': ' separator + <code>{to}</code> — pinned so the signup row (no from_tier) doesn't render with a phantom '→' (drift would either show 'null → trial_pack' or break the JSX entirely)", () => {
-    expect(body).toMatch(
-      /\{entry\.from_tier !== null && \(\s*\n?\s*<>\s*\n?\s*: <code class="font-mono">\{entry\.from_tier\}<\/code> →\{' '\}\s*\n?\s*<\/>\s*\n?\s*\)\}\s*\n?\s*\{entry\.from_tier === null && ': '\}\s*\n?\s*<code class="font-mono">\{entry\.to_tier\}<\/code>/,
-    );
-  });
-
-  it("Invoice-status 3-tone: paid → emerald-50 / open → amber-50 / void → slate-100 (nested ternary, paid first since it's the common case) — pinned so the visual urgency of unpaid (open) invoices stays distinct from paid + voided states (drift to dropping void would render as no-style when Stripe marks invoices void)", () => {
-    expect(body).toMatch(
-      /invoice\.status === 'paid'\s*\n?\s*\? 'bg-emerald-400\/10 text-emerald-300'\s*\n?\s*: invoice\.status === 'open'\s*\n?\s*\? 'bg-tk-accent\/10 text-tk-accent'\s*\n?\s*: 'bg-tk-surface text-tk-ink-2',/,
-    );
-  });
-
-  it("Stripe-hosted invoice PDF framing pinned: 'Invoice PDFs hosted by Stripe with permanent URLs. Bookmark for accounting; we don't expire them.' — pinned so customers know they can bookmark invoice URLs without fearing expiry (drift to dropping the permanence guarantee would push customers to download PDFs locally — defensive copy + storage they don't need)", () => {
-    expect(body).toMatch(
-      /Invoice PDFs hosted by Stripe with permanent URLs\. Bookmark for\s*\n?\s*accounting; we don't expire them\./,
-    );
-  });
-
-  it("fmtUsd helper: $${(cents / 100).toFixed(2)} template literal — pinned so cents → USD conversion stays consistent (drift to bare division would show '4.9' instead of '$4.90'; drift to dropping toFixed(2) would lose the cents precision)", () => {
-    expect(body).toMatch(
-      /function fmtUsd\(cents: number\): string \{\s*\n?\s*return `\$\$\{\(cents \/ 100\)\.toFixed\(2\)\}`;\s*\n?\s*\}/,
-    );
   });
 
   it("MOCK_SUBSCRIPTION null branch: 'No subscription' fallback header — pinned so a customer who lands here pre-subscription doesn't see a broken '<undefined>' tier name (drift to dropping the null check would surface a JavaScript error on the SSG render)", () => {

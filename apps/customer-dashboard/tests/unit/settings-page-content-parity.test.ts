@@ -87,14 +87,16 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     );
   });
 
-  it('profile-editing explicitly flagged as follow-up slice (currently no-op)', () => {
-    // Load-bearing honesty claim — the Save-changes button is
-    // visible but does nothing until the /v1/account profile
-    // endpoint lands. A future copy edit that drops this caveat
-    // without landing the endpoint creates a silent UX bug.
-    expect(body).toMatch(
-      /Profile editing endpoint lands as a follow-up slice; saves are\s+currently no-op/,
-    );
+  it('legacy MOCK-seeded Profile section removed; the live "Display & locale" section is the canonical profile editor (PATCH /v1/account/me)', () => {
+    // 2026-06-24 — the dead legacy "Profile" card (Name + Email inputs
+    // seeded from MOCK_ACCOUNT, no-op "Save changes" button) was removed.
+    // It's superseded by the live data-region="profile" section that PATCHes
+    // /v1/account/me. No MOCK_ACCOUNT literal may ship.
+    expect(body).not.toMatch(/MOCK_ACCOUNT/);
+    expect(body).not.toMatch(/Profile editing endpoint lands as a follow-up slice/);
+    expect(body).toMatch(/data-region="profile"/);
+    expect(body).toMatch(/data-form="profile"/);
+    expect(body).toMatch(/method: 'PATCH'/);
   });
 
   it('localStorage key ds_web_session_token (customer-dashboard convention)', () => {

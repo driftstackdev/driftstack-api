@@ -226,11 +226,13 @@ describe('W749 dashboard /sessions page V-180 + V-186 parity', () => {
     expect(p).toMatch(/showBanner\('No sessions yet — create one to get started\.'\);/);
   });
 
-  it("CRITICAL fetch-error banner pinned with HTTP-status interpolation — `Couldn't load live sessions (<status>). Showing preview data below.` Drift to silent error would lose recovery framing.", () => {
+  it("CRITICAL fetch-error banner pinned with HTTP-status interpolation — `Couldn't load live sessions (<status>).` + the meter is reset to 0 (never left on a stale/fabricated value). Drift to silent error would lose recovery framing. (2026-06-24 — dropped the 'Showing preview data below' claim; the SSG meter is a neutral 0/— placeholder, not fabricated data.)", () => {
     const p = read(PAGE);
     expect(p).toMatch(/"Couldn't load live sessions \(" \+/);
     expect(p).toMatch(/\(err && err\.message \? err\.message : 'network error'\)/);
-    expect(p).toMatch(/'\)\. Showing preview data below\.'/);
+    expect(p).toMatch(/'\)\.',/);
+    // Meter reset on failure.
+    expect(p).toMatch(/currentNow = 0;\s*\n\s+updateMeter\(0, currentCap\);/);
   });
 
   it('CRITICAL session billing-meter framing pinned — "Sessions are the only billing meter — you pay for concurrent caps, not duration or per-call." This is the load-bearing customer-comms framing.', () => {

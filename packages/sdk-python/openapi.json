@@ -2157,7 +2157,7 @@
             "maxItems": 10
           },
           "description": {
-            "type": "string",
+            "type": ["string", "null"],
             "maxLength": 200
           }
         },
@@ -23784,7 +23784,7 @@
                     "maxItems": 10
                   },
                   "description": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "maxLength": 200
                   }
                 },

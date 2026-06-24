@@ -38,20 +38,19 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
     );
   });
 
-  it('data-page="oauth-callback" + Signing-you-in-headline + check-inbox + 5-data-attribute pinned: data-banner + data-field="intro" + data-success-merge + data-merge-email + data-merge-provider + data-merge-window. Drift would break the page-script\'s root.querySelector hooks', () => {
+  it('data-page="oauth-callback" + Signing-you-in-headline + check-inbox + data-attribute hooks pinned: data-banner + data-field="intro" + data-success-merge + data-merge-provider + data-merge-window. (data-merge-email removed — the span was never populated, so the sentence rendered with a blank gap; reworded to neutral copy.) Drift would break the page-script\'s root.querySelector hooks', () => {
     expect(body).toMatch(/data-page="oauth-callback"/);
     expect(body).toMatch(/Signing you in…/);
     expect(body).toMatch(/data-banner/);
     expect(body).toMatch(/data-field="intro"/);
     expect(body).toMatch(/data-success-merge/);
-    expect(body).toMatch(/data-merge-email/);
     expect(body).toMatch(/data-merge-provider/);
     expect(body).toMatch(/data-merge-window/);
   });
 
-  it("Check-your-inbox copy pinned: 'We sent a confirmation link to <span data-merge-email…> to verify both accounts belong to you. Click the link in that email to finish linking your <span data-merge-provider…>IDP</span> account. The link expires in <span data-merge-window…>60 minutes</span>.' — pinned so the 60-minute-default expiry text + 'finish linking your IDP' copy contract stays documented", () => {
+  it("Check-your-inbox copy pinned: 'We sent a confirmation link to the email on your existing account to verify both accounts belong to you. Click the link in that email to finish linking your <span data-merge-provider…>IDP</span> account. The link expires in <span data-merge-window…>60 minutes</span>.' — pinned so the 60-minute-default expiry text + 'finish linking your IDP' copy contract stays documented. (The previous data-merge-email span was never populated → blank gap; reworded to neutral 'the email on your existing account'.)", () => {
     expect(body).toMatch(
-      /We sent a confirmation link to <span data-merge-email class="font-mono text-tk-accent-soft"><\/span>\s*\n?\s*to verify both accounts belong to you\. Click the link in that email to finish linking your\s*\n?\s*<span data-merge-provider class="font-mono">IDP<\/span> account\./,
+      /We sent a confirmation link to the email on your existing account\s*\n?\s*to verify both accounts belong to you\. Click the link in that email to finish linking your\s*\n?\s*<span data-merge-provider class="font-mono">IDP<\/span> account\./,
     );
     expect(body).toMatch(
       /The link expires in <span data-merge-window class="font-mono">60 minutes<\/span>\./,

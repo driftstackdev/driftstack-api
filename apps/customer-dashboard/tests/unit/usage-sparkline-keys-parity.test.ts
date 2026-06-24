@@ -29,17 +29,19 @@ describe('W297.C /usage page sparkline keys ↔ docs/api/usage parity', () => {
   // page uses the UsageRecordType enum names — SINGULAR forms
   // (`navigate`, `interact`, `session_minute`, `state_capture`,
   // `screenshot_capture`) — which is the canonical wire shape.
-  // Dashboard keys are plural display labels.
+  // 2026-06-24 — the fabricated plural-keyed mockSeries generator was
+  // removed; the sparkline hooks are the data-spark="…" attributes the
+  // live handler targets (singular wire names + the derived "captures").
   const METRIC_PAIRS: Array<{ dashboardKey: string; docsAny: string[] }> = [
-    { dashboardKey: 'navigates', docsAny: ['navigate'] },
-    { dashboardKey: 'interacts', docsAny: ['interact'] },
+    { dashboardKey: 'navigate', docsAny: ['navigate'] },
+    { dashboardKey: 'interact', docsAny: ['interact'] },
     { dashboardKey: 'captures', docsAny: ['state_capture', 'screenshot_capture'] },
-    { dashboardKey: 'session_minutes', docsAny: ['session_minute'] },
+    { dashboardKey: 'session_minute', docsAny: ['session_minute'] },
   ];
 
   for (const { dashboardKey, docsAny } of METRIC_PAIRS) {
     it(`/usage page references the ${dashboardKey} sparkline key`, () => {
-      expect(dashboard).toMatch(new RegExp(`\\b${dashboardKey}\\b`));
+      expect(dashboard).toMatch(new RegExp(`data-spark="${dashboardKey}"`));
     });
 
     it(`docs/api/usage.md documents at least one of [${docsAny.join(', ')}]`, () => {

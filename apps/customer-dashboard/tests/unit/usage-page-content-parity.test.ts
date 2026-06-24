@@ -103,14 +103,13 @@ describe('W363.B customer-dashboard /usage page content parity', () => {
     expect(body).toContain('ds_web_session_token');
   });
 
-  it('combined captures tile sums state_capture + screenshot_capture', () => {
+  it('combined captures tile sums state_capture + screenshot_capture in the live handler', () => {
     // The Captures tile is intentionally a derived sum, not a
     // schema metric. The derivation must keep matching the
     // schema's two capture-kind keys; if the schema renames
-    // either, the tile renders NaN.
-    expect(body).toMatch(
-      /totals\.state_capture\s*\+\s*MOCK_USAGE_SUMMARY\.totals\.screenshot_capture/,
-    );
+    // either, the tile renders NaN. (The SSG shell renders a
+    // neutral placeholder — no fabricated MOCK totals — so only the
+    // live-handler derivation is pinned now.)
     expect(body).toMatch(
       /\(totals\.state_capture \|\| 0\)\s*\+\s*\(totals\.screenshot_capture \|\| 0\)/,
     );

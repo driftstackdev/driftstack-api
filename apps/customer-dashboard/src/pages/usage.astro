@@ -1,21 +1,23 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import { MOCK_USAGE_SUMMARY } from '../data/mocks.ts';
 
-// V-171 — page progressively enhances from mock-rendered SSG to
-// real /v1/usage + /v1/usage/series fetches via inline <script>.
-// Render path:
-//   1. Astro emits the static HTML using MOCK_USAGE_SUMMARY (below).
-//      User sees mock numbers immediately while JS loads.
+// V-171 — page progressively enhances from a neutral-placeholder SSG
+// shell to real /v1/usage + /v1/usage/series fetches via inline
+// <script>. Render path:
+//   1. Astro emits the static HTML with neutral placeholders ("—"
+//      totals + flat sparklines). 2026-06-24 — the SSG no longer
+//      paints MOCK_USAGE_SUMMARY numbers; shipping fabricated totals
+//      (423/1284/5612…) to every customer read as real usage.
 //   2. <script is:inline> runs on DOMContentLoaded, reads
 //      `ds_web_session_token` from localStorage.
 //   3. Token present → fetch totals (/v1/usage) + series
 //      (/v1/usage/series?days=30) with credentials, replace DOM.
 //   4. Token absent → small banner: "Sign in to see live usage."
-//      Mock data stays visible as preview. (Production: signup/login
-//      UI sets the token; not yet wired — V-NNN follow-on.)
+//      Placeholders stay (no fabricated numbers). (Production:
+//      signup/login UI sets the token.)
 //   5. Fetch fails (network / 401 / 5xx) → small banner
-//      "Couldn't load live usage. Showing preview data." Mock stays.
+//      "Couldn't load live usage." Placeholders stay (never
+//      fabricated numbers).
 //
 // Config: PUBLIC_API_BASE_URL (Astro public env). See
 // `src/lib/api-base-url.ts` — dev falls back to localhost:3000;
@@ -25,57 +27,25 @@ import { MOCK_USAGE_SUMMARY } from '../data/mocks.ts';
 // so /v1/usage + /v1/usage/series return zeros for everyone. The
 // fetch path is real; the data is empty until writers land.
 
-function fmtIsoDay(iso: string): string {
-  return new Date(iso).toISOString().slice(0, 10);
-}
-
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
 
-// Mock 30-day series for sparklines. Real source: /v1/usage with
-// daily aggregation. Generated deterministically (no Math.random)
-// so the rendered SVG is stable across page loads at scaffolding
-// time — easier to spot real-data integration regressions later.
-function mockSeries(seedBase: number, length: number): number[] {
-  const out: number[] = [];
-  for (let i = 0; i < length; i += 1) {
-    const v = Math.round(seedBase + Math.sin(i * 0.6) * (seedBase * 0.4) + i * (seedBase * 0.02));
-    out.push(Math.max(0, v));
-  }
-  return out;
-}
-
-const SERIES_LENGTH = 30;
-const series = {
-  navigates: mockSeries(40, SERIES_LENGTH),
-  interacts: mockSeries(180, SERIES_LENGTH),
-  captures: mockSeries(12, SERIES_LENGTH),
-  session_minutes: mockSeries(15, SERIES_LENGTH),
-};
-
-function sparklinePath(values: number[], width: number, height: number): string {
-  if (values.length === 0) return '';
-  const max = Math.max(...values, 1);
-  const stepX = width / (values.length - 1);
-  return values
-    .map((v, i) => {
-      const x = i * stepX;
-      const y = height - (v / max) * height;
-      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join(' ');
-}
-
 const SPARK_W = 200;
 const SPARK_H = 48;
+
+// Neutral placeholders for the SSG shell — no fabricated data. A flat
+// baseline path keeps the sparkline SVGs from collapsing before the
+// live series replaces them; the tiles render an em-dash until a
+// successful /v1/usage fetch populates real numbers.
+const PLACEHOLDER_STAT = '—';
+const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SPARK_H / 2).toFixed(1)}`;
 ---
 
 <DashboardLayout title="Usage">
   <div class="mx-auto max-w-5xl px-6 py-10" data-page="usage">
     <header class="mb-10">
       <p class="text-sm text-tk-ink-3" data-field="period">
-        {fmtIsoDay(MOCK_USAGE_SUMMARY.period_start)} → {fmtIsoDay(MOCK_USAGE_SUMMARY.period_end)} ·
-        <span data-field="tier">{MOCK_USAGE_SUMMARY.tier}</span> tier
+        <span data-field="tier">{PLACEHOLDER_STAT}</span> tier · current billing period
       </p>
       <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Usage</h1>
       <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
@@ -108,7 +78,7 @@ const SPARK_H = 48;
           </span>
         </div>
         <p class="mt-3 text-3xl font-semibold text-tk-ink" data-stat="session_minute">
-          {MOCK_USAGE_SUMMARY.totals.session_minute.toLocaleString('en-US')}
+          {PLACEHOLDER_STAT}
         </p>
         <svg
           viewBox={`0 0 ${SPARK_W.toString()} ${SPARK_H.toString()}`}
@@ -117,7 +87,7 @@ const SPARK_H = 48;
         >
           <path
             data-spark="session_minute"
-            d={sparklinePath(series.session_minutes, SPARK_W, SPARK_H)}
+            d={FLAT_PATH}
             fill="none"
             stroke="currentColor"
             stroke-width="2"
@@ -134,7 +104,7 @@ const SPARK_H = 48;
           </span>
         </div>
         <p class="mt-3 text-3xl font-semibold text-tk-ink" data-stat="navigate">
-          {MOCK_USAGE_SUMMARY.totals.navigate.toLocaleString('en-US')}
+          {PLACEHOLDER_STAT}
         </p>
         <svg
           viewBox={`0 0 ${SPARK_W.toString()} ${SPARK_H.toString()}`}
@@ -143,7 +113,7 @@ const SPARK_H = 48;
         >
           <path
             data-spark="navigate"
-            d={sparklinePath(series.navigates, SPARK_W, SPARK_H)}
+            d={FLAT_PATH}
             fill="none"
             stroke="currentColor"
             stroke-width="2"
@@ -160,7 +130,7 @@ const SPARK_H = 48;
           </span>
         </div>
         <p class="mt-3 text-3xl font-semibold text-tk-ink" data-stat="interact">
-          {MOCK_USAGE_SUMMARY.totals.interact.toLocaleString('en-US')}
+          {PLACEHOLDER_STAT}
         </p>
         <svg
           viewBox={`0 0 ${SPARK_W.toString()} ${SPARK_H.toString()}`}
@@ -169,7 +139,7 @@ const SPARK_H = 48;
         >
           <path
             data-spark="interact"
-            d={sparklinePath(series.interacts, SPARK_W, SPARK_H)}
+            d={FLAT_PATH}
             fill="none"
             stroke="currentColor"
             stroke-width="2"
@@ -186,10 +156,7 @@ const SPARK_H = 48;
           </span>
         </div>
         <p class="mt-3 text-3xl font-semibold text-tk-ink" data-stat="captures_total">
-          {(
-            MOCK_USAGE_SUMMARY.totals.state_capture +
-            MOCK_USAGE_SUMMARY.totals.screenshot_capture
-          ).toLocaleString('en-US')}
+          {PLACEHOLDER_STAT}
         </p>
         <svg
           viewBox={`0 0 ${SPARK_W.toString()} ${SPARK_H.toString()}`}
@@ -198,7 +165,7 @@ const SPARK_H = 48;
         >
           <path
             data-spark="captures"
-            d={sparklinePath(series.captures, SPARK_W, SPARK_H)}
+            d={FLAT_PATH}
             fill="none"
             stroke="currentColor"
             stroke-width="2"
@@ -228,13 +195,13 @@ const SPARK_H = 48;
         <div class="flex justify-between border-b border-slate-100 pb-3">
           <dt class="text-sm text-tk-ink-3">Screenshots</dt>
           <dd class="font-mono text-sm text-tk-ink" data-stat="screenshot_capture">
-            {MOCK_USAGE_SUMMARY.totals.screenshot_capture.toLocaleString('en-US')}
+            {PLACEHOLDER_STAT}
           </dd>
         </div>
         <div class="flex justify-between border-b border-slate-100 pb-3">
           <dt class="text-sm text-tk-ink-3">DOM snapshots</dt>
           <dd class="font-mono text-sm text-tk-ink" data-stat="state_capture">
-            {MOCK_USAGE_SUMMARY.totals.state_capture.toLocaleString('en-US')}
+            {PLACEHOLDER_STAT}
           </dd>
         </div>
       </dl>
@@ -321,7 +288,7 @@ const SPARK_H = 48;
       }
 
       if (!token) {
-        showBanner('Sign in to see live usage. Showing preview data below.');
+        showBanner('Sign in to see live usage.');
         return;
       }
 
@@ -413,7 +380,7 @@ const SPARK_H = 48;
           showBanner(
             "Couldn't load live usage (" +
               (err && err.message ? err.message : 'network error') +
-              '). Showing preview data below.',
+              ').',
           );
         })
         .finally(function () {

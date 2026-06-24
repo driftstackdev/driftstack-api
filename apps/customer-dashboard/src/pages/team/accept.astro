@@ -73,9 +73,29 @@ const apiBaseUrl = resolveApiBaseUrl();
         return;
       }
 
+      // The accept route is requireAuth (reads the Bearer header, no
+      // cookie auth) — without a web-session token the POST always
+      // 401s. Read ds_web_session_token from localStorage like the
+      // other authed dashboard pages (billing.astro etc). If absent,
+      // show the sign-in hint and don't fire a request that's
+      // guaranteed to fail.
+      let sessionToken = null;
+      try {
+        sessionToken = localStorage.getItem('ds_web_session_token');
+      } catch (_) {
+        /* private mode / disabled storage */
+      }
+      if (!sessionToken) {
+        showBanner('You need to be signed in to accept this invite.', true);
+        return;
+      }
+
       fetch(apiBaseUrl + '/v1/team/invites/accept', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          authorization: 'Bearer ' + sessionToken,
+        },
         credentials: 'include',
         body: JSON.stringify({ token: token }),
       })

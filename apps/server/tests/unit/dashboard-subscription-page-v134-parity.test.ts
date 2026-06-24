@@ -43,61 +43,18 @@ describe('W758 dashboard /subscription page V-134 parity', () => {
     );
   });
 
-  it('CRITICAL 4-reason MockPlanHistoryEntry enum pinned — signup/upgrade/downgrade/tier_rename. Drift to dropping tier_rename would lose the "no price change" attribution.', () => {
+  it('CRITICAL honest empty states for plan history + invoices. The fabricated PLAN_HISTORY / INVOICES arrays were removed (the API exposes neither); both sections render neutral empty-state copy. No invented dollar amounts, statuses, or dead Download-PDF links may ship.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/reason: 'signup' \| 'upgrade' \| 'downgrade' \| 'tier_rename'/);
-  });
-
-  it('CRITICAL REASON_LABEL map pinned with 4 keys mapped to customer-facing strings. signup → "Initial signup", tier_rename → "Tier renamed (no price change)" tells customers the change had no $ impact.', () => {
-    const p = read(PAGE);
-
-    expect(p).toMatch(/signup: 'Initial signup',/);
-    expect(p).toMatch(/upgrade: 'Upgraded',/);
-    expect(p).toMatch(/downgrade: 'Downgraded',/);
-    expect(p).toMatch(/tier_rename: 'Tier renamed \(no price change\)'/);
-  });
-
-  it('CRITICAL plan history rendered newest-first via slice().reverse(). The .slice() avoids mutating the source array; drift to in-place .reverse() would mutate the const MOCK array across renders.', () => {
-    const p = read(PAGE);
-
-    expect(p).toMatch(/PLAN_HISTORY\.slice\(\)\s*\n\s+\.reverse\(\)/);
-  });
-
-  it('CRITICAL plan-history row formats `<from_tier> → <to_tier>` arrow when from_tier non-null. The arrow framing matches W755 audit-log subscription.tier_changed display.', () => {
-    const p = read(PAGE);
-
-    expect(p).toMatch(/<code class="font-mono">\{entry\.from_tier\}<\/code> →/);
-  });
-
-  it('CRITICAL plan-history signup row (from_tier === null) renders `: <to_tier>` without arrow. Drift to a null-arrow would render "null → trial_pack" to customers.', () => {
-    const p = read(PAGE);
-
-    expect(p).toMatch(/\{entry\.from_tier === null && ': '\}/);
-  });
-
-  it('CRITICAL 3-status invoice STATUS visual map pinned — paid/open/void. paid → bg-emerald (success), open → bg-tk-accent (action needed), void → bg-tk-surface (gray-cancelled). Drift to identical styling would lose the visual cue.', () => {
-    const p = read(PAGE);
-
-    expect(p).toMatch(
-      /invoice\.status === 'paid'\s*\n\s+\? 'bg-emerald-400\/10 text-emerald-300'\s*\n\s+: invoice\.status === 'open'\s*\n\s+\? 'bg-tk-accent\/10 text-tk-accent'\s*\n\s+: 'bg-tk-surface text-tk-ink-2',/,
-    );
-  });
-
-  it('CRITICAL fmtUsd() helper formats cents to $X.XX with .toFixed(2). Drift to a different precision would diverge from the W751 /billing fmtCents() helper.', () => {
-    const p = read(PAGE);
-
-    expect(p).toMatch(
-      /function fmtUsd\(cents: number\): string \{\s*\n\s+return `\$\$\{\(cents \/ 100\)\.toFixed\(2\)\}`;\s*\n\}/,
-    );
-  });
-
-  it("CRITICAL Stripe-permanent-URL framing pinned. The 'Invoice PDFs hosted by Stripe with permanent URLs. Bookmark for accounting; we don\\'t expire them.' wording is the customer-comms contract that protects against churn-driven invoice expiration.", () => {
-    const p = read(PAGE);
-
-    expect(p).toMatch(
-      /Invoice PDFs hosted by Stripe with permanent URLs\. Bookmark for\s*\n\s+accounting; we don't expire them\./,
-    );
+    expect(p).toMatch(/Plan history isn't available yet\./);
+    expect(p).toMatch(/No invoices yet\./);
+    expect(p).not.toMatch(/PLAN_HISTORY/);
+    expect(p).not.toMatch(/const INVOICES/);
+    expect(p).not.toMatch(/REASON_LABEL/);
+    expect(p).not.toMatch(/function fmtUsd/);
+    expect(p).not.toMatch(/Download PDF/);
+    expect(p).not.toMatch(/in_test_/);
+    expect(p).not.toMatch(/Invoice PDFs hosted by Stripe/);
   });
 
   it("CRITICAL back-link to /billing pinned. The '← Back to billing' anchor is the canonical cross-link from /subscription drill-down back to /billing at-a-glance.", () => {
@@ -122,24 +79,6 @@ describe('W758 dashboard /subscription page V-134 parity', () => {
     expect(p).toMatch(/<a href="#upgrade" class="btn-primary">Upgrade plan<\/a>/);
     expect(p).toMatch(/<a href="#downgrade" class="btn-secondary">Downgrade plan<\/a>/);
     expect(p).toMatch(/<a href="#portal" class="btn-secondary">Open Stripe portal<\/a>/);
-  });
-
-  it('CRITICAL invoice-table 5-column header pinned — Date/Invoice/Amount/Status/(actions). The 5-column shape matches the MockInvoice row render.', () => {
-    const p = read(PAGE);
-
-    expect(p).toMatch(/<th class="py-2 pr-4">Date<\/th>/);
-    expect(p).toMatch(/<th class="py-2 pr-4">Invoice<\/th>/);
-    expect(p).toMatch(/<th class="py-2 pr-4">Amount<\/th>/);
-    expect(p).toMatch(/<th class="py-2 pr-4">Status<\/th>/);
-    expect(p).toMatch(/<th class="py-2"><\/th>/);
-  });
-
-  it('CRITICAL invoice-row PDF download link pinned. Drift to an inline-view button would force customers to bookmark Driftstack URLs instead of Stripe URLs.', () => {
-    const p = read(PAGE);
-
-    expect(p).toMatch(
-      /<a href=\{invoice\.pdf_url\} class="text-sm text-tk-accent hover:underline">\s*\n\s+Download PDF\s*\n\s+<\/a>/,
-    );
   });
 
   it('CRITICAL MOCK_SUBSCRIPTION null-coalescing for status display. The "No subscription" header copy + the conditional "renews" row is what avoids rendering null status to customers.', () => {

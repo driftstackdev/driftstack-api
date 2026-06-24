@@ -308,11 +308,23 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (portalBtn) portalBtn.classList.add('hidden');
             if (cancelBtn) cancelBtn.classList.add('hidden');
           } else {
+            // 2026-06-24 — on a generic (non-503) failure, don't leave the
+            // SSG mock subscription (fabricated tier + renew date) on screen —
+            // a real customer reads it as their actual plan. Neutralize the
+            // card the same way the 503 branch does.
             showBanner(
               "Couldn't load live billing (" +
                 (err && err.message ? err.message : 'network error') +
-                '). Showing preview data below.',
+                ').',
             );
+            setText('sub-tier', 'Billing state unavailable');
+            setText(
+              'sub-summary',
+              "Couldn't load your live subscription state — reload to try again.",
+            );
+            setText('sub-status-badge', 'unavailable');
+            if (portalBtn) portalBtn.classList.add('hidden');
+            if (cancelBtn) cancelBtn.classList.add('hidden');
           }
         })
         .finally(function () {

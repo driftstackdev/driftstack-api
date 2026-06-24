@@ -1,6 +1,6 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import { MOCK_SESSIONS, MOCK_USAGE_SUMMARY } from '../data/mocks.ts';
+import { MOCK_SESSIONS } from '../data/mocks.ts';
 import {
   ARCHETYPE_REGISTRY,
   LOCKED_ARCHETYPE_DISPLAY_LABEL,
@@ -80,8 +80,8 @@ const ARCHETYPE_LABELS = Object.fromEntries(
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
         <p class="text-sm text-tk-ink-3" data-field="header-summary">
-          <span data-field="header-now">{MOCK_USAGE_SUMMARY.concurrent_now}</span> active · <span
-            data-field="header-cap">{MOCK_USAGE_SUMMARY.concurrent_limit}</span> concurrent cap
+          <span data-field="header-now">0</span> active · <span
+            data-field="header-cap">—</span> concurrent cap
         </p>
         <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Sessions</h1>
         <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
@@ -130,17 +130,13 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       </div>
       <div class="mt-4 flex items-center gap-4">
         <p class="font-mono text-3xl font-semibold text-tk-ink">
-          <span data-field="meter-now">{MOCK_USAGE_SUMMARY.concurrent_now}</span>
+          <span data-field="meter-now">0</span>
           <span class="text-base font-normal text-tk-ink-3">
-            / <span data-field="meter-cap">{MOCK_USAGE_SUMMARY.concurrent_limit}</span>
+            / <span data-field="meter-cap">—</span>
           </span>
         </p>
         <div class="h-2 flex-1 overflow-hidden rounded bg-tk-surface">
-          <div
-            data-field="meter-bar"
-            class="h-full bg-tk-accent"
-            style={`width: ${((MOCK_USAGE_SUMMARY.concurrent_now / MOCK_USAGE_SUMMARY.concurrent_limit) * 100).toString()}%`}
-          />
+          <div data-field="meter-bar" class="h-full bg-tk-accent" style="width: 0%" />
         </div>
       </div>
       <p class="mt-3 text-xs text-tk-ink-3">
@@ -659,10 +655,15 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           }
         })
         .catch((err) => {
+          // 2026-06-24 — reset the active count to 0 on failure so the
+          // meter never sits on a stale/fabricated value. The cap stays
+          // as whatever /v1/usage resolved to (or the "—" placeholder).
+          currentNow = 0;
+          updateMeter(0, currentCap);
           showBanner(
             "Couldn't load live sessions (" +
               (err && err.message ? err.message : 'network error') +
-              '). Showing preview data below.',
+              ').',
           );
         });
 

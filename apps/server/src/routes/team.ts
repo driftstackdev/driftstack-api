@@ -2,7 +2,7 @@
 //
 //   POST   /v1/team/invites              — owner invites email (account_owner)
 //   GET    /v1/team/invites              — list pending (account_owner)
-//   POST   /v1/team/invites/accept       — invitee accepts (any auth)
+//   POST   /v1/team/invites/accept       — invitee accepts (requireAuth)
 //   GET    /v1/team/members              — list confirmed (account_owner)
 //   DELETE /v1/team/members/:id          — remove member (account_owner)
 //

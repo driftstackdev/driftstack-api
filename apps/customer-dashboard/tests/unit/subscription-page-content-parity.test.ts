@@ -48,35 +48,24 @@ describe('W374.C customer-dashboard /subscription page content parity', () => {
     );
   });
 
-  it('PLAN_HISTORY reason taxonomy pinned: signup / upgrade / downgrade / tier_rename', () => {
-    const reasonLabel = body.match(/const REASON_LABEL[\s\S]*?\};/);
-    expect(reasonLabel).not.toBeNull();
-    for (const r of ['signup', 'upgrade', 'downgrade', 'tier_rename']) {
-      expect(reasonLabel![0], `reason key missing: ${r}`).toContain(`${r}:`);
-    }
-    // Type union pinned in source.
-    expect(body).toMatch(/reason: 'signup' \| 'upgrade' \| 'downgrade' \| 'tier_rename'/);
+  it('honest empty states: plan history + invoices render neutral copy (fabricated PLAN_HISTORY / INVOICES removed — the API exposes neither; no invented amounts/statuses/PDF links)', () => {
+    expect(body).toMatch(/Plan history isn't available yet\./);
+    expect(body).toMatch(/No invoices yet\./);
+    expect(body).not.toMatch(/PLAN_HISTORY/);
+    expect(body).not.toMatch(/const INVOICES/);
+    expect(body).not.toMatch(/REASON_LABEL/);
+    expect(body).not.toMatch(/function fmtUsd/);
+    expect(body).not.toMatch(/Download PDF/);
+    expect(body).not.toMatch(/in_test_/);
   });
 
-  it('MOCK_SUBSCRIPTION + inline mocks wired (data-driven mock, not inline-hardcoded UI)', () => {
+  it('MOCK_SUBSCRIPTION still imported for the live-hydrated Current-plan card (SSG paint, replaced by /v1/billing)', () => {
     expect(body).toMatch(/import \{ MOCK_SUBSCRIPTION \} from '\.\.\/data\/mocks\.ts';/);
-    expect(body).toMatch(/const PLAN_HISTORY: MockPlanHistoryEntry\[\] = \[/);
-    expect(body).toMatch(/const INVOICES: MockInvoice\[\] = \[/);
-  });
-
-  it('plan history rendered reverse-chronologically (newest first via .reverse() on slice)', () => {
-    expect(body).toMatch(/PLAN_HISTORY\.slice\(\)\s*\n?\s*\.reverse\(\)\s*\n?\s*\.map\(\(entry\)/);
   });
 
   it('"Upgrades immediate + prorate; downgrades at end of period" billing-claim framing pinned', () => {
     expect(body).toMatch(
       /Upgrades take effect immediately and prorate your remaining period\.\s+Downgrades take effect at the end of the current period — you keep\s+your current cap until renewal\./,
-    );
-  });
-
-  it('"Invoice PDFs hosted by Stripe with permanent URLs" no-expire commitment pinned', () => {
-    expect(body).toMatch(
-      /Invoice PDFs hosted by Stripe with permanent URLs\. Bookmark for\s+accounting; we don't expire them\./,
     );
   });
 
@@ -93,38 +82,5 @@ describe('W374.C customer-dashboard /subscription page content parity', () => {
     expect(body).toMatch(/<a href="#upgrade" class="btn-primary">Upgrade plan<\/a>/);
     expect(body).toMatch(/<a href="#downgrade" class="btn-secondary">Downgrade plan<\/a>/);
     expect(body).toMatch(/<a href="#portal" class="btn-secondary">Open Stripe portal<\/a>/);
-  });
-
-  it('invoice-status badge map pinned: paid (emerald) / open (glow-red after R3 migration) / void (surface-raised)', () => {
-    expect(body).toMatch(
-      /invoice\.status === 'paid'\s*\n?\s*\?\s*'bg-emerald-400\/10 text-emerald-300'/,
-    );
-    expect(body).toMatch(
-      /invoice\.status === 'open'\s*\n?\s*\?\s*'bg-tk-accent\/10 text-tk-accent'/,
-    );
-    expect(body).toMatch(/'bg-tk-surface text-tk-ink-2'/);
-  });
-
-  it('invoice table columns: Date / Invoice / Amount / Status / (download)', () => {
-    expect(body).toMatch(/<th class="py-2 pr-4">Date<\/th>/);
-    expect(body).toMatch(/<th class="py-2 pr-4">Invoice<\/th>/);
-    expect(body).toMatch(/<th class="py-2 pr-4">Amount<\/th>/);
-    expect(body).toMatch(/<th class="py-2 pr-4">Status<\/th>/);
-    // Download-PDF affordance per row.
-    expect(body).toMatch(/Download PDF/);
-  });
-
-  it('"Initial signup" + "Upgraded" + "Downgraded" + "Tier renamed" reason labels pinned', () => {
-    expect(body).toContain("signup: 'Initial signup'");
-    expect(body).toContain("upgrade: 'Upgraded'");
-    expect(body).toContain("downgrade: 'Downgraded'");
-    expect(body).toContain("tier_rename: 'Tier renamed (no price change)'");
-  });
-
-  it('invoice amounts use cents-to-USD helper (fmtUsd) for display consistency', () => {
-    expect(body).toMatch(
-      /function fmtUsd\(cents: number\): string \{[\s\S]*?\(cents \/ 100\)\.toFixed\(2\)/,
-    );
-    expect(body).toMatch(/fmtUsd\(invoice\.amount_cents\)/);
   });
 });

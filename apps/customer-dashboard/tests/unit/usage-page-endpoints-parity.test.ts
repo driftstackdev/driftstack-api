@@ -55,9 +55,14 @@ describe('W269.A /usage page ↔ /v1/usage* route parity', () => {
     expect(page).toMatch(/ds_web_session_token/);
   });
 
-  it('sparkline series keys match the documented metric names', () => {
-    for (const k of ['navigates', 'interacts', 'captures', 'session_minutes']) {
-      expect(page).toMatch(new RegExp(`${k}:\\s*mockSeries`));
+  it('sparkline data-spark keys match the live-handler metric names', () => {
+    // 2026-06-24 — the SSG `series`/`mockSeries` fabricated generator was
+    // removed (no invented numbers); the sparklines paint a flat baseline
+    // until the live /v1/usage/series fetch populates them. Pin the
+    // data-spark hooks (matched by the live handler's seriesByMetric keys).
+    for (const k of ['session_minute', 'navigate', 'interact', 'captures']) {
+      expect(page).toMatch(new RegExp(`data-spark="${k}"`));
     }
+    expect(page).not.toMatch(/mockSeries/);
   });
 });

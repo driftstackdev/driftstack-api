@@ -33,29 +33,24 @@ function read(p: string): string {
 describe('W495.A apps/customer-dashboard/src/pages/usage.astro content parity', () => {
   const body = read(LIB);
 
-  it('V-171 framing pinned: \'page progressively enhances from mock-rendered SSG to real /v1/usage + /v1/usage/series fetches via inline <script>. Token absent → small banner: "Sign in to see live usage." Mock data stays visible as preview.\' — pinned so the dual SSG-mock + live-replace pattern + the no-token-keeps-preview behavior survive (drift to blank-on-no-token would lose the preview value-prop)', () => {
+  it('V-171 framing pinned: \'page progressively enhances from a neutral-placeholder SSG shell to real /v1/usage + /v1/usage/series fetches via inline <script>. Token absent → small banner: "Sign in to see live usage." Placeholders stay (no fabricated numbers).\' — pinned so the SSG-shell + live-replace pattern survives. 2026-06-24 — SSG no longer paints fabricated MOCK numbers; the no-token path keeps neutral placeholders, never a fabricated preview.', () => {
     expect(body).toMatch(
-      /\/\/ V-171 — page progressively enhances from mock-rendered SSG to\s*\n?\s*\/\/ real \/v1\/usage \+ \/v1\/usage\/series fetches via inline <script>\./,
+      /\/\/ V-171 — page progressively enhances from a neutral-placeholder SSG\s*\n?\s*\/\/ shell to real \/v1\/usage \+ \/v1\/usage\/series fetches via inline/,
     );
     expect(body).toMatch(
-      /\/\/ {3}4\. Token absent → small banner: "Sign in to see live usage\."\s*\n?\s*\/\/ {6}Mock data stays visible as preview\./,
+      /\/\/ {3}4\. Token absent → small banner: "Sign in to see live usage\."\s*\n?\s*\/\/ {6}Placeholders stay \(no fabricated numbers\)\./,
     );
   });
 
-  it('Deterministic mockSeries generator: Math.round(seedBase + Math.sin(i * 0.6) * (seedBase * 0.4) + i * (seedBase * 0.02)) + Math.max(0, v) — pinned so the sparkline render stays stable across page loads (drift to Math.random would flicker, hiding real-data integration regressions; drift to dropping Math.max(0) would render negative values on the y-axis)', () => {
-    expect(body).toMatch(
-      /function mockSeries\(seedBase: number, length: number\): number\[\] \{\s*\n?\s*const out: number\[\] = \[\];\s*\n?\s*for \(let i = 0; i < length; i \+= 1\) \{\s*\n?\s*const v = Math\.round\(seedBase \+ Math\.sin\(i \* 0\.6\) \* \(seedBase \* 0\.4\) \+ i \* \(seedBase \* 0\.02\)\);\s*\n?\s*out\.push\(Math\.max\(0, v\)\);/,
-    );
+  it('Neutral-placeholder SSG: the fabricated deterministic mockSeries generator + series config were removed (they shipped invented sparkline magnitudes); the SSG renders PLACEHOLDER_STAT "—" tiles + a FLAT_PATH baseline until live data lands', () => {
+    expect(body).not.toMatch(/function mockSeries/);
+    expect(body).not.toMatch(/const SERIES_LENGTH/);
+    expect(body).toMatch(/const PLACEHOLDER_STAT = '—';/);
+    expect(body).toMatch(/const FLAT_PATH = /);
   });
 
   it('SPARK_W = 200 and SPARK_H = 48 sparkline viewBox constants — pinned so the sparkline aspect ratio (200×48, ~4:1) stays consistent across all 4 tiles (drift to different dimensions would break the visual grid alignment)', () => {
     expect(body).toMatch(/const SPARK_W = 200;\s*\n?\s*const SPARK_H = 48;/);
-  });
-
-  it('SERIES_LENGTH = 30 mock series buckets + 4-metric seed config: navigates 40 / interacts 180 / captures 12 / session_minutes 15 — pinned so the magnitudes match expected real-world ratios (interacts >> navigates >> captures for a typical session) — drift to equal seeds would create unrealistic uniform-looking sparklines', () => {
-    expect(body).toMatch(
-      /const SERIES_LENGTH = 30;\s*\n?\s*const series = \{\s*\n?\s*navigates: mockSeries\(40, SERIES_LENGTH\),\s*\n?\s*interacts: mockSeries\(180, SERIES_LENGTH\),\s*\n?\s*captures: mockSeries\(12, SERIES_LENGTH\),\s*\n?\s*session_minutes: mockSeries\(15, SERIES_LENGTH\),\s*\n?\s*\};/,
-    );
   });
 
   it("4-tile metric grid: data-stat='session_minute' / 'navigate' / 'interact' / 'captures_total' — pinned so the at-a-glance usage view stays 4-tile (drift to dropping a tile would force customers to interpret raw numbers in a deeper view; drift to renaming would break the inline script's [data-stat=…] selectors)", () => {
@@ -65,10 +60,7 @@ describe('W495.A apps/customer-dashboard/src/pages/usage.astro content parity', 
     expect(body).toMatch(/data-stat="captures_total"/);
   });
 
-  it("Captures combined tile sums state_capture + screenshot_capture both in SSG (MOCK + ' + ' for tile) AND in live JS (totals.state_capture + totals.screenshot_capture) — pinned so the 'Captures' tile combines DOM snapshots + screenshots (drift to showing only one would hide the other from the at-a-glance view)", () => {
-    expect(body).toMatch(
-      /MOCK_USAGE_SUMMARY\.totals\.state_capture \+\s*\n?\s*MOCK_USAGE_SUMMARY\.totals\.screenshot_capture/,
-    );
+  it("Captures combined tile sums state_capture + screenshot_capture in live JS (totals.state_capture + totals.screenshot_capture) — pinned so the 'Captures' tile combines DOM snapshots + screenshots (drift to showing only one would hide the other from the at-a-glance view). The SSG shell renders a neutral placeholder, not fabricated MOCK totals.", () => {
     expect(body).toMatch(
       /capturesTotalEl\.textContent = \(\s*\n?\s*\(totals\.state_capture \|\| 0\) \+ \(totals\.screenshot_capture \|\| 0\)\s*\n?\s*\)\.toLocaleString\('en-US'\);/,
     );
@@ -101,15 +93,15 @@ describe('W495.A apps/customer-dashboard/src/pages/usage.astro content parity', 
     );
   });
 
-  it("No-token preview: !token → 'Sign in to see live usage. Showing preview data below.' + early bail (mock data already painted via SSG) — pinned so unauthenticated visitors still see meaningful UI (the mock-data preview) rather than blank cards, with a clear sign-in prompt (matches the V-183 billing-page pattern)", () => {
+  it("No-token state: !token → 'Sign in to see live usage.' + early bail (neutral placeholders painted via SSG — no fabricated numbers) — pinned so unauthenticated visitors see a clean shell + a clear sign-in prompt", () => {
     expect(body).toMatch(
-      /if \(!token\) \{\s*\n?\s*showBanner\('Sign in to see live usage\. Showing preview data below\.'\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(!token\) \{\s*\n?\s*showBanner\('Sign in to see live usage\.'\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
   });
 
-  it("Fetch-failure banner: \"Couldn't load live usage (\" + msg + '). Showing preview data below.' — pinned so a network/401/5xx error keeps the SSG-mock visible underneath while surfacing the failure reason (drift to hiding mock would leave the page empty on transient errors)", () => {
+  it("Fetch-failure banner: \"Couldn't load live usage (\" + msg + ').' — pinned so a network/401/5xx error surfaces the failure reason while the neutral placeholders stay (drift to fabricating numbers would mislead customers)", () => {
     expect(body).toMatch(
-      /showBanner\(\s*\n?\s*"Couldn't load live usage \(" \+\s*\n?\s*\(err && err\.message \? err\.message : 'network error'\) \+\s*\n?\s*'\)\. Showing preview data below\.',\s*\n?\s*\);/,
+      /showBanner\(\s*\n?\s*"Couldn't load live usage \(" \+\s*\n?\s*\(err && err\.message \? err\.message : 'network error'\) \+\s*\n?\s*'\)\.',\s*\n?\s*\);/,
     );
   });
 

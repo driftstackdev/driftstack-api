@@ -26,6 +26,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { CreateWebhookRequestSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -54,11 +55,24 @@ describe('W871 Webhook policy cross-source invariant', () => {
     );
   });
 
-  it('CRITICAL CreateWebhookRequest description field is bounded to max(200) chars. The 200-char cap keeps audit-trail descriptions readable + bounds storage cost.', () => {
+  it('CRITICAL CreateWebhookRequest description field is bounded to max(200) chars + nullable + optional. The 200-char cap keeps audit-trail descriptions readable + bounds storage cost; nullable matches the dashboard create-form posting `description: null` for a blank description (the route normalizes with `?? null`, mirroring Update).', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
     expect(p).toMatch(
-      /CreateWebhookRequestSchema = z\.object\(\{[\s\S]+?description: z\.string\(\)\.max\(200\)\.optional\(\)/,
+      /CreateWebhookRequestSchema = z\.object\(\{[\s\S]+?description: z\.string\(\)\.max\(200\)\.nullable\(\)\.optional\(\)/,
     );
+  });
+
+  it('CreateWebhookRequestSchema accepts description: null (dashboard blank-description path) as well as undefined + a string, and rejects > 200 chars', () => {
+    const base = {
+      url: 'https://example.com/webhook',
+      events: ['session.completed'] as const,
+    };
+    expect(CreateWebhookRequestSchema.safeParse({ ...base, description: null }).success).toBe(true);
+    expect(CreateWebhookRequestSchema.safeParse({ ...base }).success).toBe(true);
+    expect(CreateWebhookRequestSchema.safeParse({ ...base, description: 'ok' }).success).toBe(true);
+    expect(
+      CreateWebhookRequestSchema.safeParse({ ...base, description: 'x'.repeat(201) }).success,
+    ).toBe(false);
   });
 
   // ─── UpdateWebhookRequestSchema same constraints ─────────────

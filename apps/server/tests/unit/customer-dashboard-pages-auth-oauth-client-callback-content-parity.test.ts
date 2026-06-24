@@ -42,10 +42,10 @@ describe('customer-dashboard auth/oauth-client/callback content parity', () => {
     expect(body).toMatch(/PKCE verifier cookie round-trip is automatic via credentials:'include'/);
   });
 
-  it("Collision-pending-verification UI pinned: 'Check your inbox' card + merge-email + 60-minute window. Drift to dropping the 60-min window would mislead customers about how long they have to click the verify link", () => {
+  it("Collision-pending-verification UI pinned: 'Check your inbox' card + neutral 'the email on your existing account' (the specific address was never populated → blank gap; reworded to drop the address claim) + 60-minute window. Drift to dropping the 60-min window would mislead customers about how long they have to click the verify link", () => {
     expect(body).toMatch(/data-success-merge/);
     expect(body).toMatch(/Check your inbox/);
-    expect(body).toMatch(/data-merge-email/);
+    expect(body).toMatch(/We sent a confirmation link to the email on your existing account/);
     expect(body).toMatch(/data-merge-provider/);
     expect(body).toMatch(/expires in <span data-merge-window class="font-mono">60 minutes/);
   });

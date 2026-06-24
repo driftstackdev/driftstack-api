@@ -27,17 +27,17 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
     expect(existsSync(PAGE)).toBe(true);
   });
 
-  it('CRITICAL V-171 anchor framing pinned. The "page progressively enhances from mock-rendered SSG to real /v1/usage + /v1/usage/series fetches via inline <script>" wording is the canonical V-171 explanation.', () => {
+  it('CRITICAL V-171 anchor framing pinned. The "page progressively enhances from a neutral-placeholder SSG shell to real /v1/usage + /v1/usage/series fetches via inline <script>" wording is the canonical V-171 explanation. (2026-06-24 — SSG no longer paints fabricated MOCK_USAGE_SUMMARY numbers.)', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/V-171 — page progressively enhances from mock-rendered SSG to/);
-    expect(p).toMatch(/real \/v1\/usage \+ \/v1\/usage\/series fetches via inline <script>/);
+    expect(p).toMatch(/V-171 — page progressively enhances from a neutral-placeholder SSG/);
+    expect(p).toMatch(/real \/v1\/usage \+ \/v1\/usage\/series fetches via inline/);
   });
 
-  it('CRITICAL 5-step render-path framing pinned. The numbered (1) Astro mock → (2) DOMContentLoaded → (3) token-present fetch → (4) token-absent banner → (5) fetch-fails banner sequence is the load-bearing progressive-enhancement explanation.', () => {
+  it('CRITICAL 5-step render-path framing pinned. The numbered (1) Astro neutral-placeholder shell → (2) DOMContentLoaded → (3) token-present fetch → (4) token-absent banner → (5) fetch-fails banner sequence is the load-bearing progressive-enhancement explanation.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/1\. Astro emits the static HTML using MOCK_USAGE_SUMMARY/);
+    expect(p).toMatch(/1\. Astro emits the static HTML with neutral placeholders/);
     expect(p).toMatch(/2\. <script is:inline> runs on DOMContentLoaded, reads/);
     expect(p).toMatch(/3\. Token present → fetch totals \(\/v1\/usage\) \+ series/);
     expect(p).toMatch(/4\. Token absent → small banner: "Sign in to see live usage\."/);
@@ -79,10 +79,9 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
     expect(p).toMatch(/prod builds fail fast when the env var is unset \(W192\)/);
   });
 
-  it('CRITICAL parallel-fetch Promise.all([/v1/usage, /v1/usage/series?days=30]) pinned. The 30-day series window matches the mock SERIES_LENGTH = 30 + UI sparkline width.', () => {
+  it('CRITICAL parallel-fetch Promise.all([/v1/usage, /v1/usage/series?days=30]) pinned. The 30-day series window is the live request that populates the sparklines (the fabricated SSG SERIES_LENGTH generator was removed).', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/const SERIES_LENGTH = 30;/);
     expect(p).toMatch(
       /fetch\(apiBaseUrl \+ '\/v1\/usage', \{ headers, credentials: 'include' \}\)/,
     );
@@ -101,15 +100,10 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
     expect(p).toMatch(/data-stat="captures_total"/);
   });
 
-  it('CRITICAL Captures-combined-tile sums state_capture + screenshot_capture. Drift to splitting into 2 tiles would force a 5-tile grid that overflows the responsive breakpoint.', () => {
+  it('CRITICAL Captures-combined-tile sums state_capture + screenshot_capture in the live handler. Drift to splitting into 2 tiles would force a 5-tile grid that overflows the responsive breakpoint. (The SSG shell renders a neutral placeholder — no fabricated MOCK totals.)', () => {
     const p = read(PAGE);
 
-    // SSG version.
-    expect(p).toMatch(
-      /MOCK_USAGE_SUMMARY\.totals\.state_capture \+\s*\n\s+MOCK_USAGE_SUMMARY\.totals\.screenshot_capture/,
-    );
-
-    // Inline-script version.
+    // Inline-script (live) version.
     expect(p).toMatch(
       /capturesTotalEl\.textContent = \(\s*\n\s+\(totals\.state_capture \|\| 0\) \+ \(totals\.screenshot_capture \|\| 0\)\s*\n\s+\)\.toLocaleString\('en-US'\)/,
     );
@@ -122,12 +116,13 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
     expect(p).toMatch(/<dt class="text-sm text-tk-ink-3">DOM snapshots<\/dt>/);
   });
 
-  it('CRITICAL deterministic-mock-series framing pinned. The "Generated deterministically (no Math.random) so the rendered SVG is stable across page loads at scaffolding time — easier to spot real-data integration regressions later" wording explains WHY mock series uses sin() + seed.', () => {
+  it('CRITICAL neutral-placeholder SSG framing pinned. 2026-06-24 — the fabricated deterministic sin()+seed mockSeries generator was removed (it shipped invented numbers to every customer); the SSG sparklines paint a flat baseline (FLAT_PATH) until the live series replaces them, and tiles render an em-dash placeholder.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /Generated deterministically \(no Math\.random\)\s*\n\/\/ so the rendered SVG is stable across page loads at scaffolding/,
-    );
+    expect(p).toMatch(/A flat\s*\n\/\/ baseline path keeps the sparkline SVGs from collapsing/);
+    expect(p).toMatch(/const PLACEHOLDER_STAT = '—';/);
+    expect(p).toMatch(/const FLAT_PATH = /);
+    expect(p).not.toMatch(/function mockSeries/);
   });
 
   it('CRITICAL sparkline SVG dimensions pinned — SPARK_W = 200 + SPARK_H = 48. Drift to different dimensions would shift the tile layout breakpoints.', () => {
@@ -137,15 +132,10 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
     expect(p).toMatch(/const SPARK_H = 48;/);
   });
 
-  it('CRITICAL sparkline path generator — `M x.toFixed(1) y.toFixed(1)` then `L x y` for subsequent points. Decimal-1 precision keeps the SVG path string small + visually identical to integer.', () => {
+  it('CRITICAL live sparkline path generator — `M x.toFixed(1) y.toFixed(1)` then `L x y` for subsequent points. Decimal-1 precision keeps the SVG path string small + visually identical to integer. (The SSG frontmatter generator was removed; only the live-handler version remains.)', () => {
     const p = read(PAGE);
 
-    // TS frontmatter version.
-    expect(p).toMatch(
-      /return `\$\{i === 0 \? 'M' : 'L'\} \$\{x\.toFixed\(1\)\} \$\{y\.toFixed\(1\)\}`/,
-    );
-
-    // Inline-script version.
+    // Inline-script (live) version.
     expect(p).toMatch(
       /return \(i === 0 \? 'M' : 'L'\) \+ ' ' \+ x\.toFixed\(1\) \+ ' ' \+ y\.toFixed\(1\)/,
     );
@@ -170,19 +160,18 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
     );
   });
 
-  it("CRITICAL no-token preview-fallback banner pinned — 'Sign in to see live usage. Showing preview data below.'", () => {
+  it("CRITICAL no-token banner pinned — 'Sign in to see live usage.' (No 'preview data below' claim: the SSG shell shows neutral placeholders, not fabricated numbers.)", () => {
     const p = read(PAGE);
-    expect(p).toMatch(
-      /showBanner\('Sign in to see live usage\. Showing preview data below\.'\);\s*\n\s+return;/,
-    );
+    expect(p).toMatch(/showBanner\('Sign in to see live usage\.'\);\s*\n\s+return;/);
+    expect(p).not.toMatch(/Showing preview data below/);
   });
 
-  it("CRITICAL fetch-error banner with HTTP-status surfacing pinned — `Couldn't load live usage (<HTTP <status>>). Showing preview data below.` Drift to silent-fail would lose debugging visibility.", () => {
+  it("CRITICAL fetch-error banner with HTTP-status surfacing pinned — `Couldn't load live usage (<HTTP <status>>).` Drift to silent-fail would lose debugging visibility. (No 'preview data below' claim — placeholders, not fabricated numbers.)", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/"Couldn't load live usage \(" \+/);
     expect(p).toMatch(/\(err && err\.message \? err\.message : 'network error'\)/);
-    expect(p).toMatch(/'\)\. Showing preview data below\.'/);
+    expect(p).toMatch(/'\)\.',/);
   });
 
   it("CRITICAL summary/series rejection messages distinguish source — 'summary HTTP <status>' vs 'series HTTP <status>'. Drift to a generic message would hide WHICH of the two parallel fetches failed.", () => {
@@ -206,22 +195,17 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
     expect(p).toMatch(/buckets\.map\(\(b\) => \(b\.totals && b\.totals\.interact\) \|\| 0\)/);
   });
 
-  it('CRITICAL toLocaleString("en-US") number formatting pinned. Drift to bare toString() would lose thousands-separator commas; drift to a different locale would change comma-vs-period.', () => {
+  it('CRITICAL toLocaleString("en-US") number formatting pinned in the live handler. Drift to bare toString() would lose thousands-separator commas; drift to a different locale would change comma-vs-period. (SSG tiles render neutral placeholders, so the localizers now live only in the live-replace path + the rate-limit card.)', () => {
     const p = read(PAGE);
 
     const localizers = (p.match(/\.toLocaleString\('en-US'\)/g) ?? []).length;
-    expect(localizers).toBeGreaterThanOrEqual(5);
+    expect(localizers).toBeGreaterThanOrEqual(3);
   });
 
-  it('CRITICAL period + tier display pinned — `<start> → <end> · <tier> tier`. Drift to a different separator would clash with the rest of the dashboard pages.', () => {
+  it('CRITICAL live period + tier display pinned — `<start> → <end> · <tier> tier`. Drift to a different separator would clash with the rest of the dashboard pages. (The SSG shell renders a neutral "<placeholder> tier · current billing period" line until live data replaces it.)', () => {
     const p = read(PAGE);
 
-    // SSG version.
-    expect(p).toMatch(
-      /\{fmtIsoDay\(MOCK_USAGE_SUMMARY\.period_start\)\} → \{fmtIsoDay\(MOCK_USAGE_SUMMARY\.period_end\)\}/,
-    );
-
-    // Inline-script version.
+    // Inline-script (live) version.
     expect(p).toMatch(
       /periodEl\.textContent = start \+ ' → ' \+ end \+ ' · ' \+ summary\.tier \+ ' tier';/,
     );

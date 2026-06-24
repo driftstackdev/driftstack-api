@@ -232,8 +232,10 @@ describe('sessions page — local integration', () => {
     await flush();
     // `now` comes from /v1/sessions, so it renders even though usage failed…
     expect(text(window, '[data-field="meter-now"]')).toBe('3');
-    // …and the cap is left at the baked-in SSG mock value (8), not blanked.
-    expect(text(window, '[data-field="meter-cap"]')).toBe('8');
+    // …and the cap stays at the neutral SSG placeholder ("—"), since the SSG
+    // no longer bakes a fabricated cap and the usage fetch (which supplies the
+    // real cap) failed. (Pre-2026-06-24 this baked in a mock "8".)
+    expect(text(window, '[data-field="meter-cap"]')).toBe('—');
     // sessions loaded fine, so no error banner.
     expect(isHidden(window, '[data-banner]')).toBe(true);
   });
