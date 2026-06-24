@@ -42,6 +42,24 @@ describe('loadConfig', () => {
     ).toBe(12_288);
   });
 
+  it('concurrent-relay + concurrent-upload COUNT caps — prod defaults 16 / 4; tunable via env (hardening 2026-06-24)', () => {
+    const base = {
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+    };
+    // Defaults (the prod posture) when the env vars are unset.
+    expect(loadConfig(base).agentRelayMaxAccountInFlight).toBe(16);
+    expect(loadConfig(base).agentUploadMaxAccountInFlightCount).toBe(4);
+    // Operator overrides coerced from env strings to numbers.
+    expect(
+      loadConfig({ ...base, AGENT_RELAY_MAX_ACCOUNT_INFLIGHT: '2' }).agentRelayMaxAccountInFlight,
+    ).toBe(2);
+    expect(
+      loadConfig({ ...base, AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT: '1' })
+        .agentUploadMaxAccountInFlightCount,
+    ).toBe(1);
+  });
+
   it('boolean env vars use strict === \'true\' parsing (NOT z.coerce.boolean which makes "false" → true)', () => {
     const base = {
       DATABASE_URL: 'postgres://u:p@localhost:5432/db',

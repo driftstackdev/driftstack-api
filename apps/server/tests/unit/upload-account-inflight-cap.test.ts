@@ -43,15 +43,21 @@ interface FilesBody {
 }
 
 // Tiny injected cap + chunk so we cross the boundary with KB payloads, never MB.
-// CHUNK × CHUNKS_TO_FILL == CAP exactly → the filling uploads are all ACCEPTED
-// (reserve, not reject), and one more tiny upload then tips it OVER.
+// Hardening (2026-06-24): the route now reserves the account's in-flight BYTE cap
+// against the ENCODED (base64) length BEFORE decoding (so a copy is never
+// materialised for an over-cap upload). The math below is therefore in ENCODED
+// terms: CHUNK_ENCODED × CHUNKS_TO_FILL == CAP exactly → the filling uploads are
+// all ACCEPTED (reserve, not reject), and one more tiny upload then tips it OVER.
 const CHUNK_BYTES = 4 * 1024; // 4 KiB decoded per filling upload
-const CHUNKS_TO_FILL = 3; // 3 × 4 KiB
-const CAP_BYTES = CHUNK_BYTES * CHUNKS_TO_FILL; // 12 KiB — the injected per-account cap
+const CHUNKS_TO_FILL = 3; // 3 filling uploads
 
 // base64 payloads. Buffer.alloc(CHUNK_BYTES) decodes back to exactly CHUNK_BYTES.
 const CHUNK_B64 = Buffer.alloc(CHUNK_BYTES, 0x41).toString('base64'); // decodes to exactly 4 KiB
 const SMALL_B64 = Buffer.from('hello').toString('base64'); // "hello" → 5 bytes (tips a full account over)
+// The cap is the ENCODED length of CHUNKS_TO_FILL filling uploads — exactly what
+// the route reserves (dataB64.length) for those uploads, so they fill to the cap
+// and a SMALL_B64 probe then crosses it.
+const CAP_BYTES = CHUNK_B64.length * CHUNKS_TO_FILL; // injected per-account cap (encoded bytes)
 
 const HANDLE_FOR = (
   name: string,
@@ -333,5 +339,75 @@ describe('POST /v1/agent-sessions/:id/files — per-account in-flight cap (injec
 
     fx.fleetControlRegistry.get('node-isolation')!.close('test teardown');
     await Promise.all(hanging);
+  });
+});
+
+// Hardening (2026-06-24, LOW defense-in-depth) — the per-account concurrent-upload
+// COUNT cap, ALONGSIDE the byte cap. A flood of small uploads (well under the 512 MB
+// byte cap) can still pin many correlator slots; this bounds the NUMBER of
+// simultaneous upload relays. Injectable via uploadMaxAccountInFlightCount (prod 4).
+describe('POST /v1/agent-sessions/:id/files — per-account concurrent-upload COUNT cap (injectable; prod 4)', () => {
+  const COUNT_CAP = 2;
+  // A byte cap large enough that the COUNT cap trips FIRST (so we exercise the
+  // count branch in isolation, not the byte branch).
+  const BIG_BYTE_CAP = 1024 * 1024 * 1024;
+  let fx: TestAppFixture;
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('CAP concurrent uploads are accepted; the (CAP+1)-th is shed with the count reason (never relayed)', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      enableFleetControlPlane: true,
+      uploadMaxAccountInFlightBytes: BIG_BYTE_CAP,
+      uploadMaxAccountInFlightCount: COUNT_CAP,
+    });
+    const id = await createSessionWith(fx, fx.plaintext);
+    const relayed: string[] = [];
+    registerEchoNode(fx, 'node-count-hang', { hangName: 'hang.bin', relayed });
+    await fx.agentSessionsRepo!.setNodeId(id, 'node-count-hang');
+
+    // Fill to EXACTLY the count cap with small hanging uploads (tiny bytes → the
+    // byte cap is nowhere near; only the count cap matters).
+    const hanging = Array.from({ length: COUNT_CAP }, () =>
+      postUpload(fx, id, fx.plaintext, 'hang.bin', SMALL_B64),
+    );
+    await waitFor(
+      () => relayed.filter((n) => n === 'hang.bin').length === COUNT_CAP,
+      'count-cap saturated',
+    );
+
+    const relayedBefore = relayed.length;
+    const res = await postUpload(fx, id, fx.plaintext, 'overflow.bin', SMALL_B64);
+    expect(res.statusCode).toBe(200);
+    const body = res.json<FilesBody>();
+    expect(body.status).toBe('error');
+    expect(body.handle).toBeNull();
+    // The COUNT-cap reason (distinct from the 512 MB byte-cap reason).
+    expect(body.reason).toMatch(/too many concurrent uploads/i);
+    expect(relayed.length).toBe(relayedBefore); // never relayed
+    expect(relayed).not.toContain('overflow.bin');
+
+    fx.fleetControlRegistry.get('node-count-hang')!.close('test teardown');
+    await Promise.all(hanging);
+  });
+
+  it('releases on every outcome — far more sequential uploads than the count cap all succeed', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      enableFleetControlPlane: true,
+      uploadMaxAccountInFlightBytes: BIG_BYTE_CAP,
+      uploadMaxAccountInFlightCount: COUNT_CAP,
+    });
+    const id = await createSessionWith(fx, fx.plaintext);
+    registerEchoNode(fx, 'node-count-release');
+    await fx.agentSessionsRepo!.setNodeId(id, 'node-count-release');
+    // Sequential: count peaks at 1 each time → the finally must release the count.
+    for (let i = 0; i < COUNT_CAP * 4; i += 1) {
+      const res = await postUpload(fx, id, fx.plaintext, `seq-${i}.bin`, CHUNK_B64);
+      expect(res.statusCode).toBe(200);
+      expect(res.json<FilesBody>().status).toBe('ok');
+    }
   });
 });

@@ -400,6 +400,20 @@ export interface AppDeps {
    */
   agentUploadMaxAccountInFlightBytes?: number;
   /**
+   * Hardening (2026-06-24, LOW defense-in-depth) — per-account cap on CONCURRENT
+   * in-flight control-relay requests (count) for the cookies/set, history,
+   * downloads-list + downloads-content routes (which carry only the `global`
+   * RATE limiter). Omit → the route's default of 16. Test-injectable so unit
+   * tests can trip it with a cap of 1–2.
+   */
+  agentRelayMaxAccountInFlight?: number;
+  /**
+   * Hardening (2026-06-24, LOW defense-in-depth) — per-account cap on the COUNT
+   * of CONCURRENT in-flight uploads for POST /v1/agent-sessions/:id/files,
+   * alongside the byte cap. Omit → the route's default of 4. Test-injectable.
+   */
+  agentUploadMaxAccountInFlightCount?: number;
+  /**
    * Arc 1 sub-slice 6.3 (v2-#6) — bundled-LLM settings reader.
    * When wired (bootstrap-side requires the deploymentFallbackKey
    * to be set; otherwise the bundled-LLM leg has nothing to consume),
@@ -1296,6 +1310,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // the route honours an operator-tuned ceiling.
       ...(deps.agentUploadMaxAccountInFlightBytes !== undefined
         ? { uploadMaxAccountInFlightBytes: deps.agentUploadMaxAccountInFlightBytes }
+        : {}),
+      // Hardening (2026-06-24) — per-account concurrent-relay COUNT cap + concurrent-
+      // upload COUNT cap. Both default at the route layer; pass through only when
+      // wired (config/tests) so the route honours an override.
+      ...(deps.agentRelayMaxAccountInFlight !== undefined
+        ? { relayMaxAccountInFlight: deps.agentRelayMaxAccountInFlight }
+        : {}),
+      ...(deps.agentUploadMaxAccountInFlightCount !== undefined
+        ? { uploadMaxAccountInFlightCount: deps.agentUploadMaxAccountInFlightCount }
         : {}),
       // Arc 1 sub-slice 6.3 (v2-#6) — bundled-LLM consent gate. When
       // wired AND customer has consent=true AND BYOK path didn't

@@ -533,6 +533,28 @@ export interface AgentSessionsRoutesDeps {
    * 1024 when omitted (the prod posture, unchanged).
    */
   uploadMaxAccountInFlightBytes?: number;
+  /**
+   * Hardening (2026-06-24, LOW defense-in-depth) — per-ACCOUNT cap on CONCURRENT
+   * in-flight RELAY requests (count) across the control-relay routes that only
+   * carry the `global` RATE limiter today (POST /:id/cookies/set, POST
+   * /:id/history, GET /:id/downloads, GET /:id/downloads/content). The rate
+   * limiter bounds requests/window, NOT how many can be awaiting a 10–30s relay
+   * at once — one account could burst dozens of concurrent handlers, each pinning
+   * a correlator slot + an HTTP connection for the relay timeout. This count cap
+   * sheds the (N+1)-th with a discriminated busy outcome (no relay). Reserved
+   * before the await, released in the relay's finally (any outcome). Test-
+   * injectable so unit tests trip it with a cap of 1–2. Default 16 when omitted.
+   */
+  relayMaxAccountInFlight?: number;
+  /**
+   * Hardening (2026-06-24, LOW defense-in-depth) — per-ACCOUNT cap on CONCURRENT
+   * in-flight UPLOAD requests (COUNT) for POST /:id/files, alongside the existing
+   * BYTE cap (uploadMaxAccountInFlightBytes). The byte cap bounds total volume;
+   * this bounds the number of simultaneous upload relays so a flood of small
+   * uploads can't pin many correlator slots at once. Reserved/released in the same
+   * finally as the byte reservation. Test-injectable. Default 4 when omitted.
+   */
+  uploadMaxAccountInFlightCount?: number;
 }
 
 /** Config for the session-create → harness `sessionAssign` dispatch (see
@@ -981,6 +1003,8 @@ export function registerAgentSessionsRoutes(
     driverSessionsRepo,
     r2,
     uploadMaxAccountInFlightBytes = 512 * 1024 * 1024,
+    relayMaxAccountInFlight = 16,
+    uploadMaxAccountInFlightCount = 4,
   } = deps;
 
   /** LK.4 — auto-mint a LiveKit token for the just-created (or
@@ -1556,6 +1580,38 @@ export function registerAgentSessionsRoutes(
     },
   );
 
+  // Hardening (2026-06-24, LOW defense-in-depth) — per-ACCOUNT cap on the number of
+  // CONCURRENT in-flight control-relay requests. The four relay routes below
+  // (cookies/set, history, downloads list, downloads content) carry only the
+  // `global` RATE limiter, which bounds requests/window but NOT how many handlers
+  // can simultaneously be awaiting a 10–30s relay — so one account could burst
+  // dozens of concurrent handlers, each pinning a correlator slot + an HTTP
+  // connection for the whole relay timeout. This shared per-account COUNT limiter
+  // sheds the (cap+1)-th request with a discriminated busy outcome BEFORE relaying.
+  // Reserve on accept (reserveRelaySlot), release in the route's finally regardless
+  // of outcome. In-memory per-instance (prod = single node; a multi-instance deploy
+  // would move this to Redis), mirroring the upload byte cap above. Default 16,
+  // test-injectable via deps.relayMaxAccountInFlight so a unit test trips it at 1–2.
+  const RELAY_MAX_ACCOUNT_INFLIGHT = relayMaxAccountInFlight;
+  const accountRelayInFlight = new Map<string, number>();
+  /** Reserve one concurrent-relay slot for `acct`. Returns a `release()` (decrement;
+   *  delete at 0) when under the cap, or `null` when the account is already at the
+   *  cap (caller returns its route-specific busy outcome WITHOUT relaying). */
+  function reserveRelaySlot(acct: string): (() => void) | null {
+    const inFlight = accountRelayInFlight.get(acct) ?? 0;
+    if (inFlight >= RELAY_MAX_ACCOUNT_INFLIGHT) return null;
+    accountRelayInFlight.set(acct, inFlight + 1);
+    return () => {
+      const cur = accountRelayInFlight.get(acct) ?? 1;
+      const next = cur - 1;
+      if (next <= 0) accountRelayInFlight.delete(acct);
+      else accountRelayInFlight.set(acct, next);
+    };
+  }
+  // The discriminated reason the four routes surface when the account is at its
+  // concurrent-relay cap (shared so the GUI/clients see one consistent message).
+  const RELAY_BUSY_REASON = 'too many concurrent requests for this account — retry shortly';
+
   // Cookie-IMPORT — the WRITE-twin of GET /:id/cookies. Relays a customer's exported
   // jar (the EXACT CookieSchema shape the read/Export emits — a cookies.json
   // round-trips 1:1) into the running session's cookie store over the node's live
@@ -1626,14 +1682,25 @@ export function registerAgentSessionsRoutes(
           reason: 'session node is not connected',
         };
       }
-      const outcome = await conn.setCookies(randomUUID(), rec.id, parsed.data.cookies);
-      if (outcome.status === 'ok') {
-        return { status: 'ok' as const };
+      // Hardening: shed the request (discriminated error, no relay) when this
+      // account already has RELAY_MAX_ACCOUNT_INFLIGHT relays awaiting; otherwise
+      // reserve a slot and release it in the finally (any outcome).
+      const releaseRelay = reserveRelaySlot(rec.accountId);
+      if (releaseRelay === null) {
+        return { status: 'error' as const, reason: RELAY_BUSY_REASON };
       }
-      if (outcome.status === 'error') {
-        return { status: 'error' as const, reason: outcome.message };
+      try {
+        const outcome = await conn.setCookies(randomUUID(), rec.id, parsed.data.cookies);
+        if (outcome.status === 'ok') {
+          return { status: 'ok' as const };
+        }
+        if (outcome.status === 'error') {
+          return { status: 'error' as const, reason: outcome.message };
+        }
+        return { status: 'timeout' as const };
+      } finally {
+        releaseRelay();
       }
-      return { status: 'timeout' as const };
     },
   );
 
@@ -1699,14 +1766,24 @@ export function registerAgentSessionsRoutes(
           reason: 'session node is not connected',
         };
       }
-      const outcome = await conn.navigateHistory(randomUUID(), rec.id, parsed.data.direction);
-      if (outcome.status === 'ok') {
-        return { status: 'ok' as const };
+      // Hardening: per-account concurrent-relay cap (reserve before the await,
+      // release in the finally; shed with a discriminated error when at the cap).
+      const releaseRelay = reserveRelaySlot(rec.accountId);
+      if (releaseRelay === null) {
+        return { status: 'error' as const, reason: RELAY_BUSY_REASON };
       }
-      if (outcome.status === 'error') {
-        return { status: 'error' as const, reason: outcome.message };
+      try {
+        const outcome = await conn.navigateHistory(randomUUID(), rec.id, parsed.data.direction);
+        if (outcome.status === 'ok') {
+          return { status: 'ok' as const };
+        }
+        if (outcome.status === 'error') {
+          return { status: 'error' as const, reason: outcome.message };
+        }
+        return { status: 'timeout' as const };
+      } finally {
+        releaseRelay();
       }
-      return { status: 'timeout' as const };
     },
   );
 
@@ -1731,8 +1808,17 @@ export function registerAgentSessionsRoutes(
   // Redis). Reserved on accept, released in the relay's finally (any outcome). The
   // threshold is config-sourced (AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES; default
   // 512 MB) + test-injectable via deps.uploadMaxAccountInFlightBytes.
+  // The byte reservation is taken on the ENCODED (base64) length BEFORE decoding, so
+  // the cap is consulted before a large copy is materialised (hardening 2026-06-24).
   const UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES = uploadMaxAccountInFlightBytes;
   const accountUploadInFlightBytes = new Map<string, number>();
+  // Hardening (2026-06-24, LOW defense-in-depth): per-ACCOUNT cap on the NUMBER of
+  // CONCURRENT in-flight uploads, alongside the byte cap — so a flood of small
+  // uploads can't pin many correlator slots at once even while well under 512 MB.
+  // Reserved/released in the SAME finally as the byte reservation. Default 4,
+  // test-injectable via deps.uploadMaxAccountInFlightCount.
+  const UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT = uploadMaxAccountInFlightCount;
+  const accountUploadInFlightCount = new Map<string, number>();
   const UploadFileBodySchema = z.object({
     name: z.string().min(1).max(255),
     mime: z.string().min(1).max(255),
@@ -1762,49 +1848,22 @@ export function registerAgentSessionsRoutes(
       }
       const parsed = UploadFileBodySchema.safeParse(req.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
-      // Decode to validate base64 + enforce the 64 MiB cap on the DECODED size
-      // (a client error → 400, NOT a discriminated relay status). Buffer.from is
-      // lenient (tolerates whitespace-wrapped base64); re-encoding to clean base64
-      // for the wire guarantees the harness's strict decoder accepts it.
-      const bytes = Buffer.from(parsed.data.dataB64, 'base64');
-      if (bytes.length === 0) {
-        throw new BadRequestError('Uploaded file is empty (dataB64 decoded to 0 bytes).');
-      }
-      if (bytes.length > UPLOAD_MAX_FILE_BYTES) {
-        throw new BadRequestError('Uploaded file is too large. Max 64 MiB.');
-      }
-      // Control plane not wired (stateless deploy / no fleet registry).
-      if (fleetControlRegistry === undefined) {
-        return {
-          handle: null,
-          status: 'unavailable' as const,
-          reason: 'fleet control plane not enabled',
-        };
-      }
-      // The upload targets the LIVE session's jail — a closed or never-dispatched
-      // session has none.
-      if (rec.status !== 'active' || rec.nodeId === null || rec.nodeId === undefined) {
-        return {
-          handle: null,
-          status: 'unavailable' as const,
-          reason: 'session is not live on a node',
-        };
-      }
-      const conn = fleetControlRegistry.get(rec.nodeId);
-      if (conn === undefined) {
-        return {
-          handle: null,
-          status: 'unavailable' as const,
-          reason: 'session node is not connected',
-        };
-      }
-      // Founder safeguard: reject when this upload would push the account's
-      // CONCURRENT in-flight upload bytes past 512 MB (a discriminated error so the
-      // GUI shows the reason, not an HTTP-error). Reserve before relay; release in
-      // the finally regardless of outcome.
+      // Founder safeguard + hardening: reject when this upload would push the
+      // account past its CONCURRENT in-flight upload BYTE cap (512 MB) OR its
+      // concurrent-upload COUNT cap — a discriminated error so the GUI shows the
+      // reason, not an HTTP-error. The cap is consulted on the ENCODED (base64)
+      // length (parsed.data.dataB64.length) BEFORE the Buffer.from decode below, so
+      // a large decoded copy is never materialised for an upload that's already over
+      // the ceiling. Reserve here; release BOTH counters in the finally regardless of
+      // outcome (the discriminated unavailable/empty/relay returns all run inside the
+      // try so the reservation is always freed). Reserving before the fleet/decode
+      // checks keeps the empty-file 400 winning over the unavailable states (the
+      // existing contract), since both run inside the try with the empty check first.
       const acct = rec.accountId;
-      const inFlight = accountUploadInFlightBytes.get(acct) ?? 0;
-      if (inFlight + bytes.length > UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES) {
+      const reserveBytes = parsed.data.dataB64.length;
+      const inFlightBytes = accountUploadInFlightBytes.get(acct) ?? 0;
+      const inFlightCount = accountUploadInFlightCount.get(acct) ?? 0;
+      if (inFlightBytes + reserveBytes > UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES) {
         return {
           handle: null,
           status: 'error' as const,
@@ -1812,8 +1871,56 @@ export function registerAgentSessionsRoutes(
             'account upload limit reached: at most 512 MB of uploads in flight at once — wait for in-progress uploads to finish',
         };
       }
-      accountUploadInFlightBytes.set(acct, inFlight + bytes.length);
+      if (inFlightCount + 1 > UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT) {
+        return {
+          handle: null,
+          status: 'error' as const,
+          reason:
+            'account upload limit reached: too many concurrent uploads in flight — wait for in-progress uploads to finish',
+        };
+      }
+      accountUploadInFlightBytes.set(acct, inFlightBytes + reserveBytes);
+      accountUploadInFlightCount.set(acct, inFlightCount + 1);
       try {
+        // Decode to validate base64 + enforce the 64 MiB cap on the DECODED size
+        // (a client error → 400, NOT a discriminated relay status). Buffer.from is
+        // lenient (tolerates whitespace-wrapped base64); re-encoding to clean base64
+        // for the wire guarantees the harness's strict decoder accepts it. The empty
+        // + too-large 400s are checked FIRST (before the unavailable states) so a
+        // malformed client payload always 400s, never masquerades as an inert relay
+        // status — and the in-flight reservation above is already freed by the finally.
+        const bytes = Buffer.from(parsed.data.dataB64, 'base64');
+        if (bytes.length === 0) {
+          throw new BadRequestError('Uploaded file is empty (dataB64 decoded to 0 bytes).');
+        }
+        if (bytes.length > UPLOAD_MAX_FILE_BYTES) {
+          throw new BadRequestError('Uploaded file is too large. Max 64 MiB.');
+        }
+        // Control plane not wired (stateless deploy / no fleet registry).
+        if (fleetControlRegistry === undefined) {
+          return {
+            handle: null,
+            status: 'unavailable' as const,
+            reason: 'fleet control plane not enabled',
+          };
+        }
+        // The upload targets the LIVE session's jail — a closed or never-dispatched
+        // session has none.
+        if (rec.status !== 'active' || rec.nodeId === null || rec.nodeId === undefined) {
+          return {
+            handle: null,
+            status: 'unavailable' as const,
+            reason: 'session is not live on a node',
+          };
+        }
+        const conn = fleetControlRegistry.get(rec.nodeId);
+        if (conn === undefined) {
+          return {
+            handle: null,
+            status: 'unavailable' as const,
+            reason: 'session node is not connected',
+          };
+        }
         const outcome = await conn.requestUpload(
           randomUUID(),
           rec.id,
@@ -1829,10 +1936,14 @@ export function registerAgentSessionsRoutes(
         }
         return { handle: null, status: 'timeout' as const };
       } finally {
-        const cur = accountUploadInFlightBytes.get(acct) ?? bytes.length;
-        const next = cur - bytes.length;
-        if (next <= 0) accountUploadInFlightBytes.delete(acct);
-        else accountUploadInFlightBytes.set(acct, next);
+        const curBytes = accountUploadInFlightBytes.get(acct) ?? reserveBytes;
+        const nextBytes = curBytes - reserveBytes;
+        if (nextBytes <= 0) accountUploadInFlightBytes.delete(acct);
+        else accountUploadInFlightBytes.set(acct, nextBytes);
+        const curCount = accountUploadInFlightCount.get(acct) ?? 1;
+        const nextCount = curCount - 1;
+        if (nextCount <= 0) accountUploadInFlightCount.delete(acct);
+        else accountUploadInFlightCount.set(acct, nextCount);
       }
     },
   );
@@ -1878,22 +1989,32 @@ export function registerAgentSessionsRoutes(
           reason: 'session node is not connected',
         };
       }
-      const outcome = await conn.requestDownloadList(randomUUID(), rec.id);
-      if (outcome.status === 'list') {
-        return { files: outcome.files, status: 'ok' as const };
+      // Hardening: per-account concurrent-relay cap (reserve before the await,
+      // release in the finally; shed with a discriminated error when at the cap).
+      const releaseRelay = reserveRelaySlot(rec.accountId);
+      if (releaseRelay === null) {
+        return { files: null, status: 'error' as const, reason: RELAY_BUSY_REASON };
       }
-      if (outcome.status === 'error') {
-        return { files: null, status: 'error' as const, reason: outcome.message };
+      try {
+        const outcome = await conn.requestDownloadList(randomUUID(), rec.id);
+        if (outcome.status === 'list') {
+          return { files: outcome.files, status: 'ok' as const };
+        }
+        if (outcome.status === 'error') {
+          return { files: null, status: 'error' as const, reason: outcome.message };
+        }
+        if (outcome.status === 'data') {
+          // A fetch reply for a list request — never expected; treat as a failure.
+          return {
+            files: null,
+            status: 'error' as const,
+            reason: 'unexpected data frame for list request',
+          };
+        }
+        return { files: null, status: 'timeout' as const };
+      } finally {
+        releaseRelay();
       }
-      if (outcome.status === 'data') {
-        // A fetch reply for a list request — never expected; treat as a failure.
-        return {
-          files: null,
-          status: 'error' as const,
-          reason: 'unexpected data frame for list request',
-        };
-      }
-      return { files: null, status: 'timeout' as const };
     },
   );
 
@@ -1939,28 +2060,38 @@ export function registerAgentSessionsRoutes(
           reason: 'session node is not connected',
         };
       }
-      const outcome = await conn.requestDownloadFetch(randomUUID(), rec.id, q.data.name);
-      if (outcome.status === 'data') {
-        return {
-          file: {
-            name: outcome.name,
-            mime: outcome.mime ?? 'application/octet-stream',
-            dataB64: outcome.dataB64,
-          },
-          status: 'ok' as const,
-        };
+      // Hardening: per-account concurrent-relay cap (reserve before the await,
+      // release in the finally; shed with a discriminated error when at the cap).
+      const releaseRelay = reserveRelaySlot(rec.accountId);
+      if (releaseRelay === null) {
+        return { file: null, status: 'error' as const, reason: RELAY_BUSY_REASON };
       }
-      if (outcome.status === 'error') {
-        return { file: null, status: 'error' as const, reason: outcome.message };
+      try {
+        const outcome = await conn.requestDownloadFetch(randomUUID(), rec.id, q.data.name);
+        if (outcome.status === 'data') {
+          return {
+            file: {
+              name: outcome.name,
+              mime: outcome.mime ?? 'application/octet-stream',
+              dataB64: outcome.dataB64,
+            },
+            status: 'ok' as const,
+          };
+        }
+        if (outcome.status === 'error') {
+          return { file: null, status: 'error' as const, reason: outcome.message };
+        }
+        if (outcome.status === 'list') {
+          return {
+            file: null,
+            status: 'error' as const,
+            reason: 'unexpected list frame for fetch request',
+          };
+        }
+        return { file: null, status: 'timeout' as const };
+      } finally {
+        releaseRelay();
       }
-      if (outcome.status === 'list') {
-        return {
-          file: null,
-          status: 'error' as const,
-          reason: 'unexpected list frame for fetch request',
-        };
-      }
-      return { file: null, status: 'timeout' as const };
     },
   );
 

@@ -1704,6 +1704,11 @@ export async function createProductionDeps(
     // Founder safeguard (2026-06-24) — per-account in-flight upload cap (bytes);
     // config-defaulted to 512 MB, tunable via AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES.
     agentUploadMaxAccountInFlightBytes: config.agentUploadMaxAccountInFlightBytes,
+    // Hardening (2026-06-24) — per-account concurrent-relay COUNT cap (default 16,
+    // AGENT_RELAY_MAX_ACCOUNT_INFLIGHT) + concurrent-upload COUNT cap (default 4,
+    // AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT).
+    agentRelayMaxAccountInFlight: config.agentRelayMaxAccountInFlight,
+    agentUploadMaxAccountInFlightCount: config.agentUploadMaxAccountInFlightCount,
     ...(config.stripe?.webhookSecret !== undefined
       ? {
           stripeWebhooksService,

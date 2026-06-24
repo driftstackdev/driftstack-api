@@ -380,6 +380,21 @@ export interface TestAppOptions {
    * `agentUploadMaxAccountInFlightBytes`.
    */
   uploadMaxAccountInFlightBytes?: number;
+  /**
+   * Hardening (2026-06-24, LOW defense-in-depth) — override the per-account
+   * CONCURRENT-RELAY COUNT cap for the cookies/set, history, downloads-list +
+   * downloads-content routes. Lets a test trip the cap at 1–2 concurrent relays.
+   * Omitted → the route's default of 16. Threaded into AppDeps as
+   * `agentRelayMaxAccountInFlight`.
+   */
+  relayMaxAccountInFlight?: number;
+  /**
+   * Hardening (2026-06-24, LOW defense-in-depth) — override the per-account
+   * CONCURRENT-UPLOAD COUNT cap for POST /:id/files. Lets a test trip the count
+   * cap at 1–2 concurrent uploads. Omitted → the route's default of 4. Threaded
+   * into AppDeps as `agentUploadMaxAccountInFlightCount`.
+   */
+  uploadMaxAccountInFlightCount?: number;
 }
 
 export interface SeedAdditionalOpts {
@@ -1383,6 +1398,15 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     ...(opts.uploadMaxAccountInFlightBytes === undefined
       ? {}
       : { agentUploadMaxAccountInFlightBytes: opts.uploadMaxAccountInFlightBytes }),
+    // Hardening (2026-06-24) — per-account concurrent-relay COUNT cap + concurrent-
+    // upload COUNT cap overrides. Only spread when set (exactOptionalPropertyTypes);
+    // omitted → the route defaults (16 / 4). Let the cap tests trip them at 1–2.
+    ...(opts.relayMaxAccountInFlight === undefined
+      ? {}
+      : { agentRelayMaxAccountInFlight: opts.relayMaxAccountInFlight }),
+    ...(opts.uploadMaxAccountInFlightCount === undefined
+      ? {}
+      : { agentUploadMaxAccountInFlightCount: opts.uploadMaxAccountInFlightCount }),
     // Arc 1 sub-slice 6.5 (v2-#6) — bundled-LLM service is always
     // wired (matches the prod bootstrap which constructs it
     // unconditionally). The route layer separately gates the bundled

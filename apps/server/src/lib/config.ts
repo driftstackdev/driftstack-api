@@ -177,6 +177,16 @@ const ConfigSchema = z.object({
     .int()
     .positive()
     .default(512 * 1024 * 1024),
+  // Hardening (2026-06-24, LOW defense-in-depth) — per-account cap on CONCURRENT
+  // in-flight control-relay requests (count) for the cookies/set, history,
+  // downloads-list + downloads-content routes (which carry only the `global` RATE
+  // limiter, not a concurrency limiter). Default 16; tune via
+  // AGENT_RELAY_MAX_ACCOUNT_INFLIGHT. coerce.number so the env string parses.
+  agentRelayMaxAccountInFlight: z.coerce.number().int().positive().default(16),
+  // Hardening (2026-06-24, LOW defense-in-depth) — per-account cap on the COUNT of
+  // CONCURRENT in-flight uploads for POST /v1/agent-sessions/:id/files, alongside
+  // the byte cap. Default 4; tune via AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT.
+  agentUploadMaxAccountInFlightCount: z.coerce.number().int().positive().default(4),
   // V-079: where the user-facing auth-flow links point. The plaintext
   // single-use token gets appended as `?token=<...>` to each. Defaults
   // are dev-friendly localhost URLs; production sets these to the real
@@ -679,6 +689,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // Raw env passed through; z.coerce.number parses it and the schema default
     // (512 MiB) applies when AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES is unset.
     agentUploadMaxAccountInFlightBytes: env.AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES,
+    // Hardening (2026-06-24) — per-account concurrent-relay COUNT cap + concurrent-
+    // upload COUNT cap. Raw env passed through; z.coerce.number parses, schema
+    // defaults (16 / 4) apply when unset.
+    agentRelayMaxAccountInFlight: env.AGENT_RELAY_MAX_ACCOUNT_INFLIGHT,
+    agentUploadMaxAccountInFlightCount: env.AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT,
     authFlowUrls: deriveAuthFlowUrls(env),
     dashboardOrigin: env.DASHBOARD_ORIGIN,
     mfaEncryptionKey: env.MFA_ENCRYPTION_KEY,
