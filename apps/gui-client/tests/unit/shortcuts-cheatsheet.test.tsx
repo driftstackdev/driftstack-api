@@ -19,7 +19,7 @@ describe('ShortcutsCheatsheet', () => {
     // Group headings.
     expect(screen.getByText('General')).toBeTruthy();
     expect(screen.getByText('Appearance')).toBeTruthy();
-    expect(screen.getByText('AI chat')).toBeTruthy();
+    expect(screen.getByText('AI Browser Automation')).toBeTruthy();
     // A couple of real shortcut labels.
     expect(screen.getByText('Command palette')).toBeTruthy();
     expect(screen.getByText('Toggle light / dark')).toBeTruthy();

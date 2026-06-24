@@ -36,7 +36,7 @@ const GROUPS: ReadonlyArray<Group> = [
     items: [{ keys: [MOD, '⇧', 'D'], label: 'Toggle light / dark' }],
   },
   {
-    title: 'AI chat',
+    title: 'AI Browser Automation',
     items: [
       { keys: ['Enter'], label: 'Send message' },
       { keys: ['⇧', 'Enter'], label: 'New line' },

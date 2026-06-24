@@ -114,10 +114,10 @@ function Shell(): JSX.Element {
     },
     {
       id: 'nav-ai',
-      label: 'Go to AI chat',
+      label: 'Go to AI Browser Automation',
       kind: 'view',
       glyph: '✦',
-      keywords: ['nav', 'ai', 'chat', 'agent', 'automate'],
+      keywords: ['nav', 'ai', 'chat', 'agent', 'automate', 'browser', 'automation'],
       run: () => setView({ kind: 'ai' }),
     },
     {

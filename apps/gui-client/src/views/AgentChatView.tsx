@@ -17,8 +17,10 @@ import type {
   AgentIntentResult,
   AgentMessageResponse,
   AgentUsage,
+  LiveKitInfo,
 } from '@driftstack/sdk';
 import { useSettings } from '../lib/SettingsContext';
+import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { useToasts } from '../lib/toasts';
 import { useAgentChat, type ChatModel, type ChatTurn } from '../lib/use-agent-chat';
 import { DEFAULT_ASSISTANT_TEMPLATES } from '../lib/assistant-templates';
@@ -216,7 +218,10 @@ export function AgentChatView({
         onSelect={handleSelectChat}
         onDelete={handleDeleteChat}
       />
-      <div className="flex h-full min-w-0 flex-1 flex-col">
+      <div
+        className="flex h-full min-w-0 flex-1 flex-col"
+        data-component="ai-automation-chat-column"
+      >
         {/* Header */}
         <header className="flex items-center justify-between gap-3 border-b border-surface-divider px-4 py-2.5">
           <div className="flex items-center gap-2">
@@ -224,7 +229,7 @@ export function AgentChatView({
               <IconSparkle />
             </span>
             <div className="flex flex-col">
-              <span className="text-sm font-medium text-ink-primary">Driftstack AI</span>
+              <span className="text-sm font-medium text-ink-primary">AI Browser Automation</span>
               <span className="text-2xs text-ink-muted">natural-language automation</span>
             </div>
             <span
@@ -424,6 +429,17 @@ export function AgentChatView({
       </div>
       {/* end main column */}
 
+      {/* Live iPhone watch pane (founder 2026-06-24: "a visual iPhone here showing
+          in realtime what is happening" when a task is dispatched). The chat runs
+          against a normal streamable agent session (chat.session.id), the same
+          LiveKit-backed session the simulator streams — so this mirrors the
+          simulator's live-video path: fetch the per-session LiveKit token via the
+          SDK (client.agentSessions.livekitToken), then render <AgentSessionPanel>.
+          READ-ONLY: interactive is left false (the default) so NO tap/scroll/key
+          input is captured here — the agent drives the phone, the user only
+          watches; clicking the view can never interfere with the automation. */}
+      <LiveAutomationPanel sessionId={chat.session?.id ?? null} />
+
       {/* Save-as-recipe dialog */}
       {saveOpen && (
         <div
@@ -492,6 +508,160 @@ export function AgentChatView({
         </div>
       )}
     </div>
+  );
+}
+
+// ─── live iPhone watch pane ───────────────────────────────────────
+
+/** The canonical iPhone screen aspect (402×874 logical ≡ 1206×2622 px) the
+ *  simulator locks to. Passing it here keeps the watch pane the same true
+ *  device proportions (and reuses AgentSessionPanel's bezel-black letterbox so
+ *  there's no white-space border). */
+const IPHONE_WATCH_ASPECT_RATIO = 402 / 874;
+
+type WatchState =
+  | { kind: 'idle' } // no chat session dispatched yet
+  | { kind: 'loading' } // fetching the LiveKit token
+  | { kind: 'live'; info: LiveKitInfo } // token in hand → stream
+  | { kind: 'error'; message: string }; // token fetch failed
+
+/**
+ * Read-only live iPhone view bound to the chat's agent session. When a task is
+ * dispatched the chat lazily creates an agent session (useAgentChat) — a normal
+ * LiveKit-streamable Driftstack session, exactly like the simulator's. This pane
+ * fetches that session's LiveKit token (POST /v1/agent-sessions/:id/livekit-token
+ * via the SDK) and renders the live stream so the user watches the automation
+ * drive the phone in realtime.
+ *
+ * READ-ONLY by design: AgentSessionPanel is mounted with `interactive` left at
+ * its default (false), so the LK.6.d input-capture is NOT wired — taps / scrolls
+ * / keystrokes on this video never reach the device. The agent is the sole
+ * driver; the user only watches and cannot interfere by clicking the view.
+ */
+function LiveAutomationPanel({ sessionId }: { sessionId: string | null }): JSX.Element {
+  const { client } = useSettings();
+  const [watch, setWatch] = useState<WatchState>({ kind: 'idle' });
+
+  useEffect(() => {
+    // No session dispatched yet → the placeholder ("Dispatch a task…").
+    if (sessionId === null) {
+      setWatch({ kind: 'idle' });
+      return undefined;
+    }
+    // Defensive: the SDK client (or its livekitToken method) may be absent in a
+    // partial harness / before connect — degrade to a calm error rather than
+    // throwing in render. The real client always carries agentSessions.
+    if (client === null || typeof client.agentSessions?.livekitToken !== 'function') {
+      setWatch({ kind: 'error', message: 'Live view unavailable — not connected.' });
+      return undefined;
+    }
+    let cancelled = false;
+    setWatch({ kind: 'loading' });
+    void client.agentSessions
+      .livekitToken(sessionId)
+      .then((info) => {
+        if (!cancelled) setWatch({ kind: 'live', info });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        // A session with no Mac/LiveKit registered yet (503) or a not-yet-ready
+        // worker is the common case here — keep the copy reassuring, not alarming.
+        const msg = err instanceof Error ? err.message : 'Could not start the live view.';
+        setWatch({ kind: 'error', message: msg });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, sessionId]);
+
+  return (
+    <aside
+      data-component="ai-automation-live-pane"
+      className="hidden w-[300px] shrink-0 flex-col border-l border-surface-divider bg-surface-raised/60 lg:flex"
+    >
+      <div className="flex items-center gap-2 border-b border-surface-divider px-3 py-2.5">
+        <span className="text-xs font-medium text-ink-primary">Live view</span>
+        <span className="text-2xs text-ink-muted">read-only — the agent is driving</span>
+      </div>
+      <div className="flex flex-1 items-center justify-center overflow-hidden p-3">
+        {watch.kind === 'idle' && (
+          <WatchPlaceholder
+            title="Nothing running yet"
+            body="Dispatch a task to watch it run live on the phone."
+          />
+        )}
+        {watch.kind === 'loading' && (
+          <div
+            data-component="ai-automation-live-connecting"
+            className="flex flex-col items-center gap-3 text-center text-xs text-ink-muted"
+          >
+            <span
+              className="h-7 w-7 animate-spin rounded-full border-2 border-surface-divider border-t-accent"
+              aria-hidden="true"
+            />
+            <span>Starting the live view…</span>
+          </div>
+        )}
+        {watch.kind === 'error' && (
+          <WatchPlaceholder title="Live view unavailable" body={watch.message} tone="muted" />
+        )}
+        {watch.kind === 'live' && (
+          // READ-ONLY: `interactive` omitted (defaults false) → no input capture.
+          // coverChromeBand reuses the simulator's bezel-black letterbox so there
+          // is no white-space border around the stream.
+          <AgentSessionPanel
+            info={watch.info}
+            interactive={false}
+            coverChromeBand
+            aspectRatio={IPHONE_WATCH_ASPECT_RATIO}
+          />
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function WatchPlaceholder({
+  title,
+  body,
+  tone = 'default',
+}: {
+  title: string;
+  body: string;
+  tone?: 'default' | 'muted';
+}): JSX.Element {
+  return (
+    <div className="flex max-w-[14rem] flex-col items-center gap-2 text-center">
+      <span
+        className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+          tone === 'muted' ? 'bg-surface-inset text-ink-muted' : 'bg-accent-subtle text-accent'
+        }`}
+        aria-hidden="true"
+      >
+        <IconPhone />
+      </span>
+      <p className="text-xs font-medium text-ink-secondary">{title}</p>
+      <p className="text-2xs text-ink-muted">{body}</p>
+    </div>
+  );
+}
+
+function IconPhone(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.4}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="4.25" y="1.75" width="7.5" height="12.5" rx="1.6" />
+      <path d="M7 3.25h2" />
+    </svg>
   );
 }
 

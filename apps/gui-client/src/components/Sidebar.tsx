@@ -127,7 +127,7 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
             active={current === 'ai'}
             onClick={() => onNavigate('ai')}
           >
-            AI chat
+            AI Browser Automation
           </SidebarItem>
           <SidebarItem
             icon={<IconBook />}
