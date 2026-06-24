@@ -615,6 +615,25 @@ describe('FleetControlRegistry', () => {
     expect(r.errorMessage).toMatch(/replaced by a new connection/);
   });
 
+  it('queues a teardown when a node is offline + re-dispatches sessionEnd on reconnect (A3 W2859)', () => {
+    const reg = new FleetControlRegistry();
+    // No connection for node-1 yet → a session close couldn't reach the box; queue it.
+    reg.recordPendingTeardown('node-1', 'ses_orphan');
+    expect(reg.pendingTeardownCount('node-1')).toBe(1);
+    // The node (re)connects → register() drains the queue + sends the sessionEnd.
+    const sent: string[] = [];
+    reg.register('node-1', (d) => sent.push(d));
+    expect(reg.pendingTeardownCount('node-1')).toBe(0);
+    expect(sent).toHaveLength(1);
+    expect(JSON.parse(sent[0]!)).toMatchObject({ type: 'sessionEnd', sessionId: 'ses_orphan' });
+  });
+
+  it('bounds the pending-teardown queue per node (drops oldest at the 256 cap)', () => {
+    const reg = new FleetControlRegistry();
+    for (let i = 0; i < 300; i += 1) reg.recordPendingTeardown('node-1', `ses_${i}`);
+    expect(reg.pendingTeardownCount('node-1')).toBe(256);
+  });
+
   it('threads the onProfileSaved handler into the connections it creates', () => {
     const seen: unknown[] = [];
     const reg = new FleetControlRegistry((f) => seen.push(f));

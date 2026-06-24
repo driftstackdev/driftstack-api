@@ -54,6 +54,7 @@ import {
   serializeUploadFile,
   serializeListDownloads,
   serializeFetchDownload,
+  serializeSessionEnd,
 } from './harness-control-codec.js';
 
 /** What the WS route hands in: a function that writes a string frame to the
@@ -403,6 +404,17 @@ export class FleetControlConnection {
  */
 export class FleetControlRegistry {
   private readonly connections = new Map<string, FleetControlConnection>();
+  /**
+   * Pending-teardown queue (founder bug, A3 W2859) — sessions whose close couldn't
+   * reach the box because its control-WSS was down/flapping. `dispatchSessionEndOnClose`
+   * records them here when the node has no live connection; `register()` drains +
+   * re-dispatches `sessionEnd` on the node's next (re)connect, so a WSS blip can't
+   * leave an orphaned browser. nodeId → set of sessionIds, bounded per node (a node
+   * that never returns can't leak); a stale re-dispatch (session already gone) is a
+   * harmless box-side no-op.
+   */
+  private readonly pendingTeardowns = new Map<string, Set<string>>();
+  private static readonly MAX_PENDING_TEARDOWNS_PER_NODE = 256;
 
   /**
    * @param onProfileSaved optional handler invoked when any node reports a
@@ -476,7 +488,48 @@ export class FleetControlRegistry {
     } catch {
       /* swallow — registration must not fail on a reaper-hook error */
     }
+    // Pending-teardown drain (founder bug, A3 W2859): re-dispatch sessionEnd for any
+    // session whose close couldn't reach the box while this node's WSS was down. The
+    // node is connected again now, so the teardown lands + the box frees the slot /
+    // kills the orphaned browser. Best-effort: a failed re-dispatch must not break
+    // registration; a stale sessionId (session already gone) is a box-side no-op.
+    const pending = this.pendingTeardowns.get(nodeId);
+    if (pending !== undefined) {
+      this.pendingTeardowns.delete(nodeId);
+      for (const sessionId of pending) {
+        try {
+          conn.sendSessionEnd(serializeSessionEnd(sessionId));
+        } catch {
+          /* swallow — one failed re-dispatch must not abort the rest or registration */
+        }
+      }
+    }
     return conn;
+  }
+
+  /**
+   * Queue a `sessionEnd` to re-dispatch when `nodeId` next (re)connects — for a
+   * session whose close couldn't reach the box because the node had no live
+   * connection (WSS down/flapping). `dispatchSessionEndOnClose` calls this on the
+   * `conn === undefined` path; `register()` drains it. Bounded per node so a node
+   * that never returns can't leak (drops the oldest at the cap).
+   */
+  recordPendingTeardown(nodeId: string, sessionId: string): void {
+    let set = this.pendingTeardowns.get(nodeId);
+    if (set === undefined) {
+      set = new Set<string>();
+      this.pendingTeardowns.set(nodeId, set);
+    }
+    if (set.size >= FleetControlRegistry.MAX_PENDING_TEARDOWNS_PER_NODE && !set.has(sessionId)) {
+      const oldest = set.values().next().value;
+      if (oldest !== undefined) set.delete(oldest);
+    }
+    set.add(sessionId);
+  }
+
+  /** In-flight pending teardowns for a node (test/inspection helper). */
+  pendingTeardownCount(nodeId: string): number {
+    return this.pendingTeardowns.get(nodeId)?.size ?? 0;
   }
 
   get(nodeId: string): FleetControlConnection | undefined {

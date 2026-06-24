@@ -850,7 +850,19 @@ export async function dispatchSessionEndOnClose(args: {
       targetNodeId = mac.nodeId ?? mac.id;
     }
     const conn = fleetControlRegistry.get(targetNodeId);
-    if (conn === undefined) return; // node not connected → nothing to tear down server-side
+    if (conn === undefined) {
+      // Node not connected (control-WSS down/flapping, A3 W2859) — the sessionEnd
+      // can't land now. QUEUE it so register() re-dispatches on the node's next
+      // reconnect; otherwise the box keeps the browser running (orphan + cost). The
+      // robust fix for the founder's "End-session doesn't tear down" symptom,
+      // independent of the -1011 WSS root cause.
+      fleetControlRegistry.recordPendingTeardown(targetNodeId, sessionId);
+      logger?.info(
+        { component: 'fleet-session-dispatch', sessionId, nodeId: targetNodeId },
+        'node offline — queued sessionEnd for re-dispatch on reconnect',
+      );
+      return;
+    }
     conn.sendSessionEnd(serializeSessionEnd(sessionId));
     logger?.info(
       { component: 'fleet-session-dispatch', sessionId, nodeId: targetNodeId },
