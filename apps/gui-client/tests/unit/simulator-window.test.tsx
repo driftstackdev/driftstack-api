@@ -123,11 +123,12 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(toolbar).not.toBeNull();
     // Device name (from the ?name= query) shows in the toolbar.
     expect(toolbar?.textContent).toContain('iPhone 17');
-    // Window controls + the quick record + the expand chevron live in the slim
-    // bar. The window is BORDERLESS (the iPhone look, founder 2026-06-18 "back
-    // like it was"), so close/minimize live here — the separate Dock icon comes
-    // from the standalone app, not a title bar. aria-labels are the contract.
-    for (const label of ['Close', 'Minimize', 'Start recording', 'Show controls']) {
+    // Window controls + the quick record live in the slim bar. The window is
+    // BORDERLESS (the iPhone look, founder 2026-06-18 "back like it was"), so
+    // close/minimize live here — the separate Dock icon comes from the standalone
+    // app, not a title bar. (The drawer is now an always-docked rail, so the old
+    // Show-controls chevron is gone.) aria-labels are the contract.
+    for (const label of ['Close', 'Minimize', 'Start recording']) {
       expect(toolbar?.querySelector(`[aria-label="${label}"]`), label).not.toBeNull();
     }
     // Founder 2026-06-17: the rotate / pin / info controls moved into
@@ -161,14 +162,14 @@ describe('SimulatorWindow — floating iPhone', () => {
         <SimulatorWindow />
       </RecordingsProvider>,
     );
-    // Approach B: the chevron reveals a docked right DRAWER (icon rail + single
-    // content pane), not the old in-toolbar dropdown. It auto-opens for a fresh user.
+    // Activity-bar drawer: the icon rail is always docked beside the phone; for a
+    // fresh user the Controls pane AUTO-OPENS so the GUI Address bar advertises
+    // itself (browser-mode off) instead of the founder tapping the un-tappable
+    // rendered Safari pill. The rail (drawer) is always present, and the Controls
+    // pane is open without any click.
     const drawer = container.querySelector('[data-component="simulator-drawer"]');
     expect(drawer).not.toBeNull();
-    // The GUI Address bar lives in the Controls pane (browser-mode off) — select
-    // that rail icon so the founder finds it instead of tapping the rendered Safari
-    // pill. (Slice 1 = single-pane; the address bar is one rail click away.)
-    fireEvent.click(drawer?.querySelector('[data-component="sim-rail-controls"]') as Element);
+    expect(drawer?.querySelector('[data-component="sim-rail-controls"]')).not.toBeNull();
     expect(drawer?.querySelector('[data-component="simulator-address"]')).not.toBeNull();
   });
 
@@ -225,24 +226,21 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(off.container.querySelector('[data-component="simulator-address-bar"]')).toBeNull();
   });
 
-  it('the expand chevron reveals the control panel — the Mode segmented control (Agent/Pair/Manual) + rotate / pin / info', () => {
+  it('the always-docked rail expands a pane on icon click — the Session pane Mode segmented control (Agent/Pair/Manual) + the Controls pane rotate / pin / info', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
     const { container } = render(
       <RecordingsProvider>
         <SimulatorWindow />
       </RecordingsProvider>,
     );
-    const wrap = container.querySelector('[data-component="simulator-toolbar-wrap"]');
-    const chevron = wrap?.querySelector('[aria-label="Show controls"]');
-    expect(chevron).not.toBeNull();
-    fireEvent.click(chevron as Element);
-    // Approach B: the chevron reveals the docked right DRAWER — an icon RAIL + a
-    // single content PANE (only the active section renders). The rail exposes one
-    // icon per section; clicking one switches the pane.
+    // Activity-bar drawer: the icon RAIL is ALWAYS docked beside the phone (no
+    // chevron). Clicking a rail icon EXPANDS its content PANE (only the active
+    // section renders). Default (navigated) is collapsed — open Session first.
     const panel = container.querySelector('[data-component="simulator-drawer"]');
     expect(panel).not.toBeNull();
-    // The Session pane is the default — the Mode segmented control is its hero
-    // (three modes as a radio group).
+    fireEvent.click(panel?.querySelector('[data-component="sim-rail-session"]') as Element);
+    // The Session pane's Mode segmented control is its hero (three modes as a
+    // radio group).
     expect(panel?.querySelector('[data-component="simulator-control-section"]')).not.toBeNull();
     expect(panel?.querySelector('[aria-label="Agent mode"]')).not.toBeNull();
     expect(panel?.querySelector('[aria-label="Pair mode"]')).not.toBeNull();
@@ -295,23 +293,26 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(toolbar?.textContent).not.toContain('·');
   });
 
-  it('the expanded control DRAWER closes on Escape (docked panel — not on an outside pointer-down)', () => {
+  it('an open pane collapses on Escape back to the always-docked rail (docked panel — not on an outside pointer-down)', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
     const { container } = render(
       <RecordingsProvider>
         <SimulatorWindow />
       </RecordingsProvider>,
     );
-    const wrap = container.querySelector('[data-component="simulator-toolbar-wrap"]');
-    fireEvent.click(wrap?.querySelector('[aria-label="Show controls"]') as Element);
-    expect(container.querySelector('[data-component="simulator-drawer"]')).not.toBeNull();
-    // Option B: the drawer is DOCKED (a sibling of the device), so it does NOT
-    // dismiss on an outside pointer-down (that would close it on its own clicks).
+    // The rail (drawer) is always docked; open a pane by clicking its rail icon.
+    const drawer = container.querySelector('[data-component="simulator-drawer"]');
+    expect(drawer).not.toBeNull();
+    fireEvent.click(drawer?.querySelector('[data-component="sim-rail-session"]') as Element);
+    expect(container.querySelector('[data-component="sim-drawer-panel"]')).not.toBeNull();
+    // The panel is DOCKED (a sibling of the device), so it does NOT dismiss on an
+    // outside pointer-down (that would collapse it on its own clicks).
     fireEvent.pointerDown(document.body);
-    expect(container.querySelector('[data-component="simulator-drawer"]')).not.toBeNull();
-    // Escape closes it.
+    expect(container.querySelector('[data-component="sim-drawer-panel"]')).not.toBeNull();
+    // Escape collapses the pane (the rail stays docked, the panel goes).
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(container.querySelector('[data-component="simulator-drawer"]')).toBeNull();
+    expect(container.querySelector('[data-component="sim-drawer-panel"]')).toBeNull();
+    expect(container.querySelector('[data-component="simulator-drawer"]')).not.toBeNull();
   });
 
   it('iOS tap cursor: a pointer-down on the screen blooms a tap-ripple ring (purely visual — never intercepts the tap)', () => {
@@ -376,17 +377,20 @@ describe('SimulatorWindow — floating iPhone', () => {
     ).not.toBeNull();
   });
 
-  it('the expanded control panel exposes an explicit End session control (the true Stop, distinct from the mode-aware window-close)', () => {
+  it('the always-docked rail exposes an explicit End session control (the true Stop, reachable even when collapsed)', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&session=agt_1');
     const { container } = render(
       <RecordingsProvider>
         <SimulatorWindow />
       </RecordingsProvider>,
     );
-    const wrap = container.querySelector('[data-component="simulator-toolbar-wrap"]');
-    fireEvent.click(wrap?.querySelector('[aria-label="Show controls"]') as Element);
-    const panel = container.querySelector('[data-component="simulator-drawer"]');
-    expect(panel?.querySelector('[aria-label="End session"]')).not.toBeNull();
+    // The End-session button lives at the BOTTOM of the always-docked rail (no
+    // pane needs to be open — default is collapsed), so it is reachable at all
+    // times. It is the dedicated rail control, not the section icons.
+    const drawer = container.querySelector('[data-component="simulator-drawer"]');
+    expect(drawer?.querySelector('[data-component="sim-drawer-panel"]')).toBeNull();
+    expect(drawer?.querySelector('[data-component="sim-rail-end"]')).not.toBeNull();
+    expect(drawer?.querySelector('[aria-label="End session"]')).not.toBeNull();
   });
 
   it('no End session control when there is no bound session (the empty window)', () => {
@@ -396,12 +400,12 @@ describe('SimulatorWindow — floating iPhone', () => {
         <SimulatorWindow />
       </RecordingsProvider>,
     );
-    // No `session=` in the query → running is false → no running cue + no End.
+    // No `session=` in the query → running is false → no running cue + no End on
+    // the rail.
     expect(container.querySelector('[data-component="simulator-running-indicator"]')).toBeNull();
-    const wrap = container.querySelector('[data-component="simulator-toolbar-wrap"]');
-    fireEvent.click(wrap?.querySelector('[aria-label="Show controls"]') as Element);
-    const panel = container.querySelector('[data-component="simulator-drawer"]');
-    expect(panel?.querySelector('[aria-label="End session"]')).toBeNull();
+    const drawer = container.querySelector('[data-component="simulator-drawer"]');
+    expect(drawer?.querySelector('[data-component="sim-rail-end"]')).toBeNull();
+    expect(drawer?.querySelector('[aria-label="End session"]')).toBeNull();
   });
 
   it('shows a no-session hint (no device frame) when the query lacks ws/token', () => {

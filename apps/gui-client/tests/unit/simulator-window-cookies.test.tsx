@@ -71,12 +71,10 @@ function renderSim() {
   );
 }
 
-// Approach B drawer = an icon RAIL + a single content PANE. Open the drawer if
-// collapsed, then select the Cookies rail icon so its pane renders (the default
-// active pane is Session).
+// Activity-bar drawer = an always-docked icon RAIL + a single content PANE that
+// expands on icon click. Click the Cookies rail icon so its pane renders (the
+// rail is always visible — no Show-controls chevron anymore; default is collapsed).
 function openCookies(c: HTMLElement): void {
-  const show = c.querySelector('[aria-label="Show controls"]');
-  if (show) fireEvent.click(show);
   const railCk = c.querySelector('[data-component="sim-rail-cookies"]');
   if (railCk) fireEvent.click(railCk);
 }

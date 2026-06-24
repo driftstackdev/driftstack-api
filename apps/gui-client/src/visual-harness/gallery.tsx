@@ -206,18 +206,14 @@ export function Gallery(): JSX.Element {
       </div>
 
       <h1 className="mb-3 mt-10 text-lg font-semibold text-ink-primary">
-        SimulatorWindow toolbar — collapsed (phone-only) + expanded controls
+        SimulatorWindow toolbar — idle · live · recording
       </h1>
       <div className="flex flex-wrap gap-10">
         <div className="w-72">
-          <span className="mb-1 block text-2xs uppercase tracking-wide text-ink-muted">
-            collapsed
-          </span>
+          <span className="mb-1 block text-2xs uppercase tracking-wide text-ink-muted">idle</span>
           <DeviceToolbar
             deviceName="iPhone 17"
             profileName="amsterdam shopper"
-            expanded={false}
-            onToggleExpanded={noop}
             recording={false}
             onToggleRecord={noop}
             running={false}
@@ -225,13 +221,11 @@ export function Gallery(): JSX.Element {
         </div>
         <div className="w-72 pb-48">
           <span className="mb-1 block text-2xs uppercase tracking-wide text-ink-muted">
-            expanded (drawer open)
+            live session
           </span>
           <DeviceToolbar
             deviceName="iPhone 17"
             profileName="amsterdam shopper"
-            expanded
-            onToggleExpanded={noop}
             recording={false}
             onToggleRecord={noop}
             running
@@ -244,8 +238,6 @@ export function Gallery(): JSX.Element {
           <DeviceToolbar
             deviceName="iPhone 17"
             profileName="amsterdam shopper"
-            expanded={false}
-            onToggleExpanded={noop}
             recording
             onToggleRecord={noop}
             running

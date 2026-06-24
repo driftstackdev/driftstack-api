@@ -66,13 +66,16 @@ const STATUS_STRIP_H = 40;
 // "actual size" reset (Cmd+0) so the device renders at true iPhone-logical px,
 // not whatever width the window happens to have been dragged to.
 const DEVICE_LOGICAL_WIDTH = 402;
-// Option B (founder 2026-06-23) — the chevron toggle reveals a wide right DRAWER
-// (Session · Controls · Diagnostics · Cookies). When open, the WINDOW widens by
-// exactly this much; the phone keeps its size. The window-sizing math always
-// derives the phone dims from (windowWidth − drawerExtra) and adds drawerExtra
-// back, so the drawer never letterboxes the device (the prior "window larger than
-// output" hazard). Reversible: closing removes the extra width exactly.
-const DRAWER_W = 300;
+// Activity-bar drawer (founder 2026-06-24) — a slim icon RAIL is ALWAYS docked
+// next to the phone; clicking a section icon EXPANDS its content PANE to the
+// right of the rail (VS Code's activity-bar + side-panel idiom). The window
+// widens to fit the rail unconditionally, and by PANE_W more whenever a pane is
+// open. The window-sizing math always derives the phone dims from (windowWidth −
+// drawerExtra) and adds drawerExtra back, so the drawer never letterboxes the
+// device (the prior "window larger than output" hazard). RAIL_W + PANE_W keeps
+// the open width at the historical 300 so nothing changes when a pane is open.
+const RAIL_W = 48; // always added — the rail is docked beside the phone at all times
+const PANE_W = 252; // added only while a pane is open (RAIL_W + PANE_W === old DRAWER_W)
 
 // Approach B drawer (founder 2026-06-24) — the section ids for the icon rail +
 // single content pane. Order = the rail's top-to-bottom order. Persisted as a
@@ -345,39 +348,22 @@ function DriftMark(): JSX.Element {
 export function DeviceToolbar({
   deviceName,
   profileName,
-  expanded,
-  onToggleExpanded,
   recording,
   onToggleRecord,
   running,
 }: {
   deviceName: string;
   profileName: string;
-  /** True when the right control DRAWER is open (Option B). The chevron toggles
-   *  it; the drawer itself + the controls it holds live in the main layout
-   *  (SimulatorWindow), not in this thin toolbar. */
-  expanded: boolean;
-  onToggleExpanded: () => void;
   recording: boolean;
   onToggleRecord: () => void;
   /** True when a live agent session is bound to this window — drives the running
    *  indicator. */
   running: boolean;
 }): JSX.Element {
-  // Escape closes the drawer (it's a docked side panel now, NOT an overlay — so
-  // an outside-pointer-down must NOT close it, or every tap on the phone would
-  // collapse it). Keyboard-only dismiss.
+  // The activity-bar rail is always docked beside the phone (it lives in the main
+  // layout, not this thin toolbar); panes expand on a rail-icon click. There is no
+  // longer a whole-drawer toggle here, so the toolbar has no chevron.
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!expanded) return;
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onToggleExpanded();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [expanded, onToggleExpanded]);
   // Robust window drag: data-tauri-drag-region is flaky on macOS over a
   // borderless toolbar (founder 2026-06-18: "not the whole topbar drags").
   // Start a real OS drag on primary-button press anywhere on the bar EXCEPT
@@ -430,10 +416,9 @@ export function DeviceToolbar({
             </span>
           )}
         </div>
-        {/* Right — quick Record + the expand chevron. The window-controls
-            (rotate / pin / info) live in the expandable panel below so the
-            default chrome stays minimal (founder 2026-06-17: "phone showing
-            only" by default, a clean expandable row for the controls). */}
+        {/* Right — quick Record. The window-controls (rotate / pin / info) live
+            in the always-docked rail's expandable panes, so the default chrome
+            stays minimal (founder 2026-06-17: "phone showing only" by default). */}
         <div data-tauri-drag-region="false" className="flex items-center gap-1 text-white/70">
           {/* Running indicator (founder Track A) — a live pulse so the window
               reads as a RUNNING session at a glance (today only the per-mode
@@ -463,30 +448,6 @@ export function DeviceToolbar({
             onClick={onToggleRecord}
           >
             ●
-          </button>
-          <button
-            type="button"
-            aria-label={expanded ? 'Hide controls' : 'Show controls'}
-            aria-expanded={expanded}
-            title={expanded ? 'Hide controls' : 'More controls'}
-            onClick={onToggleExpanded}
-            className={`rounded p-1 transition hover:bg-white/10 hover:text-ink-primary ${expanded ? 'text-accent' : ''}`}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
-            >
-              {/* Right-pointing ›: the panel is a RIGHT drawer now (Option B), so
-                  the chevron opens to the right (rotates to ‹ to close). */}
-              <path d="M9 18l6-6-6-6" />
-            </svg>
           </button>
         </div>
       </div>
@@ -1753,44 +1714,59 @@ export function SimulatorWindow(): JSX.Element {
   // controls advertise themselves exactly until they're used. The panel is an
   // absolute overlay (no effect on the fixed TOOLBAR_H window-sizing math) and
   // auto-dismisses on the first tap, so it never lingers over the device.
-  const [toolbarExpanded, setToolbarExpanded] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('ds-sim-navigated') !== '1';
-    } catch {
-      return false;
-    }
-  });
-  // Option B — extra window width contributed by the open right DRAWER. Kept
-  // current every render (like landscapeRef) so the window-sizing closures
-  // (fitWindow / resetToActualSize / the onResized aspect-lock / refitForDrawer)
-  // ALWAYS read the live value without re-subscribing. Window width = phoneW +
-  // drawerExtra; phone dims are derived from (windowWidth − drawerExtra).
-  const drawerExtraRef = useRef(0);
-  drawerExtraRef.current = toolbarExpanded ? DRAWER_W : 0;
-
-  // Approach B (founder 2026-06-24, APPROVED) — the drawer is an icon RAIL + a
-  // single content PANE. `activePane` is which section the pane renders; the rail
-  // highlights it. Persisted as a PREFERENCE in localStorage (NOT cleared by the
-  // in-place session-reset, unlike the per-session UI state) so the operator's
-  // last-used section survives a relaunch. Lazy init reads the stored value in a
-  // try/catch (jsdom / private-mode storage can throw); default 'session' (the
-  // hero). A rail click sets + persists it.
-  const [activePane, setActivePane] = useState<SimDrawerPane>(() => {
+  // Activity-bar drawer (founder 2026-06-24) — a slim icon RAIL is ALWAYS docked
+  // beside the phone; `activePane` is which section's PANE is expanded to the
+  // right of the rail (null = collapsed, rail-only). Persisted as a PREFERENCE in
+  // localStorage (NOT cleared by the in-place session-reset, unlike the per-session
+  // UI state) so the operator's last-used section survives a relaunch — the stored
+  // value is the pane id, or empty/absent for collapsed. Lazy init reads it in a
+  // try/catch (jsdom / private-mode storage can throw); default null (collapsed),
+  // EXCEPT a fresh user who has never navigated auto-opens the Controls pane (where
+  // the GUI Address bar lives) for discoverability (A3 wpiyo8v6x — the founder kept
+  // tapping the un-tappable rendered Safari pill). Self-resolving: the first
+  // successful navigate sets ds-sim-navigated, after which it stays collapsed.
+  const [activePane, setActivePane] = useState<SimDrawerPane | null>(() => {
     try {
       const stored = localStorage.getItem(SIM_DRAWER_PANE_KEY);
-      return stored !== null && (SIM_DRAWER_PANES as readonly string[]).includes(stored)
-        ? (stored as SimDrawerPane)
-        : 'session';
+      if (stored !== null && (SIM_DRAWER_PANES as readonly string[]).includes(stored))
+        return stored as SimDrawerPane;
+      // Discoverability auto-open: never-navigated → open Controls (its first item
+      // is the Address bar). Otherwise collapsed (rail-only) by default.
+      return localStorage.getItem('ds-sim-navigated') !== '1' ? 'controls' : null;
     } catch {
-      return 'session';
+      return null;
     }
   });
+  // Extra window width contributed by the docked drawer. Kept current every render
+  // (like landscapeRef) so the window-sizing closures (fitWindow / resetToActualSize
+  // / the onResized aspect-lock / refitForDrawer) ALWAYS read the live value without
+  // re-subscribing. Width = phoneW + drawerExtra; the rail is ALWAYS present (RAIL_W),
+  // and an open pane adds PANE_W. Phone dims are derived from (windowWidth − drawerExtra).
+  const paneOpen = activePane !== null;
+  const drawerExtraRef = useRef(0);
+  drawerExtraRef.current = RAIL_W + (paneOpen ? PANE_W : 0);
+
+  // A rail-icon click TOGGLES its pane: same id → collapse (null); a different id →
+  // open that pane. Persists the id (or '' for collapsed) so the choice survives a
+  // relaunch.
   const selectPane = (pane: SimDrawerPane): void => {
-    setActivePane(pane);
+    setActivePane((prev) => {
+      const next = prev === pane ? null : pane;
+      try {
+        localStorage.setItem(SIM_DRAWER_PANE_KEY, next ?? '');
+      } catch {
+        /* storage disabled — the active pane just won't persist across reopens */
+      }
+      return next;
+    });
+  };
+  // Collapse the drawer back to the rail (the status-strip ✕ + Escape).
+  const collapseDrawer = (): void => {
+    setActivePane(null);
     try {
-      localStorage.setItem(SIM_DRAWER_PANE_KEY, pane);
+      localStorage.setItem(SIM_DRAWER_PANE_KEY, '');
     } catch {
-      /* storage disabled — the active pane just won't persist across reopens */
+      /* storage disabled — nothing to persist */
     }
   };
   // Per-pane "is this section the active pane" booleans — the data/utility polls
@@ -1923,11 +1899,12 @@ export function SimulatorWindow(): JSX.Element {
     // the screen and re-introduce the side-gap letterbox).
     fitWindow(next);
   };
-  // Option B — widen/narrow the window by DRAWER_W when the drawer opens/closes.
-  // HEIGHT-driven (keep the height, re-derive the phone width, add the drawer) —
-  // distinct from the width-preserving fitWindow, which would mis-read the phone
-  // width on toggle (curWidth still reflects the OLD drawer state). The onResized
-  // aspect-lock uses the same needW formula, so it reads this as on-aspect → no fight.
+  // Widen/narrow the window by PANE_W when a pane opens/closes (the rail's RAIL_W
+  // is always present). HEIGHT-driven (keep the height, re-derive the phone width,
+  // add the drawer) — distinct from the width-preserving fitWindow, which would
+  // mis-read the phone width on toggle (curWidth still reflects the OLD drawer
+  // state). The onResized aspect-lock uses the same needW formula, so it reads this
+  // as on-aspect → no fight.
   const refitForDrawer = (): void => {
     void withCurrentWindow(async (win) => {
       const { LogicalSize } = await import('@tauri-apps/api/dpi');
@@ -1968,14 +1945,28 @@ export function SimulatorWindow(): JSX.Element {
     return () => document.removeEventListener('keydown', onKey);
   }, [browserMode, info]);
 
-  // Option B — widen/narrow the window when the right drawer opens/closes
-  // (drawerExtraRef is already updated render-time before this effect fires). Runs
-  // after paint so the aside's layout width is applied first.
+  // Escape collapses the open pane back to the always-docked rail (the drawer is a
+  // docked side panel, NOT an overlay — so an outside-pointer-down must NOT close
+  // it, or every tap on the phone would collapse it). Keyboard-only dismiss; only
+  // armed while a pane is open.
+  useEffect(() => {
+    if (!paneOpen) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') collapseDrawer();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [paneOpen]);
+
+  // Widen/narrow the window when a pane opens/closes (the rail width is constant,
+  // so only the pane toggle changes the drawer width; drawerExtraRef is already
+  // updated render-time before this effect fires). Runs after paint so the aside's
+  // layout width is applied first.
   useEffect(() => {
     if (info === null) return;
     const t = window.setTimeout(() => refitForDrawer(), 0);
     return () => window.clearTimeout(t);
-  }, [toolbarExpanded, info]);
+  }, [paneOpen, info]);
 
   // Aspect-lock manual resizing (founder 2026-06-21 "if i double click it fully
   // maximizes, looks strange"): the device video is aspect-locked, so any resize
@@ -2505,10 +2496,12 @@ export function SimulatorWindow(): JSX.Element {
         console.warn('[simulator] control fetch failed; defaulting to manual:', err);
       });
   }, [sessionId, controlAuth]);
-  // Seed on mount + re-read whenever the panel opens (cheap, no idle polling).
+  // Seed on mount + re-read whenever a pane opens (cheap, no idle polling). Keys
+  // off the open/closed boolean (not the whole activePane string) so switching
+  // BETWEEN open panes doesn't needlessly re-fetch the control state.
   useEffect(() => {
     refreshControl();
-  }, [refreshControl, toolbarExpanded]);
+  }, [refreshControl, paneOpen]);
   // Closing the simulator window is MODE-AWARE (founder 2026-06-18): in MANUAL
   // mode the human IS the session, so closing the phone ENDS it (the worker
   // tears down the browser/fork — "close the phone → it really stops"). In
@@ -2671,8 +2664,8 @@ export function SimulatorWindow(): JSX.Element {
       window.setTimeout(() => setNotice(null), 3000);
       return;
     }
-    // First successful navigate: stop auto-opening the controls panel on launch
-    // (the Address bar has been discovered + used). See toolbarExpanded init.
+    // First successful navigate: stop auto-opening the Controls pane on launch
+    // (the Address bar has been discovered + used). See the activePane lazy init.
     try {
       localStorage.setItem('ds-sim-navigated', '1');
     } catch {
@@ -2783,8 +2776,6 @@ export function SimulatorWindow(): JSX.Element {
           <DeviceToolbar
             deviceName={deviceName}
             profileName={profileName}
-            expanded={toolbarExpanded}
-            onToggleExpanded={() => setToolbarExpanded((v) => !v)}
             recording={recordingId !== null}
             onToggleRecord={toggleRecord}
             running={sessionId !== ''}
@@ -2929,107 +2920,138 @@ export function SimulatorWindow(): JSX.Element {
                 </div>
               </div>
             </div>
-            {/* Approach B drawer (founder 2026-06-24, APPROVED) — revealed by the
-              chevron; the window widens by DRAWER_W so it sits beside the phone, not
-              over it. Three zones: a pinned status strip on top (shrink-0), an
-              icon RAIL + single content PANE in the middle (flex-1, only the pane
-              scrolls), and a pinned End-session footer at the bottom (shrink-0).
-              NOT a drag region (its controls must be clickable). */}
-            {toolbarExpanded && (
-              <aside
-                data-tauri-drag-region="false"
-                data-component="simulator-drawer"
-                className="flex w-[300px] shrink-0 flex-col overflow-hidden border-l border-white/[0.12] bg-[#1d1e24] text-[11.5px]"
+            {/* Activity-bar drawer (founder 2026-06-24) — the icon RAIL is ALWAYS
+              docked beside the phone (VS Code's activity bar). The window widens by
+              RAIL_W for the rail unconditionally, and by PANE_W more whenever a pane
+              is open. Clicking a rail icon EXPANDS its content PANEL to the right of
+              the rail (the active icon again collapses it). The rail carries the
+              always-reachable red End-session button at its bottom. NOT a drag
+              region (its controls must be clickable). */}
+            <aside
+              data-tauri-drag-region="false"
+              data-component="simulator-drawer"
+              className="flex shrink-0 flex-row overflow-hidden border-l border-white/[0.12] bg-[#1d1e24] text-[11.5px]"
+            >
+              {/* The RAIL — always visible. Top: one icon per section (the active one
+                highlighted only while its pane is open). Bottom: a separator + the
+                red End-session button so a true Stop is reachable even when
+                collapsed. */}
+              <nav
+                data-component="sim-drawer-rail"
+                aria-label="Drawer sections"
+                className="flex w-12 shrink-0 flex-col items-center gap-1 py-2"
               >
-                {/* Zone 1 — pinned status strip: the cross-cutting vitals (mode ·
-                  link · transport · fps · latency · egress) on 1–2 compact lines,
-                  with the drawer-close ✕ in the top-right. Never scrolls. */}
-                <div
-                  data-component="sim-drawer-status"
-                  className="shrink-0 border-b border-white/[0.10] bg-black/20 px-2.5 py-2 font-mono text-[10px] leading-tight text-white/70"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      <div className="truncate">
-                        <span className="text-white/90">
-                          {controlMode !== null
-                            ? controlMode === 'ai'
-                              ? 'Agent'
-                              : controlMode === 'pair'
-                                ? 'Pair'
-                                : 'Manual'
-                            : '…'}
-                        </span>
-                        <span className="text-white/30"> · </span>
-                        <span>{info ? wsHost(info.ws_url) : 'not connected'}</span>
-                        <span className="text-white/30"> · </span>
-                        {conn.transport !== null ? (
-                          <span
-                            className={
-                              conn.transport === 'udp' && conn.relayed !== true
-                                ? 'text-emerald-300'
-                                : 'text-rose-300'
-                            }
-                          >
-                            {conn.transport}
-                            {conn.relayed ? ' relay⚠' : ''}
-                          </span>
-                        ) : (
-                          <span className="text-white/40">link…</span>
-                        )}
-                      </div>
-                      <div className="truncate">
-                        {fps !== null && <span>{fps}fps · </span>}
-                        {latency.rttMs !== null ? (
-                          <span
-                            className={latency.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'}
-                          >
-                            {latency.rttMs}ms
-                          </span>
-                        ) : conn.rttMs !== null ? (
-                          <span
-                            className={conn.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'}
-                          >
-                            {conn.rttMs}ms
-                          </span>
-                        ) : (
-                          <span className="text-white/40">measuring…</span>
-                        )}
-                        {proxyLabel !== '' && (
-                          <span className="text-white/60"> · 🌍 {proxyLabel}</span>
-                        )}
-                      </div>
-                    </div>
+                {SIM_DRAWER_PANES.map((pane) => (
+                  <DrawerRailButton
+                    key={pane}
+                    pane={pane}
+                    active={activePane === pane}
+                    pulse={pane === 'recording' && recordingId !== null}
+                    onSelect={selectPane}
+                  />
+                ))}
+                {/* End-session — the always-reachable Stop. Same handler + busy
+                  gating as the old footer; pinned to the rail bottom under a
+                  separator. Only when a session is bound. */}
+                {sessionId !== '' && (
+                  <>
+                    <div aria-hidden="true" className="mx-auto mt-auto mb-1 h-px w-6 bg-white/10" />
                     <button
                       type="button"
-                      aria-label="Close drawer"
-                      title="Close"
-                      onClick={() => setToolbarExpanded(false)}
-                      className="-mr-1 -mt-0.5 shrink-0 rounded px-1 text-[13px] leading-none text-white/50 transition hover:bg-white/10 hover:text-white"
+                      data-component="sim-rail-end"
+                      aria-label="End session"
+                      title="End the session — stops the worker and tears down the browser"
+                      disabled={controlBusy}
+                      onClick={onEndSession}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg text-red-400 transition-colors hover:bg-red-500/20 hover:text-red-300 disabled:opacity-50"
                     >
-                      ✕
+                      <span aria-hidden="true">{controlBusy ? '…' : '◼'}</span>
                     </button>
-                  </div>
-                </div>
-
-                {/* Zone 2 — the icon RAIL (left, fixed) + the content PANE (right,
-                  scrolls). The rail does NOT scroll; only the pane does. */}
-                <div className="flex min-h-0 flex-1 flex-row">
-                  <nav
-                    data-component="sim-drawer-rail"
-                    aria-label="Drawer sections"
-                    className="flex w-11 shrink-0 flex-col items-center gap-1 border-r border-white/[0.10] py-2"
+                  </>
+                )}
+              </nav>
+              {/* The PANEL — the status strip + the active pane's content. Renders to
+                the RIGHT of the rail ONLY when a pane is open. */}
+              {paneOpen && (
+                <div
+                  data-component="sim-drawer-panel"
+                  className="flex w-[252px] shrink-0 flex-col overflow-hidden border-l border-white/[0.12]"
+                >
+                  {/* Pinned status strip: the cross-cutting vitals (mode · link ·
+                    transport · fps · latency · egress) on 1–2 compact lines, with the
+                    collapse ✕ in the top-right. Never scrolls. */}
+                  <div
+                    data-component="sim-drawer-status"
+                    className="shrink-0 border-b border-white/[0.10] bg-black/20 px-2.5 py-2 font-mono text-[10px] leading-tight text-white/70"
                   >
-                    {SIM_DRAWER_PANES.map((pane) => (
-                      <DrawerRailButton
-                        key={pane}
-                        pane={pane}
-                        active={activePane === pane}
-                        pulse={pane === 'recording' && recordingId !== null}
-                        onSelect={selectPane}
-                      />
-                    ))}
-                  </nav>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="truncate">
+                          <span className="text-white/90">
+                            {controlMode !== null
+                              ? controlMode === 'ai'
+                                ? 'Agent'
+                                : controlMode === 'pair'
+                                  ? 'Pair'
+                                  : 'Manual'
+                              : '…'}
+                          </span>
+                          <span className="text-white/30"> · </span>
+                          <span>{info ? wsHost(info.ws_url) : 'not connected'}</span>
+                          <span className="text-white/30"> · </span>
+                          {conn.transport !== null ? (
+                            <span
+                              className={
+                                conn.transport === 'udp' && conn.relayed !== true
+                                  ? 'text-emerald-300'
+                                  : 'text-rose-300'
+                              }
+                            >
+                              {conn.transport}
+                              {conn.relayed ? ' relay⚠' : ''}
+                            </span>
+                          ) : (
+                            <span className="text-white/40">link…</span>
+                          )}
+                        </div>
+                        <div className="truncate">
+                          {fps !== null && <span>{fps}fps · </span>}
+                          {latency.rttMs !== null ? (
+                            <span
+                              className={
+                                latency.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'
+                              }
+                            >
+                              {latency.rttMs}ms
+                            </span>
+                          ) : conn.rttMs !== null ? (
+                            <span
+                              className={conn.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'}
+                            >
+                              {conn.rttMs}ms
+                            </span>
+                          ) : (
+                            <span className="text-white/40">measuring…</span>
+                          )}
+                          {proxyLabel !== '' && (
+                            <span className="text-white/60"> · 🌍 {proxyLabel}</span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        aria-label="Close drawer"
+                        title="Collapse"
+                        onClick={collapseDrawer}
+                        className="-mr-1 -mt-0.5 shrink-0 rounded px-1 text-[13px] leading-none text-white/50 transition hover:bg-white/10 hover:text-white"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* The active section's content PANE — scrolls (the rail + status
+                  strip don't). */}
                   <div
                     data-component="sim-drawer-pane"
                     className="min-w-0 flex-1 space-y-2.5 overflow-y-auto p-2.5"
@@ -3717,30 +3739,8 @@ export function SimulatorWindow(): JSX.Element {
                       })()}
                   </div>
                 </div>
-
-                {/* Zone 3 — pinned End-session footer. A true Stop (distinct from
-                  window-close, which only HIDES the window in ai/pair); always
-                  reachable outside the scroll. controlBusy gates a double-DELETE. */}
-                {sessionId !== '' && (
-                  <div
-                    data-component="sim-drawer-footer"
-                    className="shrink-0 border-t border-white/[0.10] p-2.5"
-                  >
-                    <button
-                      type="button"
-                      aria-label="End session"
-                      title="End the session — stops the worker and tears down the browser"
-                      disabled={controlBusy}
-                      onClick={onEndSession}
-                      className="flex w-full shrink-0 items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11.5px] text-red-300 transition-colors hover:bg-red-500/20 disabled:opacity-50"
-                    >
-                      <span aria-hidden="true">{controlBusy ? '…' : '◼'}</span>
-                      <span>{controlBusy ? 'Ending…' : 'End session'}</span>
-                    </button>
-                  </div>
-                )}
-              </aside>
-            )}
+              )}
+            </aside>
           </div>
         </div>
       )}

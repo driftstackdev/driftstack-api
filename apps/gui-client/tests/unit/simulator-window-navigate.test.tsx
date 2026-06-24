@@ -78,16 +78,15 @@ function renderSim() {
   );
 }
 
-// Open the expandable control panel ONLY if it's currently collapsed. The panel
-// defaults to EXPANDED until the first navigate (SimulatorWindow reads
-// localStorage['ds-sim-navigated']), so depending on prior state the chevron may
-// already read "Hide controls". The old `click([aria-label="Show controls"])`
-// assumed collapsed-start and hit `null` → threw under CI's --coverage worker
-// scheduling (the file passes locally + in isolation). Tolerate both states so the
-// tests are order-/state-independent; either way the panel ends up open.
+// Reveal an address bar. In this suite jsdom's localStorage throws, so browser
+// mode defaults ON → the BrowserBar's address field (always visible) is the one
+// under test, and the Controls-pane field never renders. The activity-bar rail is
+// always docked (no Show-controls chevron anymore); clicking the Controls rail icon
+// expands its pane harmlessly. Tolerate the icon being absent so the test stays
+// state-independent — the BrowserBar address bar is present either way.
 function openControlPanel(container: HTMLElement): void {
-  const show = container.querySelector('[aria-label="Show controls"]');
-  if (show) fireEvent.click(show);
+  const rail = container.querySelector('[data-component="sim-rail-controls"]');
+  if (rail) fireEvent.click(rail);
 }
 
 describe('SimulatorWindow — address bar navigate', () => {

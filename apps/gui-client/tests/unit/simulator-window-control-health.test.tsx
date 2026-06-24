@@ -120,9 +120,9 @@ describe('SimulatorWindow — controlUnreachable badge does not latch', () => {
 describe('SimulatorWindow — address bar connect state', () => {
   it('reads "connecting…" (not broken) while the room is still connecting, and unlocks once connected', () => {
     const { container } = renderSim();
-    // Open the control panel, then select the Controls rail icon — the panel
-    // address bar lives in the Controls pane (Approach B icon-rail + single pane).
-    fireEvent.click(container.querySelector('[aria-label="Show controls"]') as Element);
+    // The icon rail is always docked; click the Controls rail icon to expand its
+    // pane — the panel address bar lives in the Controls pane (activity-bar drawer:
+    // an always-docked rail + a single expandable pane).
     fireEvent.click(container.querySelector('[data-component="sim-rail-controls"]') as Element);
 
     const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
