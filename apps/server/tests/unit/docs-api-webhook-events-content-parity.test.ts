@@ -98,7 +98,7 @@ describe('W570.C /docs/api/webhook-events.md content parity', () => {
     expect(body).toMatch(/## Common envelope/);
     expect(body).toMatch(/Every webhook delivery is a `POST` to the customer's registered URL/);
     expect(body).toMatch(/with the following envelope:/);
-    expect(body).toMatch(/"id": "evt_<uuid>",/);
+    expect(body).toMatch(/"id": "<uuid>",/);
     expect(body).toMatch(/"type": "<event-type>",/);
     expect(body).toMatch(/"account_id": "acc_<uuid>",/);
     expect(body).toMatch(/"emitted_at": "2026-05-05T12:34:56\.789Z",/);
@@ -110,7 +110,7 @@ describe('W570.C /docs/api/webhook-events.md content parity', () => {
     expect(body).toMatch(/`packages\/sdk-typescript\/src\/webhook-signature\.ts` \(TS\),/);
     expect(body).toMatch(/`packages\/sdk-go\/webhook_signature\.go` \(Go\),/);
     expect(body).toMatch(/`packages\/sdk-python\/src\/driftstack\/webhook_signature\.py` \(Py\)\./);
-    expect(body).toMatch(/- `X-Driftstack-Event-Id: evt_<uuid>` — duplicate of `data\.id`,/);
+    expect(body).toMatch(/- `X-Driftstack-Event-Id: <uuid>` — duplicate of `data\.id`,/);
     expect(body).toMatch(/surfaces in HTTP logs without parsing the body\./);
     expect(body).toMatch(/- `X-Driftstack-Event-Type: <event-type>` — the delivered event/);
     expect(body).toMatch(/Retry policy: 6 attempts \(the initial delivery plus 5 retries\) with/);
@@ -118,7 +118,7 @@ describe('W570.C /docs/api/webhook-events.md content parity', () => {
       /exponential backoff at 1m, 5m, 15m, 30m, 60m\. Final failures land in DLQ/,
     );
     expect(body).toMatch(/\(see `docs\/api\/webhooks\.md` and the admin \/webhook-dlq page\)\./);
-    expect(body).toMatch(/Idempotency: every delivery includes the same `evt_<uuid>`\./);
+    expect(body).toMatch(/Idempotency: every delivery includes the same `<uuid>` id\./);
     expect(body).toMatch(/Customers/);
     expect(body).toMatch(/should dedup on this id — the same event may be re-delivered after a/);
     expect(body).toMatch(/manual replay \(admin tooling\) or DLQ requeue\./);
@@ -225,9 +225,10 @@ describe('W570.C /docs/api/webhook-events.md content parity', () => {
     expect(body).toMatch(/\(`admin\.driftstack\.dev\/webhook-dlq`\) — staff can manually requeue/);
     expect(body).toMatch(/them after investigating the failure\./);
     expect(body).toMatch(
-      /The endpoint is \*\*not\*\* auto-disabled on consecutive failures today\./,
+      /The endpoint \*\*is\*\* auto-disabled after 50 consecutive failed\s*\n?\s*deliveries\./,
     );
-    expect(body).toMatch(/Auto-disable after N consecutive failures is a planned safety net/);
+    expect(body).toMatch(/A disabled endpoint is a\s*\n?\s*sticky tombstone/);
+    expect(body).toMatch(/you mint a new endpoint to resume delivery\./);
   });
 
   it('file exists at canonical path', () => {

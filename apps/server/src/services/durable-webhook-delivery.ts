@@ -408,7 +408,6 @@ export class DurableWebhookWorker {
     const attemptNumber = delivery.attempts + 1;
     const payloadShape = delivery.payload as { body: string; emittedAtSec: number };
     const body = payloadShape.body;
-    const emittedAtSec = payloadShape.emittedAtSec;
 
     let attempt: Omit<DeliveryAttempt, 'attempt' | 'completedAtMs'> & {
       attemptNumber: number;
@@ -428,11 +427,17 @@ export class DurableWebhookWorker {
         endpoint.secretPrev !== null &&
         endpoint.secretPrevExpiresAt !== null &&
         endpoint.secretPrevExpiresAt.getTime() > this.now();
+      // Sign with the ATTEMPT-TIME timestamp (no timestamp override →
+      // signWebhookPayload uses now). The previous code pinned the signed
+      // timestamp to the enqueue time, but retries back off up to 60min and
+      // every SDK verifier rejects |now - t| > 300s — a delayed/retried
+      // delivery would have failed customer verification. The live worker
+      // (webhook-worker.ts) already re-signs per attempt with t=now; this
+      // path now matches.
       const sigHeader = signWebhookPayload({
         body,
         secret: endpoint.secret,
         ...(prevInGrace ? { secretPrev: endpoint.secretPrev as string } : {}),
-        timestampSec: emittedAtSec,
       });
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);

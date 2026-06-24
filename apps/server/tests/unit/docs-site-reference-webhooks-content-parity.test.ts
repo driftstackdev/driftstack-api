@@ -129,7 +129,7 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     // trial_pack.purchased / .expired [PLANNED] rows removed 2026-05-27.
     expect(body).not.toMatch(/trial_pack\./);
     expect(body).toMatch(/^## Common envelope$/m);
-    expect(body).toMatch(/"id": "evt_<uuid>"/);
+    expect(body).toMatch(/"id": "<uuid>"/);
     expect(body).toMatch(/"type": "<event-type>"/);
     // The real delivered body (services/webhooks.ts) is { id, type,
     // created_at, data } — NO account_id, NO emitted_at.

@@ -201,7 +201,7 @@ Returns the most recent deliveries for the endpoint (every status,
 not just failures). `status` filter accepts `pending`, `in_flight`,
 `delivered`, `failed`, or `dlq`. Use this to debug a misbehaving
 handler — the response includes `last_response_status`,
-`last_response_excerpt` (200-char preview of the response body),
+`last_response_excerpt` (up to ~4096-char preview of the response body),
 and `last_error` (timeout / connection-refused / etc).
 
 For replay see [/webhooks/replay](/webhooks/replay/).

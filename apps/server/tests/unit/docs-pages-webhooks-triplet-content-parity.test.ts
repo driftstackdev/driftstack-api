@@ -156,10 +156,10 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     expect(p).not.toMatch(/trial_pack\./);
   });
 
-  it('CRITICAL evt_<uuid> common-envelope shape pinned — id + type + created_at + data (the real delivered body; no account_id / emitted_at). Drift to a different envelope would break SDK type discriminators.', () => {
+  it('CRITICAL <uuid> common-envelope shape pinned — id (bare UUID, matching services/webhooks.ts randomUUID()) + type + created_at + data (the real delivered body; no account_id / emitted_at). Drift to a different envelope would break SDK type discriminators.', () => {
     const p = read(EV);
 
-    expect(p).toMatch(/"id": "evt_<uuid>",/);
+    expect(p).toMatch(/"id": "<uuid>",/);
     expect(p).toMatch(/"type": "<event-type>",/);
     expect(p).toMatch(/"created_at": "2026-05-05T12:34:56\.789Z",/);
     // The wire body (services/webhooks.ts enqueueEvent) carries NO
@@ -183,7 +183,7 @@ describe('W787 docs webhooks/ triplet content parity', () => {
   it('CRITICAL X-Driftstack-Event-Id + X-Driftstack-Event-Type headers pinned (the canonical set webhook-worker sends alongside x-driftstack-signature). Drift to dropping would lose log-correlation + handler-routing utility.', () => {
     const p = read(EV);
 
-    expect(p).toMatch(/`X-Driftstack-Event-Id: evt_<uuid>` — duplicate of the top-level/);
+    expect(p).toMatch(/`X-Driftstack-Event-Id: <uuid>` — duplicate of the top-level/);
     expect(p).toMatch(/`X-Driftstack-Event-Type: <event-type>` — the delivered event/);
   });
 
@@ -196,11 +196,11 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     expect(p).toMatch(/Final failures land in DLQ/);
   });
 
-  it("CRITICAL idempotency-via-evt-uuid framing pinned. The 'every delivery includes the same evt_<uuid>. Customers should dedup on this id — the same event may be re-delivered after a manual replay (admin tooling) or DLQ requeue' wording is the load-bearing customer-handler-design guidance.", () => {
+  it("CRITICAL idempotency-via-uuid framing pinned. The 'every delivery includes the same <uuid> id. Customers should dedup on this id — the same event may be re-delivered after a manual replay (admin tooling) or DLQ requeue' wording is the load-bearing customer-handler-design guidance.", () => {
     const p = read(EV);
 
     expect(p).toMatch(
-      /Idempotency: every delivery includes the same `evt_<uuid>`\. Customers\s*\n?should dedup on this id — the same event may be re-delivered after a\s*\n?manual replay \(admin tooling\) or DLQ requeue\./,
+      /Idempotency: every delivery includes the same `<uuid>` id\. Customers\s*\n?should dedup on this id — the same event may be re-delivered after a\s*\n?manual replay \(admin tooling\) or DLQ requeue\./,
     );
   });
 

@@ -39,7 +39,7 @@ with the following envelope:
 
 ```json
 {
-  "id": "evt_<uuid>",
+  "id": "<uuid>",
   "type": "<event-type>",
   "account_id": "acc_<uuid>",
   "emitted_at": "2026-05-05T12:34:56.789Z",
@@ -58,7 +58,7 @@ Headers:
   `packages/sdk-typescript/src/webhook-signature.ts` (TS),
   `packages/sdk-go/webhook_signature.go` (Go),
   `packages/sdk-python/src/driftstack/webhook_signature.py` (Py).
-- `X-Driftstack-Event-Id: evt_<uuid>` — duplicate of `data.id`,
+- `X-Driftstack-Event-Id: <uuid>` — duplicate of `data.id`,
   surfaces in HTTP logs without parsing the body.
 - `X-Driftstack-Event-Type: <event-type>` — the delivered event
   type (e.g. `session.completed`), so handlers can route without
@@ -68,7 +68,7 @@ Retry policy: 6 attempts (the initial delivery plus 5 retries) with
 exponential backoff at 1m, 5m, 15m, 30m, 60m. Final failures land in DLQ
 (see `docs/api/webhooks.md` and the admin /webhook-dlq page).
 
-Idempotency: every delivery includes the same `evt_<uuid>`. Customers
+Idempotency: every delivery includes the same `<uuid>` id. Customers
 should dedup on this id — the same event may be re-delivered after a
 manual replay (admin tooling) or DLQ requeue.
 
@@ -332,11 +332,13 @@ are visible in the admin panel
 (`admin.driftstack.dev/webhook-dlq`) — staff can manually requeue
 them after investigating the failure.
 
-The endpoint is **not** auto-disabled on consecutive failures today.
-Auto-disable after N consecutive failures is a planned safety net
-(V-NNN); until it lands, customers should monitor the
-`consecutive_failures` field on `GET /v1/webhooks` to detect a
-drifting endpoint.
+The endpoint **is** auto-disabled after 50 consecutive failed
+deliveries. When `consecutive_failures` crosses 50 the worker sets
+`disabled_at` and stops delivering to it. A disabled endpoint is a
+sticky tombstone — it is **not** automatically re-enabled by a later
+success; you mint a new endpoint to resume delivery. Monitor the
+`consecutive_failures` field on `GET /v1/webhooks` to catch a
+drifting endpoint before it trips the auto-disable threshold.
 
 ## Related
 

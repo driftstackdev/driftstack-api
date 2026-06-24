@@ -133,8 +133,11 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     expect(body).toMatch(/const prevInGrace =\s*\n?\s*endpoint\.secretPrev !== null &&/);
     expect(body).toMatch(/endpoint\.secretPrevExpiresAt\.getTime\(\) > this\.now\(\);/);
     expect(body).toMatch(
-      /const sigHeader = signWebhookPayload\(\{\s*\n?\s*body,\s*\n?\s*secret: endpoint\.secret,\s*\n?\s*\.\.\.\(prevInGrace \? \{ secretPrev: endpoint\.secretPrev as string \} : \{\}\),\s*\n?\s*timestampSec: emittedAtSec,\s*\n?\s*\}\);/,
+      /const sigHeader = signWebhookPayload\(\{\s*\n?\s*body,\s*\n?\s*secret: endpoint\.secret,\s*\n?\s*\.\.\.\(prevInGrace \? \{ secretPrev: endpoint\.secretPrev as string \} : \{\}\),\s*\n?\s*\}\);/,
     );
+    // Re-signs at ATTEMPT TIME — no override pinning the signed timestamp to
+    // the enqueue time (would fail the SDK ±300s window on retries).
+    expect(body).not.toMatch(/secretPrev as string \} : \{\}\),\s*\n?\s*timestampSec:/);
   });
 
   it('deliver headers: 3 x-driftstack-* headers (event-id / event-type / signature) + content-type; no emitted-at or signature-prev header', () => {

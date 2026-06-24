@@ -16,7 +16,7 @@
 // emitted header is SDK-verifiable.
 
 import { createHmac } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { verifyWebhookSignature } from '@driftstack/sdk';
 import { DurableWebhookWorker } from '../../src/services/durable-webhook-delivery.js';
 import type { Database } from '../../src/db/client.js';
@@ -100,17 +100,30 @@ function baseEndpoint(over: Record<string, unknown> = {}) {
   };
 }
 
-/** Run one deliver() tick and return the captured outbound request. */
+/** Run one deliver() tick and return the captured outbound request.
+ *  The durable sender re-signs at ATTEMPT TIME (signWebhookPayload uses
+ *  `Date.now()`, matching the live worker), so we pin the wall clock to
+ *  EMITTED_AT_SEC for this single delivery — the signed `t` then equals
+ *  EMITTED_AT_SEC and the SDK verifications (which use the same nowMs)
+ *  stay inside the ±300s window. */
 async function deliverAndCapture(endpoint: Record<string, unknown>): Promise<CapturedRequest> {
   const { fn, calls } = captureFetch();
   const db = makeMockDb(baseDelivery(), endpoint);
-  // emittedAtSec drives the signed timestamp; pin `now` near it so the
-  // attempt bookkeeping is sane (does not affect the signed header).
-  const worker = new DurableWebhookWorker(db, fn, () => EMITTED_AT_SEC * 1000);
-  await worker.processTick();
+  vi.useFakeTimers();
+  vi.setSystemTime(EMITTED_AT_SEC * 1000);
+  try {
+    const worker = new DurableWebhookWorker(db, fn, () => EMITTED_AT_SEC * 1000);
+    await worker.processTick();
+  } finally {
+    vi.useRealTimers();
+  }
   expect(calls).toHaveLength(1);
   return calls[0]!;
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('finding #12 — durable webhook header is SDK-verifiable', () => {
   it('emits a single canonical x-driftstack-signature (t=,v1=) the SDK verifier accepts', async () => {
@@ -184,7 +197,11 @@ describe('finding #12 — durable webhook header is SDK-verifiable', () => {
     );
   });
 
-  it('signed string is <emittedAtSec>.<body> (timestamp = emittedAtSec)', async () => {
+  it('signed string is <attempt-time-sec>.<body> (timestamp = now, NOT a pinned emit time) — a delayed/retried delivery re-signs with the attempt clock so |now - t| stays inside the SDK ±300s window', async () => {
+    // The wall clock is pinned to EMITTED_AT_SEC for this delivery, so the
+    // attempt-time `t` resolves to EMITTED_AT_SEC here. The signer takes the
+    // timestamp from Date.now() (no emittedAtSec override) — matching the
+    // live worker — which is what keeps retried deliveries verifiable.
     const req = await deliverAndCapture(baseEndpoint());
     const header = req.headers['x-driftstack-signature']!;
     const t = Number(/^t=(\d+),/.exec(header)![1]!);
