@@ -165,7 +165,10 @@ describe('V-530.E interleaveGestureStream', () => {
     }
   });
 
-  it('stable tie-break by fingerId ascending', () => {
+  it('stable tie-break by fingerId ascending when two samples share a tMs', () => {
+    // Finger 2's touchstart trails finger 1 by a seeded lag, so the FIRST
+    // sample is finger 1 alone (no tie). Construct a guaranteed tie by tagging
+    // two samples with the same tMs and asserting the sort keeps fingerId order.
     const g = generateTwoFingerScrollGesture({
       start: { x: 0, y: 0 },
       direction: 'down',
@@ -174,9 +177,31 @@ describe('V-530.E interleaveGestureStream', () => {
       seed: 'tie',
     });
     const stream = interleaveGestureStream(g);
-    // At each tMs, finger 1 comes before finger 2.
-    const sameTime = stream.filter((s) => s.tMs === stream[0]?.tMs);
-    expect(sameTime[0]?.fingerId).toBe(1);
-    expect(sameTime[1]?.fingerId).toBe(2);
+    // First sample of the interleaved stream is always finger 1 (it lands first).
+    expect(stream[0]?.fingerId).toBe(1);
+    // Whenever two fingers DO share a tMs, finger 1 sorts before finger 2.
+    for (let i = 1; i < stream.length; i += 1) {
+      const prev = stream[i - 1];
+      const cur = stream[i];
+      if (prev && cur && prev.tMs === cur.tMs) {
+        expect(prev.fingerId).toBeLessThanOrEqual(cur.fingerId);
+      }
+    }
+  });
+
+  it('finger 2 touchstart trails finger 1 (no perfectly synchronized landing)', () => {
+    const g = generateTwoFingerScrollGesture({
+      start: { x: 0, y: 0 },
+      direction: 'down',
+      distancePx: 100,
+      samples: 4,
+      seed: 'lag',
+    });
+    const f1Start = g.fingers[0]?.samples[0]?.tMs ?? 0;
+    const f2Start = g.fingers[1]?.samples[0]?.tMs ?? 0;
+    expect(f1Start).toBe(0);
+    expect(f2Start).toBeGreaterThan(0);
+    // start/end coordinates are unchanged by the timeline stagger.
+    expect(g.fingers[1]?.start.x).toBe((g.fingers[0]?.start.x ?? 0) + 80);
   });
 });

@@ -275,6 +275,10 @@ export function generateRegionAwareTouchEvent(
     }
   }
 
+  // ⚠️ DETERMINISTIC FALLBACK SEED — reference/testing only. Derived purely from
+  // (elementClass, bounds), so the same args produce byte-identical events.
+  // Intentional for reproducible tests; production callers MUST pass a
+  // per-session `seed` to avoid correlated, replayable touch streams.
   const seed = opts.seed ?? `region-touch:${opts.elementClass}:${JSON.stringify(opts.bounds)}`;
   const rng = mulberry32(hashSeed(seed));
 

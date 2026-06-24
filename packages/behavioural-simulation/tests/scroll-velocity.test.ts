@@ -276,14 +276,17 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
     ).toThrow(/decayRate must be >= 0/);
   });
 
-  it('allows decayRate 0 (constant-velocity scroll, no decay)', () => {
+  it('floors a decayRate 0 override to 0.1 (a real finger flick always decays)', () => {
+    // decayRate 0 would be a non-decaying constant-velocity scroll — physically
+    // impossible. The override is floored to 0.1 rather than throwing so existing
+    // decayRate:0 callers keep working with a realistic decaying profile.
     const profile = generateScrollVelocityProfile({
       direction: 'down',
       elementClass: 'scroll-container',
       initialVelocityPxPerSec: 1000,
       decayRate: 0,
     });
-    expect(profile.decayRate).toBe(0);
+    expect(profile.decayRate).toBe(0.1);
     expect(profile.ticks.length).toBeGreaterThan(0);
   });
 

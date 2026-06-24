@@ -107,6 +107,10 @@ const QWERTY_NEIGHBOURS: Readonly<Record<string, readonly string[]>> = {
  */
 export function generateTypingSequence(opts: GenerateTypingSequenceOpts): TypingSequence {
   const { text, profile } = opts;
+  // ⚠️ DETERMINISTIC FALLBACK SEED — reference/testing only. Derived purely from
+  // (profile.id, text), so the same args produce byte-identical sequences.
+  // Intentional for reproducible tests; production callers MUST pass a
+  // per-session `seed` to avoid correlated, replayable typing streams.
   const seed = opts.seed ?? `typing:${profile.id}:${text}`;
   const typoProbability = opts.typoProbability ?? DEFAULT_TYPO_PROBABILITY;
 

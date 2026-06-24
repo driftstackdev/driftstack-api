@@ -144,7 +144,7 @@ describe('W454.A packages/behavioural-simulation/src/multi-touch.ts content pari
       /const finger1 = buildLinearTrack\(\{\s*\n?\s*fingerId: 1,\s*\n?\s*start: \{ x: opts\.startCentre\.x - halfStart, y: opts\.startCentre\.y \},\s*\n?\s*end: \{ x: opts\.startCentre\.x - halfEnd, y: opts\.startCentre\.y \},/,
     );
     expect(body).toMatch(
-      /const finger2 = buildLinearTrack\(\{\s*\n?\s*fingerId: 2,\s*\n?\s*start: \{ x: opts\.startCentre\.x \+ halfStart, y: opts\.startCentre\.y \},\s*\n?\s*end: \{ x: opts\.startCentre\.x \+ halfEnd, y: opts\.startCentre\.y \},/,
+      /const finger2 = staggerTrackStart\(\s*\n?\s*buildLinearTrack\(\{\s*\n?\s*fingerId: 2,\s*\n?\s*start: \{ x: opts\.startCentre\.x \+ halfStart, y: opts\.startCentre\.y \},\s*\n?\s*end: \{ x: opts\.startCentre\.x \+ halfEnd, y: opts\.startCentre\.y \},/,
     );
     expect(body).toMatch(/kind: 'pinch',\s*\n?\s*fingers: \[finger1, finger2\],/);
   });

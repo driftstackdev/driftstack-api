@@ -159,6 +159,11 @@ function hashSeed(seed: string): number {
   return h >>> 0;
 }
 
+// ⚠️ DETERMINISTIC FALLBACK SEED — reference/testing only. Derived purely from
+// the input args, so two default-seed calls with the same args produce
+// BYTE-IDENTICAL profiles. Intentional for this reference layer (reproducible
+// tests). Production callers MUST pass a per-session `seed` so sessions don't
+// emit correlated, replayable scroll profiles (a cross-session correlation tell).
 function defaultSeed(opts: GenerateScrollVelocityProfileOpts): string {
   return `scroll-v:${opts.direction}:${opts.elementClass}`;
 }
@@ -191,8 +196,12 @@ export function generateScrollVelocityProfile(
   // Math.max(0.1, decayRate)), so validate them here. A non-positive
   // initial velocity yields a dead/reverse scroll; a negative decay rate
   // makes v(t) GROW — a physically-impossible accelerating flick that no
-  // real finger produces (a behavioural tell). decayRate 0 is allowed:
-  // it's the intentional constant-velocity case handled below.
+  // real finger produces (a behavioural tell). A decayRate override of 0
+  // would yield a non-decaying constant-velocity scroll that never slows —
+  // equally impossible for a real finger flick (it always decays under
+  // friction) — so the override is FLOORED to 0.1 below, matching the
+  // default path's Math.max(0.1, …) clamp rather than throwing (so existing
+  // decayRate:0 callers keep working, just with a realistic floor).
   if (opts.initialVelocityPxPerSec !== undefined && opts.initialVelocityPxPerSec <= 0) {
     throw new Error(
       `generateScrollVelocityProfile: initialVelocityPxPerSec must be > 0 when set ` +
@@ -217,8 +226,12 @@ export function generateScrollVelocityProfile(
       defaults.meanInitialVelocityPxPerSec + uniformSigned() * defaults.initialVelocityJitter,
     );
   const decayRate =
-    opts.decayRate ??
-    Math.max(0.1, defaults.meanDecayRate + uniformSigned() * defaults.decayRateJitter);
+    opts.decayRate !== undefined
+      ? // Floor an explicit override to 0.1 — a real finger flick always decays,
+        // so decayRate 0 (non-decaying, constant-velocity ~5s scroll) is
+        // physically impossible. Same floor as the default-path clamp below.
+        Math.max(0.1, opts.decayRate)
+      : Math.max(0.1, defaults.meanDecayRate + uniformSigned() * defaults.decayRateJitter);
 
   const sign = opts.direction === 'up' || opts.direction === 'left' ? -1 : 1;
   const tickSec = tickIntervalMs / 1000;

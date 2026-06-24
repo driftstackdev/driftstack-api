@@ -162,6 +162,12 @@ function hashSeed(seed: string): number {
   return h >>> 0;
 }
 
+// ⚠️ DETERMINISTIC FALLBACK SEEDS — reference/testing only. Both defaults below
+// are derived purely from the input args, so two default-seed calls with the
+// same args produce byte-identical idle streams. Intentional for this reference
+// layer (reproducible tests). Production callers MUST pass a per-session `seed`
+// so sessions don't emit correlated, replayable idle timing (a cross-session
+// correlation tell).
 function defaultSeed(opts: GenerateIdlePeriodOpts): string {
   return `idle:${opts.idleClass}:${opts.durationMs ?? 'auto'}`;
 }

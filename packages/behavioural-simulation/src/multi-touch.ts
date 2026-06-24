@@ -129,6 +129,47 @@ function hashSeed(seed: string): number {
   return h >>> 0;
 }
 
+/**
+ * Per-finger touchstart lag (ms). A real multi-finger gesture never lands
+ * every finger on the exact same instant — finger 2 (and 3) trail finger 1
+ * by a few ms. Mirrors the harness `secondFingerLagMs` (see
+ * WebDriverClient.touchPinchActions): without it, every finger's first
+ * sample is tMs=0, an impossible perfectly-synchronized landing a detector
+ * keys on. The lag is seeded-jittered (NO Math.random) so it varies
+ * gesture-to-gesture but stays deterministic per seed.
+ */
+const MIN_FINGER_LAG_MS = 8;
+const MAX_FINGER_LAG_MS = 30;
+
+/** Draw a seeded touchstart lag in [MIN_FINGER_LAG_MS, MAX_FINGER_LAG_MS]. */
+function fingerStartLagMs(rng: () => number): number {
+  return Math.round(MIN_FINGER_LAG_MS + rng() * (MAX_FINGER_LAG_MS - MIN_FINGER_LAG_MS));
+}
+
+/** Gesture duration = the latest sample tMs across all fingers (per the
+ *  MultiTouchGesture.durationMs contract), with `floor` as a lower bound. */
+function gestureDurationMs(fingers: readonly FingerTrack[], floor: number): number {
+  let max = floor;
+  for (const finger of fingers) {
+    const last = finger.samples[finger.samples.length - 1];
+    if (last !== undefined && last.tMs > max) max = last.tMs;
+  }
+  return max;
+}
+
+/**
+ * Shift every sample's `tMs` forward by `lagMs` so this finger's touchstart
+ * trails an earlier finger. Returns a new track (input untouched); start/end
+ * coordinates are unchanged — only the timeline is staggered.
+ */
+function staggerTrackStart(track: FingerTrack, lagMs: number): FingerTrack {
+  if (lagMs <= 0) return track;
+  return {
+    ...track,
+    samples: track.samples.map((s) => ({ ...s, tMs: s.tMs + lagMs })),
+  };
+}
+
 function dirVector(dir: 'up' | 'down' | 'left' | 'right'): { dx: number; dy: number } {
   switch (dir) {
     case 'up':
@@ -195,19 +236,25 @@ export function generatePinchGesture(opts: GeneratePinchOpts): MultiTouchGesture
     samples,
     rng,
   });
-  const finger2 = buildLinearTrack({
-    fingerId: 2,
-    start: { x: opts.startCentre.x + halfStart, y: opts.startCentre.y },
-    end: { x: opts.startCentre.x + halfEnd, y: opts.startCentre.y },
-    durationMs: duration,
-    samples,
-    rng,
-  });
+  // Finger 2's touchstart trails finger 1 by a seeded-jittered lag so the
+  // two fingers never land on the exact same tick (mirrors the harness
+  // secondFingerLagMs); start/end coordinates are unchanged.
+  const finger2 = staggerTrackStart(
+    buildLinearTrack({
+      fingerId: 2,
+      start: { x: opts.startCentre.x + halfStart, y: opts.startCentre.y },
+      end: { x: opts.startCentre.x + halfEnd, y: opts.startCentre.y },
+      durationMs: duration,
+      samples,
+      rng,
+    }),
+    fingerStartLagMs(rng),
+  );
 
   return {
     kind: 'pinch',
     fingers: [finger1, finger2],
-    durationMs: duration,
+    durationMs: gestureDurationMs([finger1, finger2], duration),
     seed,
   };
 }
@@ -241,19 +288,24 @@ export function generateTwoFingerScrollGesture(
     samples,
     rng,
   });
-  const finger2 = buildLinearTrack({
-    fingerId: 2,
-    start: f2Start,
-    end: f2End,
-    durationMs: duration,
-    samples,
-    rng,
-  });
+  // Finger 2 lands a seeded-jittered beat after finger 1 (no perfectly
+  // synchronized two-finger touchstart).
+  const finger2 = staggerTrackStart(
+    buildLinearTrack({
+      fingerId: 2,
+      start: f2Start,
+      end: f2End,
+      durationMs: duration,
+      samples,
+      rng,
+    }),
+    fingerStartLagMs(rng),
+  );
 
   return {
     kind: 'two-finger-scroll',
     fingers: [finger1, finger2],
-    durationMs: duration,
+    durationMs: gestureDurationMs([finger1, finger2], duration),
     seed,
   };
 }
@@ -275,8 +327,8 @@ export function generateThreeFingerSwipeGesture(
     { x: opts.start.x + sep, y: opts.start.y },
   ];
 
-  const fingers: FingerTrack[] = fingerStarts.map((start, i) =>
-    buildLinearTrack({
+  const fingers: FingerTrack[] = fingerStarts.map((start, i) => {
+    const track = buildLinearTrack({
       fingerId: i + 1,
       start,
       end: {
@@ -286,13 +338,16 @@ export function generateThreeFingerSwipeGesture(
       durationMs: duration,
       samples,
       rng,
-    }),
-  );
+    });
+    // Finger 1 (i === 0) lands first; fingers 2/3 trail it by a seeded lag
+    // so the three fingers never land on the exact same tick.
+    return i === 0 ? track : staggerTrackStart(track, fingerStartLagMs(rng));
+  });
 
   return {
     kind: 'three-finger-swipe',
     fingers,
-    durationMs: duration,
+    durationMs: gestureDurationMs(fingers, duration),
     seed,
   };
 }

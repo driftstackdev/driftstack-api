@@ -64,7 +64,7 @@ describe('W452.A packages/behavioural-simulation/src/types.ts content parity', (
 
   it("KeyboardCadence: 4-field (text + delaysMs length=text.length + durationMs + seed); ScrollPattern: 5-field (direction 4-union + totalDistancePx + ticks + durationMs + seed) + 'Distinct from mouse — wheel/touch deltas' framing", () => {
     expect(body).toMatch(
-      /export interface KeyboardCadence \{[\s\S]*?text: string;[\s\S]*?\/\*\* Inter-keystroke delay in ms, length = `text\.length`\. \*\/\s*\n?\s*delaysMs: number\[\];[\s\S]*?durationMs: number;[\s\S]*?seed: string;/,
+      /export interface KeyboardCadence \{[\s\S]*?text: string;[\s\S]*?\/\*\* Per-keystroke delay in ms; `delaysMs\[i\]` is the delay BEFORE keystroke[\s\S]*?delaysMs: number\[\];[\s\S]*?durationMs: number;[\s\S]*?seed: string;/,
     );
     expect(body).toMatch(
       /\/\*\* Scroll-by-scroll velocity profile\. Distinct from mouse — wheel\/touch deltas\. \*\/\s*\n?\s*export interface ScrollPattern \{[\s\S]*?direction: 'up' \| 'down' \| 'left' \| 'right';[\s\S]*?totalDistancePx: number;[\s\S]*?ticks: Array<\{ deltaPx: number; tMs: number \}>;/,

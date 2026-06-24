@@ -102,6 +102,11 @@ const LOWERCASE = /[a-z]/;
  */
 export function generateKeyboardCadence(opts: GenerateKeyboardCadenceOpts): KeyboardCadence {
   const { text, profile } = opts;
+  // ⚠️ DETERMINISTIC FALLBACK SEED — reference/testing only. The default below
+  // is derived purely from (profile.id, text), so two default-seed calls with
+  // the same args produce byte-identical cadences. Intentional for reproducible
+  // tests; production callers MUST pass a per-session `seed` to avoid correlated,
+  // replayable keystroke streams (a cross-session correlation tell).
   const seed = opts.seed ?? `keyboard:${profile.id}:${text}`;
   const rng = mulberry32(hashSeed(seed));
   const d = KEYBOARD_CADENCE_DEFAULTS;

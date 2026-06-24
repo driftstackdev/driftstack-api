@@ -131,6 +131,12 @@ function hashSeed(seed: string): number {
   return h >>> 0;
 }
 
+// ⚠️ DETERMINISTIC FALLBACK SEED — reference/testing only. This default is
+// derived purely from the input args, so two default-seed calls with the same
+// args produce BYTE-IDENTICAL event streams. That is intentional for this
+// reference layer (reproducible tests). Production callers MUST pass a
+// per-session `seed` (e.g. the session id) so concurrent/sequential sessions
+// don't emit correlated, replayable streams — a cross-session correlation tell.
 function defaultSeed(opts: { elementClass: ElementClass; bounds: ElementBounds }): string {
   return `touch:${opts.elementClass}:${JSON.stringify(opts.bounds)}`;
 }

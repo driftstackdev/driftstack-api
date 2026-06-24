@@ -26,7 +26,9 @@ export interface MouseTrajectory {
 export interface KeyboardCadence {
   /** The string typed. */
   text: string;
-  /** Inter-keystroke delay in ms, length = `text.length`. */
+  /** Per-keystroke delay in ms; `delaysMs[i]` is the delay BEFORE keystroke
+   *  `i` (so `delaysMs[0]` is the latency to the first keypress). Length =
+   *  `text.length`. */
   delaysMs: number[];
   /** Total wall-clock duration in ms. */
   durationMs: number;
