@@ -51,11 +51,11 @@ type AuthedUpgradeRequest = FastifyRequest & { fleetNodeId?: string };
 interface FleetSocket {
   send(data: string): void;
   ping(): void;
-  terminate(): void;
+  pong(): void;
   on(event: 'message', listener: (data: WsMessageData) => void): void;
   on(event: 'close', listener: () => void): void;
   on(event: 'error', listener: (err: Error) => void): void;
-  on(event: 'pong', listener: () => void): void;
+  on(event: 'ping', listener: () => void): void;
   close(code?: number, reason?: string): void;
 }
 
@@ -80,7 +80,12 @@ export async function registerFleetEventsRoutes(
   // base64-encoded on the wire (~×1.33 → ~10.7 MiB) + a small JSON envelope.
   // 16 MiB clears that with headroom while cutting the ws default (100 MiB) ~6×.
   const FLEET_WS_MAX_PAYLOAD_BYTES = 16 * 1024 * 1024;
-  await app.register(websocketPlugin, { options: { maxPayload: FLEET_WS_MAX_PAYLOAD_BYTES } });
+  // autoPong:false — the handler PONGs inbound pings explicitly (single,
+  // greppable source) so a node keepalive ping is always answered even if a
+  // future ws/plugin default changes; see the socket.on('ping') handler below.
+  await app.register(websocketPlugin, {
+    options: { maxPayload: FLEET_WS_MAX_PAYLOAD_BYTES, autoPong: false },
+  });
 
   app.get(
     '/v1/fleet/events',
@@ -107,27 +112,33 @@ export async function registerFleetEventsRoutes(
       }
       const conn = deps.registry.register(nodeId, (data) => socket.send(data));
       socket.on('message', (data: WsMessageData) => conn.handleInbound(messageToString(data)));
-      // Server-side WS keepalive. The server->node direction is silent between
-      // dispatches, so an idle control socket gets reaped by a proxy/NAT idle
-      // timeout (nginx proxy_read_timeout default 60s) -> half-open -> the box
-      // sees -1011 on its next probe and reconnects (a persistent flap). `ws`
-      // does NOT auto-ping; send a protocol ping every 30s (well under 60s) and
-      // terminate a peer that stopped ponging so `close` fires + the box
-      // reconnects cleanly. MUST clearInterval on teardown or a timer leaks per
-      // dead connection. The app-level `heartbeat` JSON frame is node->server
-      // only and does not keep the server->node direction warm.
-      let alive = true;
-      socket.on('pong', () => {
-        alive = true;
+      // Explicitly PONG every inbound ping from the node. With autoPong:false in
+      // the plugin options, ws no longer auto-replies, so this is the single,
+      // guaranteed source of pongs — a node keepalive ping is always answered, so
+      // its "no PONG within 10s -> half-open -> reconnect" flap cannot recur from
+      // a missing server pong. (The app-level `heartbeat` JSON frame is
+      // node->server only and is unrelated to WS protocol ping/pong.)
+      socket.on('ping', () => {
+        try {
+          socket.pong();
+        } catch {
+          // socket already closing — ignore
+        }
       });
+      // Keep the server->node direction warm so a proxy/NAT idle timer can't reap
+      // an otherwise-silent control socket: a protocol ping every 30s (well under
+      // nginx's 60s read timeout). Do NOT terminate() on a missed pong --
+      // terminate() = socket.destroy() = an abrupt RST the box sees as
+      // ENOTCONN/Code-57, and one missed pong is not proof of death (a brief
+      // event-loop stall on either side). TCP keepalive + the box's own reconnect
+      // handle genuinely-dead sockets. MUST clearInterval on teardown.
       const FLEET_WS_KEEPALIVE_MS = 30_000;
       const keepalive = setInterval(() => {
-        if (!alive) {
-          socket.terminate();
-          return;
+        try {
+          socket.ping();
+        } catch {
+          // socket already closing — ignore
         }
-        alive = false;
-        socket.ping();
       }, FLEET_WS_KEEPALIVE_MS);
       const stopKeepalive = (): void => clearInterval(keepalive);
       // Pass `conn` so unregister is identity-checked: a reconnect that already
