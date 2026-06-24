@@ -65,7 +65,22 @@ const DEVICE_LOGICAL_WIDTH = 402;
 // derives the phone dims from (windowWidth − drawerExtra) and adds drawerExtra
 // back, so the drawer never letterboxes the device (the prior "window larger than
 // output" hazard). Reversible: closing removes the extra width exactly.
-const DRAWER_W = 264;
+const DRAWER_W = 300;
+
+// Approach B drawer (founder 2026-06-24) — the section ids for the icon rail +
+// single content pane. Order = the rail's top-to-bottom order. Persisted as a
+// PREFERENCE so the operator's last-used section survives a relaunch.
+const SIM_DRAWER_PANES = [
+  'session',
+  'controls',
+  'diagnostics',
+  'cookies',
+  'files',
+  'downloads',
+  'recording',
+] as const;
+type SimDrawerPane = (typeof SIM_DRAWER_PANES)[number];
+const SIM_DRAWER_PANE_KEY = 'ds-sim-drawer-pane';
 
 interface SessionQuery {
   info: LiveKitInfo | null;
@@ -467,6 +482,122 @@ function LabeledControl({
         {glyph}
       </span>
       <span className="leading-none">{label}</span>
+    </button>
+  );
+}
+
+/** Approach B icon rail (founder 2026-06-24, APPROVED). Hand-rolled inline
+ *  stroke-SVG glyphs (viewBox 0 0 24 24, currentColor — no icon-font dependency,
+ *  mirroring the existing LabeledControl / chevron SVG idiom) — one per drawer
+ *  section. */
+const SIM_PANE_ICONS: Record<SimDrawerPane, JSX.Element> = {
+  // Session — a control dial.
+  session: (
+    <>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" />
+    </>
+  ),
+  // Controls — sliders.
+  controls: (
+    <>
+      <path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h13M21 18h-1" />
+      <circle cx="16" cy="6" r="2" />
+      <circle cx="8" cy="12" r="2" />
+      <circle cx="19" cy="18" r="2" />
+    </>
+  ),
+  // Diagnostics — a pulse/activity line.
+  diagnostics: <path d="M3 12h4l2-6 4 12 2-6h6" />,
+  // Cookies — a cookie with bites + chips.
+  cookies: (
+    <>
+      <path d="M12 3a9 9 0 1 0 9 9 3 3 0 0 1-3-3 3 3 0 0 1-3-3 3 3 0 0 1-3-3z" />
+      <circle cx="9" cy="11" r="0.6" />
+      <circle cx="13" cy="15" r="0.6" />
+      <circle cx="16" cy="11.5" r="0.6" />
+    </>
+  ),
+  // Files — an upload tray.
+  files: (
+    <>
+      <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
+      <path d="M12 15V4M8 8l4-4 4 4" />
+    </>
+  ),
+  // Downloads — a download tray.
+  downloads: (
+    <>
+      <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
+      <path d="M12 4v11M8 11l4 4 4-4" />
+    </>
+  ),
+  // Recording — a record disc.
+  recording: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none" />
+    </>
+  ),
+};
+const SIM_PANE_TITLES: Record<SimDrawerPane, string> = {
+  session: 'Session',
+  controls: 'Controls',
+  diagnostics: 'Diagnostics',
+  cookies: 'Cookies',
+  files: 'Files',
+  downloads: 'Downloads',
+  recording: 'Recording',
+};
+
+/** One icon button in the Approach-B drawer rail — a square, ~44px tap target
+ *  with a hand-rolled stroke-SVG glyph. The active section gets the accent
+ *  background; an optional `pulse` (recording) shows a small live dot. */
+function DrawerRailButton({
+  pane,
+  active,
+  pulse,
+  onSelect,
+}: {
+  pane: SimDrawerPane;
+  active: boolean;
+  pulse?: boolean;
+  onSelect: (pane: SimDrawerPane) => void;
+}): JSX.Element {
+  const title = SIM_PANE_TITLES[pane];
+  return (
+    <button
+      type="button"
+      data-component={`sim-rail-${pane}`}
+      aria-label={title}
+      aria-pressed={active}
+      title={title}
+      onClick={() => onSelect(pane)}
+      className={`relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+        active
+          ? 'bg-accent/20 text-accent ring-1 ring-accent/40'
+          : 'text-ink-secondary hover:bg-white/10 hover:text-ink-primary'
+      }`}
+    >
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        {SIM_PANE_ICONS[pane]}
+      </svg>
+      {pulse === true && (
+        <span
+          aria-hidden="true"
+          className="absolute right-1 top-1 h-1.5 w-1.5 animate-pulse rounded-full bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.9)]"
+        />
+      )}
     </button>
   );
 }
@@ -1278,6 +1409,38 @@ export function SimulatorWindow(): JSX.Element {
   const drawerExtraRef = useRef(0);
   drawerExtraRef.current = toolbarExpanded ? DRAWER_W : 0;
 
+  // Approach B (founder 2026-06-24, APPROVED) — the drawer is an icon RAIL + a
+  // single content PANE. `activePane` is which section the pane renders; the rail
+  // highlights it. Persisted as a PREFERENCE in localStorage (NOT cleared by the
+  // in-place session-reset, unlike the per-session UI state) so the operator's
+  // last-used section survives a relaunch. Lazy init reads the stored value in a
+  // try/catch (jsdom / private-mode storage can throw); default 'session' (the
+  // hero). A rail click sets + persists it.
+  const [activePane, setActivePane] = useState<SimDrawerPane>(() => {
+    try {
+      const stored = localStorage.getItem(SIM_DRAWER_PANE_KEY);
+      return stored !== null && (SIM_DRAWER_PANES as readonly string[]).includes(stored)
+        ? (stored as SimDrawerPane)
+        : 'session';
+    } catch {
+      return 'session';
+    }
+  });
+  const selectPane = (pane: SimDrawerPane): void => {
+    setActivePane(pane);
+    try {
+      localStorage.setItem(SIM_DRAWER_PANE_KEY, pane);
+    } catch {
+      /* storage disabled — the active pane just won't persist across reopens */
+    }
+  };
+  // Per-pane "is this section the active pane" booleans — the data/utility polls
+  // (cookies / downloads) gate on these so they only fire while their pane is
+  // actually shown. Depending on the BOOLEAN (not the whole activePane string)
+  // keeps the effect from re-arming when an UNRELATED pane switch happens.
+  const cookiesPaneActive = activePane === 'cookies';
+  const downloadsPaneActive = activePane === 'downloads';
+
   // Browser mode (founder 2026-06-21, greenlit) — a native GUI URL bar in the
   // toolbar instead of relying on the rendered iOS-Safari chrome (which the page
   // tap-path can't reach). When on, the toolbar center is an editable address
@@ -1644,7 +1807,10 @@ export function SimulatorWindow(): JSX.Element {
   const [cookies, setCookies] = useState<SessionCookie[] | null>(null);
   const [cookiesNote, setCookiesNote] = useState<string | null>(null);
   useEffect(() => {
-    if (!toolbarExpanded || sessionId === '' || room === null) return;
+    // Approach B perf — poll ONLY while the Cookies pane is the active section
+    // (was gated on the whole drawer being open). Switching away tears the
+    // interval down via the effect cleanup; switching back re-fires tick().
+    if (!cookiesPaneActive || sessionId === '' || room === null) return;
     let cancelled = false;
     const tick = (): void => {
       void getAgentSessionCookies(sessionId, controlAuth)
@@ -1676,7 +1842,7 @@ export function SimulatorWindow(): JSX.Element {
       cancelled = true;
       window.clearInterval(handle);
     };
-  }, [toolbarExpanded, sessionId, controlAuth, room]);
+  }, [cookiesPaneActive, sessionId, controlAuth, room]);
 
   // File-control upload (A3 W2851 / founder "control files"). Upload a file's bytes
   // (base64) into the running session's isolated 0o700 jail → get an OPAQUE handle
@@ -1741,7 +1907,10 @@ export function SimulatorWindow(): JSX.Element {
   const [downloadsNote, setDownloadsNote] = useState<string | null>(null);
   const [downloadingName, setDownloadingName] = useState<string | null>(null);
   useEffect(() => {
-    if (!toolbarExpanded || sessionId === '' || room === null) return;
+    // Approach B perf — poll ONLY while the Downloads pane is the active section
+    // (was gated on the whole drawer being open). Cleanup tears the interval
+    // down on switching away; switching back re-fires tick().
+    if (!downloadsPaneActive || sessionId === '' || room === null) return;
     let cancelled = false;
     const tick = (): void => {
       void listAgentSessionDownloads(sessionId, controlAuth)
@@ -1772,7 +1941,7 @@ export function SimulatorWindow(): JSX.Element {
       cancelled = true;
       window.clearInterval(handle);
     };
-  }, [toolbarExpanded, sessionId, controlAuth, room]);
+  }, [downloadsPaneActive, sessionId, controlAuth, room]);
 
   const onDownloadFile = (name: string): void => {
     setDownloadingName(name);
@@ -2399,366 +2568,498 @@ export function SimulatorWindow(): JSX.Element {
                 </div>
               </div>
             </div>
-            {/* Option B right DRAWER (founder 2026-06-23) — revealed by the chevron;
-              the window widens by DRAWER_W so the rail sits beside the phone, not
-              over it. Sections: Session · Controls · Diagnostics(✕) · Cookies · End.
-              NOT a drag region (its controls must be clickable); scrolls when the
-              rail is taller than the phone. */}
+            {/* Approach B drawer (founder 2026-06-24, APPROVED) — revealed by the
+              chevron; the window widens by DRAWER_W so it sits beside the phone, not
+              over it. Three zones: a pinned status strip on top (shrink-0), an
+              icon RAIL + single content PANE in the middle (flex-1, only the pane
+              scrolls), and a pinned End-session footer at the bottom (shrink-0).
+              NOT a drag region (its controls must be clickable). */}
             {toolbarExpanded && (
               <aside
                 data-tauri-drag-region="false"
                 data-component="simulator-drawer"
-                className="flex w-[264px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-white/[0.12] bg-[#1d1e24] p-2.5 text-[11.5px]"
+                className="flex w-[300px] shrink-0 flex-col overflow-hidden border-l border-white/[0.12] bg-[#1d1e24] text-[11.5px]"
               >
-                {/* Session — mode switch + (ai/pair) the agent composer. The rail is
-                  wider than the old dropdown, so this IS the "bigger AI chat". */}
-                <section
-                  data-component="drawer-session"
-                  className="shrink-0 rounded-lg bg-black/20 pb-1"
+                {/* Zone 1 — pinned status strip: the cross-cutting vitals (mode ·
+                  link · transport · fps · latency · egress) on 1–2 compact lines,
+                  with the drawer-close ✕ in the top-right. Never scrolls. */}
+                <div
+                  data-component="sim-drawer-status"
+                  className="shrink-0 border-b border-white/[0.10] bg-black/20 px-2.5 py-2 font-mono text-[10px] leading-tight text-white/70"
                 >
-                  <div className="px-3 pt-2 font-sans text-[11px] font-semibold text-white/90">
-                    Session
-                  </div>
-                  <SessionControlSection
-                    mode={controlMode}
-                    pairKind={pairKind}
-                    busy={controlBusy}
-                    composerText={composerText}
-                    controlError={controlError}
-                    onRetryControl={refreshControl}
-                    onSetMode={onSetMode}
-                    onTakeover={onTakeover}
-                    onHandback={onHandback}
-                    onComposerChange={setComposerText}
-                    onSendMessage={onSendMessage}
-                  />
-                </section>
-
-                {/* Controls — the address bar (non-browser-mode) + window toggles. */}
-                <section
-                  data-component="drawer-controls"
-                  className="shrink-0 rounded-lg bg-black/20 py-1"
-                >
-                  <div className="px-3 pb-0.5 pt-1 font-sans text-[11px] font-semibold text-white/90">
-                    Controls
-                  </div>
-                  {!browserMode && (
-                    <NavigateAddressBar canNavigate={room !== null} onNavigate={onNavigate} />
-                  )}
-                  <LabeledControl
-                    label={browserMode ? 'Browser mode: on' : 'Browser mode'}
-                    hint={
-                      browserMode
-                        ? 'URL bar lives in the toolbar'
-                        : 'Type URLs in the toolbar, not the phone'
-                    }
-                    active={browserMode}
-                    onClick={toggleBrowserMode}
-                    glyph={
-                      <svg
-                        width="13"
-                        height="13"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <circle cx="12" cy="12" r="9" />
-                        <path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18" />
-                      </svg>
-                    }
-                  />
-                  <LabeledControl
-                    label={landscape ? 'Rotate to portrait' : 'Rotate to landscape'}
-                    active={landscape}
-                    onClick={toggleRotate}
-                    glyph={
-                      <svg
-                        width="13"
-                        height="13"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M23 4v6h-6" />
-                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-                      </svg>
-                    }
-                  />
-                  <LabeledControl
-                    label={pinned ? 'Unpin from top' : 'Pin on top'}
-                    hint={pinned ? 'Behave like a normal window' : 'Float above everything'}
-                    active={pinned}
-                    onClick={togglePinned}
-                    glyph={
-                      <svg
-                        width="13"
-                        height="13"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M12 17v5" />
-                        <path d="M9 3h6l-1 7 3 3H7l3-3z" />
-                      </svg>
-                    }
-                  />
-                </section>
-
-                {/* Diagnostics — the session facts + Copy; ✕ closes the drawer
-                  (founder: "there's no close diagnostics"). */}
-                <section
-                  data-component="drawer-diagnostics"
-                  className="shrink-0 rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
-                >
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className="font-sans text-[11px] font-semibold text-white">
-                      Diagnostics
-                    </span>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="truncate">
+                        <span className="text-white/90">
+                          {controlMode !== null
+                            ? controlMode === 'ai'
+                              ? 'Agent'
+                              : controlMode === 'pair'
+                                ? 'Pair'
+                                : 'Manual'
+                            : '…'}
+                        </span>
+                        <span className="text-white/30"> · </span>
+                        <span>{info ? wsHost(info.ws_url) : 'not connected'}</span>
+                        <span className="text-white/30"> · </span>
+                        {conn.transport !== null ? (
+                          <span
+                            className={
+                              conn.transport === 'udp' && conn.relayed !== true
+                                ? 'text-emerald-300'
+                                : 'text-rose-300'
+                            }
+                          >
+                            {conn.transport}
+                            {conn.relayed ? ' relay⚠' : ''}
+                          </span>
+                        ) : (
+                          <span className="text-white/40">link…</span>
+                        )}
+                      </div>
+                      <div className="truncate">
+                        {fps !== null && <span>{fps}fps · </span>}
+                        {latency.rttMs !== null ? (
+                          <span
+                            className={latency.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'}
+                          >
+                            {latency.rttMs}ms
+                          </span>
+                        ) : conn.rttMs !== null ? (
+                          <span
+                            className={conn.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'}
+                          >
+                            {conn.rttMs}ms
+                          </span>
+                        ) : (
+                          <span className="text-white/40">measuring…</span>
+                        )}
+                        {proxyLabel !== '' && (
+                          <span className="text-white/60"> · 🌍 {proxyLabel}</span>
+                        )}
+                      </div>
+                    </div>
                     <button
                       type="button"
                       aria-label="Close drawer"
                       title="Close"
                       onClick={() => setToolbarExpanded(false)}
-                      className="-mr-1 rounded px-1 text-[13px] leading-none text-white/50 transition hover:bg-white/10 hover:text-white"
+                      className="-mr-1 -mt-0.5 shrink-0 rounded px-1 text-[13px] leading-none text-white/50 transition hover:bg-white/10 hover:text-white"
                     >
                       ✕
                     </button>
                   </div>
-                  {profileName !== '' && <div className="truncate">profile {profileName}</div>}
-                  <div className="truncate">device {deviceName}</div>
-                  <div className="truncate">
-                    link {info ? wsHost(info.ws_url) : 'not connected'}
-                  </div>
-                  {proxyLabel !== '' && <div className="truncate">egress 🌍 {proxyLabel}</div>}
-                  <div className="truncate">
-                    {fps !== null && <span>{fps} fps · </span>}
-                    latency{' '}
-                    {latency.rttMs !== null ? (
-                      <span className={latency.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'}>
-                        {latency.rttMs} ms
-                      </span>
-                    ) : conn.rttMs !== null ? (
-                      <span className={conn.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'}>
-                        {conn.rttMs} ms (link)
-                      </span>
-                    ) : (
-                      <span className="text-white/50">measuring…</span>
-                    )}
-                  </div>
-                  <div className="truncate">
-                    transport{' '}
-                    {conn.transport !== null ? (
-                      <span
-                        className={
-                          conn.transport === 'udp' && conn.relayed !== true
-                            ? 'text-emerald-300'
-                            : 'text-rose-300'
-                        }
-                      >
-                        {conn.transport}
-                        {conn.relayed ? ' · relay ⚠' : ' · direct'}
-                      </span>
-                    ) : (
-                      <span className="text-white/50">measuring…</span>
-                    )}
-                  </div>
-                  {(conn.decodeFps !== null ||
-                    conn.packetLossPct !== null ||
-                    conn.freezeCount !== null) && (
-                    <div className="truncate text-white/70">
-                      {conn.decodeFps !== null && <span>decode {conn.decodeFps} fps · </span>}
-                      {conn.packetLossPct !== null && (
-                        <span className={conn.packetLossPct > 1 ? 'text-amber-300' : ''}>
-                          loss {conn.packetLossPct}% ·{' '}
-                        </span>
-                      )}
-                      {conn.jitterMs !== null && <span>jitter {conn.jitterMs}ms · </span>}
-                      {conn.freezeCount !== null && (
-                        <span className={conn.freezeCount > 0 ? 'text-amber-300' : ''}>
-                          freezes {conn.freezeCount}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  <div className="mt-1.5 border-t border-white/15 pt-1.5">
-                    <div className="font-sans text-[11px] font-semibold text-white">Identity</div>
-                    <div className="truncate">engine-deep · bit-exact device</div>
-                    <div className="truncate">input human-cadence native</div>
-                    <div className="truncate text-white/40">
-                      build {typeof __BUILD_STAMP__ !== 'undefined' ? __BUILD_STAMP__ : 'dev'}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    data-action="copy-diagnostics"
-                    onClick={copyDiagnostics}
-                    className="mt-1.5 w-full rounded border border-white/15 px-2 py-1 text-center font-sans text-[10px] text-white/70 transition hover:bg-white/10 hover:text-white"
-                  >
-                    {diagCopied ? 'Copied ✓' : 'Copy diagnostics'}
-                  </button>
-                </section>
+                </div>
 
-                {/* Cookies — live jar for the current page (httpOnly included), pulled
-                  over the control plane; "pending" until the device build serves it.
-                  Cross-domain whole-jar arrives later ("this page" → "all"). */}
-                <section
-                  data-component="simulator-cookies"
-                  className="shrink-0 rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
-                >
-                  <div className="mb-0.5 flex items-center justify-between">
-                    <span className="font-sans text-[11px] font-semibold text-white">
-                      Cookies
-                      {cookies !== null && (
-                        <span className="text-white/40"> · {cookies.length}</span>
-                      )}
-                    </span>
-                    <span className="font-sans text-[9px] text-white/30">this page</span>
-                  </div>
-                  {cookies === null ? (
-                    <div className="text-white/40">{cookiesNote ?? 'loading…'}</div>
-                  ) : cookies.length === 0 ? (
-                    <div className="text-white/40">no cookies on this page</div>
-                  ) : (
-                    <div className="max-h-40 space-y-0.5 overflow-y-auto pr-1">
-                      {cookies.map((c, i) => (
-                        <div key={`${c.domain}|${c.name}|${i}`} className="truncate">
-                          <span className="text-white/50">{c.domain}</span>{' '}
-                          <span className="text-emerald-300/80">{c.name}</span>
-                          <span className="text-white/30">=</span>
-                          <span className="text-white/70">{c.value}</span>
-                          {c.httpOnly === true && (
-                            <span className="text-white/30"> · httpOnly</span>
+                {/* Zone 2 — the icon RAIL (left, fixed) + the content PANE (right,
+                  scrolls). The rail does NOT scroll; only the pane does. */}
+                <div className="flex min-h-0 flex-1 flex-row">
+                  <nav
+                    data-component="sim-drawer-rail"
+                    aria-label="Drawer sections"
+                    className="flex w-11 shrink-0 flex-col items-center gap-1 border-r border-white/[0.10] py-2"
+                  >
+                    {SIM_DRAWER_PANES.map((pane) => (
+                      <DrawerRailButton
+                        key={pane}
+                        pane={pane}
+                        active={activePane === pane}
+                        pulse={pane === 'recording' && recordingId !== null}
+                        onSelect={selectPane}
+                      />
+                    ))}
+                  </nav>
+                  <div
+                    data-component="sim-drawer-pane"
+                    className="min-w-0 flex-1 space-y-2.5 overflow-y-auto p-2.5"
+                  >
+                    {/* Session — mode switch + (ai/pair) the agent composer. The pane is
+                      wider than the old dropdown, so this IS the "bigger AI chat". */}
+                    {activePane === 'session' && (
+                      <section
+                        data-component="drawer-session"
+                        className="rounded-lg bg-black/20 pb-1"
+                      >
+                        <div className="px-3 pt-2 font-sans text-[11px] font-semibold text-white/90">
+                          Session
+                        </div>
+                        <SessionControlSection
+                          mode={controlMode}
+                          pairKind={pairKind}
+                          busy={controlBusy}
+                          composerText={composerText}
+                          controlError={controlError}
+                          onRetryControl={refreshControl}
+                          onSetMode={onSetMode}
+                          onTakeover={onTakeover}
+                          onHandback={onHandback}
+                          onComposerChange={setComposerText}
+                          onSendMessage={onSendMessage}
+                        />
+                      </section>
+                    )}
+
+                    {/* Controls — the address bar (non-browser-mode) + window toggles. */}
+                    {activePane === 'controls' && (
+                      <section
+                        data-component="drawer-controls"
+                        className="rounded-lg bg-black/20 py-1"
+                      >
+                        <div className="px-3 pb-0.5 pt-1 font-sans text-[11px] font-semibold text-white/90">
+                          Controls
+                        </div>
+                        {!browserMode && (
+                          <NavigateAddressBar canNavigate={room !== null} onNavigate={onNavigate} />
+                        )}
+                        <LabeledControl
+                          label={browserMode ? 'Browser mode: on' : 'Browser mode'}
+                          hint={
+                            browserMode
+                              ? 'URL bar lives in the toolbar'
+                              : 'Type URLs in the toolbar, not the phone'
+                          }
+                          active={browserMode}
+                          onClick={toggleBrowserMode}
+                          glyph={
+                            <svg
+                              width="13"
+                              height="13"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <circle cx="12" cy="12" r="9" />
+                              <path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18" />
+                            </svg>
+                          }
+                        />
+                        <LabeledControl
+                          label={landscape ? 'Rotate to portrait' : 'Rotate to landscape'}
+                          active={landscape}
+                          onClick={toggleRotate}
+                          glyph={
+                            <svg
+                              width="13"
+                              height="13"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M23 4v6h-6" />
+                              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                            </svg>
+                          }
+                        />
+                        <LabeledControl
+                          label={pinned ? 'Unpin from top' : 'Pin on top'}
+                          hint={pinned ? 'Behave like a normal window' : 'Float above everything'}
+                          active={pinned}
+                          onClick={togglePinned}
+                          glyph={
+                            <svg
+                              width="13"
+                              height="13"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M12 17v5" />
+                              <path d="M9 3h6l-1 7 3 3H7l3-3z" />
+                            </svg>
+                          }
+                        />
+                      </section>
+                    )}
+
+                    {/* Diagnostics — the session facts + Copy. (The drawer-close ✕
+                      now lives in the pinned status strip.) */}
+                    {activePane === 'diagnostics' && (
+                      <section
+                        data-component="drawer-diagnostics"
+                        className="rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
+                      >
+                        <div className="mb-1 font-sans text-[11px] font-semibold text-white">
+                          Diagnostics
+                        </div>
+                        {profileName !== '' && (
+                          <div className="truncate">profile {profileName}</div>
+                        )}
+                        <div className="truncate">device {deviceName}</div>
+                        <div className="truncate">
+                          link {info ? wsHost(info.ws_url) : 'not connected'}
+                        </div>
+                        {proxyLabel !== '' && (
+                          <div className="truncate">egress 🌍 {proxyLabel}</div>
+                        )}
+                        <div className="truncate">
+                          {fps !== null && <span>{fps} fps · </span>}
+                          latency{' '}
+                          {latency.rttMs !== null ? (
+                            <span
+                              className={
+                                latency.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'
+                              }
+                            >
+                              {latency.rttMs} ms
+                            </span>
+                          ) : conn.rttMs !== null ? (
+                            <span
+                              className={conn.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'}
+                            >
+                              {conn.rttMs} ms (link)
+                            </span>
+                          ) : (
+                            <span className="text-white/50">measuring…</span>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
-
-                {/* Files — upload a file into the session's isolated 0o700 jail; the
-                  OPAQUE handle drives a page's <input type=file> (A3 W2851 / founder
-                  "control files"). Upload-only for now — the file-chooser handle-pick
-                  drive (when a page opens a chooser) is A3's next harness piece. */}
-                <section
-                  data-component="simulator-files"
-                  className="shrink-0 rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
-                >
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className="font-sans text-[11px] font-semibold text-white">
-                      Files
-                      {files.length > 0 && <span className="text-white/40"> · {files.length}</span>}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label="Upload file"
-                      title="Upload a file into the session"
-                      disabled={uploading || sessionId === ''}
-                      onClick={() => fileInputRef.current?.click()}
-                      className="rounded border border-white/15 bg-white/5 px-2 py-0.5 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
-                    >
-                      {uploading ? 'Uploading…' : '+ Upload'}
-                    </button>
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) onUploadFile(f);
-                      e.target.value = '';
-                    }}
-                  />
-                  {uploadNote !== null && (
-                    <div className="mb-1 text-amber-300/80">{uploadNote}</div>
-                  )}
-                  {files.length === 0 ? (
-                    <div className="text-white/40">no files uploaded</div>
-                  ) : (
-                    <div className="max-h-40 space-y-0.5 overflow-y-auto pr-1">
-                      {files.map((f) => (
-                        <div key={f.id} className="truncate">
-                          <span className="text-emerald-300/80">{f.name}</span>
-                          <span className="text-white/30">
-                            {' '}
-                            · {Math.max(1, Math.round(f.size / 1024))} KB
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
-
-                {/* Downloads — files a page wrote into the session's download jail
-                  (A3 W2856 / founder "control files"). Click one to save it to your
-                  machine. Empty until A3's fork download-delegate populates the jail. */}
-                <section
-                  data-component="simulator-downloads"
-                  className="shrink-0 rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
-                >
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className="font-sans text-[11px] font-semibold text-white">
-                      Downloads
-                      {downloads !== null && downloads.length > 0 && (
-                        <span className="text-white/40"> · {downloads.length}</span>
-                      )}
-                    </span>
-                  </div>
-                  {downloadsNote !== null && (
-                    <div className="mb-1 text-amber-300/80">{downloadsNote}</div>
-                  )}
-                  {downloads === null || downloads.length === 0 ? (
-                    <div className="text-white/40">no downloads yet</div>
-                  ) : (
-                    <div className="max-h-40 space-y-0.5 overflow-y-auto pr-1">
-                      {downloads.map((d) => (
-                        <div key={d.name} className="flex items-center justify-between gap-2">
-                          <span className="truncate">
-                            <span className="text-sky-300/80">{d.name}</span>
-                            <span className="text-white/30">
-                              {' '}
-                              · {Math.max(1, Math.round(d.size / 1024))} KB
+                        <div className="truncate">
+                          transport{' '}
+                          {conn.transport !== null ? (
+                            <span
+                              className={
+                                conn.transport === 'udp' && conn.relayed !== true
+                                  ? 'text-emerald-300'
+                                  : 'text-rose-300'
+                              }
+                            >
+                              {conn.transport}
+                              {conn.relayed ? ' · relay ⚠' : ' · direct'}
                             </span>
+                          ) : (
+                            <span className="text-white/50">measuring…</span>
+                          )}
+                        </div>
+                        {(conn.decodeFps !== null ||
+                          conn.packetLossPct !== null ||
+                          conn.freezeCount !== null) && (
+                          <div className="truncate text-white/70">
+                            {conn.decodeFps !== null && <span>decode {conn.decodeFps} fps · </span>}
+                            {conn.packetLossPct !== null && (
+                              <span className={conn.packetLossPct > 1 ? 'text-amber-300' : ''}>
+                                loss {conn.packetLossPct}% ·{' '}
+                              </span>
+                            )}
+                            {conn.jitterMs !== null && <span>jitter {conn.jitterMs}ms · </span>}
+                            {conn.freezeCount !== null && (
+                              <span className={conn.freezeCount > 0 ? 'text-amber-300' : ''}>
+                                freezes {conn.freezeCount}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        <div className="mt-1.5 border-t border-white/15 pt-1.5">
+                          <div className="font-sans text-[11px] font-semibold text-white">
+                            Identity
+                          </div>
+                          <div className="truncate">engine-deep · bit-exact device</div>
+                          <div className="truncate">input human-cadence native</div>
+                          <div className="truncate text-white/40">
+                            build {typeof __BUILD_STAMP__ !== 'undefined' ? __BUILD_STAMP__ : 'dev'}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          data-action="copy-diagnostics"
+                          onClick={copyDiagnostics}
+                          className="mt-1.5 w-full rounded border border-white/15 px-2 py-1 text-center font-sans text-[10px] text-white/70 transition hover:bg-white/10 hover:text-white"
+                        >
+                          {diagCopied ? 'Copied ✓' : 'Copy diagnostics'}
+                        </button>
+                      </section>
+                    )}
+
+                    {/* Cookies — live jar for the current page (httpOnly included), pulled
+                      over the control plane; "pending" until the device build serves it.
+                      Cross-domain whole-jar arrives later ("this page" → "all"). */}
+                    {activePane === 'cookies' && (
+                      <section
+                        data-component="simulator-cookies"
+                        className="rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
+                      >
+                        <div className="mb-0.5 flex items-center justify-between">
+                          <span className="font-sans text-[11px] font-semibold text-white">
+                            Cookies
+                            {cookies !== null && (
+                              <span className="text-white/40"> · {cookies.length}</span>
+                            )}
+                          </span>
+                          <span className="font-sans text-[9px] text-white/30">this page</span>
+                        </div>
+                        {cookies === null ? (
+                          <div className="text-white/40">{cookiesNote ?? 'loading…'}</div>
+                        ) : cookies.length === 0 ? (
+                          <div className="text-white/40">no cookies on this page</div>
+                        ) : (
+                          <div className="max-h-40 space-y-0.5 overflow-y-auto pr-1">
+                            {cookies.map((c, i) => (
+                              <div key={`${c.domain}|${c.name}|${i}`} className="truncate">
+                                <span className="text-white/50">{c.domain}</span>{' '}
+                                <span className="text-emerald-300/80">{c.name}</span>
+                                <span className="text-white/30">=</span>
+                                <span className="text-white/70">{c.value}</span>
+                                {c.httpOnly === true && (
+                                  <span className="text-white/30"> · httpOnly</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    )}
+
+                    {/* Files — upload a file into the session's isolated 0o700 jail; the
+                      OPAQUE handle drives a page's <input type=file> (A3 W2851 / founder
+                      "control files"). Upload-only for now — the file-chooser handle-pick
+                      drive (when a page opens a chooser) is A3's next harness piece. */}
+                    {activePane === 'files' && (
+                      <section
+                        data-component="simulator-files"
+                        className="rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
+                      >
+                        <div className="mb-1 flex items-center justify-between">
+                          <span className="font-sans text-[11px] font-semibold text-white">
+                            Files
+                            {files.length > 0 && (
+                              <span className="text-white/40"> · {files.length}</span>
+                            )}
                           </span>
                           <button
                             type="button"
-                            aria-label={`Save ${d.name}`}
-                            title="Save this file to your machine"
-                            disabled={downloadingName !== null}
-                            onClick={() => onDownloadFile(d.name)}
-                            className="shrink-0 rounded border border-white/15 bg-white/5 px-2 py-0.5 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
+                            aria-label="Upload file"
+                            title="Upload a file into the session"
+                            disabled={uploading || sessionId === ''}
+                            onClick={() => fileInputRef.current?.click()}
+                            className="rounded border border-white/15 bg-white/5 px-2 py-0.5 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
                           >
-                            {downloadingName === d.name ? 'Saving…' : 'Save'}
+                            {uploading ? 'Uploading…' : '+ Upload'}
                           </button>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) onUploadFile(f);
+                            e.target.value = '';
+                          }}
+                        />
+                        {uploadNote !== null && (
+                          <div className="mb-1 text-amber-300/80">{uploadNote}</div>
+                        )}
+                        {files.length === 0 ? (
+                          <div className="text-white/40">no files uploaded</div>
+                        ) : (
+                          <div className="max-h-40 space-y-0.5 overflow-y-auto pr-1">
+                            {files.map((f) => (
+                              <div key={f.id} className="truncate">
+                                <span className="text-emerald-300/80">{f.name}</span>
+                                <span className="text-white/30">
+                                  {' '}
+                                  · {Math.max(1, Math.round(f.size / 1024))} KB
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    )}
 
-                {/* Explicit Stop/End — a true Stop (distinct from window-close, which
-                  only HIDES the window in ai/pair). controlBusy gates a double-DELETE. */}
+                    {/* Downloads — files a page wrote into the session's download jail
+                      (A3 W2856 / founder "control files"). Click one to save it to your
+                      machine. Empty until A3's fork download-delegate populates the jail. */}
+                    {activePane === 'downloads' && (
+                      <section
+                        data-component="simulator-downloads"
+                        className="rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
+                      >
+                        <div className="mb-1 flex items-center justify-between">
+                          <span className="font-sans text-[11px] font-semibold text-white">
+                            Downloads
+                            {downloads !== null && downloads.length > 0 && (
+                              <span className="text-white/40"> · {downloads.length}</span>
+                            )}
+                          </span>
+                        </div>
+                        {downloadsNote !== null && (
+                          <div className="mb-1 text-amber-300/80">{downloadsNote}</div>
+                        )}
+                        {downloads === null || downloads.length === 0 ? (
+                          <div className="text-white/40">no downloads yet</div>
+                        ) : (
+                          <div className="max-h-40 space-y-0.5 overflow-y-auto pr-1">
+                            {downloads.map((d) => (
+                              <div key={d.name} className="flex items-center justify-between gap-2">
+                                <span className="truncate">
+                                  <span className="text-sky-300/80">{d.name}</span>
+                                  <span className="text-white/30">
+                                    {' '}
+                                    · {Math.max(1, Math.round(d.size / 1024))} KB
+                                  </span>
+                                </span>
+                                <button
+                                  type="button"
+                                  aria-label={`Save ${d.name}`}
+                                  title="Save this file to your machine"
+                                  disabled={downloadingName !== null}
+                                  onClick={() => onDownloadFile(d.name)}
+                                  className="shrink-0 rounded border border-white/15 bg-white/5 px-2 py-0.5 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
+                                >
+                                  {downloadingName === d.name ? 'Saving…' : 'Save'}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    )}
+
+                    {/* Recording — placeholder pane for SLICE 1 (the full pane with
+                      Start/Stop + saved-recordings list is a LATER slice). The rail's
+                      Recording icon already shows a red pulse while recording. */}
+                    {activePane === 'recording' && (
+                      <section
+                        data-component="drawer-recording"
+                        className="rounded-lg bg-black/20 p-3 font-mono text-[10px] leading-relaxed text-white/80"
+                      >
+                        <div className="mb-1 font-sans text-[11px] font-semibold text-white">
+                          Recording
+                        </div>
+                        <div className="text-white/40">Recording controls — coming</div>
+                      </section>
+                    )}
+                  </div>
+                </div>
+
+                {/* Zone 3 — pinned End-session footer. A true Stop (distinct from
+                  window-close, which only HIDES the window in ai/pair); always
+                  reachable outside the scroll. controlBusy gates a double-DELETE. */}
                 {sessionId !== '' && (
-                  <button
-                    type="button"
-                    aria-label="End session"
-                    title="End the session — stops the worker and tears down the browser"
-                    disabled={controlBusy}
-                    onClick={onEndSession}
-                    className="flex w-full shrink-0 items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11.5px] text-red-300 transition-colors hover:bg-red-500/20 disabled:opacity-50"
+                  <div
+                    data-component="sim-drawer-footer"
+                    className="shrink-0 border-t border-white/[0.10] p-2.5"
                   >
-                    <span aria-hidden="true">{controlBusy ? '…' : '◼'}</span>
-                    <span>{controlBusy ? 'Ending…' : 'End session'}</span>
-                  </button>
+                    <button
+                      type="button"
+                      aria-label="End session"
+                      title="End the session — stops the worker and tears down the browser"
+                      disabled={controlBusy}
+                      onClick={onEndSession}
+                      className="flex w-full shrink-0 items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11.5px] text-red-300 transition-colors hover:bg-red-500/20 disabled:opacity-50"
+                    >
+                      <span aria-hidden="true">{controlBusy ? '…' : '◼'}</span>
+                      <span>{controlBusy ? 'Ending…' : 'End session'}</span>
+                    </button>
+                  </div>
                 )}
               </aside>
             )}

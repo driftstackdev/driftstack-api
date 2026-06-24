@@ -161,12 +161,14 @@ describe('SimulatorWindow — floating iPhone', () => {
         <SimulatorWindow />
       </RecordingsProvider>,
     );
-    // Option B: the chevron now reveals a docked right DRAWER (a sibling of the
-    // device), not the old in-toolbar dropdown. It auto-opens for a fresh user.
+    // Approach B: the chevron reveals a docked right DRAWER (icon rail + single
+    // content pane), not the old in-toolbar dropdown. It auto-opens for a fresh user.
     const drawer = container.querySelector('[data-component="simulator-drawer"]');
     expect(drawer).not.toBeNull();
-    // The GUI Address bar is present in the drawer (browser-mode off) so the
-    // founder finds it instead of tapping the non-interactive rendered Safari pill.
+    // The GUI Address bar lives in the Controls pane (browser-mode off) — select
+    // that rail icon so the founder finds it instead of tapping the rendered Safari
+    // pill. (Slice 1 = single-pane; the address bar is one rail click away.)
+    fireEvent.click(drawer?.querySelector('[data-component="sim-rail-controls"]') as Element);
     expect(drawer?.querySelector('[data-component="simulator-address"]')).not.toBeNull();
   });
 
@@ -234,17 +236,19 @@ describe('SimulatorWindow — floating iPhone', () => {
     const chevron = wrap?.querySelector('[aria-label="Show controls"]');
     expect(chevron).not.toBeNull();
     fireEvent.click(chevron as Element);
-    // Option B: the chevron reveals the docked right DRAWER (a sibling of the
-    // device), not the old in-toolbar dropdown.
+    // Approach B: the chevron reveals the docked right DRAWER — an icon RAIL + a
+    // single content PANE (only the active section renders). The rail exposes one
+    // icon per section; clicking one switches the pane.
     const panel = container.querySelector('[data-component="simulator-drawer"]');
     expect(panel).not.toBeNull();
-    // The Mode segmented control is the hero (replaces the old static "Full
-    // control" line) — the three modes are present as a radio group.
+    // The Session pane is the default — the Mode segmented control is its hero
+    // (three modes as a radio group).
     expect(panel?.querySelector('[data-component="simulator-control-section"]')).not.toBeNull();
     expect(panel?.querySelector('[aria-label="Agent mode"]')).not.toBeNull();
     expect(panel?.querySelector('[aria-label="Pair mode"]')).not.toBeNull();
     expect(panel?.querySelector('[aria-label="Manual mode"]')).not.toBeNull();
-    // The labelled controls live in the drawer's Controls section.
+    // The labelled window controls live in the Controls pane (one rail click away).
+    fireEvent.click(panel?.querySelector('[data-component="sim-rail-controls"]') as Element);
     expect(
       panel?.querySelector('[aria-label="Rotate to landscape"], [aria-label="Rotate to portrait"]'),
     ).not.toBeNull();
@@ -252,8 +256,9 @@ describe('SimulatorWindow — floating iPhone', () => {
     // (a normal, switchable, minimizable window), so the pin control reads "Pin
     // on top"; the toggle floats it on demand.
     expect(panel?.querySelector('[aria-label="Pin on top"]')).not.toBeNull();
-    // Diagnostics is now an always-shown drawer section (with a ✕ to close the
-    // drawer) — it replaces the old "Session info" toggle that opened an overlay.
+    // Diagnostics is its own pane (select its rail icon to render it). The drawer
+    // close ✕ now lives in the pinned status strip — always visible.
+    fireEvent.click(panel?.querySelector('[data-component="sim-rail-diagnostics"]') as Element);
     expect(panel?.querySelector('[data-component="drawer-diagnostics"]')).not.toBeNull();
     expect(panel?.querySelector('[aria-label="Close drawer"]')).not.toBeNull();
   });

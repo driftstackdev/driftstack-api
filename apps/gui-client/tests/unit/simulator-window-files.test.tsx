@@ -65,11 +65,14 @@ function renderSim() {
   );
 }
 
-// The Files section lives in the expandable drawer; open it if collapsed (mirrors
-// the navigate test). No-op when it already defaults expanded.
+// The Files section lives in the expandable drawer (Approach B: an icon RAIL +
+// a single content PANE). Open the drawer if collapsed, then select the Files
+// rail icon so its pane renders (the default active pane is Session).
 function openDrawer(c: HTMLElement): void {
   const show = c.querySelector('[aria-label="Show controls"]');
   if (show) fireEvent.click(show);
+  const filesRail = c.querySelector('[data-component="sim-rail-files"]');
+  if (filesRail) fireEvent.click(filesRail);
 }
 
 function fileInput(c: HTMLElement): HTMLInputElement {

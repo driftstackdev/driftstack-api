@@ -65,9 +65,14 @@ function renderSim() {
   );
 }
 
+// Approach B drawer = an icon RAIL + a single content PANE. Open the drawer if
+// collapsed, then select the Downloads rail icon so its pane renders (the default
+// active pane is Session).
 function openDrawer(c: HTMLElement): void {
   const show = c.querySelector('[aria-label="Show controls"]');
   if (show) fireEvent.click(show);
+  const dlRail = c.querySelector('[data-component="sim-rail-downloads"]');
+  if (dlRail) fireEvent.click(dlRail);
 }
 
 describe('SimulatorWindow — file-download Downloads section (A3 W2856)', () => {
