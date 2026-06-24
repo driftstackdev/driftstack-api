@@ -94,14 +94,21 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     expect(body).toMatch(
       /const cloudBaseUrl = isCloudBaseUrl\(draftUrl\);\s*\n?\s*const platformDefaultLabel = cloudBaseUrl \? 'on \(cloud default\)' : 'off \(self-hosted default\)';\s*\n?\s*const effectiveTelemetry =\s*\n?\s*draftTelemetry === null \? \(cloudBaseUrl \? 'on' : 'off'\) : draftTelemetry \? 'on' : 'off';/,
     );
+    // The 3 tri-state radios now render through a RadioRow helper (2026-06-24 fancy
+    // restyle) that preserves the native radio semantics verbatim. Pin the helper's
+    // native <input> (type/name/className/checked/onChange unchanged) + the 3 tri-state
+    // call sites (the load-bearing null/true/false → setDraftTelemetry wiring).
     expect(body).toMatch(
-      /<input\s*\n?\s*type="radio"\s*\n?\s*name="telemetry"\s*\n?\s*className="accent-accent"\s*\n?\s*checked=\{draftTelemetry === null\}\s*\n?\s*onChange=\{\(\) => setDraftTelemetry\(null\)\}/,
+      /<input\s*\n?\s*type="radio"\s*\n?\s*name="telemetry"\s*\n?\s*className="accent-accent"\s*\n?\s*checked=\{checked\}\s*\n?\s*onChange=\{onChange\}/,
     );
     expect(body).toMatch(
-      /<input\s*\n?\s*type="radio"\s*\n?\s*name="telemetry"\s*\n?\s*className="accent-accent"\s*\n?\s*checked=\{draftTelemetry === true\}\s*\n?\s*onChange=\{\(\) => setDraftTelemetry\(true\)\}/,
+      /<RadioRow\s+checked=\{draftTelemetry === null\} onChange=\{\(\) => setDraftTelemetry\(null\)\}>/,
     );
     expect(body).toMatch(
-      /<input\s*\n?\s*type="radio"\s*\n?\s*name="telemetry"\s*\n?\s*className="accent-accent"\s*\n?\s*checked=\{draftTelemetry === false\}\s*\n?\s*onChange=\{\(\) => setDraftTelemetry\(false\)\}/,
+      /<RadioRow\s+checked=\{draftTelemetry === true\} onChange=\{\(\) => setDraftTelemetry\(true\)\}>/,
+    );
+    expect(body).toMatch(
+      /checked=\{draftTelemetry === false\}\s*\n?\s*onChange=\{\(\) => setDraftTelemetry\(false\)\}/,
     );
   });
 

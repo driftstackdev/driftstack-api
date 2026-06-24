@@ -116,19 +116,26 @@ export function SettingsView(): JSX.Element {
 
   if (loading) {
     return (
-      <div role="status" aria-label="Loading settings" className="flex h-full flex-col gap-6 p-6">
+      <div
+        role="status"
+        aria-label="Loading settings"
+        className="mx-auto flex h-full w-full max-w-2xl flex-col gap-6 p-6"
+      >
         <span className="sr-only">Loading settings</span>
         <header
-          className="flex flex-col gap-1 border-b border-surface-divider pb-4"
+          className="flex items-start gap-4 rounded-2xl border border-surface-divider bg-surface-raised p-5"
           aria-hidden="true"
         >
-          <span className="section-label">Settings</span>
-          <div className="h-6 w-44 animate-pulse rounded bg-surface-inset" />
-          <div className="mt-1 h-4 w-80 animate-pulse rounded bg-surface-inset" />
+          <div className="h-11 w-11 shrink-0 animate-pulse rounded-xl bg-surface-inset" />
+          <div className="flex flex-col gap-1.5">
+            <span className="section-label">Settings</span>
+            <div className="h-6 w-44 animate-pulse rounded bg-surface-inset" />
+            <div className="mt-1 h-4 w-80 animate-pulse rounded bg-surface-inset" />
+          </div>
         </header>
-        <div className="flex max-w-xl flex-col gap-4" aria-hidden="true">
-          <div className="h-28 animate-pulse rounded-lg border border-surface-divider bg-surface-raised" />
-          <div className="h-40 animate-pulse rounded-lg border border-surface-divider bg-surface-raised" />
+        <div className="flex flex-col gap-4" aria-hidden="true">
+          <div className="h-28 animate-pulse rounded-xl border border-surface-divider bg-surface-raised" />
+          <div className="h-40 animate-pulse rounded-xl border border-surface-divider bg-surface-raised" />
         </div>
       </div>
     );
@@ -250,72 +257,92 @@ export function SettingsView(): JSX.Element {
     draftTelemetry === null ? (cloudBaseUrl ? 'on' : 'off') : draftTelemetry ? 'on' : 'off';
 
   return (
-    <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
-      {/* Console hero: section-label + title + at-a-glance connection status
-          on the left; the primary Save action anchored on the right. */}
-      <header className="flex flex-wrap items-start gap-4 border-b border-surface-divider pb-4">
-        <div className="min-w-0">
-          <span className="section-label">Settings</span>
-          <h2 className="mt-1 text-[19px] font-semibold tracking-tight text-ink-primary">
-            API connection
-          </h2>
-          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-secondary">
-            {isFirstRun ? (
-              <span className="text-ink-muted">not connected · add a key to begin</span>
-            ) : keyCheck.kind === 'fail' ? (
-              // A saved key that just failed validation must NOT read "Connected"
-              // while the 401/unreachable banner sits right below it. (Idle/ok/
-              // checking keep the green state — we don't re-validate on load, so
-              // the common case is unaffected.)
-              <>
-                <span
-                  aria-hidden="true"
-                  className="inline-block h-1.5 w-1.5 rounded-full bg-status-error"
-                />
-                <span className="font-semibold text-status-error">Key set · check failed</span>
-                <span className="text-surface-divider">·</span>
-                <span className="mono text-ink-secondary">{settings.baseUrl}</span>
-              </>
-            ) : (
-              <>
-                <span
-                  aria-hidden="true"
-                  className="inline-block h-1.5 w-1.5 rounded-full bg-status-ready"
-                />
-                <span className="font-semibold text-status-ready">Connected</span>
-                <span className="text-surface-divider">·</span>
-                <span className="mono text-ink-secondary">{settings.baseUrl}</span>
-              </>
-            )}
-          </p>
-        </div>
-        <div className="ml-auto flex flex-col items-end gap-2">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => void handleSave()}
-              disabled={saving || !dirty}
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
+    <div className="mx-auto flex h-full w-full max-w-2xl flex-col gap-6 overflow-y-auto p-6">
+      {/* Page hero: an icon-led title + subtitle, with the live API-connection
+          status and the primary Save action anchored on the right — matching the
+          Command Center's gradient card language. */}
+      <header className="relative overflow-hidden rounded-2xl border border-surface-divider bg-surface-raised p-5">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full opacity-40 blur-3xl"
+          style={{
+            background: 'radial-gradient(circle, rgb(var(--accent-rgb)/0.55), transparent 70%)',
+          }}
+        />
+        <div className="relative flex flex-wrap items-start gap-4">
+          <span
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent"
+            aria-hidden="true"
+          >
+            <IconCog />
+          </span>
+          <div className="min-w-0">
+            <span className="section-label text-accent">Settings</span>
+            <h2 className="mt-0.5 text-2xl font-semibold tracking-tight text-ink-primary">
+              API connection
+            </h2>
+            <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-ink-secondary">
+              {isFirstRun ? (
+                <span className="text-ink-muted">not connected · add a key to begin</span>
+              ) : keyCheck.kind === 'fail' ? (
+                // A saved key that just failed validation must NOT read "Connected"
+                // while the 401/unreachable banner sits right below it. (Idle/ok/
+                // checking keep the green state — we don't re-validate on load, so
+                // the common case is unaffected.)
+                <>
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-1.5 w-1.5 rounded-full bg-status-error"
+                  />
+                  <span className="font-semibold text-status-error">Key set · check failed</span>
+                  <span className="text-surface-divider">·</span>
+                  <span className="mono text-ink-secondary">{settings.baseUrl}</span>
+                </>
+              ) : (
+                <>
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-1.5 w-1.5 rounded-full bg-status-ready"
+                  />
+                  <span className="font-semibold text-status-ready">Connected</span>
+                  <span className="text-surface-divider">·</span>
+                  <span className="mono text-ink-secondary">{settings.baseUrl}</span>
+                </>
+              )}
+            </p>
           </div>
-          {savedAt !== null && !dirty && keyCheck.kind === 'idle' && (
-            <span className="text-2xs text-ink-muted">Saved.</span>
-          )}
-          {keyCheck.kind === 'checking' && (
-            <span className="text-2xs text-ink-muted">Saved. Validating key…</span>
-          )}
-          {keyCheck.kind === 'ok' && (
-            <span className="text-2xs text-status-ready">Saved. Key authenticated ✓</span>
-          )}
+          <div className="ml-auto flex flex-col items-end gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => void handleSave()}
+                disabled={saving || !dirty}
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+            {savedAt !== null && !dirty && keyCheck.kind === 'idle' && (
+              <span className="text-2xs text-ink-muted">Saved.</span>
+            )}
+            {keyCheck.kind === 'checking' && (
+              <span className="text-2xs text-ink-muted">Saved. Validating key…</span>
+            )}
+            {keyCheck.kind === 'ok' && (
+              <span className="text-2xs text-status-ready">Saved. Key authenticated ✓</span>
+            )}
+          </div>
         </div>
       </header>
 
       {isFirstRun && (
         <Panel className="border-accent/40 bg-accent-subtle">
-          <span className="section-label text-accent dark:text-ink-primary">No API key yet</span>
-          <p className="mt-1.5 text-sm text-ink-secondary">
+          <SectionHeader
+            icon={<IconKey />}
+            title="No API key yet"
+            titleClassName="text-accent dark:text-ink-primary"
+          />
+          <p className="mt-3 text-sm text-ink-secondary">
             {draftMode === 'cloud' ? (
               <>
                 Sign in with your browser to mint a fresh API key bound to your account, or paste an
@@ -379,7 +406,11 @@ export function SettingsView(): JSX.Element {
           accent persist in settings.json and apply instantly via the
           SettingsProvider effect (document.documentElement data attrs). */}
       <Panel>
-        <span className="section-label">Appearance</span>
+        <SectionHeader
+          icon={<IconSwatch />}
+          title="Appearance"
+          description="Theme + accent apply instantly and persist on this device."
+        />
         <div className="mt-4 flex items-center gap-3">
           <span className="w-24 text-sm text-ink-secondary">Mode</span>
           <div className="flex overflow-hidden rounded-lg border border-surface-divider">
@@ -430,8 +461,16 @@ export function SettingsView(): JSX.Element {
         <Panel>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <span className="section-label">Connected</span>
-              <p className="mt-1.5 text-sm text-ink-secondary">
+              <span className="flex items-center gap-2">
+                <span
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-surface-inset text-ink-secondary"
+                  aria-hidden="true"
+                >
+                  <IconLink />
+                </span>
+                <span className="section-label">Connected</span>
+              </span>
+              <p className="mt-2 text-sm text-ink-secondary">
                 Pointing at <span className="mono">{settings.baseUrl}</span> with key{' '}
                 <span className="mono">
                   {settings.apiKey?.slice(0, 12) ?? ''}…{settings.apiKey?.slice(-4) ?? ''}
@@ -493,7 +532,11 @@ export function SettingsView(): JSX.Element {
       )}
 
       <Panel>
-        <span className="section-label">Authentication</span>
+        <SectionHeader
+          icon={<IconKey />}
+          title="API & connection"
+          description="Your key and the server the GUI talks to."
+        />
         <div className="mt-4 flex flex-col gap-5">
           <Field label="API key">
             <div className="flex gap-2">
@@ -605,14 +648,22 @@ export function SettingsView(): JSX.Element {
       </Panel>
 
       <Panel>
-        <span className="section-label">Connection test</span>
+        <SectionHeader
+          icon={<IconActivity />}
+          title="Connection test"
+          description="Check the GUI can reach your configured API server."
+        />
         <div className="mt-4">
           <ConnectivityView embedded />
         </div>
       </Panel>
 
       <Panel>
-        <span className="section-label">Sessions</span>
+        <SectionHeader
+          icon={<IconWindow />}
+          title="Default session"
+          description="What a freshly launched remote browser opens with."
+        />
         <div className="mt-4">
           <Field label="Start URL">
             <input
@@ -633,42 +684,26 @@ export function SettingsView(): JSX.Element {
       </Panel>
 
       <Panel>
-        <span className="section-label">Privacy</span>
+        <SectionHeader
+          icon={<IconShield />}
+          title="Telemetry & diagnostics"
+          description="Crash-only reporting — fully opt-in, never any session data."
+        />
         <div className="mt-4">
           <Field label="Crash reports">
-            <div className="flex flex-col gap-2.5">
-              <label className="flex items-center gap-2 text-sm text-ink-secondary">
-                <input
-                  type="radio"
-                  name="telemetry"
-                  className="accent-accent"
-                  checked={draftTelemetry === null}
-                  onChange={() => setDraftTelemetry(null)}
-                />
-                <span>
-                  Use platform default <span className="mono">({platformDefaultLabel})</span>
-                </span>
-              </label>
-              <label className="flex items-center gap-2 text-sm text-ink-secondary">
-                <input
-                  type="radio"
-                  name="telemetry"
-                  className="accent-accent"
-                  checked={draftTelemetry === true}
-                  onChange={() => setDraftTelemetry(true)}
-                />
-                <span>Share crash reports with Driftstack</span>
-              </label>
-              <label className="flex items-center gap-2 text-sm text-ink-secondary">
-                <input
-                  type="radio"
-                  name="telemetry"
-                  className="accent-accent"
-                  checked={draftTelemetry === false}
-                  onChange={() => setDraftTelemetry(false)}
-                />
-                <span>Don't share crash reports</span>
-              </label>
+            <div className="flex flex-col gap-2">
+              <RadioRow checked={draftTelemetry === null} onChange={() => setDraftTelemetry(null)}>
+                Use platform default <span className="mono">({platformDefaultLabel})</span>
+              </RadioRow>
+              <RadioRow checked={draftTelemetry === true} onChange={() => setDraftTelemetry(true)}>
+                Share crash reports with Driftstack
+              </RadioRow>
+              <RadioRow
+                checked={draftTelemetry === false}
+                onChange={() => setDraftTelemetry(false)}
+              >
+                Don't share crash reports
+              </RadioRow>
             </div>
             <span className="mt-2.5 block text-2xs text-ink-muted">
               Crash-only: error messages, stack traces, app version, OS. Never API keys, profile
@@ -681,7 +716,7 @@ export function SettingsView(): JSX.Element {
 
       {keyCheck.kind === 'fail' && (
         <div
-          className="max-w-xl rounded-lg border border-status-error/30 bg-status-error/10 px-4 py-3 text-xs text-status-error"
+          className="rounded-xl border border-status-error/30 bg-status-error/10 px-4 py-3 text-xs text-status-error"
           role="alert"
         >
           {keyCheck.message}
@@ -691,7 +726,7 @@ export function SettingsView(): JSX.Element {
       {/* V-324 — help links so customers don't have to dig through
           the marketing site to find status / docs / support contact
           from inside the app. */}
-      <div className="max-w-xl border-t border-surface-divider pt-4">
+      <div className="border-t border-surface-divider pt-4">
         <span className="section-label">Need help?</span>
         <ul className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1.5 text-sm text-ink-secondary">
           <li>
@@ -729,7 +764,8 @@ export function SettingsView(): JSX.Element {
 
 // Console-style sectioned panel: a rounded, hairline-bordered raised card
 // with tasteful elevation. The shared container for every settings group so
-// the whole view reads with one consistent rhythm + density.
+// the whole view reads with one consistent rhythm + density. Matches the
+// Command Center's rounded-xl card language.
 function Panel({
   children,
   className,
@@ -739,12 +775,45 @@ function Panel({
 }): JSX.Element {
   return (
     <section
-      className={`max-w-xl rounded-lg border border-surface-divider bg-surface-raised px-5 py-4 shadow-sm ${
+      className={`rounded-xl border border-surface-divider bg-surface-raised px-5 py-4 shadow-sm ${
         className ?? ''
       }`}
     >
       {children}
     </section>
+  );
+}
+
+// Icon-led card header — an accent-tinted icon chip + a section label, with an
+// optional one-line description. The shared heading idiom across every settings
+// card so the page reads with one consistent rhythm (mirrors the Command
+// Center's icon-chip + label pattern).
+function SectionHeader({
+  icon,
+  title,
+  description,
+  titleClassName,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description?: string;
+  titleClassName?: string;
+}): JSX.Element {
+  return (
+    <div className="flex items-start gap-3">
+      <span
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-surface-inset text-ink-secondary"
+        aria-hidden="true"
+      >
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <span className={`section-label ${titleClassName ?? ''}`}>{title}</span>
+        {description !== undefined && (
+          <p className="mt-0.5 text-xs text-ink-muted">{description}</p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -754,5 +823,101 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="section-label">{label}</span>
       {children}
     </label>
+  );
+}
+
+// Selectable radio row — a bordered, accent-washed card when checked; preserves
+// the native radio (name="telemetry") + its checked/onChange semantics exactly,
+// only restyling the surrounding affordance.
+function RadioRow({
+  checked,
+  onChange,
+  children,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <label
+      className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors ${
+        checked
+          ? 'border-accent bg-accent-subtle text-ink-primary'
+          : 'border-surface-divider bg-surface-base text-ink-secondary hover:border-ink-muted/50 hover:text-ink-primary'
+      }`}
+    >
+      <input
+        type="radio"
+        name="telemetry"
+        className="accent-accent"
+        checked={checked}
+        onChange={onChange}
+      />
+      <span>{children}</span>
+    </label>
+  );
+}
+
+// ─── icons (Lucide-shape, inline, no dependency) — matches CommandCenterView ──
+const stroke = {
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.6,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+};
+function IconCog(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="17" height="17" {...stroke}>
+      <circle cx="8" cy="8" r="2.25" />
+      <path d="M8 1.25v1.5M8 13.25v1.5M14.75 8h-1.5M2.75 8h-1.5M12.77 3.23l-1.06 1.06M4.29 11.71l-1.06 1.06M12.77 12.77l-1.06-1.06M4.29 4.29 3.23 3.23" />
+    </svg>
+  );
+}
+function IconKey(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
+      <circle cx="5" cy="11" r="2.5" />
+      <path d="M6.75 9.25 13 3M11 5l1.5 1.5M9.5 6.5 11 8" />
+    </svg>
+  );
+}
+function IconLink(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
+      <path d="M6.5 9.5a2.5 2.5 0 0 0 3.54 0l2-2a2.5 2.5 0 1 0-3.54-3.54l-1 1" />
+      <path d="M9.5 6.5a2.5 2.5 0 0 0-3.54 0l-2 2a2.5 2.5 0 1 0 3.54 3.54l1-1" />
+    </svg>
+  );
+}
+function IconSwatch(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
+      <circle cx="5.5" cy="5" r="1.75" />
+      <path d="M8.5 2.25h5.25v5.25M13.75 2.25 8 8M2.25 8.5v3a2.25 2.25 0 0 0 4.5 0 2.25 2.25 0 0 0-4.5 0Z" />
+    </svg>
+  );
+}
+function IconWindow(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
+      <rect x="2" y="3" width="12" height="10" rx="1.5" />
+      <path d="M2 6h12M4.25 4.5h.01M5.75 4.5h.01" />
+    </svg>
+  );
+}
+function IconShield(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
+      <path d="M8 1.75 13 3.5v4c0 3-2.1 5.4-5 6.75C5.1 12.9 3 10.5 3 7.5v-4Z" />
+      <path d="M6 8l1.5 1.5L10.5 6.5" />
+    </svg>
+  );
+}
+function IconActivity(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
+      <path d="M1.5 8h2.75l1.5-4.5 3 9 1.5-4.5h4.25" />
+    </svg>
   );
 }
