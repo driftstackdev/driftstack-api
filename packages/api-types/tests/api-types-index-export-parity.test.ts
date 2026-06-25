@@ -50,6 +50,7 @@ const EXPECTED_REEXPORTS = [
   'egress',
   'livekit',
   'agent-input-event',
+  'agent-tab-ops',
   'agent-models',
   'agent-sessions',
   'agent-intents',

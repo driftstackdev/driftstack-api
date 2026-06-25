@@ -181,6 +181,70 @@ describe('SimulatorWindow — page tab strip', () => {
     expect((payload.tabs[0] as { url: string }).url).toBe('https://example.com/');
   });
 
+  it('repopulates the bar from a tabListRestore frame (doc-150 §7.5 — profile reopen)', () => {
+    const { container } = renderSim();
+    // Sanity: the fresh sim starts with exactly one seed tab.
+    expect(tabEls(container)).toHaveLength(1);
+    expect(dataHandler).not.toBeNull();
+    // The box pushes the decrypted ProfileBlob.openTabs over the page_state channel.
+    act(() => {
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({
+            type: 'tabListRestore',
+            tabs: [
+              { id: 'tab_a', url: 'https://a.example/', scrollY: 0, title: 'Alpha' },
+              { id: 'tab_b', url: 'https://b.example/', scrollY: 120, title: 'Bravo' },
+              { id: 'tab_c', url: 'https://c.example/', scrollY: 0, title: 'Charlie' },
+            ],
+            activeTabId: 'tab_b',
+          }),
+        ),
+      );
+    });
+    // The bar is REPLACED with the restored set (3 tabs, not 1+3).
+    const tabs = tabEls(container);
+    expect(tabs).toHaveLength(3);
+    // The restored active tab (tab_b) is highlighted; the others are not.
+    expect(tabs[0].getAttribute('data-active')).toBe('false');
+    expect(tabs[1].getAttribute('data-active')).toBe('true');
+    expect(tabs[2].getAttribute('data-active')).toBe('false');
+    // The address bar reflects the active tab's url (BrowserBar reads liveUrl).
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    expect(addressInput.value).toBe('https://b.example/');
+  });
+
+  it('ignores a malformed tabListRestore frame (tabs missing / not-an-array) — keeps the current bar', () => {
+    const { container } = renderSim();
+    expect(tabEls(container)).toHaveLength(1);
+    expect(dataHandler).not.toBeNull();
+    // tabs missing.
+    act(() => {
+      dataHandler?.(
+        new TextEncoder().encode(JSON.stringify({ type: 'tabListRestore', activeTabId: 'x' })),
+      );
+    });
+    expect(tabEls(container)).toHaveLength(1);
+    // tabs not-an-array.
+    act(() => {
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({ type: 'tabListRestore', tabs: 'nope', activeTabId: 'x' }),
+        ),
+      );
+    });
+    expect(tabEls(container)).toHaveLength(1);
+    // empty array → nothing usable, keep the current bar.
+    act(() => {
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({ type: 'tabListRestore', tabs: [], activeTabId: 'x' }),
+        ),
+      );
+    });
+    expect(tabEls(container)).toHaveLength(1);
+  });
+
   it('reverts the optimistic switch when the harness replies activateTabResult{ok:false}', async () => {
     const { container } = renderSim();
     fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active

@@ -65,10 +65,14 @@ describe('W432.A packages/api-types/src/index.ts content parity', () => {
     }
   });
 
-  it('Barrel is re-exports only (no inline declarations); 21 export-star lines (one per module — agent-input-event + agent-models + agent-sessions + agent-intents + recipes added with the api-types growth)', () => {
+  it('Barrel is re-exports only (no inline declarations); 22 export-star lines (one per module — agent-input-event + agent-tab-ops + agent-models + agent-sessions + agent-intents + recipes added with the api-types growth; agent-tab-ops = doc-150 §7 multi-tab GUI↔box DataChannel contract)', () => {
     const exportStarMatches = body.match(/^export \* from '\.\/[a-z-]+\.js';$/gm);
     expect(exportStarMatches).not.toBeNull();
-    expect((exportStarMatches ?? []).length).toBe(21);
+    expect((exportStarMatches ?? []).length).toBe(22);
+  });
+
+  it('agent-tab-ops barrel export pinned (doc-150 §7 — TabDescriptor / tabListUpdate / activateTab(Request|Result) / tabListRestore; GUI↔box DataChannel-only, NOT SDK-exposed)', () => {
+    expect(body).toMatch(/export \* from '\.\/agent-tab-ops\.js';/);
   });
 
   it('agent-models barrel export pinned (per-session model picker registry — #15 / 6.c)', () => {

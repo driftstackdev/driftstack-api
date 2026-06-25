@@ -2497,6 +2497,10 @@ export function SimulatorWindow(): JSX.Element {
           requestId?: string;
           ok?: boolean;
           error?: string;
+          // tabListRestore (doc-150 §7.5) — the box pushes the decrypted
+          // ProfileBlob.openTabs set on profile reopen so the bar repopulates.
+          tabs?: unknown;
+          activeTabId?: unknown;
         };
         // activateTabResult — correlate by requestId against our optimistic switch.
         // ok (or a missing ok with no error) → confirmed, drop the pending record. A
@@ -2512,6 +2516,44 @@ export function SimulatorWindow(): JSX.Element {
             setNotice('Could not switch tab');
             window.setTimeout(() => setNotice(null), 3000);
           }
+          return;
+        }
+        // tabListRestore (doc-150 §7.5) — on profile reopen the box decrypts the
+        // server-opaque ProfileBlob.openTabs and PUSHES the restored set over this
+        // channel so the bar repopulates (the only path: the server can't decrypt
+        // the URLs to supply them over REST). REPLACE the local tab model with the
+        // restored set + point the address bar at the active tab's url. Sanitize
+        // hostile frames defensively (the GUI is the encoder's twin, but a frame is
+        // semi-trusted): require a non-empty tabs ARRAY of well-formed entries, drop
+        // malformed entries, never go below one tab, and resolve activeTabId to a real
+        // tab (fall back to the first). A malformed/empty frame is ignored entirely
+        // (keep the current bar) rather than blanking it.
+        if (msg.type === 'tabListRestore') {
+          if (!Array.isArray(msg.tabs)) return; // not-an-array / missing → ignore
+          const restored: SimTab[] = [];
+          for (const raw of msg.tabs as unknown[]) {
+            if (typeof raw !== 'object' || raw === null) continue;
+            const t = raw as { id?: unknown; url?: unknown; scrollY?: unknown; title?: unknown };
+            if (typeof t.id !== 'string' || t.id === '') continue;
+            restored.push({
+              id: t.id,
+              url: typeof t.url === 'string' ? t.url : '',
+              scrollY: typeof t.scrollY === 'number' && t.scrollY >= 0 ? t.scrollY : 0,
+              title: typeof t.title === 'string' ? t.title : '',
+            });
+          }
+          const first = restored[0];
+          if (first === undefined) return; // nothing usable → keep the current bar
+          const wantActive = typeof msg.activeTabId === 'string' ? msg.activeTabId : '';
+          const active = restored.find((t) => t.id === wantActive) ?? first;
+          // Pending optimistic switches reference ids from the OLD set — clear them so
+          // a late activateTabResult can't revert into a tab that no longer exists.
+          pendingActivationsRef.current.clear();
+          setTabs(restored);
+          setActiveTabId(active.id);
+          // Reflect the active tab's url in the address bar (the BrowserBar reads liveUrl).
+          if (active.url !== '') setLiveUrl(active.url);
+          if (active.title !== '') setLiveTitle(active.title);
           return;
         }
         // Accept BOTH the proposed {type:'page_state', url, loading, progress}
