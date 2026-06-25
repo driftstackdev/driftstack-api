@@ -237,4 +237,6 @@ class AsyncProfilesResource:
         profile's re-fetchable caches WITHOUT touching logins/localStorage/
         IndexedDB/open tabs. Always 200 with a DISCRIMINATED body; branch on
         ``result["status"]``, not the HTTP code."""
-        return await self._http.request("POST", f"/v1/profiles/{quote(profile_id, safe='')}/trim")
+        return await self._http.request(
+            "POST", f"/v1/profiles/{quote(profile_id, safe='')}/trim"
+        )
