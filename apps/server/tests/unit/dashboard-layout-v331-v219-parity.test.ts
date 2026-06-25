@@ -175,8 +175,16 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     expect(l).toMatch(
       /const options = \[\{ value: '', label: 'Self \(' \+ \(me\.email \|\| me\.id\) \+ '\)' \}\]/,
     );
+    // The option VALUE (what gets written to ds_act_as_account) is still the
+    // raw owner_account_id. The LABEL now shows a friendly workspace name via
+    // ownerLabel(t) — owner_name / owner_email / owner_slug, falling back to
+    // the opaque id — so a multi-team user can tell workspaces apart instead
+    // of reading raw UUIDs. The role suffix is preserved.
     expect(l).toMatch(
-      /options\.push\(\{\s*\n\s+value: t\.owner_account_id,\s*\n\s+label: t\.owner_account_id \+ ' \(' \+ t\.role \+ '\)',/,
+      /function ownerLabel\(t\) \{\s*\n\s+const name = t\.owner_name \|\| t\.owner_email \|\| t\.owner_slug;\s*\n\s+return name \? String\(name\) : t\.owner_account_id;\s*\n\s+\}/,
+    );
+    expect(l).toMatch(
+      /options\.push\(\{\s*\n\s+value: t\.owner_account_id,\s*\n\s+label: label \+ ' \(' \+ t\.role \+ '\)',/,
     );
   });
 

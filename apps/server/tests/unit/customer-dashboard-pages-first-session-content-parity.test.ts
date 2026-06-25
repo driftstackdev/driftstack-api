@@ -68,7 +68,11 @@ describe('W492.C apps/customer-dashboard/src/pages/first-session.astro content p
 
   it("Two-phase fetch contract: phase 1 POST /v1/api-keys with Bearer ds_web_session_token + JSON {name:'default', scopes:['read','write']} → phase 2 POST /v1/sessions with Bearer apiKey.plaintext + JSON {label} — pinned so the auth handoff (web session → minted API key) stays correct (drift to using the same token for both would 401 on /v1/sessions since web sessions can't create sessions)", () => {
     expect(body).toMatch(
-      /const mintRes = await fetch\(apiBaseUrl \+ '\/v1\/api-keys', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json', authorization: 'Bearer ' \+ token \},\s*\n?\s*credentials: 'include',\s*\n?\s*body: JSON\.stringify\(\{ name: 'default', scopes: \['read', 'write'\] \}\),\s*\n?\s*\}\);/,
+      // V-501b — the mint fetch was lifted into a named `mintKey()` helper so
+      // it can be re-invoked after the 409 legal-acceptance inline retry. The
+      // load-bearing auth handoff (Bearer web-session token + read/write scopes
+      // on /v1/api-keys) is unchanged; pin the fetch body, not the assignment.
+      /return fetch\(apiBaseUrl \+ '\/v1\/api-keys', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json', authorization: 'Bearer ' \+ token \},\s*\n?\s*credentials: 'include',\s*\n?\s*body: JSON\.stringify\(\{ name: 'default', scopes: \['read', 'write'\] \}\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /const sessionRes = await fetch\(apiBaseUrl \+ '\/v1\/sessions', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json', authorization: 'Bearer ' \+ apiKeyPlaintext \},\s*\n?\s*credentials: 'include',\s*\n?\s*body: JSON\.stringify\(\{ label \}\),\s*\n?\s*\}\);/,
@@ -111,8 +115,14 @@ describe('W492.C apps/customer-dashboard/src/pages/first-session.astro content p
   });
 
   it("Error-detail surfacing on both phases: errBody.detail || 'mint key HTTP N' / errBody.detail || 'create session HTTP N' — pinned so each phase's failure surfaces its own problem+json detail (drift to merging the two error paths would obscure which phase failed and lose the diagnostic context)", () => {
+    // V-501b — the mint-phase error path now branches on a 409 legal-
+    // acceptance type (accept-all-then-retry-once) before falling through to
+    // the generic throw, so the errBody parse and the throw are no longer
+    // adjacent. Pin each fragment independently: the problem+json parse, and
+    // the mint-specific 'mint key HTTP N' fallback that surfaces its detail.
+    expect(body).toMatch(/const errBody = await mintRes\.json\(\)\.catch\(\(\) => \(\{\}\)\);/);
     expect(body).toMatch(
-      /const errBody = await mintRes\.json\(\)\.catch\(\(\) => \(\{\}\)\);\s*\n?\s*throw new Error\(errBody\.detail \|\| 'mint key HTTP ' \+ mintRes\.status\);/,
+      /throw new Error\(errBody\.detail \|\| 'mint key HTTP ' \+ mintRes\.status\);/,
     );
     expect(body).toMatch(
       /const errBody = await sessionRes\.json\(\)\.catch\(\(\) => \(\{\}\)\);\s*\n?\s*throw new Error\(errBody\.detail \|\| 'create session HTTP ' \+ sessionRes\.status\);/,

@@ -153,9 +153,15 @@ describe('W741 dashboard first-session V-184a + V-501 parity', () => {
   it('CRITICAL Step-1 error body JSON-parse fallback pinned — `.catch(() => ({}))`. Drift to dropping would let non-JSON server errors crash the await chain.', () => {
     const p = read(PAGE);
 
-    // 2 mint+session JSON-parse fallbacks.
+    // 4 JSON-parse fallbacks. V-501b's 409 legal-acceptance inline-retry
+    // path added two more defensive parses beyond the original mint + session
+    // pair: legal/required catalog body + the mint-retry error body. Every
+    // server-error branch that reads a problem+json body must tolerate a
+    // non-JSON response so the await chain can't crash mid-onboarding.
     const fallbacks = (p.match(/await \w+\.json\(\)\.catch\(\(\) => \(\{\}\)\)/g) ?? []).length;
-    expect(fallbacks, '2 JSON-parse fallbacks (mint + session)').toBe(2);
+    expect(fallbacks, '4 JSON-parse fallbacks (legal/required + mint + mint-retry + session)').toBe(
+      4,
+    );
   });
 
   it('CRITICAL DashboardLayout + withSidebar={false} (onboarding-flow page — no sidebar). Matches W735-W740 auth/onboarding pattern.', () => {

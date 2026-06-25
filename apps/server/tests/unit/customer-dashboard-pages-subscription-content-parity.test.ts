@@ -61,14 +61,27 @@ describe('W493.B apps/customer-dashboard/src/pages/subscription.astro content pa
     );
   });
 
-  it("3-button action row: Upgrade plan (#upgrade, btn-primary) / Downgrade plan (#downgrade, btn-secondary) / Open Stripe portal (#portal, btn-secondary) — pinned so the action vocabulary stays 3-button (drift to dropping Stripe portal would force customers to navigate through /billing for portal access, doubling the click count for the most-common 'manage subscription externally' workflow)", () => {
-    expect(body).toMatch(/<a href="#upgrade" class="btn-primary">Upgrade plan<\/a>/);
-    expect(body).toMatch(/<a href="#downgrade" class="btn-secondary">Downgrade plan<\/a>/);
-    expect(body).toMatch(/<a href="#portal" class="btn-secondary">Open Stripe portal<\/a>/);
+  it("3-button action row: Upgrade plan (/select-tier, btn-primary) / Downgrade plan (/select-tier, btn-secondary) / Open Stripe portal (data-action=portal button, btn-secondary) — pinned so the action vocabulary stays 3-button (drift to dropping Stripe portal would force customers to navigate through /billing for portal access, doubling the click count for the most-common 'manage subscription externally' workflow)", () => {
+    // The dead `#upgrade` / `#downgrade` / `#portal` anchors were replaced
+    // with working actions: Upgrade/Downgrade link to /select-tier (the live
+    // checkout page) and "Open Stripe portal" is now a real button wired to
+    // POST /v1/billing/portal-session (handlePortal). The 3-button vocabulary
+    // is unchanged; the targets now actually do something.
+    expect(body).toMatch(/<a href="\/select-tier" class="btn-primary">Upgrade plan<\/a>/);
+    expect(body).toMatch(/<a href="\/select-tier" class="btn-secondary">Downgrade plan<\/a>/);
+    expect(body).toMatch(
+      /<button type="button" class="btn-secondary" data-action="portal">Open Stripe portal<\/button>/,
+    );
   });
 
   it("MOCK_SUBSCRIPTION null branch: 'No subscription' fallback header — pinned so a customer who lands here pre-subscription doesn't see a broken '<undefined>' tier name (drift to dropping the null check would surface a JavaScript error on the SSG render)", () => {
-    expect(body).toMatch(/\{MOCK_SUBSCRIPTION \? MOCK_SUBSCRIPTION\.tier : 'No subscription'\}/);
+    // The truthy branch now renders the human plan name via
+    // TIER_DISPLAY_NAMES[MOCK_SUBSCRIPTION.tier] (matching usage/billing)
+    // instead of the raw tier id. The null-check + 'No subscription' fallback
+    // — the load-bearing part of this guard — is unchanged.
+    expect(body).toMatch(
+      /\{MOCK_SUBSCRIPTION \? TIER_DISPLAY_NAMES\[MOCK_SUBSCRIPTION\.tier\] : 'No subscription'\}/,
+    );
   });
 
   it('file exists at canonical path', () => {

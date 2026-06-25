@@ -133,9 +133,15 @@ describe('W418.C apps/server/src/routes/billing.ts content parity', () => {
     );
   });
 
-  it('GET billing state: subscription null-handled via publicSubscription (trial_pack envelope removed 2026-05-27)', () => {
+  it('GET billing state: V-326c act-as resolution (resolveEffectiveAccount + X-Driftstack-Account header) → getBillingState(effective.accountId); subscription null-handled via publicSubscription (trial_pack envelope removed 2026-05-27)', () => {
+    // V-326c — the Billing page honors the X-Driftstack-Account act-as
+    // header (like GET /v1/usage). A team member "Acting as <owner>"
+    // reads the OWNER's subscription via resolveEffectiveAccount
+    // (fails-closed 403 on a non-member account) instead of their own.
+    // Pinned so a drift back to `ctx.account.id` would silently show the
+    // member's own (likely free) plan while the banner claims otherwise.
     expect(body).toMatch(
-      /const state = await service\.getBillingState\(ctx\.account\.id\);\s*\n?\s*return \{\s*\n?\s*subscription: state\.subscription !== null \? publicSubscription\(state\.subscription\) : null,\s*\n?\s*\};/,
+      /const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(req\)\);\s*\n?\s*const state = await service\.getBillingState\(effective\.accountId\);\s*\n?\s*return \{\s*\n?\s*subscription: state\.subscription !== null \? publicSubscription\(state\.subscription\) : null,\s*\n?\s*\};/,
     );
   });
 

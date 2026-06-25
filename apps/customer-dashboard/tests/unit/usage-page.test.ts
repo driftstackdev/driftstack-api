@@ -168,9 +168,12 @@ describe('customer-dashboard Usage (usage.astro) behaviour', () => {
     // Period line carries the live window + tier. (The nested [data-field="tier"]
     // span is intentionally overwritten when periodEl.textContent is replaced —
     // the tier survives as text within the period line, which is what shows.)
+    // The tier id is mapped to its human plan name via TIER_DISPLAY_NAMES
+    // (api_builder → "API Builder"), matching the index/billing pages, so the
+    // customer never sees the raw backend id.
     expect(text(window, '[data-field="period"]')).toContain('2026-05-01');
     expect(text(window, '[data-field="period"]')).toContain('2026-05-31');
-    expect(text(window, '[data-field="period"]')).toContain('api_builder tier');
+    expect(text(window, '[data-field="period"]')).toContain('API Builder tier');
   });
 
   it('sparkline: the navigate path is recomputed from the series buckets', async () => {

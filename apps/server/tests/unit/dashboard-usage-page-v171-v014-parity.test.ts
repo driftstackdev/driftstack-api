@@ -205,9 +205,14 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
   it('CRITICAL live period + tier display pinned — `<start> → <end> · <tier> tier`. Drift to a different separator would clash with the rest of the dashboard pages. (The SSG shell renders a neutral "<placeholder> tier · current billing period" line until live data replaces it.)', () => {
     const p = read(PAGE);
 
-    // Inline-script (live) version.
+    // Inline-script (live) version. The tier segment now renders the human
+    // plan name via tierLabel(summary.tier) — TIER_DISPLAY_NAMES maps the
+    // backend id (e.g. "api_builder") to "API Builder", matching index/billing
+    // — instead of the raw id. The `<start> → <end> · <tier> tier` shape +
+    // ` · ` separator + ` tier` suffix are unchanged.
+    expect(p).toMatch(/const tierName = tierLabel\(summary\.tier\);/);
     expect(p).toMatch(
-      /periodEl\.textContent = start \+ ' → ' \+ end \+ ' · ' \+ summary\.tier \+ ' tier';/,
+      /periodEl\.textContent = start \+ ' → ' \+ end \+ ' · ' \+ tierName \+ ' tier';/,
     );
   });
 
