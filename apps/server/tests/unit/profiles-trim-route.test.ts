@@ -15,6 +15,7 @@ import { registerErrorHandler } from '../../src/middleware/error-handler.js';
 import { NotFoundError } from '../../src/lib/errors.js';
 import type { ProfilesService } from '../../src/services/profiles.js';
 import type { AccountAuthRepo } from '../../src/services/auth.js';
+import type { AgentSessionsRepo } from '../../src/services/agent-sessions.js';
 import type { R2 } from '../../src/lib/r2.js';
 
 const ACCOUNT_ID = '00000000-0000-4000-8000-000000000001';
@@ -66,6 +67,8 @@ async function buildHarness(deps: {
   service: ProfilesService;
   fleetControlRegistry?: FleetControlRegistry;
   r2?: R2;
+  /** #14 — count of active sessions bound to the profile (0 → not in use). */
+  activeForProfile?: number;
 }): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   registerErrorHandler(app);
@@ -75,6 +78,12 @@ async function buildHarness(deps: {
   });
   app.decorate('requireScope', (_scope: string) => () => Promise.resolve());
   app.decorate('rateLimit', (_bucket: string) => () => Promise.resolve());
+  const agentSessions =
+    deps.activeForProfile !== undefined
+      ? ({
+          countActiveForProfile: (_id: string) => Promise.resolve(deps.activeForProfile),
+        } as unknown as AgentSessionsRepo)
+      : undefined;
   registerProfileRoutes(app, {
     service: deps.service,
     authRepo: fakeAuthRepo,
@@ -82,6 +91,7 @@ async function buildHarness(deps: {
       ? { fleetControlRegistry: deps.fleetControlRegistry }
       : {}),
     ...(deps.r2 !== undefined ? { r2: deps.r2 } : {}),
+    ...(agentSessions !== undefined ? { agentSessions } : {}),
   });
   await app.ready();
   return app;
@@ -139,6 +149,54 @@ describe('POST /v1/profiles/:id/trim', () => {
     });
     const res = await trim(app);
     expect(res.statusCode).toBe(404);
+  });
+
+  it('#14: profile bound to a live session → 200 { status:"unavailable" } BEFORE any node round-trip (avoids the R2 lost-update race)', async () => {
+    const { service, recordTrimCalls } = fakeService({ ownedProfileUuid: PROFILE_UUID });
+    const registry = new FleetControlRegistry();
+    // An echo node IS connected + a blob exists — so absent the guard the trim
+    // would proceed and race the live session's save-back. The guard must short-
+    // circuit to `unavailable` first, never touching the node or persisting.
+    const { sentTrim } = registerEchoNode(registry, 'node-trim-busy', (frame) => ({
+      profileId: frame.profileId,
+      ok: true,
+      newSizeBytes: 1,
+      bytesReclaimed: 1,
+    }));
+    app = await buildHarness({
+      service,
+      fleetControlRegistry: registry,
+      r2: fakeR2({ blobExists: true }),
+      activeForProfile: 1,
+    });
+    const res = await trim(app);
+    expect(res.statusCode).toBe(200);
+    expect(res.json<TrimBody>()).toMatchObject({ status: 'unavailable' });
+    expect(res.json<TrimBody>().reason).toMatch(/currently in use/);
+    // The node was never asked to trim and no size was persisted.
+    expect(sentTrim).toHaveLength(0);
+    expect(recordTrimCalls).toHaveLength(0);
+  });
+
+  it('#14: profile NOT in use (0 active sessions) → the trim proceeds normally (guard does not block)', async () => {
+    const { service, recordTrimCalls } = fakeService({ ownedProfileUuid: PROFILE_UUID });
+    const registry = new FleetControlRegistry();
+    registerEchoNode(registry, 'node-trim-free', (frame) => ({
+      profileId: frame.profileId,
+      ok: true,
+      newSizeBytes: 4_000,
+      bytesReclaimed: 6_000,
+    }));
+    app = await buildHarness({
+      service,
+      fleetControlRegistry: registry,
+      r2: fakeR2({ blobExists: true }),
+      activeForProfile: 0,
+    });
+    const res = await trim(app);
+    expect(res.statusCode).toBe(200);
+    expect(res.json<TrimBody>()).toMatchObject({ status: 'ok', size_bytes: 4_000 });
+    expect(recordTrimCalls).toHaveLength(1);
   });
 
   it('control plane / R2 not wired → 200 { status:"unavailable" }', async () => {

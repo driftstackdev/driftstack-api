@@ -1248,6 +1248,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         ? { fleetControlRegistry: deps.fleetControlRegistry }
         : {}),
       ...(deps.r2 ? { r2: deps.r2 } : {}),
+      // #14 — agent-sessions repo for the trim's "profile bound to a live
+      // session?" guard (countActiveForProfile). Absent → guard skipped.
+      ...(deps.agentSessionsRepo !== undefined ? { agentSessions: deps.agentSessionsRepo } : {}),
     });
     // V-312 — profile snapshots routes share the profiles service +
     // auth repo. Registers only when profilesService is wired.

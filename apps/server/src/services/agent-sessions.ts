@@ -104,6 +104,13 @@ export interface AgentSessionRecord {
    */
   nodeId: string | null;
   /**
+   * 2026-06-25 (migration 0089) — the profile this session is running, or NULL
+   * for an ephemeral (no-profile) session. Set at create-time from the create
+   * body's profile_id. The out-of-session profile trim reads it to refuse a trim
+   * against a profile bound to a still-active session (R2 lost-update guard).
+   */
+  profileId: string | null;
+  /**
    * Arc 2 sub-slice 8.2 (v2-#8) — pair-mode state machine discriminator
    * payload (sub-slice 8.7 will define the exact shape). NULL when
    * the session is not in pair mode, OR is in pair mode but no
@@ -156,6 +163,12 @@ export interface CreateAgentSessionArgs {
    * dashboard surface the picker at create-time.
    */
   model?: AgentModel;
+  /**
+   * 2026-06-25 (migration 0089) — the bare profile uuid this session runs, when
+   * the create carried a profile_id. Omitted for ephemeral (no-profile) sessions.
+   * Lets the out-of-session profile trim detect a profile bound to a live session.
+   */
+  profileId?: string;
 }
 
 export interface AgentSessionsRepo {
@@ -173,6 +186,16 @@ export interface AgentSessionsRepo {
    *  concurrent-session cap so one account can't create unbounded rows / monopolise
    *  fleet slots (audit #8). */
   countActive(accountId: string): Promise<number>;
+
+  /**
+   * 2026-06-25 (migration 0089) — count of still-active sessions running a given
+   * profile (status='active' AND profile_id=profileId). The out-of-session profile
+   * trim reads it to refuse a trim against a profile bound to a live session (the
+   * session would otherwise save its full, un-trimmed state back over the trimmed
+   * R2 blob — a lost update). NULL profile_id never matches. Owner scoping is the
+   * caller's responsibility (the trim route already 404s a foreign profile id).
+   */
+  countActiveForProfile(profileId: string): Promise<number>;
 
   /**
    * Orphaned-session backstop — bulk-close every session still
@@ -313,6 +336,8 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       model: args.model ?? DEFAULT_AGENT_MODEL,
       // 0086 — set later by setNodeId when the sessionAssign is dispatched.
       nodeId: null,
+      // 0089 — the profile this session runs (NULL for ephemeral sessions).
+      profileId: args.profileId ?? null,
       pairModeState: null,
       guiControlKeyExpiresAt: null,
       guiControlKeyCiphertext: null,
@@ -343,6 +368,14 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     let n = 0;
     for (const rec of this.records.values()) {
       if (rec.accountId === accountId && rec.status === 'active') n += 1;
+    }
+    return Promise.resolve(n);
+  }
+
+  countActiveForProfile(profileId: string): Promise<number> {
+    let n = 0;
+    for (const rec of this.records.values()) {
+      if (rec.profileId === profileId && rec.status === 'active') n += 1;
     }
     return Promise.resolve(n);
   }

@@ -19,6 +19,7 @@ import type { DrizzleFleetNodesRepo } from '../../src/db/fleet-nodes-repo.js';
 import type { ProfilesService } from '../../src/services/profiles.js';
 import type { R2 } from '../../src/lib/r2.js';
 import type { AccountProxiesService } from '../../src/services/account-proxies.js';
+import { UnsafeProxyHostError } from '../../src/services/account-proxies.js';
 
 const KEY = Buffer.alloc(32, 7).toString('base64');
 const NODE_ID = 'local-mac-dev-001';
@@ -196,6 +197,73 @@ describe('dispatchSessionAssignOnCreate', () => {
     // The customer's requested proxy couldn't resolve → we MUST NOT fall back to the
     // operator-default egress (egress-identity leak). Session created but NOT dispatched.
     expect(sent).toHaveLength(0);
+  });
+
+  it('#16: an unresolvable proxy CLOSES the never-dispatched session (egress_unresolved) so it stops counting against the active-session cap', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const closed: Array<{ id: string; reason: string }> = [];
+    const agentSessions = {
+      closeWithReason: (id: string, reason: string) => {
+        closed.push({ id, reason });
+        return Promise.resolve({});
+      },
+      // setNodeId is never reached on the fail-closed path (we return before it).
+      setNodeId: () => Promise.resolve({}),
+    } as unknown as InstanceType<typeof InMemoryAgentSessionsRepo>;
+
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_failclosed_close',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      logger: logger(),
+      accountId: 'acc_x',
+      proxyId: 'prx_unresolvable',
+      accountProxiesService: {
+        resolveForDispatch: () => Promise.resolve(null),
+      } as unknown as AccountProxiesService,
+      agentSessions,
+    });
+
+    // Never dispatched …
+    expect(sent).toHaveLength(0);
+    // … and the phantom 'active' row is closed with the terminal reason.
+    expect(closed).toEqual([{ id: 'agt_failclosed_close', reason: 'egress_unresolved' }]);
+  });
+
+  it('#16: an SSRF-rejected proxy host (UnsafeProxyHostError) ALSO closes the session (egress_unresolved)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const closed: Array<{ id: string; reason: string }> = [];
+    const agentSessions = {
+      closeWithReason: (id: string, reason: string) => {
+        closed.push({ id, reason });
+        return Promise.resolve({});
+      },
+      setNodeId: () => Promise.resolve({}),
+    } as unknown as InstanceType<typeof InMemoryAgentSessionsRepo>;
+
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_ssrf_close',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      logger: logger(),
+      accountId: 'acc_x',
+      proxyId: 'prx_internal_host',
+      accountProxiesService: {
+        resolveForDispatch: () => Promise.reject(new UnsafeProxyHostError('loopback')),
+      } as unknown as AccountProxiesService,
+      agentSessions,
+    });
+
+    expect(sent).toHaveLength(0);
+    expect(closed).toEqual([{ id: 'agt_ssrf_close', reason: 'egress_unresolved' }]);
   });
 
   it('region-aware: an EU viewer routes to the EU node (region threaded to findNearestWithLivekit), not the US node', async () => {

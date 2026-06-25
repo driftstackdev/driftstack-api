@@ -1976,6 +1976,13 @@ export const agentSessions = pgTable(
     // minutes instead of waiting for the 12h orphan_reap backstop. NOT a FK to
     // fleet_nodes (the registry keys by the human node_id, not the uuid PK).
     nodeId: text('node_id'),
+    // 2026-06-25 (migration 0089) — which profile this session is running. Set at
+    // create-time when the create body carried a profile_id; NULL on ephemeral
+    // (no-profile) sessions and on every pre-column row. ON DELETE SET NULL so the
+    // session history survives a profile purge (like driftstack_session_id). The
+    // out-of-session profile trim consults this to refuse a trim against a profile
+    // bound to a still-active session (avoids a two-writer R2 lost-update race).
+    profileId: uuid('profile_id').references(() => profiles.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -1993,6 +2000,12 @@ export const agentSessions = pgTable(
     // rows accumulate.
     index('agent_sessions_node_id_active_idx')
       .on(t.nodeId)
+      .where(sql`${t.status} = 'active'`),
+    // 2026-06-25 (migration 0089) — partial index backing the trim guard's hot
+    // read ("is there a still-active session for THIS profile?"). Mirrors the
+    // migration's `WHERE status = 'active'`; stays O(active-for-profile).
+    index('agent_sessions_profile_id_active_idx')
+      .on(t.profileId)
       .where(sql`${t.status} = 'active'`),
   ],
 );

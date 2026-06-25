@@ -114,10 +114,15 @@ describe('W497.A apps/customer-dashboard/src/pages/profiles.astro content parity
     expect(body).toMatch(/URL\.revokeObjectURL\(url\);/);
   });
 
-  it('Delete-confirm framing pinned (L4b recycle bin): recycle bin + 30-day restore window + bound-sessions-fail consequence; the stale "This cannot be undone" / "Cookies + storage are wiped" / fictional "force=true" (no such flag on profile DELETE) framing is all GONE (delete is a soft-delete — recoverable, state retained until purge)', () => {
+  it('Delete-confirm framing pinned (L4b recycle bin): recycle bin + 30-day auto-purge + still-counts-toward-limit-until-purged (#10/#13: trashed holds a cap slot) + restore-is-elsewhere (#11: no web restore UI — the desktop app / API own it) + bound-sessions-fail consequence; the stale "This cannot be undone" / "Cookies + storage are wiped" / fictional "force=true" (no such flag on profile DELETE) framing is all GONE (delete is a soft-delete — recoverable, state retained until purge). The OLD "restore it within 30 days" copy is GONE too — the dashboard has no restore UI, so promising an in-dashboard restore was a broken promise (#11).', () => {
     expect(body).toMatch(/It moves to the recycle bin/);
-    expect(body).toMatch(/restore it within 30 days/);
-    expect(body).toMatch(/will fail until you restore it/);
+    expect(body).toMatch(/permanently purged after 30 days/);
+    expect(body).toMatch(/still counts toward your profile limit/);
+    expect(body).toMatch(/use the desktop app or the API/);
+    expect(body).toMatch(/Sessions currently using this profile will fail/);
+    // #11 — the dashboard can't deliver an in-dashboard restore, so it must not
+    // promise one. The honest copy points to where restore actually lives.
+    expect(body).not.toMatch(/restore it within 30 days/);
     expect(body).not.toMatch(/This cannot be undone/);
     expect(body).not.toMatch(/Cookies \+ storage are wiped/);
     expect(body).not.toMatch(/force=true/);

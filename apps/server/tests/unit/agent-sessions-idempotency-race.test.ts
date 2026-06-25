@@ -32,6 +32,7 @@ function makeWinner(): AgentSessionRecord {
     mode: 'ai',
     model: 'claude-opus-4-7',
     nodeId: null,
+    profileId: null,
     idempotencyKey: 'race-key-1',
     guiControlKeyExpiresAt: null,
     guiControlKeyCiphertext: null,

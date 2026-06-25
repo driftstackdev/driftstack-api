@@ -253,6 +253,29 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.statusCode).toBe(201);
   });
 
+  it('#15: create with an HTTP-scheme proxy_id → 400 at create (not a silent 30s dead-end) — http has no inline-dispatch slot', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const proxy = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { label: 'http one', scheme: 'http', host: '203.0.113.9', port: 8080 },
+    });
+    expect(proxy.statusCode).toBe(201);
+    const proxyId = proxy.json<{ id: string }>().id;
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, proxy_id: proxyId },
+    });
+    // Authoritative reject at CREATE — the session row is never minted, so it
+    // never leaks a phantom active slot (#16) and the GUI gets an instant honest
+    // message instead of a 30s "the proxy may be down" timeout.
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ detail?: string }>().detail).toMatch(/HTTP proxies cannot drive/);
+  });
+
   it('initial_url validation: http(s) accepted (201); javascript:/file:/data:/garbage + over-length rejected (400) — customer start URL is scheme-guarded at the route', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const post = (initial_url: string) =>

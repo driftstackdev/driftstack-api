@@ -30,6 +30,7 @@ function makeRecord(id: string): AgentSessionRecord {
     mode: 'ai',
     model: 'claude-opus-4-7',
     nodeId: null,
+    profileId: null,
     idempotencyKey: null,
     guiControlKeyExpiresAt: null,
     guiControlKeyCiphertext: null,

@@ -114,6 +114,10 @@ function makeRouter(profiles: Array<Record<string, unknown>>): (c: MockFetchCall
     const u = call.url;
     if (/\/v1\/account\/me$/.test(u)) return json({}, 500);
     if (/\/v1\/proxies$/.test(u)) return json({ data: [] });
+    // #10 — refresh() now also fetches the trash count (the cap is enforced over
+    // LIVE + TRASHED, so the "tier limit reached" gate must use the same total).
+    // No trashed fixtures here → empty list.
+    if (/\/v1\/profiles\/trash$/.test(u) && method === 'GET') return json({ data: [] });
     const cloneMatch = u.match(/\/v1\/profiles\/([^/]+)\/clone$/);
     if (cloneMatch && method === 'POST') {
       const src = profiles.find((p) => p.id === cloneMatch[1]);
@@ -184,8 +188,13 @@ describe('profiles page — local integration', () => {
     // archetypeLabel() maps the locked slug to the human display string.
     expect(text).toContain('iPhone 16 Pro / iOS 18.7 / Safari 26.4');
     expect(window.document.querySelector('[data-launch="prof_a"]')).toBeTruthy();
-    expect(window.document.querySelector('[data-clone="prof_a"]')).toBeTruthy();
     expect(window.document.querySelector('[data-delete="prof_a"]')).toBeTruthy();
+    // #12 — Clone / Export / Transfer are gated OFF in lockstep with the desktop
+    // GUI (clone "currently useless" + export/transfer a profile-cheat abuse
+    // vector). The row must NOT render those affordances.
+    expect(window.document.querySelector('[data-clone="prof_a"]')).toBeNull();
+    expect(window.document.querySelector('[data-export="prof_a"]')).toBeNull();
+    expect(window.document.querySelector('[data-transfer="prof_a"]')).toBeNull();
   });
 
   it('non-empty: a non-default archetype (iphone15pro) renders its friendly label, NOT the raw slug — proves the injected registry label map', async () => {
@@ -259,7 +268,10 @@ describe('profiles page — local integration', () => {
     expect(body.archetype).toBe('iphone17_ios18_7_safari26_4');
   });
 
-  it('clone: confirm-gated POST /:id/clone adds the copy after refresh', async () => {
+  it('clone: gated OFF (#12) — no Clone affordance renders and no /clone request is ever fired', async () => {
+    // Clone is hidden on the dashboard in lockstep with the desktop GUI
+    // (cloneEnabled=false; "currently useless"). The row renders no Clone button,
+    // so a customer can't trigger the POST /:id/clone path from the web.
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       confirmReturns: true,
@@ -267,12 +279,9 @@ describe('profiles page — local integration', () => {
     });
     win = window;
     await flush();
-    (window.document.querySelector('[data-clone="prof_a"]') as HTMLButtonElement).click();
-    await flush();
-    const post = fetchCalls.find((c) => /\/v1\/profiles\/prof_a\/clone$/.test(c.url));
-    expect(post?.init?.method).toBe('POST');
-    expect(rowCount(window)).toBe(2);
-    expect(window.document.querySelector('[data-list]')?.textContent).toContain('Base (copy)');
+    expect(window.document.querySelector('[data-clone="prof_a"]')).toBeNull();
+    expect(rowCount(window)).toBe(1);
+    expect(fetchCalls.some((c) => /\/v1\/profiles\/prof_a\/clone$/.test(c.url))).toBe(false);
   });
 
   it('delete: confirm-gated DELETE then refresh removes the row', async () => {

@@ -21,6 +21,7 @@ import {
 } from '@driftstack/api-types';
 import { randomUUID } from 'node:crypto';
 import type { ProfileRecord, ProfilesService } from '../services/profiles.js';
+import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import { BadRequestError, ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';
 import type { AccountAuthRepo } from '../services/auth.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
@@ -106,10 +107,18 @@ export interface ProfileRoutesDeps {
    * returns `unavailable` (no blob to fetch/write back).
    */
   r2?: R2;
+  /**
+   * #14 — agent-sessions repo for the trim's "is this profile bound to a live
+   * session?" guard (countActiveForProfile). Absent → the guard is skipped (the
+   * trim behaves exactly as before; no false positives). Present → a trim against
+   * a profile with a still-active session returns `unavailable` instead of racing
+   * the session's save-back over the same R2 blob (a lost update).
+   */
+  agentSessions?: AgentSessionsRepo;
 }
 
 export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesDeps): void {
-  const { service, authRepo, fleetControlRegistry, r2 } = deps;
+  const { service, authRepo, fleetControlRegistry, r2, agentSessions } = deps;
 
   // ── POST /v1/profiles ────────────────────────────────────────────────
   // V-326e4 — admin-only when targeting a team owner; profile cap +
@@ -460,6 +469,23 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       const eff = effectiveAccountIdForWrite(req, ctx);
       const accountId = eff ?? ctx.account.id;
       await service.get({ id, accountId }); // throws NotFoundError on unknown/foreign
+
+      // #14 — refuse a trim against a profile bound to a still-active session.
+      // Trim runs OUT-OF-SESSION on an arbitrary node against R2's last-saved
+      // blob; if a live session for this profile is still open, it holds the full
+      // un-trimmed state and saves it back over the trimmed blob at teardown (a
+      // two-writer lost update — the reclaimed space silently reappears, or the
+      // saved state is clobbered). Stop the session first. The owner-check above
+      // already ran, so `id` is this account's profile; countActiveForProfile is
+      // a partial-index lookup. Guard is skipped when the repo isn't wired (no
+      // false positives — behaves exactly as before).
+      if (agentSessions !== undefined && (await agentSessions.countActiveForProfile(id)) > 0) {
+        return {
+          status: 'unavailable' as const,
+          reason:
+            'profile is currently in use — stop its running session before clearing the cache',
+        };
+      }
 
       // Control plane / R2 not wired (stateless deploy) → graceful unavailable.
       if (fleetControlRegistry === undefined || r2 === undefined) {

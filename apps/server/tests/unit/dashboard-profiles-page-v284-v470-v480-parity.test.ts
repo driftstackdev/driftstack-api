@@ -89,12 +89,16 @@ describe('W752 dashboard /profiles page V-284 + V-470 + V-480 parity', () => {
     );
   });
 
-  it('CRITICAL delete-confirm framing pinned (L4b recycle bin) — recycle bin + 30-day restore window + bound-sessions-fail consequence; stale permanent-deletion + fictional force=true framing removed (delete is soft; no force flag on profile DELETE).', () => {
+  it('CRITICAL delete-confirm framing pinned (L4b recycle bin) — recycle bin + 30-day auto-purge + still-counts-toward-limit-until-purged (#10/#13) + restore-is-in-the-desktop-app/API (#11: no web restore UI) + bound-sessions-fail consequence; stale permanent-deletion + fictional force=true framing removed (delete is soft; no force flag on profile DELETE). The OLD "restore it within 30 days" copy is removed — the dashboard has no restore UI, so it must not promise one.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/It moves to the recycle bin/);
-    expect(p).toMatch(/restore it within 30 days/);
-    expect(p).toMatch(/will fail until you restore it/);
+    expect(p).toMatch(/permanently purged after 30 days/);
+    expect(p).toMatch(/still counts toward your profile limit/);
+    expect(p).toMatch(/use the desktop app or the API/);
+    expect(p).toMatch(/Sessions currently using this profile will fail/);
+    // #11 — no in-dashboard restore, so the broken "restore within 30 days" promise is gone.
+    expect(p).not.toMatch(/restore it within 30 days/);
     expect(p).not.toMatch(/This cannot be undone/);
     expect(p).not.toMatch(/force=true/);
   });
@@ -221,18 +225,26 @@ describe('W752 dashboard /profiles page V-284 + V-470 + V-480 parity', () => {
     expect(p).toMatch(
       /const meP = authedFetch\('\/v1\/account\/me'\)\s*\n\s+\.then\(\(r\) => \(r\.ok \? r\.json\(\) : Promise\.reject\(new Error\('HTTP ' \+ r\.status\)\)\)\)\s*\n\s+\.catch\(\(\) => null\);/,
     );
-    expect(p).toMatch(/return Promise\.all\(\[profilesP, meP\]\)/);
+    // #10 — refresh() also fetches the trash count (the profile cap is enforced
+    // over LIVE + TRASHED, so the "tier limit reached" gate uses the same total).
+    expect(p).toMatch(/const trashP = authedFetch\('\/v1\/profiles\/trash'\)/);
+    expect(p).toMatch(/return Promise\.all\(\[profilesP, meP, trashP\]\)/);
   });
 
-  it('CRITICAL renderUsage() injects "tier limit reached" inline span when count >= cap. The injection-guard (`!usageLine.querySelector(\'[data-cap-flag]\')`) prevents double-injection on repeat refresh.', () => {
+  it('CRITICAL renderUsage() injects "tier limit reached" inline span when the ENFORCED total (LIVE + TRASHED) >= cap (#10/#13 — the cap counts trashed, so the flag must too or it contradicts the server 429). The flag is rebuilt every render (remove + re-add) so a restore/purge clears it.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /if \(usageLine && cap !== null && cap !== undefined && count >= cap\) \{\s*\n\s+if \(!usageLine\.querySelector\('\[data-cap-flag\]'\)\) \{/,
-    );
-    expect(p).toMatch(
-      /span\.setAttribute\('data-cap-flag', ''\);\s*\n\s+span\.className = 'text-red-700';\s*\n\s+span\.textContent = ' · tier limit reached';/,
-    );
+    // The enforced total is live count + trashed count (the same predicate the
+    // server's insertWithLimit cap uses).
+    expect(p).toMatch(/const enforcedTotal = count \+ trashed;/);
+    expect(p).toMatch(/cap !== null && cap !== undefined && enforcedTotal >= cap/);
+    // Idempotent rebuild: drop any prior flag, then re-add when over the enforced cap.
+    expect(p).toMatch(/if \(existing\) existing\.remove\(\);/);
+    expect(p).toMatch(/span\.setAttribute\('data-cap-flag', ''\);/);
+    expect(p).toMatch(/tier limit reached/);
+    // #13 — when trashed profiles are what hold the slot (live grid shows room
+    // but creation is still refused), the flag says so + points to the purge path.
+    expect(p).toMatch(/in the recycle bin still count toward your limit/);
   });
 
   it('CRITICAL escapeHtml() 5-char XSS guard pinned in inline script. Every dynamically-rendered profile field flows through it on row build. Drift to dropping would let a malicious profile name inject HTML.', () => {

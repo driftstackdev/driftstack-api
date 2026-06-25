@@ -66,6 +66,9 @@ function rowToRecord(row: typeof agentSessions.$inferSelect): AgentSessionRecord
     // 0086 — fleet node the session was dispatched to (NULL until dispatch /
     // on every no-fleet-CP row).
     nodeId: row.nodeId,
+    // 0089 — the profile this session runs (NULL for ephemeral sessions / pre-
+    // column rows). The out-of-session trim reads it via countActiveForProfile.
+    profileId: row.profileId,
     pairModeState: row.pairModeState,
     guiControlKeyExpiresAt: row.guiControlKeyExpiresAt,
     guiControlKeyCiphertext: row.guiControlKeyCiphertext,
@@ -106,6 +109,9 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
         // 6.c / #15 — model forwarded from caller (or default via DB
         // CHECK constraint when args.model is omitted).
         ...(args.model !== undefined ? { model: args.model } : {}),
+        // 0089 — the profile this session runs, when the create carried a
+        // profile_id; column defaults NULL (ephemeral session) when omitted.
+        ...(args.profileId !== undefined ? { profileId: args.profileId } : {}),
         createdAt: now,
         updatedAt: now,
       })
@@ -149,6 +155,16 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       .select({ n: count() })
       .from(agentSessions)
       .where(and(eq(agentSessions.accountId, accountId), eq(agentSessions.status, 'active')));
+    return rows[0]?.n ?? 0;
+  }
+
+  async countActiveForProfile(profileId: string): Promise<number> {
+    // 0089 — backed by the partial index agent_sessions_profile_id_active_idx
+    // (ON (profile_id) WHERE status = 'active'). NULL profile_id never matches.
+    const rows = await this.database.db
+      .select({ n: count() })
+      .from(agentSessions)
+      .where(and(eq(agentSessions.profileId, profileId), eq(agentSessions.status, 'active')));
     return rows[0]?.n ?? 0;
   }
 

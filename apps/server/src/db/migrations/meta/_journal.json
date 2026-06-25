@@ -624,6 +624,13 @@
       "when": 1780321200000,
       "tag": "0088_profile_size_bytes",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1780324800000,
+      "tag": "0089_agent_sessions_profile_id",
+      "breakpoints": true
     }
   ]
 }

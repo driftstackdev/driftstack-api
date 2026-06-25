@@ -69,6 +69,15 @@ function fmtLimit(value: number | 'custom'): string {
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
+
+// #12 — mirror the desktop GUI's gating (ProfilesView CLONE_ENABLED=false /
+// IMPORT_EXPORT_ENABLED=false, founder 2026-06-20: clone is currently useless +
+// export/import is a profile-cheat abuse vector). These features were hidden in
+// the GUI but stayed live on the web dashboard, so the abuse vector was one tab
+// away + the two surfaces gave the same account contradictory capabilities. Keep
+// the two surfaces in lockstep: flip both flags together if the decision changes.
+const CLONE_ENABLED = false;
+const IMPORT_EXPORT_ENABLED = false;
 ---
 
 <DashboardLayout title="Profiles">
@@ -99,7 +108,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         </p>
       </div>
       <div class="flex shrink-0 flex-wrap items-center gap-2">
-        <button type="button" class="btn-secondary" data-show-import>Import</button>
+        {/* #12 — Import is hidden in lockstep with the desktop GUI
+            (IMPORT_EXPORT_ENABLED=false; profile-cheat abuse vector). */}
+        {IMPORT_EXPORT_ENABLED && (
+          <button type="button" class="btn-secondary" data-show-import>Import</button>
+        )}
         <button type="button" class="btn-primary" data-show-create>New profile</button>
       </div>
     </header>
@@ -550,7 +563,7 @@ const apiBaseUrl = resolveApiBaseUrl();
  — progressive-enhancement script. Live-fetches /v1/profiles +
     /v1/account/me; wires create + delete actions.
   -->
-  <script is:inline define:vars={{ apiBaseUrl, archetypeLabels: ARCHETYPE_LABELS, storageCaps: TIER_STORAGE_BYTES_CAP, storageSoftFraction: STORAGE_SOFT_WARN_FRACTION }}>
+  <script is:inline define:vars={{ apiBaseUrl, archetypeLabels: ARCHETYPE_LABELS, storageCaps: TIER_STORAGE_BYTES_CAP, storageSoftFraction: STORAGE_SOFT_WARN_FRACTION, cloneEnabled: CLONE_ENABLED, importExportEnabled: IMPORT_EXPORT_ENABLED }}>
     (function () {
       const root = document.querySelector('[data-page="profiles"]');
       if (!root) return;
@@ -693,24 +706,32 @@ const apiBaseUrl = resolveApiBaseUrl();
           '" data-launch-name="' +
           escapeHtml(p.name) +
           '" class="text-sm font-medium text-tk-accent hover:underline">Launch</button>' +
-          '<button type="button" data-clone="' +
-          escapeHtml(p.id) +
-          '" data-clone-name="' +
-          escapeHtml(p.name) +
-          '" class="text-sm text-tk-accent hover:underline">Clone</button>' +
-          '<button type="button" data-export="' +
-          escapeHtml(p.id) +
-          '" data-export-name="' +
-          escapeHtml(p.name) +
-          '" class="text-sm text-tk-accent hover:underline">Export</button>' +
-          // 2026-05-22 — V-666 transfer-to-account. Recipient pastes
-          // their account_id from /settings; this profile moves to
-          // them (delete from source on success).
-          '<button type="button" data-transfer="' +
-          escapeHtml(p.id) +
-          '" data-transfer-name="' +
-          escapeHtml(p.name) +
-          '" class="text-sm text-tk-accent hover:underline">Transfer</button>' +
+          // #12 — Clone gated in lockstep with the desktop GUI
+          // (cloneEnabled=false; "currently useless"). Export + Transfer gated
+          // under importExportEnabled (profile-cheat abuse vector — Export writes
+          // a portable envelope, Transfer moves the profile to another account).
+          (cloneEnabled
+            ? '<button type="button" data-clone="' +
+              escapeHtml(p.id) +
+              '" data-clone-name="' +
+              escapeHtml(p.name) +
+              '" class="text-sm text-tk-accent hover:underline">Clone</button>'
+            : '') +
+          (importExportEnabled
+            ? '<button type="button" data-export="' +
+              escapeHtml(p.id) +
+              '" data-export-name="' +
+              escapeHtml(p.name) +
+              '" class="text-sm text-tk-accent hover:underline">Export</button>' +
+              // 2026-05-22 — V-666 transfer-to-account. Recipient pastes
+              // their account_id from /settings; this profile moves to
+              // them (delete from source on success).
+              '<button type="button" data-transfer="' +
+              escapeHtml(p.id) +
+              '" data-transfer-name="' +
+              escapeHtml(p.name) +
+              '" class="text-sm text-tk-accent hover:underline">Transfer</button>'
+            : '') +
           '<button type="button" data-snapshot="' +
           escapeHtml(p.id) +
           '" data-snapshot-name="' +
@@ -782,14 +803,24 @@ const apiBaseUrl = resolveApiBaseUrl();
         const meP = authedFetch('/v1/account/me')
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .catch(() => null);
-        return Promise.all([profilesP, meP])
-          .then(([profiles, me]) => {
+        // #10 — the profile cap is enforced server-side over LIVE + TRASHED
+        // profiles (a trashed profile still holds its row/DEK/blob until purge),
+        // but the live grid only shows LIVE ones. Fetch the trash count so the
+        // "tier limit reached" flag + the New gate match what the server enforces
+        // — otherwise a user who deletes a profile sees 0/1 yet gets a 429 saying
+        // they have 1. Best-effort (null → treat as 0, the prior behavior).
+        const trashP = authedFetch('/v1/profiles/trash')
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((b) => (b && Array.isArray(b.data) ? b.data.length : 0))
+          .catch(() => 0);
+        return Promise.all([profilesP, meP, trashP])
+          .then(([profiles, me, trashedCount]) => {
             // doc-150 item 6 — capture the live tier BEFORE renderProfiles so
             // renderStorageTotal (called inside it) can resolve the storage cap.
             if (me && me.tier) currentTier = me.tier;
             renderProfiles(profiles);
             if (me) {
-              renderUsage(me, profiles.length);
+              renderUsage(me, profiles.length, trashedCount);
               // 2026-05-22 — highlight the customer's current tier card
               // in the per-tier ceiling grid. Adds the glow-red accent;
               // every other card stays neutral so the active tier
@@ -1184,7 +1215,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         });
       }
 
-      function renderUsage(me, count) {
+      function renderUsage(me, count, trashedCount) {
         const tierLine = root.querySelector('[data-field="tier-line"]');
         const countEl = root.querySelector('[data-field="count"]');
         const limitEl = root.querySelector('[data-field="limit"]');
@@ -1195,12 +1226,30 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (limitEl) {
           limitEl.textContent = cap === null || cap === undefined ? 'Custom' : String(cap);
         }
-        if (usageLine && cap !== null && cap !== undefined && count >= cap) {
-          if (!usageLine.querySelector('[data-cap-flag]')) {
+        // #10/#13 — the cap is enforced over LIVE + TRASHED profiles, so the
+        // "tier limit reached" flag has to use the SAME total or it contradicts
+        // the server's 429. A trashed profile still holds a slot until it's
+        // purged, so deleting one does NOT free a count slot (unlike storage,
+        // which a delete frees immediately) — call that out so the customer
+        // knows the next step is to permanently remove a trashed profile, not
+        // just trash another. Rebuilt every render so a restore/purge clears it.
+        const trashed = typeof trashedCount === 'number' ? trashedCount : 0;
+        const enforcedTotal = count + trashed;
+        if (usageLine) {
+          const existing = usageLine.querySelector('[data-cap-flag]');
+          if (existing) existing.remove();
+          if (cap !== null && cap !== undefined && enforcedTotal >= cap) {
             const span = document.createElement('span');
             span.setAttribute('data-cap-flag', '');
             span.className = 'text-red-700';
-            span.textContent = ' · tier limit reached';
+            // When trashed profiles are what's holding the slot(s) (the live
+            // grid shows room but creation is still refused), say so explicitly.
+            span.textContent =
+              trashed > 0 && count < cap
+                ? ' · tier limit reached — ' +
+                  trashed +
+                  ' in the recycle bin still count toward your limit (permanently remove one in the desktop app or API to free a slot)'
+                : ' · tier limit reached';
             usageLine.appendChild(span);
           }
         }
@@ -1425,7 +1474,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             const ok = await window.driftstackConfirm(
               'Delete profile "' +
                 name +
-                '"? It moves to the recycle bin — you can restore it within 30 days, after which it is permanently purged. Sessions currently using this profile will fail until you restore it.',
+                '"? It moves to the recycle bin and is permanently purged after 30 days. It still counts toward your profile limit until then — to free a slot now, or to restore it, use the desktop app or the API. Sessions currently using this profile will fail.',
               { confirmLabel: 'Delete' },
             );
             if (!ok) return;

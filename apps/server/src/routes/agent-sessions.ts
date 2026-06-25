@@ -35,6 +35,7 @@ import type { AgentSessionRecord, AgentSessionsRepo } from '../services/agent-se
 import type { ProfilesService } from '../services/profiles.js';
 import type { AccountAuthRepo } from '../services/auth.js';
 import type { AccountProxiesService } from '../services/account-proxies.js';
+import { UnsafeProxyHostError } from '../services/account-proxies.js';
 import type { SessionRepo } from '../services/sessions.js';
 import { buildAssignProfileBlock } from '../services/profile-store.js';
 import type { R2 } from '../lib/r2.js';
@@ -585,6 +586,16 @@ export interface SessionDispatchConfig {
  *  default (they stay active via API intents). Value is a sensible default; A3 can tune. */
 export const MANUAL_SESSION_IDLE_TIMEOUT_SECONDS = 1800;
 
+/** Max wall-clock lifetime for MANUAL (GUI) sessions. The harness default is
+ *  ~1800s (30 min) for EVERY session (harness-control-protocol: omit → max 1800s),
+ *  which hard-kills an interactively-watched sim mid-use after half an hour with no
+ *  explanation — the GUI only learns via a generic disconnect. A manual session is a
+ *  human at the controls, so it gets a far more generous 4h cap; the idle timeout
+ *  (above) still reaps a genuinely-abandoned tab well before this. ai/pair (API-driven)
+ *  sessions keep the box default — they're bounded by token budget + the orphan reaper,
+ *  not a human's attention span. 14400s = 4h is a sensible default; A3 can tune. */
+export const MANUAL_SESSION_MAX_DURATION_SECONDS = 14400;
+
 /**
  * Dispatch a `sessionAssign` to the LiveKit-owning fleet node on
  * session-create, so the harness spawns the browser + captures + publishes.
@@ -645,6 +656,11 @@ export async function dispatchSessionAssignOnCreate(args: {
   // touching is not idle_timeout-reaped at the box default (~300s); absent → the
   // box default (correct for ai/pair API-driven sessions, which stay active).
   idleTimeoutSeconds?: number;
+  // Per-session max-duration override. The route sets a generous value for manual
+  // (GUI) sessions so an interactively-watched sim isn't hard-killed at the box
+  // ~1800s default mid-use; absent → the box default (correct for ai/pair sessions,
+  // bounded by token budget + the orphan reaper instead of a wall clock).
+  maxDurationSeconds?: number;
 }): Promise<void> {
   const {
     sessionId,
@@ -663,6 +679,7 @@ export async function dispatchSessionAssignOnCreate(args: {
     accountRegion,
     initialUrl,
     idleTimeoutSeconds,
+    maxDurationSeconds,
   } = args;
   if (
     fleetControlRegistry === undefined ||
@@ -770,11 +787,15 @@ export async function dispatchSessionAssignOnCreate(args: {
         // resolved (not found / non-dispatchable scheme / decrypt fail). Do NOT silently fall
         // back to the operator-default egress — that would run the customer's session through
         // shared egress they never chose (an egress-identity leak). Skip the dispatch instead.
-        // (An unsafe-host proxy already throws UnsafeProxyHostError → the outer catch skips.)
+        // (An unsafe-host proxy already throws UnsafeProxyHostError → the outer catch closes it.)
         logger?.warn(
           { component: 'fleet-session-dispatch', sessionId, proxyId },
           'requested proxy_id unresolvable; failing closed (no operator-default egress fallback)',
         );
+        // #16 — close the row with a terminal reason so this never-dispatched session
+        // stops counting against MAX_ACTIVE_AGENT_SESSIONS_PER_ACCOUNT (otherwise each
+        // failed launch/retry leaks a phantom 'active' slot until the wall-clock reaper).
+        await closeUnresolvedEgressSession(agentSessions, sessionId, logger);
         return;
       }
       inlineProxyConfig = resolved;
@@ -795,6 +816,7 @@ export async function dispatchSessionAssignOnCreate(args: {
       },
       ...(profile !== undefined ? { profile } : {}),
       ...(idleTimeoutSeconds !== undefined ? { idleTimeoutSeconds } : {}),
+      ...(maxDurationSeconds !== undefined ? { maxDurationSeconds } : {}),
     });
     const dispatchedNodeId = mac.nodeId ?? mac.id;
     // Worker-disconnect fix (2026-06-19) — persist session→node so the disconnect
@@ -849,6 +871,43 @@ export async function dispatchSessionAssignOnCreate(args: {
         err: err instanceof Error ? err.message : String(err),
       },
       'sessionAssign dispatch failed (session create unaffected)',
+    );
+    // #16 — an UnsafeProxyHostError is a fail-closed egress decision (the SSRF
+    // re-guard rejected the customer's proxy host); the session was never
+    // dispatched and never will be, so close the row's phantom 'active' slot
+    // exactly like the resolved===null branch. Other dispatch errors (transient
+    // R2/registry hiccups) are NOT closed here — they may be retryable and the
+    // wall-clock orphan reaper is the correct backstop for a genuinely stuck row.
+    if (err instanceof UnsafeProxyHostError) {
+      await closeUnresolvedEgressSession(agentSessions, sessionId, logger);
+    }
+  }
+}
+
+/**
+ * #16 — close a never-dispatched session whose customer egress could not be
+ * resolved (unresolvable/undispatchable proxy or an SSRF-rejected host), so the
+ * phantom 'active' row stops counting against the per-account active-session cap.
+ * Best-effort + no-op when the repo isn't wired (the fail-closed path still
+ * returns); the wall-clock orphan reaper remains the backstop. Idempotent —
+ * closeWithReason keeps the first close's timestamp.
+ */
+async function closeUnresolvedEgressSession(
+  agentSessions: AgentSessionsRepo | undefined,
+  sessionId: string,
+  logger?: { info: (obj: unknown, msg: string) => void; warn: (obj: unknown, msg: string) => void },
+): Promise<void> {
+  if (agentSessions === undefined) return;
+  try {
+    await agentSessions.closeWithReason(sessionId, 'egress_unresolved');
+  } catch (closeErr) {
+    logger?.warn(
+      {
+        component: 'fleet-session-dispatch',
+        sessionId,
+        err: closeErr instanceof Error ? closeErr.message : String(closeErr),
+      },
+      'failed to close session after unresolvable egress; orphan reaper will backstop',
     );
   }
 }
@@ -1289,6 +1348,17 @@ export function registerAgentSessionsRoutes(
         if (owned === null) {
           throw new NotFoundError(`Proxy ${proxyId} not found.`);
         }
+        // #15 — reject an undispatchable scheme at CREATE with a clear 400 instead
+        // of letting the create 201 + then silently fail-closed at dispatch (which
+        // left the GUI spinning 30s into a misleading "the proxy may be down"). Only
+        // socks5/openvpn/wireguard resolve to an inline egress (account-proxies
+        // resolveForDispatch); http has no dispatch slot yet. Surfacing it here (the
+        // server is authoritative) gives the customer an instant, honest message.
+        if (owned.scheme === 'http') {
+          throw new BadRequestError(
+            'HTTP proxies cannot drive a browser session yet — use a SOCKS5, OpenVPN, or WireGuard proxy.',
+          );
+        }
       }
 
       // Strict-FK (2026-06-16) — normalize the optional driftstack_session_id
@@ -1362,6 +1432,10 @@ export function registerAgentSessionsRoutes(
           // 6.c / #15 — forward the picked model when supplied; otherwise
           // repo applies the default ('claude-opus-4-8').
           ...(parsed.data.model !== undefined ? { model: parsed.data.model } : {}),
+          // #14 (migration 0089) — record the profile this session runs so the
+          // out-of-session trim can refuse a trim against a profile bound to a
+          // live session (avoids a two-writer R2 lost-update on the sealed blob).
+          ...(profileBareId !== undefined ? { profileId: profileBareId } : {}),
         });
       } catch (err) {
         // v2-#19 — concurrent same-key idempotency race: the
@@ -1449,10 +1523,15 @@ export function registerAgentSessionsRoutes(
         // this URL on session launch (inert until the box honors initialUrl).
         ...(parsed.data.initial_url !== undefined ? { initialUrl: parsed.data.initial_url } : {}),
         // Manual (GUI) sessions are interactively WATCHED — give them a generous idle
-        // timeout so a sim the operator watches without touching isn't reaped at the box
-        // ~300s default (A3 W2813 knob). ai/pair stay on the box default (API-driven).
+        // timeout AND a generous max-duration so a sim the operator watches without
+        // touching isn't reaped at the box ~300s idle default, nor hard-killed at the
+        // box ~1800s wall-clock default mid-use (A3 W2813 knob). ai/pair stay on the box
+        // defaults (API-driven; bounded by token budget + the orphan reaper).
         ...(created.mode === 'manual'
-          ? { idleTimeoutSeconds: MANUAL_SESSION_IDLE_TIMEOUT_SECONDS }
+          ? {
+              idleTimeoutSeconds: MANUAL_SESSION_IDLE_TIMEOUT_SECONDS,
+              maxDurationSeconds: MANUAL_SESSION_MAX_DURATION_SECONDS,
+            }
           : {}),
       });
       // Slice 6 follow-up 2026-05-20 — agent-session create audit. Best-
