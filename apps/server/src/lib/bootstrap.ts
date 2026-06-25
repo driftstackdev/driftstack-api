@@ -1090,10 +1090,20 @@ export async function createProductionDeps(
   const proxyPrelaunchProbeEnabled = !['0', 'false'].includes(
     (process.env.DRIFTSTACK_PROXY_PRELAUNCH_PROBE ?? '').toLowerCase(),
   );
+  // Overall probe deadline (dial + handshake + egress round-trip), env-tunable so
+  // the budget can be retuned for slow residential/mobile proxies without a code
+  // change. A non-numeric / non-positive value falls back to the default (12s).
+  const proxyProbeTimeoutMs = ((): number | undefined => {
+    const raw = process.env.DRIFTSTACK_PROXY_PROBE_TIMEOUT_MS;
+    if (raw === undefined) return undefined;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  })();
   const proxyConnectivityProbe = new ProxyConnectivityProbe({
     ...(process.env.DRIFTSTACK_PROXY_PROBE_TARGET_URL !== undefined
       ? { targetUrl: process.env.DRIFTSTACK_PROXY_PROBE_TARGET_URL }
       : {}),
+    ...(proxyProbeTimeoutMs !== undefined ? { timeoutMs: proxyProbeTimeoutMs } : {}),
   });
   const profilesService = new ProfilesService(
     profilesRepo,

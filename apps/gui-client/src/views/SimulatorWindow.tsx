@@ -104,13 +104,30 @@ function makeTabId(): string {
 // new-tab page (apps/marketing-site/src/pages/newtab.astro) so the box renders an
 // on-brand page instead of a literally-empty about:blank. A NAMED CONSTANT so it's
 // a one-line swap back to 'about:blank' if A3 prefers it for fingerprint reasons.
-const NEW_TAB_URL = 'https://driftstack.dev/newtab';
+// TRAILING SLASH is deliberate: Astro (output:'static', directory format) builds the
+// page to dist/newtab/index.html, served at /newtab/. Without the slash CF Pages
+// 308-redirects /newtab → /newtab/, which the box reports back as an extra navigation
+// (and a url the no-slash blank-tab check no longer matched). Seed the served path so
+// there's no redirect hop and the tab reads as blank.
+const NEW_TAB_URL = 'https://driftstack.dev/newtab/';
 const NEW_TAB_TITLE = 'New Tab';
 /** A "home"/blank tab whose url should read as an empty new tab in the UI (no
  *  address shown, label falls back to "New Tab", window title to the device
- *  name) — both the literal about:blank and the branded NEW_TAB_URL. */
+ *  name) — both the literal about:blank and the branded new-tab page. Normalizes a
+ *  trailing slash and accepts the box-reported title chrome so a fresh tab still reads
+ *  as blank even if the box reports the redirected (no-slash) or slashed form. */
 function isBlankTabUrl(url: string): boolean {
-  return url === '' || url === 'about:blank' || url === NEW_TAB_URL;
+  if (url === '' || url === 'about:blank') return true;
+  const normalized = url.replace(/\/$/, '');
+  return normalized === 'https://driftstack.dev/newtab';
+}
+/** The branded new-tab page hard-depends on driftstack.dev being reachable THROUGH the
+ *  customer proxy — a geo-block / CF challenge / marketing outage makes the box report
+ *  it 'errored'. A blank new tab must never read as a navigation FAILURE (about:blank
+ *  always rendered), so a load error on the new-tab url is treated as graceful (no
+ *  overlay) rather than a hard error. The operator just types an address as usual. */
+function isNewTabLoadError(url: unknown): boolean {
+  return typeof url === 'string' && url !== '' && isBlankTabUrl(url);
 }
 // Tab-switch ack handling (founder 2026-06-25 "could not switch tab" softening).
 // If the harness MISSES an activateTab ack (a dropped data-channel frame) within
@@ -122,6 +139,14 @@ const ACTIVATE_MAX_ATTEMPTS = 3;
 // (a dropped ack AND a dropped page_state). Cleared earlier by any box page-state
 // for the tab or an ack; this is the safety net.
 const SWITCH_AFFORDANCE_TIMEOUT_MS = 6000;
+// Grace window after a navigate / tab switch during which a box page-state frame that
+// carries NO tabId must NOT overwrite the active tab's url. Right after a switch the
+// box's page-state still reflects the PRIOR tab's page and (on prod) carries no tabId,
+// so a tabId-less frame would route the stale url onto the just-switched active tab —
+// the founder's "2nd switch stays on the same url" clobber. Both the ~2s poll AND the
+// one-shot reconcile gate their url write on this (the title still applies; titles
+// self-heal). A tabId-bearing frame routes precisely and is never suppressed.
+const PAGE_STATE_GRACE_MS = 2500;
 // flip true when A3's navigateHistory handler deploys — bus W2870
 const BACK_FORWARD_ENABLED = true; // A3 navigateHistory handler deployed (bus W2872; A3 01a5d48f1)
 const BEZEL_PAD = 20; // p-[10px] × 2
@@ -1293,10 +1318,13 @@ function TabStrip({
   onNew: () => void;
 }): JSX.Element {
   const label = (t: SimTab): string => {
+    const url = t.url.trim();
+    // A blank/new tab always reads as "New Tab" — the box reports the branded page's
+    // own <title> ("New Tab · Driftstack") which is chrome, not a real page title; it
+    // must not leak into the tab label (a fresh tab should look clean).
+    if (isBlankTabUrl(url)) return 'New Tab';
     const title = t.title.trim();
     if (title !== '') return title;
-    const url = t.url.trim();
-    if (isBlankTabUrl(url)) return 'New Tab';
     // Show the host (sans scheme) when possible, else the raw url — compact + readable.
     try {
       return new URL(url).host || url;
@@ -2726,20 +2754,41 @@ export function SimulatorWindow(): JSX.Element {
         // a DROPPED reply leaves the optimistic switch in place (acceptable for v1).
         if (msg.type === 'activateTabResult' && typeof msg.requestId === 'string') {
           const pending = pendingActivationsRef.current.get(msg.requestId);
-          pendingActivationsRef.current.delete(msg.requestId);
           if (pending !== undefined) {
+            // A switch can have SEVERAL in-flight requestIds for the SAME tab (each
+            // re-issue mints a new one). The first ack RESOLVES that tab; drop EVERY
+            // pending entry for the same tabId so a sibling retry's late/colliding ack
+            // (a duplicate wd.navigate can collide → -1005 error even though the page
+            // switched) can't later REVERT a switch that already landed (founder
+            // 2026-06-25 "could not switch tab" yank under lag).
+            for (const [id, p] of pendingActivationsRef.current) {
+              if (p.tabId === pending.tabId) pendingActivationsRef.current.delete(id);
+            }
             // ANY ack (ok or reject) resolves the switch — stop the re-issue-on-miss
             // timer + clear the "switching…" affordance for this tab.
             resolveSwitchRef.current(pending.tabId);
           }
-          if (pending !== undefined && (msg.ok === false || typeof msg.error === 'string')) {
+          // A superseded ack (the operator has since switched to a DIFFERENT tab, or a
+          // sibling retry already resolved this one) must never yank the current tab.
+          // Only revert when this ack's tab is STILL the active one — i.e. its switch is
+          // the live one. activeTabIdRef mirrors the latest active tab (the closure's
+          // activeTabId is stale across switches).
+          if (
+            pending !== undefined &&
+            pending.tabId === activeTabIdRef.current &&
+            (msg.ok === false || typeof msg.error === 'string')
+          ) {
             // SOFT failure (founder 2026-06-25): revert to the previously-active tab
             // (a sensible state — never leave it half-switched) and show a brief,
             // NON-BLOCKING notice. No alert(); the toast auto-dismisses.
             setActiveTabId(pending.prevTabId);
             setNotice('Could not switch tab');
             window.setTimeout(() => setNotice(null), 3000);
-          } else if (pending !== undefined) {
+          } else if (
+            pending !== undefined &&
+            pending.tabId === activeTabIdRef.current &&
+            !(msg.ok === false || typeof msg.error === 'string')
+          ) {
             // CONFIRMED switch — the box acknowledged it landed on `pending.tabId`.
             // Fire a one-shot reconcile so the now-active tab refreshes from the box
             // even if the data-channel page_state for the switched page dropped (the
@@ -2822,9 +2871,11 @@ export function SimulatorWindow(): JSX.Element {
         // failure must not read as a blank successful load). Any other harness
         // state means the page is loading/loaded/responsive → clear it.
         if (isHarnessState) {
-          if (msg.state === 'errored') {
+          if (msg.state === 'errored' && !isNewTabLoadError(msg.url)) {
             setPageError(typeof msg.error === 'object' && msg.error !== null ? msg.error : {});
           } else {
+            // A real error overlay, OR a blank new-tab whose branded page couldn't load
+            // through the proxy → clear/never show the hard error (graceful blank tab).
             setPageError(null);
           }
         }
@@ -2882,7 +2933,8 @@ export function SimulatorWindow(): JSX.Element {
           // makes this fully precise automatically.
           const hasTabId = typeof ps.tabId === 'string' && ps.tabId !== '';
           const inGrace =
-            Date.now() - lastSwitchAtRef.current < 2500 || Date.now() - lastNavAtRef.current < 2500;
+            Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS ||
+            Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS;
           const suppressUrl = !hasTabId && inGrace;
           writeTabPageState({
             tabId: ps.tabId,
@@ -2894,13 +2946,16 @@ export function SimulatorWindow(): JSX.Element {
           setPageStalled(ps.state === 'stalled');
           // W616 — surface/clear the page-navigation error from the poll too (same
           // payload as the data-channel path); 'errored' shows the overlay, any
-          // other state clears it.
-          setPageError(ps.state === 'errored' ? (ps.error ?? {}) : null);
+          // other state clears it. A blank new-tab whose branded page couldn't load
+          // through the proxy is graceful (no overlay) — never a hard error.
+          setPageError(
+            ps.state === 'errored' && !isNewTabLoadError(ps.url) ? (ps.error ?? {}) : null,
+          );
           const loading = ps.state === 'loading';
           // Don't let a stale 'loaded' (the box hasn't seen our just-submitted
           // navigate yet) kill the optimistic spinner. Within the grace window after
           // a navigate, only ESCALATE to loading; the 6s watchdog still bounds it.
-          if (!loading && Date.now() - lastNavAtRef.current < 2500) return;
+          if (!loading && Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS) return;
           setPageLoading(loading);
           if (!loading) clearLoadWatchdog();
         })
@@ -3510,14 +3565,29 @@ export function SimulatorWindow(): JSX.Element {
   // One-shot page-state pull (live-state accuracy refactor). Fired right after a tab
   // switch so the active tab reconciles from the box immediately rather than waiting
   // up to ~2s for the next poll tick. Same routing as the poll (tabId → that tab, else
-  // active) but NOT grace-gated: a deliberate reconcile WANTS the box's current url —
-  // and routing by tabId (when present) is precise regardless. Best-effort + guarded.
+  // active) AND the SAME grace gating: a tabId-less frame that resolves WITHIN the
+  // switch grace window still reflects the PRIOR tab's page (the box hasn't re-reported
+  // the switched page yet) — applying its url to the just-switched active tab is the
+  // exact "2nd switch stays on the same url" clobber. So suppress the url for a
+  // tabId-less in-grace result (the title still applies + self-heals); a tabId-bearing
+  // frame routes precisely and is never suppressed. The HTTP round-trip resolves on a
+  // macrotask AFTER the switch's activeTabIdRef commit, so the grace check must run at
+  // RESOLVE time, not call time. Best-effort + guarded.
   const reconcilePageState = useCallback(async (): Promise<void> => {
     if (sessionId === '') return;
     try {
       const ps = await getAgentSessionPageState(sessionId, controlAuth);
       if (ps === null) return;
-      writeTabPageState({ tabId: ps.tabId, url: ps.url, title: ps.title });
+      const hasTabId = typeof ps.tabId === 'string' && ps.tabId !== '';
+      const inGrace =
+        Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS ||
+        Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS;
+      const suppressUrl = !hasTabId && inGrace;
+      writeTabPageState({
+        tabId: ps.tabId,
+        url: suppressUrl ? null : ps.url,
+        title: ps.title,
+      });
     } catch {
       /* best-effort reconcile — transient errors are non-fatal */
     }
@@ -3702,11 +3772,16 @@ export function SimulatorWindow(): JSX.Element {
   const activeTabUrl = activeTab?.url ?? '';
   const activeTabTitle = activeTab?.title ?? '';
   useEffect(() => {
-    setLiveUrl(activeTabUrl);
-    // A blank/new tab's placeholder 'New Tab' title is chrome, not a real page title —
-    // don't surface it as the window title; leave liveTitle empty so the title falls
-    // back to the url/host (matches the tab-label rule). A real box title overrides.
-    setLiveTitle(activeTabTitle === 'New Tab' ? '' : activeTabTitle);
+    // A blank/new tab reads as a CLEAN empty address bar — the branded new-tab url
+    // (the served /newtab/ page) is chrome, not a destination the operator typed, so
+    // don't surface it in the bar (founder 2026-06-25: a fresh tab should look blank,
+    // not show driftstack.dev/newtab/). Any real page url flows through verbatim.
+    setLiveUrl(isBlankTabUrl(activeTabUrl) ? '' : activeTabUrl);
+    // A blank/new tab's title is chrome, not a real page title — don't surface it as
+    // the window title; leave liveTitle empty so the title falls back to the device
+    // name (matches the tab-label rule). Covers both the seeded 'New Tab' placeholder
+    // and the box-reported branded page <title> ('New Tab · Driftstack').
+    setLiveTitle(isBlankTabUrl(activeTabUrl) || activeTabTitle === 'New Tab' ? '' : activeTabTitle);
     // Re-derive whenever the active tab's stored url/title changes (a box page_state
     // write) or which tab is active changes (a switch reads the new tab's own values).
   }, [activeTabUrl, activeTabTitle]);

@@ -321,7 +321,8 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(payload.tabs).toHaveLength(2);
     const fresh = payload.tabs[1] as { url: string; title: string };
     // Founder 2026-06-25: the "+" opens our branded /newtab page, never about:blank.
-    expect(fresh.url).toBe('https://driftstack.dev/newtab');
+    // The url carries the trailing slash (the served path) to skip the 308 redirect.
+    expect(fresh.url).toBe('https://driftstack.dev/newtab/');
     expect(fresh.url).not.toBe('about:blank');
     expect(fresh.title).toBe('New Tab');
     // And the prior page's url/title must NOT have been stamped onto the new tab by
@@ -467,6 +468,69 @@ describe('SimulatorWindow — page tab strip', () => {
     }
   });
 
+  it('(c2) the one-shot RECONCILE within the grace window does NOT clobber a just-switched url (macrotask resolve)', async () => {
+    // This is the faithful prod ordering the existing case-(c) test masks: the explicit
+    // reconcile fired by onActivateTab resolves its getAgentSessionPageState on a
+    // MACROTASK — AFTER the switch's activeTabIdRef effect has committed — and the box's
+    // page-state STILL reflects the PRIOR tab (tabId null). Without grace-gating the
+    // reconcile, that stale prior url routes onto the just-switched active tab and
+    // re-breaks the founder's "2nd switch stays on the same url" fix.
+    vi.useFakeTimers();
+    try {
+      const { container } = renderSim();
+      expect(dataHandler).not.toBeNull();
+      // Tab 1 = site A; tab 2 = site B (active after open).
+      pushPageState({ state: 'loaded', url: 'https://aaa.example/', title: 'A' });
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+      pushPageState({ state: 'loaded', url: 'https://bbb.example/', title: 'B' });
+      const tab1Id = (lastTabListCall().tabs[0] as { id: string }).id;
+      const tab2Id = (lastTabListCall().tabs[1] as { id: string }).id;
+
+      const addressInput = container.querySelector(
+        '[aria-label="Address bar"]',
+      ) as HTMLInputElement;
+
+      // ARM the stale box page-state BEFORE the switch: the box still reports B (the
+      // PRIOR tab) with NO tabId — and the reconcile fetch resolves on a real MACROTASK
+      // (a setTimeout(0), like an HTTP round-trip) so it lands AFTER the activeTabId
+      // commit, not in the same synchronous microtask the seed mock uses.
+      getAgentSessionPageState.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(
+              () =>
+                resolve({
+                  state: 'loaded',
+                  url: 'https://bbb.example/',
+                  title: 'B',
+                  tabId: null,
+                  error: null,
+                }),
+              0,
+            );
+          }),
+      );
+
+      // Switch from tab 2 (B) back to tab 1 (A) — the address bar shows A immediately.
+      fireEvent.click(tabEls(container)[0]);
+      expect(addressInput.value).toBe('https://aaa.example/');
+
+      // Let the macrotask reconcile resolve INSIDE the grace window. The stale B url
+      // must be suppressed — tab 1 stays on A, tab 2 keeps B; NEITHER flips to the
+      // prior page.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(addressInput.value).toBe('https://aaa.example/');
+      const byId = tabsById();
+      expect(byId.get(tab1Id)?.url).toBe('https://aaa.example/');
+      expect(byId.get(tab2Id)?.url).toBe('https://bbb.example/');
+    } finally {
+      getAgentSessionPageState.mockImplementation(() => Promise.resolve(pageStateValue));
+      vi.useRealTimers();
+    }
+  });
+
   it('(d) a page_state carrying tabId routes url/title to THAT tab (not the active one)', () => {
     const { container } = renderSim();
     expect(dataHandler).not.toBeNull();
@@ -495,6 +559,45 @@ describe('SimulatorWindow — page tab strip', () => {
     // And the address bar (active = tab 2) still shows tab 2's url, not tab 1's.
     const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
     expect(addressInput.value).toBe('https://two.example/');
+  });
+
+  // ── Branded new-tab page (founder 2026-06-25) ─────────────────────────────────
+
+  it('a new (+) tab reads as a clean "New Tab" — slashed url + box title chrome are hidden', () => {
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    // The new tab seeds the SLASHED served path (no 308 redirect hop).
+    const tabs = lastTabListCall().tabs as Array<{ url: string }>;
+    expect(tabs[1]?.url).toBe('https://driftstack.dev/newtab/');
+    // The box reports the branded page's own title + url (slashed) — both are chrome
+    // for a blank tab. The label must still read "New Tab", and the address bar blank.
+    pushPageState({
+      state: 'loaded',
+      url: 'https://driftstack.dev/newtab/',
+      title: 'New Tab · Driftstack',
+    });
+    expect(tabEls(container)[1].textContent).toContain('New Tab');
+    expect(tabEls(container)[1].textContent).not.toContain('Driftstack');
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    expect(addressInput.value).toBe('');
+  });
+
+  it('a blocked new-tab (errored branded page through the proxy) does NOT show a hard error overlay', () => {
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    // The proxy can't reach driftstack.dev → the box reports the new-tab url 'errored'.
+    // It must stay graceful (a blank tab), NOT a "Page failed to load" overlay.
+    pushPageState({
+      state: 'errored',
+      url: 'https://driftstack.dev/newtab/',
+      error: { kind: 'net' },
+    });
+    expect(container.querySelector('[data-component="page-error-overlay"]')).toBeNull();
+    // A REAL page error (a normal site that failed) still shows the overlay.
+    pushPageState({ state: 'errored', url: 'https://blocked.example/', error: { kind: 'net' } });
+    expect(container.querySelector('[data-component="page-error-overlay"]')).not.toBeNull();
   });
 
   // ── Tab-switch UX round 2 (founder 2026-06-25) ────────────────────────────────
@@ -608,6 +711,64 @@ describe('SimulatorWindow — page tab strip', () => {
       expect(sendActivateTab).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it('a stale/superseded error-ack does NOT revert a switch that already landed (two in-flight requestIds)', async () => {
+    // Each re-issue mints a NEW requestId for the SAME tab, so 2+ requestIds can be
+    // outstanding at once (R1, R2). When R1 acks ok the switch lands; a LATE R2
+    // error-ack (a colliding duplicate wd.navigate → -1005 even though the page
+    // switched) must NOT yank the operator back to the previous tab.
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    vi.useFakeTimers();
+    try {
+      // Distinct requestIds per activateTab send so R1 and R2 are separately tracked.
+      let n = 0;
+      sendActivateTab.mockImplementation(() => Promise.resolve(`req_${++n}`));
+      const { container } = renderSim();
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+      sendActivateTab.mockClear();
+      n = 0;
+      // Switch to tab1 → R1 sent. A missed ack re-issues after the 1200ms backoff → R2.
+      fireEvent.click(tabEls(container)[0]); // optimistic switch to tab1
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(sendActivateTab).toHaveBeenCalledTimes(1); // R1
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1200); // backoff → R2
+      });
+      expect(sendActivateTab).toHaveBeenCalledTimes(2); // R1 + R2
+      // R1 acks OK → the switch to tab1 lands (affordance clears, tab1 active).
+      act(() => {
+        dataHandler?.(
+          new TextEncoder().encode(
+            JSON.stringify({ type: 'activateTabResult', requestId: 'req_1', ok: true }),
+          ),
+        );
+      });
+      expect(tabEls(container)[0].getAttribute('data-active')).toBe('true');
+      // R2's LATE error-ack arrives — it must be ignored (R1 already resolved the tab),
+      // NOT revert to tab2.
+      act(() => {
+        dataHandler?.(
+          new TextEncoder().encode(
+            JSON.stringify({ type: 'activateTabResult', requestId: 'req_2', ok: false }),
+          ),
+        );
+      });
+      expect(tabEls(container)[0].getAttribute('data-active')).toBe('true'); // still tab1
+      expect(tabEls(container)[1].getAttribute('data-active')).toBe('false');
+      // No "Could not switch tab" toast for the stale ack.
+      expect(container.querySelector('[role="status"]')?.textContent ?? '').not.toContain(
+        'Could not switch tab',
+      );
+      expect(alertSpy).not.toHaveBeenCalled();
+    } finally {
+      sendActivateTab.mockImplementation(() => Promise.resolve('req_1'));
+      vi.useRealTimers();
+      alertSpy.mockRestore();
     }
   });
 

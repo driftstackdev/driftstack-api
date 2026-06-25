@@ -186,6 +186,12 @@ const CreateAgentSessionRequestSchema = z.object({
   // returns 404 (never confirm another account's proxy exists). Bare uuid (the
   // id the proxies API returns). Optional → operator-default egress (unchanged).
   proxy_id: z.string().uuid().optional(),
+  // "Launch anyway" override — when the GUI's local proxy probe flagged the proxy
+  // unreachable/auth-failed and the customer explicitly accepted the risk, the
+  // client sends skip_proxy_probe:true and the server SKIPS the pre-launch live
+  // probe gate for THIS launch (the dispatch path's own resolve + SSRF re-guard
+  // still apply as defense-in-depth). Booleans only; absent → probe runs as normal.
+  skip_proxy_probe: z.boolean().optional(),
   // Customer-settable start URL — the URL the remote browser opens on launch.
   // When supplied, overrides the operator-default sessionDispatch.initialUrl.
   // http(s)-only (file:/javascript:/data: rejected here → 400 at the route, not a
@@ -1441,24 +1447,12 @@ export function registerAgentSessionsRoutes(
             'HTTP proxies cannot drive a browser session yet — use a SOCKS5, OpenVPN, or WireGuard proxy.',
           );
         }
-
-        // Founder directive #63 — TEST THE PROXY LIVE before we create a session
-        // row or spin a worker. We resolve the proxy (owner-scoped decrypt + SSRF
-        // re-guard), then CONNECT THROUGH it to a neutral target + do a real egress
-        // round-trip. A failed live test BLOCKS the launch with a clean 422 here —
-        // BEFORE sessions.create + dispatchSessionAssignOnCreate — so a dead/
-        // misconfigured proxy never dispatches a session that dead-ends at the box
-        // (zero session row, zero simulator spin-up). The dispatch path keeps its
-        // own resolve + SSRF re-guard as defense-in-depth; this gate is the
-        // pre-flight the founder asked for.
-        await runProxyPrelaunchGate({
-          probe: proxyConnectivityProbe,
-          enabled: proxyPrelaunchProbeEnabled,
-          accountProxiesService,
-          proxyId,
-          accountId: ownerAccountId,
-          logger: req.log,
-        });
+        // NOTE: the LIVE pre-launch probe is deliberately NOT run here. It runs
+        // AFTER the idempotency replay short-circuit below, so a retry of an
+        // already-succeeded create replays the cached 201 instead of re-probing
+        // (idempotency must always replay success — re-probing could return a
+        // fresh 422 for a session that already launched). See the gate call after
+        // the idempotency block.
       }
 
       // Strict-FK (2026-06-16) — normalize the optional driftstack_session_id
@@ -1508,6 +1502,45 @@ export function registerAgentSessionsRoutes(
           return reply.code(201).send(publicAgentSession(existing, livekit, sessionLivenessStore));
         }
       }
+
+      // Founder directive #63 — TEST THE PROXY LIVE before we create a session row
+      // or spin a worker. Placed AFTER the idempotency replay short-circuit above
+      // (a retry of an already-succeeded create returns the cached 201 WITHOUT
+      // re-probing — idempotency must always replay success, and re-probing could
+      // return a fresh 422 for a session that already launched), and only on a
+      // genuinely NEW create. We resolve the proxy (owner-scoped decrypt + SSRF
+      // re-guard), then CONNECT THROUGH it to a neutral target + do a real egress
+      // round-trip. A failed live test BLOCKS the launch with a clean 422 here —
+      // BEFORE sessions.create + dispatchSessionAssignOnCreate — so a dead/
+      // misconfigured proxy never dispatches a session that dead-ends at the box
+      // (zero session row, zero simulator spin-up). The dispatch path keeps its own
+      // resolve + SSRF re-guard as defense-in-depth; this gate is the pre-flight the
+      // founder asked for.
+      //
+      // skip_proxy_probe:true is the GUI's "Launch anyway" override — the customer
+      // saw the local probe flag the proxy and explicitly accepted the risk, so we
+      // honor it and skip the gate for this launch (the dispatch re-guard still
+      // applies). Only meaningful when a proxy_id was supplied.
+      //
+      // The `accountProxiesService !== undefined` check is structurally redundant
+      // (proxyId is only ever set inside the proxy_id block, which already threw a
+      // 404 when the service was unwired) — it's here so TypeScript narrows the
+      // optional dep across the idempotency block this gate now sits after.
+      if (
+        proxyId !== undefined &&
+        accountProxiesService !== undefined &&
+        parsed.data.skip_proxy_probe !== true
+      ) {
+        await runProxyPrelaunchGate({
+          probe: proxyConnectivityProbe,
+          enabled: proxyPrelaunchProbeEnabled,
+          accountProxiesService,
+          proxyId,
+          accountId: ownerAccountId,
+          logger: req.log,
+        });
+      }
+
       // #8 — per-account active-session cap. Placed AFTER the idempotency replay above
       // (a retry of an existing session already returned 201), so only a genuinely NEW
       // create is gated — bounds unbounded row creation + one account monopolising fleet

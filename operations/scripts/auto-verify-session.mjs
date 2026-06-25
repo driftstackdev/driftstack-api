@@ -14,6 +14,17 @@
 //                         proxy-INDEPENDENT. A real page_state url change (the
 //                         tab content actually loading) is a STRONGER tier that
 //                         needs egress (see the two-tier note at the check).
+//   CHECK 3b— TAB_NO_RELOAD : opening a NEW TAB (the GUI's onNewTab path —
+//                         a `tabListUpdate` that ADDS a tab and sets it active,
+//                         byte-mirroring SimulatorWindow.onNewTab) must NOT make
+//                         the box RELOAD the previously-active tab. The box keeps
+//                         ONE live WebContent today, so switching the active tab
+//                         reloads the page (the old page lingers / the current tab
+//                         reloads — founder bug). PASS = no reload (warm switch);
+//                         FAIL = the prior tab reloaded (current single-WebContent
+//                         box). Goes GREEN automatically once A3 ships warm tabs
+//                         (W2946). Proxy-INDEPENDENT: a reload emits a `loading`
+//                         page_state regardless of egress.
 //   CHECK 4 — SCROLL    : a `touchStart→touchMove…→touchEnd` finger drag (the
 //                         EXACT wire shape the GUI's wheel→touch path emits) is
 //                         accepted by the box (the "scroll does nothing" bug).
@@ -48,6 +59,9 @@
 //   - LiveKit Room config + connect            : apps/gui-client/src/lib/livekit.ts (createLivekitRoom / connectToAgentSession)
 //   - navigate / tabListUpdate / activateTab    : apps/gui-client/src/lib/livekit.ts (sendNavigate / sendTabListUpdate / sendActivateTab)
 //                                                 + packages/api-types/src/agent-tab-ops.ts
+//   - new-tab op (onNewTab)                     : apps/gui-client/src/views/SimulatorWindow.tsx
+//                                                 (onNewTab → emitTabList: ONE tabListUpdate adds a tab + sets it active;
+//                                                  NEW_TAB_URL / NEW_TAB_TITLE / makeTabId)
 //   - tap / scroll touch wire shape             : apps/gui-client/src/lib/livekit-input-capture.ts
 //                                                 (tap = touchStart+touchEnd; wheel→touchStart/touchMove/touchEnd drag)
 //                                                 + packages/api-types/src/agent-input-event.ts (InputEventSchema)
@@ -88,6 +102,10 @@ const NAV_URL = process.env.DRIFTSTACK_NAV_URL ?? 'https://example.com';
 const STREAM_TIMEOUT_MS = 30_000;
 const NAVIGATE_TIMEOUT_MS = 20_000;
 const TAB_TIMEOUT_MS = 20_000;
+// TAB_NO_RELOAD watches for a reload of the prior tab in the wake of a new-tab op.
+// A reload (state:'loading' on the existing WebContent) lands within ~1s on the
+// current box; 5s is a generous ceiling that still keeps the check snappy.
+const TAB_NO_RELOAD_WATCH_MS = 5_000;
 const TAP_TIMEOUT_MS = 20_000;
 const COOKIES_TIMEOUT_MS = 15_000;
 
@@ -111,6 +129,25 @@ const TAP_EXPECT_URL = process.env.DRIFTSTACK_TAP_EXPECT_URL ?? 'https://www.ian
 // device-CSS coords are deliberately conservative (centre column, lower third).
 const TAP_X = Number(process.env.DRIFTSTACK_TAP_X ?? 200);
 const TAP_Y = Number(process.env.DRIFTSTACK_TAP_Y ?? 250);
+// New-tab destination + title — byte-mirrored from SimulatorWindow.tsx
+// (NEW_TAB_URL / NEW_TAB_TITLE). The GUI's "+" button (onNewTab) opens a fresh
+// tab pointed at the branded Driftstack new-tab page and makes it active. The
+// TAB_NO_RELOAD check reproduces that exact tab record so the box sees the same
+// new-tab op the founder triggers.
+const NEW_TAB_URL = 'https://driftstack.dev/newtab/';
+const NEW_TAB_TITLE = 'New Tab';
+// makeTabId — mirrors SimulatorWindow.makeTabId (`tab_<uuid>`), with the same
+// random-token fallback when crypto.randomUUID is unavailable.
+function makeTabId() {
+  try {
+    if (typeof globalThis.crypto?.randomUUID === 'function') {
+      return `tab_${globalThis.crypto.randomUUID()}`;
+    }
+  } catch {
+    /* crypto unavailable — fall through to the token */
+  }
+  return `tab_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
 // The harness/box reloads a background tab on activate; give the 2nd tab a
 // distinct URL so the page_state url change is unambiguous.
 const TAB_TWO_URL = (() => {
@@ -496,17 +533,19 @@ async function main() {
     }
   }
 
-  // ── CHECK 1/2/3/4/5 require LiveKit + WebRTC (data-channel ops) ──
+  // ── CHECK 1/2/3/3b/4/5 require LiveKit + WebRTC (data-channel ops) ──
   if (info === null) {
     record('STREAM', 'SKIP', 'no LiveKit join info on this deployment');
     record('NAVIGATE', 'SKIP', 'no LiveKit join info');
     record('TAB_SWITCH', 'SKIP', 'no LiveKit join info');
+    record('TAB_NO_RELOAD', 'SKIP', 'no LiveKit join info');
     record('SCROLL', 'SKIP', 'no LiveKit join info');
     record('TAP', 'SKIP', 'no LiveKit join info');
   } else if (!haveWebRtc) {
     record('STREAM', 'SKIP', 'WebRTC not installed (npm install --no-save @roamhq/wrtc)');
     record('NAVIGATE', 'SKIP', 'WebRTC not installed');
     record('TAB_SWITCH', 'SKIP', 'WebRTC not installed');
+    record('TAB_NO_RELOAD', 'SKIP', 'WebRTC not installed');
     record('SCROLL', 'SKIP', 'WebRTC not installed');
     record('TAP', 'SKIP', 'WebRTC not installed');
   } else {
@@ -600,6 +639,7 @@ async function runLiveKitChecks(info) {
     record('STREAM', 'FAIL', `room.connect failed: ${m.slice(0, 160)}`);
     record('NAVIGATE', 'SKIP', 'no LiveKit connection');
     record('TAB_SWITCH', 'SKIP', 'no LiveKit connection');
+    record('TAB_NO_RELOAD', 'SKIP', 'no LiveKit connection');
     record('SCROLL', 'SKIP', 'no LiveKit connection');
     record('TAP', 'SKIP', 'no LiveKit connection');
     return;
@@ -760,6 +800,132 @@ async function runLiveKitChecks(info) {
     }
   } catch (e) {
     record('TAB_SWITCH', 'FAIL', `tab ops failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // ── CHECK 3b TAB_NO_RELOAD — opening a new tab must NOT reload the prior tab ──
+  // Founder bug: opening a NEW TAB (or switching tabs) makes the box RELOAD the
+  // currently-active tab. The box keeps only ONE live WebContent today, so making
+  // a different tab active forces the single renderer to navigate — the old page
+  // lingers / the current tab reloads. A3's warm-tab fix (W2946) is queued; this
+  // check BASELINES the bug now (expected FAIL on the current box) and flips GREEN
+  // automatically once warm tabs ship.
+  //
+  // METHOD (proxy-independent — a reload emits a page_state regardless of egress):
+  //   1. Settle tab A's page (we just navigated to NAV_URL above; wait for its
+  //      page_state, then record a quiet marker — the box should be IDLE, not mid-
+  //      load, before we open the new tab, so any subsequent 'loading' is OURS).
+  //   2. Open a SECOND tab via the GUI's onNewTab WIRE SHAPE: a single
+  //      `tabListUpdate` that APPENDS a new tab AND sets it active. onNewTab sends
+  //      ONLY a tabListUpdate (NOT activateTab) — the box reconciles the active
+  //      change itself. We mirror that exactly: tabs=[tabA, newTab],
+  //      activeTabId=newTab.id, url=NEW_TAB_URL, title='New Tab' (SimulatorWindow
+  //      NEW_TAB_URL / NEW_TAB_TITLE / makeTabId).
+  //   3. WATCH for a fresh `state:'loading'` page_state in the ~5s after the op.
+  //      That is the box re-loading the (single) WebContent — the reload signal.
+  //
+  // tabId caveat (honest): on prod the page_state frames carry NO tabId (the GUI's
+  // own grace-window logic exists precisely because of this — SimulatorWindow
+  // PAGE_STATE_GRACE_MS). So we CANNOT attribute the 'loading' to tab A by id; we
+  // treat ANY fresh 'loading' page_state right after the new-tab op as the reload,
+  // and SAY SO. (If a frame DOES carry a tabId for tab A, that's an even stronger
+  // confirmation — noted in the reason.) A new-tab op that warm-switches would
+  // emit at most a 'loading' for the NEW tab's url, not the prior tab's; either
+  // way, on a single-WebContent box ANY in-wake 'loading' means the live renderer
+  // navigated away from tab A's page — the founder's bug.
+  try {
+    // Step 1 — let tab A (NAV_URL) settle so the box is idle before we act. Best-
+    // effort: if it never reports a page_state, the data channel is too quiet to
+    // reason about a reload → SKIP (don't false-FAIL or false-PASS a dead channel).
+    const tabASettled = await waitFor(
+      () => pageStates.some((p) => urlMatches(p.url, NAV_URL)),
+      NAVIGATE_TIMEOUT_MS,
+      250,
+    );
+    if (!tabASettled) {
+      record(
+        'TAB_NO_RELOAD',
+        'SKIP',
+        `tab A (${NAV_URL}) never reported a page_state — the data channel is too quiet to detect a reload (re-run when STREAM/NAVIGATE are healthy)`,
+      );
+    } else {
+      // Quiet settle: wait until no NEW page_state has arrived for ~1.2s so a late
+      // tail of tab A's own load can't be misread as the reload our op triggers.
+      let quietBaseline = pageStates.length;
+      await waitFor(
+        async () => {
+          const n = pageStates.length;
+          if (n !== quietBaseline) {
+            quietBaseline = n;
+            return false; // still settling — reset the quiet window
+          }
+          return true; // no new frame since last poll → quiet
+        },
+        3_000,
+        400,
+      );
+      // The marker: nothing before this index counts as our reload signal.
+      const marker = pageStates.length;
+      const markerAt = Date.now();
+      // Step 2 — open a new tab using the EXACT onNewTab wire shape: one
+      // tabListUpdate appending a new tab + making it active. tabA mirrors the
+      // already-open tab (NAV_URL); newTab mirrors SimulatorWindow's new-tab record.
+      const tabA = { id: 'tab_a', url: NAV_URL, scrollY: 0, title: '' };
+      const newTab = { id: makeTabId(), url: NEW_TAB_URL, scrollY: 0, title: NEW_TAB_TITLE };
+      await sendTabListUpdate(room, {
+        sessionId,
+        tabs: [tabA, newTab],
+        activeTabId: newTab.id,
+      });
+      log(
+        `opened new tab (onNewTab wire shape: tabListUpdate add ${newTab.id} url=${NEW_TAB_URL}, activeTabId=${newTab.id})`,
+      );
+      // Step 3 — watch for a fresh 'loading' page_state = the box reloading the
+      // single WebContent. A 'loading' whose url is tab A's NAV_URL (NOT the new
+      // tab's NEW_TAB_URL) is the unambiguous "prior tab reloaded" signal; a
+      // 'loading' with NO url / a tabId for tab A is the prod (tabId-less) case we
+      // treat as the reload too. We deliberately do NOT count a 'loading' for
+      // NEW_TAB_URL as a reload of the PRIOR tab (that's the new tab loading itself).
+      const reloadFrame = () =>
+        pageStates.slice(marker).find(
+          (p) =>
+            p.state === 'loading' &&
+            // url == prior tab (definite reload) OR no/blank url (prod tabId-less)
+            (urlMatches(p.url, NAV_URL) || p.url === null || p.url === ''),
+        );
+      await waitFor(() => reloadFrame() !== undefined, TAB_NO_RELOAD_WATCH_MS, 200);
+      const hit = reloadFrame();
+      if (hit !== undefined) {
+        const which = urlMatches(hit.url, NAV_URL)
+          ? `prior tab url ${NAV_URL}`
+          : `loading (tabId-less on prod — attributed to the new-tab op ${Date.now() - markerAt}ms earlier)`;
+        record(
+          'TAB_NO_RELOAD',
+          'FAIL',
+          `opening a new tab reloaded the active tab (box single-WebContent; A3 warm-tab W2946 pending) — saw a fresh state:'loading' page_state [${which}] within ${TAB_NO_RELOAD_WATCH_MS / 1000}s of the new-tab op`,
+        );
+      } else {
+        // No fresh 'loading' for the prior tab → the box did NOT reload it (a warm
+        // switch). NOTE any frames we DID see so the PASS is honest about what was
+        // observed (e.g. a 'loading' for the NEW tab's own url is expected + fine).
+        const seen = pageStates
+          .slice(marker)
+          .map((p) => `${p.state ?? '?'}${p.url ? `:${p.url}` : ''}`)
+          .filter(Boolean);
+        record(
+          'TAB_NO_RELOAD',
+          'PASS',
+          `no reload of the prior tab after the new-tab op (warm switch)${seen.length > 0 ? ` — in-wake frames: ${seen.slice(-3).join(', ')}` : ' — no page_state in the window'}`,
+        );
+      }
+    }
+  } catch (e) {
+    // A publish throw mid-op (not a product reload verdict) → SKIP, don't FAIL the
+    // reload dimension on a transport hiccup; the channel-health checks own that.
+    record(
+      'TAB_NO_RELOAD',
+      'SKIP',
+      `new-tab op could not be issued: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 
   // ── CHECK 4 SCROLL — one-finger drag (the GUI wheel→touch wire shape) ──

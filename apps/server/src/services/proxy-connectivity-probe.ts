@@ -41,10 +41,14 @@ import { classifyUnsafeHost } from '../lib/webhook-target-guard.js';
  *  target can be retuned without a code change. */
 export const DEFAULT_PROBE_TARGET_URL = 'https://api.driftstack.dev/v1/egress/echo';
 
-/** Tight per-probe deadline. The whole live test (TCP connect + proxy handshake +
- *  egress GET) must finish within this — a slow/half-open proxy is a `timeout`
- *  failure, not a hung launch. Founder asked for ~6s. */
-export const DEFAULT_PROBE_TIMEOUT_MS = 6_000;
+/** Overall per-probe deadline — ONE wall-clock budget across the WHOLE live test
+ *  (TCP connect + proxy handshake + egress round-trip), not per-phase. A
+ *  slow/half-open proxy that blows the budget is a `timeout` failure, not a hung
+ *  launch. Bumped from the original 6s: real residential/mobile proxies (the exact
+ *  kind anti-detect customers use) routinely take 6-7 RTT at ~700-900ms each, so 6s
+ *  false-failed slow-but-working proxies. 12s gives them room while still bounding
+ *  launch latency. Env-tunable via DRIFTSTACK_PROXY_PROBE_TIMEOUT_MS. */
+export const DEFAULT_PROBE_TIMEOUT_MS = 12_000;
 
 /** Machine-readable failure enum. Mirrors ProxyValidationFailedError's `reason`
  *  so the route gate maps one to the other 1:1, and A3's W2931 box-reported
@@ -148,6 +152,13 @@ export class ProxyConnectivityProbe {
     const targetPort = this.target.port !== '' ? Number(this.target.port) : 443;
     const useTls = this.target.protocol === 'https:';
 
+    // ONE wall-clock deadline across the WHOLE probe (dial + handshake + round-
+    // trip), not a fresh `timeoutMs` per phase. Previously `this.timeoutMs` was
+    // spent on dial AND again on the post-connect exchange → worst case ~2× the
+    // promised budget. We track elapsed and bound the post-connect phase by what
+    // remains so a slow-connecting-then-slow-handshaking proxy can't double-spend.
+    const startedAt = Date.now();
+
     let socket: Socket;
     try {
       socket = await this.dial(proxy.host, proxy.port, this.timeoutMs);
@@ -160,14 +171,17 @@ export class ProxyConnectivityProbe {
     }
 
     // A single deadline spans the whole post-connect exchange (handshake +
-    // egress round-trip). On expiry, destroy the socket → any pending read
-    // rejects → `timeout`.
+    // egress round-trip), bounded by the budget REMAINING after the dial. On
+    // expiry, destroy the socket → any pending read rejects → `timeout`. Floor at
+    // a small positive value so a dial that already consumed the budget still
+    // gives the handshake a brief chance rather than firing instantly.
+    const remainingMs = Math.max(this.timeoutMs - (Date.now() - startedAt), 250);
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadline = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
         socket.destroy();
         reject(new ProbeDialError('timeout', `proxy did not complete the round-trip in time`));
-      }, this.timeoutMs);
+      }, remainingMs);
     });
 
     try {
@@ -318,13 +332,26 @@ export class ProxyConnectivityProbe {
   }
 
   // ── egress round-trip ─────────────────────────────────────────────────────
-  // Over the now-tunneled socket, do a real HTTP request to the neutral target
-  // and require a 2xx/3xx status line back — proving the proxy can actually reach
-  // the internet, not merely accept a CONNECT. We send a bare HTTP/1.1 GET; for an
-  // https target this would need a TLS handshake over the tunnel, which a raw
-  // socket can't do alone — so we upgrade with node:tls when useTls. Tests inject
-  // a paired socket that answers the GET directly (the dial stub), so the TLS
-  // upgrade only runs against a real https target.
+  // Over the now-tunneled socket, do a real HTTP request to the neutral target.
+  // We validate PROXY CONNECTIVITY, not the target endpoint's HTTP status: if ANY
+  // HTTP response status line comes back (2xx/3xx OR 4xx/5xx — incl. 429/403/503),
+  // the proxy demonstrably tunneled to the internet, completed the request and
+  // returned the upstream's bytes → egress WORKS → PASS. Only a status of `none`
+  // (no parseable status line — the proxy closed/hung mid-response, or returned
+  // garbage) is an egress failure.
+  //
+  // Why not require 2xx/3xx: the default target (api.driftstack.dev/v1/egress/echo)
+  // is rate-limited per exit IP AND Cloudflare-fronted, so a healthy proxy on a
+  // shared/datacenter/flagged exit legitimately receives a 429 (rate limit) or a
+  // 403/503 (CF challenge) — and that response STILL proves the round-trip
+  // completed. Requiring 2xx/3xx coupled every proxied launch to Cloudflare's bot
+  // scoring of the customer's proxy and false-blocked working proxies.
+  //
+  // We send a bare HTTP/1.1 GET; for an https target this would need a TLS
+  // handshake over the tunnel, which a raw socket can't do alone — so we upgrade
+  // with node:tls when useTls. Tests inject a paired socket that answers the GET
+  // directly (the dial stub), so the TLS upgrade only runs against a real https
+  // target.
   private async egressRoundTrip(
     socket: Socket,
     reader: SocketReader,
@@ -355,13 +382,21 @@ export class ProxyConnectivityProbe {
     const head = await streamReader.readUntil('\r\n');
     const statusMatch = /HTTP\/1\.[01]\s(\d{3})/.exec(head);
     const status = statusMatch ? Number(statusMatch[1]) : 0;
-    if (status >= 200 && status < 400) {
+    // ANY parseable HTTP status back = the proxy tunneled to the internet and the
+    // round-trip completed → egress works → PASS. A 4xx/5xx (incl. 429 rate-limit,
+    // 403/503 CF challenge) from the target endpoint proves connectivity just as
+    // much as a 2xx does; the proxy is fine even if our echo endpoint throttled or
+    // challenged this exit IP.
+    if (status > 0) {
       return { ok: true };
     }
+    // No parseable status line — the proxy returned no/garbage bytes for the GET.
+    // The CONNECT/tunnel may have opened but no real HTTP response came back, so we
+    // can't confirm egress.
     return {
       ok: false,
-      reason: status === 0 ? 'egress_blocked' : 'egress_blocked',
-      detail: `egress round-trip returned status ${status || 'none'}`,
+      reason: 'egress_blocked',
+      detail: 'egress round-trip returned no HTTP response',
     };
   }
 }

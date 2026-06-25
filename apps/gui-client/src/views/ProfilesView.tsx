@@ -62,6 +62,7 @@ import {
   STORAGE_SOFT_WARN_FRACTION,
   TIER_STORAGE_BYTES_CAP,
   type ArchetypeStatus,
+  type CreateAgentSessionRequest,
   type UpdateProfileRequest,
 } from '@driftstack/sdk';
 import { openSimulatorWindow } from '../lib/open-simulator';
@@ -1497,6 +1498,12 @@ export function ProfilesView({
       // straight through. SKIPPED for bulk launch (skipProxyDownConfirm) — the
       // operator already confirmed the batch up front; a per-profile modal here
       // would block the whole loop on each prompt (audit wn1ghalx1).
+      // When the operator EXPLICITLY overrides a failed local probe ("Launch
+      // anyway"), tell the server to skip its own pre-launch proxy probe for this
+      // create — otherwise the server-side gate re-probes the same proxy and hard-
+      // blocks the launch with a 422, silently nullifying the override (#12). The
+      // server honors `skip_proxy_probe: true` to bypass the gate for this launch.
+      let skipProxyProbe = false;
       const lastProbe = probeCache[proxy.id];
       if (
         !opts.skipProxyDownConfirm &&
@@ -1509,6 +1516,8 @@ export function ProfilesView({
           { confirmLabel: 'Launch anyway' },
         );
         if (!proceed) return; // finally resets busyId
+        // The operator accepted the risk → the server must not re-block on its probe.
+        skipProxyProbe = true;
       }
       // ARC A — sync the picked proxy to the account (server-side, encrypted)
       // so the dispatch routes egress through it. ensureServerProxy creates or
@@ -1533,16 +1542,22 @@ export function ProfilesView({
       // URL; default https://driftstack.dev). normalizeNavigateUrl prepends
       // https:// + rejects non-http(s); fall back to the default if it returns null.
       const startUrl = normalizeNavigateUrl(settings.startUrl) ?? 'https://driftstack.dev';
-      const created = await client.agentSessions.create(
+      // `skip_proxy_probe` is an additive create field the server honors to bypass its
+      // pre-launch proxy probe (set only when the operator overrode a failed local
+      // probe via "Launch anyway"). It rides on the request body even though the SDK's
+      // CreateAgentSessionRequest type doesn't (yet) declare it — the SDK forwards the
+      // body verbatim; the cast keeps the call type-safe without editing the SDK.
+      const createBody: CreateAgentSessionRequest & { skip_proxy_probe?: boolean } =
         proxyIdForLaunch !== undefined
           ? {
               profile_id: profile.id,
               proxy_id: proxyIdForLaunch,
               mode: 'manual',
               initial_url: startUrl,
+              ...(skipProxyProbe ? { skip_proxy_probe: true } : {}),
             }
-          : { profile_id: profile.id, mode: 'manual', initial_url: startUrl },
-      );
+          : { profile_id: profile.id, mode: 'manual', initial_url: startUrl };
+      const created = await client.agentSessions.create(createBody);
       await markLaunched(profile.id, created.id);
       if (created.livekit) {
         // Mint the per-session gui_control_key so the SEPARATE simulator

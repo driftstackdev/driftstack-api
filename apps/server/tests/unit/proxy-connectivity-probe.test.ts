@@ -179,7 +179,10 @@ describe('ProxyConnectivityProbe — SOCKS5', () => {
     expect(res.reason).toBe('unreachable');
   });
 
-  it('EGRESS_BLOCKED: tunnel established but egress GET returns 5xx → { ok:false, egress_blocked }', async () => {
+  it('PASS: tunnel established + egress GET returns 5xx (round-trip completed → egress works) → { ok: true }', async () => {
+    // New ANY-response-passes semantics: a 5xx from the target endpoint STILL
+    // proves the proxy tunneled to the internet and the round-trip completed. We
+    // validate proxy connectivity, not the endpoint's HTTP status.
     const { dial } = await fakeProxy((sock) => {
       let step = 0;
       sock.on('data', () => {
@@ -191,6 +194,73 @@ describe('ProxyConnectivityProbe — SOCKS5', () => {
           step = 2;
         } else {
           sock.write('HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n');
+        }
+      });
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe(SOCKS5_PROXY);
+    expect(res).toEqual({ ok: true });
+  });
+
+  it('PASS: tunnel established + egress GET returns 429 (rate-limited echo, healthy proxy) → { ok: true }', async () => {
+    // The exact false-block this redesign fixes: the CF-fronted, per-exit-IP
+    // rate-limited echo returns 429 to a healthy proxy on a shared/burst exit. The
+    // 429 round-trip proves egress works → PASS (was egress_blocked → 422 block).
+    const { dial } = await fakeProxy((sock) => {
+      let step = 0;
+      sock.on('data', () => {
+        if (step === 0) {
+          sock.write(Buffer.from([0x05, 0x00]));
+          step = 1;
+        } else if (step === 1) {
+          sock.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
+          step = 2;
+        } else {
+          sock.write('HTTP/1.1 429 Too Many Requests\r\nContent-Length: 0\r\n\r\n');
+        }
+      });
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe(SOCKS5_PROXY);
+    expect(res).toEqual({ ok: true });
+  });
+
+  it('PASS: tunnel established + egress GET returns 403 (CF challenge to flagged exit IP) → { ok: true }', async () => {
+    const { dial } = await fakeProxy((sock) => {
+      let step = 0;
+      sock.on('data', () => {
+        if (step === 0) {
+          sock.write(Buffer.from([0x05, 0x00]));
+          step = 1;
+        } else if (step === 1) {
+          sock.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
+          step = 2;
+        } else {
+          sock.write('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n');
+        }
+      });
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe(SOCKS5_PROXY);
+    expect(res).toEqual({ ok: true });
+  });
+
+  it('EGRESS_BLOCKED: tunnel established but the proxy returns NO HTTP response (garbage / closed) → { ok:false, egress_blocked }', async () => {
+    // No parseable status line back → the round-trip did not complete → the one
+    // case that still fails: we can't confirm egress.
+    const { dial } = await fakeProxy((sock) => {
+      let step = 0;
+      sock.on('data', () => {
+        if (step === 0) {
+          sock.write(Buffer.from([0x05, 0x00]));
+          step = 1;
+        } else if (step === 1) {
+          sock.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
+          step = 2;
+        } else {
+          // Not an HTTP status line — a terminated line of garbage, then close.
+          sock.write('NOT-HTTP garbage\r\n');
+          sock.end();
         }
       });
     });
@@ -278,5 +348,36 @@ describe('ProxyConnectivityProbe — connect-level failures (rejecting dial stub
     const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET, timeoutMs: 80 });
     const res = await probe.probe({ protocol: 'socks5', host: '127.0.0.1', port: 0 });
     expect(res).toMatchObject({ ok: false, reason: 'timeout' });
+  });
+
+  it('SINGLE DEADLINE: a slow dial + a silent handshake times out within ~one budget, not two', async () => {
+    // Regression for the double-applied-deadline bug: the budget must be ONE
+    // wall-clock window across dial + post-connect, not `timeoutMs` per phase. A
+    // dial that consumes most of the budget then a silent proxy must trip the
+    // deadline shortly after the dial resolves — total ≈ budget, not ≈ 2× budget.
+    const BUDGET = 300;
+    const DIAL_DELAY = 220;
+    const { dial: rawDial } = await fakeProxy(() => {
+      /* accept then stay silent — relies on the post-connect deadline */
+    });
+    // Wrap the dialer to take DIAL_DELAY before resolving the socket.
+    const slowDial = (host: string, port: number, timeoutMs: number): Promise<Socket> =>
+      new Promise<Socket>((resolve, reject) => {
+        setTimeout(() => {
+          rawDial(host, port, timeoutMs).then(resolve, reject);
+        }, DIAL_DELAY);
+      });
+    const probe = new ProxyConnectivityProbe({
+      dial: slowDial,
+      targetUrl: TARGET,
+      timeoutMs: BUDGET,
+    });
+    const startedAt = Date.now();
+    const res = await probe.probe({ protocol: 'socks5', host: '127.0.0.1', port: 0 });
+    const elapsed = Date.now() - startedAt;
+    expect(res).toMatchObject({ ok: false, reason: 'timeout' });
+    // The post-connect window is BUDGET - DIAL_DELAY (≈80ms), not a fresh BUDGET.
+    // Total must be well under 2× BUDGET; generous ceiling for CI jitter.
+    expect(elapsed).toBeLessThan(BUDGET + DIAL_DELAY);
   });
 });

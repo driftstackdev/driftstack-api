@@ -27,6 +27,7 @@ from driftstack.errors import (
     ConcurrencyLimitError,
     DriftstackError,
     LegalAcceptanceRequiredError,
+    ProxyValidationFailedError,
     QuotaExceededError,
     RateLimitError,
     SessionTimeoutError,
@@ -235,6 +236,18 @@ def _error_from_response_data(
         return LegalAcceptanceRequiredError(
             detail,
             pending_acceptances=pending,
+            status=status,
+            problem_type=problem_type,
+            problem=problem,
+        )
+    if error_cls is ProxyValidationFailedError:
+        # Mirror the TS/Go SDKs: surface the structured `reason` enum
+        # (unreachable / auth_failed / timeout / egress_blocked) as a first-class
+        # attribute so customers can branch on the failure cause. The server spreads
+        # it to the problem's top level (errors.ts extensions.reason → toProblem()).
+        return ProxyValidationFailedError(
+            detail,
+            reason=str(problem["reason"]) if problem.get("reason") else None,
             status=status,
             problem_type=problem_type,
             problem=problem,

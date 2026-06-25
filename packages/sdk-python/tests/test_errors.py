@@ -24,6 +24,7 @@ from driftstack.errors import (
     NotFoundError,
     PairModeConflictError,
     PairModeStateInvalidTransitionError,
+    ProxyValidationFailedError,
     QuotaExceededError,
     RateLimitError,
     RevokedKeyError,
@@ -250,6 +251,35 @@ def test_session_timeout_extracts_timeout_ms() -> None:
     assert isinstance(err, SessionTimeoutError)
     assert err.timeout_ms == 30_000
     assert err.status == 504
+
+
+def test_proxy_validation_failed_extracts_reason() -> None:
+    # The server spreads `reason` to the problem's top level (errors.ts
+    # extensions.reason → toProblem()); the SDK must surface it as a first-class
+    # attribute so customers can branch on the failure cause (cross-SDK parity
+    # with TS err.reason / Go err.Reason).
+    body = (
+        '{"type":"https://errors.driftstack.dev/proxy-validation-failed",'
+        '"title":"Proxy validation failed","status":422,'
+        '"detail":"The proxy rejected the supplied credentials.",'
+        '"reason":"auth_failed","resource":"proxy"}'
+    )
+    err = _error_from_response_data(status=422, text=body, retry_after_header=None)
+    assert isinstance(err, ProxyValidationFailedError)
+    assert err.reason == "auth_failed"
+    assert err.status == 422
+
+
+def test_proxy_validation_failed_reason_absent_is_none() -> None:
+    # No `reason` in the problem → .reason is None (not a crash on a missing key).
+    body = (
+        '{"type":"https://errors.driftstack.dev/proxy-validation-failed",'
+        '"title":"Proxy validation failed","status":422,'
+        '"detail":"The proxy could not be reached."}'
+    )
+    err = _error_from_response_data(status=422, text=body, retry_after_header=None)
+    assert isinstance(err, ProxyValidationFailedError)
+    assert err.reason is None
 
 
 def test_unknown_problem_type_falls_back_to_base_class() -> None:

@@ -420,6 +420,100 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(probeCalls).toBe(0);
   });
 
+  it('#63 idempotent retry REPLAYS the original 201 WITHOUT re-probing (idempotency must replay success, not re-run the gate)', async () => {
+    // A counting probe: first call passes (the real create), and we assert it is
+    // NOT invoked again on the idempotent replay — otherwise a retry of an already-
+    // succeeded create could return a fresh 422 + burn a rate-limit token.
+    let probeCalls = 0;
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: {
+        probe: () => {
+          probeCalls += 1;
+          return Promise.resolve<ProxyProbeResult>({ ok: true });
+        },
+      } as unknown as ProxyConnectivityProbe,
+    });
+    const proxyId = await seedOwnSocks5Proxy(fx);
+    const key = 'idem-key-probe-replay-1';
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'idempotency-key': key },
+      payload: { token_budget: 50_000, proxy_id: proxyId },
+    });
+    expect(first.statusCode).toBe(201);
+    expect(probeCalls).toBe(1);
+    const firstId = first.json<{ id: string }>().id;
+
+    const replay = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'idempotency-key': key },
+      payload: { token_budget: 50_000, proxy_id: proxyId },
+    });
+    expect(replay.statusCode).toBe(201);
+    // Same session replayed, and the probe did NOT run again.
+    expect(replay.json<{ id: string }>().id).toBe(firstId);
+    expect(probeCalls).toBe(1);
+    // Exactly one row — the replay didn't create a second session.
+    expect(await fx.agentSessionsRepo!.countActive(fx.accountId)).toBe(1);
+  });
+
+  it('#63 skip_proxy_probe:true → "Launch anyway" override SKIPS the gate (a failing probe does NOT block; 201)', async () => {
+    let probeCalls = 0;
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: {
+        probe: () => {
+          probeCalls += 1;
+          return Promise.resolve<ProxyProbeResult>({ ok: false, reason: 'unreachable' });
+        },
+      } as unknown as ProxyConnectivityProbe,
+    });
+    const proxyId = await seedOwnSocks5Proxy(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, proxy_id: proxyId, skip_proxy_probe: true },
+    });
+    expect(res.statusCode).toBe(201);
+    // The override skips the gate entirely — the probe is never even invoked.
+    expect(probeCalls).toBe(0);
+  });
+
+  it('#63 skip_proxy_probe absent/false → the gate still runs (a failing probe blocks with 422)', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: stubProbe({ ok: false, reason: 'unreachable' }),
+    });
+    const proxyId = await seedOwnSocks5Proxy(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, proxy_id: proxyId, skip_proxy_probe: false },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json<{ reason?: string }>().reason).toBe('unreachable');
+  });
+
+  it('#63 skip_proxy_probe must be a boolean → a non-boolean is rejected (400, never coerced to skip the gate)', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: stubProbe({ ok: false, reason: 'unreachable' }),
+    });
+    const proxyId = await seedOwnSocks5Proxy(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, proxy_id: proxyId, skip_proxy_probe: 'yes' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it('initial_url validation: http(s) accepted (201); javascript:/file:/data:/garbage + over-length rejected (400) — customer start URL is scheme-guarded at the route', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const post = (initial_url: string) =>
