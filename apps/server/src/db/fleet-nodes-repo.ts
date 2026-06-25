@@ -270,6 +270,33 @@ export class DrizzleFleetNodesRepo implements FleetNodesRepo {
     return this.findAnyWithLivekit();
   }
 
+  /** Connectivity-aware dispatch helper: the FULL set of non-revoked LiveKit
+   *  nodes, ordered so the caller can pick the first that is ALSO present in the
+   *  control-WSS registry — home-region first (so an EU session prefers an EU
+   *  box), then most-recently-LiveKit-registered. `findNearestWithLivekit`
+   *  returns only the single top candidate; in a >=2-box region, if that one
+   *  box's control-WSS happens to be offline the caller would black-screen even
+   *  though a sibling box in the region is online and could serve. This lets the
+   *  caller iterate candidates and bind the viewer token + publisher dispatch to
+   *  the SAME live box. `region` null/empty → region-blind recency order. */
+  async listWithLivekitNearest(
+    region: string | null | undefined,
+  ): Promise<ReadonlyArray<FleetNodeDetail>> {
+    const hasRegion = region != null && region !== '';
+    const rows = await this.database.db
+      .select()
+      .from(fleetNodes)
+      .where(and(isNull(fleetNodes.revokedAt), sql`${fleetNodes.livekitApiKey} IS NOT NULL`))
+      // Home-region rows first (boolean DESC → true before false), then
+      // most-recently-LiveKit-registered. A NULL/empty region degrades to pure
+      // recency (the region predicate is a constant-false expression).
+      .orderBy(
+        desc(hasRegion ? eq(fleetNodes.region, region) : sql`false`),
+        desc(fleetNodes.livekitRegisteredAt),
+      );
+    return rows.map(rowToDetail);
+  }
+
   /** Operator-dashboard list: non-revoked nodes, most-recently-seen
    *  first. Uses the partial index on `last_seen_at WHERE revoked_at
    *  IS NULL`. */

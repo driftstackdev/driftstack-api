@@ -62,7 +62,7 @@ import type { AccountAuditService } from '../services/account-audit.js';
 import type { MetricsRegistry } from '../services/metrics-registry.js';
 import { METRIC_NAMES } from '../services/metrics-registry.js';
 import type { PairModeHeartbeatTracker } from '../services/agent-pair-mode-heartbeat.js';
-import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
+import type { DrizzleFleetNodesRepo, FleetNodeDetail } from '../db/fleet-nodes-repo.js';
 import { mintLivekitToken, resolveSessionPublisherNode } from '../lib/livekit-token.js';
 import { decryptLivekitSecret } from '../lib/livekit-secret-encryption.js';
 import {
@@ -70,7 +70,10 @@ import {
   serializeSessionEnd,
   serializeResumeSession,
 } from '../services/harness-control-codec.js';
-import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
+import type {
+  FleetControlRegistry,
+  FleetControlConnection,
+} from '../services/fleet-control-registry.js';
 import { CookieSchema } from '../schemas/harness-control-protocol.js';
 import type { SessionPageStateStore } from '../services/session-page-state-store.js';
 import type {
@@ -629,6 +632,55 @@ export const MANUAL_SESSION_IDLE_TIMEOUT_SECONDS = 1800;
 export const MANUAL_SESSION_MAX_DURATION_SECONDS = 14400;
 
 /**
+ * Connectivity-aware dispatch-node selection (multi-box region fix). Returns the
+ * region-nearest LiveKit node whose control-WSS is ACTUALLY connected right now,
+ * plus its live connection, so the publisher dispatch + the viewer token (minted
+ * separately off the persisted node_id) both bind to the SAME live box.
+ *
+ * `findNearestWithLivekit` alone returns only the SINGLE top candidate — in a
+ * >=2-box region, if that one box's control-WSS is offline while a sibling box is
+ * online, committing to it black-screens the session even though a healthy box
+ * could serve. So we walk the region-nearest LiveKit candidates and pick the
+ * first one present in the registry. When NONE are connected we return the top
+ * candidate with `conn: undefined` so the caller can fail honestly (close the
+ * never-dispatched row) — same signal the old single-node check produced.
+ *
+ * Degrades gracefully: if the repo doesn't implement `listWithLivekitNearest`
+ * (older stubs / the InMemory variant), falls back to the single
+ * `findNearestWithLivekit` candidate — identical to the prior behaviour.
+ */
+async function resolveLiveDispatchNode(
+  fleetNodesRepo: DrizzleFleetNodesRepo,
+  registry: FleetControlRegistry,
+  accountRegion: string | null | undefined,
+): Promise<{ mac: FleetNodeDetail | null; conn: FleetControlConnection | undefined }> {
+  // The registry is keyed by the authed node_id (the JWT iss), NOT the
+  // fleet_nodes uuid PK (migration 0085 / Path C) — resolve by nodeId, falling
+  // back to the uuid for any legacy uuid-keyed node.
+  //
+  // Degrade gracefully when the repo predates listWithLivekitNearest (older test
+  // stubs / the InMemory variant): the runtime check guards the call so a stub
+  // typed `as DrizzleFleetNodesRepo` without the method falls to the single-node
+  // path below — identical to the prior behaviour.
+  if (typeof fleetNodesRepo.listWithLivekitNearest === 'function') {
+    const candidates = await fleetNodesRepo.listWithLivekitNearest(accountRegion);
+    let firstWithLivekit: FleetNodeDetail | null = null;
+    for (const candidate of candidates) {
+      if (candidate.livekit === null) continue;
+      if (firstWithLivekit === null) firstWithLivekit = candidate;
+      const conn = registry.get(candidate.nodeId ?? candidate.id);
+      if (conn !== undefined) return { mac: candidate, conn };
+    }
+    // No live candidate — return the top one so the caller fails honestly.
+    return { mac: firstWithLivekit, conn: undefined };
+  }
+  // Fallback: single-candidate selection (no candidate list available).
+  const mac = await fleetNodesRepo.findNearestWithLivekit(accountRegion);
+  if (mac === null || mac.livekit === null) return { mac, conn: undefined };
+  return { mac, conn: registry.get(mac.nodeId ?? mac.id) };
+}
+
+/**
  * Dispatch a `sessionAssign` to the LiveKit-owning fleet node on
  * session-create, so the harness spawns the browser + captures + publishes.
  *
@@ -638,8 +690,13 @@ export const MANUAL_SESSION_MAX_DURATION_SECONDS = 14400;
  * effort: any failure is logged, never thrown, so a dispatch problem can't
  * break session-create.
  *
- * v0 semantics (A3 W298 contract): dispatch-on-create only if the node is
- * connected NOW; if not, log + skip (no queue). LIVE re-delivery is idempotent
+ * Node selection is connectivity-aware (multi-box region fix): it picks the
+ * region-nearest LiveKit node whose control-WSS is actually connected. When NO
+ * LiveKit box has a live control-WSS at create time, the session can never get a
+ * publisher, so the row is CLOSED honestly (reason='dispatch_no_live_node') —
+ * the GUI sees status='closed' instead of a permanently stuck "No frame yet", and
+ * the never-dispatched row stops counting against the per-account active cap (it
+ * no longer leaks until the 12h reaper). LIVE re-delivery is idempotent
  * harness-side; TERMINAL re-delivery re-provisions — so this never replays.
  *
  * The assign's `livekit.token` is a PUBLISHER token (canPublish:true) for the
@@ -722,19 +779,37 @@ export async function dispatchSessionAssignOnCreate(args: {
     return;
   }
   try {
-    // Region-aware: prefer a livekit node in the viewer's home region, fall back
-    // to any (single-region fleet → same as before). See findNearestWithLivekit.
-    const mac = await fleetNodesRepo.findNearestWithLivekit(accountRegion);
+    // Connectivity-aware node selection (multi-box region fix). `findNearestWithLivekit`
+    // returns only the SINGLE region-nearest LiveKit node; if THAT box's control-WSS is
+    // offline while a sibling box in the region is online, the old code black-screened
+    // even though a healthy box could serve. So iterate the region-nearest LiveKit
+    // candidates and pick the FIRST that is ALSO present in the control-WSS registry, and
+    // bind BOTH the viewer token (minted by maybeMintLivekit off the persisted node_id
+    // below) AND this publisher dispatch to that SAME live box. Falls back to the single
+    // findNearestWithLivekit candidate when the candidate-list method isn't wired (older
+    // repo stubs) — same behaviour as before for the common single-box case.
+    const { mac, conn } = await resolveLiveDispatchNode(
+      fleetNodesRepo,
+      fleetControlRegistry,
+      accountRegion,
+    );
     if (mac === null || mac.livekit === null) return;
-    // The registry is keyed by the authed node_id (the JWT iss), NOT the
-    // fleet_nodes uuid PK — so resolve the live connection by nodeId (migration
-    // 0085 / Path C). Fall back to the uuid for any legacy uuid-keyed node.
-    const conn = fleetControlRegistry.get(mac.nodeId ?? mac.id);
     if (conn === undefined) {
+      // Founder bug ("opened a session and nothing happened, browser not
+      // started"): NO LiveKit box in the region has a live control-WSS at create
+      // time (the registry has none of the candidates), so the session minted a
+      // viewer token but no publisher could be dispatched → the GUI would sit on
+      // "No frame yet" forever and the status='active' row would count against the
+      // per-account cap until the 12h reaper. FAIL HONESTLY: close the
+      // never-dispatched row with a terminal reason (mirrors the egress-unresolved
+      // path) so (a) it stops counting active immediately and (b) the GUI sees
+      // status='closed' instead of a permanently stuck stream. A momentary WSS flap
+      // → the founder simply relaunches; a closed honest row beats a silently-stuck one.
       logger?.info(
         { component: 'fleet-session-dispatch', sessionId, nodeId: mac.nodeId ?? mac.id },
-        'fleet node not connected; session created but sessionAssign not dispatched',
+        'no live fleet node at create; closing never-dispatched session (dispatch_no_live_node)',
       );
+      await closeUnresolvedEgressSession(agentSessions, sessionId, logger, 'dispatch_no_live_node');
       return;
     }
     const apiSecret = decryptLivekitSecret(
@@ -917,9 +992,11 @@ export async function dispatchSessionAssignOnCreate(args: {
 }
 
 /**
- * #16 — close a never-dispatched session whose customer egress could not be
- * resolved (unresolvable/undispatchable proxy or an SSRF-rejected host), so the
- * phantom 'active' row stops counting against the per-account active-session cap.
+ * #16 — close a never-dispatched session so the phantom 'active' row stops
+ * counting against the per-account active-session cap. Used for two terminal,
+ * never-will-dispatch cases: `egress_unresolved` (unresolvable/undispatchable
+ * proxy or an SSRF-rejected host) and `dispatch_no_live_node` (the owning box's
+ * control-WSS was disconnected at create time, so no publisher was ever sent).
  * Best-effort + no-op when the repo isn't wired (the fail-closed path still
  * returns); the wall-clock orphan reaper remains the backstop. Idempotent —
  * closeWithReason keeps the first close's timestamp.
@@ -928,18 +1005,20 @@ async function closeUnresolvedEgressSession(
   agentSessions: AgentSessionsRepo | undefined,
   sessionId: string,
   logger?: { info: (obj: unknown, msg: string) => void; warn: (obj: unknown, msg: string) => void },
+  reason: 'egress_unresolved' | 'dispatch_no_live_node' = 'egress_unresolved',
 ): Promise<void> {
   if (agentSessions === undefined) return;
   try {
-    await agentSessions.closeWithReason(sessionId, 'egress_unresolved');
+    await agentSessions.closeWithReason(sessionId, reason);
   } catch (closeErr) {
     logger?.warn(
       {
         component: 'fleet-session-dispatch',
         sessionId,
+        reason,
         err: closeErr instanceof Error ? closeErr.message : String(closeErr),
       },
-      'failed to close session after unresolvable egress; orphan reaper will backstop',
+      'failed to close never-dispatched session; orphan reaper will backstop',
     );
   }
 }
@@ -1630,15 +1709,13 @@ export function registerAgentSessionsRoutes(
           byokKeyCache.set(created.id, stored);
         }
       }
-      const livekit = await maybeMintLivekit(
-        created.id,
-        ownerAccountId,
-        ctx.account.region,
-        created.nodeId,
-      );
       // Fleet-CP session dispatch — hand the new session to a connected
       // harness node (local fleet-demo). No-op in prod (no registry); best-
-      // effort (never throws) so it can't break session-create.
+      // effort (never throws) so it can't break session-create. Runs BEFORE the
+      // viewer-token mint so the publisher dispatch picks the live box, persists
+      // its node_id, and the viewer token below binds to that SAME box (multi-box
+      // region fix — otherwise the token could point at the region-nearest box
+      // while the publisher landed on an online sibling → black screen).
       await dispatchSessionAssignOnCreate({
         sessionId: created.id,
         fleetControlRegistry,
@@ -1681,6 +1758,21 @@ export function registerAgentSessionsRoutes(
             }
           : {}),
       });
+      // Viewer (subscriber) token — minted AFTER the dispatch so it binds to the
+      // node the publisher actually landed on (the dispatch persists node_id to
+      // the live box it picked). Re-read the row to pick up that persisted
+      // node_id; fall back to `created` (node_id still NULL → region-nearest, same
+      // as before) when the re-read misses or the dispatch wiring is inert (prod —
+      // node_id stays NULL and maybeMintLivekit no-ops anyway). A dispatch that
+      // honestly closed the row (no live node) re-reads a closed row; the viewer
+      // token is then harmless (the GUI sees status='closed' and never joins).
+      const dispatched = (await sessions.get(created.id)) ?? created;
+      const livekit = await maybeMintLivekit(
+        created.id,
+        ownerAccountId,
+        ctx.account.region,
+        dispatched.nodeId,
+      );
       // Slice 6 follow-up 2026-05-20 — agent-session create audit. Best-
       // effort emit; audit failures don't break the create. Distinct
       // action from session.created (which audits the underlying driver
@@ -1700,7 +1792,7 @@ export function registerAgentSessionsRoutes(
       } catch {
         /* swallow */
       }
-      return reply.code(201).send(publicAgentSession(created, livekit, sessionLivenessStore));
+      return reply.code(201).send(publicAgentSession(dispatched, livekit, sessionLivenessStore));
     },
   );
 

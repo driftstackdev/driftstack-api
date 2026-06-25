@@ -660,6 +660,109 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
+  it('founder bug: node not connected at create CLOSES the never-dispatched row (dispatch_no_live_node) so the GUI is not stuck + the cap is freed', async () => {
+    const registry = new FleetControlRegistry(); // node never registered (WSS flapping)
+    const closed: Array<{ id: string; reason: string }> = [];
+    const agentSessions = {
+      closeWithReason: (id: string, reason: string) => {
+        closed.push({ id, reason });
+        return Promise.resolve({});
+      },
+      // setNodeId is never reached on this path (we return before persisting).
+      setNodeId: () => Promise.resolve({}),
+    } as unknown as InstanceType<typeof InMemoryAgentSessionsRepo>;
+    const sent: string[] = [];
+    registry.register('some-other-node', (d) => sent.push(d)); // a DIFFERENT node is up
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_no_live_node',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()), // resolves NODE_ID, which is NOT registered
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      agentSessions,
+      logger: logger(),
+    });
+    // No publisher was dispatched …
+    expect(sent).toHaveLength(0);
+    // … and the phantom 'active' row is closed honestly so the GUI sees status='closed'
+    // (not a permanent "No frame yet") and it stops counting against the active cap.
+    expect(closed).toEqual([{ id: 'agt_no_live_node', reason: 'dispatch_no_live_node' }]);
+  });
+
+  it('multi-box region: skips the OFFLINE region-nearest box + dispatches to the ONLINE sibling (connectivity-aware listWithLivekitNearest)', async () => {
+    const sentOffline: string[] = [];
+    const sentOnline: string[] = [];
+    const registry = new FleetControlRegistry();
+    // Only the SIBLING box is connected; the region-nearest (first) box is offline.
+    registry.register('mac-eu-online-002', (d) => sentOnline.push(d));
+    const offlineTop = { ...macWithLivekit(), id: 'eu-offline-uuid', nodeId: 'mac-eu-offline-001' };
+    const onlineSibling = {
+      ...macWithLivekit(),
+      id: 'eu-online-uuid',
+      nodeId: 'mac-eu-online-002',
+    };
+    let regionSeen: string | null | undefined = 'UNSET';
+    const agentSessions = new InMemoryAgentSessionsRepo();
+    const created = await agentSessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const candidateRepo = {
+      findAnyWithLivekit: () => Promise.resolve(offlineTop),
+      findNearestWithLivekit: () => Promise.resolve(offlineTop),
+      // Region-nearest CANDIDATE LIST: offline box first, online sibling second.
+      listWithLivekitNearest: (region: string | null | undefined) => {
+        regionSeen = region;
+        return Promise.resolve([offlineTop, onlineSibling]);
+      },
+    } as unknown as DrizzleFleetNodesRepo;
+    await dispatchSessionAssignOnCreate({
+      sessionId: created.id,
+      fleetControlRegistry: registry,
+      fleetNodesRepo: candidateRepo,
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      accountRegion: 'eu',
+      agentSessions,
+      logger: logger(),
+    });
+    expect(regionSeen).toBe('eu');
+    // The publisher went to the ONLINE sibling, NOT the offline region-nearest box.
+    expect(sentOffline).toHaveLength(0);
+    expect(sentOnline).toHaveLength(1);
+    // … and node_id was persisted to that SAME live box (so the viewer token, minted
+    // off node_id at the route, binds to the box the publisher actually landed on).
+    const after = await agentSessions.get(created.id);
+    expect(after!.nodeId).toBe('mac-eu-online-002');
+  });
+
+  it('multi-box region: ALL candidate boxes offline → closes the row (dispatch_no_live_node), no dispatch', async () => {
+    const registry = new FleetControlRegistry(); // none connected
+    const closed: Array<{ id: string; reason: string }> = [];
+    const agentSessions = {
+      closeWithReason: (id: string, reason: string) => {
+        closed.push({ id, reason });
+        return Promise.resolve({});
+      },
+      setNodeId: () => Promise.resolve({}),
+    } as unknown as InstanceType<typeof InMemoryAgentSessionsRepo>;
+    const a = { ...macWithLivekit(), id: 'a-uuid', nodeId: 'mac-a-001' };
+    const b = { ...macWithLivekit(), id: 'b-uuid', nodeId: 'mac-b-002' };
+    const candidateRepo = {
+      findAnyWithLivekit: () => Promise.resolve(a),
+      findNearestWithLivekit: () => Promise.resolve(a),
+      listWithLivekitNearest: () => Promise.resolve([a, b]),
+    } as unknown as DrizzleFleetNodesRepo;
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_all_offline',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: candidateRepo,
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      accountRegion: 'eu',
+      agentSessions,
+      logger: logger(),
+    });
+    expect(closed).toEqual([{ id: 'agt_all_offline', reason: 'dispatch_no_live_node' }]);
+  });
+
   it('is a no-op (does not even touch the fleet repo) when the registry is unwired (prod)', async () => {
     const spy = vi.fn();
     await dispatchSessionAssignOnCreate({

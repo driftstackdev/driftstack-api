@@ -146,5 +146,58 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(got).not.toBeNull();
       expect(got?.livekit?.wsUrl).not.toBe('ws://revoked');
     });
+
+    it('listWithLivekitNearest: home-region candidates first, revoked + non-livekit excluded (multi-box region fix)', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleFleetNodesRepo({ client, db, close: async () => {} });
+
+      // A unique region so this test's assertions aren't perturbed by other rows.
+      const euRegion = `eu-list-${randomUUID().slice(0, 8)}`;
+      const usRegion = `us-list-${randomUUID().slice(0, 8)}`;
+      const seed = async (
+        region: string,
+        opts: { livekit?: boolean; revoked?: boolean; wsUrl: string },
+      ): Promise<void> => {
+        const node = await repo.register({
+          publicKeyBase64Url: pk(),
+          displayName: `lst-${region}-${randomUUID().slice(0, 8)}`,
+          region,
+          hardwareClass: 'm2pro',
+          nodeId: `test-node-${randomUUID()}`,
+        });
+        seededIds.push(node.id);
+        if (opts.livekit !== false) {
+          await repo.setLivekitCredentials({
+            nodeId: node.id,
+            apiKey: `key-${region}`,
+            apiSecretCiphertextBase64: 'ct',
+            wsUrl: opts.wsUrl,
+          });
+        }
+        if (opts.revoked) await repo.revoke({ nodeId: node.id, reason: 'test' });
+      };
+      // Two EU livekit boxes (the multi-box region), one EU box WITHOUT livekit,
+      // one EU revoked livekit box, and a US livekit box (out-of-region).
+      await seed(euRegion, { wsUrl: 'ws://eu-1' });
+      await seed(euRegion, { wsUrl: 'ws://eu-2' });
+      await seed(euRegion, { livekit: false, wsUrl: '' });
+      await seed(euRegion, { revoked: true, wsUrl: 'ws://eu-revoked' });
+      await seed(usRegion, { wsUrl: 'ws://us-1' });
+
+      const candidates = await repo.listWithLivekitNearest(euRegion);
+      const urls = candidates.map((c) => c.livekit?.wsUrl);
+      // The two EU livekit boxes come FIRST (home region), before the US box.
+      const euIdx1 = urls.indexOf('ws://eu-1');
+      const euIdx2 = urls.indexOf('ws://eu-2');
+      const usIdx = urls.indexOf('ws://us-1');
+      expect(euIdx1).toBeGreaterThanOrEqual(0);
+      expect(euIdx2).toBeGreaterThanOrEqual(0);
+      expect(usIdx).toBeGreaterThanOrEqual(0);
+      expect(Math.max(euIdx1, euIdx2)).toBeLessThan(usIdx);
+      // The revoked + non-livekit EU boxes are excluded entirely.
+      expect(urls).not.toContain('ws://eu-revoked');
+      expect(candidates.every((c) => c.livekit !== null)).toBe(true);
+    });
   },
 );
