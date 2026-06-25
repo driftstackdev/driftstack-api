@@ -135,6 +135,64 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         );
       }
     });
+
+    // FIX 3 — a cursor pointing at a profile that was soft-deleted between page
+    // fetches must still ADVANCE the page, not silently reset to page 1. The
+    // cursor-anchor lookup deliberately drops the notDeleted filter (a keyset
+    // position is well-defined whether or not the boundary row is still live);
+    // the RESULT set stays live-only. Pre-fix, a trashed boundary made the anchor
+    // unresolvable → page 1 returned again with a non-null next_cursor (loop).
+    it('advances past a boundary profile trashed between page fetches (no reset to page 1)', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG trashed-boundary test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      // Capture into a non-null local so the closure below keeps the narrowing
+      // (the `client` field is `... | null`; closures don't carry the guard).
+      const sql = client;
+      const db = drizzle(sql) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleProfilesRepo({ client: sql, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await sql`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`boundary-${accountId}@test.local`})`;
+
+      // Three distinct created_at so the desc order is c → b → a (newest first).
+      const base = Date.UTC(2026, 5, 1, 0, 0, 0);
+      const insert = async (name: string, ms: number): Promise<string> => {
+        const [row] = await sql`
+          INSERT INTO profiles (account_id, name, created_at)
+          VALUES (${accountId}, ${name}, ${new Date(base + ms).toISOString()})
+          RETURNING id`;
+        return row?.id as string;
+      };
+      const a = await insert('boundary-a', 0);
+      const b = await insert('boundary-b', 1000);
+      const c = await insert('boundary-c', 2000);
+
+      // Page 1 (limit 1) → newest `c`; next_cursor = c.
+      const page1 = await repo.list({ accountId, limit: 1 });
+      expect(page1.data.map((r) => r.id)).toEqual([c]);
+      expect(page1.nextCursor).toBe(c);
+
+      // Trash the boundary `c` before page 2.
+      expect(await repo.delete({ id: c, accountId })).toBe(true);
+
+      // Page 2 with the stale cursor MUST advance to `b`, not reset to the
+      // newest live profile (which is now `b` too — so we additionally verify
+      // page 3 reaches `a` and terminates, proving real forward progress).
+      const page2 = await repo.list({ accountId, limit: 1, cursor: c });
+      expect(page2.data.map((r) => r.id)).toEqual([b]);
+      expect(page2.nextCursor).toBe(b);
+
+      const page3 = await repo.list({ accountId, limit: 1, cursor: b });
+      expect(page3.data.map((r) => r.id)).toEqual([a]);
+      expect(page3.nextCursor).toBeNull();
+    });
   },
 );
 

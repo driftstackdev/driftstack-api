@@ -29,6 +29,7 @@ function row(over: Partial<ProfileTableRow> = {}): ProfileTableRow {
     folder: 'Shopping',
     tags: ['aged'],
     note: '',
+    sizeLabel: '4.2 MiB',
     createdAtIso: '2026-06-01T00:00:00.000Z',
     lastUsedIso: null,
     selected: false,
@@ -53,6 +54,7 @@ function props(over: Partial<ProfilesTableProps> = {}): ProfilesTableProps {
     onWatch: vi.fn(),
     onStop: vi.fn(),
     onTest: vi.fn(),
+    onTrim: vi.fn(),
     onDelete: vi.fn(),
     onSaveNote: vi.fn(),
     ...over,
@@ -158,6 +160,34 @@ describe('ProfilesTable', () => {
       <ProfilesTable {...props({ rows: [row({ running: false, runningSinceIso: null })] })} />,
     );
     expect(screen.queryByText(/^\d+m$/)).toBeNull();
+    cleanup();
+  });
+
+  it('renders the per-profile storage size (doc-150 item 5)', () => {
+    render(<ProfilesTable {...props({ rows: [row({ sizeLabel: '18.7 MiB' })] })} />);
+    expect(within(screen.getByRole('table')).getByText('18.7 MiB')).toBeTruthy();
+    cleanup();
+    // never-saved profile → "—"
+    render(<ProfilesTable {...props({ rows: [row({ sizeLabel: '—' })] })} />);
+    expect(within(screen.getByRole('table')).getByText('—')).toBeTruthy();
+    cleanup();
+  });
+
+  it('Trim button ("Clear cache, keep logins") fires onTrim without toggling row select', () => {
+    const onTrim = vi.fn();
+    const onToggleSelect = vi.fn();
+    render(<ProfilesTable {...props({ onTrim, onToggleSelect })} />);
+    const trim = screen.getByRole('button', { name: 'Trim' });
+    expect(trim.getAttribute('title')).toBe('Clear cache, keep logins');
+    fireEvent.click(trim);
+    expect(onTrim).toHaveBeenCalledWith('p1');
+    expect(onToggleSelect).not.toHaveBeenCalled(); // stopPropagation
+    cleanup();
+  });
+
+  it('Trim is disabled while the row is busy', () => {
+    render(<ProfilesTable {...props({ rows: [row({ busy: true })] })} />);
+    expect(screen.getByRole('button', { name: 'Trim' })).toBeDisabled();
     cleanup();
   });
 

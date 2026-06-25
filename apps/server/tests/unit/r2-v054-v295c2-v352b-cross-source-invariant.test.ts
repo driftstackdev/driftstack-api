@@ -109,13 +109,14 @@ describe('W970 r2 V-054 + V-295c2 + V-352b cross-source invariant', () => {
     expect(p).toMatch(/export const R2_SENTINEL_KEY = '__driftstack_sentinel__';/);
   });
 
-  // ─── R2 interface 5-method surface ───────────────────────────
+  // ─── R2 interface 6-method surface ───────────────────────────
 
-  it('CRITICAL R2 interface has 5 fields — headObject + putObject + presignPut + presignGet + readonly bucket. The 5-field surface is what services-under-r2 consume.', () => {
+  it('CRITICAL R2 interface has 6 fields — headObject + putObject + deleteObject + presignPut + presignGet + readonly bucket. The surface is what services-under-r2 consume (deleteObject added 2026-06-25 for purged-profile sealed-blob cleanup).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/r2.ts'));
     expect(p).toMatch(/export interface R2 \{/);
     expect(p).toMatch(/headObject\(key: string\): Promise<\{ exists: boolean \}>;/);
     expect(p).toMatch(/putObject\(args: \{/);
+    expect(p).toMatch(/deleteObject\(key: string\): Promise<void>;/);
     expect(p).toMatch(/presignPut\(args: \{/);
     expect(p).toMatch(/presignGet\(args: \{/);
     expect(p).toMatch(/readonly bucket: string;/);
@@ -186,6 +187,7 @@ describe('W970 r2 V-054 + V-295c2 + V-352b cross-source invariant', () => {
       bucket: 'test-bucket',
       headObject: () => Promise.resolve({ exists: true }),
       putObject: () => Promise.resolve(),
+      deleteObject: () => Promise.resolve(),
       presignPut: () => Promise.resolve('https://example.com/put'),
       presignGet: () => Promise.resolve('https://example.com/get'),
     };
@@ -204,6 +206,7 @@ describe('W970 r2 V-054 + V-295c2 + V-352b cross-source invariant', () => {
         return Promise.resolve({ exists: true });
       },
       putObject: () => Promise.resolve(),
+      deleteObject: () => Promise.resolve(),
       presignPut: () => Promise.resolve(''),
       presignGet: () => Promise.resolve(''),
     };
@@ -221,6 +224,7 @@ describe('W970 r2 V-054 + V-295c2 + V-352b cross-source invariant', () => {
         return Promise.resolve({ exists: true });
       },
       putObject: () => Promise.resolve(),
+      deleteObject: () => Promise.resolve(),
       presignPut: () => Promise.resolve(''),
       presignGet: () => Promise.resolve(''),
     };

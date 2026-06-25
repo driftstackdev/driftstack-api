@@ -63,7 +63,9 @@ describe('W424.A packages/sdk-typescript/src/index.ts content parity', () => {
     expect(body).toMatch(
       /export type \{ WebhookEndpointList, WebhookDeliveryListPage \} from '\.\/resources\/webhooks\.js';/,
     );
-    expect(body).toMatch(/export type \{ ProfilesListPage \} from '\.\/resources\/profiles\.js';/);
+    expect(body).toMatch(
+      /export type \{ ProfilesListPage, TrimProfileResponse \} from '\.\/resources\/profiles\.js';/,
+    );
     expect(body).toMatch(
       /export type \{ ProfileSnapshotsListPage \} from '\.\/resources\/profile-snapshots\.js';/,
     );

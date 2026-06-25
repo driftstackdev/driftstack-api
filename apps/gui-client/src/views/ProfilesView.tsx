@@ -59,6 +59,8 @@ import {
 } from '../components/ProfilesTable';
 import {
   ARCHETYPE_REGISTRY,
+  STORAGE_SOFT_WARN_FRACTION,
+  TIER_STORAGE_BYTES_CAP,
   type ArchetypeStatus,
   type UpdateProfileRequest,
 } from '@driftstack/sdk';
@@ -123,6 +125,12 @@ interface Profile {
   last_used_at: string | null;
   created_at: string;
   updated_at: string;
+  // doc-150 item 5 — byte size of the profile's last saved sealed store (the
+  // opaque encrypted browser-state blob). `null` until the profile is first
+  // saved. The server already returns this on GET /v1/profiles; surfaced per-
+  // row + summed into the account-wide storage meter. Mirrors the canonical
+  // @driftstack/api-types Profile shape.
+  size_bytes: number | null;
   // L4b recycle bin — null for live profiles; set for trashed ones (only the
   // GET /v1/profiles/trash response carries a non-null value).
   deleted_at: string | null;
@@ -150,6 +158,26 @@ export function formatDeviceName(archetype: string): string {
   return ['iPhone', `${num}${e ? 'e' : ''}`, pro ? 'Pro' : '', max ? 'Max' : '']
     .filter(Boolean)
     .join(' ');
+}
+
+// doc-150 items 5/6 — human-readable byte size, mirroring the customer
+// dashboard's fmtBytes. `null`/`undefined`/negative/non-finite → "—" (a profile
+// that's never been saved has no size). BINARY units (1024-based, KiB/MiB/GiB)
+// so the quota cap renders the EXACT plan number — TIER_STORAGE_BYTES_CAP is
+// declared in GiB (N * 2**30), so a decimal (1000-based) basis would overstate
+// the allowance (~7% high). Used bytes share this basis, so the % + bar stay
+// correct. 1 decimal place above KiB.
+export function fmtBytes(n: number | null | undefined): string {
+  if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) return '—';
+  if (n < 1024) return `${n.toString()} B`;
+  const units = ['KiB', 'MiB', 'GiB', 'TiB'];
+  let v = n / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(1)} ${units[i] ?? 'TiB'}`;
 }
 
 // 2026-06-20 — UNIFIED sort plumbing. The action-bar (ProfileSortBy) and the
@@ -785,6 +813,56 @@ export function ProfilesView({
     }
   }
 
+  // doc-150 §8 — "Clear cache, keep logins". POST /v1/profiles/:id/trim reclaims
+  // the profile's re-fetchable caches (images/scripts/service-workers) while
+  // KEEPING logins, localStorage, IndexedDB + open tabs — the headline reclaim
+  // action when over the storage cap. The server always returns 200 with a
+  // DISCRIMINATED body, so we branch on `status` (NOT the HTTP code). On `ok` we
+  // surface the freed bytes + refresh so the per-profile size + account meter
+  // pick up the smaller size_bytes immediately. Single-flight on busyId mirrors
+  // handleDelete/handleClone so a trim can't race an in-flight launch.
+  async function handleTrim(id: string): Promise<void> {
+    if (!client || busyId !== null) return;
+    const name = state.profiles.find((p) => p.id === id)?.name ?? 'this profile';
+    const ok = await confirm(
+      `Clear cached website data for "${name}"? This frees re-fetchable caches (images, scripts, service workers) to reclaim storage. Your logins, saved site data and open tabs are KEPT — they reload from the network on the next visit, just like clearing a browser cache.`,
+      { confirmLabel: 'Clear cache' },
+    );
+    if (!ok) return;
+    setBusyId(id);
+    try {
+      const result = await client.profiles.trim(id);
+      if (result.status === 'ok') {
+        setState((s) => ({
+          ...s,
+          notice: `Cleared cache for "${name}" — freed ${fmtBytes(result.bytes_reclaimed)}.`,
+        }));
+        await refresh(false);
+      } else if (result.status === 'error') {
+        setState((s) => ({
+          ...s,
+          error: `Couldn't clear cache for "${name}": ${result.reason}.`,
+        }));
+      } else if (result.status === 'timeout') {
+        setState((s) => ({
+          ...s,
+          error: `Clearing cache for "${name}" timed out — the session node didn't respond. Try again shortly.`,
+        }));
+      } else {
+        // unavailable — informative, not an error: a fresh profile with no saved
+        // state has nothing to clear.
+        setState((s) => ({
+          ...s,
+          notice: `Nothing to clear for "${name}": ${result.reason}.`,
+        }));
+      }
+    } catch (err) {
+      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   /** Returns the currently-active session for a profile, or null when
    *  the profile is idle. Looks up the binding's currentSessionId in
    *  the live activeSessions list — a stale binding (session destroyed
@@ -1267,6 +1345,31 @@ export function ProfilesView({
     const ok = probed.filter((p) => probeCache[p.id]?.result.reachable === true).length;
     return (ok / probed.length) * 100;
   }, [proxies, probeCache]);
+  // doc-150 items 5/6 — account-wide storage: sum every profile's size_bytes
+  // (never-saved / pre-column profiles contribute 0), and resolve the per-tier
+  // hard cap from the live tier (TIER_STORAGE_BYTES_CAP). The quota leg
+  // (cap/pct/bar/warn) only renders once the tier is known — we don't guess a
+  // cap. Enterprise is soft-only (the server never hard-blocks it), so its
+  // over-cap state reads as a warning, not a stop. Mirrors the dashboard's
+  // renderStorageTotal + the server's computeAccountStorageState.
+  const storage = useMemo(() => {
+    const total = state.profiles.reduce(
+      (sum, p) => sum + (typeof p.size_bytes === 'number' && p.size_bytes > 0 ? p.size_bytes : 0),
+      0,
+    );
+    const tier = accountMe?.tier ?? null;
+    const cap = tier !== null ? (TIER_STORAGE_BYTES_CAP[tier] ?? null) : null;
+    const fraction = cap !== null && cap > 0 ? total / cap : null;
+    return {
+      total,
+      cap,
+      fraction,
+      pct: fraction !== null ? Math.round(fraction * 100) : null,
+      isEnterprise: tier === 'enterprise',
+      overCap: fraction !== null && fraction >= 1,
+      nearCap: fraction !== null && fraction >= STORAGE_SOFT_WARN_FRACTION && fraction < 1,
+    };
+  }, [state.profiles, accountMe?.tier]);
   const greeting = useMemo(() => {
     const h = new Date().getHours();
     if (h < 12) return 'Good morning';
@@ -1961,6 +2064,65 @@ export function ProfilesView({
       {/* (Profiles hub-stats strip removed 2026-06-15 — the fleet KPIs live on
           the Command Center only, per founder; Profiles stays focused on the
           grid/list.) */}
+      {/* doc-150 items 5/6 — account-wide storage meter (parity with the
+          customer dashboard). Sums every profile's size_bytes and shows
+          "X of Y used" vs the live tier's cap, with a % + bar + soft (>=80%)
+          warn + an over-cap state. Hidden when there are no profiles; the cap
+          leg stays collapsed until the live tier is known. Enterprise is
+          soft-only — its over-cap state reads as a warning, not a stop. */}
+      {state.profiles.length > 0 && (
+        <div
+          data-component="storage-meter"
+          className="flex flex-col gap-1.5 rounded-md border border-surface-divider bg-surface-raised px-3 py-2"
+        >
+          <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-ink-secondary">
+            <span className="section-label">Storage</span>
+            <span className="font-medium text-ink-primary" data-field="storage-total">
+              {fmtBytes(storage.total)}
+            </span>
+            <span>of</span>
+            <span className="font-medium text-ink-primary" data-field="storage-cap">
+              {storage.cap !== null ? fmtBytes(storage.cap) : '—'}
+            </span>
+            <span>used across your profiles</span>
+            {storage.pct !== null && (
+              <span className="text-ink-muted" data-field="storage-pct">
+                ({storage.pct.toString()}%)
+              </span>
+            )}
+            {storage.overCap && (
+              <span className="font-medium text-status-error" data-field="storage-warn">
+                ·{' '}
+                {storage.isEnterprise
+                  ? 'over your plan allowance — contact sales to raise it'
+                  : 'storage limit reached — clear a cache or delete a profile to launch new sessions'}
+              </span>
+            )}
+            {storage.nearCap && (
+              <span className="font-medium text-amber-500" data-field="storage-warn">
+                · approaching your storage limit
+              </span>
+            )}
+          </p>
+          {storage.fraction !== null && (
+            <div
+              className="h-1.5 w-full max-w-md overflow-hidden rounded-full bg-surface-inset"
+              role="presentation"
+            >
+              <div
+                className={`h-full rounded-full transition-[width] ${
+                  storage.overCap
+                    ? 'bg-status-error'
+                    : storage.nearCap
+                      ? 'bg-amber-500'
+                      : 'bg-accent'
+                }`}
+                style={{ width: `${Math.min(100, storage.pct ?? 0).toString()}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
       {/* Team workspace indicator (hub demo, honest v1): memberships
           from /v1/account/me. Workspace SWITCHING (X-Driftstack-Account
           effective-account) is the named follow-up — this surfaces the
@@ -2645,6 +2807,7 @@ export function ProfilesView({
                           running={running}
                           selected={selectedIds.has(profile.id)}
                           lastUsedIso={profile.last_used_at}
+                          sizeLabel={fmtBytes(profile.size_bytes)}
                           folder={profilesMeta[profile.id]?.folder ?? ''}
                           tags={profilesMeta[profile.id]?.tags ?? []}
                           note={profilesMeta[profile.id]?.note ?? ''}
@@ -2693,6 +2856,7 @@ export function ProfilesView({
                           onExport={
                             IMPORT_EXPORT_ENABLED ? () => void handleExport(profile.id) : undefined
                           }
+                          onTrim={() => void handleTrim(profile.id)}
                           onDelete={() => void handleDelete(profile.id)}
                         />
                       </div>
@@ -2744,6 +2908,7 @@ export function ProfilesView({
                       folder: profilesMeta[profile.id]?.folder ?? '',
                       tags: profilesMeta[profile.id]?.tags ?? [],
                       note: profilesMeta[profile.id]?.note ?? '',
+                      sizeLabel: fmtBytes(profile.size_bytes),
                       createdAtIso: profile.created_at,
                       lastUsedIso: profile.last_used_at,
                       selected: selectedIds.has(profile.id),
@@ -2816,6 +2981,7 @@ export function ProfilesView({
                       onClone={CLONE_ENABLED ? (id) => void handleClone(id) : undefined}
                       cloneDisabled={atProfileCap}
                       cloneDisabledReason={profileCapReason}
+                      onTrim={(id) => void handleTrim(id)}
                       onDelete={(id) => void handleDelete(id)}
                       onSaveNote={handleSaveNote}
                     />

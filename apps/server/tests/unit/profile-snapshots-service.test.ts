@@ -181,7 +181,7 @@ function makeRepos(
     listTrashed: ({ accountId }) =>
       Promise.resolve(profiles.filter((p) => p.accountId === accountId && p.deletedAt !== null)),
     restore: () => Promise.resolve('not_found' as const),
-    purgeTrashedBefore: () => Promise.resolve(0),
+    purgeTrashedBefore: () => Promise.resolve([]),
     purgeTrashed: () => Promise.resolve(false),
     touch: () => Promise.resolve(),
     recordSave: () => Promise.resolve(),

@@ -119,20 +119,38 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
 
   list(args: ListProfilesArgs): Promise<ListProfilesPage> {
     const limit = Math.min(args.limit ?? 50, 100);
-    const all = Array.from(this.rows.values())
-      .filter((r) => r.accountId === args.accountId && r.deletedAt === null)
+    // FIX 3 — resolve the cursor keyset POSITION against the account's full
+    // ordered set (live + trashed), mirroring the prod repo dropping the
+    // notDeleted filter on the cursor-anchor lookup. The cursor id is the prior
+    // page's last profile, which may have been soft-deleted/restored between
+    // page fetches; resolving it against the live-only set would miss a trashed
+    // boundary → startIdx 0 → page 1 returned again (a pagination loop). The
+    // notDeleted filter still applies to the RESULT set below.
+    const ordered = Array.from(this.rows.values())
+      .filter((r) => r.accountId === args.accountId)
       .sort((a, b) => {
         const t = b.createdAt.getTime() - a.createdAt.getTime();
         return t !== 0 ? t : b.id.localeCompare(a.id);
       });
 
-    let startIdx = 0;
+    let anchor: { createdAt: Date; id: string } | undefined;
     if (args.cursor !== undefined) {
-      const i = all.findIndex((r) => r.id === args.cursor);
-      startIdx = i >= 0 ? i + 1 : 0;
+      const c = ordered.find((r) => r.id === args.cursor);
+      if (c !== undefined) anchor = { createdAt: c.createdAt, id: c.id };
     }
 
-    const slice = all.slice(startIdx, startIdx + limit + 1);
+    const live = ordered.filter((r) => r.deletedAt === null);
+    let afterAnchor = live;
+    if (anchor !== undefined) {
+      const at = anchor;
+      afterAnchor = live.filter(
+        (r) =>
+          r.createdAt.getTime() < at.createdAt.getTime() ||
+          (r.createdAt.getTime() === at.createdAt.getTime() && r.id.localeCompare(at.id) < 0),
+      );
+    }
+
+    const slice = afterAnchor.slice(0, limit + 1);
     const hasMore = slice.length > limit;
     const data = slice.slice(0, limit);
     const nextCursor = hasMore && data.length > 0 ? data[data.length - 1]!.id : null;
@@ -220,15 +238,15 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
 
   // L4b Step 4 — hard-delete trashed rows older than cutoff (mirrors the prod
   // DELETE WHERE deletedAt IS NOT NULL AND deletedAt < cutoff).
-  purgeTrashedBefore(cutoff: Date): Promise<number> {
-    let purged = 0;
+  purgeTrashedBefore(cutoff: Date): Promise<string[]> {
+    const purgedIds: string[] = [];
     for (const [id, r] of this.rows) {
       if (r.deletedAt !== null && r.deletedAt.getTime() < cutoff.getTime()) {
         this.rows.delete(id);
-        purged += 1;
+        purgedIds.push(id);
       }
     }
-    return Promise.resolve(purged);
+    return Promise.resolve(purgedIds);
   }
 
   purgeTrashed(args: { id: string; accountId: string }): Promise<boolean> {

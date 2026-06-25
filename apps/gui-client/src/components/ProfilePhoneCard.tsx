@@ -25,6 +25,10 @@ export interface ProfilePhoneCardProps {
   running: boolean;
   selected: boolean;
   lastUsedIso: string | null;
+  /** doc-150 item 5 — already-formatted per-profile storage size (e.g. "2.4 MiB"
+   *  or "—" when never saved). The parent formats it via fmtBytes so the card
+   *  stays purely presentational. */
+  sizeLabel?: string;
   folder: string;
   tags: ReadonlyArray<string>;
   /** Free-text note (F3 — now editable in the grid card too, not just the table).
@@ -70,6 +74,10 @@ export interface ProfilePhoneCardProps {
   cloneDisabled?: boolean;
   cloneDisabledReason?: string;
   onExport?: () => void;
+  /** doc-150 §8 — "Clear cache, keep logins". Trims the profile's re-fetchable
+   *  caches while keeping logins/storage/tabs. Omitted → the action isn't
+   *  offered. Disabled while busy (a launch/clone/trim in flight). */
+  onTrim?: () => void;
   onDelete?: () => void;
 }
 
@@ -391,11 +399,18 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             </button>
           ) : null}
 
-          <span className="mt-auto text-center text-[9.5px] text-ink-muted">
+          <span className="mt-auto flex items-center justify-center gap-1.5 text-center text-[9.5px] text-ink-muted">
             {p.lastUsedIso !== null ? (
               <RelativeTime iso={p.lastUsedIso} tooltipPrefix="Last used" />
             ) : (
               'never launched'
+            )}
+            {/* doc-150 item 5 — per-profile sealed-store size. "—" = never saved. */}
+            {p.sizeLabel !== undefined && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span title="Stored profile size (encrypted browser state)">{p.sizeLabel}</span>
+              </>
             )}
           </span>
         </div>
@@ -508,6 +523,22 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 onClick={() => {
                   setActionsOpen(false);
                   p.onExport?.();
+                }}
+              />
+            ) : null}
+            {/* doc-150 §8 — Trim: clear re-fetchable caches, keep logins. The
+                title spells out exactly what's kept so the customer knows
+                nothing identity-bearing is dropped. Disabled while busy. */}
+            {p.onTrim ? (
+              <MenuRow
+                glyph="🧹"
+                caption="Trim"
+                label={`Trim ${p.name}`}
+                title="Clear cache, keep logins"
+                disabled={p.busy}
+                onClick={() => {
+                  setActionsOpen(false);
+                  p.onTrim?.();
                 }}
               />
             ) : null}

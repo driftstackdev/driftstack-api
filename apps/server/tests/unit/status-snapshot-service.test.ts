@@ -31,6 +31,7 @@ function makeR2(): {
       puts.push(args);
       return Promise.resolve();
     },
+    deleteObject: () => Promise.resolve(),
     presignPut: () => Promise.resolve('stub'),
     presignGet: () => Promise.resolve('stub'),
     bucket: 'stub-bucket',

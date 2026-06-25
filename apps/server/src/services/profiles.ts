@@ -22,6 +22,8 @@ import { profileLimitFor } from './sessions.js';
 import type { AccountAuditService } from './account-audit.js';
 import { computeAccountStorageState, type AccountStorageState } from './profile-storage-quota.js';
 import { mintWrappedProfileDek, unwrapProfileDek } from '../lib/profile-key-hierarchy.js';
+import { profileSealedBlobKey, type R2 } from '../lib/r2.js';
+import type { Logger } from '../lib/logger.js';
 
 export interface ProfileRecord {
   id: string;
@@ -153,10 +155,12 @@ export interface ProfilesRepo {
   /**
    * L4b Step 4 — retention purge. HARD-deletes trashed profiles (the only hard
    * delete now that `delete()` is soft) whose `deletedAt` is older than
-   * `cutoff`, account-wide. Removes the row + its wrapped DEK. Returns the
-   * number of rows purged. Driven by the daily profile-trash-purge sweep.
+   * `cutoff`, account-wide. Removes the row + its wrapped DEK. Returns the IDs
+   * of the purged rows (caller derives the count via `.length` and best-effort
+   * deletes each purged profile's orphaned R2 sealed blob). Driven by the daily
+   * profile-trash-purge sweep.
    */
-  purgeTrashedBefore(cutoff: Date): Promise<number>;
+  purgeTrashedBefore(cutoff: Date): Promise<string[]>;
   /** Anti-abuse — user-initiated permanent delete of ONE trashed profile (frees
    *  a cap slot immediately). Owner-scoped + trashed-only; true if purged. */
   purgeTrashed(args: { id: string; accountId: string }): Promise<boolean>;
@@ -231,7 +235,32 @@ export class ProfilesService {
      * inert).
      */
     private readonly profileMasterKey: Buffer | null = null,
+    /**
+     * R2 client for the profiles' sealed-blob store. When wired, a manual purge
+     * (DELETE /:id/purge) best-effort deletes the purged profile's
+     * `profiles/<id>.sealed` object so the encrypted bytes don't orphan in R2
+     * forever (the daily sweeper does the same for the auto-purge path). Null
+     * (R2 not configured) → DB-only purge, unchanged.
+     */
+    private readonly r2: R2 | null = null,
+    private readonly logger: Logger | null = null,
   ) {}
+
+  /**
+   * Profile-backed sessions (file 57) — mint a FRESH per-profile DEK wrapped
+   * under the account's TMK, or `undefined` when no master key is configured
+   * (feature inert → the row stores NULL). Shared by EVERY profile-insert path
+   * (create / clone / import / transfer): each path mints its OWN fresh DEK —
+   * a clone/import/transfer starts with NO sealed blob, so it must never reuse
+   * the source profile's DEK. Without a DEK the row is stateless at
+   * session-assign (no restore URL, no save-back PUT URL) → sealed-state
+   * persistence silently breaks for that profile.
+   */
+  private mintWrappedDek(accountId: string): string | undefined {
+    return this.profileMasterKey !== null
+      ? mintWrappedProfileDek(this.profileMasterKey, accountId).wrappedDek
+      : undefined;
+  }
 
   private async emitAuditBestEffort(
     accountId: string,
@@ -298,10 +327,7 @@ export class ProfilesService {
     // account's TMK when the master key is configured. The plaintext DEK is
     // discarded here (re-derived by unwrapping at session-assign time); only the
     // wrapped form is stored. Absent key → undefined → stored NULL (inert).
-    const wrappedDek =
-      this.profileMasterKey !== null
-        ? mintWrappedProfileDek(this.profileMasterKey, args.accountId).wrappedDek
-        : undefined;
+    const wrappedDek = this.mintWrappedDek(args.accountId);
 
     let result: Awaited<ReturnType<typeof this.repo.insertWithLimit>>;
     try {
@@ -529,7 +555,30 @@ export class ProfilesService {
   async purge(args: { id: string; accountId: string }): Promise<void> {
     const purged = await this.repo.purgeTrashed(args);
     if (!purged) throw new NotFoundError('Trashed profile not found.');
+    // Best-effort R2 cleanup of the now-orphaned sealed blob. R2 DELETE is
+    // idempotent (a never-saved profile has no blob → no-op 204), so we delete
+    // unconditionally. A failure is logged, never thrown — the DB row is gone
+    // and the blob is opaque + inert; surfacing a 500 here would wrongly tell
+    // the customer the purge failed when it succeeded.
+    await this.deleteSealedBlobBestEffort(args.id);
     await this.emitAuditBestEffort(args.accountId, 'profile.purged', `profile_${args.id}`, {});
+  }
+
+  /**
+   * FIX 2 — best-effort delete of a purged profile's R2 sealed blob so the
+   * encrypted bytes don't orphan forever. No-op when R2 isn't wired. Never
+   * throws (tolerates a missing object + a transient R2 error).
+   */
+  private async deleteSealedBlobBestEffort(profileId: string): Promise<void> {
+    if (this.r2 === null) return;
+    try {
+      await this.r2.deleteObject(profileSealedBlobKey(profileId));
+    } catch (err) {
+      this.logger?.error?.(
+        { component: 'profiles', profileId, err },
+        'failed to delete purged profile sealed-blob from R2 (orphan left behind)',
+      );
+    }
   }
 
   /**
@@ -581,6 +630,13 @@ export class ProfilesService {
       cloneName = await this.deriveNonConflictingCopyName(args.accountId, source.name);
     }
 
+    // Profile-backed sessions (file 57): mint a FRESH per-profile DEK for the
+    // clone — it starts with no sealed blob, so it must NOT reuse the source's
+    // DEK (a clone is a new identity slot, not a copy of the sealed store).
+    // Without a DEK the clone runs stateless at session-assign (no restore /
+    // save-back) → sealed-state persistence silently breaks for it.
+    const cloneWrappedDek = this.mintWrappedDek(args.accountId);
+
     // V-714 — atomic limit-check + insert (count above is the fast-fail
     // pre-check; insertWithLimit re-checks under an account-row lock).
     let result: Awaited<ReturnType<typeof this.repo.insertWithLimit>>;
@@ -599,6 +655,7 @@ export class ProfilesService {
           tags: source.tags,
           icon: source.icon,
           note: source.note,
+          wrappedDek: cloneWrappedDek,
         },
         limit,
       );
@@ -718,6 +775,13 @@ export class ProfilesService {
       );
     }
 
+    // Profile-backed sessions (file 57): mint a FRESH per-profile DEK for the
+    // imported profile — it's a new identity slot in THIS account starting with
+    // no sealed blob, so it gets its own DEK (never the source's). Without one
+    // the import runs stateless at session-assign (no restore / save-back) →
+    // sealed-state persistence silently breaks for it.
+    const importWrappedDek = this.mintWrappedDek(args.accountId);
+
     // V-714 — atomic limit-check + insert (count above is the fast-fail
     // pre-check; insertWithLimit re-checks under an account-row lock).
     let result: Awaited<ReturnType<typeof this.repo.insertWithLimit>>;
@@ -728,6 +792,7 @@ export class ProfilesService {
           name: targetName,
           archetype: args.payload.archetype,
           description: args.payload.description,
+          wrappedDek: importWrappedDek,
         },
         limit,
       );
@@ -847,6 +912,14 @@ export class ProfilesService {
       targetName = source.name + ' (transferred)';
     }
 
+    // Profile-backed sessions (file 57): mint a FRESH per-profile DEK bound to
+    // the RECIPIENT account's TMK. A transfer mints a new row (new profile_id →
+    // new sealed-blob R2 key) with no sealed blob yet, and the source's wrapped
+    // DEK is keyed to the SOURCE account's TMK — so the recipient row must get
+    // its own freshly-minted DEK, never a copy. Without it the transferred
+    // profile runs stateless at session-assign (no restore / save-back).
+    const transferWrappedDek = this.mintWrappedDek(args.recipientAccountId);
+
     // V-714 — atomic limit-check + insert on the RECIPIENT account (count
     // above is the fast-fail pre-check; insertWithLimit re-checks under the
     // recipient's account-row lock). Both the cap refusal and the name-race
@@ -860,6 +933,7 @@ export class ProfilesService {
           name: targetName,
           archetype: source.archetype,
           description: source.description,
+          wrappedDek: transferWrappedDek,
         },
         limit,
       );

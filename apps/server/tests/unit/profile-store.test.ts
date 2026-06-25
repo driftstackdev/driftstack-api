@@ -21,6 +21,7 @@ function fakeR2(putObject: R2['putObject']): R2 {
   return {
     bucket: 'test-bucket',
     putObject,
+    deleteObject: vi.fn(),
     headObject: vi.fn(),
     presignPut: vi.fn(),
     presignGet: vi.fn(),

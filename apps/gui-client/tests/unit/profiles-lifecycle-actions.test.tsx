@@ -15,6 +15,11 @@ const profilesClone = vi.fn<(id: string) => Promise<unknown>>(() =>
 const profilesImport = vi.fn<(body: unknown) => Promise<unknown>>(() =>
   Promise.resolve({ id: 'prof_imported', name: 'Imported' }),
 );
+// doc-150 §8 — POST /v1/profiles/:id/trim. Default to the `ok` shape so the
+// success-notice path is exercised; individual tests override the resolution.
+const profilesTrim = vi.fn<(id: string) => Promise<unknown>>(() =>
+  Promise.resolve({ status: 'ok', size_bytes: 1024, bytes_reclaimed: 2_097_152 }),
+);
 const refreshAccountMe = vi.fn(() => Promise.resolve());
 
 function profile() {
@@ -24,6 +29,9 @@ function profile() {
     archetype: 'iphone16pro_ios18_7_safari26_4',
     description: 'orig desc',
     last_used_at: null,
+    // doc-150 item 5 — sealed-store size; ~3 MiB so the storage meter + the
+    // per-row size both render a non-"—" value.
+    size_bytes: 3_145_728,
     created_at: '2026-06-08T00:00:00Z',
     updated_at: '2026-06-08T00:00:00Z',
   };
@@ -47,6 +55,7 @@ const stableClient = {
     update: (id: string, body: unknown) => profilesUpdate(id, body),
     clone: (id: string) => profilesClone(id),
     import: (body: unknown) => profilesImport(body),
+    trim: (id: string) => profilesTrim(id),
   },
   sessions: { list: () => Promise.resolve({ data: [] }) },
   agentSessions: { list: () => Promise.resolve({ data: [] }) },
@@ -138,6 +147,7 @@ vi.mock('../../src/lib/agent-session-control', () => ({
 }));
 
 const { ProfilesView } = await import('../../src/views/ProfilesView');
+const { ConfirmProvider } = await import('../../src/components/ConfirmProvider');
 
 async function openCardMenu(): Promise<void> {
   render(<ProfilesView onGoToSettings={vi.fn()} />);
@@ -153,7 +163,76 @@ describe('ProfilesView profile-lifecycle actions', () => {
     profilesUpdate.mockClear();
     profilesClone.mockClear();
     profilesImport.mockClear();
+    profilesTrim.mockClear();
     refreshAccountMe.mockClear();
+  });
+
+  // doc-150 items 5/6 + §8 — storage parity with the customer dashboard:
+  // per-profile size, an account-wide storage meter, and a per-profile Trim
+  // ("Clear cache, keep logins") action.
+  describe('Storage + Trim', () => {
+    it('renders the account-wide storage meter ("X of Y used" vs the tier cap)', async () => {
+      const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
+      // Wait for hydration (the meter only renders once profiles load).
+      await screen.findByText(/used across your profiles/);
+      const meter = container.querySelector('[data-component="storage-meter"]');
+      expect(meter).toBeTruthy();
+      // 3 MiB used; solo_manual cap = 5 GiB. The meter shows both legs.
+      expect(meter?.textContent).toContain('3.0 MiB');
+      expect(meter?.textContent).toContain('5.0 GiB');
+    });
+
+    it('surfaces the per-profile size on the grid card', async () => {
+      const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
+      await screen.findByText(/used across your profiles/);
+      // The card footer shows the formatted sealed-store size (3 MiB) with an
+      // explanatory title — distinct from the meter's account total.
+      const sized = within(container).getByTitle(/Stored profile size/);
+      expect(sized.textContent).toBe('3.0 MiB');
+    });
+
+    it('exposes a Trim action labelled "Clear cache, keep logins" in the card menu', async () => {
+      await openCardMenu();
+      const trim = await screen.findByRole('button', { name: 'Trim Demo' });
+      expect(trim.getAttribute('title')).toBe('Clear cache, keep logins');
+    });
+
+    it('on confirm, calls profiles.trim and shows the freed-bytes notice (status ok)', async () => {
+      // 2 MiB reclaimed → "freed 2.0 MiB". Branch is on `status`, not HTTP code.
+      profilesTrim.mockResolvedValueOnce({
+        status: 'ok',
+        size_bytes: 1024,
+        bytes_reclaimed: 2_097_152,
+      });
+      render(
+        <ConfirmProvider>
+          <ProfilesView onGoToSettings={vi.fn()} />
+        </ConfirmProvider>,
+      );
+      fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Trim Demo' }));
+      // The confirm dialog's primary action is "Clear cache".
+      fireEvent.click(await screen.findByRole('button', { name: 'Clear cache' }));
+      await waitFor(() => expect(profilesTrim).toHaveBeenCalledWith('prof_1'));
+      expect(await screen.findByText(/freed 2\.0 MiB/)).toBeTruthy();
+    });
+
+    it('surfaces an informative (non-error) notice when there is nothing to trim (status unavailable)', async () => {
+      profilesTrim.mockResolvedValueOnce({
+        status: 'unavailable',
+        reason: 'no saved state to trim yet',
+      });
+      render(
+        <ConfirmProvider>
+          <ProfilesView onGoToSettings={vi.fn()} />
+        </ConfirmProvider>,
+      );
+      fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Trim Demo' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Clear cache' }));
+      await waitFor(() => expect(profilesTrim).toHaveBeenCalledWith('prof_1'));
+      expect(await screen.findByText(/no saved state to trim yet/)).toBeTruthy();
+    });
   });
 
   // Clone affordance hidden 2026-06-20 (CLONE_ENABLED=false; founder: clone is

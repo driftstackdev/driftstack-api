@@ -21,6 +21,7 @@ import {
   HeadObjectCommand,
   PutObjectCommand,
   GetObjectCommand,
+  DeleteObjectCommand,
   type S3ClientConfig,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -44,6 +45,13 @@ export interface R2 {
     body: Buffer | Uint8Array | string;
     contentType?: string;
   }): Promise<void>;
+  /**
+   * Delete an object. S3/R2 DELETE is idempotent — deleting a key that doesn't
+   * exist returns 204, not an error — so callers needn't pre-check existence
+   * (a never-saved profile simply has no blob). Resolves on success; throws
+   * only on a credentials/network/server error (not on a missing object).
+   */
+  deleteObject(key: string): Promise<void>;
   /**
    * Generate a presigned PUT URL for a client to upload directly.
    * Used by Mac Mini fleet recording-frame uploads (per V-054 §4)
@@ -119,6 +127,12 @@ function createR2ClientForBucket(config: R2Config, bucket: string): R2 {
           ContentType: contentType,
         }),
       );
+    },
+
+    async deleteObject(key) {
+      // S3/R2 DELETE is idempotent: a missing key returns 204 (no NoSuchKey
+      // error), so this is safe to call for a never-saved profile's blob.
+      await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
     },
 
     async presignPut({ key, contentType, expiresIn = 900 }) {

@@ -193,4 +193,56 @@ func TestProfiles_Clone_ExplicitName(t *testing.T) {
 	}
 }
 
+func TestProfiles_Trim_OkPersistsSize(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/profiles/prof_src/trim" || r.Method != "POST" {
+			t.Errorf("unexpected: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(TrimProfileResponse{
+			Status:         "ok",
+			SizeBytes:      4000,
+			BytesReclaimed: 6000,
+		})
+	})
+	got, err := client.Profiles.Trim(context.Background(), "prof_src")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "ok" {
+		t.Errorf("status=%q", got.Status)
+	}
+	if got.SizeBytes != 4000 {
+		t.Errorf("size_bytes=%d", got.SizeBytes)
+	}
+	if got.BytesReclaimed != 6000 {
+		t.Errorf("bytes_reclaimed=%d", got.BytesReclaimed)
+	}
+}
+
+func TestProfiles_Trim_Unavailable(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(TrimProfileResponse{
+			Status: "unavailable",
+			Reason: "no fleet node is connected",
+		})
+	})
+	got, err := client.Profiles.Trim(context.Background(), "prof_src")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "unavailable" {
+		t.Errorf("status=%q", got.Status)
+	}
+	if got.Reason != "no fleet node is connected" {
+		t.Errorf("reason=%q", got.Reason)
+	}
+	if got.SizeBytes != 0 || got.BytesReclaimed != 0 {
+		t.Errorf("size/reclaim should be zero on unavailable, got %d/%d", got.SizeBytes, got.BytesReclaimed)
+	}
+}
+
 func stringPtr(s string) *string { return &s }

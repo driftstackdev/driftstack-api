@@ -40,6 +40,9 @@ export interface ProfileTableRow {
   folder: string;
   tags: ReadonlyArray<string>;
   note: string;
+  /** doc-150 item 5 — already-formatted per-profile storage size (e.g. "2.4 MiB"
+   *  or "—" when never saved). The parent formats it via fmtBytes. */
+  sizeLabel: string;
   createdAtIso: string | null;
   lastUsedIso: string | null;
   selected: boolean;
@@ -69,6 +72,9 @@ export interface ProfilesTableProps {
   onClone?: (id: string) => void;
   cloneDisabled?: boolean;
   cloneDisabledReason?: string;
+  /** doc-150 §8 — "Clear cache, keep logins". Trims the profile's re-fetchable
+   *  caches. Disabled while the row is busy. */
+  onTrim: (id: string) => void;
   onDelete: (id: string) => void;
   // Inline note editing (founder batch #2 "Add note"). Called with the trimmed
   // note on commit (Enter / blur); empty string clears the note.
@@ -91,6 +97,9 @@ const COLS: ReadonlyArray<Col> = [
   { key: null, label: 'UDP', hideMed: true },
   { key: 'created', label: 'Created', hideSmall: true },
   { key: 'lastUsed', label: 'Last used', hideSmall: true },
+  // doc-150 item 5 — per-profile sealed-store size. Collapses on narrow widths
+  // with the other secondary columns.
+  { key: null, label: 'Storage', hideSmall: true, align: 'right' },
   { key: null, label: 'Notes', hideSmall: true },
   { key: null, label: 'Actions', align: 'right' },
 ];
@@ -317,6 +326,13 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
           'never'
         )}
       </td>
+      {/* Storage — per-profile sealed-store size ("—" = never saved). */}
+      <td
+        className={`mono whitespace-nowrap px-3 py-2 text-right text-ink-muted ${HIDE_SMALL}`}
+        title="Stored profile size (encrypted browser state)"
+      >
+        {r.sizeLabel}
+      </td>
       {/* Notes — click to edit inline (founder batch #2 "Add note"). The cell
           stops click propagation so editing never toggles row selection. */}
       <td className={`px-3 py-2 ${HIDE_SMALL}`} onClick={(e) => e.stopPropagation()}>
@@ -416,6 +432,16 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               Duplicate
             </button>
           )}
+          {/* doc-150 §8 — Trim: clear re-fetchable caches, keep logins. */}
+          <button
+            type="button"
+            className="text-[11px] text-ink-muted hover:text-ink-primary disabled:opacity-50"
+            onClick={stop(() => p.onTrim(r.id))}
+            disabled={r.busy}
+            title="Clear cache, keep logins"
+          >
+            Trim
+          </button>
           <button
             type="button"
             className="text-[11px] text-ink-muted hover:text-status-error disabled:opacity-50"

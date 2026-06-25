@@ -11,7 +11,7 @@ export type {
   RotateApiKeyResponse,
 } from './resources/api-keys.js';
 export type { WebhookEndpointList, WebhookDeliveryListPage } from './resources/webhooks.js';
-export type { ProfilesListPage } from './resources/profiles.js';
+export type { ProfilesListPage, TrimProfileResponse } from './resources/profiles.js';
 export type { ProfileSnapshotsListPage } from './resources/profile-snapshots.js';
 export type {
   AccountSelfProfile,
@@ -63,6 +63,12 @@ export {
   type ArchetypeStatus,
   type ArchetypeCanvasFamily,
 } from '@driftstack/api-types';
+// doc-150 items 5/6 — re-export the per-account storage quota constants so
+// SDK + GUI consumers can render the per-profile size meter + account-wide
+// quota bar against the SAME caps the server enforces, without deep-importing
+// @driftstack/api-types. TIER_STORAGE_BYTES_CAP is keyed by AccountTier (bytes);
+// STORAGE_SOFT_WARN_FRACTION is the soft (80%) warn threshold.
+export { TIER_STORAGE_BYTES_CAP, STORAGE_SOFT_WARN_FRACTION } from '@driftstack/api-types';
 export type { Recipe, CreateRecipeRequest } from './resources/recipes.js';
 export type {
   TeamRole,

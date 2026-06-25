@@ -168,7 +168,7 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     void py;
   });
 
-  it("CRITICAL method-verb mix on profiles pinned — 6× POST (create + clone + launch + import + transfer + L4b restore) + 4× GET (list + get + export + L4b listTrash) + 1× PATCH (update) + 2× DELETE (delete + L4b purge). The 13-method count (excluding iterate which delegates to list) is what the dashboard's CRUD + antidetect-launch + V-480 portability + V-666 transfer + L4b recycle-bin flows depend on. (2026-05-20 launch; 2026-05-31 export/import/transfer; 2026-06-16 recycle bin; 2026-06-17 purge.)", () => {
+  it("CRITICAL method-verb mix on profiles pinned — 7× POST (create + clone + launch + import + transfer + L4b restore + doc-150 §8 trim) + 4× GET (list + get + export + L4b listTrash) + 1× PATCH (update) + 2× DELETE (delete + L4b purge). The 14-method count (excluding iterate which delegates to list) is what the dashboard's CRUD + antidetect-launch + V-480 portability + V-666 transfer + L4b recycle-bin + storage-trim flows depend on. (2026-05-20 launch; 2026-05-31 export/import/transfer; 2026-06-16 recycle bin; 2026-06-17 purge; 2026-06-25 trim.)", () => {
     const ts = read(TS_PROFILES);
 
     // sdk-typescript: count method strings.
@@ -177,7 +177,7 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     const tsPatch = (ts.match(/method: 'PATCH'/g) ?? []).length;
     const tsDelete = (ts.match(/method: 'DELETE'/g) ?? []).length;
 
-    expect(tsPost, 'sdk-typescript POST count').toBe(6);
+    expect(tsPost, 'sdk-typescript POST count').toBe(7);
     expect(tsGet, 'sdk-typescript GET count').toBe(4);
     expect(tsPatch, 'sdk-typescript PATCH count').toBe(1);
     expect(tsDelete, 'sdk-typescript DELETE count').toBe(2);
@@ -188,7 +188,7 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     const goPatch = (go.match(/method: "PATCH"/g) ?? []).length;
     const goDelete = (go.match(/method: "DELETE"/g) ?? []).length;
 
-    expect(goPost, 'sdk-go POST count').toBe(6);
+    expect(goPost, 'sdk-go POST count').toBe(7);
     expect(goGet, 'sdk-go GET count').toBe(4);
     expect(goPatch, 'sdk-go PATCH count').toBe(1);
     expect(goDelete, 'sdk-go DELETE count').toBe(2);
@@ -209,7 +209,7 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     expect(py).toMatch(/quote\(profile_id, safe=''\)/);
   });
 
-  it('CRITICAL sdk-python async-mirror parity — sync + async resources expose the same 10 verbs. Drift to dropping an async variant would silently break asyncio callers.', () => {
+  it('CRITICAL sdk-python async-mirror parity — sync + async resources expose the same 11 verbs (incl. doc-150 §8 trim). Drift to dropping an async variant would silently break asyncio callers.', () => {
     const py = read(PY_PROFILES);
 
     // Both ProfilesResource and AsyncProfilesResource classes defined.
@@ -228,6 +228,37 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     expect(py).toMatch(/async def export\(self/);
     expect(py).toMatch(/async def import_\(self/);
     expect(py).toMatch(/async def transfer\(self/);
+    expect(py).toMatch(/async def trim\(self/);
+  });
+
+  it('CRITICAL doc-150 §8 trim verb pinned in all 3 SDKs — POST /v1/profiles/:id/trim "Clear cache, keep logins" storage-reclaim action. The server ALWAYS returns 200 with a DISCRIMINATED status body; drift to dropping the verb in ANY SDK would break the over-cap storage-reclaim flow.', () => {
+    const ts = read(TS_PROFILES);
+    const go = read(GO_PROFILES);
+    const py = read(PY_PROFILES);
+
+    // Verb present per language-canonical naming.
+    expect(ts).toMatch(/trim\(id: string\)/);
+    expect(go).toMatch(/func \(r \*ProfilesResource\) Trim\(/);
+    expect(py).toMatch(/def trim\(self, profile_id: str\)/);
+    expect(py).toMatch(/async def trim\(self, profile_id: str\)/);
+
+    // /trim wire sub-path per SDK.
+    for (const sdk of [ts, go, py]) {
+      expect(sdk).toMatch(/\/trim/);
+    }
+
+    // doc-150 §8 "Clear cache, keep logins" framing pinned per SDK.
+    for (const sdk of [ts, go, py]) {
+      expect(sdk).toMatch(/doc-150 §8/);
+      expect(sdk).toMatch(/Clear cache, keep logins/);
+    }
+
+    // Discriminated response: TS union + Go struct carry the 4 status shapes'
+    // fields (size_bytes / bytes_reclaimed on ok; reason on unavailable/error).
+    expect(ts).toMatch(/TrimProfileResponse/);
+    expect(go).toMatch(/type TrimProfileResponse struct/);
+    expect(go).toMatch(/SizeBytes\s+int64\s+`json:"size_bytes,omitempty"`/);
+    expect(go).toMatch(/BytesReclaimed\s+int64\s+`json:"bytes_reclaimed,omitempty"`/);
   });
 
   it('Cross-SDK V-081 5-invariant cluster — V-081 anchor + V-313 anchor + 7-verb surface + 3 wire-paths + Tier-limit framing. Drift on any would fragment the cross-language profiles contract.', () => {

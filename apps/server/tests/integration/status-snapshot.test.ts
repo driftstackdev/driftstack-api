@@ -29,6 +29,8 @@ function fakeR2(): R2 & { calls: PutCall[] } {
     async putObject(args) {
       calls.push(args);
     },
+
+    async deleteObject() {},
     // eslint-disable-next-line @typescript-eslint/require-await
     async presignPut() {
       return 'http://test/put';

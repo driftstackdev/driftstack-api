@@ -174,6 +174,7 @@ export function Gallery(): JSX.Element {
         onTest={noop}
         onEdit={noop}
         onClone={noop}
+        onTrim={noop}
         onDelete={noop}
         onSaveNote={noop}
       />
@@ -359,6 +360,7 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     testDisabled: false,
     launchDisabled: false,
     note: '',
+    sizeLabel: '4.2 MiB',
     createdAtIso: '2026-06-01T00:00:00.000Z',
   },
   {
@@ -384,6 +386,7 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     testDisabled: false,
     launchDisabled: false,
     note: '',
+    sizeLabel: '18.7 MiB',
     createdAtIso: '2026-06-01T00:00:00.000Z',
   },
   {
@@ -409,6 +412,7 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     testDisabled: false,
     launchDisabled: false,
     note: '',
+    sizeLabel: '1.1 GiB',
     createdAtIso: '2026-06-01T00:00:00.000Z',
   },
   {
@@ -434,6 +438,7 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     testDisabled: false,
     launchDisabled: false,
     note: '',
+    sizeLabel: '—',
     createdAtIso: '2026-06-01T00:00:00.000Z',
   },
   {
@@ -459,6 +464,7 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     testDisabled: false,
     launchDisabled: false,
     note: '',
+    sizeLabel: '512.0 KiB',
     createdAtIso: '2026-06-01T00:00:00.000Z',
   },
 ];

@@ -1044,7 +1044,13 @@ export async function createProductionDeps(
   // L4b Step 4 — recycle-bin retention purge. Daily 04:00 UTC sweep that
   // hard-deletes trashed profiles (+ their wrapped DEK) older than 30 days;
   // re-arms after each run. Without it, soft-deleted rows accumulate forever.
-  const profileTrashPurgeSweeper = new ProfileTrashPurgeSweeperService({ repo: profilesRepo });
+  const profileTrashPurgeSweeper = new ProfileTrashPurgeSweeperService({
+    repo: profilesRepo,
+    // FIX 2 — best-effort delete each purged profile's R2 sealed blob so the
+    // encrypted bytes don't orphan forever (no-op when R2 isn't configured).
+    r2,
+    logger,
+  });
   registerProfileTrashPurgeJob({
     scheduledJobs: scheduledJobsService,
     sweeper: profileTrashPurgeSweeper,
@@ -1077,6 +1083,10 @@ export async function createProductionDeps(
     profilesRepo,
     accountAuditService,
     profileMasterKeyBuf,
+    // FIX 2 — manual purge (DELETE /:id/purge) best-effort deletes the purged
+    // profile's R2 sealed blob (no-op when R2 isn't configured).
+    r2,
+    logger,
   );
   // V-312 — profile snapshots service shares the profiles repo for
   // tier-cap + name-conflict enforcement on restore.

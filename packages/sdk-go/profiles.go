@@ -305,3 +305,39 @@ func (r *ProfilesResource) Transfer(ctx context.Context, profileID string, body 
 	}
 	return &out, nil
 }
+
+// TrimProfileResponse — doc-150 §8 discriminated body for Trim. The server
+// ALWAYS returns HTTP 200; branch on Status, never the HTTP code:
+//   - "ok"          → caches cleared; BytesReclaimed freed, SizeBytes is the new
+//     (smaller) sealed-store size persisted server-side.
+//   - "unavailable" → nothing to trim (fresh profile / storage trim not wired /
+//     no connected node). Reason is human-readable. Not an error.
+//   - "timeout"     → the session node did not respond in time. Safe to retry.
+//   - "error"       → the node reported a failure; the stored blob is untouched.
+//
+// SizeBytes / BytesReclaimed are present only on "ok"; Reason only on
+// "unavailable" / "error" — hence omitempty on all three.
+type TrimProfileResponse struct {
+	Status         string `json:"status"`
+	SizeBytes      int64  `json:"size_bytes,omitempty"`
+	BytesReclaimed int64  `json:"bytes_reclaimed,omitempty"`
+	Reason         string `json:"reason,omitempty"`
+}
+
+// Trim — doc-150 §8 "Clear cache, keep logins". Reclaims a profile's
+// re-fetchable caches (HTTP/media/DOMCache/service-workers) WITHOUT touching
+// logins, localStorage, IndexedDB or open tabs — the headline reclaim action
+// when an account is over its storage cap. The server always responds 200 with
+// a DISCRIMINATED body; branch on Status (see TrimProfileResponse), not the HTTP
+// code. On "ok" the profile's SizeBytes is updated server-side.
+func (r *ProfilesResource) Trim(ctx context.Context, profileID string) (*TrimProfileResponse, error) {
+	var out TrimProfileResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/profiles/" + url.PathEscape(profileID) + "/trim",
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

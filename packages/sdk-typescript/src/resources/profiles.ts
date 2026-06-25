@@ -44,6 +44,22 @@ export interface TransferProfileResponse {
   recipient_account_id: string;
 }
 
+/**
+ * doc-150 §8 — discriminated response from `trim()`. The server ALWAYS returns
+ * HTTP 200 with one of these shapes (branch on `status`, never the HTTP code):
+ *  - `ok`          → caches cleared; `bytes_reclaimed` freed, `size_bytes` is the
+ *                    new (smaller) sealed-store size persisted server-side.
+ *  - `unavailable` → nothing to trim (fresh profile / storage trim not wired /
+ *                    no connected node). `reason` is human-readable. Not an error.
+ *  - `timeout`     → the session node did not respond in time. Safe to retry.
+ *  - `error`       → the node reported a failure; the stored blob is untouched.
+ */
+export type TrimProfileResponse =
+  | { status: 'ok'; size_bytes: number; bytes_reclaimed: number }
+  | { status: 'unavailable'; reason: string }
+  | { status: 'timeout' }
+  | { status: 'error'; reason: string };
+
 export class ProfilesResource {
   constructor(private readonly http: HttpClient) {}
 
@@ -206,6 +222,22 @@ export class ProfilesResource {
       method: 'POST',
       path: `/v1/profiles/${encodeURIComponent(id)}/transfer`,
       body,
+    });
+  }
+
+  /**
+   * doc-150 §8 — "Clear cache, keep logins". Reclaims a profile's re-fetchable
+   * caches (HTTP/media/DOMCache/service-workers) WITHOUT touching logins,
+   * localStorage, IndexedDB or open tabs — the headline reclaim action when an
+   * account is over its storage cap. The server always responds 200 with a
+   * DISCRIMINATED body; branch on `status` (see `TrimProfileResponse`), not the
+   * HTTP code. On `ok` the profile's `size_bytes` is updated server-side, so a
+   * subsequent list reflects the smaller size.
+   */
+  trim(id: string): Promise<TrimProfileResponse> {
+    return this.http.request<TrimProfileResponse>({
+      method: 'POST',
+      path: `/v1/profiles/${encodeURIComponent(id)}/trim`,
     });
   }
 }

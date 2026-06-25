@@ -34,6 +34,7 @@ function fakeR2(uploads: UploadedObject[]): R2 {
       uploads.push({ key, body: buf, contentType });
       return Promise.resolve();
     },
+    deleteObject: () => Promise.resolve(),
     presignPut: () => Promise.resolve('https://presigned.test/put'),
     presignGet: () => Promise.resolve('https://presigned.test/get'),
   };
@@ -248,6 +249,7 @@ describe('AuditArchiveService.archiveTable — R2 upload failure is data-loss-sa
       bucket: 'test-bucket',
       headObject: () => Promise.resolve({ exists: false }),
       putObject: () => Promise.reject(new Error('R2 unavailable')),
+      deleteObject: () => Promise.resolve(),
       presignPut: () => Promise.resolve('https://presigned.test/put'),
       presignGet: () => Promise.resolve('https://presigned.test/get'),
     };
@@ -327,6 +329,7 @@ describe('AuditArchiveService.archiveAll — orchestrates five tables', () => {
         uploads.push({ key, body: Buffer.isBuffer(body) ? body : Buffer.from(body), contentType });
         return Promise.resolve();
       },
+      deleteObject: () => Promise.resolve(),
       presignPut: () => Promise.resolve('https://presigned.test/put'),
       presignGet: () => Promise.resolve('https://presigned.test/get'),
     };

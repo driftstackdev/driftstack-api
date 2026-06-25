@@ -24,6 +24,7 @@ import {
   type NewProfileInput,
 } from '../../src/services/profiles.js';
 import type { AccountAuditService } from '../../src/services/account-audit.js';
+import type { R2 } from '../../src/lib/r2.js';
 import {
   ConflictError,
   NotFoundError,
@@ -167,12 +168,15 @@ function makeRepo(
       return Promise.resolve('restored' as const);
     },
     purgeTrashedBefore: (cutoff) => {
-      const before = rows.length;
+      const purgedIds: string[] = [];
       for (let i = rows.length - 1; i >= 0; i--) {
         const r = rows[i]!;
-        if (r.deletedAt !== null && r.deletedAt.getTime() < cutoff.getTime()) rows.splice(i, 1);
+        if (r.deletedAt !== null && r.deletedAt.getTime() < cutoff.getTime()) {
+          purgedIds.push(r.id);
+          rows.splice(i, 1);
+        }
       }
-      return Promise.resolve(before - rows.length);
+      return Promise.resolve(purgedIds);
     },
     purgeTrashed: ({ id, accountId }) => {
       const i = rows.findIndex(
@@ -605,6 +609,159 @@ describe('V-553.B-21 ProfilesService.transferProfile', () => {
     // The source delete runs only after a successful insert — a race failure
     // must leave the source profile intact.
     expect(state.rows.find((r) => r.id === 'p1')).toBeDefined();
+  });
+});
+
+// file 57 — clone/import/transfer must mint a FRESH wrapped DEK (not run
+// stateless). A DEK-less profile is stateless at session-assign (no restore /
+// save-back URL) → sealed-state persistence silently breaks. Each path mints
+// its OWN fresh DEK bound to the OWNING account's TMK.
+describe('ProfilesService DEK mint on clone/import/transfer (file 57)', () => {
+  function captureInsert(repo: ProfilesRepo): { get: () => NewProfileInput | undefined } {
+    let captured: NewProfileInput | undefined;
+    const inner = repo.insertWithLimit.bind(repo);
+    repo.insertWithLimit = (input, limit) => {
+      captured = input;
+      return inner(input, limit);
+    };
+    return { get: () => captured };
+  }
+
+  it('clone mints a fresh wrapped DEK (round-trips under the account TMK) when the master key is set', async () => {
+    const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_c', name: 'src' })]);
+    const cap = captureInsert(repo);
+    const master = Buffer.alloc(32, 4);
+    const svc = new ProfilesService(repo, null, master);
+    await svc.clone({ id: 'p1', accountId: 'acc_c', tier: TEAM });
+    expect(typeof cap.get()?.wrappedDek).toBe('string');
+    const dek = unwrapProfileDek(master, 'acc_c', cap.get()?.wrappedDek ?? '');
+    expect(dek.length).toBe(32);
+  });
+
+  it('import mints a fresh wrapped DEK bound to the importing account when the master key is set', async () => {
+    const { repo } = makeRepo();
+    const cap = captureInsert(repo);
+    const master = Buffer.alloc(32, 7);
+    const svc = new ProfilesService(repo, null, master);
+    await svc.importProfile({
+      accountId: 'acc_i',
+      tier: TEAM,
+      sourceProfileId: 'p_src',
+      sourceAccountId: 'acc_src',
+      payload: { name: 'imported', archetype: 'default', description: null },
+    });
+    expect(typeof cap.get()?.wrappedDek).toBe('string');
+    const dek = unwrapProfileDek(master, 'acc_i', cap.get()?.wrappedDek ?? '');
+    expect(dek.length).toBe(32);
+  });
+
+  it('transfer mints a fresh wrapped DEK bound to the RECIPIENT account when the master key is set', async () => {
+    const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_src', name: 'movable' })]);
+    const cap = captureInsert(repo);
+    const master = Buffer.alloc(32, 9);
+    const svc = new ProfilesService(repo, null, master);
+    await svc.transferProfile({
+      sourceProfileId: 'p1',
+      sourceAccountId: 'acc_src',
+      recipientAccountId: 'acc_dst',
+      recipientTier: TEAM,
+    });
+    expect(typeof cap.get()?.wrappedDek).toBe('string');
+    // Bound to the recipient's TMK context — unwraps under acc_dst, not acc_src.
+    const dek = unwrapProfileDek(master, 'acc_dst', cap.get()?.wrappedDek ?? '');
+    expect(dek.length).toBe(32);
+  });
+
+  it('clone/import/transfer store NO DEK when the master key is absent (feature inert)', async () => {
+    // clone
+    {
+      const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_c', name: 'src' })]);
+      const cap = captureInsert(repo);
+      const svc = new ProfilesService(repo); // no master key
+      await svc.clone({ id: 'p1', accountId: 'acc_c', tier: TEAM });
+      expect(cap.get()?.wrappedDek).toBeUndefined();
+    }
+    // import
+    {
+      const { repo } = makeRepo();
+      const cap = captureInsert(repo);
+      const svc = new ProfilesService(repo);
+      await svc.importProfile({
+        accountId: 'acc_i',
+        tier: TEAM,
+        sourceProfileId: 'p_src',
+        sourceAccountId: 'acc_src',
+        payload: { name: 'imported', archetype: 'default', description: null },
+      });
+      expect(cap.get()?.wrappedDek).toBeUndefined();
+    }
+    // transfer
+    {
+      const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_src', name: 'movable' })]);
+      const cap = captureInsert(repo);
+      const svc = new ProfilesService(repo);
+      await svc.transferProfile({
+        sourceProfileId: 'p1',
+        sourceAccountId: 'acc_src',
+        recipientAccountId: 'acc_dst',
+        recipientTier: TEAM,
+      });
+      expect(cap.get()?.wrappedDek).toBeUndefined();
+    }
+  });
+});
+
+// FIX 2 — a manual purge (DELETE /:id/purge) must best-effort delete the purged
+// profile's R2 sealed blob so the encrypted bytes don't orphan forever.
+describe('ProfilesService.purge — R2 sealed-blob cleanup (FIX 2)', () => {
+  function stubR2(opts: { fail?: boolean } = {}): {
+    r2: R2;
+    deleted: string[];
+  } {
+    const deleted: string[] = [];
+    const r2 = {
+      deleteObject: (key: string) => {
+        if (opts.fail === true) return Promise.reject(new Error('r2 down'));
+        deleted.push(key);
+        return Promise.resolve();
+      },
+    } as unknown as R2;
+    return { r2, deleted };
+  }
+
+  it('deletes the purged profile blob from R2 (profiles/<id>.sealed) when R2 is wired', async () => {
+    const { repo } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_1', name: 'gone', deletedAt: new Date() }),
+    ]);
+    const { r2, deleted } = stubR2();
+    const svc = new ProfilesService(repo, null, null, r2);
+    await svc.purge({ id: 'p1', accountId: 'acc_1' });
+    expect(deleted).toEqual(['profiles/p1.sealed']);
+  });
+
+  it('still resolves (purge succeeds) when the R2 delete fails — best-effort, never throws', async () => {
+    const { repo } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_1', name: 'gone', deletedAt: new Date() }),
+    ]);
+    const { r2 } = stubR2({ fail: true });
+    const svc = new ProfilesService(repo, null, null, r2);
+    await expect(svc.purge({ id: 'p1', accountId: 'acc_1' })).resolves.toBeUndefined();
+  });
+
+  it('NotFound (no row purged) never touches R2', async () => {
+    const { repo } = makeRepo();
+    const { r2, deleted } = stubR2();
+    const svc = new ProfilesService(repo, null, null, r2);
+    await expect(svc.purge({ id: 'p_missing', accountId: 'acc_1' })).rejects.toThrow(NotFoundError);
+    expect(deleted).toHaveLength(0);
+  });
+
+  it('R2 not wired → purge is DB-only (no crash)', async () => {
+    const { repo } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_1', name: 'gone', deletedAt: new Date() }),
+    ]);
+    const svc = new ProfilesService(repo); // no R2
+    await expect(svc.purge({ id: 'p1', accountId: 'acc_1' })).resolves.toBeUndefined();
   });
 });
 

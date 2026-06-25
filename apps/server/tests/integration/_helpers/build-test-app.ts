@@ -566,6 +566,11 @@ function makeR2Fake(): { r2: R2; store: R2FakeStore } {
       putCalls.push({ key, size: buf.length, contentType });
       return Promise.resolve();
     },
+    deleteObject(key) {
+      // Idempotent like S3/R2 — a missing key is a no-op.
+      objects.delete(key);
+      return Promise.resolve();
+    },
     presignPut({ key }) {
       return Promise.resolve(`https://r2-fake.test/${bucket}/${key}?put=1`);
     },

@@ -180,14 +180,22 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
   async list(args: ListProfilesArgs): Promise<ListProfilesPage> {
     const limit = Math.min(args.limit ?? DEFAULT_PAGE, MAX_PAGE);
 
+    // A supplied cursor is a keyset POSITION on (created_at desc, id desc). We
+    // resolve the anchor row WITHOUT the notDeleted filter: the cursor id is the
+    // PRIOR page's last profile, and that profile may have been soft-deleted (or
+    // restored) between page fetches. If we required it to still be live, a
+    // trashed boundary would make cursorRow undefined → cursorWhere undefined →
+    // the query would silently return PAGE 1 again (with a non-null next_cursor
+    // → a pagination loop / skipped rows). The anchor's (created_at, id) keyset
+    // position is well-defined whether or not the row is currently live, so the
+    // page after a stale boundary still advances correctly. The notDeleted
+    // filter still applies to the RESULT set below — trashed rows never appear.
     let cursorWhere;
     if (args.cursor !== undefined && parseUuidCursor(args.cursor) !== undefined) {
       const [cursorRow] = await this.database.db
         .select({ createdAt: profiles.createdAt, id: profiles.id })
         .from(profiles)
-        .where(
-          and(eq(profiles.id, args.cursor), eq(profiles.accountId, args.accountId), notDeleted),
-        )
+        .where(and(eq(profiles.id, args.cursor), eq(profiles.accountId, args.accountId)))
         .limit(1);
       if (cursorRow !== undefined) {
         cursorWhere = or(
@@ -343,13 +351,14 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
   // L4b Step 4 — retention purge. The ONLY hard DELETE on profiles (delete()
   // is now soft). Scoped to trashed rows older than cutoff so a live profile
   // can never be reached: isNotNull(deletedAt) AND deletedAt < cutoff. Removing
-  // the row also drops its wrapped DEK. Returns the purged count.
-  async purgeTrashedBefore(cutoff: Date): Promise<number> {
+  // the row also drops its wrapped DEK. Returns the purged IDs so the caller can
+  // best-effort delete each profile's orphaned R2 sealed blob (count = .length).
+  async purgeTrashedBefore(cutoff: Date): Promise<string[]> {
     const result = await this.database.db
       .delete(profiles)
       .where(and(isNotNull(profiles.deletedAt), lt(profiles.deletedAt, cutoff)))
       .returning({ id: profiles.id });
-    return result.length;
+    return result.map((r) => r.id);
   }
 
   // Anti-abuse companion (2026-06-17) — user-initiated permanent delete of ONE

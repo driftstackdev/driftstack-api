@@ -124,18 +124,19 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
     );
   });
 
-  it('encodeURIComponent invariant — :id escaped EXACTLY 9 times (get + update + delete + launch + clone + export + transfer + L4b restore + L4b purge). import() + listTrash() take no :id. 2026-05-31 — export/transfer (V-480/V-666); 2026-06-16 — restore (L4b); 2026-06-17 — purge (L4b).', () => {
+  it('encodeURIComponent invariant — :id escaped EXACTLY 10 times (get + update + delete + launch + clone + export + transfer + L4b restore + L4b purge + doc-150 §8 trim). import() + listTrash() take no :id. 2026-05-31 — export/transfer (V-480/V-666); 2026-06-16 — restore (L4b); 2026-06-17 — purge (L4b); 2026-06-25 — trim (doc-150 §8).', () => {
     const matches = body.match(/encodeURIComponent\(id\)/g) ?? [];
-    expect(matches.length, 'expected encodeURIComponent(id) 9 times').toBe(9);
+    expect(matches.length, 'expected encodeURIComponent(id) 10 times').toBe(10);
   });
 
-  it('14-verb inventory + verb-mix invariants — exactly 14 method declarations (create + list + iterate + get + update + launch + delete + listTrash + restore + purge + clone + export + import + transfer). Verb mix: 6 POSTs (create + launch + restore + clone + import + transfer) + 4 GETs (list + get + listTrash + export) + 1 PATCH (update) + 2 DELETEs (delete + L4b purge) = 13 wire-call verbs (iterate is delegation). NO PUT — partial updates use PATCH.', () => {
+  it('15-verb inventory + verb-mix invariants — exactly 15 method declarations (create + list + iterate + get + update + launch + delete + listTrash + restore + purge + clone + export + import + transfer + trim). Verb mix: 7 POSTs (create + launch + restore + clone + import + transfer + trim) + 4 GETs (list + get + listTrash + export) + 1 PATCH (update) + 2 DELETEs (delete + L4b purge) = 14 wire-call verbs (iterate is delegation). NO PUT — partial updates use PATCH.', () => {
     const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
-    expect(methods.length, 'expected 14 verb declarations').toBe(14);
+    expect(methods.length, 'expected 15 verb declarations').toBe(15);
     const posts = (body.match(/method: 'POST'/g) ?? []).length;
-    expect(posts, 'expected 6 POSTs (create + launch + restore + clone + import + transfer)').toBe(
-      6,
-    );
+    expect(
+      posts,
+      'expected 7 POSTs (create + launch + restore + clone + import + transfer + trim)',
+    ).toBe(7);
     const gets = (body.match(/method: 'GET'/g) ?? []).length;
     expect(gets, 'expected 4 GETs (list + get + listTrash + export)').toBe(4);
     const patches = (body.match(/method: 'PATCH'/g) ?? []).length;

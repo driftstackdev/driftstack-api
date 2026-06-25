@@ -116,16 +116,26 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
     );
   });
 
-  it('list cursor framing pinned: cursor lookup is ACCOUNT-SCOPED via and(eq(id, cursor), eq(accountId, args.accountId)) — prevents cross-account cursor probe; composite OR(lt(createdAt, c.createdAt), and(eq(createdAt, c.createdAt), lt(id, c.id)))', () => {
+  it('list cursor framing pinned: cursor lookup is ACCOUNT-SCOPED via and(eq(id, cursor), eq(accountId, args.accountId)) — prevents cross-account cursor probe; the cursor-anchor lookup deliberately OMITS notDeleted (a keyset POSITION is well-defined even if the boundary row was trashed between pages → no reset-to-page-1); composite OR(lt(createdAt, c.createdAt), and(eq(createdAt, c.createdAt), lt(id, c.id)))', () => {
     // Per-fragment toContain (no long \s*\n?\s* chain — it backtracks
     // pathologically AND breaks when prettier wraps the .where() across lines;
-    // see feedback_no_long_chain_parity_regex). The security-relevant pins are
-    // the account-scoped + notDeleted cursor lookup and the composite tiebreak.
+    // see feedback_no_long_chain_parity_regex). The security-relevant pin is the
+    // account-scoped cursor lookup (cross-account probe blocked) + the composite
+    // tiebreak. FIX 3 (2026-06-25) dropped notDeleted from the cursor-anchor
+    // lookup ONLY (the RESULT set below stays notDeleted): a cursor pointing at a
+    // profile trashed between page fetches must still ADVANCE the page, not reset
+    // to page 1. The negative-pin below guards that notDeleted did NOT creep back
+    // into the cursor-anchor .where().
     expect(body).toContain(
       'if (args.cursor !== undefined && parseUuidCursor(args.cursor) !== undefined) {',
     );
     expect(body).toContain('.select({ createdAt: profiles.createdAt, id: profiles.id })');
     expect(body).toContain(
+      'and(eq(profiles.id, args.cursor), eq(profiles.accountId, args.accountId))',
+    );
+    // Negative pin: the cursor-anchor lookup must NOT re-add notDeleted (would
+    // reintroduce the trashed-boundary page-1 reset FIX 3 closed).
+    expect(body).not.toContain(
       'and(eq(profiles.id, args.cursor), eq(profiles.accountId, args.accountId), notDeleted)',
     );
     expect(body).toContain('lt(profiles.createdAt, cursorRow.createdAt),');

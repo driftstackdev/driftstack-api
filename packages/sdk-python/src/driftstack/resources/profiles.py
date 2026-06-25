@@ -132,6 +132,17 @@ class ProfilesResource:
             json_body=coerce_body(body),
         )
 
+    def trim(self, profile_id: str) -> dict[str, Any]:
+        """doc-150 §8 — "Clear cache, keep logins". Reclaims a profile's
+        re-fetchable caches (HTTP/media/DOMCache/service-workers) WITHOUT
+        touching logins, localStorage, IndexedDB or open tabs — the headline
+        reclaim action when an account is over its storage cap. The server
+        always responds 200 with a DISCRIMINATED body; branch on
+        ``result["status"]`` (``ok`` → ``size_bytes`` + ``bytes_reclaimed``;
+        ``unavailable`` / ``error`` → ``reason``; ``timeout``), not the HTTP
+        code. On ``ok`` the profile's ``size_bytes`` is updated server-side."""
+        return self._http.request("POST", f"/v1/profiles/{quote(profile_id, safe='')}/trim")
+
 
 class AsyncProfilesResource:
     """Async profiles resource."""
@@ -220,3 +231,10 @@ class AsyncProfilesResource:
             f"/v1/profiles/{quote(profile_id, safe='')}/transfer",
             json_body=coerce_body(body),
         )
+
+    async def trim(self, profile_id: str) -> dict[str, Any]:
+        """Async mirror — doc-150 §8 "Clear cache, keep logins". Reclaims a
+        profile's re-fetchable caches WITHOUT touching logins/localStorage/
+        IndexedDB/open tabs. Always 200 with a DISCRIMINATED body; branch on
+        ``result["status"]``, not the HTTP code."""
+        return await self._http.request("POST", f"/v1/profiles/{quote(profile_id, safe='')}/trim")

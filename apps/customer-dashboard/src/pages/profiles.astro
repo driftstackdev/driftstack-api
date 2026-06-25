@@ -129,6 +129,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       <div class="mt-2 h-2 w-full max-w-md overflow-hidden rounded-full bg-tk-bg" role="presentation">
         <div data-field="storage-bar" class="h-full w-0 rounded-full bg-tk-accent transition-[width]"></div>
       </div>
+      {/* doc-150 §8 — when at/over the soft/hard storage threshold, surface the
+          Trim ("Clear cache, keep logins") reclaim action alongside the implicit
+          delete/upgrade options. Trim frees re-fetchable caches without dropping
+          logins, so it's the safest first reclaim step. Hidden until over-soft;
+          the click scrolls to the profile list where each row's Trim lives. */}
+      <p data-field="storage-trim-cta" class="mt-1 hidden text-xs text-tk-ink-3">
+        Low on space? <button type="button" data-storage-trim-cta class="font-medium text-tk-accent hover:underline">Trim a profile</button> (clear cache, keep logins) to reclaim storage, or delete one / upgrade your tier.
+      </p>
     </div>
 
     <!--
@@ -883,6 +891,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         const storagePct = root.querySelector('[data-field="storage-pct"]');
         const storageWarn = root.querySelector('[data-field="storage-warn"]');
         const storageBar = root.querySelector('[data-field="storage-bar"]');
+        const storageTrimCta = root.querySelector('[data-field="storage-trim-cta"]');
         if (!storageLine || !storageTotal) return;
         if (!Array.isArray(profiles) || profiles.length === 0) {
           storageLine.classList.add('hidden');
@@ -920,7 +929,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (fraction >= 1) {
               storageWarn.textContent = isEnterprise
                 ? ' · over your plan allowance — contact sales to raise it'
-                : ' · storage limit reached — delete a profile or upgrade to launch new profile sessions';
+                : ' · storage limit reached — trim, delete a profile, or upgrade to launch new profile sessions';
               storageWarn.className = 'font-medium text-rose-700';
               storageWarn.classList.remove('hidden');
             } else if (fraction >= storageSoftFraction) {
@@ -932,6 +941,14 @@ const apiBaseUrl = resolveApiBaseUrl();
               storageWarn.textContent = '';
             }
           }
+          // doc-150 §8 — surface the Trim reclaim CTA from the soft threshold up
+          // (the headline non-destructive way to reclaim space before
+          // delete/upgrade). Enterprise is soft-only; the CTA still helps it
+          // reclaim, so it shows there too.
+          if (storageTrimCta) {
+            if (fraction >= storageSoftFraction) storageTrimCta.classList.remove('hidden');
+            else storageTrimCta.classList.add('hidden');
+          }
         } else {
           // Tier/cap not yet known — show the total without the quota leg.
           if (storageCapEl) storageCapEl.textContent = '—';
@@ -940,6 +957,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             storageWarn.classList.add('hidden');
             storageWarn.textContent = '';
           }
+          if (storageTrimCta) storageTrimCta.classList.add('hidden');
           if (storageBar) storageBar.style.width = '0%';
         }
         storageLine.classList.remove('hidden');
@@ -1072,7 +1090,11 @@ const apiBaseUrl = resolveApiBaseUrl();
               )
               .then(() => {
                 showBanner('Transferred "' + name + '" to ' + recipient + '.');
-                if (typeof load === 'function') load();
+                // The transferred profile is gone from THIS account — refresh the
+                // list + storage meter (refresh() is the real reload fn the other
+                // actions use; the old `load()` was undefined → a silent no-op, so
+                // the grid kept showing the now-foreign profile until a manual reload).
+                return refresh();
               })
               .catch((err) => {
                 showBanner(
@@ -1717,6 +1739,17 @@ const apiBaseUrl = resolveApiBaseUrl();
             createSubmit.textContent = 'Create profile';
           });
       });
+
+      // doc-150 §8 — the over-soft/over-cap storage-warning "Trim a profile" CTA
+      // scrolls the profile list into view so the customer can reach each row's
+      // Trim ("Clear cache, keep logins") action. Wired once (the CTA element is
+      // static; only its visibility toggles per render).
+      const storageTrimCtaBtn = root.querySelector('[data-storage-trim-cta]');
+      if (storageTrimCtaBtn && list) {
+        storageTrimCtaBtn.addEventListener('click', () => {
+          list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      }
 
       if (!token) {
         showBanner('Sign in to see live profiles. Showing preview data below.');

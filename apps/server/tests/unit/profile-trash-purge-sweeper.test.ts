@@ -7,20 +7,37 @@ import {
   nextPurgeRunAt,
   PROFILE_TRASH_PURGE_JOB_TYPE,
 } from '../../src/services/profile-trash-purge-sweeper.js';
+import { profileSealedBlobKey, type R2 } from '../../src/lib/r2.js';
 import { InMemoryProfilesRepo } from '../integration/_helpers/in-memory-profiles-repo.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Minimal repo stub that records the cutoff tickOnce passes to purgeTrashedBefore.
-function stubRepo(): { repo: ProfilesRepo; cutoffs: Date[] } {
+function stubRepo(ids: string[] = ['p1', 'p2', 'p3']): { repo: ProfilesRepo; cutoffs: Date[] } {
   const cutoffs: Date[] = [];
   const repo = {
     purgeTrashedBefore: (cutoff: Date) => {
       cutoffs.push(cutoff);
-      return Promise.resolve(3);
+      return Promise.resolve(ids);
     },
   } as unknown as ProfilesRepo;
   return { repo, cutoffs };
+}
+
+// Minimal R2 stub recording the keys deleted; `failOn` rejects for one key so we
+// can assert the per-blob error is tolerated (logged, not thrown).
+function stubR2(opts: { failOn?: string } = {}): { r2: R2; deleted: string[] } {
+  const deleted: string[] = [];
+  const r2 = {
+    deleteObject: (key: string) => {
+      if (opts.failOn !== undefined && key === opts.failOn) {
+        return Promise.reject(new Error('r2 down'));
+      }
+      deleted.push(key);
+      return Promise.resolve();
+    },
+  } as unknown as R2;
+  return { r2, deleted };
 }
 
 describe('ProfileTrashPurgeSweeperService.tickOnce', () => {
@@ -32,6 +49,38 @@ describe('ProfileTrashPurgeSweeperService.tickOnce', () => {
     expect(res.purged).toBe(3);
     expect(cutoffs).toHaveLength(1);
     expect(cutoffs[0]!.getTime()).toBe(now.getTime() - 30 * DAY_MS);
+  });
+
+  it('FIX 2 — deletes each purged profile sealed blob from R2 when wired', async () => {
+    const { repo } = stubRepo(['pa', 'pb']);
+    const { r2, deleted } = stubR2();
+    const svc = new ProfileTrashPurgeSweeperService({ repo, r2 });
+    const res = await svc.tickOnce(new Date('2026-06-16T12:00:00.000Z'));
+    expect(res.purged).toBe(2);
+    expect(res.blobsDeleted).toBe(2);
+    expect(deleted).toEqual([profileSealedBlobKey('pa'), profileSealedBlobKey('pb')]);
+  });
+
+  it('FIX 2 — tolerates a per-blob R2 delete failure (logs, never throws; row already gone)', async () => {
+    const { repo } = stubRepo(['pa', 'pb']);
+    const { r2, deleted } = stubR2({ failOn: profileSealedBlobKey('pa') });
+    const errors: unknown[] = [];
+    const logger = { error: (o: unknown) => errors.push(o) } as never;
+    const svc = new ProfileTrashPurgeSweeperService({ repo, r2, logger });
+    const res = await svc.tickOnce(new Date('2026-06-16T12:00:00.000Z'));
+    // The DB purge count is unaffected; only the surviving blob delete counts.
+    expect(res.purged).toBe(2);
+    expect(res.blobsDeleted).toBe(1);
+    expect(deleted).toEqual([profileSealedBlobKey('pb')]);
+    expect(errors).toHaveLength(1);
+  });
+
+  it('FIX 2 — DB-only purge (no R2 wired) deletes nothing + reports blobsDeleted 0', async () => {
+    const { repo } = stubRepo(['pa', 'pb']);
+    const svc = new ProfileTrashPurgeSweeperService({ repo });
+    const res = await svc.tickOnce(new Date('2026-06-16T12:00:00.000Z'));
+    expect(res.purged).toBe(2);
+    expect(res.blobsDeleted).toBe(0);
   });
 
   it('honors a custom retentionDays', async () => {
@@ -79,14 +128,15 @@ describe('purgeTrashedBefore data correctness (in-memory repo)', () => {
 
     // Cutoff in the PAST → the just-trashed row isn't old enough → nothing purged.
     const past = new Date(Date.now() - 60 * 60 * 1000);
-    expect(await repo.purgeTrashedBefore(past)).toBe(0);
+    expect(await repo.purgeTrashedBefore(past)).toEqual([]);
     // Both rows still resolvable (live via findById; trashed via listTrashed).
     expect(await repo.findById({ id: live.id, accountId: 'acc_1' })).not.toBeNull();
     expect((await repo.listTrashed({ accountId: 'acc_1' })).map((p) => p.id)).toEqual([doomed.id]);
 
     // Cutoff in the FUTURE → the trashed row is "older than cutoff" → purged.
+    // Returns the purged id so the caller can delete its orphaned R2 blob.
     const future = new Date(Date.now() + 60 * 60 * 1000);
-    expect(await repo.purgeTrashedBefore(future)).toBe(1);
+    expect(await repo.purgeTrashedBefore(future)).toEqual([doomed.id]);
     // Trash is now empty; the LIVE profile is untouched (the key safety invariant).
     expect(await repo.listTrashed({ accountId: 'acc_1' })).toHaveLength(0);
     expect(await repo.findById({ id: live.id, accountId: 'acc_1' })).not.toBeNull();

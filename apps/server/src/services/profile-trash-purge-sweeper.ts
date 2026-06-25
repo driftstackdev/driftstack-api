@@ -18,6 +18,7 @@
 import type { ProfilesRepo } from './profiles.js';
 import type { ScheduledJobsService, ScheduledJobRow } from './scheduled-jobs.js';
 import type { Logger } from '../lib/logger.js';
+import { profileSealedBlobKey, type R2 } from '../lib/r2.js';
 
 export const PROFILE_TRASH_PURGE_JOB_TYPE = 'profile_trash.purge';
 
@@ -28,10 +29,23 @@ export interface ProfileTrashPurgeSweeperDeps {
   readonly repo: ProfilesRepo;
   /** Days a trashed profile is retained before purge. Defaults to 30. */
   readonly retentionDays?: number;
+  /**
+   * R2 client for the profiles' sealed-blob store. When wired, each purged
+   * profile's `profiles/<id>.sealed` object is best-effort deleted so the
+   * encrypted bytes don't orphan in R2 forever. Null/undefined (R2 not
+   * configured) → DB-only purge, unchanged. The `logger` records a
+   * best-effort delete failure (the DB row is already gone — a left-behind
+   * blob is opaque + inert, so we log and move on, never throw).
+   */
+  readonly r2?: R2 | null;
+  readonly logger?: Logger;
 }
 
 export interface ProfileTrashPurgeResult {
   readonly purged: number;
+  /** doc-150 — count of purged sealed blobs the R2 cleanup deleted (0 when R2
+   *  is unwired or every purged profile had never been saved). */
+  readonly blobsDeleted: number;
 }
 
 export class ProfileTrashPurgeSweeperService {
@@ -43,8 +57,27 @@ export class ProfileTrashPurgeSweeperService {
 
   async tickOnce(now: Date): Promise<ProfileTrashPurgeResult> {
     const cutoff = new Date(now.getTime() - this.retentionMs);
-    const purged = await this.deps.repo.purgeTrashedBefore(cutoff);
-    return { purged };
+    const purgedIds = await this.deps.repo.purgeTrashedBefore(cutoff);
+    // Best-effort R2 cleanup of each purged profile's orphaned sealed blob.
+    // R2 DELETE is idempotent (a never-saved profile's missing blob is a no-op
+    // 204), so we delete unconditionally. A failure is logged, never thrown —
+    // the DB row is already gone and the blob is opaque + inert.
+    let blobsDeleted = 0;
+    const r2 = this.deps.r2;
+    if (r2 !== undefined && r2 !== null) {
+      for (const id of purgedIds) {
+        try {
+          await r2.deleteObject(profileSealedBlobKey(id));
+          blobsDeleted += 1;
+        } catch (err) {
+          this.deps.logger?.error?.(
+            { component: 'profile-trash-purge', profileId: id, err },
+            'failed to delete purged profile sealed-blob from R2 (orphan left behind)',
+          );
+        }
+      }
+    }
+    return { purged: purgedIds.length, blobsDeleted };
   }
 }
 
@@ -61,7 +94,11 @@ export function registerProfileTrashPurgeJob(opts: RegisterProfileTrashPurgeJobO
   opts.scheduledJobs.register(PROFILE_TRASH_PURGE_JOB_TYPE, async (_job: ScheduledJobRow) => {
     const result = await opts.sweeper.tickOnce(new Date(now()));
     opts.logger.info?.(
-      { component: 'profile-trash-purge', purged: result.purged },
+      {
+        component: 'profile-trash-purge',
+        purged: result.purged,
+        blobsDeleted: result.blobsDeleted,
+      },
       'profile-trash purge sweep complete',
     );
     // Re-arm with dedup OFF — the in-flight (still-locked, not-yet-completed)

@@ -211,10 +211,14 @@ export class StorageQuotaExceededError extends ApiError {
     super({
       type: PROBLEM_TYPES.StorageQuotaExceeded,
       title: 'Storage quota reached',
+      // The human `detail` reads in GiB (the caps are whole-GiB per-tier, so
+      // "5 GiB" is far more legible than "5368709120 bytes"); the structured
+      // `used_bytes`/`cap_bytes` extensions below stay RAW bytes for machine
+      // consumers (dashboard/SDK render their own precise overage).
       status: 409,
       detail:
-        `Your profiles use ${args.usedBytes.toString()} bytes, which has reached the ` +
-        `${args.capBytes.toString()}-byte storage limit for the "${args.tier}" tier. ` +
+        `Your profiles use ${formatGiB(args.usedBytes)}, which has reached the ` +
+        `${formatGiB(args.capBytes)} storage limit for the "${args.tier}" tier. ` +
         `Delete or trim a profile, or upgrade your tier, then launch again. ` +
         `Sessions without a profile are not affected.`,
       extensions: {
@@ -226,6 +230,16 @@ export class StorageQuotaExceededError extends ApiError {
     });
     this.name = 'StorageQuotaExceededError';
   }
+}
+
+// Render a byte count as GiB for the human-facing storage-quota message. Whole
+// GiB show with no decimal ("5 GiB"); a fractional amount shows up to 2 decimals
+// trimmed of trailing zeros ("2.5 GiB", "1.25 GiB"). Used ONLY for `detail` —
+// the structured byte extensions stay raw.
+function formatGiB(bytes: number): string {
+  const gib = bytes / 2 ** 30;
+  const rounded = Math.round(gib * 100) / 100;
+  return `${Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(2).replace(/\.?0+$/, '')} GiB`;
 }
 
 export class SessionDestroyedError extends ApiError {
