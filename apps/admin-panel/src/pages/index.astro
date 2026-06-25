@@ -589,9 +589,12 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
         list.innerHTML = entries
           .map((entry) => {
+            // Prefer the email (UUID secondary) when the server enriches
+            // the entry, so the recent-actions feed reads "who → action →
+            // to whom" without UUID-chasing. Falls back to the UUID.
             const targetFrag = entry.target_account_id
               ? '<p class="mt-1 font-mono text-xs text-tk-ink-3">target: ' +
-                escapeHtml(entry.target_account_id) +
+                escapeHtml(entry.target_email || entry.target_account_id) +
                 '</p>'
               : '';
             const resultClass =
@@ -606,7 +609,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               '</p>' +
               '<p class="mt-1 text-sm text-tk-ink">' +
               '<span class="font-mono text-xs text-tk-ink-2">' +
-              escapeHtml(entry.admin_account_id) +
+              escapeHtml(entry.admin_email || entry.admin_account_id) +
               '</span> ' +
               '<span class="font-mono text-xs text-tk-ink-3">→</span> ' +
               '<code class="font-mono text-xs text-tk-accent">' +

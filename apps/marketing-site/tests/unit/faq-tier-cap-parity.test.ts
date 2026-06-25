@@ -7,7 +7,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { TIER_CONCURRENT_SESSION_LIMITS, PROFILES_PER_TIER } from '@driftstack/api-types';
+import {
+  TIER_CONCURRENT_SESSION_LIMITS,
+  PROFILES_PER_TIER,
+  TIER_FEATURES,
+} from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -60,5 +64,24 @@ describe('W261.C /faq ↔ TIER_CONCURRENT_SESSION_LIMITS parity', () => {
   it('PROFILES_PER_TIER values referenced in the FAQ match the schema', () => {
     // Free tier profile cap is 1. (Sanity bound only; FAQ may not show all numbers.)
     expect(PROFILES_PER_TIER.free).toBe(1);
+  });
+
+  it('bundled-LLM tier gating answer matches TIER_FEATURES llmBilling (Agency is BYOK-only, NOT bundled)', () => {
+    // Guard against the drift fixed here: the FAQ once claimed Agency
+    // supports bundled-LLM. Authoritative gating: only api_builder /
+    // api_scale / enterprise carry a 'byok_or_bundled*' llmBilling; team,
+    // agency, and api_starter are 'byok_only'.
+    expect(TIER_FEATURES.agency_manual.llmBilling).toBe('byok_only');
+    expect(TIER_FEATURES.team_manual.llmBilling).toBe('byok_only');
+    expect(TIER_FEATURES.api_starter.llmBilling).toBe('byok_only');
+    expect(TIER_FEATURES.api_builder.llmBilling).toBe('byok_or_bundled');
+    expect(TIER_FEATURES.api_scale.llmBilling).toBe('byok_or_bundled');
+    // FAQ free-text must list the BYOK-only set including Agency, and the
+    // bundled set as Builder / Scale / Enterprise — never list Agency as
+    // bundled-supporting.
+    expect(page).toMatch(
+      /Team, Agency, and API Starter are BYOK-only; API Builder, API Scale, and Enterprise support bundled-LLM with consent/,
+    );
+    expect(page).not.toMatch(/Agency support bundled-LLM/);
   });
 });

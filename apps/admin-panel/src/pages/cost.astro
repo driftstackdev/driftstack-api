@@ -25,7 +25,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <header class="mb-10">
       <p class="text-sm text-tk-ink-3">Driftstack admin · staff-only</p>
-      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Cost (V-541)</h1>
+      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Cost</h1>
      <div class="mt-3 h-px w-16 bg-gradient-to-r from-oxblood-700 to-transparent" aria-hidden="true"></div>
       <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
         Per-account cost estimate for the current billing cycle. Numbers
@@ -133,10 +133,13 @@ const apiBaseUrl = resolveApiBaseUrl();
             Top accounts by cost
           </h2>
           <p class="mt-1 text-sm text-tk-ink-3">
-            Sorted descending by total cents in the current cycle. Fetches the
-            first <code class="font-mono text-xs">limit=50</code> accounts then
-            asks <code class="font-mono text-xs">/v1/admin/cost/overview</code>
-            (which already returns sorted by total cost desc).
+            Top by total cents among the most recent
+            <code class="font-mono text-xs">limit=50</code> accounts (by
+            creation order) — not the platform-wide top spenders. Fetches that
+            page then asks <code class="font-mono text-xs">/v1/admin/cost/overview</code>
+            to sort it by total cost desc. A high-cost account outside the most
+            recent 50 won't appear until a server-side cost-ranked endpoint
+            lands; for a specific account use the per-account breakdown above.
           </p>
         </div>
         <div class="flex items-center gap-2">

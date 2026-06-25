@@ -261,10 +261,23 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           '<p class="mt-0.5 font-mono text-[11px] text-tk-ink-3">' +
           escapeHtml(archetypeLabel(s.archetype)) +
           '</p></td>' +
+          // Show the account email as the primary line (with the UUID
+          // secondary), like the Accounts list — so an operator can tell
+          // whose session this is without copying the id into /accounts.
+          // Falls back to the bare UUID when the server hasn't enriched
+          // the row with account_email yet.
           '<td class="px-4 py-3">' +
-          '<p class="font-mono text-[11px] text-tk-ink-3">' +
-          escapeHtml(s.account_id) +
-          '</p></td>' +
+          (s.account_email
+            ? '<p class="text-sm text-tk-ink">' +
+              escapeHtml(s.account_email) +
+              '</p>' +
+              '<p class="mt-0.5 font-mono text-[11px] text-tk-ink-3">' +
+              escapeHtml(s.account_id) +
+              '</p>'
+            : '<p class="font-mono text-[11px] text-tk-ink-3">' +
+              escapeHtml(s.account_id) +
+              '</p>') +
+          '</td>' +
           '<td class="px-4 py-3">' +
           '<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
           (STATUS_BADGE[s.status] || '') +
@@ -375,6 +388,17 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       // success/error.
       async function destroy(id, btn) {
         if (!token) return;
+        // Force-destroy ends a live customer browser session immediately —
+        // gate it behind an explicit yes/no confirm first (destructive: true
+        // means a stray Enter can't fire it; the operator must click OK),
+        // matching every other destructive admin action (suspend / drain /
+        // restart). Without this, OK/Enter on the optional-reason prompt
+        // alone destroyed the session.
+        const confirmed = await window.driftstackConfirm(
+          'Force-destroy session ' + id + "? This ends the customer's live browser session immediately.",
+          { confirmLabel: 'Force-destroy', destructive: true },
+        );
+        if (!confirmed) return;
         const reason =
           (await window.driftstackPrompt('Reason for force-destroying ' + id + ' (optional):', {
             placeholder: 'optional',

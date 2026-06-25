@@ -41,12 +41,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       <p class="mt-6 hidden text-xs text-tk-ink-3" data-field="signin-hint">
         Not signed in? <a
           href="/login"
+          data-link="signin"
           class="text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft">Sign in</a
         > or <a
           href="/signup"
+          data-link="signup"
           class="text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft"
           >create your account</a
-        > with the email the invite was sent to, then click the invite link again.
+        > with the email the invite was sent to. We'll bring you straight back here to finish.
       </p>
     </div>
   </div>
@@ -58,6 +60,26 @@ const apiBaseUrl = resolveApiBaseUrl();
       const banner = root.querySelector('[data-banner]');
       const intro = root.querySelector('[data-field="intro"]');
       const signinHint = root.querySelector('[data-field="signin-hint"]');
+
+      // Carry the current invite URL (/team/accept?token=…) through
+      // sign-in / sign-up as ?next= so the invitee returns here and
+      // acceptance auto-completes — rather than landing on the
+      // dashboard home with the token gone. Both /login and /signup
+      // honour a safeNext-guarded ?next= round-trip (login.astro /
+      // signup.astro), and thread it through verify-email, so a
+      // not-signed-in invitee resumes the flow seamlessly. The accept
+      // route is requireAuth and the token is single-use, email-bound,
+      // and 7-day-expiring, so the round-trip is safe.
+      try {
+        const here = window.location.pathname + window.location.search;
+        const next = encodeURIComponent(here);
+        const signinLink = root.querySelector('[data-link="signin"]');
+        const signupLink = root.querySelector('[data-link="signup"]');
+        if (signinLink) signinLink.setAttribute('href', '/login?next=' + next);
+        if (signupLink) signupLink.setAttribute('href', '/signup?next=' + next);
+      } catch (_) {
+        /* leave the bare /login + /signup fallbacks in place */
+      }
 
       function showBanner(text, showSignin) {
         if (intro) intro.textContent = '';

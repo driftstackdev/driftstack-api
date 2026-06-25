@@ -270,10 +270,21 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<p class="mt-0.5 font-mono text-[10px] text-tk-ink-3">' +
           escapeHtml(k.id) +
           '</p></td>' +
+          // Email primary (UUID secondary) when the server enriches the
+          // row, like the Accounts list — so the operator can tell whose
+          // key this is. Falls back to the bare UUID otherwise.
           '<td class="px-4 py-3">' +
-          '<p class="font-mono text-[10px] text-tk-ink-3">' +
-          escapeHtml(k.account_id) +
-          '</p></td>' +
+          (k.account_email
+            ? '<p class="text-xs text-tk-ink">' +
+              escapeHtml(k.account_email) +
+              '</p>' +
+              '<p class="mt-0.5 font-mono text-[10px] text-tk-ink-3">' +
+              escapeHtml(k.account_id) +
+              '</p>'
+            : '<p class="font-mono text-[10px] text-tk-ink-3">' +
+              escapeHtml(k.account_id) +
+              '</p>') +
+          '</td>' +
           '<td class="px-4 py-3"><div class="flex flex-wrap gap-1">' +
           scopeChips +
           '</div></td>' +

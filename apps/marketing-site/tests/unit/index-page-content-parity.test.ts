@@ -119,14 +119,20 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).not.toMatch(/Hetzner\s+Falkenstein, Neon EU, and Cloudflare R2/);
   });
 
-  it('egress card body no longer claims "on the roadmap" prose (F-5 Issue 5); the small "# Roadmap — customer-configurable egress" inline comment in the EU-residency code-preview is the canonical honest disclosure, gated by W499.D against the server source state. Priority order SOCKS5 / OpenVPN / WireGuard per founder verdict 2026-05-16 (Phase 1 / Phase 2 / Phase 3 deferred); matches the server source string in session-proxy.ts.', () => {
+  it('egress code-preview reflects the accurate MIXED state, consistent with /trust/security-overview (egress marked live): per-profile SOCKS5 / OpenVPN / WireGuard egress IS shipped (attached per profile, dialed at session launch); only the per-session "change a running session\'s proxy mid-flight" path is roadmap. The page must NOT flatly claim egress is "(not shipped)" — that stale outlier contradicted the live Egress feature section + the "Exit anywhere. Leak nowhere." console row + the security-overview green-check. Priority order SOCKS5 / OpenVPN / WireGuard per founder verdict 2026-05-16.', () => {
     expect(body).toMatch(/Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\)\s+— see/);
-    expect(body).toMatch(/SOCKS5 \/ OpenVPN \/ WireGuard \(not shipped\)/);
+    // Live per-profile egress framing in the code-preview.
+    expect(body).toMatch(/SOCKS5 \/ OpenVPN \/ WireGuard, attached per profile/);
+    expect(body).toMatch(/dialed at session launch · DNS leaks blocked/);
+    // Only the mid-flight per-session proxy swap is honestly roadmap.
+    expect(body).toMatch(/change a running session's proxy mid-flight \(not shipped\)/);
+    // The stale "egress itself is not shipped" outlier must NOT return —
+    // it self-contradicted every other egress surface on the site.
+    expect(body).not.toMatch(/SOCKS5 \/ OpenVPN \/ WireGuard \(not shipped\)/);
+    expect(body).not.toMatch(/SOCKS5 \/ WireGuard \/ OpenVPN \(not shipped\)/);
     expect(body).not.toMatch(
       /Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\)\s+is on the roadmap/,
     );
-    // The pre-reorder form must not return.
-    expect(body).not.toMatch(/SOCKS5 \/ WireGuard \/ OpenVPN \(not shipped\)/);
   });
 
   it('two-ladder pricing teaser pinned: Manual $79/$249/$699 + API $149/$499/$1,499', () => {

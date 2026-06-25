@@ -33,7 +33,7 @@ const apiBaseUrl = resolveApiBaseUrl();
        <div class="mt-3 h-px w-16 bg-gradient-to-r from-oxblood-700 to-transparent" aria-hidden="true"></div>
         <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
           Append-only record of every admin action. Cannot be mutated by admins
-          (D-025). Filter by action, target account, or admin email.
+          (D-025). Filter by action, admin id, or target account.
         </p>
       </div>
       {/* 2026-05-22 — live auto-poll. Same pattern as 2c24750f /
@@ -225,15 +225,32 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function rowHtml(e) {
-        const adminFrag =
-          '<p class="font-mono text-xs text-tk-ink-2">' +
-          escapeHtml(e.admin_account_id) +
-          '</p>';
+        // Show the email as the primary line (UUID secondary) when the
+        // server has enriched the entry — so "who did this?" and "to
+        // whom?" read off the row directly. Falls back to the bare UUID
+        // when admin_email / target_email aren't present yet.
+        const adminFrag = e.admin_email
+          ? '<p class="text-xs text-tk-ink">' +
+            escapeHtml(e.admin_email) +
+            '</p>' +
+            '<p class="mt-0.5 font-mono text-[11px] text-tk-ink-3">' +
+            escapeHtml(e.admin_account_id) +
+            '</p>'
+          : '<p class="font-mono text-xs text-tk-ink-2">' +
+            escapeHtml(e.admin_account_id) +
+            '</p>';
         const targetFrag =
           (e.target_account_id
-            ? '<p class="font-mono text-xs text-tk-ink-2">' +
-              escapeHtml(e.target_account_id) +
-              '</p>'
+            ? e.target_email
+              ? '<p class="text-xs text-tk-ink">' +
+                escapeHtml(e.target_email) +
+                '</p>' +
+                '<p class="mt-0.5 font-mono text-[11px] text-tk-ink-3">' +
+                escapeHtml(e.target_account_id) +
+                '</p>'
+              : '<p class="font-mono text-xs text-tk-ink-2">' +
+                escapeHtml(e.target_account_id) +
+                '</p>'
             : '') +
           (e.target_resource_id
             ? '<p class="mt-0.5 font-mono text-[11px] text-tk-ink-3">' +
