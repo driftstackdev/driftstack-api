@@ -885,26 +885,33 @@ export type DownloadDataResult = z.infer<typeof DownloadDataResultSchema>;
 // the sealed blob with `dek`, drops the re-fetchable cache subtrees (NetworkCache /
 // MediaCache + per-origin CacheStorage / ServiceWorkers) from `opaqueStorage` while
 // KEEPING cookies / localStorage / IndexedDB / openTabs, re-seals under the SAME dek,
-// PUTs the trimmed blob to `sealedBlobPutURL`, and replies with the `trimResult` below.
+// PUTs the trimmed blob to `sealed_blob_put_url`, and replies with the `trimResult` below.
 // UNLIKE the cookies/history frames this is OUT-OF-SESSION (a profile at rest in R2 has
 // no live node), so it carries the JIT crypto envelope (the same fields
-// SessionAssign.ProfileInfo carries) keyed by `profileId` instead of a `sessionId`.
+// SessionAssign.ProfileInfo carries) keyed by `profile_id` instead of a `sessionId`.
 // NOT in HarnessOutbound (that's node→CP); this is CP→node like cookiesRequest.
-// `sealedBlobPutURL` is REQUIRED (the trimmed blob must be written back); one of
-// `sealedBlob` (inline ≤256KB) / `sealedBlobURL` (presigned GET) supplies the input.
+// `sealed_blob_put_url` is REQUIRED (the trimmed blob must be written back); one of
+// `sealed_blob` (inline ≤256KB) / `sealed_blob_url` (presigned GET) supplies the input.
 // Field notes: `dek` = base64 of the 32-byte per-profile DEK (JIT, like
-// SessionAssign.ProfileInfo.dek). One of `sealedBlob` (inline ≤256KB) / `sealedBlobURL`
-// (presigned GET) supplies the input; `sealedBlobPutURL` (REQUIRED) is where the node
+// SessionAssign.ProfileInfo.dek). One of `sealed_blob` (inline ≤256KB) / `sealed_blob_url`
+// (presigned GET) supplies the input; `sealed_blob_put_url` (REQUIRED) is where the node
 // PUTs the trimmed blob back.
+// Wire keys mirror the SessionAssign.ProfileInfo convention exactly (A3's Swift
+// Codable decoder is the source of truth): the envelope fields `type` + `requestId`
+// stay camelCase like every other CP→node request frame, but the profile-payload
+// fields are snake_case (`profile_id`, `dek`, `sealed_blob`, `sealed_blob_url`,
+// `sealed_blob_put_url`) — the same CodingKeys SessionAssignProfileSchema emits. The
+// previous camelCase emit (`profileId` / `sealedBlob…`) made the box's Codable decode
+// fail with keyNotFound 'profile_id' so trim NEVER executed.
 export const TrimProfileRequestSchema = z
   .object({
     type: z.literal('trimProfile'),
     requestId: z.string().min(1),
-    profileId: z.string().min(1),
+    profile_id: z.string().min(1),
     dek: z.string().min(1),
-    sealedBlob: z.string().min(1).optional(),
-    sealedBlobURL: z.string().min(1).optional(),
-    sealedBlobPutURL: z.string().min(1),
+    sealed_blob: z.string().min(1).optional(),
+    sealed_blob_url: z.string().min(1).optional(),
+    sealed_blob_put_url: z.string().min(1),
   })
   .strict();
 export type TrimProfileRequest = z.infer<typeof TrimProfileRequestSchema>;

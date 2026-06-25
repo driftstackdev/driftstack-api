@@ -426,6 +426,13 @@ export function serializeFetchDownload(args: {
  * `requestId` (the harness echoes it on the `trimResult` reply). `sealedBlobPutURL`
  * is required; one of `sealedBlob` / `sealedBlobURL` supplies the input. Re-validated
  * so a malformed envelope never leaves the server. NEVER log `dek`.
+ *
+ * Like serializeSessionAssign's profile block, the camelCase args are mapped to the
+ * snake_case WIRE keys (`profile_id` / `sealed_blob` / `sealed_blob_url` /
+ * `sealed_blob_put_url`) the harness's Swift Codable decoder expects — only `type` +
+ * `requestId` stay camelCase (the universal CP→node envelope convention). Emitting
+ * camelCase payload keys made the box decode fail keyNotFound 'profile_id' (trim
+ * never executed).
  */
 export function serializeTrimProfile(args: {
   requestId: string;
@@ -438,11 +445,11 @@ export function serializeTrimProfile(args: {
   return TrimProfileRequestSchema.parse({
     type: 'trimProfile',
     requestId: args.requestId,
-    profileId: args.profileId,
+    profile_id: args.profileId,
     dek: args.dek,
-    ...(args.sealedBlob !== undefined ? { sealedBlob: args.sealedBlob } : {}),
-    ...(args.sealedBlobURL !== undefined ? { sealedBlobURL: args.sealedBlobURL } : {}),
-    sealedBlobPutURL: args.sealedBlobPutURL,
+    ...(args.sealedBlob !== undefined ? { sealed_blob: args.sealedBlob } : {}),
+    ...(args.sealedBlobURL !== undefined ? { sealed_blob_url: args.sealedBlobURL } : {}),
+    sealed_blob_put_url: args.sealedBlobPutURL,
   });
 }
 

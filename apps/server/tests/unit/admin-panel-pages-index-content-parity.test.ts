@@ -111,12 +111,15 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     expect(body).toMatch(/data-field="total-accounts-annotation"/);
   });
 
-  it("Audit-log render: per-entry timestamp via fmtIso → 'YYYY-MM-DD HH:MM:SS UTC' (slice(0, 19) — not 16 like the leads page, because audit-log needs second-level precision) + entry.admin_account_id mono + → arrow + entry.action code + entry.result success/error badge — pinned so the admin-action row template renders the structured action vocabulary consistently", () => {
+  it("Audit-log render: per-entry timestamp via fmtIso → 'YYYY-MM-DD HH:MM:SS UTC' (slice(0, 19) — not 16 like the leads page, because audit-log needs second-level precision) + admin identity (email primary, admin_account_id UUID fallback) mono + → arrow + entry.action code + entry.result success/error badge — pinned so the admin-action row template renders the structured action vocabulary consistently. The actor renders email-primary with the UUID secondary when the server enriches the entry, matching the Accounts list, so operators read 'who → action' without UUID-chasing (drift back to UUID-only would re-introduce the UUID-chasing the email-primary change removed)", () => {
     expect(body).toMatch(/\.slice\(0, 19\) \+ ' UTC';/);
     expect(body).toMatch(
       /entry\.result === 'success'\s*\n?\s*\? 'bg-emerald-50 text-emerald-700'\s*\n?\s*: 'bg-red-50 text-red-700';/,
     );
-    expect(body).toMatch(/escapeHtml\(entry\.admin_account_id\)/);
+    // Actor is email-primary with the admin_account_id UUID as the fallback.
+    expect(body).toMatch(/escapeHtml\(entry\.admin_email \|\| entry\.admin_account_id\)/);
+    // The target row likewise prefers the email with the account-id UUID as fallback.
+    expect(body).toMatch(/escapeHtml\(entry\.target_email \|\| entry\.target_account_id\)/);
     expect(body).toMatch(/escapeHtml\(entry\.action\)/);
   });
 

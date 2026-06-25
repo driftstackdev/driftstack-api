@@ -49,9 +49,11 @@ import {
   SessionEndSchema,
   SetCookiesRequestSchema,
   NavigateHistoryRequestSchema,
+  TrimProfileRequestSchema,
   HarnessErrorCodeSchema,
   HarnessOutboundSchema,
 } from '../../src/schemas/harness-control-protocol.js';
+import { serializeTrimProfile } from '../../src/services/harness-control-codec.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -261,15 +263,71 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
 
   it('profile-trim frames pinned: trimProfile (CP→node, strict, JIT crypto envelope) + trimResult (node→CP, in union)', () => {
     // CP→node REQUEST — strict, carries the JIT crypto envelope (dek + presigned
-    // GET/PUT) keyed by profileId (OUT-OF-SESSION, no sessionId); sealedBlobPutURL
-    // REQUIRED, one of sealedBlob/sealedBlobURL supplies the input.
+    // GET/PUT) keyed by profile_id (OUT-OF-SESSION, no sessionId); the payload fields
+    // are snake_case (profile_id / sealed_blob / sealed_blob_url / sealed_blob_put_url)
+    // mirroring SessionAssign.ProfileInfo — only type + requestId stay camelCase (the
+    // CP→node envelope convention). sealed_blob_put_url REQUIRED, one of
+    // sealed_blob/sealed_blob_url supplies the input.
     expect(body).toMatch(
-      /export const TrimProfileRequestSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('trimProfile'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*profileId: z\.string\(\)\.min\(1\),\s*\n?\s*dek: z\.string\(\)\.min\(1\),\s*\n?\s*sealedBlob: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*sealedBlobURL: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*sealedBlobPutURL: z\.string\(\)\.min\(1\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
+      /export const TrimProfileRequestSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('trimProfile'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*profile_id: z\.string\(\)\.min\(1\),\s*\n?\s*dek: z\.string\(\)\.min\(1\),\s*\n?\s*sealed_blob: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*sealed_blob_url: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*sealed_blob_put_url: z\.string\(\)\.min\(1\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
     );
     // node→CP RESULT — ok?/newSizeBytes?/bytesReclaimed?/error?, lenient like cookiesResult.
     expect(body).toMatch(
       /export const TrimProfileResultSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('trimResult'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*profileId: z\.string\(\)\.min\(1\),\s*\n?\s*ok: z\.boolean\(\)\.optional\(\),\s*\n?\s*newSizeBytes: z\.number\(\)\.int\(\)\.nonnegative\(\)\.optional\(\),\s*\n?\s*bytesReclaimed: z\.number\(\)\.int\(\)\.nonnegative\(\)\.optional\(\),\s*\n?\s*error: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
     );
+  });
+
+  it('trimProfile WIRE keys are snake_case (A3-root-caused regression: camelCase broke the box Codable decode → trim never ran)', () => {
+    // CONTENT-parity, not just a source regex: serialize a real trim envelope (camelCase
+    // args in) and assert the emitted WIRE object carries the exact snake_case payload
+    // keys the harness Swift Codable decoder requires. The correlator unit tests use a
+    // mock transport and never inspected casing, so they missed the prod break where
+    // serializeTrimProfile emitted profileId/sealedBlob* → DecodingError.keyNotFound
+    // 'profile_id'. This is the regression net for that casing.
+    const wire = serializeTrimProfile({
+      requestId: 'rq_1',
+      profileId: 'prof_x',
+      dek: 'ZGVrLWJhc2U2NA==',
+      sealedBlobURL: 'https://r2/get?sig=1',
+      sealedBlobPutURL: 'https://r2/put?sig=1',
+    });
+    // The payload fields cross the wire snake_case (mirroring SessionAssign.ProfileInfo).
+    expect(wire).toEqual({
+      type: 'trimProfile',
+      requestId: 'rq_1',
+      profile_id: 'prof_x',
+      dek: 'ZGVrLWJhc2U2NA==',
+      sealed_blob_url: 'https://r2/get?sig=1',
+      sealed_blob_put_url: 'https://r2/put?sig=1',
+    });
+    // Exact key set — assert the snake_case keys are present and NONE of the old
+    // camelCase payload keys leaked back (the precise shape that broke the box).
+    expect(Object.keys(wire).sort()).toEqual(
+      ['dek', 'profile_id', 'requestId', 'sealed_blob_url', 'sealed_blob_put_url', 'type'].sort(),
+    );
+    for (const camel of ['profileId', 'sealedBlob', 'sealedBlobURL', 'sealedBlobPutURL']) {
+      expect(Object.prototype.hasOwnProperty.call(wire, camel)).toBe(false);
+    }
+    // The schema itself rejects a stray camelCase payload key (strict guards the drift).
+    expect(
+      TrimProfileRequestSchema.safeParse({
+        type: 'trimProfile',
+        requestId: 'rq_1',
+        profileId: 'prof_x', // camelCase — must be rejected by .strict()
+        dek: 'ZGVrLWJhc2U2NA==',
+        sealed_blob_put_url: 'https://r2/put?sig=1',
+      }).success,
+    ).toBe(false);
+    // And the inline sealed_blob variant likewise snake-cases.
+    const inlineWire = serializeTrimProfile({
+      requestId: 'rq_2',
+      profileId: 'prof_y',
+      dek: 'ZGVr',
+      sealedBlob: 'YmxvYg==',
+      sealedBlobPutURL: 'https://r2/put?sig=2',
+    });
+    expect(inlineWire).toMatchObject({ sealed_blob: 'YmxvYg==' });
+    expect(Object.prototype.hasOwnProperty.call(inlineWire, 'sealedBlob')).toBe(false);
   });
 
   it('W393 challenge-handling contract: pauseSession/resumeSession inbound (strict) + challengeDetected outbound (in union) + behavioral parse', () => {

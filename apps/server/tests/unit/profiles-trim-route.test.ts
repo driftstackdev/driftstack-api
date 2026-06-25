@@ -114,7 +114,10 @@ interface TrimBody {
   bytes_reclaimed?: number;
 }
 
-/** Register a node whose socket echoes a trimResult for the trimProfile it receives. */
+/** Register a node whose socket echoes a trimResult for the trimProfile it receives.
+ *  The inbound REQUEST carries snake_case `profile_id` (the harness Codable wire shape);
+ *  the echoed RESULT keeps `profileId` (the node→CP trimResult contract). The reply
+ *  callback receives the request's profileId (read from `profile_id`) for convenience. */
 function registerEchoNode(
   registry: FleetControlRegistry,
   nodeId: string,
@@ -122,11 +125,15 @@ function registerEchoNode(
 ): { sentTrim: Array<Record<string, unknown>> } {
   const sentTrim: Array<Record<string, unknown>> = [];
   const conn = registry.register(nodeId, (data) => {
-    const frame = JSON.parse(data) as { type?: string; requestId: string; profileId: string };
+    const frame = JSON.parse(data) as { type?: string; requestId: string; profile_id: string };
     if (frame.type === 'trimProfile') {
       sentTrim.push(frame);
       conn.handleInbound(
-        JSON.stringify({ type: 'trimResult', requestId: frame.requestId, ...reply(frame) }),
+        JSON.stringify({
+          type: 'trimResult',
+          requestId: frame.requestId,
+          ...reply({ requestId: frame.requestId, profileId: frame.profile_id }),
+        }),
       );
     }
   });
@@ -268,14 +275,15 @@ describe('POST /v1/profiles/:id/trim', () => {
       size_bytes: 4_000,
       bytes_reclaimed: 6_000,
     });
-    // The op carried the JIT crypto envelope (dek + both presigned URLs), keyed by profileId.
+    // The op carried the JIT crypto envelope (dek + both presigned URLs), keyed by
+    // profile_id. The wire payload keys are snake_case (the harness Codable shape).
     expect(sentTrim).toHaveLength(1);
     expect(sentTrim[0]).toMatchObject({
       type: 'trimProfile',
-      profileId: PROFILE_UUID,
+      profile_id: PROFILE_UUID,
       dek: DEK.toString('base64'),
-      sealedBlobPutURL: expect.stringContaining('put=1'),
-      sealedBlobURL: expect.stringContaining('get=1'),
+      sealed_blob_put_url: expect.stringContaining('put=1'),
+      sealed_blob_url: expect.stringContaining('get=1'),
     });
     // The new (smaller) size was persisted to the OWNER's row.
     expect(recordTrimCalls).toEqual([

@@ -44,10 +44,12 @@ describe('W488.A apps/admin-panel/src/pages/audit-log.astro content parity', () 
     );
   });
 
-  it("D-025 framing pinned: 'Append-only record of every admin action. Cannot be mutated by admins (D-025). Filter by action, target account, or admin email.' — pinned so the immutability contract stays explicit on the page operators see (drift to softer phrasing weakens the compliance-review guarantee)", () => {
+  it("D-025 framing pinned: 'Append-only record of every admin action. Cannot be mutated by admins (D-025). Filter by action, admin id, or target account.' — pinned so the immutability contract stays explicit on the page operators see (drift to softer phrasing weakens the compliance-review guarantee). The filter list names the REAL filters (action / admin id / target account) — it must NOT advertise a non-existent 'admin email' filter (the endpoint has no such param)", () => {
     expect(body).toMatch(
-      /Append-only record of every admin action\. Cannot be mutated by admins\s*\n?\s*\(D-025\)\. Filter by action, target account, or admin email\./,
+      /Append-only record of every admin action\. Cannot be mutated by admins\s*\n?\s*\(D-025\)\. Filter by action, admin id, or target account\./,
     );
+    // The page must not promise an 'admin email' filter the endpoint can't honor.
+    expect(body).not.toMatch(/Filter by action, target account, or admin email/);
   });
 
   it("Filter bar 3-field: data-field='action' (substring placeholder 'e.g. account.tier_changed') + data-field='admin-id' (placeholder 'acc_<uuid>') + data-field='result' 3-option select (Any result / Success only / Errors only) — pinned so the filter taxonomy stays in sync with the server endpoint's accepted params + the result-only client-side filter has all 3 states", () => {

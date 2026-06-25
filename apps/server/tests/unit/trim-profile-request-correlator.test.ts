@@ -18,13 +18,16 @@ import { FleetControlConnection } from '../../src/services/fleet-control-registr
 import type { TrimProfileRequest } from '../../src/schemas/harness-control-protocol.js';
 
 function req(requestId: string, profileId = 'prof_x'): TrimProfileRequest {
+  // The wire request carries snake_case payload keys (profile_id / sealed_blob_url /
+  // sealed_blob_put_url), mirroring SessionAssign.ProfileInfo; only type + requestId
+  // are camelCase (the CP→node envelope convention).
   return {
     type: 'trimProfile',
     requestId,
-    profileId,
+    profile_id: profileId,
     dek: 'ZGVrLWJhc2U2NA==',
-    sealedBlobURL: 'https://r2/get?sig=1',
-    sealedBlobPutURL: 'https://r2/put?sig=1',
+    sealed_blob_url: 'https://r2/get?sig=1',
+    sealed_blob_put_url: 'https://r2/put?sig=1',
   };
 }
 
@@ -62,8 +65,8 @@ describe('TrimProfileRequestCorrelator', () => {
     expect(sent[0]).toMatchObject({
       type: 'trimProfile',
       requestId: 'rq_1',
-      profileId: 'prof_x',
-      sealedBlobPutURL: 'https://r2/put?sig=1',
+      profile_id: 'prof_x',
+      sealed_blob_put_url: 'https://r2/put?sig=1',
     });
     expect(c.inFlight()).toBe(1);
     c.onResultFrame(resultFrame('rq_1', { ok: true, newSizeBytes: 4000, bytesReclaimed: 6000 }));
@@ -193,13 +196,15 @@ describe('FleetControlConnection trim (out-of-session profile eviction)', () => 
       sealedBlobPutURL: 'https://r2/put?sig=1',
     });
     expect(sent).toHaveLength(1);
+    // requestTrim takes camelCase args, but the JSON that goes out on the wire carries
+    // snake_case payload keys the harness's Swift Codable decoder expects.
     expect(JSON.parse(sent[0]!)).toEqual({
       type: 'trimProfile',
       requestId: 'rq_1',
-      profileId: 'prof_x',
+      profile_id: 'prof_x',
       dek: 'ZGVrLWJhc2U2NA==',
-      sealedBlobURL: 'https://r2/get?sig=1',
-      sealedBlobPutURL: 'https://r2/put?sig=1',
+      sealed_blob_url: 'https://r2/get?sig=1',
+      sealed_blob_put_url: 'https://r2/put?sig=1',
     });
     conn.handleInbound(
       JSON.stringify({

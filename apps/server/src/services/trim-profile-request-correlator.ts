@@ -67,7 +67,7 @@ export class TrimProfileRequestCorrelator {
       const timer = setTimeout(() => {
         this.settle(req.requestId, { status: 'timeout' });
       }, timeoutMs);
-      this.pending.set(req.requestId, { resolve, timer, profileId: req.profileId });
+      this.pending.set(req.requestId, { resolve, timer, profileId: req.profile_id });
       try {
         this.transport.send(req);
       } catch (err) {

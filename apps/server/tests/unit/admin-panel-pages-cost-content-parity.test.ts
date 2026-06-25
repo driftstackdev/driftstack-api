@@ -40,9 +40,12 @@ describe('admin-panel pages/cost content parity', () => {
     );
   });
 
-  it('Cost (V-541) header anchor pinned: h1 contains "Cost (V-541)". 2026-05-23 — h1 wrapped in oxblood gradient span (admin-panel visual unification); V-anchor preserved.', () => {
-    expect(body).toMatch(/<h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">/);
-    expect(body).toMatch(/Cost \(V-541\)/);
+  it('Cost header pinned to the clean operator-facing "Cost" h1 — the internal "(V-541)" workstream code is NOT leaked into customer/operator-facing copy (drift to re-adding "(V-541)" would re-expose internal sweep codes on the page operators see)', () => {
+    expect(body).toMatch(
+      /<h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Cost<\/h1>/,
+    );
+    // The internal workstream anchor must NOT appear in the rendered H1 copy.
+    expect(body).not.toMatch(/Cost \(V-541\)/);
   });
 
   it("data-page='admin-cost' wrapper pinned (used by the inline-JS root selector). Drift to a different data-page name would silently disconnect the inline script from the DOM root and leave every tile rendering its SSG-time placeholder", () => {
@@ -80,9 +83,15 @@ describe('admin-panel pages/cost content parity', () => {
     );
   });
 
-  it("'Top accounts by cost' framing pinned: 'Sorted descending by total cents in the current cycle. Fetches the first limit=50 accounts then asks /v1/admin/cost/overview (which already returns sorted by total cost desc).' — pinned so the server-already-sorts-desc contract + the 50-row pagination cap survive (drift to client-side resort would silently mismatch server's ranking; drift to dropping limit=50 would let operators trigger 10k-row dumps on accounts with many billing accounts)", () => {
+  it("'Top accounts by cost' framing pinned to the HONEST most-recent-50 copy: 'Top by total cents among the most recent limit=50 accounts (by creation order) — not the platform-wide top spenders. Fetches that page then asks /v1/admin/cost/overview to sort it by total cost desc.' — pinned so (a) the honesty caveat survives (the table ranks only the most-recent 50 accounts, NOT platform-wide top spenders; drift back to implying platform-wide ranking would mislead operators), (b) the server-already-sorts-desc contract survives (drift to client-side resort would mismatch the server ranking), and (c) the limit=50 cap survives (drift to dropping it would let operators trigger 10k-row dumps)", () => {
+    // Honesty caveat: ranks only the most-recent 50 (by creation order), explicitly
+    // NOT the platform-wide top spenders.
     expect(body).toMatch(
-      /Sorted descending by total cents in the current cycle\. Fetches the\s*\n?\s*first <code class="font-mono text-xs">limit=50<\/code> accounts then\s*\n?\s*asks <code class="font-mono text-xs">\/v1\/admin\/cost\/overview<\/code>\s*\n?\s*\(which already returns sorted by total cost desc\)\./,
+      /Top by total cents among the most recent\s*\n?\s*<code class="font-mono text-xs">limit=50<\/code> accounts \(by\s*\n?\s*creation order\) — not the platform-wide top spenders\./,
+    );
+    // Server-sorts-desc contract + the limit=50 page cap.
+    expect(body).toMatch(
+      /Fetches that\s*\n?\s*page then asks <code class="font-mono text-xs">\/v1\/admin\/cost\/overview<\/code>\s*\n?\s*to sort it by total cost desc\./,
     );
   });
 
