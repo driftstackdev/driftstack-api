@@ -245,9 +245,11 @@ describe('ProxyConnectivityProbe — SOCKS5', () => {
     expect(res).toEqual({ ok: true });
   });
 
-  it('EGRESS_BLOCKED: tunnel established but the proxy returns NO HTTP response (garbage / closed) → { ok:false, egress_blocked }', async () => {
-    // No parseable status line back → the round-trip did not complete → the one
-    // case that still fails: we can't confirm egress.
+  it('PASS (CF non-HTTP body): tunnel established but the egress target returns a NON-HTTP line → ok:true (tunnel-proven reachability)', async () => {
+    // The CONNECT/tunnel succeeded (REP 0x00), which already proves the proxy
+    // reached the target host:port over the internet. A non-HTTP body from a
+    // CF-fronted echo target on a flagged exit IP must NOT hard-block a working
+    // proxy — the round-trip reaching the target endpoint at all is the proof.
     const { dial } = await fakeProxy((sock) => {
       let step = 0;
       sock.on('data', () => {
@@ -266,8 +268,31 @@ describe('ProxyConnectivityProbe — SOCKS5', () => {
     });
     const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
     const res = await probe.probe(SOCKS5_PROXY);
-    expect(res.ok).toBe(false);
-    expect(res.reason).toBe('egress_blocked');
+    expect(res.ok).toBe(true);
+  });
+
+  it('PASS (CF hard-drop): tunnel established but the egress target RESETS the connection before any response → ok:true (not a false egress_blocked)', async () => {
+    // The Cloudflare-fronted echo target silently drops (TCP reset) a flagged exit
+    // IP instead of returning an HTTP status. The CONNECT already proved egress
+    // reachability, so the drop during the GET must NOT block the launch.
+    const { dial } = await fakeProxy((sock) => {
+      let step = 0;
+      sock.on('data', () => {
+        if (step === 0) {
+          sock.write(Buffer.from([0x05, 0x00]));
+          step = 1;
+        } else if (step === 1) {
+          sock.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
+          step = 2;
+        } else {
+          // No response bytes at all — close (reset) the moment the GET arrives.
+          sock.destroy();
+        }
+      });
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe(SOCKS5_PROXY);
+    expect(res.ok).toBe(true);
   });
 });
 
@@ -347,6 +372,28 @@ describe('ProxyConnectivityProbe — connect-level failures (rejecting dial stub
     });
     const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET, timeoutMs: 80 });
     const res = await probe.probe({ protocol: 'socks5', host: '127.0.0.1', port: 0 });
+    expect(res).toMatchObject({ ok: false, reason: 'timeout' });
+  });
+
+  it('TIMEOUT (not masked as a CF PASS): a proxy that completes CONNECT then HANGS on the GET still trips the deadline', async () => {
+    // The CF hard-drop softening (a connection RESET before the response → PASS)
+    // must NOT mask a genuinely hung proxy: when the probe's own deadline destroys
+    // the socket, the read-close is deadline-triggered and must surface as `timeout`.
+    const { dial } = await fakeProxy((sock) => {
+      let step = 0;
+      sock.on('data', () => {
+        if (step === 0) {
+          sock.write(Buffer.from([0x05, 0x00]));
+          step = 1;
+        } else if (step === 1) {
+          sock.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
+          step = 2;
+        }
+        // step 2 (the GET): say NOTHING — hang until the deadline destroys the socket.
+      });
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET, timeoutMs: 80 });
+    const res = await probe.probe(SOCKS5_PROXY);
     expect(res).toMatchObject({ ok: false, reason: 'timeout' });
   });
 

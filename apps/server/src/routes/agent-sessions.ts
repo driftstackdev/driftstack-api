@@ -1046,7 +1046,7 @@ async function closeUnresolvedEgressSession(
  * propagates as the route's existing fail-closed (the outer handler maps it), so a
  * private-host proxy never even reaches the live probe.
  */
-async function runProxyPrelaunchGate(args: {
+export async function runProxyPrelaunchGate(args: {
   probe: ProxyConnectivityProbe | undefined;
   enabled: boolean;
   accountProxiesService: AccountProxiesService;
@@ -1058,13 +1058,25 @@ async function runProxyPrelaunchGate(args: {
   if (probe === undefined || !enabled) return;
 
   // Resolve to the decrypted dispatch config (owner-scoped + SSRF re-guard).
-  // Null = unresolvable (decrypt fail / non-dispatchable) — the dispatch path
-  // already fails closed on null, so don't block the create here on it; let the
-  // create proceed and the dispatch close it (preserves today's behavior for the
-  // edge case and avoids a confusing 422 for a decrypt/config issue the probe
-  // can't even attempt).
+  // Null = unresolvable (decrypt fail / non-dispatchable scheme). The dispatch
+  // path fails closed on null too (closes the never-dispatched row), but by then
+  // the route has already returned 201 and the GUI has opened the simulator window
+  // → it just spins forever ("launched but nothing opened"). Since the gate is
+  // active here, BLOCK at create with a clean 422 instead, so the founder gets an
+  // honest, specific error before any window opens. `unreachable` is the closest
+  // reason (the proxy can't be used right now); the detail spells it out.
   const resolved = await accountProxiesService.resolveForDispatch({ proxyId, accountId });
-  if (resolved === null) return;
+  if (resolved === null) {
+    logger?.warn(
+      { component: 'proxy-prelaunch-probe', proxyId },
+      'proxy unresolvable at pre-launch gate (decrypt/config) — blocking launch (no dispatch)',
+    );
+    throw new ProxyValidationFailedError({
+      reason: 'unreachable',
+      detail:
+        'This proxy can’t be used right now (its stored configuration could not be read). Re-add it and try again.',
+    });
+  }
 
   // VPN wire carries a `type` discriminator (openvpn|wireguard) — not a
   // CP-dialable socks5/http proxy. Skip the live probe (box-side W2931 covers it).

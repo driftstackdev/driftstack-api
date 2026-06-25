@@ -177,8 +177,13 @@ export class ProxyConnectivityProbe {
     // gives the handshake a brief chance rather than firing instantly.
     const remainingMs = Math.max(this.timeoutMs - (Date.now() - startedAt), 250);
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // Shared deadline state so the egress round-trip can tell a deadline-triggered
+    // socket close (→ honest `timeout`) apart from a target-side connection RESET
+    // before the deadline (→ tunnel-proven PASS, the Cloudflare hard-drop case).
+    const deadlineState = { expired: false };
     const deadline = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
+        deadlineState.expired = true;
         socket.destroy();
         reject(new ProbeDialError('timeout', `proxy did not complete the round-trip in time`));
       }, remainingMs);
@@ -187,8 +192,8 @@ export class ProxyConnectivityProbe {
     try {
       const result = await Promise.race([
         proxy.protocol === 'socks5'
-          ? this.runSocks5RoundTrip(socket, proxy, targetHost, targetPort, useTls)
-          : this.runHttpRoundTrip(socket, proxy, targetHost, targetPort, useTls),
+          ? this.runSocks5RoundTrip(socket, proxy, targetHost, targetPort, useTls, deadlineState)
+          : this.runHttpRoundTrip(socket, proxy, targetHost, targetPort, useTls, deadlineState),
         deadline,
       ]);
       return result;
@@ -213,6 +218,7 @@ export class ProxyConnectivityProbe {
     targetHost: string,
     targetPort: number,
     useTls: boolean,
+    deadlineState: { expired: boolean },
   ): Promise<ProxyProbeResult> {
     const reader = new SocketReader(socket);
     const hasAuth = proxy.username !== undefined && proxy.password !== undefined;
@@ -290,7 +296,7 @@ export class ProxyConnectivityProbe {
     const addrLen = atyp === 0x01 ? 4 : atyp === 0x04 ? 16 : ((await reader.read(1))[0] ?? 0);
     await reader.read(addrLen + 2); // BND.ADDR + BND.PORT, discarded
 
-    return this.egressRoundTrip(socket, reader, targetHost, targetPort, useTls);
+    return this.egressRoundTrip(socket, reader, targetHost, targetPort, useTls, deadlineState);
   }
 
   // ── HTTP CONNECT ────────────────────────────────────────────────────────────
@@ -302,6 +308,7 @@ export class ProxyConnectivityProbe {
     targetHost: string,
     targetPort: number,
     useTls: boolean,
+    deadlineState: { expired: boolean },
   ): Promise<ProxyProbeResult> {
     const reader = new SocketReader(socket);
     const authority = `${targetHost}:${targetPort}`;
@@ -328,7 +335,7 @@ export class ProxyConnectivityProbe {
       };
     }
 
-    return this.egressRoundTrip(socket, reader, targetHost, targetPort, useTls);
+    return this.egressRoundTrip(socket, reader, targetHost, targetPort, useTls, deadlineState);
   }
 
   // ── egress round-trip ─────────────────────────────────────────────────────
@@ -336,9 +343,17 @@ export class ProxyConnectivityProbe {
   // We validate PROXY CONNECTIVITY, not the target endpoint's HTTP status: if ANY
   // HTTP response status line comes back (2xx/3xx OR 4xx/5xx — incl. 429/403/503),
   // the proxy demonstrably tunneled to the internet, completed the request and
-  // returned the upstream's bytes → egress WORKS → PASS. Only a status of `none`
-  // (no parseable status line — the proxy closed/hung mid-response, or returned
-  // garbage) is an egress failure.
+  // returned the upstream's bytes → egress WORKS → PASS.
+  //
+  // The CONNECT/tunnel succeeding (REP 0x00 / HTTP 2xx, asserted by the callers
+  // before reaching here) ALREADY proves the proxy reached the target host:port
+  // over the internet. So a target-side connection RESET or a NON-HTTP body during
+  // the GET — the Cloudflare-fronted-echo hard-drop case, where CF silently drops a
+  // flagged/blocklisted exit IP instead of returning a status — is NOT an egress
+  // failure: it's tunnel-proven reachability, so we PASS rather than false-block a
+  // working proxy. The ONLY post-tunnel failure surfaced is the probe's OWN deadline
+  // expiring (a genuinely hung proxy → `timeout`), which the `deadlineState` guard
+  // distinguishes from a target-side drop.
   //
   // Why not require 2xx/3xx: the default target (api.driftstack.dev/v1/egress/echo)
   // is rate-limited per exit IP AND Cloudflare-fronted, so a healthy proxy on a
@@ -358,6 +373,7 @@ export class ProxyConnectivityProbe {
     targetHost: string,
     _targetPort: number,
     useTls: boolean,
+    deadlineState: { expired: boolean },
   ): Promise<ProxyProbeResult> {
     let stream: Socket = socket;
     let streamReader: SocketReader = reader;
@@ -379,7 +395,38 @@ export class ProxyConnectivityProbe {
     stream.write(
       `GET ${reqPath} HTTP/1.1\r\nHost: ${targetHost}\r\nUser-Agent: driftstack-proxy-probe\r\nAccept: */*\r\nConnection: close\r\n\r\n`,
     );
-    const head = await streamReader.readUntil('\r\n');
+    // Read the response status line. A connection CLOSE/RESET before the response
+    // arrives (SocketReader throws a ProbeDialError) is the Cloudflare-fronted-
+    // echo-target hard-drop case: a perfectly working proxy whose exit IP is on a
+    // CF-challenged/blocklisted range gets its connection silently dropped (TCP
+    // reset) instead of an HTTP status — even though the proxy reaches the rest of
+    // the internet fine. By the time we get here the CONNECT/tunnel ALREADY
+    // succeeded (SOCKS5 REP 0x00 / HTTP 2xx), which itself proves the proxy reached
+    // the target host:port over the internet, so a CF drop during the GET must NOT
+    // hard-block the launch. Treat it as PASS (tunnel-proven reachability) rather
+    // than a false egress_blocked. (A TLS handshake failure is a DIFFERENT,
+    // genuine egress failure — it rejects above, before this read, and is unaffected.)
+    let head: string;
+    try {
+      head = await streamReader.readUntil('\r\n');
+    } catch (err) {
+      // Distinguish a deadline-triggered socket close (the probe's own timer
+      // destroyed the socket → honest `timeout`, do NOT mask a genuinely slow/hung
+      // proxy) from a target-side connection RESET before the deadline (CF hard-drop
+      // → tunnel-proven PASS).
+      if (deadlineState.expired) {
+        return {
+          ok: false,
+          reason: 'timeout',
+          detail: 'proxy did not complete the round-trip in time',
+        };
+      }
+      const detail = err instanceof Error ? err.message : String(err);
+      return {
+        ok: true,
+        detail: `tunnel established; egress target dropped the GET (${detail}) — treated as reachable`,
+      };
+    }
     const statusMatch = /HTTP\/1\.[01]\s(\d{3})/.exec(head);
     const status = statusMatch ? Number(statusMatch[1]) : 0;
     // ANY parseable HTTP status back = the proxy tunneled to the internet and the
@@ -390,13 +437,15 @@ export class ProxyConnectivityProbe {
     if (status > 0) {
       return { ok: true };
     }
-    // No parseable status line — the proxy returned no/garbage bytes for the GET.
-    // The CONNECT/tunnel may have opened but no real HTTP response came back, so we
-    // can't confirm egress.
+    // No parseable status line — the proxy returned garbage (non-HTTP) bytes for the
+    // GET. The CONNECT/tunnel already proved the proxy reached the target host:port
+    // over the internet, so (like the connection-drop case above) this must not
+    // hard-block a working proxy whose CF-fronted egress target returned a non-HTTP
+    // body. PASS on tunnel-proven reachability rather than a false egress_blocked.
     return {
-      ok: false,
-      reason: 'egress_blocked',
-      detail: 'egress round-trip returned no HTTP response',
+      ok: true,
+      detail:
+        'tunnel established; egress target returned a non-HTTP response — treated as reachable',
     };
   }
 }

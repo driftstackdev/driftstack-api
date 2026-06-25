@@ -17,8 +17,12 @@
 // no longer false-blocks launches: the probe validates proxy CONNECTIVITY,
 // not this endpoint's status, so ANY HTTP response back (incl. a 429 from
 // this limiter or a 403/503 from the CF edge) is treated as PASS — the
-// round-trip completing is the proof. So this limit is intentionally left
-// as-is for scraper resistance; it cannot throttle a real launch.
+// round-trip completing is the proof. Even a CF HARD-DROP (TCP reset / no
+// HTTP response, when CF silently drops a flagged exit IP) is a PASS: the
+// CONNECT/tunnel already proved egress reachability, so the probe treats a
+// post-tunnel drop as tunnel-proven rather than blocking a working proxy.
+// So this limit is intentionally left as-is for scraper resistance; it
+// cannot throttle a real launch.
 //
 // Geo source: Cloudflare's `cf-ipcountry` edge header (the API is
 // CF-fronted; trustProxy makes req.ip the real client). 'XX' (unknown)

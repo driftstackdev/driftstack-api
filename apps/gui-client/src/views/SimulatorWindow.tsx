@@ -38,6 +38,7 @@ import {
 import { buildRecordingExport, recordingExportFilename } from '../lib/recordings-export';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
+import { pointerToViewport } from '../lib/livekit-input-capture';
 import { pageErrorCopy, type PageErrorInfo } from '../lib/page-error-copy';
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
 import { downloadBlob, downloadJson } from '../lib/download';
@@ -3219,6 +3220,19 @@ export function SimulatorWindow(): JSX.Element {
   const screenHostRef = useRef<HTMLDivElement | null>(null);
   const tapIdRef = useRef(0);
   const [taps, setTaps] = useState<{ id: number; x: number; y: number }[]>([]);
+  // True when the pointer is on a SIZED live video but maps OFF its object-contain
+  // surface (a letterbox/pillarbox bar) — exactly where the wire's input-capture sends
+  // nothing. Used to suppress the tap ripple + fingertip dot so the visual feedback
+  // matches what the device receives. False (fall through, show the feedback) when the
+  // video isn't mounted/sized yet — pointerToViewport returns null for an unsized rect
+  // too, and the pre-stream ripple is harmless.
+  const isOffVideoSurface = (e: ReactPointerEvent<HTMLDivElement>): boolean => {
+    const video = videoElRef.current;
+    if (video === null) return false;
+    const vr = video.getBoundingClientRect();
+    if (vr.width === 0 || vr.height === 0) return false; // not sized yet → don't suppress
+    return pointerToViewport(e.nativeEvent, video) === null;
+  };
   const showTap = (e: ReactPointerEvent<HTMLDivElement>): void => {
     const host = screenHostRef.current;
     if (host === null) return;
@@ -3226,6 +3240,14 @@ export function SimulatorWindow(): JSX.Element {
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
     if (r.width === 0 || x < 0 || y < 0 || x > r.width || y > r.height) return;
+    // Off-surface guard: gate the ripple/cursor on the SAME surface test the wire uses.
+    // A click in the object-contain letterbox bars (or anywhere the device receives
+    // nothing) returns null from pointerToViewport — render NO ripple/dot there, so the
+    // visual feedback never signals success on a silent no-op (founder "taps near the
+    // edge feel dropped"). Only suppress when the video is actually SIZED (a real rect);
+    // an unmounted/unsized video also returns null and must fall through to the host
+    // clamp (the ripple is harmless pre-stream).
+    if (isOffVideoSurface(e)) return;
     // Press feedback for the touch-point cursor — it shrinks/brightens on press,
     // alongside the bloom ring below (resets on pointer up / leave).
     setTouchPoint({ x, y });
@@ -3251,6 +3273,13 @@ export function SimulatorWindow(): JSX.Element {
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
     if (r.width === 0 || x < 0 || y < 0 || x > r.width || y > r.height) {
+      setTouchPoint(null);
+      return;
+    }
+    // Hide the fingertip dot in the object-contain letterbox bars — the device receives
+    // nothing there, so a touch cursor would falsely read as a live touch surface (same
+    // surface test the wire uses). Keep the dot only where pointerToViewport is non-null.
+    if (isOffVideoSurface(e)) {
       setTouchPoint(null);
       return;
     }
