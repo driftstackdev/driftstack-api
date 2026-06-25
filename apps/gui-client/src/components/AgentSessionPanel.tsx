@@ -76,13 +76,17 @@ export interface AgentSessionPanelProps {
   coverChromeBand?: boolean;
 }
 
-/** W617 — how long a connected-but-videoless room waits before the panel
- *  declares "no publisher". A WARM worker publishes in ~2-5s, but a COLD
- *  session spawn (the worker launches a fresh browser fork → loads the page →
- *  joins LiveKit → first frame) routinely takes longer — 10s flipped to a
+/** W617 / #59 — how long a connected-but-videoless room waits before the panel
+ *  declares the launch failed (no publisher). A WARM worker publishes in ~2-5s,
+ *  but a COLD session spawn (the worker launches a fresh browser fork → loads the
+ *  page → joins LiveKit → first frame) routinely takes longer — 10s flipped to a
  *  discouraging "no video" right as the stream was about to appear (founder's
- *  first real launch, 2026-06-18). 30s comfortably covers a cold spawn; the
- *  spinner + reassuring copy keep it from feeling stuck in the meantime. */
+ *  first real launch, 2026-06-18). 30s comfortably covers a cold spawn while still
+ *  bounding the indefinite "connecting…" the founder hit when a launch silently
+ *  failed (proxy down → the box never started → the room stays empty forever, #59);
+ *  the spinner + reassuring copy keep it from feeling stuck in the meantime, and on
+ *  timeout the overlay offers Retry. Cleared the instant a video track arrives, so a
+ *  slow-but-working start never trips it. */
 export const NO_PUBLISHER_TIMEOUT_MS = 30_000;
 
 /** Map raw livekit-client connection errors to customer-friendly copy. The raw
@@ -224,9 +228,10 @@ export function AgentSessionPanel({
 
     setS({ kind: 'connecting' });
     setPublisher('waiting');
-    // W617 — empty-room detector: connected but no video track within the
-    // timeout means no browser worker is publishing on this deployment
-    // (founder-hit black screen). Cleared by TrackSubscribed above.
+    // W617 / #59 — empty-room detector: connected but no video track within the
+    // timeout means the launch never produced a stream (no worker publishing /
+    // proxy down so the box never started → an indefinite "connecting…"). Flips
+    // to 'none' → the launch-failed overlay + Retry. Cleared by TrackSubscribed.
     let noPublisherTimer: ReturnType<typeof setTimeout> | null = null;
     connectToAgentSession(room, info)
       .then(() => {
@@ -351,19 +356,35 @@ export function AgentSessionPanel({
           ) : (
             <>
               <span>
-                No live video — the stream room is up, but no browser worker is publishing on this
-                deployment.
+                Couldn’t start the session — the proxy or connection may be down. The stream room
+                connected, but no live video arrived.
               </span>
-              {onNoPublisher !== undefined && (
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {/* #59 — a no-stream launch can recover on a fresh connect (the worker
+                    was slow, the proxy came back, a transient SFU hiccup), so always
+                    offer Retry. It bumps retryNonce → the connect effect re-runs (new
+                    Room + reconnect + a fresh NO_PUBLISHER_TIMEOUT_MS window). */}
                 <button
                   type="button"
-                  data-action="open-polling-viewer"
-                  onClick={onNoPublisher}
+                  data-action="retry-launch"
+                  onClick={() => {
+                    setRetryNonce((n) => n + 1);
+                  }}
                   className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-ink-primary transition hover:bg-white/20"
                 >
-                  Open in the direct viewer instead
+                  Retry
                 </button>
-              )}
+                {onNoPublisher !== undefined && (
+                  <button
+                    type="button"
+                    data-action="open-polling-viewer"
+                    onClick={onNoPublisher}
+                    className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-ink-primary transition hover:bg-white/20"
+                  >
+                    Open in the direct viewer instead
+                  </button>
+                )}
+              </div>
             </>
           )}
         </div>

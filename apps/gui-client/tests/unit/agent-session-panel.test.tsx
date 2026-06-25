@@ -4,16 +4,25 @@
 // connection state machine deterministically.
 
 import { describe, expect, it, vi } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/react';
-import { AgentSessionPanel, friendlyConnectError } from '../../src/components/AgentSessionPanel';
+import { render, fireEvent, waitFor, act } from '@testing-library/react';
+import {
+  AgentSessionPanel,
+  friendlyConnectError,
+  NO_PUBLISHER_TIMEOUT_MS,
+} from '../../src/components/AgentSessionPanel';
 
 const connectMock = vi.fn();
+// A vi.fn() (not a plain arrow) so individual tests can override the room it
+// returns — e.g. to capture the TrackSubscribed handler and fire a real track.
+const createRoomMock = vi.fn(() => ({ on: vi.fn(), disconnect: vi.fn() }));
 
 vi.mock('../../src/lib/livekit', () => ({
-  createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
+  createLivekitRoom: (...args: unknown[]) => createRoomMock(...args) as unknown,
   connectToAgentSession: (...args: unknown[]) => connectMock(...args) as unknown,
   RoomEvent: {
     TrackSubscribed: 'trackSubscribed',
+    TrackUnsubscribed: 'trackUnsubscribed',
+    ParticipantDisconnected: 'participantDisconnected',
     Disconnected: 'disconnected',
     Reconnecting: 'reconnecting',
     Reconnected: 'reconnected',
@@ -95,5 +104,78 @@ describe('AgentSessionPanel overlay UX', () => {
     await waitFor(() => {
       expect(connectMock.mock.calls.length).toBeGreaterThan(callsBeforeClick);
     });
+  });
+
+  // #59 — a launch that connects the room but never publishes a video track
+  // (proxy down / the box never started) must NOT spin forever: after the
+  // no-publisher timeout the overlay flips to a launch-failed state with Retry.
+  it('#59: a connected-but-videoless room flips to a launch-failed overlay + Retry after the timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      connectMock.mockReset();
+      // Connect resolves (room joins LiveKit) but no TrackSubscribed ever fires.
+      connectMock.mockResolvedValue(undefined);
+      const { container } = render(<AgentSessionPanel info={INFO} />);
+      // Let the connect promise settle → 'connected', publisher still 'waiting'.
+      await act(async () => {
+        await Promise.resolve();
+      });
+      // Before the timeout: the waiting spinner, no launch-failed copy / Retry.
+      expect(container.querySelector('[data-action="retry-launch"]')).toBeNull();
+      // Advance past the no-publisher window → publisher flips to 'none'.
+      act(() => {
+        vi.advanceTimersByTime(NO_PUBLISHER_TIMEOUT_MS + 100);
+      });
+      const overlay = container.querySelector('[data-overlay="publisher-state"]');
+      expect(overlay?.getAttribute('data-state')).toBe('none');
+      expect(overlay?.textContent).toMatch(/couldn’t start the session/i);
+      const retry = container.querySelector('[data-action="retry-launch"]');
+      expect(retry).not.toBeNull();
+      // Retry re-runs the connect effect (new Room + a fresh attempt).
+      const callsBefore = connectMock.mock.calls.length;
+      act(() => {
+        fireEvent.click(retry as HTMLButtonElement);
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(connectMock.mock.calls.length).toBeGreaterThan(callsBefore);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #59 false-positive guard — a slow-but-working start (track arrives before the
+  // timeout) must clear the timer and never show the launch-failed overlay.
+  it('#59: a video track arriving before the timeout clears the timer — no launch-failed overlay', async () => {
+    vi.useFakeTimers();
+    try {
+      connectMock.mockReset();
+      const handlers: Record<string, (arg: unknown) => void> = {};
+      // Capture the TrackSubscribed handler so the test can fire it like a real track.
+      const roomOn = vi.fn((evt: string, cb: (arg: unknown) => void) => {
+        handlers[evt] = cb;
+      });
+      // Override the room JUST for this render so we can drive TrackSubscribed.
+      createRoomMock.mockReturnValueOnce({ on: roomOn, disconnect: vi.fn() });
+      connectMock.mockResolvedValue(undefined);
+      const { container } = render(<AgentSessionPanel info={INFO} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      // A video track arrives well before the timeout.
+      act(() => {
+        handlers['trackSubscribed']?.({ kind: 'video', attach: vi.fn() });
+      });
+      // Advance PAST the timeout — the cleared timer must not fire a 'none' state.
+      act(() => {
+        vi.advanceTimersByTime(NO_PUBLISHER_TIMEOUT_MS + 5_000);
+      });
+      expect(container.querySelector('[data-action="retry-launch"]')).toBeNull();
+      // publisher === 'publishing' → no publisher-state overlay at all.
+      expect(container.querySelector('[data-overlay="publisher-state"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

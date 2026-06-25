@@ -2671,12 +2671,23 @@ export function SimulatorWindow(): JSX.Element {
             );
           }
         })
-        .catch(() => {
+        .catch((err: unknown) => {
           if (cancelled) return;
-          // Gated 503 / 404 / network — the cookies view isn't live on this
-          // build/box yet. Show the calm pending note rather than an error.
+          // getAgentSessionCookies throws (via authedFetch) on any non-2xx, with
+          // the HTTP status attached to AgentSessionControlError. Branch on it so
+          // the note reflects the real state instead of one blanket message:
+          //   404 → no cookie jar yet (no page has loaded in the session)
+          //   503 → the cookies route is gated off on this deployment
+          //   else (network / 5xx) → a transient hiccup we'll retry on the next tick
           setCookies(null);
-          setCookiesNote('pending — live cookie view ships with the next device update');
+          const status = err instanceof AgentSessionControlError ? err.status : 0;
+          setCookiesNote(
+            status === 404
+              ? 'cookies will appear once a page loads in the session'
+              : status === 503
+                ? "cookies aren't enabled on this deployment"
+                : "couldn't load cookies — retrying",
+          );
         });
     };
     tick();

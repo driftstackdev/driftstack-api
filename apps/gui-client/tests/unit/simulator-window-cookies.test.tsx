@@ -54,7 +54,17 @@ vi.mock('../../src/lib/agent-session-control', () => ({
   handbackSession: vi.fn(),
   sendAgentMessage: vi.fn(),
   endAgentSession: vi.fn(),
-  AgentSessionControlError: class extends Error {},
+  // Mirror the real class shape (#58): the cookie poll `.catch` branches on the
+  // HTTP `status` attached to the thrown error, so the mock must carry it too.
+  AgentSessionControlError: class extends Error {
+    constructor(
+      message: string,
+      public status = 0,
+      public kind = 'unknown',
+    ) {
+      super(message);
+    }
+  },
 }));
 
 vi.mock('../../src/lib/download', () => ({
@@ -63,6 +73,11 @@ vi.mock('../../src/lib/download', () => ({
 
 const { SimulatorWindow } = await import('../../src/views/SimulatorWindow');
 const { RecordingsProvider } = await import('../../src/lib/recordings');
+// The mocked error class (carries `status`) so #58 catch-branch tests can throw it.
+const { AgentSessionControlError } =
+  (await import('../../src/lib/agent-session-control')) as unknown as {
+    AgentSessionControlError: new (m: string, s?: number) => Error;
+  };
 
 function renderSim() {
   window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&session=agt_ck');
@@ -330,5 +345,50 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
     expect(pane.textContent).toContain('no cookies on this page');
     // cookies !== null → live indicator shows even for the empty jar.
     expect(pane.querySelector('[data-component="simulator-cookies-live"]')).not.toBeNull();
+  });
+
+  // #58 — the poll `.catch` now branches on the thrown error's HTTP status
+  // instead of one blanket "ships with the next device update" line.
+  it('#58: a 404 (no page loaded yet) surfaces a calm "cookies will appear once a page loads" note', async () => {
+    cookiesMock.mockRejectedValue(new AgentSessionControlError('not found', 404));
+    const { container } = renderSim();
+    openCookies(container);
+
+    const pane = await waitFor(() => {
+      const p = container.querySelector('[data-component="simulator-cookies"]');
+      if (!p || !p.textContent?.includes('once a page loads')) throw new Error('not yet');
+      return p;
+    });
+    expect(pane.textContent).toContain('cookies will appear once a page loads in the session');
+    // The stale "next device update" copy is gone.
+    expect(pane.textContent).not.toContain('next device update');
+  });
+
+  it('#58: a 503 (route gated off) surfaces "cookies aren’t enabled on this deployment"', async () => {
+    cookiesMock.mockRejectedValue(new AgentSessionControlError('unavailable', 503));
+    const { container } = renderSim();
+    openCookies(container);
+
+    const pane = await waitFor(() => {
+      const p = container.querySelector('[data-component="simulator-cookies"]');
+      if (!p || !p.textContent?.includes("aren't enabled")) throw new Error('not yet');
+      return p;
+    });
+    expect(pane.textContent).toContain("cookies aren't enabled on this deployment");
+    expect(pane.textContent).not.toContain('next device update');
+  });
+
+  it('#58: a network/other error surfaces a transient "couldn’t load — retrying" note', async () => {
+    cookiesMock.mockRejectedValue(new Error('network down')); // not an AgentSessionControlError
+    const { container } = renderSim();
+    openCookies(container);
+
+    const pane = await waitFor(() => {
+      const p = container.querySelector('[data-component="simulator-cookies"]');
+      if (!p || !p.textContent?.includes('retrying')) throw new Error('not yet');
+      return p;
+    });
+    expect(pane.textContent).toContain("couldn't load cookies — retrying");
+    expect(pane.textContent).not.toContain('next device update');
   });
 });
