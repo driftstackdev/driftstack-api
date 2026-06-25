@@ -2676,14 +2676,29 @@ export function SimulatorWindow(): JSX.Element {
   // changed (no wire storm from the ~2s poll re-asserting the same values). liveUrl/
   // liveTitle are mirrored separately (only when the written tab IS the active one).
   const writeTabPageState = useCallback(
-    (frame: { tabId?: string | null; url?: string | null; title?: string | null }): void => {
+    (
+      frame: { tabId?: string | null; url?: string | null; title?: string | null },
+      // Whether this frame is AUTHORITATIVE for resolving an in-flight switch. A switch
+      // must only resolve (clear "switching…" + cancel the activateTab retry net) on a
+      // frame that genuinely reflects the SWITCHED page — a tabId-routed frame to the
+      // target, OR a tabId-less frame that arrived OUTSIDE the post-switch grace window
+      // (the box has had time to re-report the new page). A tabId-less poll/reconcile
+      // frame that lands DURING the grace window still carries the PRIOR tab's state, so
+      // it must NOT resolve the switch — doing so silently re-introduces the dropped-ack
+      // failure the activateTab retry net was added to fix (cancels the retry timer +
+      // clears the spinner before the box actually switches). Data-channel + ack paths
+      // are always authoritative.
+      isAuthoritative: boolean,
+    ): void => {
       const targetId =
         typeof frame.tabId === 'string' && frame.tabId !== ''
           ? frame.tabId
           : activeTabIdRef.current;
       // The box reported a page for this tab → the switch (if any) landed; clear the
       // "switching…" affordance + cancel its re-issue timer (instant-feedback path).
-      resolveSwitchRef.current(targetId);
+      // Only on an authoritative frame: a stale in-grace tabId-less poll must keep the
+      // retry net running until a genuine frame/ack for the switched page arrives.
+      if (isAuthoritative) resolveSwitchRef.current(targetId);
       setTabs((prev) => {
         let changed = false;
         const next = prev.map((t) => {
@@ -2862,7 +2877,9 @@ export function SimulatorWindow(): JSX.Element {
           (typeof msg.url === 'string' && msg.url !== '') ||
           (typeof msg.title === 'string' && msg.title !== '')
         ) {
-          writeTabPageState({ tabId: msg.tabId, url: msg.url, title: msg.title });
+          // Data-channel page_state is authoritative for the switch — it's the box's
+          // live push for the page it's actually showing.
+          writeTabPageState({ tabId: msg.tabId, url: msg.url, title: msg.title }, true);
         }
         // A3 W2845 — a 'stalled' frame surfaces the frozen-renderer badge; any
         // other harness state clears it (the page is responsive again).
@@ -2936,11 +2953,18 @@ export function SimulatorWindow(): JSX.Element {
             Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS ||
             Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS;
           const suppressUrl = !hasTabId && inGrace;
-          writeTabPageState({
-            tabId: ps.tabId,
-            url: suppressUrl ? null : ps.url,
-            title: ps.title,
-          });
+          // Authoritative for the SWITCH iff it routes by tabId OR it arrived outside
+          // the post-switch grace window — a tabId-less in-grace poll still carries the
+          // PRIOR tab's page, so it must NOT resolve the switch (keep the retry net up).
+          const inSwitchGrace = Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS;
+          writeTabPageState(
+            {
+              tabId: ps.tabId,
+              url: suppressUrl ? null : ps.url,
+              title: ps.title,
+            },
+            hasTabId || !inSwitchGrace,
+          );
           // A3 W2845 — surface/clear the frozen-renderer badge from the poll too
           // (independent of the loading grace window; a stall is real regardless).
           setPageStalled(ps.state === 'stalled');
@@ -3583,11 +3607,18 @@ export function SimulatorWindow(): JSX.Element {
         Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS ||
         Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS;
       const suppressUrl = !hasTabId && inGrace;
-      writeTabPageState({
-        tabId: ps.tabId,
-        url: suppressUrl ? null : ps.url,
-        title: ps.title,
-      });
+      // Same switch-resolution gating as the poll: a tabId-less reconcile result that
+      // lands inside the switch grace window reflects the PRIOR page and must NOT
+      // resolve the switch (the box hasn't re-reported the switched page yet).
+      const inSwitchGrace = Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS;
+      writeTabPageState(
+        {
+          tabId: ps.tabId,
+          url: suppressUrl ? null : ps.url,
+          title: ps.title,
+        },
+        hasTabId || !inSwitchGrace,
+      );
     } catch {
       /* best-effort reconcile — transient errors are non-fatal */
     }

@@ -531,6 +531,50 @@ describe('SimulatorWindow — page tab strip', () => {
     }
   });
 
+  it('(c3) a STALE tabId-less poll within the grace window does NOT resolve the switch (keeps the retry net + spinner alive)', async () => {
+    // Regression: a tabId-less poll frame that lands DURING the post-switch grace window
+    // still carries the PRIOR tab's page. It used to unconditionally resolve the switch
+    // via writeTabPageState → cancelling the activateTab retry net and clearing the
+    // "switching…" spinner BEFORE the box actually switched — silently re-introducing the
+    // dropped-ack failure the retry net was added to fix. The in-grace tabId-less frame
+    // must NOT be treated as authoritative for the switch.
+    vi.useFakeTimers();
+    try {
+      const { container } = renderSim();
+      expect(dataHandler).not.toBeNull();
+      pushPageState({ state: 'loaded', url: 'https://aaa.example/', title: 'A' });
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+      pushPageState({ state: 'loaded', url: 'https://bbb.example/', title: 'B' });
+      sendActivateTab.mockClear();
+      // Switch back to tab 1 → first activateTab send + spinner on tab 1.
+      fireEvent.click(tabEls(container)[0]);
+      expect(sendActivateTab).toHaveBeenCalledTimes(1);
+      expect(tabEls(container)[0].getAttribute('data-switching')).toBe('true');
+      // Arm a STALE tabId-less poll (still the prior tab B) and let a poll tick fire
+      // INSIDE the grace window. It must NOT resolve the switch.
+      pageStateValue = {
+        state: 'loaded',
+        url: 'https://bbb.example/',
+        title: 'B',
+        tabId: null,
+        error: null,
+      };
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      // The spinner is still up — the switch was NOT prematurely resolved.
+      expect(tabEls(container)[0].getAttribute('data-switching')).toBe('true');
+      // And the ack-miss retry net is still armed: the next backoff re-issues activateTab
+      // (it would have been cancelled if the stale poll had resolved the switch).
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1200);
+      });
+      expect(sendActivateTab.mock.calls.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('(d) a page_state carrying tabId routes url/title to THAT tab (not the active one)', () => {
     const { container } = renderSim();
     expect(dataHandler).not.toBeNull();
