@@ -575,6 +575,51 @@ describe('SimulatorWindow — page tab strip', () => {
     }
   });
 
+  it('clears a prior tab error overlay + stalled badge when SWITCHING to another tab', () => {
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+    // Open a 2nd tab (tab2 active); tab1 = the one that will carry an error.
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    // Switch back to tab1, then fail its load → the full-screen error overlay shows.
+    fireEvent.click(tabEls(container)[0]);
+    pushPageState({
+      state: 'errored',
+      url: 'https://a.example/',
+      error: { kind: 'net', message: 'x' },
+    });
+    expect(container.querySelector('[data-component="page-error-overlay"]')).not.toBeNull();
+    // Switch to tab2 (a healthy page). The error overlay must NOT bleed onto it.
+    fireEvent.click(tabEls(container)[1]);
+    expect(container.querySelector('[data-component="page-error-overlay"]')).toBeNull();
+  });
+
+  it('clears a prior tab stalled badge when OPENING a new tab', () => {
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+    pushPageState({ state: 'stalled', url: 'https://a.example/' });
+    expect(container.querySelector('[data-component="page-stalled-badge"]')).not.toBeNull();
+    // Open a fresh tab → the prior tab's stalled badge must not cover the new tab.
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    expect(container.querySelector('[data-component="page-stalled-badge"]')).toBeNull();
+  });
+
+  it('clears the error overlay when CLOSING the active (errored) tab focuses a neighbour', () => {
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+    // Two tabs; make tab2 (active) the errored one, then close it.
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+    pushPageState({
+      state: 'errored',
+      url: 'https://b.example/',
+      error: { kind: 'net', message: 'x' },
+    });
+    expect(container.querySelector('[data-component="page-error-overlay"]')).not.toBeNull();
+    // Close tab2 → focus moves to tab1; the overlay must not linger over it.
+    const closeBtn = within(tabEls(container)[1]).getByLabelText('Close tab');
+    fireEvent.click(closeBtn);
+    expect(container.querySelector('[data-component="page-error-overlay"]')).toBeNull();
+  });
+
   it('(d) a page_state carrying tabId routes url/title to THAT tab (not the active one)', () => {
     const { container } = renderSim();
     expect(dataHandler).not.toBeNull();

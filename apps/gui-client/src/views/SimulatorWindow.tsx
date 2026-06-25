@@ -2732,6 +2732,22 @@ export function SimulatorWindow(): JSX.Element {
     }
   };
   useEffect(() => () => clearLoadWatchdog(), []);
+  // Optimistically reset the per-page chrome (error overlay / loading bar / stalled
+  // badge / progress) on a tab switch/open/close. These four pieces of state are
+  // currently GLOBAL to the window (not per-tab), so without this reset a prior tab's
+  // "Page failed to load" overlay, loading bar, or "page unresponsive" badge bleeds
+  // across onto the newly-active tab — and the overlay's "Try again" re-navigates the
+  // WRONG tab (liveUrl has already re-derived to the new tab). The box's next
+  // page_state for the now-active tab re-asserts the real state. Until pageError/
+  // pageLoading/pageStalled/loadProgress move into the per-tab SimTab record, this is
+  // the correct optimistic clear.
+  const resetPageChromeForSwitch = useCallback((): void => {
+    setPageError(null);
+    setPageStalled(false);
+    setPageLoading(false);
+    setLoadProgress(null);
+    clearLoadWatchdog();
+  }, []);
   useEffect(() => {
     if (room === null) return;
     const onData = (payload: Uint8Array): void => {
@@ -3655,17 +3671,34 @@ export function SimulatorWindow(): JSX.Element {
       return next;
     });
     setActiveTabId(tab.id);
+    // Clear the prior tab's error overlay / loading bar / stalled badge so they don't
+    // cover the fresh new tab (the new-tab page re-asserts its own loading state).
+    resetPageChromeForSwitch();
     // Mark a switch so the ~2s poll's grace window suppresses a stale prior-tab url
     // landing on the fresh blank tab. liveUrl/liveTitle re-derive from the new active
     // tab automatically (the about:blank/'New Tab' record), so there's no manual
     // reset to do — and no stamp-back loop to carry the prior page onto the + tab.
     lastSwitchAtRef.current = Date.now();
-  }, [emitTabList]);
+  }, [emitTabList, resetPageChromeForSwitch]);
   // Close a tab — remove it; if it was active, activate the nearest neighbor (prefer
   // the one to the left, else the right). NEVER drops below one tab (the close button
   // is hidden on the last tab too, but guard here as well).
   const onCloseTab = useCallback(
     (id: string): void => {
+      // Whether the close moves focus to a neighbour (we closed the ACTIVE tab). Side
+      // effects (grace-arm + chrome reset) run OUTSIDE the setTabs reducer to keep it pure.
+      const closingActive = id === activeTabId;
+      if (closingActive) {
+        // Arm the switch grace window so the ~2s poll doesn't clobber the newly-active
+        // neighbour's url with the just-closed tab's stale prior-page url (the box is
+        // still publishing/reporting the old page for ~2s — the "2nd switch stays on the
+        // same url" clobber, on the close path).
+        lastSwitchAtRef.current = Date.now();
+        // Clear the closed tab's error overlay / loading bar / stalled badge so they
+        // don't bleed onto the neighbour the close focuses (the box re-asserts the
+        // neighbour's real state on its next page_state).
+        resetPageChromeForSwitch();
+      }
       setTabs((prev) => {
         if (prev.length <= 1) return prev; // never go below one tab
         const idx = prev.findIndex((t) => t.id === id);
@@ -3675,7 +3708,7 @@ export function SimulatorWindow(): JSX.Element {
         // `next` is non-empty here (prev had >1 and we removed one); prefer the tab to
         // the left of the closed index, else the first remaining.
         let nextActive = activeTabId;
-        if (id === activeTabId) {
+        if (closingActive) {
           const neighbor = next[Math.max(0, idx - 1)] ?? next[0];
           if (neighbor !== undefined) nextActive = neighbor.id;
         }
@@ -3684,7 +3717,7 @@ export function SimulatorWindow(): JSX.Element {
         return next;
       });
     },
-    [activeTabId, emitTabList],
+    [activeTabId, emitTabList, resetPageChromeForSwitch],
   );
   // Send a single activateTab attempt for a switch + arm the ack-miss re-issue timer
   // (founder 2026-06-25 softer "could not switch tab" handling). On a missed ack the
@@ -3762,6 +3795,10 @@ export function SimulatorWindow(): JSX.Element {
       // stays on the same url" bug). liveUrl/liveTitle re-derive from the target
       // tab's OWN stored url/title via the derived effect below — NO stamp-back.
       lastSwitchAtRef.current = Date.now();
+      // Clear the prior tab's error overlay / loading bar / stalled badge so they don't
+      // bleed onto the newly-active tab (and so "Try again" can't re-navigate the wrong
+      // tab). The box's next page_state for the now-active tab re-asserts the real state.
+      resetPageChromeForSwitch();
       setActiveTabId(id);
       // INSTANT feedback — show "switching…" on the target tab immediately (real
       // speed is A3's box-side no-reload). Cleared when the box reports the tab's
@@ -3790,7 +3827,15 @@ export function SimulatorWindow(): JSX.Element {
         setSwitchingTabId(null);
       }
     },
-    [tabs, activeTabId, emitTabList, room, sendActivateAttempt, reconcilePageState],
+    [
+      tabs,
+      activeTabId,
+      emitTabList,
+      room,
+      sendActivateAttempt,
+      reconcilePageState,
+      resetPageChromeForSwitch,
+    ],
   );
   // DERIVE the address-bar view (liveUrl/liveTitle) from the ACTIVE tab's stored
   // url/title (live-state accuracy refactor). This REPLACES the old stamp-back sync
