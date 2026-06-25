@@ -42,8 +42,10 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
   });
 
   it('imports: and/count/desc/eq/lt/or from drizzle-orm; 6 service types (ListProfilesArgs/Page + NewProfileInput + ProfileRecord + ProfileUpdates + ProfilesRepo); Database; profiles schema', () => {
+    // doc-150 item 6 — `sql` joined the drizzle import for the
+    // COALESCE(sum(...))::bigint storage-total aggregate in sumSizeBytesByAccount.
     expect(body).toMatch(
-      /import \{ and, count, desc, eq, isNotNull, isNull, lt, or \} from 'drizzle-orm';/,
+      /import \{ and, count, desc, eq, isNotNull, isNull, lt, or, sql \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(/import \{ isUniqueViolation \} from '\.\.\/lib\/pg-error\.js';/);
     expect(body).toMatch(
@@ -75,6 +77,13 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
     expect(body).toContain('createdAt: r.createdAt,');
     expect(body).toContain('updatedAt: r.updatedAt,');
     expect(body).toContain('deletedAt: r.deletedAt,'); // L4b recycle bin
+  });
+
+  it('sumSizeBytesByAccount (doc-150 item 6): COALESCE(sum(sizeBytes), 0)::bigint over notDeleted account rows; Number()-parses the string back', () => {
+    expect(body).toMatch(/async sumSizeBytesByAccount\(accountId: string\): Promise<number> \{/);
+    expect(body).toContain('coalesce(sum(${profiles.sizeBytes}), 0)::bigint');
+    expect(body).toContain('.where(and(eq(profiles.accountId, accountId), notDeleted));');
+    expect(body).toContain('return row ? Number(row.total) : 0;');
   });
 
   it("insert: 7-field values (accountId + name + archetype + description + folder + tags + wrappedDek); returning(); throws 'insert profile: no row returned'", () => {

@@ -6,6 +6,8 @@ import {
   LOCKED_ARCHETYPE_ID,
   LOCKED_ARCHETYPE_DISPLAY_LABEL,
   PROFILES_PER_TIER,
+  STORAGE_SOFT_WARN_FRACTION,
+  TIER_STORAGE_BYTES_CAP,
   archetypeDisplayLabel,
   type AccountTier,
 } from '@driftstack/api-types';
@@ -109,12 +111,25 @@ const apiBaseUrl = resolveApiBaseUrl();
       {atLimit && <span class="text-red-700"> · tier limit reached</span>}
     </p>
     {/* doc-150 item 5 — account storage total (sum of every profile's
-        size_bytes). Hidden until hydration fills it in (no meaningful SSR
-        value without live data). Quota enforcement is item 6. */}
-    <p class="mb-6 hidden text-sm text-tk-ink-3" data-field="storage-line">
-      <strong class="font-medium text-tk-ink" data-field="storage-total">—</strong>
-      stored across your profiles.
-    </p>
+        size_bytes). item 6 — per-account storage QUOTA: used / tier-cap %
+        with a soft (>=80%) warn + an over-cap state. Both hidden until
+        hydration fills them in (no meaningful SSR value without live data;
+        the cap depends on the live tier from /v1/account/me). Enforced
+        server-side at session-launch; enterprise is soft-only (no hard
+        block, so the over-cap bar reads as a warning, not a stop). */}
+    <div class="mb-6 hidden" data-field="storage-line">
+      <p class="text-sm text-tk-ink-3">
+        <strong class="font-medium text-tk-ink" data-field="storage-total">—</strong>
+        of
+        <strong class="font-medium text-tk-ink" data-field="storage-cap">—</strong>
+        used across your profiles
+        <span data-field="storage-pct" class="text-tk-ink-3"></span>
+        <span data-field="storage-warn" class="hidden font-medium"></span>
+      </p>
+      <div class="mt-2 h-2 w-full max-w-md overflow-hidden rounded-full bg-tk-bg" role="presentation">
+        <div data-field="storage-bar" class="h-full w-0 rounded-full bg-tk-accent transition-[width]"></div>
+      </div>
+    </div>
 
     <!--
       V-470 — Snapshot capture form, hidden by default. Reveals when a
@@ -527,7 +542,7 @@ const apiBaseUrl = resolveApiBaseUrl();
  — progressive-enhancement script. Live-fetches /v1/profiles +
     /v1/account/me; wires create + delete actions.
   -->
-  <script is:inline define:vars={{ apiBaseUrl, archetypeLabels: ARCHETYPE_LABELS }}>
+  <script is:inline define:vars={{ apiBaseUrl, archetypeLabels: ARCHETYPE_LABELS, storageCaps: TIER_STORAGE_BYTES_CAP, storageSoftFraction: STORAGE_SOFT_WARN_FRACTION }}>
     (function () {
       const root = document.querySelector('[data-page="profiles"]');
       if (!root) return;
@@ -541,6 +556,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       const createError = root.querySelector('[data-create-error]');
       const showCreateBtns = root.querySelectorAll('[data-show-create]');
       const token = localStorage.getItem('ds_web_session_token');
+      // doc-150 item 6 — live account tier, captured from /v1/account/me on
+      // refresh. Drives the storage-quota cap lookup in renderStorageTotal.
+      // Null until the first /v1/account/me resolves → the quota bar stays
+      // collapsed (we don't guess a cap).
+      let currentTier = null;
 
       function showBanner(text) {
         if (!banner) return;
@@ -718,6 +738,9 @@ const apiBaseUrl = resolveApiBaseUrl();
           .catch(() => null);
         return Promise.all([profilesP, meP])
           .then(([profiles, me]) => {
+            // doc-150 item 6 — capture the live tier BEFORE renderProfiles so
+            // renderStorageTotal (called inside it) can resolve the storage cap.
+            if (me && me.tier) currentTier = me.tier;
             renderProfiles(profiles);
             if (me) {
               renderUsage(me, profiles.length);
@@ -808,11 +831,20 @@ const apiBaseUrl = resolveApiBaseUrl();
       });
 
       // doc-150 item 5 — account storage total = sum of every profile's
-      // size_bytes (non-numeric / pre-save profiles contribute 0). Surfaced in
-      // the storage-line; the line stays hidden when there are no profiles.
+      // size_bytes (non-numeric / pre-save profiles contribute 0). item 6 —
+      // per-account QUOTA: used / tier-cap %, a soft warn at >=80%, and an
+      // over-cap state. The cap comes from the live tier (storageCaps map,
+      // injected from TIER_STORAGE_BYTES_CAP); compute-on-read mirrors the
+      // server's computeAccountStorageState. The whole block stays hidden when
+      // there are no profiles, and the bar/cap stay collapsed until the live
+      // tier is known (currentTier null → no cap to compare against).
       function renderStorageTotal(profiles) {
         const storageLine = root.querySelector('[data-field="storage-line"]');
         const storageTotal = root.querySelector('[data-field="storage-total"]');
+        const storageCapEl = root.querySelector('[data-field="storage-cap"]');
+        const storagePct = root.querySelector('[data-field="storage-pct"]');
+        const storageWarn = root.querySelector('[data-field="storage-warn"]');
+        const storageBar = root.querySelector('[data-field="storage-bar"]');
         if (!storageLine || !storageTotal) return;
         if (!Array.isArray(profiles) || profiles.length === 0) {
           storageLine.classList.add('hidden');
@@ -823,6 +855,55 @@ const apiBaseUrl = resolveApiBaseUrl();
           0,
         );
         storageTotal.textContent = fmtBytes(total);
+
+        // Quota: only renders the cap leg once the live tier is known. Enterprise
+        // is soft-only (server never hard-blocks it), so its over-cap state reads
+        // as a warning, not a stop.
+        const cap =
+          currentTier && storageCaps && typeof storageCaps[currentTier] === 'number'
+            ? storageCaps[currentTier]
+            : null;
+        const isEnterprise = currentTier === 'enterprise';
+        if (cap && cap > 0) {
+          const fraction = total / cap;
+          const pct = Math.round(fraction * 100);
+          if (storageCapEl) storageCapEl.textContent = fmtBytes(cap);
+          if (storagePct) storagePct.textContent = ' (' + pct + '%)';
+          if (storageBar) {
+            // Bar width clamps at 100% even when over-cap (the warn label carries
+            // the overage); color shifts to rose at the soft threshold + over-cap.
+            storageBar.style.width = Math.min(100, pct) + '%';
+            storageBar.classList.remove('bg-tk-accent', 'bg-amber-500', 'bg-rose-600');
+            if (fraction >= 1) storageBar.classList.add('bg-rose-600');
+            else if (fraction >= storageSoftFraction) storageBar.classList.add('bg-amber-500');
+            else storageBar.classList.add('bg-tk-accent');
+          }
+          if (storageWarn) {
+            if (fraction >= 1) {
+              storageWarn.textContent = isEnterprise
+                ? ' · over your plan allowance — contact sales to raise it'
+                : ' · storage limit reached — delete a profile or upgrade to launch new profile sessions';
+              storageWarn.className = 'font-medium text-rose-700';
+              storageWarn.classList.remove('hidden');
+            } else if (fraction >= storageSoftFraction) {
+              storageWarn.textContent = ' · approaching your storage limit';
+              storageWarn.className = 'font-medium text-amber-700';
+              storageWarn.classList.remove('hidden');
+            } else {
+              storageWarn.classList.add('hidden');
+              storageWarn.textContent = '';
+            }
+          }
+        } else {
+          // Tier/cap not yet known — show the total without the quota leg.
+          if (storageCapEl) storageCapEl.textContent = '—';
+          if (storagePct) storagePct.textContent = '';
+          if (storageWarn) {
+            storageWarn.classList.add('hidden');
+            storageWarn.textContent = '';
+          }
+          if (storageBar) storageBar.style.width = '0%';
+        }
         storageLine.classList.remove('hidden');
       }
 

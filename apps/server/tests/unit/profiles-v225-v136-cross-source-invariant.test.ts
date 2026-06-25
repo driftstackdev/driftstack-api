@@ -249,10 +249,10 @@ describe('W948 V-225 + V-136 profiles cross-source invariant', () => {
 
   // ─── 3-error class import ────────────────────────────────────
 
-  it('CRITICAL imports 3 error classes — ConflictError + NotFoundError + TierLimitError. The 3-error palette covers name-collision / row-missing / tier-cap states.', () => {
+  it('CRITICAL imports 4 error classes — ConflictError + NotFoundError + StorageQuotaExceededError + TierLimitError. Covers name-collision / row-missing / storage-quota (doc-150 item 6) / tier-cap states.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/profiles.ts'));
     expect(p).toMatch(
-      /import \{ ConflictError, NotFoundError, TierLimitError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{\s*\n?\s*ConflictError,\s*\n?\s*NotFoundError,\s*\n?\s*StorageQuotaExceededError,\s*\n?\s*TierLimitError,\s*\n?\s*\} from '\.\.\/lib\/errors\.js';/,
     );
   });
 

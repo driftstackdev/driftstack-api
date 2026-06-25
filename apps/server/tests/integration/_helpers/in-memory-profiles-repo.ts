@@ -47,6 +47,17 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
     return Promise.resolve(n);
   }
 
+  // doc-150 item 6 — sum of size_bytes over the account's LIVE profiles
+  // (deletedAt === null, matching the prod COALESCE(sum) + notDeleted filter).
+  // A NULL/never-saved size contributes 0.
+  sumSizeBytesByAccount(accountId: string): Promise<number> {
+    let total = 0;
+    for (const r of this.rows.values())
+      if (r.accountId === accountId && r.deletedAt === null && typeof r.sizeBytes === 'number')
+        total += r.sizeBytes;
+    return Promise.resolve(total);
+  }
+
   // V-714 — atomic limit-check + insert. The prod Drizzle repo serialises this
   // via a `FOR UPDATE` lock on the accounts row; here the count + insert run
   // synchronously (JS single-thread → no interleave), which models the same

@@ -226,6 +226,32 @@ class ConcurrencyLimitError(DriftstackError):
         self.limit = limit
 
 
+class StorageQuotaExceededError(DriftstackError):
+    """doc-150 item 6 — per-account profile-storage quota reached at session-launch.
+
+    409 Conflict. Raised when a profile-backed session-create would grow the
+    account's stored state past its tier's hard cap. ``used_bytes`` /
+    ``cap_bytes`` / ``tier`` surface the overage. Only profile-backed launches
+    raise this; enterprise is soft-only and never does.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        used_bytes: int | None = None,
+        cap_bytes: int | None = None,
+        tier: str | None = None,
+        status: int | None = 409,
+        problem_type: str | None = None,
+        problem: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message, status=status, problem_type=problem_type, problem=problem)
+        self.used_bytes = used_bytes
+        self.cap_bytes = cap_bytes
+        self.tier = tier
+
+
 # ── Driver / upstream (502) ───────────────────────────────────────────────
 
 
@@ -387,6 +413,8 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/rate-limited": RateLimitError,
     "https://errors.driftstack.dev/concurrency-limit": ConcurrencyLimitError,
     "https://errors.driftstack.dev/tier-limit": QuotaExceededError,
+    # doc-150 item 6 — per-account profile-storage quota (409 at session-launch).
+    "https://errors.driftstack.dev/storage-quota-exceeded": StorageQuotaExceededError,
     "https://errors.driftstack.dev/revoked-key": RevokedKeyError,
     "https://errors.driftstack.dev/expired-key": ExpiredKeyError,
     "https://errors.driftstack.dev/invalid-key": InvalidKeyError,

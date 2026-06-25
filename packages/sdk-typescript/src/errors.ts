@@ -18,6 +18,7 @@
 //   https://errors.driftstack.dev/rate-limited         → RateLimitError
 //   https://errors.driftstack.dev/concurrency-limit    → ConcurrencyLimitError
 //   https://errors.driftstack.dev/tier-limit           → TierLimitError
+//   https://errors.driftstack.dev/storage-quota-exceeded → StorageQuotaExceededError
 //   https://errors.driftstack.dev/session-destroyed    → SessionDestroyedError
 //   https://errors.driftstack.dev/driver-error         → DriverError
 //   https://errors.driftstack.dev/driver-not-integrated → DriverNotIntegratedError
@@ -207,6 +208,27 @@ export class TierLimitError extends DriftstackError {
     this.current = ext.current;
     this.limit = ext.limit;
     this.recordType = ext.record_type;
+  }
+}
+
+/**
+ * doc-150 item 6 — per-account profile-storage quota reached at session-
+ * launch. 409 Conflict (reuses the `conflict` kind, like the pair-mode 409s).
+ * Extensions carry the byte numbers so consumers can render the overage:
+ * `err.usedBytes`, `err.capBytes`, `err.tier`. Only profile-backed launches
+ * raise this; enterprise is soft-only and never does.
+ */
+export class StorageQuotaExceededError extends DriftstackError {
+  readonly usedBytes: number | undefined;
+  readonly capBytes: number | undefined;
+  readonly tier: string | undefined;
+  constructor(p: Problem) {
+    super(toOpts('conflict', p));
+    this.name = 'StorageQuotaExceededError';
+    const ext = p as { used_bytes?: number; cap_bytes?: number; tier?: string };
+    this.usedBytes = ext.used_bytes;
+    this.capBytes = ext.cap_bytes;
+    this.tier = ext.tier;
   }
 }
 
@@ -425,6 +447,8 @@ const TYPE_TO_CTOR: Record<string, (p: Problem) => DriftstackError> = {
   'https://errors.driftstack.dev/conflict': (p) => new ConflictError(p),
   'https://errors.driftstack.dev/concurrency-limit': (p) => new ConcurrencyLimitError(p),
   'https://errors.driftstack.dev/tier-limit': (p) => new TierLimitError(p),
+  // doc-150 item 6 — per-account profile-storage quota (409 at session-launch).
+  'https://errors.driftstack.dev/storage-quota-exceeded': (p) => new StorageQuotaExceededError(p),
   'https://errors.driftstack.dev/session-destroyed': (p) => new SessionDestroyedError(p),
   'https://errors.driftstack.dev/session-timeout': (p) => new SessionTimeoutError(p),
   'https://errors.driftstack.dev/legal-acceptance-required': (p) =>

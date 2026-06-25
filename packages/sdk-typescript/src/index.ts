@@ -116,6 +116,7 @@ export {
   RevokedKeyError,
   SessionDestroyedError,
   SessionTimeoutError,
+  StorageQuotaExceededError,
   TierLimitError,
   TransportError,
   ValidationError,

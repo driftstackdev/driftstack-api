@@ -165,6 +165,12 @@ function makeRepos(
       Promise.resolve(
         opts.countOverride ?? profiles.filter((p) => p.accountId === accountId).length,
       ),
+    sumSizeBytesByAccount: (accountId) =>
+      Promise.resolve(
+        profiles
+          .filter((p) => p.accountId === accountId && p.deletedAt === null)
+          .reduce((sum, p) => sum + (typeof p.sizeBytes === 'number' ? p.sizeBytes : 0), 0),
+      ),
     findById: ({ id, accountId }) =>
       Promise.resolve(profiles.find((p) => p.id === id && p.accountId === accountId) ?? null),
     findByAccountAndName: ({ accountId, name }) =>

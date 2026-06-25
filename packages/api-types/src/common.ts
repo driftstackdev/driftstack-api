@@ -126,6 +126,49 @@ export const PROFILES_PER_TIER: Record<AccountTier, number | 'custom'> = {
 };
 
 /**
+ * doc-150 item 6 — per-account profile-storage quota (bytes). The
+ * enforced quota is the PER-ACCOUNT TOTAL: the SUM of the account's
+ * live (non-trashed) profiles' `size_bytes`. The per-profile rails
+ * from doc-150 (1 GiB / 5 GiB) are NOT customer-facing-enforced — the
+ * 256 MiB-per-blob harness backstop already bounds a single profile;
+ * those rails stay internal. Single source of truth for marketing-
+ * site, customer-dashboard, and server-side enforcement (mirrors the
+ * PROFILES_PER_TIER shape).
+ *
+ * Caps are declared in GiB and converted to bytes via `* 2 ** 30`.
+ * Enterprise is SOFT-ONLY — its value is the alert floor, never a hard
+ * block (the launch gate skips enterprise entirely; see
+ * `computeAccountStorageState` in
+ * `apps/server/src/services/profile-storage-quota.ts`).
+ *
+ * Server-side enforcement reads this at session-launch (a profile-
+ * backed POST /v1/sessions or POST /v1/profiles/:id/launch): when the
+ * account's aggregate `size_bytes` has reached its hard cap (100%) the
+ * create is refused with a `storage_quota_exceeded` problem (409).
+ * Sessions WITHOUT a profile are never blocked; reads/restores always
+ * work. The dashboard surfaces the soft (80%) warn state compute-on-read.
+ */
+export const TIER_STORAGE_BYTES_CAP: Record<AccountTier, number> = {
+  free: 1 * 2 ** 30,
+  solo_manual: 5 * 2 ** 30,
+  team_manual: 25 * 2 ** 30,
+  agency_manual: 100 * 2 ** 30,
+  api_starter: 15 * 2 ** 30,
+  api_builder: 50 * 2 ** 30,
+  api_scale: 250 * 2 ** 30,
+  // Enterprise is SOFT-ONLY — this is the alert floor, not a hard block.
+  enterprise: 500 * 2 ** 30,
+};
+
+/**
+ * doc-150 item 6 — fraction of the per-account storage cap at which the
+ * dashboard surfaces a soft "approaching your limit" warning. Soft never
+ * blocks; the hard block is at 100% (`fraction >= 1`). Single source of
+ * truth shared by the server quota helper + the dashboard meter.
+ */
+export const STORAGE_SOFT_WARN_FRACTION = 0.8;
+
+/**
  * Concurrent session limit per tier — the primary metering primitive
  * on paid tiers. A customer can have up to N sessions in `creating` /
  * `ready` / `busy` state simultaneously; creating an (N+1)th triggers

@@ -154,10 +154,10 @@ describe('W965 errors lib RFC 7807 cross-source invariant', () => {
 
   // ─── 25 ApiError subclasses cardinality ──────────────────────
 
-  it('CRITICAL errors.ts declares EXACTLY 30 ApiError subclasses — covers BadRequest + Validation + auth (5x 401) + Forbidden + NotFound + Conflict + 2x rate-limit + Tier + 16 domain-specific errors + Internal. Q.1.d added ByokAnthropicRequiredError (2026-05-17); subsequent additions through 2026-05-20 (egress + agent + activation-gate family) grew the taxonomy to 29 subclasses + 1 base.', () => {
+  it('CRITICAL errors.ts declares EXACTLY 30 ApiError subclasses — covers BadRequest + Validation + auth (5x 401) + Forbidden + NotFound + Conflict + 2x rate-limit + Tier + domain-specific errors + Internal. Q.1.d added ByokAnthropicRequiredError (2026-05-17); subsequent additions through 2026-05-20 (egress + agent + activation-gate family) grew the taxonomy; doc-150 item 6 added StorageQuotaExceededError (2026-06-25) → 30 subclasses + 1 base.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'));
     const classes = p.match(/export class \w+Error extends ApiError/g) ?? [];
-    expect(classes.length).toBe(29); // 29 subclasses, plus ApiError base = 30 total
+    expect(classes.length).toBe(30); // 30 subclasses, plus ApiError base = 31 total
   });
 
   // ─── Each subclass sets name field ───────────────────────────

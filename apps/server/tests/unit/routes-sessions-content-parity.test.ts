@@ -45,9 +45,9 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     );
   });
 
-  it('imports: 9 Zod schemas from @driftstack/api-types + SessionRecord/SessionsService + GUIInputRequestSchema + BadRequest/Forbidden errors + AccountAuthRepo + resolveEffectiveAccount', () => {
+  it('imports: 9 Zod schemas + AccountTier type from @driftstack/api-types (doc-150 item 6 storage-quota gate uses the owner tier) + SessionRecord/SessionsService + GUIInputRequestSchema + BadRequest/Forbidden errors + AccountAuthRepo + resolveEffectiveAccount', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*CaptureRequestSchema,\s*\n?\s*ExtractRequestSchema,\s*\n?\s*SearchRequestSchema,\s*\n?\s*SessionLoginRequestSchema,\s*\n?\s*CreateSessionRequestSchema,\s*\n?\s*InteractRequestSchema,\s*\n?\s*NavigateRequestSchema,\s*\n?\s*PaginationQuerySchema,\s*\n?\s*WaitRequestSchema,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*\n?\s*CaptureRequestSchema,\s*\n?\s*ExtractRequestSchema,\s*\n?\s*SearchRequestSchema,\s*\n?\s*SessionLoginRequestSchema,\s*\n?\s*CreateSessionRequestSchema,\s*\n?\s*InteractRequestSchema,\s*\n?\s*NavigateRequestSchema,\s*\n?\s*PaginationQuerySchema,\s*\n?\s*WaitRequestSchema,\s*\n?\s*type AccountTier,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
       /import type \{ SessionRecord, SessionsService \} from '\.\.\/services\/sessions\.js';/,
@@ -121,8 +121,12 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     );
     // 2026-05-20 — profile_id binding lifted out of the branch as
     // bodyWithProfile; the create call now references bodyWithProfile.
+    // doc-150 item 6 — the OWNER's tier is resolved up front (ownerTier) so
+    // the storage-quota gate + concurrent cap share it; the team-create call
+    // references ownerAccountId + ownerTier (the owner lookup moved ahead of
+    // the binding).
     expect(body).toMatch(
-      /created = await service\.create\(ctx, bodyWithProfile, \{\s*\n?\s*effectiveAccountId: owner\.id,\s*\n?\s*effectiveTier: owner\.tier,\s*\n?\s*\}\);/,
+      /created = await service\.create\(ctx, bodyWithProfile, \{\s*\n?\s*effectiveAccountId: ownerAccountId,\s*\n?\s*effectiveTier: ownerTier,\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(/return reply\.code\(201\)\.send\(publicSession\(created\)\);/);
   });

@@ -102,6 +102,13 @@ export const ERROR_PAGES = {
     meaning: 'A per-tier resource cap (e.g. profile count) is exhausted.',
     fix: 'Delete unused resources or upgrade your tier. The error body names the limit that was hit.',
   },
+  'storage-quota-exceeded': {
+    status: 409,
+    title: 'Storage quota reached',
+    meaning:
+      'A profile-backed session-launch was refused because your profiles’ combined stored size reached your tier’s storage cap. The body carries used_bytes, cap_bytes, and tier. Sessions without a profile are never blocked; Enterprise is soft-only.',
+    fix: 'Delete or trim a profile to free space, or upgrade your tier, then launch again.',
+  },
   'session-destroyed': {
     status: 410,
     title: 'Session destroyed',
@@ -224,7 +231,8 @@ export const ERROR_PAGES = {
 export const RELATED = {
   'rate-limited': ['concurrency-limit', 'tier-limit'],
   'concurrency-limit': ['rate-limited', 'tier-limit'],
-  'tier-limit': ['concurrency-limit', 'rate-limited'],
+  'tier-limit': ['concurrency-limit', 'rate-limited', 'storage-quota-exceeded'],
+  'storage-quota-exceeded': ['tier-limit', 'conflict'],
   unauthorized: ['invalid-key', 'invalid-credentials', 'forbidden'],
   forbidden: ['unauthorized', 'mfa-step-up-required'],
   'mfa-step-up-required': ['forbidden', 'unauthorized'],

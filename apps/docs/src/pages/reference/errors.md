@@ -59,6 +59,7 @@ returns true for that class.
 | `errors.driftstack.dev/bundled-llm-consent-required` | 402  | `BundledLlmConsentRequiredError`      | `BundledLlmConsentRequiredError`      | `BundledLlmConsentRequiredError`      | no         |
 | `errors.driftstack.dev/pair-mode-conflict`           | 409  | `PairModeConflictError`               | `PairModeConflictError`               | `PairModeConflictError`               | no         |
 | `errors.driftstack.dev/pair-mode-invalid-transition` | 409  | `PairModeStateInvalidTransitionError` | `PairModeStateInvalidTransitionError` | `PairModeStateInvalidTransitionError` | no         |
+| `errors.driftstack.dev/storage-quota-exceeded`       | 409  | `StorageQuotaExceededError`           | `StorageQuotaExceededError`           | `StorageQuotaExceededError`           | no         |
 | `errors.driftstack.dev/internal`                     | 5xx  | `InternalError`                       | `InternalError`                       | `InternalError`                       | **yes**    |
 | (network failure / parse error)                      | 0    | `TransportError`                      | `TransportError`                      | `TransportError`                      | **yes**    |
 

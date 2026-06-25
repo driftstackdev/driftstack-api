@@ -23,6 +23,7 @@ import {
   NavigateRequestSchema,
   PaginationQuerySchema,
   WaitRequestSchema,
+  type AccountTier,
 } from '@driftstack/api-types';
 import type { SessionRecord, SessionsService } from '../services/sessions.js';
 import type { ProfilesService } from '../services/profiles.js';
@@ -155,9 +156,18 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   // Validates ownership, inherits archetype default, stamps the binding
   // into session metadata, then bumps profile.last_used_at after the
   // create succeeds.
+  //
+  // doc-150 item 6 — HARD per-account storage-quota gate. A profile-backed
+  // session-create is the point where NEW persisted state starts growing, so
+  // a launch is refused (409 storage_quota_exceeded) BEFORE the driver
+  // dispatch when the OWNER's aggregate profile size_bytes has reached its
+  // tier's hard cap. Enterprise is soft-only (never blocked). Sessions
+  // WITHOUT a profile never call this helper, so they're never gated. `tier`
+  // is the OWNER's tier (the storage belongs to the owner account).
   async function resolveProfileBinding(
     profileId: string,
     accountId: string,
+    tier: AccountTier,
   ): Promise<{ archetype: string; metadata: Record<string, unknown> }> {
     if (!profilesService) {
       throw new NotFoundError(`Profile ${profileId} not found.`);
@@ -166,6 +176,11 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     // mismatch; propagate as-is (already returns 404, not 403, so we
     // don't leak profile existence to outsiders).
     const profile = await profilesService.get({ id: profileId, accountId });
+    // Storage-quota gate runs AFTER ownership is confirmed (we only meter the
+    // account that actually owns the resolved profile) and BEFORE the create
+    // returns to the caller's dispatch path. Throws StorageQuotaExceededError
+    // (409) when over the hard cap; no-op otherwise.
+    await profilesService.assertWithinStorageQuotaForLaunch({ accountId, tier });
     return {
       archetype: profile.archetype,
       metadata: { profile_id: profile.id, profile_name: profile.name },
@@ -212,6 +227,27 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       // atomically. The bump-last-used happens AFTER create so a
       // create-failed path doesn't leave the profile reading "used".
       const ownerAccountId = effective.kind === 'team' ? effective.accountId : ctx.account.id;
+      // Resolve the OWNER's tier up front. For a team-scoped create the
+      // session is owned by the team owner, so BOTH the storage-quota gate
+      // (doc-150 item 6, metered against the owner's stored profiles) AND the
+      // concurrent-cap tier use the owner's tier. The admin-role check + owner-
+      // existence guard move up here too so they run before any owner-scoped
+      // side effect. Self-scoped uses the caller's own tier.
+      let ownerTier: AccountTier;
+      if (effective.kind === 'team') {
+        if (effective.role !== 'admin') {
+          throw new ForbiddenError(
+            'Creating a session on a team owner requires admin role on that team.',
+          );
+        }
+        const owner = await authRepo.getAccount(effective.accountId);
+        if (!owner) {
+          throw new ForbiddenError('Owner account no longer exists.');
+        }
+        ownerTier = owner.tier;
+      } else {
+        ownerTier = ctx.account.tier;
+      }
       // Accept the canonical prof_<uuid> the profiles API returns OR a bare uuid
       // (parseProfileId normalizes + 400s on bad) → the bare uuid used by the
       // repo/touch. Matches /v1/agent-sessions (W335); resolves the divergence.
@@ -219,7 +255,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
         body.profile_id !== undefined ? parseProfileId(body.profile_id) : undefined;
       const profileBinding =
         profileBareId !== undefined
-          ? await resolveProfileBinding(profileBareId, ownerAccountId)
+          ? await resolveProfileBinding(profileBareId, ownerAccountId, ownerTier)
           : null;
       const bodyWithProfile =
         profileBinding !== null
@@ -231,18 +267,9 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
           : body;
       let created: SessionRecord;
       if (effective.kind === 'team') {
-        if (effective.role !== 'admin') {
-          throw new ForbiddenError(
-            'Creating a session on a team owner requires admin role on that team.',
-          );
-        }
-        const owner = await authRepo.getAccount(effective.accountId);
-        if (!owner) {
-          throw new ForbiddenError('Owner account no longer exists.');
-        }
         created = await service.create(ctx, bodyWithProfile, {
-          effectiveAccountId: owner.id,
-          effectiveTier: owner.tier,
+          effectiveAccountId: ownerAccountId,
+          effectiveTier: ownerTier,
         });
       } else {
         created = await service.create(ctx, bodyWithProfile);
@@ -304,14 +331,12 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       }
       const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
       const ownerAccountId = effective.kind === 'team' ? effective.accountId : ctx.account.id;
-      const binding = await resolveProfileBinding(profileId, ownerAccountId);
-      const body = {
-        archetype: binding.archetype,
-        label: typeof rawBody.label === 'string' ? rawBody.label : undefined,
-        metadata: binding.metadata,
-        profile_id: profileId,
-      } as const;
-      let created: SessionRecord;
+      // Resolve the OWNER's tier up front (storage-quota gate + concurrent cap
+      // both meter the owner). Admin-role + owner-existence guards move ahead of
+      // the binding so they run before any owner-scoped side effect — mirrors
+      // POST /v1/sessions. A profile launch is ALWAYS profile-backed, so the
+      // doc-150 item 6 storage gate inside resolveProfileBinding always runs.
+      let ownerTier: AccountTier;
       if (effective.kind === 'team') {
         if (effective.role !== 'admin') {
           throw new ForbiddenError(
@@ -322,9 +347,22 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
         if (!owner) {
           throw new ForbiddenError('Owner account no longer exists.');
         }
+        ownerTier = owner.tier;
+      } else {
+        ownerTier = ctx.account.tier;
+      }
+      const binding = await resolveProfileBinding(profileId, ownerAccountId, ownerTier);
+      const body = {
+        archetype: binding.archetype,
+        label: typeof rawBody.label === 'string' ? rawBody.label : undefined,
+        metadata: binding.metadata,
+        profile_id: profileId,
+      } as const;
+      let created: SessionRecord;
+      if (effective.kind === 'team') {
         created = await service.create(ctx, body, {
-          effectiveAccountId: owner.id,
-          effectiveTier: owner.tier,
+          effectiveAccountId: ownerAccountId,
+          effectiveTier: ownerTier,
         });
       } else {
         created = await service.create(ctx, body);

@@ -30,6 +30,7 @@ from driftstack.errors import (
     QuotaExceededError,
     RateLimitError,
     SessionTimeoutError,
+    StorageQuotaExceededError,
     TransportError,
 )
 from driftstack.retry import RetryConfig, with_retry, with_retry_async
@@ -149,6 +150,16 @@ def _error_from_response_data(
             detail,
             current_sessions=_int_or_none(problem.get("current_sessions")),
             limit=_int_or_none(problem.get("limit")),
+            status=status,
+            problem_type=problem_type,
+            problem=problem,
+        )
+    if error_cls is StorageQuotaExceededError:
+        return StorageQuotaExceededError(
+            detail,
+            used_bytes=_int_or_none(problem.get("used_bytes")),
+            cap_bytes=_int_or_none(problem.get("cap_bytes")),
+            tier=str(problem["tier"]) if problem.get("tier") else None,
             status=status,
             problem_type=problem_type,
             problem=problem,

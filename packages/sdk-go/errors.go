@@ -57,6 +57,7 @@ var (
 	ErrRateLimit               = errors.New("rate limited")
 	ErrConcurrencyLimit        = errors.New("concurrency limit hit")
 	ErrQuotaExceeded           = errors.New("quota exceeded")
+	ErrStorageQuotaExceeded    = errors.New("storage quota reached")
 	ErrSessionDestroyed        = errors.New("session destroyed")
 	ErrSessionTimeout          = errors.New("session timeout")
 	ErrLegalAcceptanceRequired = errors.New("legal acceptance required")
@@ -164,6 +165,20 @@ type QuotaExceededError struct {
 }
 
 func (e *QuotaExceededError) Is(target error) bool { return target == ErrQuotaExceeded }
+
+// StorageQuotaExceededError — 409 (doc-150 item 6). A profile-backed
+// session-launch was refused because the account's aggregate profile
+// storage reached its tier's hard cap. UsedBytes/CapBytes/Tier report the
+// overage. Only profile-backed launches raise this; enterprise is soft-only
+// and never does.
+type StorageQuotaExceededError struct {
+	apiError
+	UsedBytes int
+	CapBytes  int
+	Tier      string
+}
+
+func (e *StorageQuotaExceededError) Is(target error) bool { return target == ErrStorageQuotaExceeded }
 
 // SessionDestroyedError — 410 when an op targets a destroyed session.
 type SessionDestroyedError struct{ apiError }

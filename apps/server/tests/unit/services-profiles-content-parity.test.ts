@@ -194,14 +194,17 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
     expect(body).toMatch(/\/\*\* Page size, 1-100\. Default 50\. \*\/\s*\n?\s*limit\?: number;/);
   });
 
-  it('imports: LOCKED_ARCHETYPE_ID + AccountTier + ConflictError + NotFoundError + TierLimitError + profileLimitFor + AccountAuditService', () => {
+  it('imports: LOCKED_ARCHETYPE_ID + AccountTier + ConflictError + NotFoundError + StorageQuotaExceededError + TierLimitError + profileLimitFor + computeAccountStorageState + AccountAuditService', () => {
     expect(body).toMatch(
       /import \{ LOCKED_ARCHETYPE_ID, type AccountTier \} from '@driftstack\/api-types';/,
     );
+    // doc-150 item 6 — StorageQuotaExceededError joined the errors import (now
+    // multi-line) + the pure quota helper is imported for the launch gate.
     expect(body).toMatch(
-      /import \{ ConflictError, NotFoundError, TierLimitError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{\s*\n?\s*ConflictError,\s*\n?\s*NotFoundError,\s*\n?\s*StorageQuotaExceededError,\s*\n?\s*TierLimitError,\s*\n?\s*\} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(/import \{ profileLimitFor \} from '\.\/sessions\.js';/);
+    expect(body).toMatch(/computeAccountStorageState/);
     expect(body).toMatch(/import type \{ AccountAuditService \} from '\.\/account-audit\.js';/);
   });
 

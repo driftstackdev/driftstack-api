@@ -19,6 +19,7 @@ var problemTypeToFactory = map[string]func(base apiError, problem map[string]any
 	"https://errors.driftstack.dev/rate-limited":              buildRateLimit,
 	"https://errors.driftstack.dev/concurrency-limit":         buildConcurrencyLimit,
 	"https://errors.driftstack.dev/tier-limit":                buildQuotaExceeded,
+	"https://errors.driftstack.dev/storage-quota-exceeded":    buildStorageQuotaExceeded,
 	"https://errors.driftstack.dev/revoked-key":               buildRevokedKey,
 	"https://errors.driftstack.dev/expired-key":               buildExpiredKey,
 	"https://errors.driftstack.dev/invalid-key":               buildInvalidKey,
@@ -207,6 +208,16 @@ func buildQuotaExceeded(base apiError, problem map[string]any, _ string) error {
 		Current:    intFromProblem(problem, "current"),
 		Limit:      intFromProblem(problem, "limit"),
 		RecordType: rt,
+	}
+}
+
+func buildStorageQuotaExceeded(base apiError, problem map[string]any, _ string) error {
+	tier, _ := problem["tier"].(string)
+	return &StorageQuotaExceededError{
+		apiError:  base,
+		UsedBytes: intFromProblem(problem, "used_bytes"),
+		CapBytes:  intFromProblem(problem, "cap_bytes"),
+		Tier:      tier,
 	}
 }
 

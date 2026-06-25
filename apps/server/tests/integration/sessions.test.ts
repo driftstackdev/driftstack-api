@@ -3,7 +3,7 @@
 // ownership scoping, and concurrency limits.
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { PROBLEM_TYPES } from '@driftstack/api-types';
+import { PROBLEM_TYPES, TIER_STORAGE_BYTES_CAP } from '@driftstack/api-types';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
 let fx: TestAppFixture;
@@ -416,6 +416,116 @@ describe('DELETE /v1/sessions/:id', () => {
     expect(navigate.statusCode).toBe(410);
     const body = navigate.json<Record<string, unknown>>();
     expect(body.type).toBe(PROBLEM_TYPES.SessionDestroyed);
+  });
+});
+
+// doc-150 item 6 — per-account storage quota is enforced HARD at
+// session-launch when the create is profile-backed. The enforced quota is the
+// SUM of the account's live profiles' size_bytes vs TIER_STORAGE_BYTES_CAP.
+describe('POST /v1/sessions storage quota (doc-150 item 6)', () => {
+  // Create a profile via the API, then seed its sealed-store size directly on
+  // the repo (the harness emits size_bytes post-save; recordSave is that path).
+  async function createProfileWithSize(
+    fixture: TestAppFixture,
+    name: string,
+    sizeBytes: number,
+  ): Promise<string> {
+    const res = await fixture.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth(fixture),
+      payload: { name },
+    });
+    if (res.statusCode !== 200)
+      throw new Error(`profile create failed ${String(res.statusCode)}: ${res.body}`);
+    const prefixed = res.json<{ id: string }>().id; // prof_<uuid>
+    const bareId = prefixed.replace(/^prof_/, '');
+    await fixture.profilesRepo.recordSave({
+      id: bareId,
+      accountId: fixture.accountId,
+      at: new Date(),
+      sizeBytes,
+    });
+    return prefixed;
+  }
+
+  it('409 storage_quota_exceeded when the account is at its hard cap + a profile is bound', async () => {
+    fx = await buildTestApp({ tier: 'solo_manual' });
+    const profileId = await createProfileWithSize(
+      fx,
+      'fat-profile',
+      TIER_STORAGE_BYTES_CAP.solo_manual, // exactly at the cap → hard
+    );
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      payload: { profile_id: profileId },
+    });
+    expect(res.statusCode).toBe(409);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.type).toBe(PROBLEM_TYPES.StorageQuotaExceeded);
+    expect(body.used_bytes).toBe(TIER_STORAGE_BYTES_CAP.solo_manual);
+    expect(body.cap_bytes).toBe(TIER_STORAGE_BYTES_CAP.solo_manual);
+  });
+
+  it('201 when the account is UNDER the cap + a profile is bound', async () => {
+    fx = await buildTestApp({ tier: 'solo_manual' });
+    const profileId = await createProfileWithSize(fx, 'lean-profile', 1024);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      payload: { profile_id: profileId },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('201 when an account WITHOUT a profile is over what would be its cap — no-profile is never blocked', async () => {
+    fx = await buildTestApp({ tier: 'solo_manual' });
+    // Even with a fat profile on the account, a session that binds NO profile
+    // is never gated (the quota only applies to profile-backed launches).
+    await createProfileWithSize(fx, 'fat-profile', TIER_STORAGE_BYTES_CAP.solo_manual);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      payload: {},
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('201 for enterprise over its cap — enterprise is soft-only (no hard block)', async () => {
+    fx = await buildTestApp({ tier: 'enterprise' });
+    const profileId = await createProfileWithSize(
+      fx,
+      'huge-profile',
+      TIER_STORAGE_BYTES_CAP.enterprise + 1, // over the soft floor
+    );
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      payload: { profile_id: profileId },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('409 on POST /v1/profiles/:id/launch when over the hard cap', async () => {
+    fx = await buildTestApp({ tier: 'solo_manual' });
+    const profileId = await createProfileWithSize(
+      fx,
+      'fat-profile',
+      TIER_STORAGE_BYTES_CAP.solo_manual,
+    );
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profileId}/launch`,
+      headers: auth(fx),
+      payload: {},
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json<Record<string, unknown>>().type).toBe(PROBLEM_TYPES.StorageQuotaExceeded);
   });
 });
 

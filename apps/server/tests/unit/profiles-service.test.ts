@@ -24,7 +24,13 @@ import {
   type NewProfileInput,
 } from '../../src/services/profiles.js';
 import type { AccountAuditService } from '../../src/services/account-audit.js';
-import { ConflictError, NotFoundError, TierLimitError } from '../../src/lib/errors.js';
+import {
+  ConflictError,
+  NotFoundError,
+  StorageQuotaExceededError,
+  TierLimitError,
+} from '../../src/lib/errors.js';
+import { TIER_STORAGE_BYTES_CAP } from '@driftstack/api-types';
 import { mintWrappedProfileDek, unwrapProfileDek } from '../../src/lib/profile-key-hierarchy.js';
 
 function makeProfile(overrides: Partial<ProfileRecord> = {}): ProfileRecord {
@@ -109,6 +115,12 @@ function makeRepo(
     },
     countByAccount: (accountId) =>
       Promise.resolve(opts.countOverride ?? rows.filter((r) => r.accountId === accountId).length),
+    sumSizeBytesByAccount: (accountId) =>
+      Promise.resolve(
+        rows
+          .filter((r) => r.accountId === accountId && r.deletedAt === null)
+          .reduce((sum, r) => sum + (typeof r.sizeBytes === 'number' ? r.sizeBytes : 0), 0),
+      ),
     findById: ({ id, accountId }) =>
       Promise.resolve(rows.find((r) => r.id === id && r.accountId === accountId) ?? null),
     findByAccountAndName: ({ accountId, name }) =>
@@ -593,5 +605,71 @@ describe('V-553.B-21 ProfilesService.transferProfile', () => {
     // The source delete runs only after a successful insert — a race failure
     // must leave the source profile intact.
     expect(state.rows.find((r) => r.id === 'p1')).toBeDefined();
+  });
+});
+
+// doc-150 item 6 — per-account storage-quota state + the session-launch gate.
+describe('ProfilesService storage quota (doc-150 item 6)', () => {
+  const SOLO_CAP = TIER_STORAGE_BYTES_CAP.solo_manual; // 5 GiB
+
+  it('getStorageState sums LIVE profiles + reports ok under the soft threshold', async () => {
+    const { repo } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_1', name: 'a', sizeBytes: 1024 }),
+      makeProfile({ id: 'p2', accountId: 'acc_1', name: 'b', sizeBytes: 2048 }),
+    ]);
+    const svc = new ProfilesService(repo);
+    const state = await svc.getStorageState({ accountId: 'acc_1', tier: 'solo_manual' });
+    expect(state.usedBytes).toBe(3072);
+    expect(state.capBytes).toBe(SOLO_CAP);
+    expect(state.state).toBe('ok');
+  });
+
+  it('getStorageState excludes trashed profiles from the sum', async () => {
+    const { repo } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_1', name: 'live', sizeBytes: 100 }),
+      makeProfile({
+        id: 'p2',
+        accountId: 'acc_1',
+        name: 'trashed',
+        sizeBytes: 999,
+        deletedAt: new Date(),
+      }),
+    ]);
+    const svc = new ProfilesService(repo);
+    const state = await svc.getStorageState({ accountId: 'acc_1', tier: 'solo_manual' });
+    expect(state.usedBytes).toBe(100);
+  });
+
+  it('assertWithinStorageQuotaForLaunch passes when under the hard cap', async () => {
+    const { repo } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_1', name: 'a', sizeBytes: SOLO_CAP - 1 }),
+    ]);
+    const svc = new ProfilesService(repo);
+    await expect(
+      svc.assertWithinStorageQuotaForLaunch({ accountId: 'acc_1', tier: 'solo_manual' }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('assertWithinStorageQuotaForLaunch throws StorageQuotaExceededError at/over the hard cap', async () => {
+    const { repo } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_1', name: 'a', sizeBytes: SOLO_CAP }),
+    ]);
+    const svc = new ProfilesService(repo);
+    await expect(
+      svc.assertWithinStorageQuotaForLaunch({ accountId: 'acc_1', tier: 'solo_manual' }),
+    ).rejects.toThrow(StorageQuotaExceededError);
+  });
+
+  it('enterprise is soft-only — never blocks even far over its cap', async () => {
+    const ENT_CAP = TIER_STORAGE_BYTES_CAP.enterprise;
+    const { repo } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_1', name: 'a', sizeBytes: ENT_CAP * 2 }),
+    ]);
+    const svc = new ProfilesService(repo);
+    const state = await svc.getStorageState({ accountId: 'acc_1', tier: 'enterprise' });
+    expect(state.state).toBe('soft');
+    await expect(
+      svc.assertWithinStorageQuotaForLaunch({ accountId: 'acc_1', tier: 'enterprise' }),
+    ).resolves.toBeUndefined();
   });
 });

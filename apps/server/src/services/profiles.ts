@@ -11,10 +11,16 @@
 // through this service. We store only the metadata.
 
 import { LOCKED_ARCHETYPE_ID, type AccountTier } from '@driftstack/api-types';
-import { ConflictError, NotFoundError, TierLimitError } from '../lib/errors.js';
+import {
+  ConflictError,
+  NotFoundError,
+  StorageQuotaExceededError,
+  TierLimitError,
+} from '../lib/errors.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
 import { profileLimitFor } from './sessions.js';
 import type { AccountAuditService } from './account-audit.js';
+import { computeAccountStorageState, type AccountStorageState } from './profile-storage-quota.js';
 import { mintWrappedProfileDek, unwrapProfileDek } from '../lib/profile-key-hierarchy.js';
 
 export interface ProfileRecord {
@@ -113,6 +119,13 @@ export interface ProfilesRepo {
     limit: number | null,
   ): Promise<{ record: ProfileRecord } | { limitExceeded: true; current: number }>;
   countByAccount(accountId: string): Promise<number>;
+  /**
+   * doc-150 item 6 — sum of `size_bytes` (COALESCE NULL→0) over the account's
+   * LIVE profiles (excludes trashed/soft-deleted, matching the list/count read
+   * filter). This is the enforced per-account storage-quota numerator; the
+   * session-launch gate compares it against TIER_STORAGE_BYTES_CAP[tier].
+   */
+  sumSizeBytesByAccount(accountId: string): Promise<number>;
   findById(args: { id: string; accountId: string }): Promise<ProfileRecord | null>;
   findByAccountAndName(args: { accountId: string; name: string }): Promise<ProfileRecord | null>;
   list(args: ListProfilesArgs): Promise<ListProfilesPage>;
@@ -350,6 +363,47 @@ export class ProfilesService {
     });
     if (wrappedDek === null) return null;
     return unwrapProfileDek(this.profileMasterKey, args.accountId, wrappedDek);
+  }
+
+  /**
+   * doc-150 item 6 — current per-account storage-quota state. Sums the
+   * account's LIVE profiles' size_bytes (the enforced numerator) and derives
+   * the quota state against TIER_STORAGE_BYTES_CAP[tier]. Pure read; surfaced
+   * by the dashboard (soft/80% compute-on-read) and used by the launch gate.
+   */
+  async getStorageState(args: {
+    accountId: string;
+    tier: AccountTier;
+  }): Promise<AccountStorageState> {
+    const usedBytes = await this.repo.sumSizeBytesByAccount(args.accountId);
+    return computeAccountStorageState({ usedBytes, tier: args.tier });
+  }
+
+  /**
+   * doc-150 item 6 — HARD enforcement gate for session-launch. Computes the
+   * account's storage state and throws StorageQuotaExceededError (409) when it
+   * has reached the tier's hard cap (`state === 'hard'`). Enterprise is
+   * soft-only so it never reaches 'hard' and is never blocked here. Called
+   * BEFORE the driver dispatch on a profile-backed create — the R2 blob is
+   * already written by ack time, so this is the enforceable point to block
+   * NEW state growth. Sessions without a profile never reach this method.
+   *
+   * TODO(item6-trim): gated on A3 trimProfile op — once posted, a future
+   * `trimProfile` action lets a customer reclaim space in-place instead of
+   * only delete/upgrade. No hook needed here yet; this stays a pure block.
+   */
+  async assertWithinStorageQuotaForLaunch(args: {
+    accountId: string;
+    tier: AccountTier;
+  }): Promise<void> {
+    const state = await this.getStorageState(args);
+    if (state.state === 'hard') {
+      throw new StorageQuotaExceededError({
+        usedBytes: state.usedBytes,
+        capBytes: state.capBytes,
+        tier: args.tier,
+      });
+    }
   }
 
   async list(args: ListProfilesArgs): Promise<ListProfilesPage> {

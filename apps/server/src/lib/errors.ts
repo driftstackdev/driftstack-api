@@ -198,6 +198,36 @@ export class TierLimitError extends ApiError {
   }
 }
 
+// doc-150 item 6 — per-account profile-storage quota reached. Raised at
+// session-launch when a profile-backed session-create would grow the
+// account's stored state past its tier's hard cap (the SUM of every live
+// profile's size_bytes). 409 Conflict (the request conflicts with the
+// account's current storage state, like the per-tier name/limit conflicts).
+// Extensions carry the byte numbers so the dashboard + SDK consumers can
+// render the precise overage without re-querying. Enterprise is soft-only
+// and never raises this; sessions without a profile are never blocked.
+export class StorageQuotaExceededError extends ApiError {
+  constructor(args: { usedBytes: number; capBytes: number; tier: string }) {
+    super({
+      type: PROBLEM_TYPES.StorageQuotaExceeded,
+      title: 'Storage quota reached',
+      status: 409,
+      detail:
+        `Your profiles use ${args.usedBytes.toString()} bytes, which has reached the ` +
+        `${args.capBytes.toString()}-byte storage limit for the "${args.tier}" tier. ` +
+        `Delete or trim a profile, or upgrade your tier, then launch again. ` +
+        `Sessions without a profile are not affected.`,
+      extensions: {
+        used_bytes: args.usedBytes,
+        cap_bytes: args.capBytes,
+        tier: args.tier,
+        resource: 'profile_storage',
+      },
+    });
+    this.name = 'StorageQuotaExceededError';
+  }
+}
+
 export class SessionDestroyedError extends ApiError {
   constructor() {
     super({

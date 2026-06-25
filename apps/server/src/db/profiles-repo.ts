@@ -1,6 +1,6 @@
 // Drizzle-backed ProfilesRepo (V-081).
 
-import { and, count, desc, eq, isNotNull, isNull, lt, or } from 'drizzle-orm';
+import { and, count, desc, eq, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { isUniqueViolation } from '../lib/pg-error.js';
 import type {
   ListProfilesArgs,
@@ -72,6 +72,20 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
       .from(profiles)
       .where(and(eq(profiles.accountId, accountId), notDeleted));
     return row?.n ?? 0;
+  }
+
+  // doc-150 item 6 — sum of size_bytes (COALESCE NULL→0) over the account's
+  // LIVE profiles (notDeleted, same filter as countByAccount/list — trashed
+  // profiles don't count toward the storage quota, mirroring the live read
+  // paths). The ::bigint cast keeps the SUM exact for large totals; we read it
+  // back as a string and Number()-parse (account storage caps top out at
+  // 500 GiB ≈ 5.4e11, well inside Number's 2^53 safe-integer range).
+  async sumSizeBytesByAccount(accountId: string): Promise<number> {
+    const [row] = await this.database.db
+      .select({ total: sql<string>`coalesce(sum(${profiles.sizeBytes}), 0)::bigint` })
+      .from(profiles)
+      .where(and(eq(profiles.accountId, accountId), notDeleted));
+    return row ? Number(row.total) : 0;
   }
 
   // V-714 — atomic tier-limit check + insert. The plain count-then-insert in

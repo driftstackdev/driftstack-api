@@ -270,5 +270,59 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         SELECT count(*)::int AS n FROM profiles WHERE account_id = ${accountId}`;
       expect(countRows[0]?.n).toBe(LIMIT);
     });
+
+    // doc-150 item 6 — sumSizeBytesByAccount over a REAL Postgres: COALESCE
+    // NULL→0, excludes trashed (notDeleted), scoped to the account. The
+    // in-memory repo + service tests cover the math; this pins the actual
+    // COALESCE(sum(...))::bigint SQL + the notDeleted filter on the driver.
+    it('sumSizeBytesByAccount: COALESCE NULL→0, account-scoped, excludes trashed', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG sumSizeBytes test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleProfilesRepo({ client, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      const otherAccountId = randomUUID();
+      seeded.push(accountId, otherAccountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`sum-${accountId}@test.local`})`;
+      await client`INSERT INTO accounts (id, email) VALUES (${otherAccountId}, ${`sum-${otherAccountId}@test.local`})`;
+
+      const base = {
+        archetype: 'iphone17_ios18_7_safari26_4',
+        description: null,
+      };
+      const sized = await repo.insert({ accountId, name: 'sized', ...base });
+      const unsaved = await repo.insert({ accountId, name: 'unsaved', ...base }); // size NULL → 0
+      const trashed = await repo.insert({ accountId, name: 'trashed', ...base });
+      const otherAcct = await repo.insert({ accountId: otherAccountId, name: 'other', ...base });
+
+      await repo.recordSave({ id: sized.id, accountId, at: new Date(), sizeBytes: 5000 });
+      await repo.recordSave({ id: trashed.id, accountId, at: new Date(), sizeBytes: 9999 });
+      await repo.recordSave({
+        id: otherAcct.id,
+        accountId: otherAccountId,
+        at: new Date(),
+        sizeBytes: 7777,
+      });
+      // Trash the 9999-byte profile → it must drop out of the live sum.
+      await repo.delete({ id: trashed.id, accountId });
+
+      // 5000 (sized) + 0 (unsaved NULL) ; trashed + other-account excluded.
+      const total = await repo.sumSizeBytesByAccount(accountId);
+      expect(total).toBe(5000);
+      expect(unsaved.sizeBytes).toBeNull();
+
+      // An account with zero profiles sums to 0 (COALESCE, not NULL).
+      const emptyAccountId = randomUUID();
+      seeded.push(emptyAccountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${emptyAccountId}, ${`sum-empty-${emptyAccountId}@test.local`})`;
+      expect(await repo.sumSizeBytesByAccount(emptyAccountId)).toBe(0);
+    });
   },
 );

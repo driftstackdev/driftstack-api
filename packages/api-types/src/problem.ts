@@ -86,6 +86,14 @@ export const PROBLEM_TYPES = {
   // request before any takeover-grant). 409 Conflict + `from` +
   // `transition` extensions for dashboard diagnostics.
   PairModeStateInvalidTransition: 'https://errors.driftstack.dev/pair-mode-invalid-transition',
+  // doc-150 item 6 — per-account profile-storage quota reached. Fires at
+  // session-launch when a profile-backed session-create would grow the
+  // account's stored state past its tier's hard cap (the SUM of every
+  // live profile's size_bytes ≥ TIER_STORAGE_BYTES_CAP[tier]). 409
+  // Conflict + `used_bytes` / `cap_bytes` extensions so the dashboard +
+  // SDK consumers can render the exact overage. Enterprise is soft-only
+  // and never raises this. Sessions WITHOUT a profile are never blocked.
+  StorageQuotaExceeded: 'https://errors.driftstack.dev/storage-quota-exceeded',
 } as const;
 
 export type ProblemType = (typeof PROBLEM_TYPES)[keyof typeof PROBLEM_TYPES];
