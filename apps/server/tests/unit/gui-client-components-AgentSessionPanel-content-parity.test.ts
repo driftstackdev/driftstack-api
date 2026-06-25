@@ -131,6 +131,7 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).toMatch(/if \(noPublisherTimer !== null\) clearTimeout\(noPublisherTimer\);/);
     expect(body).toMatch(/data-overlay="publisher-state"/);
     expect(body).toMatch(/data-action="open-polling-viewer"/);
-    expect(body).toMatch(/no browser worker is publishing on/);
+    expect(body).toMatch(/the proxy or connection may be down/);
+    expect(body).toMatch(/data-action="retry-launch"/);
   });
 });
