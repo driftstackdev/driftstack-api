@@ -20,6 +20,8 @@ import {
   isBenignTeardownError,
   sendInputEvent,
   sendNavigate,
+  sendTabListUpdate,
+  sendActivateTab,
   type InputEvent,
   type Room,
 } from '../../src/lib/livekit';
@@ -213,6 +215,94 @@ describe('sendNavigate', () => {
     await expect(
       sendNavigate(minimal as unknown as Room, 'https://example.com/'),
     ).resolves.toBeUndefined();
+  });
+});
+
+// Browser-style page TABS (doc-150 item 4; locked A2↔A3 contract). The GUI emits the
+// full tab list on every change + an activateTab (with a correlation requestId) on a
+// switch, both over the SAME reliable data channel as taps/navigate.
+describe('sendTabListUpdate', () => {
+  it('publishes {type:"tabListUpdate", sessionId, tabs, activeTabId} reliably (full list)', async () => {
+    const { room, publishData } = makeRoom();
+    const tabs = [
+      { id: 't1', url: 'https://a.example/', scrollY: 0, title: 'A' },
+      { id: 't2', url: 'about:blank', scrollY: 120, title: 'New Tab' },
+    ];
+    await sendTabListUpdate(room, { sessionId: 'agt_x', tabs, activeTabId: 't2' });
+    expect(publishData).toHaveBeenCalledTimes(1);
+    const call = firstCall(publishData);
+    expect(decodeEvent(call)).toEqual({
+      type: 'tabListUpdate',
+      sessionId: 'agt_x',
+      tabs,
+      activeTabId: 't2',
+    });
+    // reliable=true — a dropped list leaves the harness's tab set stale.
+    expect(call.opts.reliable).toBe(true);
+  });
+
+  it('preserves the exact tab field shape + order (id/url/scrollY/title) on the wire', async () => {
+    const { room, publishData } = makeRoom();
+    await sendTabListUpdate(room, {
+      sessionId: 's',
+      tabs: [{ id: 'only', url: 'https://x.test/p?q=1', scrollY: 42, title: 'T' }],
+      activeTabId: 'only',
+    });
+    const decoded = decodeEvent(firstCall(publishData));
+    if (decoded.type === 'tabListUpdate') {
+      expect(decoded.tabs).toEqual([
+        { id: 'only', url: 'https://x.test/p?q=1', scrollY: 42, title: 'T' },
+      ]);
+    } else {
+      throw new Error('expected a tabListUpdate event');
+    }
+  });
+});
+
+describe('sendActivateTab', () => {
+  it('publishes {type:"activateTab", requestId, sessionId, tabId, url, scrollY} reliably', async () => {
+    const { room, publishData } = makeRoom();
+    const requestId = await sendActivateTab(room, {
+      sessionId: 'agt_x',
+      tabId: 't2',
+      url: 'https://b.example/',
+      scrollY: 300,
+    });
+    expect(typeof requestId).toBe('string');
+    expect(requestId.length).toBeGreaterThan(0);
+    const call = firstCall(publishData);
+    expect(decodeEvent(call)).toEqual({
+      type: 'activateTab',
+      requestId,
+      sessionId: 'agt_x',
+      tabId: 't2',
+      url: 'https://b.example/',
+      scrollY: 300,
+    });
+    expect(call.opts.reliable).toBe(true);
+  });
+
+  it('returns the SAME requestId it put on the wire (correlation contract)', async () => {
+    const { room, publishData } = makeRoom();
+    const requestId = await sendActivateTab(room, {
+      sessionId: 's',
+      tabId: 't',
+      url: 'about:blank',
+      scrollY: 0,
+    });
+    const decoded = decodeEvent(firstCall(publishData));
+    if (decoded.type === 'activateTab') {
+      expect(decoded.requestId).toBe(requestId);
+    } else {
+      throw new Error('expected an activateTab event');
+    }
+  });
+
+  it('mints a UNIQUE requestId per call', async () => {
+    const { room } = makeRoom();
+    const a = await sendActivateTab(room, { sessionId: 's', tabId: 't', url: 'u', scrollY: 0 });
+    const b = await sendActivateTab(room, { sessionId: 's', tabId: 't', url: 'u', scrollY: 0 });
+    expect(a).not.toBe(b);
   });
 });
 

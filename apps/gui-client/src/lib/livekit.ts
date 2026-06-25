@@ -42,7 +42,47 @@ export type InputEvent =
   // rejection (≤4096 bytes, non-empty); no server route is needed (that would 401
   // for the keychain-less Simulator app).
   | { type: 'navigate'; url: string }
+  // Browser-style page TABS (doc-150 item 4; locked A2↔A3 contract). The GUI owns
+  // the tab list; the harness keeps one renderer/page per tab and switches the
+  // PUBLISHED page on `activateTab`. Both ride the SAME reliable data channel as
+  // taps/navigate.
+  //
+  //  - `tabListUpdate` is fire-and-forget — the GUI sends the FULL list on every
+  //    new / close / switch / reorder so the harness can reconcile (create missing
+  //    pages, drop closed ones). `activeTabId` is which tab is currently published.
+  //  - `activateTab` carries a `requestId` so the harness's `activateTabResult`
+  //    reply ({ ok?, error? }) can be correlated for re-issue-on-miss.
+  | {
+      type: 'tabListUpdate';
+      sessionId: string;
+      tabs: ReadonlyArray<{ id: string; url: string; scrollY: number; title: string }>;
+      activeTabId: string;
+    }
+  | {
+      type: 'activateTab';
+      requestId: string;
+      sessionId: string;
+      tabId: string;
+      url: string;
+      scrollY: number;
+    }
   | { type: 'ping'; timestamp: number };
+
+/** Payload for `sendTabListUpdate` — the InputEvent body minus the discriminant. */
+export type TabListUpdatePayload = {
+  sessionId: string;
+  tabs: ReadonlyArray<{ id: string; url: string; scrollY: number; title: string }>;
+  activeTabId: string;
+};
+
+/** Payload for `sendActivateTab` — the InputEvent body minus the discriminant +
+ *  the auto-generated requestId (the wrapper mints the requestId itself). */
+export type ActivateTabPayload = {
+  sessionId: string;
+  tabId: string;
+  url: string;
+  scrollY: number;
+};
 
 /** Connection-state machine surfaces to the UI layer. LK.6.c
  *  consumes this to render the connecting / connected / disconnected
@@ -127,6 +167,26 @@ export async function sendInputEvent(
  *  rejections are swallowed exactly like sendInputEvent (shared codepath). */
 export async function sendNavigate(room: Room, url: string): Promise<void> {
   await sendInputEvent(room, { type: 'navigate', url }, { reliable: true });
+}
+
+/** Send the FULL tab list to the harness (doc-150 item 4; locked A2↔A3 contract).
+ *  Fire-and-forget — the GUI emits this on EVERY new / close / switch / reorder so
+ *  the harness reconciles its per-tab pages (create missing, drop closed) and knows
+ *  which tab (`activeTabId`) is published. reliable=true (a dropped list would leave
+ *  the harness's tab set stale); teardown races are swallowed (shared codepath). */
+export async function sendTabListUpdate(room: Room, payload: TabListUpdatePayload): Promise<void> {
+  await sendInputEvent(room, { type: 'tabListUpdate', ...payload }, { reliable: true });
+}
+
+/** Switch the PUBLISHED page to another tab (doc-150 item 4; locked A2↔A3 contract).
+ *  Mints a `requestId` (`crypto.randomUUID()`) so the harness's `activateTabResult`
+ *  reply ({ ok?, error? }) can be correlated for re-issue-on-miss. Returns the
+ *  requestId so the caller can track the in-flight switch. reliable=true; teardown
+ *  races are swallowed (shared codepath). */
+export async function sendActivateTab(room: Room, payload: ActivateTabPayload): Promise<string> {
+  const requestId = crypto.randomUUID();
+  await sendInputEvent(room, { type: 'activateTab', requestId, ...payload }, { reliable: true });
+  return requestId;
 }
 
 /** True for the LiveKit errors thrown when an operation runs after the Room's

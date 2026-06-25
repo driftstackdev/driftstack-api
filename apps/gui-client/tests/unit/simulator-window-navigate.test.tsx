@@ -18,6 +18,11 @@ vi.mock('../../src/lib/livekit', () => ({
   connectToAgentSession: () => new Promise(() => {}),
   sendInputEvent: vi.fn(() => Promise.resolve()),
   sendNavigate,
+  // Browser-style page tabs (doc-150 item 4) — onNavigate now also updates the active
+  // tab + publishes the list, and the seed tab publishes on mount, so the mock must
+  // export these or the calls throw.
+  sendTabListUpdate: vi.fn(() => Promise.resolve()),
+  sendActivateTab: vi.fn(() => Promise.resolve('req_test')),
   RoomEvent: {
     TrackSubscribed: 'trackSubscribed',
     Disconnected: 'disconnected',

@@ -19,7 +19,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
-import { sendNavigate, RoomEvent, type Room } from '../lib/livekit';
+import {
+  sendNavigate,
+  sendTabListUpdate,
+  sendActivateTab,
+  RoomEvent,
+  type Room,
+} from '../lib/livekit';
 import { useLatencyPing } from '../lib/livekit-latency-ping';
 import { useConnectionStats } from '../lib/livekit-connection-stats';
 import {
@@ -62,6 +68,36 @@ import {
  *  and the in-screen status strip the video sits below. */
 const TOOLBAR_H = 34;
 const BROWSER_BAR_H = 40; // dedicated browser-mode address bar (its own row)
+// Browser-style page TAB strip (doc-150 item 4) — its OWN full-width row between the
+// toolbar and the address bar, shown only in browser mode (gated identically to
+// BROWSER_BAR_H). MUST be added to the `chrome` height expression at all four
+// window-sizing sites (fitWindow / resetToActualSize / refitForDrawer / onResized)
+// or the device letterboxes (the 402×714 viewport invariant). It's GUI chrome
+// OUTSIDE the video — the rendered fingerprint viewport is unchanged.
+const TAB_STRIP_H = 32;
+
+/** A browser page tab in the GUI's tab model (doc-150 item 4). Mirrors the
+ *  `tabListUpdate` / `activateTab` contract entry shape exactly (id/url/scrollY/
+ *  title) so a tab can be serialized straight onto the wire. */
+interface SimTab {
+  id: string;
+  url: string;
+  scrollY: number;
+  title: string;
+}
+
+/** Mint a stable, unique tab id. crypto.randomUUID() in the app + Tauri webview;
+ *  falls back to a time+random token in any (test) env without it. */
+function makeTabId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return `tab_${crypto.randomUUID()}`;
+    }
+  } catch {
+    /* crypto unavailable — fall through to the token */
+  }
+  return `tab_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
 // flip true when A3's navigateHistory handler deploys — bus W2870
 const BACK_FORWARD_ENABLED = true; // A3 navigateHistory handler deployed (bus W2872; A3 01a5d48f1)
 const BEZEL_PAD = 20; // p-[10px] × 2
@@ -1207,6 +1243,116 @@ function BrowserBar({
 }
 
 /**
+ * Browser-style page TAB strip (doc-150 item 4) — its own full-width row between the
+ * Mac toolbar and the address bar, shown only in browser mode. Pure GUI chrome
+ * OUTSIDE the video: switching tabs asks the harness to publish a different page, but
+ * never changes the rendered 402×714 fingerprint viewport. Mirrors BrowserBar's dark,
+ * compact Tailwind styling. Each tab shows title || url with a per-tab close ✕; a +
+ * appends a new tab. Reorder-by-drag is intentionally omitted from v1 (a follow-up).
+ */
+function TabStrip({
+  tabs,
+  activeTabId,
+  onActivate,
+  onClose,
+  onNew,
+}: {
+  tabs: SimTab[];
+  activeTabId: string;
+  onActivate: (id: string) => void;
+  onClose: (id: string) => void;
+  onNew: () => void;
+}): JSX.Element {
+  const label = (t: SimTab): string => {
+    const title = t.title.trim();
+    if (title !== '') return title;
+    const url = t.url.trim();
+    if (url === '' || url === 'about:blank') return 'New Tab';
+    // Show the host (sans scheme) when possible, else the raw url — compact + readable.
+    try {
+      return new URL(url).host || url;
+    } catch {
+      return url;
+    }
+  };
+  return (
+    <div
+      data-component="simulator-tab-strip"
+      data-no-drag
+      className="relative flex h-8 w-full shrink-0 items-stretch gap-1 overflow-x-auto bg-[#17181d] px-1.5 py-1 ring-1 ring-white/[0.08] shadow-[inset_0_-1px_0_rgba(0,0,0,0.45)]"
+    >
+      {tabs.map((t) => {
+        const active = t.id === activeTabId;
+        return (
+          <div
+            key={t.id}
+            data-component="simulator-tab"
+            data-active={active ? 'true' : 'false'}
+            title={t.url || label(t)}
+            onClick={() => onActivate(t.id)}
+            className={`group flex min-w-[88px] max-w-[160px] shrink-0 cursor-default items-center gap-1.5 rounded-md px-2 text-[11px] leading-none transition ${
+              active
+                ? 'bg-black/40 text-white/90 ring-1 ring-white/15'
+                : 'bg-white/[0.04] text-white/55 hover:bg-white/[0.08] hover:text-white/80'
+            }`}
+          >
+            <span className="min-w-0 flex-1 truncate">{label(t)}</span>
+            {tabs.length > 1 && (
+              <button
+                type="button"
+                aria-label="Close tab"
+                title="Close tab"
+                onClick={(e) => {
+                  // Don't let the close click bubble to the tab's activate handler.
+                  e.stopPropagation();
+                  onClose(t.id);
+                }}
+                className="shrink-0 rounded p-0.5 text-white/40 opacity-0 transition hover:bg-white/15 hover:text-white/90 focus:opacity-100 group-hover:opacity-100"
+              >
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        aria-label="New tab"
+        title="New tab"
+        onClick={onNew}
+        className="ml-0.5 flex shrink-0 items-center justify-center rounded-md px-2 text-white/45 transition hover:bg-white/10 hover:text-white/85"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+/**
  * Cosmetic iOS status bar — live clock + cellular/Wi-Fi/battery glyphs, with
  * the dynamic island centered in the strip. A DEDICATED black strip at the top
  * of the screen — the page video starts BELOW it, so it never overlaps browser
@@ -2051,7 +2197,8 @@ export function SimulatorWindow(): JSX.Element {
       // and add the drawer back, so the drawer never letterboxes the device.
       const drawerExtra = drawerExtraRef.current;
       const phoneW = curWidth - drawerExtra;
-      const chrome = TOOLBAR_H + (browserModeOn ? BROWSER_BAR_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
+      const chrome =
+        TOOLBAR_H + (browserModeOn ? BROWSER_BAR_H + TAB_STRIP_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
       // The device screen-area must match the video aspect or the video
       // object-contains with side gaps. Height for a phone width = chrome + (w-bezel)/aspect.
       // First pass: ask for that height, pre-capped to the screen work area (a hint).
@@ -2087,7 +2234,8 @@ export function SimulatorWindow(): JSX.Element {
       const { LogicalSize } = await import('@tauri-apps/api/dpi');
       const factor = await win.scaleFactor();
       const aspect = sizingAspect();
-      const chrome = TOOLBAR_H + (browserMode ? BROWSER_BAR_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
+      const chrome =
+        TOOLBAR_H + (browserMode ? BROWSER_BAR_H + TAB_STRIP_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
       // Target device-content width = the iPhone CSS-logical width (its long edge
       // when rotated to landscape), then the window adds the bezel padding + (if
       // open) the right drawer's fixed width.
@@ -2142,7 +2290,8 @@ export function SimulatorWindow(): JSX.Element {
       const size = await win.innerSize();
       const h = Math.round(size.height / factor);
       const aspect = sizingAspect();
-      const chrome = TOOLBAR_H + (browserMode ? BROWSER_BAR_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
+      const chrome =
+        TOOLBAR_H + (browserMode ? BROWSER_BAR_H + TAB_STRIP_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
       const width = Math.round((h - chrome) * aspect + BEZEL_PAD) + drawerExtraRef.current;
       if (width > 0) await win.setSize(new LogicalSize(width, h));
     });
@@ -2251,7 +2400,10 @@ export function SimulatorWindow(): JSX.Element {
                 const w = Math.round(size.width / factor);
                 const aspect = sizingAspect();
                 const chrome =
-                  TOOLBAR_H + (browserMode ? BROWSER_BAR_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
+                  TOOLBAR_H +
+                  (browserMode ? BROWSER_BAR_H + TAB_STRIP_H : 0) +
+                  BEZEL_PAD +
+                  STATUS_STRIP_H;
                 // Window width = phone width (aspect-locked to the height) + the open
                 // drawer's fixed width, so a manual resize scales the PHONE and never
                 // eats the drawer.
@@ -2284,6 +2436,10 @@ export function SimulatorWindow(): JSX.Element {
   // Until the harness emits it, onNavigate optimistically shows a loading sweep
   // that a watchdog clears (graceful fallback).
   const [liveUrl, setLiveUrl] = useState('');
+  // Live page TITLE from page_state (doc-150 item 4) — feeds the active tab's label
+  // (the tab shows title || url). Separate from liveUrl so a title-only update still
+  // refreshes the tab. Empty until the box reports one.
+  const [liveTitle, setLiveTitle] = useState('');
   const [pageLoading, setPageLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState<number | null>(null);
   // 'stalled' (A3 W2845): the device renderer froze (hung JS / compositor
@@ -2293,6 +2449,25 @@ export function SimulatorWindow(): JSX.Element {
   // page unresponsive" badge over the (still-visible) last frame, cleared when
   // the box reports any non-stalled state again.
   const [pageStalled, setPageStalled] = useState(false);
+  // Browser-style page TABS (doc-150 item 4; locked A2↔A3 contract). The GUI owns the
+  // tab model; each tab is a page the harness keeps a renderer for, and `activeTabId`
+  // is the one currently published into the video. We seed exactly one tab on mount so
+  // there's always ≥1 (the close handler also refuses to drop below one). The ACTIVE
+  // tab's url/title track liveUrl + page_state; a navigate updates the active tab's url
+  // and re-sends the full list. The strip is GUI chrome OUTSIDE the video — switching
+  // tabs changes which page the BOX publishes, never the rendered 402×714 viewport.
+  // Seed a single tab + make it active in one initializer pass so they share an id
+  // (no set-during-render). The seed tab's url is empty until liveUrl/page_state fills
+  // it (synced by the effect below) — there's always exactly one tab on mount.
+  const seedTabRef = useRef<SimTab>({ id: makeTabId(), url: '', scrollY: 0, title: '' });
+  const [tabs, setTabs] = useState<SimTab[]>(() => [seedTabRef.current]);
+  const [activeTabId, setActiveTabId] = useState<string>(() => seedTabRef.current.id);
+  // In-flight activateTab requests keyed by requestId so the harness's
+  // activateTabResult reply (handled in onData) can revert an optimistic switch that
+  // the box rejected. A missed reply just leaves the optimistic switch (v1 behaviour).
+  const pendingActivationsRef = useRef<Map<string, { tabId: string; prevTabId: string }>>(
+    new Map(),
+  );
   const loadWatchdogRef = useRef<number | null>(null);
   // Timestamp of the last operator navigate. The ~2s page-state poll can fire before
   // the box has seen a just-submitted navigate and would read the PREVIOUS page as
@@ -2318,7 +2493,27 @@ export function SimulatorWindow(): JSX.Element {
           title?: string;
           loading?: boolean;
           progress?: number;
+          // activateTabResult (doc-150 item 4) — the harness's reply to activateTab.
+          requestId?: string;
+          ok?: boolean;
+          error?: string;
         };
+        // activateTabResult — correlate by requestId against our optimistic switch.
+        // ok (or a missing ok with no error) → confirmed, drop the pending record. A
+        // rejection (ok:false / error) → revert to the tab that was active before, and
+        // surface a brief notice. A reply for an unknown requestId is ignored (already
+        // resolved / a different window). This is the only re-issue-on-miss handling;
+        // a DROPPED reply leaves the optimistic switch in place (acceptable for v1).
+        if (msg.type === 'activateTabResult' && typeof msg.requestId === 'string') {
+          const pending = pendingActivationsRef.current.get(msg.requestId);
+          pendingActivationsRef.current.delete(msg.requestId);
+          if (pending !== undefined && (msg.ok === false || typeof msg.error === 'string')) {
+            setActiveTabId(pending.prevTabId);
+            setNotice('Could not switch tab');
+            window.setTimeout(() => setNotice(null), 3000);
+          }
+          return;
+        }
         // Accept BOTH the proposed {type:'page_state', url, loading, progress}
         // envelope AND A3's shipped HarnessOutbound.PageState {sessionId, state,
         // url, error} where state ∈ loading|loaded|errored (bus W2717-done). The
@@ -2332,6 +2527,9 @@ export function SimulatorWindow(): JSX.Element {
           msg.state === 'stalled';
         if (msg.type !== 'page_state' && !isHarnessState) return;
         if (typeof msg.url === 'string' && msg.url !== '') setLiveUrl(msg.url);
+        // Page title → active tab label (doc-150 item 4). Only set when present so a
+        // url-only state frame doesn't wipe a previously-known title.
+        if (typeof msg.title === 'string' && msg.title !== '') setLiveTitle(msg.title);
         // A3 W2845 — a 'stalled' frame surfaces the frozen-renderer badge; any
         // other harness state clears it (the page is responsive again).
         if (isHarnessState) setPageStalled(msg.state === 'stalled');
@@ -2913,6 +3111,122 @@ export function SimulatorWindow(): JSX.Element {
   // to http(s) first (prepend https:// when scheme-less); a non-http(s) entry is
   // dropped here and the harness re-validates with the same allowlist + SSRF
   // rejection. No-op until the room is connected.
+  // ── Browser-style page TABS (doc-150 item 4; locked A2↔A3 contract) ──────────
+  // Fire-and-forget full-list publish to the harness; called on EVERY new / close /
+  // switch / reorder so the harness reconciles its per-tab pages. No-op (the wire
+  // payload is still computed) until the room connects. Teardown races are swallowed
+  // in the livekit wrapper, so a stray send during disconnect can't blank the window.
+  const emitTabList = useCallback(
+    (nextTabs: SimTab[], nextActiveId: string): void => {
+      if (room === null || sessionId === '') return;
+      void sendTabListUpdate(room, {
+        sessionId,
+        tabs: nextTabs.map((t) => ({ id: t.id, url: t.url, scrollY: t.scrollY, title: t.title })),
+        activeTabId: nextActiveId,
+      });
+    },
+    [room, sessionId],
+  );
+  // Patch the active tab's fields (url/title/scrollY) and re-publish the list. Used by
+  // onNavigate (url) + the page_state sync effect (url/title). A functional setState so
+  // it composes with concurrent updates; the list is emitted from the SAME next state.
+  const updateActiveTab = useCallback(
+    (patch: Partial<Omit<SimTab, 'id'>>): void => {
+      setTabs((prev) => {
+        const next = prev.map((t) => (t.id === activeTabId ? { ...t, ...patch } : t));
+        // Only re-publish when something actually changed (avoid a wire storm from the
+        // ~2s page-state poll re-asserting the same url/title every tick).
+        const changed = next.some((t, i) => t !== prev[i]);
+        if (changed) emitTabList(next, activeTabId);
+        return changed ? next : prev;
+      });
+    },
+    [activeTabId, emitTabList],
+  );
+  // New tab — append a blank about:blank tab, activate it, publish. Never navigates
+  // the box on its own (the harness opens a blank page for the new tab); the operator
+  // drives it via the address bar afterward.
+  const onNewTab = useCallback((): void => {
+    const tab: SimTab = { id: makeTabId(), url: 'about:blank', scrollY: 0, title: 'New Tab' };
+    setTabs((prev) => {
+      const next = [...prev, tab];
+      emitTabList(next, tab.id);
+      return next;
+    });
+    setActiveTabId(tab.id);
+  }, [emitTabList]);
+  // Close a tab — remove it; if it was active, activate the nearest neighbor (prefer
+  // the one to the left, else the right). NEVER drops below one tab (the close button
+  // is hidden on the last tab too, but guard here as well).
+  const onCloseTab = useCallback(
+    (id: string): void => {
+      setTabs((prev) => {
+        if (prev.length <= 1) return prev; // never go below one tab
+        const idx = prev.findIndex((t) => t.id === id);
+        if (idx === -1) return prev;
+        const next = prev.filter((t) => t.id !== id);
+        // Choosing the new active tab only matters if we closed the active one.
+        // `next` is non-empty here (prev had >1 and we removed one); prefer the tab to
+        // the left of the closed index, else the first remaining.
+        let nextActive = activeTabId;
+        if (id === activeTabId) {
+          const neighbor = next[Math.max(0, idx - 1)] ?? next[0];
+          if (neighbor !== undefined) nextActive = neighbor.id;
+        }
+        emitTabList(next, nextActive);
+        if (nextActive !== activeTabId) setActiveTabId(nextActive);
+        return next;
+      });
+    },
+    [activeTabId, emitTabList],
+  );
+  // Switch tabs — set active, OPTIMISTICALLY switch (the address bar + viewport follow
+  // immediately), then ask the harness to publish that tab's page via activateTab
+  // (correlated by requestId) and re-publish the list. v1 is optimistic: if the
+  // harness replies activateTabResult{ok:false} we surface a notice + revert; a missed
+  // reply leaves the optimistic switch in place (acceptable for v1 — see onData).
+  const onActivateTab = useCallback(
+    (id: string): void => {
+      const target = tabs.find((t) => t.id === id);
+      if (target === undefined || id === activeTabId) return;
+      const prevActive = activeTabId;
+      setActiveTabId(id);
+      // Reflect the target tab's known url in the address bar immediately (optimistic);
+      // page_state will refine it once the box publishes the switched page.
+      setLiveUrl(target.url);
+      emitTabList(tabs, id);
+      if (room !== null) {
+        void sendActivateTab(room, {
+          sessionId,
+          tabId: id,
+          url: target.url,
+          scrollY: target.scrollY,
+        }).then(
+          (requestId) => {
+            pendingActivationsRef.current.set(requestId, { tabId: id, prevTabId: prevActive });
+          },
+          () => {
+            /* benign teardown — swallowed in the wrapper; nothing to track */
+          },
+        );
+      }
+    },
+    [tabs, activeTabId, emitTabList, room, sessionId],
+  );
+  // Keep the ACTIVE tab's url/title in lock-step with the live page (page_state /
+  // redirects / link-taps surface via liveUrl + liveTitle, NOT only the omnibox).
+  // updateActiveTab only re-publishes when a field actually changed, so this won't
+  // storm the wire on the ~2s poll re-asserting the same values.
+  useEffect(() => {
+    if (liveUrl === '' && liveTitle === '') return;
+    const patch: Partial<Omit<SimTab, 'id'>> = {};
+    if (liveUrl !== '') patch.url = liveUrl;
+    if (liveTitle !== '') patch.title = liveTitle;
+    updateActiveTab(patch);
+    // Re-run on a live url/title change (the sync we want) + activeTabId (so a switch
+    // re-seeds the newly-active tab's fields from the current page). updateActiveTab is
+    // stable per (activeTabId, emitTabList) and only re-publishes on an actual change.
+  }, [liveUrl, liveTitle, activeTabId, updateActiveTab]);
   const onNavigate = (raw: string): void => {
     if (room === null) return;
     // Omnibox behaviour: a URL navigates, anything else becomes a web search —
@@ -2936,6 +3250,10 @@ export function SimulatorWindow(): JSX.Element {
     setLiveUrl(url);
     setPageLoading(true);
     setLoadProgress(null);
+    // The navigate happens in the ACTIVE tab — point its url at the new address +
+    // re-send the full list so the harness's per-tab page tracks the address bar
+    // (the title follows via page_state). updateActiveTab emits tabListUpdate itself.
+    updateActiveTab({ url });
     // An operator navigate optimistically clears the frozen-renderer badge — the
     // page is being driven again; the box re-asserts 'stalled' if it's still frozen.
     setPageStalled(false);
@@ -3052,6 +3370,20 @@ export function SimulatorWindow(): JSX.Element {
             onToggleRecord={toggleRecord}
             running={sessionId !== ''}
           />
+          {/* Browser-style page TAB strip (doc-150 item 4) — full-width row between
+              the toolbar and the address bar, gated on browserMode exactly like the
+              BrowserBar below. OUTSIDE simulator-screen (the fingerprint-safe video
+              area): the rendered 402×714 viewport is unchanged. Its TAB_STRIP_H is in
+              the chrome height at all four window-sizing sites. */}
+          {browserMode && (
+            <TabStrip
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onActivate={onActivateTab}
+              onClose={onCloseTab}
+              onNew={onNewTab}
+            />
+          )}
           {browserMode && (
             <BrowserBar
               canNavigate={room !== null}
