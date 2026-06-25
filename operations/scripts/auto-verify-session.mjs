@@ -95,6 +95,10 @@ const BASE_URL = (process.env.DRIFTSTACK_BASE_URL ?? 'https://api.driftstack.dev
 const API_KEY = process.env.DRIFTSTACK_API_KEY ?? '';
 const PROFILE_ID = process.env.DRIFTSTACK_PROFILE_ID ?? '';
 const PROXY_ID = process.env.DRIFTSTACK_PROXY_ID ?? '';
+// Optional archetype override — lets the harness verify a NON-launch archetype
+// dispatches + streams (e.g. before exposing the full registry). Empty = let the
+// server pick the locked launch default.
+const ARCHETYPE = process.env.DRIFTSTACK_ARCHETYPE ?? '';
 const NAV_URL = process.env.DRIFTSTACK_NAV_URL ?? 'https://example.com';
 
 // Per-check timeouts (ms). The founder's manual flow tolerates a slow first
@@ -508,6 +512,7 @@ async function main() {
     initial_url: NAV_URL,
     ...(PROFILE_ID !== '' ? { profile_id: PROFILE_ID } : {}),
     ...(PROXY_ID !== '' ? { proxy_id: PROXY_ID } : {}),
+    ...(ARCHETYPE !== '' ? { archetype: ARCHETYPE } : {}),
   };
   const created = await api('POST', '/v1/agent-sessions', createBody, { timeoutMs: 30_000 });
   if (!created.ok || created.json === null || typeof created.json.id !== 'string') {
