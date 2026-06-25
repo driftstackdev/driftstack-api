@@ -2087,6 +2087,17 @@ export function SimulatorWindow(): JSX.Element {
   // Night-arc C cockpit: live room handle (from the panel) drives the
   // previously-dormant LK.6.e latency ping; rendered in the overlay.
   const [room, setRoom] = useState<Room | null>(null);
+  // The panel's live connection + publisher state, surfaced via its callbacks. The
+  // BrowserBar / address bar / back-forward / reload gate on these (NOT merely room !==
+  // null) so a URL typed during "connecting…" — before the box renderer is up — can't
+  // silently no-op behind a fake loading bar (edge-errors review). canNavigate below
+  // derives from BOTH: the room reports connected AND a video track has arrived.
+  const [connState, setConnState] = useState<
+    'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error'
+  >('idle');
+  const [publisherState, setPublisherState] = useState<'waiting' | 'publishing' | 'none'>(
+    'waiting',
+  );
   const videoElRef = useRef<HTMLVideoElement | null>(null);
   // fps: rolling 1s counter via requestVideoFrameCallback (browser-native;
   // no LiveKit internals). null until the first full window.
@@ -3395,6 +3406,12 @@ export function SimulatorWindow(): JSX.Element {
     setRoom(r);
     if (r !== null) setControlUnreachable(false);
   }, []);
+  // Navigation (address bar / back-forward / reload) is enabled ONLY once the device is
+  // actually live — the LiveKit room reports 'connected' AND a video track is publishing
+  // — not the instant the Room object exists (room !== null fired during "connecting…",
+  // so a URL typed then trickled a fake loading bar and silently did nothing). Mirrors
+  // the box readiness the navigate actually needs.
+  const canNavigate = connState === 'connected' && publisherState === 'publishing';
   // Keep the current session + busy state readable from late async callbacks so a
   // getAgentSession result can't apply to the WRONG session (in-place relaunch
   // swaps sessionId without remount) or clobber an in-flight mode mutation —
@@ -4073,7 +4090,7 @@ export function SimulatorWindow(): JSX.Element {
           )}
           {browserMode && (
             <BrowserBar
-              canNavigate={room !== null}
+              canNavigate={canNavigate}
               onNavigate={onNavigate}
               onHistory={onHistory}
               liveUrl={liveUrl}
@@ -4224,6 +4241,8 @@ export function SimulatorWindow(): JSX.Element {
                     interactive={controlMode !== 'ai'}
                     onVideoDimensions={handleVideoDimensions}
                     onRoom={handleRoom}
+                    onStateChange={(s) => setConnState(s.kind)}
+                    onPublisher={setPublisherState}
                     onPublishError={() => setControlUnreachable(true)}
                     onVideoEl={(el) => {
                       videoElRef.current = el;
@@ -4435,7 +4454,7 @@ export function SimulatorWindow(): JSX.Element {
                           Controls
                         </div>
                         {!browserMode && (
-                          <NavigateAddressBar canNavigate={room !== null} onNavigate={onNavigate} />
+                          <NavigateAddressBar canNavigate={canNavigate} onNavigate={onNavigate} />
                         )}
                         <LabeledControl
                           label={browserMode ? 'Browser mode: on' : 'Browser mode'}

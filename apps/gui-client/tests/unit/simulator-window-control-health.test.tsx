@@ -63,11 +63,20 @@ const fakeRoom = {
 const panelCbs: {
   onPublishError?: () => void;
   onRoom?: (room: unknown) => void;
+  onStateChange?: (s: { kind: string }) => void;
+  onPublisher?: (p: string) => void;
 } = {};
 vi.mock('../../src/components/AgentSessionPanel', () => ({
-  AgentSessionPanel: (props: { onPublishError?: () => void; onRoom?: (room: unknown) => void }) => {
+  AgentSessionPanel: (props: {
+    onPublishError?: () => void;
+    onRoom?: (room: unknown) => void;
+    onStateChange?: (s: { kind: string }) => void;
+    onPublisher?: (p: string) => void;
+  }) => {
     panelCbs.onPublishError = props.onPublishError;
     panelCbs.onRoom = props.onRoom;
+    panelCbs.onStateChange = props.onStateChange;
+    panelCbs.onPublisher = props.onPublisher;
     return <div data-component="agent-session-panel-mock" />;
   },
 }));
@@ -136,8 +145,21 @@ describe('SimulatorWindow — address bar connect state', () => {
       container.querySelector('[data-component="simulator-address-connecting"]'),
     ).not.toBeNull();
 
-    // Once the room connects the bar unlocks and the connecting caption is gone.
-    act(() => panelCbs.onRoom?.(fakeRoom));
+    // The Room object existing (onRoom) + a 'connected' signal is NOT enough — without a
+    // video track publishing, the box renderer isn't up, so the bar STAYS locked
+    // ("connecting…"). This is the edge-errors fix: navigation no longer enables on
+    // room !== null during connect.
+    act(() => {
+      panelCbs.onRoom?.(fakeRoom);
+      panelCbs.onStateChange?.({ kind: 'connected' });
+    });
+    expect(
+      (container.querySelector('[aria-label="Address bar"]') as HTMLInputElement).disabled,
+    ).toBe(true);
+
+    // Once a video track is actually publishing the device is live → the bar unlocks and
+    // the connecting caption is gone.
+    act(() => panelCbs.onPublisher?.('publishing'));
     const connectedInput = container.querySelector(
       '[aria-label="Address bar"]',
     ) as HTMLInputElement;

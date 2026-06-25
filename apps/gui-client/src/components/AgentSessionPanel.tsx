@@ -39,6 +39,11 @@ export interface AgentSessionPanelProps {
   /** Callback fired on every connection-state transition. LK.6.c
    *  wires the chrome badge to this. */
   onStateChange?: (state: LivekitConnectionState) => void;
+  /** Fired on every publisher-state transition (waiting → publishing → none).
+   *  The simulator gates the address bar / back-forward / reload on a video
+   *  track actually arriving ('publishing'), so a URL typed while the box
+   *  renderer isn't up yet can't silently no-op. */
+  onPublisher?: (publisher: 'waiting' | 'publishing' | 'none') => void;
   /** W617 — offered when the room connects but NO video track arrives
    *  within NO_PUBLISHER_TIMEOUT_MS (founder-hit: empty LiveKit room on a
    *  deployment with no browser worker → black screen). The parent wires
@@ -115,6 +120,7 @@ export function AgentSessionPanel({
   info,
   aspectRatio = IPHONE_16_PRO_ASPECT_RATIO,
   onStateChange,
+  onPublisher,
   onNoPublisher,
   interactive = false,
   onVideoDimensions,
@@ -168,6 +174,16 @@ export function AgentSessionPanel({
   useEffect(() => {
     onStateChangeRef.current = onStateChange;
   }, [onStateChange]);
+  // Surface publisher transitions upward (same ref-decoupling rationale as
+  // onStateChange) so the simulator can gate navigation on a video track actually
+  // arriving. Keyed on the publisher VALUE so it fires on every real change.
+  const onPublisherRef = useRef(onPublisher);
+  useEffect(() => {
+    onPublisherRef.current = onPublisher;
+  }, [onPublisher]);
+  useEffect(() => {
+    onPublisherRef.current?.(publisher);
+  }, [publisher]);
 
   useEffect(() => {
     let cancelled = false;

@@ -45,9 +45,17 @@ const fakeRoom = {
   localParticipant: { publishData: vi.fn(() => Promise.resolve()) },
 };
 vi.mock('../../src/components/AgentSessionPanel', () => ({
-  AgentSessionPanel: (props: { onRoom?: (room: unknown) => void }) => {
+  AgentSessionPanel: (props: {
+    onRoom?: (room: unknown) => void;
+    onStateChange?: (s: { kind: string }) => void;
+    onPublisher?: (p: string) => void;
+  }) => {
     useEffect(() => {
       props.onRoom?.(fakeRoom);
+      // A fully-live session (connected + a publishing video track) so the tab-bar
+      // navigation chrome is enabled (canNavigate gates on connected+publishing).
+      props.onStateChange?.({ kind: 'connected' });
+      props.onPublisher?.('publishing');
     }, [props]);
     return <div data-component="agent-session-panel-mock" />;
   },
