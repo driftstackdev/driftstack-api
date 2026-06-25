@@ -761,7 +761,9 @@ function Header(props: HeaderProps): JSX.Element {
 }
 
 // W616 — friendly copy per page-error kind. The harness/driver supplies the
-// kind; the GUI renders what a customer should DO about it.
+// kind; the GUI renders what a customer should DO about it. The standalone
+// SimulatorWindow uses the same kind→copy mapping via lib/page-error-copy.ts
+// (kept in lock-step with this); this view's pinned copy is the canonical source.
 function pageErrorCopy(err: NonNullable<PageStateInfo['error']>): string {
   switch (err.kind) {
     case 'dns':

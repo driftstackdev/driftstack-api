@@ -1616,7 +1616,27 @@ export function ProfilesView({
   async function openPollingFallback(profileId: string, agentSessionId: string): Promise<void> {
     if (!client) return;
     await client.agentSessions.close(agentSessionId).catch(() => undefined);
-    const driverSession = await client.sessions.create({ profile_id: profileId });
+    let driverSession: { id: string };
+    try {
+      driverSession = await client.sessions.create({ profile_id: profileId });
+    } catch (err) {
+      // The driver (polling-viewer) route requires a `proxy` envelope when the
+      // deployment wires egress — but the driver CreateSessionRequest schema has
+      // NO proxy_id field, so this fallback CANNOT thread the customer proxy the
+      // founder picked (the SDK strips any proxy). Rather than dead-end on the raw
+      // "A proxy configuration is required…" 400, surface a specific, honest line
+      // so the founder understands the direct-viewer fallback (not their proxy
+      // choice) is the limitation here (audit). The primary LiveKit path honors
+      // the proxy; this fallback only runs on a non-LiveKit deployment.
+      if (isProxyRequiredError(err)) {
+        throw new Error(
+          'The direct-viewer fallback needs a proxy on this deployment, but it ' +
+            "can't carry the proxy you picked. Live streaming (which does use your " +
+            'proxy) is unavailable here — contact support to enable it for this account.',
+        );
+      }
+      throw err;
+    }
     await markLaunched(profileId, driverSession.id);
     // This launch genuinely used the placeholder polling viewer (no LiveKit) —
     // surface the heads-up banner. A LiveKit launch never reaches here.
@@ -1633,9 +1653,17 @@ export function ProfilesView({
       const driverSession = await client.sessions.create({ label: 'quick-session' });
       onOpenSession(driverSession.id);
     } catch (err) {
-      // Surface the failure in the banner instead of letting the rejection reach
-      // the global handler (which would blank the app with the fatal overlay).
-      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
+      // Quick Session creates an ephemeral driver session with NO proxy. On a
+      // deployment that requires egress the driver route 400s with the raw "A
+      // proxy configuration is required…" — map it to a clear line (Quick Session
+      // has no proxy by design; the founder should launch a profile with a proxy
+      // instead). Otherwise surface the failure in the banner rather than letting
+      // the rejection blank the app via the global fatal overlay.
+      const message = isProxyRequiredError(err)
+        ? 'Quick Session runs without a proxy, but this deployment requires one. ' +
+          'Launch a profile with a proxy selected instead.'
+        : friendlyError(err, settings.baseUrl);
+      setState((s) => ({ ...s, error: message }));
     } finally {
       setQuickBusy(false);
     }
@@ -4801,6 +4829,21 @@ function regionName(cc: string): string {
   } catch {
     return cc;
   }
+}
+
+/** True for the driver-session "egress required" 400 (BadRequestError with the
+ *  "A proxy configuration is required…" detail). The driver CreateSessionRequest
+ *  schema has no proxy_id field, so the polling-viewer fallback / Quick Session
+ *  cannot satisfy it — callers map this to a specific, honest message instead of
+ *  the raw API detail (audit). Matches on the stable detail substring (the server
+ *  surfaces it as a generic bad_request, so the kind alone isn't specific). */
+function isProxyRequiredError(err: unknown): boolean {
+  return (
+    err instanceof DriftstackError &&
+    err.status === 400 &&
+    typeof err.detail === 'string' &&
+    /proxy configuration is required/i.test(err.detail)
+  );
 }
 
 function friendlyError(err: unknown, baseUrl?: string): string {

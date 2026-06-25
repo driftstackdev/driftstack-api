@@ -269,4 +269,70 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(tabEls(container)[1].getAttribute('data-active')).toBe('true');
     expect(tabEls(container)[0].getAttribute('data-active')).toBe('false');
   });
+
+  it('a new ("+") tab opened after a live page does NOT inherit the prior page url/title (opens blank)', () => {
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+    // The box reports a live page on the (single) seed tab.
+    act(() => {
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({ state: 'loaded', url: 'https://example.com/', title: 'Example Domain' }),
+        ),
+      );
+    });
+    // The seed tab now tracks the live page (sanity).
+    expect((lastTabListCall().tabs[0] as { url: string; title: string }).url).toBe(
+      'https://example.com/',
+    );
+    sendTabListUpdate.mockClear();
+    // Open a new tab — it must be a CLEAN blank tab, not a clone of example.com.
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    const payload = lastTabListCall();
+    expect(payload.tabs).toHaveLength(2);
+    const fresh = payload.tabs[1] as { url: string; title: string };
+    expect(fresh.url).toBe('about:blank');
+    expect(fresh.title).toBe('New Tab');
+    // And the prior page's url/title must NOT have been stamped onto the new tab by
+    // the active-tab sync effect (the bug: it carried example.com onto the + tab).
+    expect(fresh.url).not.toBe('https://example.com/');
+    expect(fresh.title).not.toBe('Example Domain');
+  });
+
+  it('switching tabs seeds BOTH url and title from the target tab (no prior-title flicker onto the new tab)', () => {
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+    // Tab 1 (the seed) gets a live page: GitHub.
+    act(() => {
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({ state: 'loaded', url: 'https://github.com/', title: 'GitHub' }),
+        ),
+      );
+    });
+    // Open + navigate a second tab to Google so it has its own url+title.
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active, blank
+    act(() => {
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({ state: 'loaded', url: 'https://google.com/', title: 'Google' }),
+        ),
+      );
+    });
+    const tab1Id = (lastTabListCall().tabs[0] as { id: string }).id;
+    const tab2Id = (lastTabListCall().tabs[1] as { id: string }).id;
+    sendTabListUpdate.mockClear();
+    // Switch from Google (tab2) back to GitHub (tab1).
+    fireEvent.click(tabEls(container)[0]);
+    const tabsAfter = lastTabListCall().tabs as Array<{ id: string; title: string; url: string }>;
+    const t1 = tabsAfter.find((t) => t.id === tab1Id);
+    const t2 = tabsAfter.find((t) => t.id === tab2Id);
+    // The newly-active GitHub tab keeps its OWN title — the prior tab's "Google"
+    // must not be stamped onto it (the switch bug).
+    expect(t1?.title).toBe('GitHub');
+    expect(t1?.url).toBe('https://github.com/');
+    expect(t1?.title).not.toBe('Google');
+    // Google's tab is untouched.
+    expect(t2?.title).toBe('Google');
+  });
 });

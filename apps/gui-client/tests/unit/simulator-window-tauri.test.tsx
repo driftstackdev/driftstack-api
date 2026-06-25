@@ -35,12 +35,17 @@ vi.mock('../../src/lib/livekit', () => ({
 
 // Control transport: getAgentSession seeds the mode; endAgentSession is spied.
 let sessionMode: 'ai' | 'manual' | 'pair' = 'manual';
+// getAgentSession is a spy so a test can make it REJECT (control unreachable),
+// which exercises the default-to-manual-but-UNCONFIRMED close-safety path.
+const getAgentSession =
+  vi.fn<(id: string, auth: unknown) => Promise<{ mode: string; pairKind: null }>>();
 const endAgentSession = vi.fn<(id: string, auth: unknown) => Promise<void>>().mockResolvedValue();
 vi.mock('../../src/lib/agent-session-control', () => ({
   uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
   listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
   fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),
-  getAgentSession: () => Promise.resolve({ mode: sessionMode, pairKind: null }),
+  getAgentSession: (id: string, auth: unknown): Promise<{ mode: string; pairKind: null }> =>
+    getAgentSession(id, auth),
   getAgentSessionPageState: () => Promise.resolve(null),
   setSessionMode: vi.fn(),
   takeoverSession: vi.fn(),
@@ -92,6 +97,11 @@ describe('SimulatorWindow — Tauri close + Dock tile', () => {
     destroy.mockClear();
     closeHandler = null;
     sessionMode = 'manual';
+    // Default: control fetch succeeds → CONFIRMED mode (seeded from sessionMode).
+    getAgentSession.mockReset();
+    getAgentSession.mockImplementation(() =>
+      Promise.resolve({ mode: sessionMode, pairKind: null }),
+    );
     // Tauri IPC seam: the real `invoke` calls window.__TAURI_INTERNALS__.invoke.
     (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = { invoke };
   });
@@ -162,6 +172,31 @@ describe('SimulatorWindow — Tauri close + Dock tile', () => {
     expect(event.preventDefault).toHaveBeenCalled();
     expect(endAgentSession).toHaveBeenCalledWith('agt_42', null);
     expect(destroy).toHaveBeenCalled();
+  });
+
+  it('UNCONFIRMED manual (control fetch FAILED → defaulted to manual): closing does NOT end the session', async () => {
+    // The separate Simulator app reopened without its per-session control key →
+    // getAgentSession rejects → controlMode defaults to 'manual' but is NOT
+    // confirmed. Closing must NOT end what could be a live agent session (audit).
+    sessionMode = 'manual';
+    getAgentSession.mockRejectedValue(new Error('control unreachable'));
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=tok&session=agt_77&cc=US',
+    );
+    renderSim();
+    // The default-to-manual still flips the host to cursor-none (manual cursor),
+    // so wait on that to confirm the mode resolved into render + the handler
+    // re-registered with the (unconfirmed) manual mode.
+    await waitFor(() => expect(host()?.className).toContain('cursor-none'));
+    expect(closeHandler).not.toBeNull();
+    const event = { preventDefault: vi.fn() };
+    await closeHandler?.(event);
+    // Unconfirmed manual → treated as non-manual: window closes, session lives on.
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(endAgentSession).not.toHaveBeenCalled();
+    expect(destroy).not.toHaveBeenCalled();
   });
 
   it('AGENT (ai) mode: closing does NOT end the session and lets the window close (no preventDefault/destroy)', async () => {

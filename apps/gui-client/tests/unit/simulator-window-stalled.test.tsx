@@ -122,3 +122,65 @@ describe('SimulatorWindow — stalled (frozen-renderer) badge (A3 W2845)', () =>
     expect(container.querySelector('[data-component="page-stalled-badge"]')).toBeNull();
   });
 });
+
+// W616 — page-NAVIGATION error overlay. The standalone Simulator previously dropped
+// the page_state{state:'errored'} payload: the loading bar vanished and the frozen
+// last frame read as a blank successful load. Now it surfaces a per-kind error
+// overlay (same copy as the in-app LiveSessionView) and clears it on any
+// loading/loaded state.
+describe('SimulatorWindow — page-navigation error overlay (W616)', () => {
+  beforeEach(() => {
+    fakeRoom.on.mockClear();
+  });
+
+  it('shows the error overlay with per-kind copy on a pageState{state:errored} frame', async () => {
+    const { container } = renderSim();
+    await waitFor(() => {
+      expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
+    });
+    act(() => {
+      fireDataFrame({
+        state: 'errored',
+        url: 'https://nope.invalid/',
+        error: { kind: 'dns', message: 'lookup failed' },
+      });
+    });
+    const overlay = container.querySelector('[data-component="page-error-overlay"]');
+    expect(overlay).not.toBeNull();
+    // DNS kind → the address-check copy (shared lib/page-error-copy).
+    expect(overlay?.textContent).toMatch(/find this site/i);
+    expect(overlay?.textContent).toMatch(/page failed to load/i);
+  });
+
+  it('renders an HTTP-status-specific message for kind:http', async () => {
+    const { container } = renderSim();
+    await waitFor(() => {
+      expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
+    });
+    act(() => {
+      fireDataFrame({
+        state: 'errored',
+        url: 'https://app.example/',
+        error: { kind: 'http', http_status: 503, message: 'service unavailable' },
+      });
+    });
+    expect(container.querySelector('[data-component="page-error-overlay"]')?.textContent).toMatch(
+      /HTTP 503/,
+    );
+  });
+
+  it('clears the error overlay when a subsequent loading/loaded frame arrives', async () => {
+    const { container } = renderSim();
+    await waitFor(() => {
+      expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
+    });
+    act(() => {
+      fireDataFrame({ state: 'errored', url: 'https://x/', error: { kind: 'net', message: 'x' } });
+    });
+    expect(container.querySelector('[data-component="page-error-overlay"]')).not.toBeNull();
+    act(() => {
+      fireDataFrame({ state: 'loaded', url: 'https://x/' });
+    });
+    expect(container.querySelector('[data-component="page-error-overlay"]')).toBeNull();
+  });
+});

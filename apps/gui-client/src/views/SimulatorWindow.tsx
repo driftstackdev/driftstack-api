@@ -38,6 +38,7 @@ import {
 import { buildRecordingExport, recordingExportFilename } from '../lib/recordings-export';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
+import { pageErrorCopy, type PageErrorInfo } from '../lib/page-error-copy';
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
 import { downloadBlob, downloadJson } from '../lib/download';
 import { persistBaseUrl } from '../lib/settings';
@@ -2036,6 +2037,44 @@ export function SimulatorWindow(): JSX.Element {
   // WebRTC transport diagnostics (relay/tcp? loss? freezes?) — founder's
   // "is it slow because we're on TCP?" question. Read-only stats poll.
   const conn = useConnectionStats({ room, enabled: room !== null });
+  // Client-side VIDEO-FREEZE heuristic (audit). The box-reported 'stalled'
+  // page_state covers a frozen RENDERER, and the transport badge covers a
+  // TCP/relay slow link — but a pure CLIENT decode freeze (decoder stalls / SFU
+  // stops delivering frames / severe loss) WITHOUT a box-side stall leaves the
+  // last frame frozen with no indicator. Flag it only once frames were ACTUALLY
+  // flowing (decodeFps > 0 at some point) and then decodeFps holds 0 for ~4s — so
+  // the pre-first-frame connect phase (decodeFps naturally 0) never false-fires.
+  const [videoFrozen, setVideoFrozen] = useState(false);
+  const sawFramesRef = useRef(false);
+  const freezeSinceRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (room === null) {
+      sawFramesRef.current = false;
+      freezeSinceRef.current = null;
+      setVideoFrozen(false);
+      return;
+    }
+    const FREEZE_AFTER_MS = 4000;
+    const tick = (): void => {
+      const fpsNow = conn.decodeFps;
+      // Only arm the detector after we've genuinely decoded frames (avoids the
+      // pre-first-frame 0-fps false positive). Once armed, a sustained 0 fps is a
+      // freeze; any fps > 0 clears it immediately.
+      if (typeof fpsNow === 'number' && fpsNow > 0) {
+        sawFramesRef.current = true;
+        freezeSinceRef.current = null;
+        setVideoFrozen(false);
+        return;
+      }
+      if (!sawFramesRef.current) return; // never decoded a frame yet — not a freeze
+      const now = Date.now();
+      if (freezeSinceRef.current === null) freezeSinceRef.current = now;
+      setVideoFrozen(now - freezeSinceRef.current >= FREEZE_AFTER_MS);
+    };
+    tick();
+    const handle = window.setInterval(tick, 1000);
+    return () => window.clearInterval(handle);
+  }, [room, conn.decodeFps]);
   // #48 item 2 — "Copy diagnostics": a paste-ready snapshot of the session-info
   // overlay (the founder keeps reporting streaming/latency issues and needs the
   // exact figures for a bug report). formatSessionDiagnostics is pure + tested;
@@ -2449,6 +2488,16 @@ export function SimulatorWindow(): JSX.Element {
   // page unresponsive" badge over the (still-visible) last frame, cleared when
   // the box reports any non-stalled state again.
   const [pageStalled, setPageStalled] = useState(false);
+  // Page-NAVIGATION error (W616 — DNS/TLS/HTTP/timeout/net). The harness emits a
+  // page_state{state:'errored', error:{kind,...}} on a failed load over BOTH the
+  // LiveKit data channel AND the control-plane page-state poll. Without surfacing
+  // it the loading bar just vanishes and the last frame stays frozen — a real
+  // failure reading as a blank successful load (audit, sibling of the launch-no-
+  // stream bug). null = no error; set on an 'errored' frame, cleared on any
+  // loading/loaded/stalled state + on every operator navigate. The in-app
+  // LiveSessionView already shows this overlay; the standalone Simulator (the
+  // surface used daily) did not — this closes that gap with the same per-kind copy.
+  const [pageError, setPageError] = useState<PageErrorInfo | null>(null);
   // Browser-style page TABS (doc-150 item 4; locked A2↔A3 contract). The GUI owns the
   // tab model; each tab is a page the harness keeps a renderer for, and `activeTabId`
   // is the one currently published into the video. We seed exactly one tab on mount so
@@ -2496,7 +2545,11 @@ export function SimulatorWindow(): JSX.Element {
           // activateTabResult (doc-150 item 4) — the harness's reply to activateTab.
           requestId?: string;
           ok?: boolean;
-          error?: string;
+          // `error` is overloaded across frame types: a string on activateTabResult
+          // (narrowed via typeof below) and a {kind,http_status,message} object on a
+          // page_state{state:'errored'} frame (W616). Typed `unknown` so each path
+          // narrows it safely.
+          error?: unknown;
           // tabListRestore (doc-150 §7.5) — the box pushes the decrypted
           // ProfileBlob.openTabs set on profile reopen so the bar repopulates.
           tabs?: unknown;
@@ -2575,6 +2628,16 @@ export function SimulatorWindow(): JSX.Element {
         // A3 W2845 — a 'stalled' frame surfaces the frozen-renderer badge; any
         // other harness state clears it (the page is responsive again).
         if (isHarnessState) setPageStalled(msg.state === 'stalled');
+        // W616 — a page-NAVIGATION error: surface the per-kind error overlay (the
+        // failure must not read as a blank successful load). Any other harness
+        // state means the page is loading/loaded/responsive → clear it.
+        if (isHarnessState) {
+          if (msg.state === 'errored') {
+            setPageError(typeof msg.error === 'object' && msg.error !== null ? msg.error : {});
+          } else {
+            setPageError(null);
+          }
+        }
         const loading = isHarnessState ? msg.state === 'loading' : msg.loading;
         if (typeof loading === 'boolean') {
           setPageLoading(loading);
@@ -2621,6 +2684,10 @@ export function SimulatorWindow(): JSX.Element {
           // A3 W2845 — surface/clear the frozen-renderer badge from the poll too
           // (independent of the loading grace window; a stall is real regardless).
           setPageStalled(ps.state === 'stalled');
+          // W616 — surface/clear the page-navigation error from the poll too (same
+          // payload as the data-channel path); 'errored' shows the overlay, any
+          // other state clears it.
+          setPageError(ps.state === 'errored' ? (ps.error ?? {}) : null);
           const loading = ps.state === 'loading';
           // Don't let a stale 'loaded' (the box hasn't seen our just-submitted
           // navigate yet) kill the optimistic spinner. Within the grace window after
@@ -2895,6 +2962,16 @@ export function SimulatorWindow(): JSX.Element {
   // SimulatorWindow has no SDK client → lib/agent-session-control raw-fetches
   // (reads {apiKey,baseUrl} via loadSettings). null mode = not loaded yet.
   const [controlMode, setControlMode] = useState<SessionMode | null>(null);
+  // Distinguishes a CONFIRMED mode (a successful getAgentSession round-trip) from
+  // one DEFAULTED to 'manual' because the control HTTP API was unreachable (e.g.
+  // the separate Simulator app reopened without its per-session control key). The
+  // mode-aware close handler ends a session ONLY when the mode is a confirmed
+  // 'manual' — an unconfirmed/defaulted 'manual' falls through to the non-manual
+  // (hide-and-leave-running) path, so closing a window that COULDN'T verify it's
+  // human-only never silently kills an agent session the founder meant to keep
+  // running (audit; matches the documented "never silently kill a session we
+  // can't confirm is human-only" intent). Reset to false on every session swap.
+  const [controlModeConfirmed, setControlModeConfirmed] = useState(false);
   const [pairKind, setPairKind] = useState<string | null>(null);
   const [controlBusy, setControlBusy] = useState(false);
   const [composerText, setComposerText] = useState('');
@@ -2919,6 +2996,7 @@ export function SimulatorWindow(): JSX.Element {
       activeRecIdRef.current = null;
     }
     setControlMode(null);
+    setControlModeConfirmed(false);
     setPairKind(null);
     setLiveUrl('');
     setPageLoading(false);
@@ -2927,6 +3005,22 @@ export function SimulatorWindow(): JSX.Element {
     // per-session reset so a previous session's "stalled" overlay can't persist
     // over a NEW session's live frame after an in-place session swap.
     setPageStalled(false);
+    // Clear any page-navigation error so a prior session's error overlay can't
+    // persist over the new session's first frame (mirrors the pageStalled reset).
+    setPageError(null);
+    // Reset the per-session TAB model + title to a clean single-seed state. The
+    // in-place relaunch swaps sessionId WITHOUT remounting (to keep the Room), so
+    // tabs/activeTabId/liveTitle would otherwise carry the OLD session's tabs into
+    // the new one (the new box has no knowledge of them → desynced strip; the
+    // stale liveTitle then stamps onto the new first tab — audit). Mint a fresh
+    // seed tab so there's always exactly one, and drop any pending optimistic
+    // switches referencing the old tab ids.
+    const seed: SimTab = { id: makeTabId(), url: '', scrollY: 0, title: '' };
+    seedTabRef.current = seed;
+    setTabs([seed]);
+    setActiveTabId(seed.id);
+    setLiveTitle('');
+    pendingActivationsRef.current.clear();
   }, [sessionId, stopRecording]);
   // Control-channel load state for the panel caption (founder 2026-06-18: the
   // mode toggle was stuck "Connecting…" forever when getAgentSession failed and
@@ -2985,6 +3079,10 @@ export function SimulatorWindow(): JSX.Element {
         // window-close end the wrong session.
         if (reqSessionId !== sessionIdRef.current || controlBusyRef.current) return;
         setControlMode(s.mode);
+        // The mode was actually fetched from the server — CONFIRMED. Only a
+        // confirmed 'manual' lets window-close end the session (see the close
+        // handler); a defaulted-to-manual (control unreachable) must not.
+        setControlModeConfirmed(true);
         setPairKind(s.pairKind);
         // A successful control round-trip proves the session is reachable —
         // clear any stale "control may not be reaching the device" badge.
@@ -3018,13 +3116,16 @@ export function SimulatorWindow(): JSX.Element {
   // ai/pair (agent-driven) modes the agent keeps working in the background, so
   // closing just hides the window — the session keeps running and can be
   // reopened (the profile-row "Live view"). Unknown/null mode (controls never
-  // loaded) is treated as NON-manual: never silently kill a session we can't
-  // confirm is human-only. Covers the toolbar close button (window.close fires
-  // this) AND the OS close. The MANUAL path preventDefaults + races a 2s timeout
-  // so a slow/failed end can never wedge the window open; destroy() then closes
-  // without re-firing. controlMode is in the deps so the handler always sees the
-  // current mode (the listener re-registers on a mode switch — same pattern as
-  // controlAuth). Declared AFTER the control state so controlMode is in scope.
+  // loaded) AND a manual that was only DEFAULTED because the control API was
+  // unreachable (controlModeConfirmed === false) are treated as NON-manual: never
+  // silently kill a session we can't CONFIRM is human-only. Only a confirmed
+  // manual (a successful getAgentSession / explicit mode set) ends on close.
+  // Covers the toolbar close button (window.close fires this) AND the OS close.
+  // The MANUAL path preventDefaults + races a 2s timeout so a slow/failed end can
+  // never wedge the window open; destroy() then closes without re-firing.
+  // controlMode + controlModeConfirmed are in the deps so the handler always sees
+  // the current mode (the listener re-registers on a mode switch — same pattern as
+  // controlAuth). Declared AFTER the control state so they're in scope.
   useEffect(() => {
     if (sessionId === '' || typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
       return;
@@ -3038,9 +3139,13 @@ export function SimulatorWindow(): JSX.Element {
       const stop = await win.onCloseRequested(async (event) => {
         if (closing) return;
         closing = true;
-        // Manual → end the session before closing; agent-driven (ai/pair) or
-        // unknown → close immediately and leave the session running.
-        if (controlMode === 'manual') {
+        // CONFIRMED manual → end the session before closing; agent-driven
+        // (ai/pair), unknown, OR a manual that was only DEFAULTED because the
+        // control API was unreachable → close immediately and leave the session
+        // running. Requiring controlModeConfirmed here is the safety guard: a
+        // window that couldn't verify the mode (reopened without its control key)
+        // must NOT end what might be a live agent session on close (audit).
+        if (controlMode === 'manual' && controlModeConfirmed) {
           event.preventDefault();
           try {
             await Promise.race([
@@ -3068,7 +3173,7 @@ export function SimulatorWindow(): JSX.Element {
       disposed = true;
       unlisten?.();
     };
-  }, [sessionId, controlAuth, controlMode]);
+  }, [sessionId, controlAuth, controlMode, controlModeConfirmed]);
   // Dynamic macOS Dock icon (founder 2026-06-18: "the Dock should be the proxy
   // country's FLAG, with the profile name on it"). With a live session, set the
   // Dock icon to the proxy country's flag captioned with the profile name; with
@@ -3089,6 +3194,9 @@ export function SimulatorWindow(): JSX.Element {
     void setSessionMode(sessionId, target, controlAuth)
       .then((s) => {
         setControlMode(s.mode);
+        // The founder explicitly set the mode and the server confirmed it — a
+        // confirmed mode (so a deliberate switch to manual lets close end it).
+        setControlModeConfirmed(true);
         setPairKind(s.pairKind);
       })
       .catch((err: unknown) => {
@@ -3207,6 +3315,13 @@ export function SimulatorWindow(): JSX.Element {
       return next;
     });
     setActiveTabId(tab.id);
+    // Reset the live page identity for the freshly-activated blank tab. Without
+    // this the active-tab sync effect (keyed on activeTabId) fires with the PRIOR
+    // page's liveUrl/liveTitle still set and stamps them onto the new blank tab —
+    // the "+" tab would inherit the previous site's URL + title (audit). The box
+    // re-reports a fresh page_state once the operator navigates the new tab.
+    setLiveUrl('');
+    setLiveTitle('');
   }, [emitTabList]);
   // Close a tab — remove it; if it was active, activate the nearest neighbor (prefer
   // the one to the left, else the right). NEVER drops below one tab (the close button
@@ -3244,9 +3359,14 @@ export function SimulatorWindow(): JSX.Element {
       if (target === undefined || id === activeTabId) return;
       const prevActive = activeTabId;
       setActiveTabId(id);
-      // Reflect the target tab's known url in the address bar immediately (optimistic);
-      // page_state will refine it once the box publishes the switched page.
+      // Reflect the target tab's known url + title in the address bar / label
+      // immediately (optimistic); page_state will refine them once the box
+      // publishes the switched page. BOTH must be seeded from the target tab: the
+      // sync effect re-runs on the activeTabId change, and a stale liveTitle from
+      // the previous tab would otherwise be stamped onto the newly-active tab
+      // (tab labels flickering to the wrong site on every switch — audit).
       setLiveUrl(target.url);
+      setLiveTitle(target.title);
       emitTabList(tabs, id);
       if (room !== null) {
         void sendActivateTab(room, {
@@ -3310,6 +3430,9 @@ export function SimulatorWindow(): JSX.Element {
     // An operator navigate optimistically clears the frozen-renderer badge — the
     // page is being driven again; the box re-asserts 'stalled' if it's still frozen.
     setPageStalled(false);
+    // W616 — a fresh navigate clears any stale page-error overlay; the box
+    // re-asserts 'errored' if THIS navigation also fails.
+    setPageError(null);
     lastNavAtRef.current = Date.now();
     clearLoadWatchdog();
     loadWatchdogRef.current = window.setTimeout(() => {
@@ -3501,6 +3624,50 @@ export function SimulatorWindow(): JSX.Element {
                   >
                     <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
                     Reconnecting — page unresponsive
+                  </div>
+                )}
+                {/* Client-side video-freeze badge (audit). Surfaced ONLY when the
+                  box hasn't already reported a renderer stall and there's no
+                  page-error overlay (those take priority and explain the frozen
+                  frame); a calm "Video frozen — reconnecting" over the last frame,
+                  same treatment as the page-stalled badge. */}
+                {videoFrozen && !pageStalled && pageError === null && (
+                  <div
+                    role="status"
+                    data-component="video-frozen-badge"
+                    className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-black/75 px-4 py-2 text-[11px] font-medium text-white shadow-lg backdrop-blur"
+                  >
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                    Video frozen — reconnecting
+                  </div>
+                )}
+                {/* W616 — honest page-navigation error overlay (DNS/TLS/HTTP/
+                  timeout/net). The standalone Simulator previously dropped the
+                  error payload entirely — the loading bar vanished and the frozen
+                  last frame read as a blank successful load (audit). Mirror the
+                  in-app LiveSessionView treatment: a per-kind message (shared
+                  lib/page-error-copy) over the last frame + a Try again that
+                  re-navigates the current address. Cleared on any loading/loaded/
+                  stalled state and on every navigate. */}
+                {pageError !== null && (
+                  <div
+                    data-component="page-error-overlay"
+                    className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/75 px-6 text-center"
+                  >
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-rose-300">
+                      Page failed to load
+                    </span>
+                    <span className="max-w-xs text-sm text-white">{pageErrorCopy(pageError)}</span>
+                    {liveUrl !== '' && liveUrl !== 'about:blank' && (
+                      <button
+                        type="button"
+                        data-action="retry-navigate"
+                        onClick={() => onNavigate(liveUrl)}
+                        className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-white/20"
+                      >
+                        Try again
+                      </button>
+                    )}
                   </div>
                 )}
                 {/* LOUD transport-fallback badge (A3 wmdoil11r rec (a)): WebRTC

@@ -778,8 +778,19 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         tag === 'INPUT' || tag === 'TEXTAREA' || (el as HTMLElement).isContentEditable === true
       );
     };
+    // The bare Escape key is the GUI's drawer-collapse shortcut (a document-level
+    // keydown in SimulatorWindow). It has no iPhone-meaningful analogue for the
+    // touch flows the device runs, so forwarding it ALSO to the device dismissed a
+    // modal/menu/dropdown on the live page on the same press the founder used to
+    // close the drawer — one keypress doing two things (audit). Skip forwarding a
+    // bare Escape (no modifiers); a modified Escape still goes through (rare, but
+    // it's not the drawer shortcut). Applies to both keyDown + keyUp so a half-key
+    // never reaches the device.
+    const isBareEscape = (e: KeyboardEvent): boolean =>
+      e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey;
     const onKeyDown = (e: KeyboardEvent): void => {
       if (editingLocally()) return;
+      if (isBareEscape(e)) return;
       const modifiers = modifiersFromEvent(e);
       send(
         {
@@ -792,6 +803,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     };
     const onKeyUp = (e: KeyboardEvent): void => {
       if (editingLocally()) return;
+      if (isBareEscape(e)) return;
       const modifiers = modifiersFromEvent(e);
       send(
         {

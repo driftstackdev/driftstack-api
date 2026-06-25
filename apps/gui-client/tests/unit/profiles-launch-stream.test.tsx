@@ -8,6 +8,21 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { openSimulatorWindow } from '../../src/lib/open-simulator';
+import { DriftstackError } from '@driftstack/sdk';
+
+/** The server's egress-required 400 (driver CreateSessionRequest has no proxy
+ *  field, so the polling fallback / Quick Session can't satisfy it). */
+function proxyRequiredError(): DriftstackError {
+  return new DriftstackError({
+    kind: 'bad_request',
+    status: 400,
+    type: 'https://driftstack.dev/problems/bad-request',
+    title: 'Bad Request',
+    detail:
+      'A proxy configuration is required to create a session on this deployment. ' +
+      'Supply `proxy` in the create-session body.',
+  });
+}
 
 const agentCreate = vi.fn<(b: unknown) => Promise<unknown>>();
 const agentClose = vi.fn<(id: string) => Promise<unknown>>(() => Promise.resolve({}));
@@ -168,6 +183,23 @@ describe('ProfilesView launch → stream', () => {
     expect(sessionCreate).toHaveBeenCalledWith({ profile_id: 'prof_1' });
     // The old dead-end message is gone — the launch opens a working viewer.
     expect(screen.queryByText(/no live stream was returned/i)).toBeNull();
+  });
+
+  it('polling fallback on an egress-required deployment surfaces a SPECIFIC message (not the raw "proxy configuration is required" 400)', async () => {
+    // No livekit → polling fallback; the driver sessions.create 400s because
+    // egress is required but the driver schema can't carry the picked proxy.
+    agentCreate.mockResolvedValueOnce({ id: 'agt_3' });
+    sessionCreate.mockRejectedValueOnce(proxyRequiredError());
+    const onOpenSession = vi.fn();
+    render(<ProfilesView onGoToSettings={vi.fn()} onOpenSession={onOpenSession} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
+    // The specific direct-viewer message renders — NOT the raw API detail.
+    await waitFor(() =>
+      expect(screen.getByText(/direct-viewer fallback needs a proxy/i)).toBeTruthy(),
+    );
+    expect(screen.queryByText(/Supply `proxy` in the create-session body/i)).toBeNull();
+    // The fallback never opens a (broken) viewer session.
+    expect(onOpenSession).not.toHaveBeenCalled();
   });
 
   // Session-tracking self-heal (founder 2026-06-18: "always says open session even
