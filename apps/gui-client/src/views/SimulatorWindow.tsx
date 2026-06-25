@@ -99,6 +99,29 @@ function makeTabId(): string {
   }
   return `tab_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
+// New-tab destination (founder 2026-06-25: "our own blank about:me page instead
+// of nothing"). The "+" action opens a fresh tab to the branded Driftstack
+// new-tab page (apps/marketing-site/src/pages/newtab.astro) so the box renders an
+// on-brand page instead of a literally-empty about:blank. A NAMED CONSTANT so it's
+// a one-line swap back to 'about:blank' if A3 prefers it for fingerprint reasons.
+const NEW_TAB_URL = 'https://driftstack.dev/newtab';
+const NEW_TAB_TITLE = 'New Tab';
+/** A "home"/blank tab whose url should read as an empty new tab in the UI (no
+ *  address shown, label falls back to "New Tab", window title to the device
+ *  name) — both the literal about:blank and the branded NEW_TAB_URL. */
+function isBlankTabUrl(url: string): boolean {
+  return url === '' || url === 'about:blank' || url === NEW_TAB_URL;
+}
+// Tab-switch ack handling (founder 2026-06-25 "could not switch tab" softening).
+// If the harness MISSES an activateTab ack (a dropped data-channel frame) within
+// this backoff, re-issue the activateTab — up to ACTIVATE_MAX_ATTEMPTS total (the
+// initial send + 2 retries) before giving up with a soft, non-blocking notice.
+const ACTIVATE_ACK_TIMEOUT_MS = 1200;
+const ACTIVATE_MAX_ATTEMPTS = 3;
+// Hard upper bound on the "switching…" affordance so it can never hang on the tab
+// (a dropped ack AND a dropped page_state). Cleared earlier by any box page-state
+// for the tab or an ack; this is the safety net.
+const SWITCH_AFFORDANCE_TIMEOUT_MS = 6000;
 // flip true when A3's navigateHistory handler deploys — bus W2870
 const BACK_FORWARD_ENABLED = true; // A3 navigateHistory handler deployed (bus W2872; A3 01a5d48f1)
 const BEZEL_PAD = 20; // p-[10px] × 2
@@ -1254,12 +1277,17 @@ function BrowserBar({
 function TabStrip({
   tabs,
   activeTabId,
+  switchingTabId,
   onActivate,
   onClose,
   onNew,
 }: {
   tabs: SimTab[];
   activeTabId: string;
+  // INSTANT switch-feedback (founder 2026-06-25): the tab currently being switched
+  // TO renders a subtle "switching…" affordance until the box reports its page. null
+  // when no switch is in flight. iOS-clean, not over-animated.
+  switchingTabId: string | null;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
   onNew: () => void;
@@ -1268,7 +1296,7 @@ function TabStrip({
     const title = t.title.trim();
     if (title !== '') return title;
     const url = t.url.trim();
-    if (url === '' || url === 'about:blank') return 'New Tab';
+    if (isBlankTabUrl(url)) return 'New Tab';
     // Show the host (sans scheme) when possible, else the raw url — compact + readable.
     try {
       return new URL(url).host || url;
@@ -1284,19 +1312,40 @@ function TabStrip({
     >
       {tabs.map((t) => {
         const active = t.id === activeTabId;
+        const switching = t.id === switchingTabId;
         return (
           <div
             key={t.id}
             data-component="simulator-tab"
             data-active={active ? 'true' : 'false'}
+            data-switching={switching ? 'true' : 'false'}
             title={t.url || label(t)}
             onClick={() => onActivate(t.id)}
-            className={`group flex min-w-[88px] max-w-[160px] shrink-0 cursor-default items-center gap-1.5 rounded-md px-2 text-[11px] leading-none transition ${
+            className={`group relative flex min-w-[88px] max-w-[160px] shrink-0 cursor-default items-center gap-1.5 overflow-hidden rounded-md px-2 text-[11px] leading-none transition ${
               active
                 ? 'bg-black/40 text-white/90 ring-1 ring-white/15'
                 : 'bg-white/[0.04] text-white/55 hover:bg-white/[0.08] hover:text-white/80'
             }`}
           >
+            {/* INSTANT switch-feedback (founder 2026-06-25): a small spinning glyph
+                before the label while the box catches up to the switch. Tasteful,
+                iOS-clean — cleared the moment the tab's page_state arrives. */}
+            {switching && (
+              <svg
+                data-component="simulator-tab-switching"
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                aria-hidden="true"
+                className="shrink-0 animate-spin text-white/70"
+              >
+                <path d="M21 12a9 9 0 1 1-6.22-8.56" />
+              </svg>
+            )}
             <span className="min-w-0 flex-1 truncate">{label(t)}</span>
             {tabs.length > 1 && (
               <button
@@ -1324,6 +1373,15 @@ function TabStrip({
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
+            )}
+            {/* Thin progress hint along the bottom edge of the tab while switching —
+                a subtle pulsing accent rule (NOT a full reflow). Built-in pulse, no
+                custom keyframe; cleared the moment the tab's page_state arrives. */}
+            {switching && (
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-x-1 bottom-0 h-[2px] animate-pulse rounded-full bg-accent/80"
+              />
             )}
           </div>
         );
@@ -2521,6 +2579,22 @@ export function SimulatorWindow(): JSX.Element {
   const pendingActivationsRef = useRef<Map<string, { tabId: string; prevTabId: string }>>(
     new Map(),
   );
+  // INSTANT switch-feedback (founder 2026-06-25: "kinda slow to switch"). The real
+  // speed lever is A3's box-side no-reload; on the GUI we make the switch FEEL
+  // responsive with a subtle "switching…" affordance on the target tab. Holds the
+  // tabId currently being switched TO; set on click, cleared the moment the box's
+  // page_state for that tab arrives (the one-shot reconcile / activateTabResult ok /
+  // a tab-routed page_state frame) or on a bounded timeout so it never hangs.
+  const [switchingTabId, setSwitchingTabId] = useState<string | null>(null);
+  // SOFTER "could not switch tab" handling (founder 2026-06-25). The harness can
+  // MISS an activateTab ack (a dropped data-channel frame); rather than silently
+  // leaving the switch half-acknowledged we RE-SEND activateTab once or twice with a
+  // short backoff before giving up. One in-flight retry context per target tab,
+  // keyed by tabId; cleared on any ack (ok or reject) or when superseded by a newer
+  // switch. The re-issue is the ONLY non-blocking failure path — no alert().
+  const activationRetryRef = useRef<
+    Map<string, { tabId: string; prevTabId: string; attempts: number; timer: number }>
+  >(new Map());
   const loadWatchdogRef = useRef<number | null>(null);
   // Timestamp of the last operator navigate. The ~2s page-state poll can fire before
   // the box has seen a just-submitted navigate and would read the PREVIOUS page as
@@ -2543,6 +2617,30 @@ export function SimulatorWindow(): JSX.Element {
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
   }, [activeTabId]);
+  // Resolve a tab's switch: clear the "switching…" affordance if THIS tab is the one
+  // being switched to, and cancel any pending re-issue timer for it. Called when the
+  // box acks the switch, reports a page for the tab, or a newer switch supersedes it.
+  const resolveSwitch = useCallback((tabId: string): void => {
+    const retry = activationRetryRef.current.get(tabId);
+    if (retry !== undefined) {
+      window.clearTimeout(retry.timer);
+      activationRetryRef.current.delete(tabId);
+    }
+    setSwitchingTabId((cur) => (cur === tabId ? null : cur));
+  }, []);
+  const resolveSwitchRef = useRef(resolveSwitch);
+  useEffect(() => {
+    resolveSwitchRef.current = resolveSwitch;
+  }, [resolveSwitch]);
+  // Cancel every pending switch re-issue timer + clear the affordance. Used when the
+  // tab set is replaced (tabListRestore / relaunch) and on unmount so no orphan timer
+  // re-sends an activateTab for a tab that no longer exists. Functionless on []-deps.
+  const clearAllActivationRetries = useCallback((): void => {
+    for (const r of activationRetryRef.current.values()) window.clearTimeout(r.timer);
+    activationRetryRef.current.clear();
+    setSwitchingTabId(null);
+  }, []);
+  useEffect(() => () => clearAllActivationRetries(), [clearAllActivationRetries]);
   // SINGLE writer of a tab's stored url/title (live-state accuracy refactor). Applies
   // a box-sourced page_state to ONE tab: the frame's tabId when present (forward-
   // compatible per-tab routing — activates automatically once the box sends tabId),
@@ -2555,6 +2653,9 @@ export function SimulatorWindow(): JSX.Element {
         typeof frame.tabId === 'string' && frame.tabId !== ''
           ? frame.tabId
           : activeTabIdRef.current;
+      // The box reported a page for this tab → the switch (if any) landed; clear the
+      // "switching…" affordance + cancel its re-issue timer (instant-feedback path).
+      resolveSwitchRef.current(targetId);
       setTabs((prev) => {
         let changed = false;
         const next = prev.map((t) => {
@@ -2626,7 +2727,15 @@ export function SimulatorWindow(): JSX.Element {
         if (msg.type === 'activateTabResult' && typeof msg.requestId === 'string') {
           const pending = pendingActivationsRef.current.get(msg.requestId);
           pendingActivationsRef.current.delete(msg.requestId);
+          if (pending !== undefined) {
+            // ANY ack (ok or reject) resolves the switch — stop the re-issue-on-miss
+            // timer + clear the "switching…" affordance for this tab.
+            resolveSwitchRef.current(pending.tabId);
+          }
           if (pending !== undefined && (msg.ok === false || typeof msg.error === 'string')) {
+            // SOFT failure (founder 2026-06-25): revert to the previously-active tab
+            // (a sensible state — never leave it half-switched) and show a brief,
+            // NON-BLOCKING notice. No alert(); the toast auto-dismisses.
             setActiveTabId(pending.prevTabId);
             setNotice('Could not switch tab');
             window.setTimeout(() => setNotice(null), 3000);
@@ -2670,7 +2779,12 @@ export function SimulatorWindow(): JSX.Element {
           const active = restored.find((t) => t.id === wantActive) ?? first;
           // Pending optimistic switches reference ids from the OLD set — clear them so
           // a late activateTabResult can't revert into a tab that no longer exists.
+          // Cancel any in-flight switch re-issue timers + the affordance too (their
+          // target tab ids are gone).
           pendingActivationsRef.current.clear();
+          for (const r of activationRetryRef.current.values()) window.clearTimeout(r.timer);
+          activationRetryRef.current.clear();
+          setSwitchingTabId(null);
           setTabs(restored);
           setActiveTabId(active.id);
           // Reflect the active tab's url in the address bar (the BrowserBar reads liveUrl).
@@ -3115,6 +3229,11 @@ export function SimulatorWindow(): JSX.Element {
     setActiveTabId(seed.id);
     setLiveTitle('');
     pendingActivationsRef.current.clear();
+    // Drop any in-flight switch re-issue timers + the affordance — they reference the
+    // PRIOR session's tab ids.
+    for (const r of activationRetryRef.current.values()) window.clearTimeout(r.timer);
+    activationRetryRef.current.clear();
+    setSwitchingTabId(null);
   }, [sessionId, stopRecording]);
   // Control-channel load state for the panel caption (founder 2026-06-18: the
   // mode toggle was stuck "Connecting…" forever when getAgentSession failed and
@@ -3422,11 +3541,13 @@ export function SimulatorWindow(): JSX.Element {
     },
     [activeTabId, emitTabList],
   );
-  // New tab — append a blank about:blank tab, activate it, publish. Never navigates
-  // the box on its own (the harness opens a blank page for the new tab); the operator
-  // drives it via the address bar afterward.
+  // New tab — append a fresh tab pointed at the branded Driftstack new-tab page
+  // (NEW_TAB_URL), activate it, publish. The box opens that page for the new tab
+  // instead of a literally-empty about:blank (founder 2026-06-25); the operator
+  // drives it onward via the address bar afterward. The stored url/title seed from
+  // NEW_TAB_URL so the tab label + address bar read sensibly before the box reports.
   const onNewTab = useCallback((): void => {
-    const tab: SimTab = { id: makeTabId(), url: 'about:blank', scrollY: 0, title: 'New Tab' };
+    const tab: SimTab = { id: makeTabId(), url: NEW_TAB_URL, scrollY: 0, title: NEW_TAB_TITLE };
     setTabs((prev) => {
       const next = [...prev, tab];
       emitTabList(next, tab.id);
@@ -3464,11 +3585,70 @@ export function SimulatorWindow(): JSX.Element {
     },
     [activeTabId, emitTabList],
   );
+  // Send a single activateTab attempt for a switch + arm the ack-miss re-issue timer
+  // (founder 2026-06-25 softer "could not switch tab" handling). On a missed ack the
+  // timer fires: while attempts remain it RE-SENDS activateTab (short backoff); once
+  // exhausted it gives up SOFTLY — a brief non-blocking notice, never an alert, and
+  // the optimistic switch is left in a sensible state (we keep the operator on the
+  // tab they tapped rather than yanking them back on a mere dropped-ack). A real
+  // reject (activateTabResult{ok:false}) still reverts via onData. resolveSwitch
+  // (box page-state / ack) cancels the timer so a healthy switch never retries.
+  const sendActivateAttempt = useCallback(
+    (ctx: { tabId: string; prevTabId: string; url: string; scrollY: number }): void => {
+      if (room === null) return;
+      void sendActivateTab(room, {
+        sessionId,
+        tabId: ctx.tabId,
+        url: ctx.url,
+        scrollY: ctx.scrollY,
+      }).then(
+        (requestId) => {
+          pendingActivationsRef.current.set(requestId, {
+            tabId: ctx.tabId,
+            prevTabId: ctx.prevTabId,
+          });
+        },
+        () => {
+          /* benign teardown — swallowed in the wrapper; nothing to track */
+        },
+      );
+      const existing = activationRetryRef.current.get(ctx.tabId);
+      const attempts = (existing?.attempts ?? 0) + 1;
+      if (existing !== undefined) window.clearTimeout(existing.timer);
+      const timer = window.setTimeout(() => {
+        const cur = activationRetryRef.current.get(ctx.tabId);
+        if (cur === undefined) return; // resolved (ack / page-state) — nothing to do
+        if (cur.attempts < ACTIVATE_MAX_ATTEMPTS) {
+          sendActivateAttemptRef.current(ctx); // re-issue on the missed ack
+        } else {
+          // Exhausted — give up softly. Clear the affordance + retry record; leave the
+          // operator on the tab they tapped (a dropped ack ≠ a reject). A gentle toast.
+          activationRetryRef.current.delete(ctx.tabId);
+          setSwitchingTabId((s) => (s === ctx.tabId ? null : s));
+          setNotice('Still switching tabs…');
+          window.setTimeout(() => setNotice(null), 3000);
+        }
+      }, ACTIVATE_ACK_TIMEOUT_MS);
+      activationRetryRef.current.set(ctx.tabId, {
+        tabId: ctx.tabId,
+        prevTabId: ctx.prevTabId,
+        attempts,
+        timer,
+      });
+    },
+    [room, sessionId],
+  );
+  // Stable self-reference so the setTimeout closure always re-issues via the latest
+  // sendActivateAttempt (it captures room/sessionId) without a forward-ref cycle.
+  const sendActivateAttemptRef = useRef(sendActivateAttempt);
+  useEffect(() => {
+    sendActivateAttemptRef.current = sendActivateAttempt;
+  }, [sendActivateAttempt]);
   // Switch tabs — set active, OPTIMISTICALLY switch (the address bar + viewport follow
-  // immediately), then ask the harness to publish that tab's page via activateTab
-  // (correlated by requestId) and re-publish the list. v1 is optimistic: if the
-  // harness replies activateTabResult{ok:false} we surface a notice + revert; a missed
-  // reply leaves the optimistic switch in place (acceptable for v1 — see onData).
+  // immediately) + show a subtle "switching…" affordance on the target tab, then ask
+  // the harness to publish that tab's page via activateTab (correlated by requestId,
+  // re-issued on a missed ack — see sendActivateAttempt) and re-publish the list. A
+  // reject reverts + notifies; a dropped ack retries then soft-fails (see onData).
   const onActivateTab = useCallback(
     (id: string): void => {
       const target = tabs.find((t) => t.id === id);
@@ -3482,28 +3662,34 @@ export function SimulatorWindow(): JSX.Element {
       // tab's OWN stored url/title via the derived effect below — NO stamp-back.
       lastSwitchAtRef.current = Date.now();
       setActiveTabId(id);
+      // INSTANT feedback — show "switching…" on the target tab immediately (real
+      // speed is A3's box-side no-reload). Cleared when the box reports the tab's
+      // page (resolveSwitch via writeTabPageState / ack), or the hard timeout below.
+      setSwitchingTabId(id);
       emitTabList(tabs, id);
       if (room !== null) {
-        void sendActivateTab(room, {
-          sessionId,
+        sendActivateAttempt({
           tabId: id,
+          prevTabId: prevActive,
           url: target.url,
           scrollY: target.scrollY,
-        }).then(
-          (requestId) => {
-            pendingActivationsRef.current.set(requestId, { tabId: id, prevTabId: prevActive });
-          },
-          () => {
-            /* benign teardown — swallowed in the wrapper; nothing to track */
-          },
-        );
+        });
         // One-shot reconcile: pull the box's current page-state immediately so the
         // active tab refreshes from the device without waiting for the next ~2s poll
         // tick. void it (no floating promise) — best-effort, transient errors ignored.
         void reconcilePageState();
+        // Hard safety net: never let the "switching…" affordance hang on the tab even
+        // if both the ack AND the page-state for it are dropped.
+        window.setTimeout(() => {
+          setSwitchingTabId((s) => (s === id ? null : s));
+        }, SWITCH_AFFORDANCE_TIMEOUT_MS);
+      } else {
+        // No control channel yet — nothing to ack the switch; don't strand the
+        // affordance (it would otherwise spin forever with no box to clear it).
+        setSwitchingTabId(null);
       }
     },
-    [tabs, activeTabId, emitTabList, room, sessionId, reconcilePageState],
+    [tabs, activeTabId, emitTabList, room, sendActivateAttempt, reconcilePageState],
   );
   // DERIVE the address-bar view (liveUrl/liveTitle) from the ACTIVE tab's stored
   // url/title (live-state accuracy refactor). This REPLACES the old stamp-back sync
@@ -3533,7 +3719,7 @@ export function SimulatorWindow(): JSX.Element {
   useEffect(() => {
     const base = profileName !== '' ? profileName : deviceName;
     let host = '';
-    if (liveUrl !== '' && liveUrl !== 'about:blank') {
+    if (!isBlankTabUrl(liveUrl)) {
       try {
         host = new URL(liveUrl).host;
       } catch {
@@ -3699,6 +3885,7 @@ export function SimulatorWindow(): JSX.Element {
             <TabStrip
               tabs={tabs}
               activeTabId={activeTabId}
+              switchingTabId={switchingTabId}
               onActivate={onActivateTab}
               onClose={onCloseTab}
               onNew={onNewTab}
@@ -3802,7 +3989,7 @@ export function SimulatorWindow(): JSX.Element {
                       Page failed to load
                     </span>
                     <span className="max-w-xs text-sm text-white">{pageErrorCopy(pageError)}</span>
-                    {liveUrl !== '' && liveUrl !== 'about:blank' && (
+                    {!isBlankTabUrl(liveUrl) && (
                       <button
                         type="button"
                         data-action="retry-navigate"

@@ -299,7 +299,7 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(tabEls(container)[0].getAttribute('data-active')).toBe('false');
   });
 
-  it('a new ("+") tab opened after a live page does NOT inherit the prior page url/title (opens blank)', () => {
+  it('a new ("+") tab opens the branded Driftstack new-tab page (NOT about:blank) and does NOT inherit the prior page url/title', () => {
     const { container } = renderSim();
     expect(dataHandler).not.toBeNull();
     // The box reports a live page on the (single) seed tab.
@@ -315,17 +315,24 @@ describe('SimulatorWindow — page tab strip', () => {
       'https://example.com/',
     );
     sendTabListUpdate.mockClear();
-    // Open a new tab — it must be a CLEAN blank tab, not a clone of example.com.
+    // Open a new tab — it must open the branded new-tab page, not a clone of example.com.
     fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
     const payload = lastTabListCall();
     expect(payload.tabs).toHaveLength(2);
     const fresh = payload.tabs[1] as { url: string; title: string };
-    expect(fresh.url).toBe('about:blank');
+    // Founder 2026-06-25: the "+" opens our branded /newtab page, never about:blank.
+    expect(fresh.url).toBe('https://driftstack.dev/newtab');
+    expect(fresh.url).not.toBe('about:blank');
     expect(fresh.title).toBe('New Tab');
     // And the prior page's url/title must NOT have been stamped onto the new tab by
     // the active-tab sync effect (the bug: it carried example.com onto the + tab).
     expect(fresh.url).not.toBe('https://example.com/');
     expect(fresh.title).not.toBe('Example Domain');
+    // The new tab's strip label reads "New Tab" (the /newtab url is treated as a blank
+    // home tab in the label fallback), not the host.
+    const tabs = tabEls(container);
+    expect(tabs[1].textContent).toContain('New Tab');
+    expect(tabs[1].textContent).not.toContain('driftstack.dev');
   });
 
   it('switching tabs seeds BOTH url and title from the target tab (no prior-title flicker onto the new tab)', () => {
@@ -488,5 +495,148 @@ describe('SimulatorWindow — page tab strip', () => {
     // And the address bar (active = tab 2) still shows tab 2's url, not tab 1's.
     const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
     expect(addressInput.value).toBe('https://two.example/');
+  });
+
+  // ── Tab-switch UX round 2 (founder 2026-06-25) ────────────────────────────────
+
+  it('shows a "switching…" affordance on the target tab, then CLEARS it when the box reports the tab page', async () => {
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+    // Two tabs, each with its own loaded page.
+    pushPageState({ state: 'loaded', url: 'https://alpha.example/', title: 'Alpha' });
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+    pushPageState({ state: 'loaded', url: 'https://bravo.example/', title: 'Bravo' });
+    // Switch back to tab 1 — the affordance appears on tab 1 immediately (instant feedback).
+    fireEvent.click(tabEls(container)[0]);
+    await Promise.resolve();
+    const tab1 = tabEls(container)[0];
+    expect(tab1.getAttribute('data-switching')).toBe('true');
+    expect(tab1.querySelector('[data-component="simulator-tab-switching"]')).not.toBeNull();
+    // The box reports tab 1's page (the one-shot reconcile / data-channel frame) → the
+    // affordance clears (no spinner hung on the tab).
+    pushPageState({ state: 'loaded', url: 'https://alpha.example/', title: 'Alpha' });
+    expect(tabEls(container)[0].getAttribute('data-switching')).toBe('false');
+    expect(
+      tabEls(container)[0].querySelector('[data-component="simulator-tab-switching"]'),
+    ).toBeNull();
+  });
+
+  it('clears the "switching…" affordance when the harness ACKS the switch (activateTabResult ok)', async () => {
+    const { container } = renderSim();
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+    sendActivateTab.mockClear();
+    fireEvent.click(tabEls(container)[0]); // switch to tab1 → switching affordance on tab1
+    expect(tabEls(container)[0].getAttribute('data-switching')).toBe('true');
+    // Flush the sendActivateTab resolve so the pending record (req_1) is tracked.
+    await Promise.resolve();
+    await Promise.resolve();
+    // The harness ACKS the switch — the affordance clears.
+    act(() => {
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({ type: 'activateTabResult', requestId: 'req_1', ok: true }),
+        ),
+      );
+    });
+    expect(tabEls(container)[0].getAttribute('data-switching')).toBe('false');
+  });
+
+  it('RE-SENDS activateTab on a missed ack (retry), then SOFT-fails without an alert', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    vi.useFakeTimers();
+    try {
+      const { container } = renderSim();
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+      sendActivateTab.mockClear();
+      // Switch to tab1 → the FIRST activateTab is sent immediately.
+      fireEvent.click(tabEls(container)[0]);
+      expect(sendActivateTab).toHaveBeenCalledTimes(1);
+      // The ack never arrives. Each backoff (1200ms) re-issues activateTab — up to 3
+      // total (initial + 2 retries). Advance two backoffs → two more sends.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1200);
+      });
+      expect(sendActivateTab).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1200);
+      });
+      expect(sendActivateTab).toHaveBeenCalledTimes(3);
+      // The third backoff exhausts the retries → SOFT-fail: a non-blocking notice, NO
+      // alert, no further re-send, and the affordance clears (never hangs).
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1200);
+      });
+      expect(sendActivateTab).toHaveBeenCalledTimes(3); // no 4th send
+      expect(alertSpy).not.toHaveBeenCalled();
+      // The operator stays on the tab they tapped (a dropped ack is NOT a reject — we
+      // don't yank them back); the switching affordance is cleared.
+      expect(tabEls(container)[0].getAttribute('data-active')).toBe('true');
+      expect(tabEls(container)[0].getAttribute('data-switching')).toBe('false');
+      // A soft toast was surfaced (role=status), never a blocking alert.
+      expect(container.querySelector('[role="status"]')?.textContent).toContain('switching');
+    } finally {
+      vi.useRealTimers();
+      alertSpy.mockRestore();
+    }
+  });
+
+  it('a CONFIRMED ack (ok) cancels the retry timer — no re-send fires', async () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderSim();
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+      sendActivateTab.mockClear();
+      fireEvent.click(tabEls(container)[0]); // switch to tab1 → first send
+      expect(sendActivateTab).toHaveBeenCalledTimes(1);
+      // Flush the resolve so req_1 is the tracked pending requestId.
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      // The harness ACKS before the backoff elapses → the retry timer is cancelled.
+      act(() => {
+        dataHandler?.(
+          new TextEncoder().encode(
+            JSON.stringify({ type: 'activateTabResult', requestId: 'req_1', ok: true }),
+          ),
+        );
+      });
+      // Advance well past several backoffs — no re-send because the ack cleared it.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(sendActivateTab).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a hard reject (activateTabResult ok:false) reverts the tab and shows a soft notice (no alert)', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    try {
+      const { container } = renderSim();
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+      sendActivateTab.mockClear();
+      fireEvent.click(tabEls(container)[0]); // optimistic switch to tab1
+      expect(tabEls(container)[0].getAttribute('data-active')).toBe('true');
+      await Promise.resolve();
+      await Promise.resolve();
+      act(() => {
+        dataHandler?.(
+          new TextEncoder().encode(
+            JSON.stringify({ type: 'activateTabResult', requestId: 'req_1', ok: false }),
+          ),
+        );
+      });
+      // Reverted to tab2, affordance cleared, soft notice (no alert).
+      expect(tabEls(container)[1].getAttribute('data-active')).toBe('true');
+      expect(tabEls(container)[0].getAttribute('data-switching')).toBe('false');
+      expect(alertSpy).not.toHaveBeenCalled();
+      expect(container.querySelector('[role="status"]')?.textContent).toContain(
+        'Could not switch tab',
+      );
+    } finally {
+      alertSpy.mockRestore();
+    }
   });
 });

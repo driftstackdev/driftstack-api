@@ -1,0 +1,224 @@
+---
+// Branded new-tab page (founder 2026-06-25: "our own blank about:me page
+// instead of nothing"). Served at https://driftstack.dev/newtab and opened by
+// the GUI simulator's "+" new-tab action (apps/gui-client SimulatorWindow
+// NEW_TAB_URL) so a fresh tab shows an on-brand Driftstack page instead of the
+// box rendering a literally-empty about:blank.
+//
+// DELIBERATELY self-contained — NO BaseLayout (which pulls the Header/Footer,
+// JSON-LD, and OG chrome). This page must load INSTANTLY inside the streamed
+// iPhone: brand tokens are inlined, the mark is an inline SVG, the font falls
+// back to the system stack, and there is exactly one tiny inline <script> for
+// the search/URL submit. No webfonts, no images, no external CSS — a single
+// HTML document.
+//
+// The centered field navigates on submit: a typed value with no scheme gets
+// https:// prefixed; anything that doesn't look like a URL becomes a Google
+// search (mirrors the GUI omnibox + a real browser new-tab page). It sets
+// window.location so the navigation happens IN the streamed tab.
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#060608" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>New Tab · Driftstack</title>
+    <style>
+      :root {
+        --bg: #060608;
+        --surface: #0e0e12;
+        --ink: #f5f5f7;
+        --ink-2: #b0b0bb;
+        --ink-3: #73737f;
+        --border: #1e1e26;
+        --accent: #9b3b46;
+        --accent-2: #c04b58;
+        --glow: rgba(155, 59, 70, 0.32);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+      }
+      body {
+        background-color: var(--bg);
+        background-image: radial-gradient(
+          ellipse 90% 55% at 50% -10%,
+          var(--glow),
+          transparent 70%
+        );
+        color: var(--ink);
+        font-family: 'Geist', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          'Segoe UI', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100%;
+      }
+      main {
+        width: 100%;
+        max-width: 520px;
+        padding: 24px;
+        text-align: center;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 28px;
+        user-select: none;
+      }
+      .brand svg {
+        width: 38px;
+        height: 38px;
+      }
+      .wordmark {
+        font-weight: 900;
+        font-style: italic;
+        font-size: 30px;
+        letter-spacing: -0.02em;
+      }
+      .wordmark .stack {
+        color: var(--accent-2);
+      }
+      form {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 4px 6px 4px 14px;
+        box-shadow: 0 8px 30px -12px var(--glow);
+        transition:
+          border-color 0.18s ease,
+          box-shadow 0.18s ease;
+      }
+      form:focus-within {
+        border-color: rgba(192, 75, 88, 0.55);
+        box-shadow: 0 10px 36px -10px var(--glow);
+      }
+      .search-icon {
+        flex: none;
+        color: var(--ink-3);
+      }
+      input {
+        flex: 1 1 auto;
+        min-width: 0;
+        background: transparent;
+        border: 0;
+        outline: 0;
+        color: var(--ink);
+        font-size: 16px;
+        font-family: inherit;
+        padding: 12px 0;
+      }
+      input::placeholder {
+        color: var(--ink-3);
+      }
+      button {
+        flex: none;
+        appearance: none;
+        border: 0;
+        cursor: pointer;
+        background: var(--accent);
+        color: #fff;
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        border-radius: 10px;
+        padding: 10px 16px;
+        transition: background 0.16s ease;
+      }
+      button:hover {
+        background: var(--accent-2);
+      }
+      .hint {
+        margin-top: 18px;
+        color: var(--ink-3);
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand">
+        <svg viewBox="0 0 256 256" fill="none" aria-label="Driftstack">
+          <rect
+            x="46"
+            y="30"
+            width="118"
+            height="194"
+            rx="34"
+            fill="none"
+            stroke="#474a55"
+            stroke-width="14"
+            opacity="0.55"
+            transform="rotate(-7 105 127)"></rect>
+          <rect x="86" y="30" width="118" height="194" rx="34" fill="#9b3b46"></rect>
+          <circle cx="145" cy="192" r="12" fill="#ffffff"></circle>
+        </svg>
+        <span class="wordmark">DRIFT<span class="stack">STACK</span></span>
+      </div>
+      <form id="newtab-search" autocomplete="off">
+        <svg
+          class="search-icon"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="11" cy="11" r="8"></circle>
+          <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input
+          id="newtab-input"
+          type="text"
+          name="q"
+          placeholder="Search or enter address"
+          aria-label="Search or enter address"
+          spellcheck="false"
+          autofocus
+        />
+        <button type="submit">Go</button>
+      </form>
+      <p class="hint">A fresh iPhone Safari tab on Driftstack.</p>
+    </main>
+    <script is:inline>
+      (function () {
+        var form = document.getElementById('newtab-search');
+        var input = document.getElementById('newtab-input');
+        if (!form || !input) return;
+        // Resolve a typed entry to a destination URL. A value that parses as a
+        // host (has a dot + no spaces) navigates directly — prefixing https://
+        // when no scheme is present; anything else becomes a Google search.
+        function resolve(raw) {
+          var v = (raw || '').trim();
+          if (v === '') return null;
+          if (/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) return v;
+          var looksLikeHost = /^[^\s]+\.[^\s]{2,}(\/[^\s]*)?$/.test(v) || v.indexOf('localhost') === 0;
+          if (looksLikeHost) return 'https://' + v;
+          return 'https://www.google.com/search?q=' + encodeURIComponent(v);
+        }
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var dest = resolve(input.value);
+          if (dest !== null) window.location.assign(dest);
+        });
+      })();
+    </script>
+  </body>
+</html>
