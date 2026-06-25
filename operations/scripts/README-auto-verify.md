@@ -13,24 +13,58 @@ independent** — a failure in one never blocks the others, and any op/endpoint
 that isn't wired on the deployment is reported as `SKIP` (with the reason), not
 `FAIL`.
 
-| Check                     | What it proves                                                                                        | The bug it catches                   |
-| ------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| `CREATE`                  | `POST /v1/agent-sessions` returns a session id                                                        | account/auth/dispatch broken         |
-| `STREAM`                  | the box **publishes** a video track (or inbound bytes flow)                                           | "launch but no video"                |
-| `NAVIGATE`                | a `navigate` data-channel op lands a `page_state` carrying the new URL                                | address bar / nav path dead          |
-| `TAB_SWITCH`              | `tabListUpdate` + `activateTab` switches the published page                                           | tab switching dead                   |
-| `SCROLL`                  | a `touchStart→touchMove…→touchEnd` finger drag (the GUI's wheel→touch wire shape) is accepted         | "scroll does nothing" / dead input   |
-| `TAP`                     | a `touchStart+touchEnd` on a known link lands a `page_state` url change                               | "taps do nothing"                    |
-| `COOKIES`                 | `GET /:id/cookies` returns a live jar (`status:'ok'`), **account-Bearer** auth                        | cookie jar not served                |
-| `COOKIES_VIA_CONTROL_KEY` | mint a `gui_control_key` then `GET /:id/cookies` with `x-driftstack-gui-control-key` (the GUI's path) | **#58** cookies-throw (auth 401/404) |
-| `RECORDINGS`              | a session recordings list/download endpoint responds sanely (if one exists)                           | recordings endpoint broken           |
-| `FILE_UPLOAD`             | `POST /:id/files` with a tiny payload acks with an upload handle                                      | file-control upload path broken      |
+| Check                     | What it proves                                                                                         | The bug it catches                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------ |
+| `CREATE`                  | `POST /v1/agent-sessions` returns a session id                                                         | account/auth/dispatch broken         |
+| `STREAM`                  | the box **publishes** a video track (or inbound bytes flow)                                            | "launch but no video"                |
+| `NAVIGATE`                | a `navigate` data-channel op lands a `page_state` carrying the new URL                                 | address bar / nav path dead          |
+| `TAB_SWITCH`              | `tabListUpdate` + `activateTab` is **acked** by the box (`activateTabResult{ok}`); proxy-INDEPENDENT   | tab-switch handler dead              |
+| `SCROLL`                  | a `touchStart→touchMove…→touchEnd` finger drag (the GUI's wheel→touch wire shape) is accepted          | "scroll does nothing" / dead input   |
+| `TAP`                     | a `touchStart+touchEnd` is **received + injected** (box reacts with a `page_state`); proxy-INDEPENDENT | "taps do nothing"                    |
+| `COOKIES`                 | `GET /:id/cookies` returns a live jar (`status:'ok'`), **account-Bearer** auth                         | cookie jar not served                |
+| `COOKIES_VIA_CONTROL_KEY` | mint a `gui_control_key` then `GET /:id/cookies` with `x-driftstack-gui-control-key` (the GUI's path)  | **#58** cookies-throw (auth 401/404) |
+| `RECORDINGS`              | a session recordings list/download endpoint responds sanely (if one exists)                            | recordings endpoint broken           |
+| `FILE_UPLOAD`             | `POST /:id/files` with a tiny payload acks with an upload handle                                       | file-control upload path broken      |
 
 The session is **always deleted** at the end (success, failure, or timeout).
 
 Exit code: **0** when no check failed, **1** when any did. Missing-dependency or
 deployment-gated conditions are reported as `SKIP` (not `FAIL`) so a missing local
 WebRTC build or a LiveKit-less deployment doesn't read as a product regression.
+
+### `TAB_SWITCH` / `TAP` — proxy-independent, two-tier
+
+`TAB_SWITCH` and `TAP` verify the box's **handler** WITHOUT requiring working
+egress, and report **which tier** passed so the verdict is honest about what was
+proven. The test account has **no proxy** (loopback egress), so a real page
+**content load** hangs past the window — but the box's control-plane handlers
+fire regardless (A3 box-trace, bus W2940/W2945), and those are what these checks
+assert:
+
+- **`TAB_SWITCH`** — the box replies `activateTabResult { type, requestId, ok? }`
+  over the data channel the instant it accepts the `activateTab` (the switch
+  handler ran) — **proxy-independent**.
+  - `[tier=ack]` PASS — `activateTabResult{ok}` received (handler fired). The full
+    content-switch to the target tab's url wasn't observed (needs egress).
+  - `[tier=full-content]` PASS — the box additionally published a `page_state`
+    whose url == the target tab (the page actually switched; needs egress).
+  - FAIL only when the box **rejects** (`activateTabResult{ok:false}`/`error`) or
+    sends **no ack at all** (the handler never reacted — the real regression).
+
+- **`TAP`** — the input-event contract has **no input-ack message**, so the only
+  control-plane-observable proof a tap landed is the box **reacting** (emitting a
+  fresh `page_state` the tap kicked off) — **proxy-independent** (the box emits a
+  `state:'loading'` frame the moment it begins a navigation, before egress).
+  - `[tier=ack]` PASS — a fresh `page_state` followed the tap (received + injected).
+  - `[tier=full-content]` PASS — the box reported a `page_state` url == the tapped
+    link's target (the link navigated through; needs egress).
+  - `SKIP` (not FAIL) — without egress the target page renders as an error page
+    (no tappable link), so the tap hits empty space and the box has nothing to
+    react to. With no ack message to fall back on, a dead tap can't be told apart
+    from "there was no link to hit," so the honest verdict is `SKIP` — **re-run
+    with `DRIFTSTACK_PROXY_ID`** to render the link and get a real ack/full PASS.
+  - FAIL only when the target page **did** load a usable link yet the box still
+    produced no reaction ("taps do nothing").
 
 ### `COOKIES_VIA_CONTROL_KEY` — the real #58 reproducer
 
@@ -118,40 +152,50 @@ node operations/scripts/auto-verify-session.mjs
 
 ## Sample output
 
+Run with **no proxy** (loopback egress — the `TAB_SWITCH`/`TAP` handlers still
+self-verify proxy-independently):
+
 ```
-[13:46:39.020] base=https://api.driftstack.dev  nav=https://example.com  profile=(none)  proxy=(none)
-[13:46:39.468] PASS — CREATE: id=agt_… mode=manual
-[13:46:48.183] PASS — STREAM: box is streaming video (video track PUBLISHED by box)
-[13:46:48.436] PASS — NAVIGATE: page_state url == https://example.com
-[13:47:10.569] FAIL — TAB_SWITCH: page did not switch to https://example.org/ within 20s
-[13:47:11.487] PASS — SCROLL: scroll drag accepted by box (no channel error, no stalled/errored frame)
-[13:47:33.391] FAIL — TAP: tap sent but no page_state at all within 20s (taps may not be reaching the device)
-[13:47:33.850] PASS — COOKIES: jar returned (0 cookies)
-[13:47:34.286] PASS — COOKIES_VIA_CONTROL_KEY: control-key auth OK (HTTP 200) + jar returned (0 cookies)
-[13:47:34.358] SKIP — RECORDINGS: no recordings endpoint on this API
-[13:47:34.528] PASS — FILE_UPLOAD: upload ack'd — handle id=… name=auto-verify.txt size=11
-[13:47:34.650] cleanup — DELETE /v1/agent-sessions/agt_… → HTTP 204
+[16:32:20.906] base=https://api.driftstack.dev  nav=https://example.com  profile=(none)  proxy=(none)
+[16:32:21.370] PASS — CREATE: id=agt_… mode=manual
+[16:32:28.987] PASS — STREAM: box is streaming video (video track PUBLISHED by box)
+[16:32:29.239] PASS — NAVIGATE: page_state url == https://example.com
+[16:32:35.509] PASS — TAB_SWITCH: [tier=ack] handler acked (activateTabResult ok); full content-switch to https://example.org/ needs egress
+[16:32:36.414] PASS — SCROLL: scroll drag accepted by box (no channel error, no stalled/errored frame)
+[16:32:58.248] SKIP — TAP: tap could not be self-verified without egress: https://example.com/ never rendered a tappable link (loaded as a no-egress error page) and the input contract has no ack message — re-run with DRIFTSTACK_PROXY_ID to render the link and prove the tap
+[16:32:58.717] PASS — COOKIES: jar returned (0 cookies)
+[16:32:59.087] PASS — COOKIES_VIA_CONTROL_KEY: control-key auth OK (HTTP 200) + jar returned (0 cookies)
+[16:32:59.174] SKIP — RECORDINGS: no recordings endpoint on this API
+[16:32:59.352] PASS — FILE_UPLOAD: upload ack'd — handle id=… name=auto-verify.txt size=11
+[16:32:59.472] cleanup — DELETE /v1/agent-sessions/agt_… → HTTP 204
 
 ──────────── SUMMARY ────────────
   PASS  CREATE        id=agt_… mode=manual
   PASS  STREAM        box is streaming video (video track PUBLISHED by box)
   PASS  NAVIGATE      page_state url == https://example.com
-  FAIL  TAB_SWITCH    page did not switch to https://example.org/ within 20s
+  PASS  TAB_SWITCH    [tier=ack] handler acked (activateTabResult ok); full content-switch needs egress
   PASS  SCROLL        scroll drag accepted by box
-  FAIL  TAP           tap sent but no page_state at all within 20s
+  SKIP  TAP           tap could not be self-verified without egress (no-egress error page; re-run with a proxy)
   PASS  COOKIES       jar returned (0 cookies)
   PASS  COOKIES_VIA_CONTROL_KEY  control-key auth OK (HTTP 200) + jar returned (0 cookies)
   SKIP  RECORDINGS    no recordings endpoint on this API
   PASS  FILE_UPLOAD   upload ack'd — handle id=… name=auto-verify.txt size=11
 ─────────────────────────────────
-  7 pass · 2 fail · 1 skip
-  OVERALL: FAIL
+  8 pass · 0 fail · 2 skip
+  OVERALL: PASS
 ```
 
-> The `TAB_SWITCH` / `TAP` `FAIL`s above are a **real, reproducible** product
-> finding from a live `mode:manual` no-profile run (relayed to the harness team
-> on the A2↔A3 bus, W2940): on the current prod box, `navigate` lands a
-> `page_state` but `activateTab` returns no `activateTabResult` and a `tap`
-> produces no reaction — i.e. the box-side handlers for these data-channel ops
-> aren't reacting on a no-profile session, while `navigate` on the same channel
-> works. This is exactly what the suite exists to surface.
+> **`TAB_SWITCH` now PASSES on the ack** with no proxy: A3's box-trace (bus
+> W2940/W2945) proved the box DOES fire `handleActivateTab ENTER gate=true` and
+> emits an `activateTabResult{ok}` on a no-profile session — the handler is
+> healthy; only the egress-dependent **content** load was hanging past the
+> window, which the old url-change-only assertion mis-read as a handler fault.
+> The check now asserts the proxy-independent ack and reports `[tier=ack]` vs
+> `[tier=full-content]` so the verdict is honest about what was proven.
+>
+> **`TAP` cannot self-verify without egress** and now `SKIP`s honestly: a tap on
+> a no-egress error page has no link to hit, the box reacts with no `page_state`,
+> and the input-event contract has no ack message — so a dead tap is
+> indistinguishable from "no link to hit." Re-run **with a proxy**
+> (`DRIFTSTACK_PROXY_ID`) to render the tappable link and turn `TAP` into a real
+> `[tier=ack]`/`[tier=full-content]` PASS (or a true FAIL if taps are dead).
