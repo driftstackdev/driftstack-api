@@ -11,9 +11,28 @@
 //                         frame carrying the new URL (the address-bar path).
 //   CHECK 3 — TAB SWITCH: a `tabListUpdate` + `activateTab` switches the
 //                         published page (activateTabResult{ok} + page_state url).
-//   CHECK 4 — COOKIES   : GET /:id/cookies returns a live jar (status:'ok').
+//   CHECK 4 — SCROLL    : a `touchStart→touchMove…→touchEnd` finger drag (the
+//                         EXACT wire shape the GUI's wheel→touch path emits) is
+//                         accepted by the box (the "scroll does nothing" bug).
+//   CHECK 5 — TAP       : a `touchStart+touchEnd` at one point (the GUI's tap
+//                         wire shape) on a tappable target lands a page_state url
+//                         change (the "taps do nothing" bug).
+//   CHECK 6 — COOKIES   : GET /:id/cookies returns a live jar (status:'ok'),
+//                         account-Bearer auth path.
+//   CHECK 7 — COOKIES_VIA_CONTROL_KEY : mint a per-session gui_control_key (the
+//                         GUI's REAL auth path — mintGuiControlKey) then GET
+//                         /:id/cookies with the `x-driftstack-gui-control-key`
+//                         header. This reproduces the separate-Simulator-app path
+//                         end-to-end and surfaces whether it 401s/404s (the real
+//                         #58 cookies-throw root cause). Reports HTTP status+body.
+//   CHECK 8 — RECORDINGS: if a session recordings list/download endpoint exists,
+//                         verify it responds sanely (SKIP when not wired).
+//   CHECK 9 — FILE_UPLOAD : POST /:id/files with a tiny payload — verify it acks
+//                         (the file-control upload path; SKIP when gated/not live).
 //
-// The session is ALWAYS deleted at the end (cleanup on success, error, timeout).
+// Every check is INDEPENDENT: each prints PASS / FAIL / SKIP with a reason and a
+// failure in one never blocks the others. The session is ALWAYS deleted at the
+// end (cleanup on success, error, timeout).
 //
 // Wire fidelity — every op below is byte-mirrored from the gui-client so this is
 // a true integration probe of the same contract the GUI ships:
@@ -21,9 +40,16 @@
 //   - LiveKit Room config + connect            : apps/gui-client/src/lib/livekit.ts (createLivekitRoom / connectToAgentSession)
 //   - navigate / tabListUpdate / activateTab    : apps/gui-client/src/lib/livekit.ts (sendNavigate / sendTabListUpdate / sendActivateTab)
 //                                                 + packages/api-types/src/agent-tab-ops.ts
+//   - tap / scroll touch wire shape             : apps/gui-client/src/lib/livekit-input-capture.ts
+//                                                 (tap = touchStart+touchEnd; wheel→touchStart/touchMove/touchEnd drag)
+//                                                 + packages/api-types/src/agent-input-event.ts (InputEventSchema)
 //   - page_state / activateTabResult consumer   : apps/gui-client/src/views/SimulatorWindow.tsx (onData, ~2500-2585)
 //   - cookies result shape                      : apps/gui-client/src/lib/agent-session-control.ts (getAgentSessionCookies)
 //                                                 + apps/server/src/routes/agent-sessions.ts (cookies route)
+//   - gui_control_key mint + control-auth header: apps/gui-client/src/lib/agent-session-control.ts (mintGuiControlKey / authedFetch)
+//                                                 + apps/server/src/routes/agent-sessions.ts (/:id/gui-control-key, controlKeyOrAccountAuth)
+//   - file upload shape                         : apps/gui-client/src/lib/agent-session-control.ts (uploadAgentSessionFile)
+//                                                 + apps/server/src/routes/agent-sessions.ts (POST /:id/files)
 //
 // Node + WebRTC: livekit-client constructs a Room fine under Node, but
 // room.connect() needs a WebRTC implementation (Node has WebSocket but no
@@ -54,7 +80,30 @@ const NAV_URL = process.env.DRIFTSTACK_NAV_URL ?? 'https://example.com';
 const STREAM_TIMEOUT_MS = 30_000;
 const NAVIGATE_TIMEOUT_MS = 20_000;
 const TAB_TIMEOUT_MS = 20_000;
+const SCROLL_TIMEOUT_MS = 12_000;
+const TAP_TIMEOUT_MS = 20_000;
 const COOKIES_TIMEOUT_MS = 15_000;
+
+// Device coordinate space + touch dynamics — byte-mirrored from the GUI's
+// livekit-input-capture.ts so the box's WebDriver-touch path sees the same shape:
+//   - DEVICE_LOGICAL_*    : the fixed 402×874 logical frame the GUI clamps to
+//                           (NOT the SFU track px, which downscales under load).
+//   - TAP_Y_OFFSET        : the GUI subtracts this from the SENT y (devY) only.
+//   - TAP_URL             : a page whose primary link navigates somewhere distinct,
+//                           so a successful tap is provable by a page_state url change.
+const DEVICE_LOGICAL_WIDTH = 402;
+const DEVICE_LOGICAL_HEIGHT = 874;
+const TAP_Y_OFFSET = 32;
+const devY = (y) => Math.max(0, y - TAP_Y_OFFSET);
+// example.com is a single centred paragraph + ONE link ("More information…") to
+// iana.org; tapping it is the cleanest provable tap target. Overridable so the
+// check can be pointed at any page with a known link rect.
+const TAP_PAGE_URL = process.env.DRIFTSTACK_TAP_PAGE_URL ?? 'https://example.com/';
+const TAP_EXPECT_URL = process.env.DRIFTSTACK_TAP_EXPECT_URL ?? 'https://www.iana.org/';
+// The link rect on example.com sits low-centre in the 402-wide viewport. These
+// device-CSS coords are deliberately conservative (centre column, lower third).
+const TAP_X = Number(process.env.DRIFTSTACK_TAP_X ?? 200);
+const TAP_Y = Number(process.env.DRIFTSTACK_TAP_Y ?? 250);
 // The harness/box reloads a background tab on activate; give the 2nd tab a
 // distinct URL so the page_state url change is unambiguous.
 const TAB_TWO_URL = (() => {
@@ -152,6 +201,40 @@ async function api(method, path, body, { timeoutMs = 15_000 } = {}) {
   }
 }
 
+// Like api() but sends a CALLER-SUPPLIED auth header set instead of the account
+// Bearer — used for the gui_control_key path (x-driftstack-gui-control-key), the
+// EXACT auth header the separate Simulator app sends (agent-session-control.ts
+// authedFetch). The header VALUES are never logged. Mirrors authedFetch's
+// header order: Content-Type + the auth header, then any per-call overrides.
+async function apiRaw(method, path, body, authHeaders, { timeoutMs = 15_000 } = {}) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...authHeaders,
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      signal: ctrl.signal,
+    });
+    let json = null;
+    const text = await res.text();
+    if (text !== '') {
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = { _raw: text.slice(0, 400) };
+      }
+    }
+    return { ok: res.ok, status: res.status, json };
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 // ── result accounting ─────────────────────────────────────────────────
 const results = [];
 function record(name, status, reason) {
@@ -180,6 +263,53 @@ function sendActivateTab(room, payload) {
   return publishJson(room, { type: 'activateTab', requestId, ...payload }, true).then(
     () => requestId,
   );
+}
+
+// ── touch send helpers — byte-mirror livekit-input-capture.ts ─────────
+// The GUI never emits mouse events to the box (a real iPhone has none — the
+// harness drops them). A TAP is a clean touchStart+touchEnd at one point (no
+// move, so the box can never read it as a scroll). A SCROLL is a CONTINUOUS
+// one-finger drag: touchStart → touchMove(s) → touchEnd (the GUI accumulates
+// trackpad-wheel deltas into exactly this monotone drag). Coordinates are the
+// fixed 402×874 logical frame, X raw, Y passed through devY on the SENT value —
+// identical to the capture module's `send({ ... y: devY(...) })`.
+const clampX = (v) => Math.max(0, Math.min(DEVICE_LOGICAL_WIDTH, Math.round(v)));
+const clampY = (v) => Math.max(0, Math.min(DEVICE_LOGICAL_HEIGHT, Math.round(v)));
+let touchIdSeq = 1;
+
+// tap(room, x, y) — the GUI's finishGesture tap branch (no committed move).
+async function sendTap(room, x, y) {
+  const touchId = touchIdSeq++;
+  const px = clampX(x);
+  const py = clampY(y);
+  await publishJson(room, { type: 'touchStart', x: px, y: devY(py), touchId }, true);
+  await publishJson(room, { type: 'touchEnd', x: px, y: devY(py), touchId }, true);
+  return touchId;
+}
+
+// scroll(room, { fromX, fromY, dy, steps }) — a one-finger vertical drag. A
+// positive `dy` swipes the finger UP (content scrolls DOWN), matching the GUI's
+// "content DOWN (deltaY>0) = finger swipes UP (y↓)". touchStart is reliable; the
+// intermediate moves are lossy (reliable=false) exactly as the capture module
+// sends them; touchEnd is reliable.
+async function sendScrollDrag(room, { fromX, fromY, dy, steps = 6 }) {
+  const touchId = touchIdSeq++;
+  const x = clampX(fromX);
+  const startY = clampY(fromY);
+  await publishJson(room, { type: 'touchStart', x, y: devY(startY), touchId }, true);
+  // dy>0 → drag the finger upward (negative screen-y direction) to scroll down.
+  const dir = dy >= 0 ? -1 : 1;
+  const total = Math.abs(dy);
+  for (let i = 1; i <= steps; i++) {
+    const yRaw = startY + dir * Math.round((total * i) / steps);
+    const y = clampY(yRaw);
+    await publishJson(room, { type: 'touchMove', x, y: devY(y), touchId }, false);
+    await delay(16); // ~one animation frame between moves, like the rAF-coalesced GUI stream
+  }
+  const endYRaw = startY + dir * total;
+  const endY = clampY(endYRaw);
+  await publishJson(room, { type: 'touchEnd', x, y: devY(endY), touchId }, true);
+  return touchId;
 }
 
 // ── page_state parsing (mirror SimulatorWindow.tsx onData) ────────────
@@ -359,21 +489,28 @@ async function main() {
     }
   }
 
-  // ── CHECK 1/2/3 require LiveKit + WebRTC ──
+  // ── CHECK 1/2/3/4/5 require LiveKit + WebRTC (data-channel ops) ──
   if (info === null) {
     record('STREAM', 'SKIP', 'no LiveKit join info on this deployment');
     record('NAVIGATE', 'SKIP', 'no LiveKit join info');
     record('TAB_SWITCH', 'SKIP', 'no LiveKit join info');
+    record('SCROLL', 'SKIP', 'no LiveKit join info');
+    record('TAP', 'SKIP', 'no LiveKit join info');
   } else if (!haveWebRtc) {
     record('STREAM', 'SKIP', 'WebRTC not installed (npm install --no-save @roamhq/wrtc)');
     record('NAVIGATE', 'SKIP', 'WebRTC not installed');
     record('TAB_SWITCH', 'SKIP', 'WebRTC not installed');
+    record('SCROLL', 'SKIP', 'WebRTC not installed');
+    record('TAP', 'SKIP', 'WebRTC not installed');
   } else {
     await runLiveKitChecks(info);
   }
 
-  // ── CHECK 4 COOKIES — pure REST, always runs ──
-  await runCookiesCheck();
+  // ── REST checks — run regardless of WebRTC. Each is independent. ──
+  await runCookiesCheck(); // CHECK 6 — account-Bearer cookies path
+  await runCookiesViaControlKeyCheck(); // CHECK 7 — gui_control_key path (#58 root cause)
+  await runRecordingsCheck(); // CHECK 8 — recordings list/download (SKIP if absent)
+  await runFileUploadCheck(); // CHECK 9 — POST /:id/files tiny upload ack
 }
 
 function detailOf(json) {
@@ -456,6 +593,8 @@ async function runLiveKitChecks(info) {
     record('STREAM', 'FAIL', `room.connect failed: ${m.slice(0, 160)}`);
     record('NAVIGATE', 'SKIP', 'no LiveKit connection');
     record('TAB_SWITCH', 'SKIP', 'no LiveKit connection');
+    record('SCROLL', 'SKIP', 'no LiveKit connection');
+    record('TAP', 'SKIP', 'no LiveKit connection');
     return;
   }
 
@@ -530,6 +669,13 @@ async function runLiveKitChecks(info) {
   }
 
   // ── CHECK 3 TAB SWITCH — tabListUpdate(2 tabs) → activateTab(2nd) ──
+  // Settle after the NAVIGATE above before issuing the tab switch. A3 (W2926)
+  // found that firing `navigate` then `activateTab` within ~2ms collides two
+  // concurrent `wd.navigate` calls on one WebContent → the activateTab WD /url
+  // returns -1005 → the activateTabResult flips to `error` even though the page
+  // switches. A human never navigates+switches in 2ms; this settle removes the
+  // self-inflicted collision so the check measures the real tab-switch path.
+  await delay(2_000);
   const tabA = { id: 'tab_a', url: NAV_URL, scrollY: 0, title: '' };
   const tabB = { id: 'tab_b', url: TAB_TWO_URL, scrollY: 0, title: '' };
   const tabBaseline = pageStates.length;
@@ -575,6 +721,114 @@ async function runLiveKitChecks(info) {
     }
   } catch (e) {
     record('TAB_SWITCH', 'FAIL', `tab ops failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // ── CHECK 4 SCROLL — one-finger drag (the GUI wheel→touch wire shape) ──
+  // The box reports page LOAD state over the data channel (page_state) but does
+  // NOT report a scroll position, so there is no scrollY delta to assert. The
+  // product behaviour we CAN verify end-to-end is that the box ACCEPTS the exact
+  // touch-drag the GUI emits without erroring the control channel — i.e. the
+  // gesture is delivered and the renderer stays responsive (no 'errored'/'stalled'
+  // page_state in its wake). A genuine "scroll does nothing because the channel is
+  // dead / the box rejects the gesture" regression surfaces here as a publish
+  // throw or a stalled frame. Scroll-position confirmation isn't exposed over the
+  // channel — noted in the PASS reason so the operator isn't misled.
+  const scrollBaseline = pageStates.length;
+  try {
+    // Drag from low-centre upward ~360px → content scrolls down (dy>0 = finger up).
+    await sendScrollDrag(room, { fromX: 200, fromY: 600, dy: 360, steps: 6 });
+    log('sent scroll drag (touchStart→6×touchMove→touchEnd, dy=360 down)');
+    // Give the box a moment; then check no error/stalled state arrived after it.
+    await delay(800);
+    const post = pageStates.slice(scrollBaseline);
+    const bad = post.find((p) => p.state === 'errored' || p.state === 'stalled');
+    if (bad !== undefined) {
+      record(
+        'SCROLL',
+        'FAIL',
+        `box reported '${bad.state}' after the scroll gesture (renderer froze/errored on scroll input)`,
+      );
+    } else {
+      record(
+        'SCROLL',
+        'PASS',
+        'scroll drag accepted by box (no channel error, no stalled/errored frame) — note: scroll position is not reported over the data channel, so position delta is not asserted',
+      );
+    }
+  } catch (e) {
+    // A publish throw here is a REAL bug — it's the "control will not reach the
+    // device" condition the GUI surfaces as a dead view (founder 2026-06-12).
+    record(
+      'SCROLL',
+      'FAIL',
+      `scroll publish failed: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+
+  // ── CHECK 5 TAP — tap a known link, await a page_state url change ──
+  // Navigate to a page with ONE provable link (example.com → iana.org), then tap
+  // its rect. A successful tap is proven by a page_state carrying the link target
+  // — the cleanest "the tap registered AND hit a tappable element" signal we have.
+  // If the page never loads (no page_state for TAP_PAGE_URL), we can't place the
+  // tap meaningfully → SKIP rather than FAIL (that's a navigate/load problem the
+  // NAVIGATE check already owns).
+  const tapNavBaseline = pageStates.length;
+  try {
+    await sendNavigate(room, TAP_PAGE_URL);
+    log(`sent navigate → ${TAP_PAGE_URL} (tap target page)`);
+  } catch (e) {
+    record(
+      'TAP',
+      'FAIL',
+      `pre-tap navigate publish failed: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+  const tapPageLoaded = await waitFor(
+    () => pageStates.slice(tapNavBaseline).some((p) => urlMatches(p.url, TAP_PAGE_URL)),
+    NAVIGATE_TIMEOUT_MS,
+    250,
+  );
+  if (!tapPageLoaded) {
+    record(
+      'TAP',
+      'SKIP',
+      `tap target page ${TAP_PAGE_URL} did not load (no page_state) — cannot place a provable tap`,
+    );
+  } else {
+    // Let the page fully paint before tapping — the link rect isn't hittable
+    // until layout settles (and this also separates the tap from the navigate
+    // above, avoiding the same WD-collision the tab-switch settle guards against).
+    await delay(1_500);
+    const tapBaseline = pageStates.length;
+    try {
+      await sendTap(room, TAP_X, TAP_Y);
+      log(`sent tap @ (${TAP_X},${TAP_Y}) → expect navigation to ${TAP_EXPECT_URL}`);
+      const tapHit = await waitFor(
+        () => pageStates.slice(tapBaseline).some((p) => urlMatches(p.url, TAP_EXPECT_URL)),
+        TAP_TIMEOUT_MS,
+        250,
+      );
+      if (tapHit) {
+        record('TAP', 'PASS', `tap registered — page navigated to ${TAP_EXPECT_URL}`);
+      } else {
+        const seen = pageStates
+          .slice(tapBaseline)
+          .map((p) => p.url ?? `(${p.state})`)
+          .filter(Boolean);
+        // The tap published cleanly but the expected nav didn't land. That can be
+        // a missed link rect (coords off) rather than a dead tap pipeline, so this
+        // is a soft FAIL with the seen-states so the operator can re-aim TAP_X/Y.
+        record(
+          'TAP',
+          'FAIL',
+          seen.length > 0
+            ? `tap sent but no nav to ${TAP_EXPECT_URL} within ${TAP_TIMEOUT_MS / 1000}s (saw: ${seen.slice(-4).join(', ')}) — link rect may differ; re-aim DRIFTSTACK_TAP_X/Y`
+            : `tap sent but no page_state at all within ${TAP_TIMEOUT_MS / 1000}s (taps may not be reaching the device)`,
+        );
+      }
+    } catch (e) {
+      record('TAP', 'FAIL', `tap publish failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 }
 
@@ -643,6 +897,212 @@ async function runCookiesCheck() {
       'COOKIES',
       'SKIP',
       `status:${status}${body.reason !== undefined ? ` (${body.reason})` : ''}`,
+    );
+  }
+}
+
+// ── CHECK 7 COOKIES_VIA_CONTROL_KEY — the GUI's REAL cookies auth path ──
+// This is the path the SEPARATE "Driftstack Simulator" app takes and the one the
+// founder hits (#58): it has NO account Bearer key (different app → different
+// keychain), so it (1) the MAIN app mints a per-session gui_control_key via
+// GET /:id/gui-control-key, hands it off, then (2) the simulator GETs
+// /:id/cookies presenting the key in the `x-driftstack-gui-control-key` header
+// (agent-session-control.ts mintGuiControlKey + authedFetch). We reproduce BOTH
+// steps and report the EXACT HTTP status + body of the cookies call, because a
+// 401/404 HERE — while the account-Bearer COOKIES check above passes — is the
+// real #58 root cause (the control-key cookies path is broken / not wired) and
+// is invisible to the Bearer probe. The control key plaintext is NEVER logged.
+async function runCookiesViaControlKeyCheck() {
+  const name = 'COOKIES_VIA_CONTROL_KEY';
+  if (sessionId === null) {
+    record(name, 'SKIP', 'no session');
+    return;
+  }
+  // Step 1 — mint (or fetch the live) gui_control_key, account-Bearer authed.
+  // This is the same GET the main app's mintGuiControlKey issues. The endpoint is
+  // only mounted when the deployment wires guiControlKeyEncryptionKey; a 404 here
+  // means the control-key feature isn't enabled → SKIP (not a cookies bug).
+  const mint = await api(
+    'GET',
+    `/v1/agent-sessions/${encodeURIComponent(sessionId)}/gui-control-key`,
+    undefined,
+    { timeoutMs: 15_000 },
+  );
+  if (mint.status === 404) {
+    record(name, 'SKIP', 'gui-control-key endpoint not enabled on this deployment (HTTP 404)');
+    return;
+  }
+  if (!mint.ok || mint.json === null || typeof mint.json.gui_control_key !== 'string') {
+    record(name, 'FAIL', `gui-control-key mint HTTP ${mint.status} — ${detailOf(mint.json)}`);
+    return;
+  }
+  const controlKey = mint.json.gui_control_key; // NEVER logged
+  log(
+    `minted gui_control_key (${mint.json.minted === true ? 'fresh' : 'existing'}, plaintext redacted)`,
+  );
+
+  // Step 2 — GET /:id/cookies presenting ONLY the control-key header (no Bearer),
+  // exactly as the separate Simulator app does. Report the raw HTTP status+body.
+  const r = await apiRaw(
+    'GET',
+    `/v1/agent-sessions/${encodeURIComponent(sessionId)}/cookies`,
+    undefined,
+    { 'x-driftstack-gui-control-key': controlKey },
+    { timeoutMs: COOKIES_TIMEOUT_MS },
+  );
+  // The headline diagnostic: the HTTP status of the control-key cookies call.
+  log(`control-key cookies call → HTTP ${r.status} body.status=${r.json?.status ?? '(none)'}`);
+  if (r.status === 401 || r.status === 403) {
+    // THE #58 SMOKING GUN: the GUI's real cookies path is rejected by auth even
+    // though the account-Bearer path works. Surface it loudly as a FAIL.
+    record(
+      name,
+      'FAIL',
+      `gui_control_key cookies call REJECTED: HTTP ${r.status} — ${detailOf(r.json)} (this is the #58 cookies-throw root cause: the GUI's real auth path is denied)`,
+    );
+    return;
+  }
+  if (r.status === 404) {
+    record(
+      name,
+      'FAIL',
+      `gui_control_key cookies call 404 — ${detailOf(r.json)} (the control-key path can't see the session it was minted for — #58 root cause)`,
+    );
+    return;
+  }
+  if (r.status === 503) {
+    record(name, 'SKIP', `cookies endpoint gated (HTTP 503) on this deployment`);
+    return;
+  }
+  if (!r.ok) {
+    record(name, 'FAIL', `gui_control_key cookies call HTTP ${r.status} — ${detailOf(r.json)}`);
+    return;
+  }
+  // 2xx — the control-key path AUTHORISED fine (the #58 auth bug is NOT present).
+  // The discriminated body then says whether the live jar was served.
+  const body = r.json ?? {};
+  const status = body.status ?? 'error';
+  if (status === 'ok' && Array.isArray(body.cookies)) {
+    record(
+      name,
+      'PASS',
+      `control-key auth OK (HTTP 200) + jar returned (${body.cookies.length} cookie${body.cookies.length === 1 ? '' : 's'}) — the GUI's real cookies path works`,
+    );
+  } else if (status === 'ok') {
+    record(name, 'FAIL', `HTTP 200 status:ok but no cookies array`);
+  } else {
+    // Auth PASSED (2xx) but the jar isn't live yet (unavailable/timeout/error).
+    // That's the inert data-source state, NOT the #58 auth bug — report PASS on
+    // the auth dimension with the discriminated reason so it's unambiguous.
+    record(
+      name,
+      'PASS',
+      `control-key auth OK (HTTP 200) — jar not live yet (status:${status}${body.reason !== undefined ? `, ${body.reason}` : ''}); the #58 auth path is healthy`,
+    );
+  }
+}
+
+// ── CHECK 8 RECORDINGS — session recordings list/download (if wired) ──
+// There is no recordings endpoint in the current API (the only session
+// "recording" is the pair-mode heartbeat tracker, unrelated). We probe the most
+// likely paths and SKIP gracefully when none exist (a 404 is "not wired", not a
+// product bug); a 5xx on a path that DOES respond would be a real fault.
+async function runRecordingsCheck() {
+  const name = 'RECORDINGS';
+  if (sessionId === null) {
+    record(name, 'SKIP', 'no session');
+    return;
+  }
+  const candidates = [
+    `/v1/agent-sessions/${encodeURIComponent(sessionId)}/recordings`,
+    `/v1/agent-sessions/${encodeURIComponent(sessionId)}/recording`,
+  ];
+  for (const path of candidates) {
+    const r = await api('GET', path, undefined, { timeoutMs: 10_000 });
+    if (r.status === 404) continue; // not this path
+    if (r.status === 503) {
+      record(name, 'SKIP', `recordings endpoint gated (HTTP 503) at ${path}`);
+      return;
+    }
+    if (r.ok) {
+      // Sane response: either a list array or a discriminated body.
+      const body = r.json ?? {};
+      const list = Array.isArray(body.recordings)
+        ? body.recordings
+        : Array.isArray(body)
+          ? body
+          : null;
+      record(
+        name,
+        'PASS',
+        list !== null
+          ? `recordings endpoint responded (HTTP 200, ${list.length} item${list.length === 1 ? '' : 's'})`
+          : `recordings endpoint responded sanely (HTTP 200)`,
+      );
+      return;
+    }
+    // A non-404, non-2xx on a path that DID match is a real fault.
+    record(name, 'FAIL', `${path} → HTTP ${r.status} — ${detailOf(r.json)}`);
+    return;
+  }
+  record(
+    name,
+    'SKIP',
+    'no recordings endpoint on this API (none of /recordings, /recording exist)',
+  );
+}
+
+// ── CHECK 9 FILE_UPLOAD — POST /:id/files tiny upload acks ──
+// Mirrors uploadAgentSessionFile: { name, mime, dataB64 } → a discriminated 200
+// body { status, handle, reason? }. A 2xx with status:'ok' proves the upload
+// jail is live; 'unavailable'/'timeout' (control plane off / node not serving)
+// is an inert state → SKIP (not a product regression in this probe context). A
+// 404 means the endpoint isn't mounted → SKIP. A 401/403 is a real auth fault.
+async function runFileUploadCheck() {
+  const name = 'FILE_UPLOAD';
+  if (sessionId === null) {
+    record(name, 'SKIP', 'no session');
+    return;
+  }
+  // A 12-byte text file — well under the 64 MiB cap; cleaned up with the session.
+  const dataB64 = Buffer.from('driftstack\n', 'utf8').toString('base64');
+  const r = await api(
+    'POST',
+    `/v1/agent-sessions/${encodeURIComponent(sessionId)}/files`,
+    { name: 'auto-verify.txt', mime: 'text/plain', dataB64 },
+    { timeoutMs: 15_000 },
+  );
+  if (r.status === 404) {
+    record(name, 'SKIP', 'files endpoint not mounted on this deployment (HTTP 404)');
+    return;
+  }
+  if (r.status === 401 || r.status === 403) {
+    record(name, 'FAIL', `upload auth rejected: HTTP ${r.status} — ${detailOf(r.json)}`);
+    return;
+  }
+  if (r.status === 503) {
+    record(name, 'SKIP', `files endpoint gated (HTTP 503) on this deployment`);
+    return;
+  }
+  if (!r.ok) {
+    record(name, 'FAIL', `upload HTTP ${r.status} — ${detailOf(r.json)}`);
+    return;
+  }
+  const body = r.json ?? {};
+  const status = body.status ?? 'error';
+  if (status === 'ok' && body.handle !== null && typeof body.handle === 'object') {
+    record(
+      name,
+      'PASS',
+      `upload ack'd — handle id=${body.handle.id ?? '?'} name=${body.handle.name ?? '?'} size=${body.handle.size ?? '?'}`,
+    );
+  } else if (status === 'ok') {
+    record(name, 'FAIL', `status:ok but no upload handle returned`);
+  } else {
+    record(
+      name,
+      'SKIP',
+      `upload status:${status}${body.reason !== undefined ? ` (${body.reason})` : ''} (jail not live — inert state, not an upload-path bug)`,
     );
   }
 }

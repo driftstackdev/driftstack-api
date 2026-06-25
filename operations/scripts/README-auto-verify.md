@@ -8,21 +8,41 @@ the launch → stream → navigate → tabs → cookies path before a human noti
 
 ## What it checks
 
-Each check prints `PASS` / `FAIL` / `SKIP` with a reason.
+Each check prints `PASS` / `FAIL` / `SKIP` with a reason. **Every check is
+independent** — a failure in one never blocks the others, and any op/endpoint
+that isn't wired on the deployment is reported as `SKIP` (with the reason), not
+`FAIL`.
 
-| Check        | What it proves                                                         | The bug it catches           |
-| ------------ | ---------------------------------------------------------------------- | ---------------------------- |
-| `CREATE`     | `POST /v1/agent-sessions` returns a session id                         | account/auth/dispatch broken |
-| `STREAM`     | a LiveKit **video track** is subscribed and receiving                  | "launch but no video"        |
-| `NAVIGATE`   | a `navigate` data-channel op lands a `page_state` carrying the new URL | address bar / nav path dead  |
-| `TAB_SWITCH` | `tabListUpdate` + `activateTab` switches the published page            | tab switching dead           |
-| `COOKIES`    | `GET /:id/cookies` returns a live jar (`status:'ok'`)                  | cookie jar not served        |
+| Check                     | What it proves                                                                                        | The bug it catches                   |
+| ------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `CREATE`                  | `POST /v1/agent-sessions` returns a session id                                                        | account/auth/dispatch broken         |
+| `STREAM`                  | the box **publishes** a video track (or inbound bytes flow)                                           | "launch but no video"                |
+| `NAVIGATE`                | a `navigate` data-channel op lands a `page_state` carrying the new URL                                | address bar / nav path dead          |
+| `TAB_SWITCH`              | `tabListUpdate` + `activateTab` switches the published page                                           | tab switching dead                   |
+| `SCROLL`                  | a `touchStart→touchMove…→touchEnd` finger drag (the GUI's wheel→touch wire shape) is accepted         | "scroll does nothing" / dead input   |
+| `TAP`                     | a `touchStart+touchEnd` on a known link lands a `page_state` url change                               | "taps do nothing"                    |
+| `COOKIES`                 | `GET /:id/cookies` returns a live jar (`status:'ok'`), **account-Bearer** auth                        | cookie jar not served                |
+| `COOKIES_VIA_CONTROL_KEY` | mint a `gui_control_key` then `GET /:id/cookies` with `x-driftstack-gui-control-key` (the GUI's path) | **#58** cookies-throw (auth 401/404) |
+| `RECORDINGS`              | a session recordings list/download endpoint responds sanely (if one exists)                           | recordings endpoint broken           |
+| `FILE_UPLOAD`             | `POST /:id/files` with a tiny payload acks with an upload handle                                      | file-control upload path broken      |
 
 The session is **always deleted** at the end (success, failure, or timeout).
 
 Exit code: **0** when no check failed, **1** when any did. Missing-dependency or
 deployment-gated conditions are reported as `SKIP` (not `FAIL`) so a missing local
 WebRTC build or a LiveKit-less deployment doesn't read as a product regression.
+
+### `COOKIES_VIA_CONTROL_KEY` — the real #58 reproducer
+
+The separate "Driftstack Simulator" macOS app has **no account Bearer key** (a
+different app → a different keychain), so it can't auth cookies the way the
+account-Bearer `COOKIES` check does. Instead the **main** app mints a per-session
+`gui_control_key` (`GET /:id/gui-control-key`) and hands it off, and the simulator
+presents it in the `x-driftstack-gui-control-key` header. This check reproduces
+**both** steps and reports the **exact HTTP status + body** of the control-key
+cookies call. A `401`/`403`/`404` here — while account-Bearer `COOKIES` passes —
+is the real **#58** cookies-throw root cause (the GUI's actual auth path is denied)
+and is invisible to the Bearer probe. The control-key plaintext is **never logged**.
 
 ## Wire fidelity
 
@@ -32,8 +52,11 @@ same contract:
 - session create / livekit-token / delete — `packages/sdk-typescript/src/resources/agent-sessions.ts`
 - Room config + connect — `apps/gui-client/src/lib/livekit.ts` (`createLivekitRoom` / `connectToAgentSession`)
 - `navigate` / `tabListUpdate` / `activateTab` — `apps/gui-client/src/lib/livekit.ts` + `packages/api-types/src/agent-tab-ops.ts`
+- `tap` / `scroll` touch wire shape — `apps/gui-client/src/lib/livekit-input-capture.ts` (tap = `touchStart`+`touchEnd`; wheel → a `touchStart`/`touchMove`/`touchEnd` finger drag) + `packages/api-types/src/agent-input-event.ts`
 - `page_state` / `activateTabResult` consumer — `apps/gui-client/src/views/SimulatorWindow.tsx` (`onData`)
 - cookies result shape — `apps/gui-client/src/lib/agent-session-control.ts` + `apps/server/src/routes/agent-sessions.ts`
+- `gui_control_key` mint + control-auth header — `apps/gui-client/src/lib/agent-session-control.ts` (`mintGuiControlKey` / `authedFetch`) + `apps/server/src/routes/agent-sessions.ts` (`/:id/gui-control-key`, `controlKeyOrAccountAuth`)
+- file upload shape — `apps/gui-client/src/lib/agent-session-control.ts` (`uploadAgentSessionFile`) + `apps/server/src/routes/agent-sessions.ts` (`POST /:id/files`)
 
 ## Requirements
 
@@ -53,13 +76,19 @@ same contract:
 
 ## Environment variables
 
-| Var                     | Required | Default                      | Notes                                  |
-| ----------------------- | -------- | ---------------------------- | -------------------------------------- |
-| `DRIFTSTACK_API_KEY`    | **yes**  | —                            | account Bearer key. **Never printed.** |
-| `DRIFTSTACK_BASE_URL`   | no       | `https://api.driftstack.dev` | API host                               |
-| `DRIFTSTACK_PROFILE_ID` | no       | —                            | attach a saved profile (`prof_…`)      |
-| `DRIFTSTACK_PROXY_ID`   | no       | —                            | route egress through a saved proxy     |
-| `DRIFTSTACK_NAV_URL`    | no       | `https://example.com`        | URL the NAVIGATE check loads           |
+| Var                         | Required | Default                      | Notes                                        |
+| --------------------------- | -------- | ---------------------------- | -------------------------------------------- |
+| `DRIFTSTACK_API_KEY`        | **yes**  | —                            | account Bearer key. **Never printed.**       |
+| `DRIFTSTACK_BASE_URL`       | no       | `https://api.driftstack.dev` | API host                                     |
+| `DRIFTSTACK_PROFILE_ID`     | no       | —                            | attach a saved profile (`prof_…`)            |
+| `DRIFTSTACK_PROXY_ID`       | no       | —                            | route egress through a saved proxy           |
+| `DRIFTSTACK_NAV_URL`        | no       | `https://example.com`        | URL the NAVIGATE check loads                 |
+| `DRIFTSTACK_TAP_PAGE_URL`   | no       | `https://example.com/`       | page the TAP check loads (must have a link)  |
+| `DRIFTSTACK_TAP_EXPECT_URL` | no       | `https://www.iana.org/`      | URL the TAP target link navigates to         |
+| `DRIFTSTACK_TAP_X` / `_Y`   | no       | `200` / `250`                | device-CSS coord of the tap target link rect |
+
+The `gui_control_key` plaintext minted for `COOKIES_VIA_CONTROL_KEY` is **never
+printed** (only "fresh/existing" + the cookies-call HTTP status are logged).
 
 The API key and the LiveKit token are never written to stdout (the LiveKit client
 log level is pinned to `warn`, and the token livekit puts in its own URL log is
@@ -90,21 +119,39 @@ node operations/scripts/auto-verify-session.mjs
 ## Sample output
 
 ```
-[11:54:26.118] base=https://api.driftstack.dev  nav=https://example.com  profile=(none)  proxy=(none)
-[11:54:27.402] PASS — CREATE: id=agt_… mode=manual
-[11:54:31.880] PASS — STREAM: video track subscribed + live (bytesReceived=48213)
-[11:54:34.221] PASS — NAVIGATE: page_state url == https://example.com
-[11:54:38.640] PASS — TAB_SWITCH: page switched to https://example.org/ (activateTabResult ok)
-[11:54:40.115] PASS — COOKIES: jar returned (3 cookies)
-[11:54:40.330] cleanup — DELETE /v1/agent-sessions/agt_… → HTTP 204
+[13:46:39.020] base=https://api.driftstack.dev  nav=https://example.com  profile=(none)  proxy=(none)
+[13:46:39.468] PASS — CREATE: id=agt_… mode=manual
+[13:46:48.183] PASS — STREAM: box is streaming video (video track PUBLISHED by box)
+[13:46:48.436] PASS — NAVIGATE: page_state url == https://example.com
+[13:47:10.569] FAIL — TAB_SWITCH: page did not switch to https://example.org/ within 20s
+[13:47:11.487] PASS — SCROLL: scroll drag accepted by box (no channel error, no stalled/errored frame)
+[13:47:33.391] FAIL — TAP: tap sent but no page_state at all within 20s (taps may not be reaching the device)
+[13:47:33.850] PASS — COOKIES: jar returned (0 cookies)
+[13:47:34.286] PASS — COOKIES_VIA_CONTROL_KEY: control-key auth OK (HTTP 200) + jar returned (0 cookies)
+[13:47:34.358] SKIP — RECORDINGS: no recordings endpoint on this API
+[13:47:34.528] PASS — FILE_UPLOAD: upload ack'd — handle id=… name=auto-verify.txt size=11
+[13:47:34.650] cleanup — DELETE /v1/agent-sessions/agt_… → HTTP 204
 
 ──────────── SUMMARY ────────────
   PASS  CREATE        id=agt_… mode=manual
-  PASS  STREAM        video track subscribed + live (bytesReceived=48213)
+  PASS  STREAM        box is streaming video (video track PUBLISHED by box)
   PASS  NAVIGATE      page_state url == https://example.com
-  PASS  TAB_SWITCH    page switched to https://example.org/ (activateTabResult ok)
-  PASS  COOKIES       jar returned (3 cookies)
+  FAIL  TAB_SWITCH    page did not switch to https://example.org/ within 20s
+  PASS  SCROLL        scroll drag accepted by box
+  FAIL  TAP           tap sent but no page_state at all within 20s
+  PASS  COOKIES       jar returned (0 cookies)
+  PASS  COOKIES_VIA_CONTROL_KEY  control-key auth OK (HTTP 200) + jar returned (0 cookies)
+  SKIP  RECORDINGS    no recordings endpoint on this API
+  PASS  FILE_UPLOAD   upload ack'd — handle id=… name=auto-verify.txt size=11
 ─────────────────────────────────
-  5 pass · 0 fail · 0 skip
-  OVERALL: PASS
+  7 pass · 2 fail · 1 skip
+  OVERALL: FAIL
 ```
+
+> The `TAB_SWITCH` / `TAP` `FAIL`s above are a **real, reproducible** product
+> finding from a live `mode:manual` no-profile run (relayed to the harness team
+> on the A2↔A3 bus, W2940): on the current prod box, `navigate` lands a
+> `page_state` but `activateTab` returns no `activateTabResult` and a `tap`
+> produces no reaction — i.e. the box-side handlers for these data-channel ops
+> aren't reacting on a no-profile session, while `navigate` on the same channel
+> works. This is exactly what the suite exists to surface.
