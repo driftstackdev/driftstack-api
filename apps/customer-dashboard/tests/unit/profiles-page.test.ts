@@ -237,7 +237,7 @@ describe('profiles page — local integration', () => {
     expect(window.document.querySelector('[data-list]')?.textContent).toContain('Fresh profile');
   });
 
-  it('archetype selector: offers the registry selectable catalogue (post-cutover: iphone17 only), defaults to the locked archetype, and sends the chosen archetype on create', async () => {
+  it('archetype selector: offers the registry selectable catalogue (the full Agent-1 catalog folded in as available), defaults to the locked archetype, and sends the chosen archetype on create', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       route: makeRouter([]),
@@ -248,10 +248,13 @@ describe('profiles page — local integration', () => {
     expect(select).toBeTruthy();
     const values = Array.from(select.options).map((o) => o.value);
     // The customer-selectable catalogue = registry status launch | available.
-    // Post-2026-06-11 cutover that's exactly iphone17 — iphone16pro/iphone15pro
-    // were demoted to non-selectable reference, so they must NOT be offered.
+    // Post the 2026-06-25 catalog sync that's the locked iphone17 launch default
+    // PLUS the 80 other Agent-1-verified catalog slugs (all `available`), e.g.
+    // the prior iphone16pro launch is now a selectable available entry.
     expect(values).toContain('iphone17_ios18_7_safari26_4');
-    expect(values).not.toContain('iphone16pro_ios18_7_safari26_4');
+    expect(values).toContain('iphone16pro_ios18_7_safari26_4');
+    // The legacy iphone15pro/iOS17.5 baseline is NOT in Agent-1's catalog and
+    // stays a non-selectable `reference` entry, so it must NOT be offered.
     expect(values).not.toContain('iphone15pro_ios17_5_safari17_5');
     // Defaults to the locked archetype.
     expect(select.value).toBe('iphone17_ios18_7_safari26_4');

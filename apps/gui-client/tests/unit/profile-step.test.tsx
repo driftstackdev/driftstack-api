@@ -1,10 +1,10 @@
 // V-669 — view tests for FirstRunWizard.tsx::ProfileStep.
 //
-// Focused on the archetype picker introduced in V-669. Post-2026-06-11
-// cutover the picker offers exactly ONE archetype (the iPhone 17 launch
-// default) — the prior iPhone 16 Pro / iPhone 15 Pro 2-option catalog was
-// removed when the launch default moved to iphone17. Skip path doesn't fire
-// any API call.
+// Focused on the archetype picker introduced in V-669. Post the 2026-06-25
+// catalog sync the picker derives from ARCHETYPE_REGISTRY filtered to the
+// customer-selectable statuses (launch|available) — the full 81-slug Agent-1
+// catalog (1 launch iphone17 26.4 + 80 available). The iPhone 17 26.4 launch
+// default is still pre-selected. Skip path doesn't fire any API call.
 
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -37,20 +37,25 @@ describe('V-669 ProfileStep — archetype picker', () => {
     });
   });
 
-  it('offers the iPhone 17 Safari 26.4 + 26.5 options (the prior 16 Pro / 15 Pro catalog stays gone); 26.4 is the default', async () => {
+  it('offers the full Agent-1 catalog (launch iphone17 26.4 + the 80 available slugs); the iPhone 17 26.4/26.5 bands render and 26.4 is the default', async () => {
     profilesCreate.mockClear();
     render(<ProfileStep onSkip={vi.fn()} onCreated={vi.fn()} />);
 
-    // Two selectable archetypes post-2026-06-18: the 26.4 launch default + the
-    // 26.5 point-release band (Agent-1 verified it meets the launch bar).
+    // Post the 2026-06-25 catalog sync the picker derives from
+    // ARCHETYPE_REGISTRY filtered to launch|available — the full 81-slug
+    // Agent-1 catalog (1 launch + 80 available). The legacy iphone15pro/iOS17.5
+    // reference baseline is NOT in the catalog and stays non-selectable.
     const radios = screen.getAllByRole('radio');
-    expect(radios).toHaveLength(2);
-    expect(screen.getByRole('radio', { name: /Safari 26\.4/ })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /Safari 26\.5/ })).toBeInTheDocument();
-    expect(screen.queryByRole('radio', { name: /iPhone 15 Pro/ })).toBeNull();
-    expect(screen.queryByRole('radio', { name: /iPhone 16 Pro/ })).toBeNull();
+    expect(radios).toHaveLength(81);
+    expect(
+      screen.getByRole('radio', { name: /iPhone 17 · iOS 18\.7 · Safari 26\.4/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('radio', { name: /iPhone 17 · iOS 18\.7 · Safari 26\.5/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: /iPhone 15 Pro \/ iOS 17\.5/ })).toBeNull();
 
-    // No radio click → the default (26.4) is what create sends.
+    // No radio click → the default (26.4 launch) is what create sends.
     await userEvent.type(screen.getByLabelText(/profile name/i), 'launch-target');
     await userEvent.click(screen.getByRole('button', { name: /create profile/i }));
 
@@ -60,11 +65,13 @@ describe('V-669 ProfileStep — archetype picker', () => {
     });
   });
 
-  it('selecting the 26.5 option sends that archetype to create', async () => {
+  it('selecting the iPhone 17 Safari 26.5 option sends that archetype to create', async () => {
     profilesCreate.mockClear();
     render(<ProfileStep onSkip={vi.fn()} onCreated={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole('radio', { name: /Safari 26\.5/ }));
+    await userEvent.click(
+      screen.getByRole('radio', { name: /iPhone 17 · iOS 18\.7 · Safari 26\.5/ }),
+    );
     await userEvent.type(screen.getByLabelText(/profile name/i), 'safari-265');
     await userEvent.click(screen.getByRole('button', { name: /create profile/i }));
 

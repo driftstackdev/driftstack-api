@@ -277,25 +277,25 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     );
   });
 
-  it('ARCHETYPE_REGISTRY is the multi-archetype catalogue (NOT a single hardcoded device): ArchetypeConfig shape + status enum (launch/reference/planned for atlas-readiness) + the locked id (iphone17, post-2026-06-11 cutover) is the sole status:launch entry + the prior iphone16pro + sibling slugs registered as reference/planned placeholders', () => {
+  it('ARCHETYPE_REGISTRY is the multi-archetype catalogue (NOT a single hardcoded device): ArchetypeConfig shape + status enum + the locked id (iphone17, post-2026-06-11 cutover) is the sole status:launch entry + the full 81-slug Agent-1 catalog folds in as `available` + a legacy reference baseline retained', () => {
     // The platform models a device MATRIX; the registry is the source of
     // truth. A drift back to a single hardcoded archetype would re-break
-    // the multi-archetype architecture.
+    // the multi-archetype architecture. The catalogue is synced from
+    // Agent-1's verified catalog (driftstack/operations/archetype-catalog.json):
+    // all 81 catalog slugs appear; only the locked id is status:'launch', the
+    // rest are status:'available', plus a single legacy `reference` baseline.
     expect(body).toMatch(/export interface ArchetypeConfig \{/);
     expect(body).toMatch(
       /export type ArchetypeStatus = 'launch' \| 'available' \| 'reference' \| 'planned';/,
     );
     expect(body).toMatch(/export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig\[\] = \[/);
-    // Sibling slugs are registered so the matrix is the source of truth. The
-    // prior launch (iphone16pro_ios18_7_safari26_4) is retained as a literal
-    // `reference` entry post-cutover; iphone17 is now the LOCKED entry (checked
-    // via LOCKED_ARCHETYPE_ID below, not as a standalone literal).
+    // A representative spread of catalog slugs across the device matrix +
+    // Safari bands is registered (would catch a drift back to one device).
+    expect(body).toMatch(/id: 'iphone13_ios18_6_safari18_6',/);
+    expect(body).toMatch(/id: 'iphone14pro_ios18_7_safari26_5',/);
     expect(body).toMatch(/id: 'iphone16pro_ios18_7_safari26_4',/);
     expect(body).toMatch(/id: 'iphone17_ios18_7_safari26_5',/);
     expect(body).toMatch(/id: 'iphone16pro_ios18_6_safari18_6',/);
-    // Broader launch-family device matrix registered as placeholders
-    // (founder 2026-05-30: iphone 17 / pro / pro max, iphone 16 / pro max).
-    // The platform is a DEVICE MATRIX, not one device.
     expect(body).toMatch(/id: 'iphone17pro_ios18_7_safari26_4',/);
     expect(body).toMatch(/id: 'iphone17promax_ios18_7_safari26_4',/);
     expect(body).toMatch(/id: 'iphone16_ios18_7_safari26_4',/);
@@ -306,14 +306,15 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
       /id: LOCKED_ARCHETYPE_ID,\s*\n?\s*displayLabel: LOCKED_ARCHETYPE_DISPLAY_LABEL,/,
     );
     expect(body).toMatch(/status: 'launch',/);
-    expect(body).toMatch(/status: 'reference',/);
-    expect(body).toMatch(/status: 'planned',/);
-    // iphone17 (26.4) is the sole launch DEFAULT; the 26.5 point-release band is
-    // 'available' (customer-selectable, not default) per Agent-1's 2026-06-18
-    // archetype-availability assessment (meets the live-launch-band bar). The
-    // prior launch (iphone16pro) + iphone15pro stay 'reference' (non-selectable).
+    // The 80 non-launch catalog entries are customer-selectable 'available';
+    // the legacy iphone15pro baseline (NOT in the catalog) stays 'reference'.
     expect(body).toMatch(/status: 'available',/);
+    expect(body).toMatch(/status: 'reference',/);
     expect(body).toMatch(/id: 'iphone15pro_ios17_5_safari17_5',/);
+    // canvasFamily is derived from the Safari band (s_isFamilyAArchetype gate):
+    // 18.x + 26.0-26.3 ⇒ 'A', 26.4+ ⇒ 'B'. Both families are represented.
+    expect(body).toMatch(/canvasFamily: 'A',/);
+    expect(body).toMatch(/canvasFamily: 'B',/);
   });
 
   it('V-174 scope split framing pinned: account_owner (customer-account control via ctx.account.id) + driftstack_internal_admin (staff-only gates /v1/admin/* with admin.driftstack.dev Cloudflare Access SSO V-135 + defense-in-depth) + admin compat alias (satisfies BOTH during migration; founder-driven migration script promotes internal admin keys + re-scopes customer admin → account_owner; admin deprecated + removed after)', () => {
