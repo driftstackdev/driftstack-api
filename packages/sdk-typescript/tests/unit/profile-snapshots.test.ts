@@ -102,6 +102,8 @@ describe('ProfileSnapshotsResource', () => {
         archetype: 'iphone16pro_ios18_7_safari26_4',
         description: null,
         last_used_at: null,
+        size_bytes: null,
+        last_saved_at: null,
         created_at: '2026-05-09T00:00:00Z',
         updated_at: '2026-05-09T00:00:00Z',
         deleted_at: null,

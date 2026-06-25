@@ -22,6 +22,8 @@ const SAMPLE_PROFILE = `{
   "icon": "🛒",
   "note": "warmed up — ready for checkout flows",
   "last_used_at": "2026-05-11T12:00:00.000Z",
+  "size_bytes": 12900000,
+  "last_saved_at": "2026-05-11T12:00:00.000Z",
   "created_at": "2026-05-01T00:00:00.000Z",
   "updated_at": "2026-05-11T12:00:00.000Z",
   "deleted_at": null
@@ -85,6 +87,13 @@ ${SAMPLE_PROFILE}`}</code></pre>
       account's locked archetype if you omit it. Browser state
       (cookies, localStorage, etc.) is created on first use and is
       not part of the create request.
+    </p>
+    <p>
+      <code>size_bytes</code> is the byte size of the profile's saved
+      browser-state store, and <code>last_saved_at</code> is when it was
+      last written back — both <code>null</code> until the profile is
+      first used and saved. Use them to surface per-profile and
+      account-wide storage usage.
     </p>
 
     <h2>GET /v1/profiles — list</h2>

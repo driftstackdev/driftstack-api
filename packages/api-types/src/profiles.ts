@@ -154,6 +154,15 @@ export const ProfileSchema = z.object({
   icon: z.string().nullable(),
   note: z.string().nullable(),
   last_used_at: Iso8601Schema.nullable(),
+  /**
+   * doc-150 item 5 — byte size of this profile's last saved sealed store (the
+   * opaque encrypted browser-state blob). `null` until the profile is first
+   * saved. Surfaced for per-profile storage + an account-wide total; the
+   * per-tier quota (1GB/5GB) is enforced separately (doc-150 item 6).
+   */
+  size_bytes: z.number().int().nonnegative().nullable(),
+  /** doc-150 item 5 — when the sealed store was last saved back. `null` until first saved. */
+  last_saved_at: Iso8601Schema.nullable(),
   created_at: Iso8601Schema,
   updated_at: Iso8601Schema,
   /**

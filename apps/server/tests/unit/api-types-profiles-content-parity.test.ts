@@ -59,7 +59,7 @@ describe('W434.B packages/api-types/src/profiles.ts content parity', () => {
     );
   });
 
-  it('ProfileSchema: id + name + archetype + description nullable + folder nullable + tags array + last_used_at nullable + created/updated_at (9 fields)', () => {
+  it('ProfileSchema: id + name + archetype + description nullable + folder nullable + tags array + last_used_at nullable + size_bytes/last_saved_at nullable (doc-150 item 5) + created/updated_at', () => {
     // Per-field toContain (no long \s*\n?\s* chains — see
     // feedback_no_long_chain_parity_regex).
     expect(body).toMatch(/export const ProfileSchema = z\.object\(\{/);
@@ -69,6 +69,9 @@ describe('W434.B packages/api-types/src/profiles.ts content parity', () => {
     expect(body).toContain('folder: z.string().nullable(),');
     expect(body).toContain('tags: z.array(z.string()),');
     expect(body).toContain('last_used_at: Iso8601Schema.nullable(),');
+    // doc-150 item 5 — per-profile sealed-store size + save-back time.
+    expect(body).toContain('size_bytes: z.number().int().nonnegative().nullable(),');
+    expect(body).toContain('last_saved_at: Iso8601Schema.nullable(),');
     expect(body).toContain('created_at: Iso8601Schema,');
     expect(body).toContain('updated_at: Iso8601Schema,');
   });

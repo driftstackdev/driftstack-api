@@ -32,7 +32,18 @@ import type { Logger } from '../lib/logger.js';
  */
 export interface ProfileSavedOwnershipDeps {
   agentSessions: { get(id: string): Promise<{ accountId: string } | null> };
-  profiles: { findById(args: { id: string; accountId: string }): Promise<unknown> };
+  profiles: {
+    findById(args: { id: string; accountId: string }): Promise<unknown>;
+    // doc-150 item 5 — stamp last_saved_at (+ size_bytes when the harness
+    // emitted it) on the owning profile row. Account-scoped, so the resolved
+    // session-owner account is what binds the write to the right profile.
+    recordSave(args: {
+      id: string;
+      accountId: string;
+      at: Date;
+      sizeBytes?: number;
+    }): Promise<void>;
+  };
 }
 
 /**
@@ -51,10 +62,14 @@ export function makeProfileSavedPersister(
   ownership?: ProfileSavedOwnershipDeps,
 ): (frame: ProfileSaved) => void {
   return (frame: ProfileSaved): void => {
-    // Large path: the harness already PUT to the presigned URL; nothing to store.
     const sealedBlob = frame.sealed_blob;
-    if (sealedBlob === undefined) return;
+    // doc-150 item 5 — the size + save-back metadata rides BOTH shapes (inline
+    // `sealed_blob` and the presigned `stored:true` ack), while only the inline
+    // path has bytes for the server to write to R2. So we no longer early-return
+    // on the large path: it still resolves ownership + records the save
+    // metadata; it just skips the R2 write (the harness already PUT the blob).
     void (async () => {
+      let ownerAccountId: string | undefined;
       if (ownership !== undefined) {
         const session = await ownership.agentSessions.get(frame.sessionId);
         if (session === null) {
@@ -80,28 +95,58 @@ export function makeProfileSavedPersister(
           );
           return;
         }
+        ownerAccountId = session.accountId;
       }
-      const key = profileSealedBlobKey(frame.profile_id);
-      try {
-        await r2.putObject({
-          key,
-          body: Buffer.from(sealedBlob, 'base64'),
-          contentType: 'application/octet-stream',
-        });
-        logger.info(
-          { component: 'profile-store', profileId: frame.profile_id, sessionId: frame.sessionId },
-          'persisted profile sealed-blob to R2',
-        );
-      } catch (err) {
-        logger.error(
-          {
-            component: 'profile-store',
-            profileId: frame.profile_id,
-            sessionId: frame.sessionId,
-            err,
-          },
-          'failed to persist profile sealed-blob to R2',
-        );
+
+      // Inline path: persist the sealed bytes to R2 (the large path already PUT).
+      if (sealedBlob !== undefined) {
+        const key = profileSealedBlobKey(frame.profile_id);
+        try {
+          await r2.putObject({
+            key,
+            body: Buffer.from(sealedBlob, 'base64'),
+            contentType: 'application/octet-stream',
+          });
+          logger.info(
+            { component: 'profile-store', profileId: frame.profile_id, sessionId: frame.sessionId },
+            'persisted profile sealed-blob to R2',
+          );
+        } catch (err) {
+          logger.error(
+            {
+              component: 'profile-store',
+              profileId: frame.profile_id,
+              sessionId: frame.sessionId,
+              err,
+            },
+            'failed to persist profile sealed-blob to R2',
+          );
+        }
+      }
+
+      // doc-150 item 5 — best-effort record of the save-back (last_saved_at +
+      // size_bytes) on the profile row. Only when ownership deps are wired (the
+      // resolved session-owner account scopes the write). A missing size_bytes
+      // leaves the column untouched; a failure is logged, never thrown.
+      if (ownership !== undefined && ownerAccountId !== undefined) {
+        try {
+          await ownership.profiles.recordSave({
+            id: frame.profile_id,
+            accountId: ownerAccountId,
+            at: new Date(),
+            ...(frame.size_bytes !== undefined ? { sizeBytes: frame.size_bytes } : {}),
+          });
+        } catch (err) {
+          logger.error(
+            {
+              component: 'profile-store',
+              profileId: frame.profile_id,
+              sessionId: frame.sessionId,
+              err,
+            },
+            'failed to record profile save metadata (size_bytes / last_saved_at)',
+          );
+        }
       }
     })();
   };

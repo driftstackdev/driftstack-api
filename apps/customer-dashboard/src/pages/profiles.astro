@@ -102,11 +102,18 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
     </header>
 
-    <p class="mb-6 text-sm text-tk-ink-3" data-field="usage-line">
+    <p class="mb-2 text-sm text-tk-ink-3" data-field="usage-line">
       <strong class="font-medium text-tk-ink" data-field="count">{profileCount}</strong> of
       <strong class="font-medium text-tk-ink" data-field="limit">{limitDisplay}</strong>
       profile slots used.
       {atLimit && <span class="text-red-700"> · tier limit reached</span>}
+    </p>
+    {/* doc-150 item 5 — account storage total (sum of every profile's
+        size_bytes). Hidden until hydration fills it in (no meaningful SSR
+        value without live data). Quota enforcement is item 6. */}
+    <p class="mb-6 hidden text-sm text-tk-ink-3" data-field="storage-line">
+      <strong class="font-medium text-tk-ink" data-field="storage-total">—</strong>
+      stored across your profiles.
     </p>
 
     <!--
@@ -561,6 +568,21 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!iso) return '—';
         return new Date(iso).toISOString().slice(0, 10);
       }
+      // doc-150 item 5 — human-readable byte size. null/undefined → "—" (never
+      // saved). Decimal units (1000-based) to match how customers read storage
+      // ("12.3 MB"); 1 decimal place above KB. Negative / non-finite → "—".
+      function fmtBytes(n) {
+        if (typeof n !== 'number' || !isFinite(n) || n < 0) return '—';
+        if (n < 1000) return n + ' B';
+        const units = ['KB', 'MB', 'GB', 'TB'];
+        let v = n / 1000;
+        let i = 0;
+        while (v >= 1000 && i < units.length - 1) {
+          v /= 1000;
+          i++;
+        }
+        return v.toFixed(1) + ' ' + units[i];
+      }
 
       // Labels injected from the registry-derived archetypeLabels map (the
       // server's archetypeDisplayLabel() source of truth), so every selectable
@@ -620,6 +642,10 @@ const apiBaseUrl = resolveApiBaseUrl();
           escapeHtml(archetypeLabel(p.archetype)) +
           ' · last used ' +
           escapeHtml(fmtIso(p.last_used_at)) +
+          // doc-150 item 5 — per-profile sealed-store size. A pre-save / pre-
+          // column profile omits size_bytes → fmtBytes renders "—".
+          ' · storage ' +
+          escapeHtml(fmtBytes(typeof p.size_bytes === 'number' ? p.size_bytes : null)) +
           '</p></div>' +
           '<div class="flex shrink-0 flex-col items-end gap-2">' +
           // 2026-05-20 — antidetect-browser-style Launch primary CTA
@@ -781,8 +807,28 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
       });
 
+      // doc-150 item 5 — account storage total = sum of every profile's
+      // size_bytes (non-numeric / pre-save profiles contribute 0). Surfaced in
+      // the storage-line; the line stays hidden when there are no profiles.
+      function renderStorageTotal(profiles) {
+        const storageLine = root.querySelector('[data-field="storage-line"]');
+        const storageTotal = root.querySelector('[data-field="storage-total"]');
+        if (!storageLine || !storageTotal) return;
+        if (!Array.isArray(profiles) || profiles.length === 0) {
+          storageLine.classList.add('hidden');
+          return;
+        }
+        const total = profiles.reduce(
+          (sum, p) => sum + (typeof p.size_bytes === 'number' && p.size_bytes > 0 ? p.size_bytes : 0),
+          0,
+        );
+        storageTotal.textContent = fmtBytes(total);
+        storageLine.classList.remove('hidden');
+      }
+
       function renderProfiles(profiles) {
         const searchWrap = root.querySelector('[data-profiles-search-wrap]');
+        renderStorageTotal(profiles);
         if (profiles.length === 0) {
           list.classList.add('hidden');
           empty.classList.remove('hidden');

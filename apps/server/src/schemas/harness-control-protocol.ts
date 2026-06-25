@@ -576,6 +576,13 @@ export const ProfileSavedSchema = z.object({
   profile_id: z.string(),
   sealed_blob: z.string().optional(),
   stored: z.boolean().optional(),
+  // doc-150 item 5 (A3 emit) — byte size of the sealed store the harness just
+  // saved (the LZFSE + AES-GCM-256 blob, before/independent of the inline-vs-
+  // presigned transport). Optional/forward-compat: a pre-emit harness omits it
+  // and the consumer leaves size_bytes NULL. The save-back persists it (plus
+  // last_saved_at) on the profile row so the dashboard can surface per-profile
+  // storage + an account total.
+  size_bytes: z.number().int().nonnegative().optional(),
 });
 
 // ── HarnessOutbound.challengeDetected (harness → server; W393, A3 W717) ──

@@ -37,6 +37,8 @@ function makeProfile(overrides: Partial<ProfileRecord> = {}): ProfileRecord {
     folder: null,
     tags: [],
     lastUsedAt: null,
+    sizeBytes: null,
+    lastSavedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     deletedAt: null,
@@ -67,6 +69,8 @@ function makeRepo(
         folder: null,
         tags: [],
         lastUsedAt: null,
+        sizeBytes: null,
+        lastSavedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
         deletedAt: null,
@@ -92,6 +96,8 @@ function makeRepo(
         folder: null,
         tags: [],
         lastUsedAt: null,
+        sizeBytes: null,
+        lastSavedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
         deletedAt: null,
@@ -165,6 +171,7 @@ function makeRepo(
       return Promise.resolve(true);
     },
     touch: () => Promise.resolve(),
+    recordSave: () => Promise.resolve(),
     getWrappedDek: () => Promise.resolve(null),
   };
   return { repo, state: { rows } };

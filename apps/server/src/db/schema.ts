@@ -566,6 +566,17 @@ export const profiles = pgTable(
     note: text('note'),
     /** Last time a session was created against this profile. Updated by SessionsService at create-time. */
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    // Per-profile sealed-store size (doc-150 item 5) — the byte count of the
+    // last saved sealed blob (LZFSE + AES-GCM-256, opaque to the control
+    // plane). Persisted best-effort from the harness `profileSaved` frame's
+    // `size_bytes` on each save-back. BIGINT: a sealed store can exceed 2GiB
+    // (the 2^31 int ceiling). NULL = never saved / a pre-column row / a harness
+    // that didn't emit the field (forward-compat). Surfaced to the customer for
+    // per-profile storage + an account-wide total; the 1GB/5GB quota
+    // enforcement is doc-150 item 6 (not this slice).
+    sizeBytes: bigint('size_bytes', { mode: 'number' }),
+    /** Last time the harness saved this profile's sealed store back (doc-150 item 5). NULL = never saved. */
+    lastSavedAt: timestamp('last_saved_at', { withTimezone: true }),
     // Profile-backed sessions (file 57 key hierarchy): the per-profile DEK,
     // wrapped under the account's TMK — base64([iv|tag|ct]), see
     // lib/profile-key-hierarchy.ts. Nullable: NULL when PROFILE_MASTER_KEY is

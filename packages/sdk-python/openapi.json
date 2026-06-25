@@ -25194,6 +25194,15 @@
                       "format": "date-time",
                       "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                     },
+                    "size_bytes": {
+                      "type": ["integer", "null"],
+                      "minimum": 0
+                    },
+                    "last_saved_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
                     "created_at": {
                       "type": "string",
                       "format": "date-time",
@@ -25220,6 +25229,8 @@
                     "icon",
                     "note",
                     "last_used_at",
+                    "size_bytes",
+                    "last_saved_at",
                     "created_at",
                     "updated_at",
                     "deleted_at"
@@ -25358,6 +25369,15 @@
                             "format": "date-time",
                             "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                           },
+                          "size_bytes": {
+                            "type": ["integer", "null"],
+                            "minimum": 0
+                          },
+                          "last_saved_at": {
+                            "type": ["string", "null"],
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          },
                           "created_at": {
                             "type": "string",
                             "format": "date-time",
@@ -25384,6 +25404,8 @@
                           "icon",
                           "note",
                           "last_used_at",
+                          "size_bytes",
+                          "last_saved_at",
                           "created_at",
                           "updated_at",
                           "deleted_at"
@@ -25506,6 +25528,15 @@
                       "format": "date-time",
                       "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                     },
+                    "size_bytes": {
+                      "type": ["integer", "null"],
+                      "minimum": 0
+                    },
+                    "last_saved_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
                     "created_at": {
                       "type": "string",
                       "format": "date-time",
@@ -25532,6 +25563,8 @@
                     "icon",
                     "note",
                     "last_used_at",
+                    "size_bytes",
+                    "last_saved_at",
                     "created_at",
                     "updated_at",
                     "deleted_at"
@@ -25695,6 +25728,15 @@
                       "format": "date-time",
                       "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                     },
+                    "size_bytes": {
+                      "type": ["integer", "null"],
+                      "minimum": 0
+                    },
+                    "last_saved_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
                     "created_at": {
                       "type": "string",
                       "format": "date-time",
@@ -25721,6 +25763,8 @@
                     "icon",
                     "note",
                     "last_used_at",
+                    "size_bytes",
+                    "last_saved_at",
                     "created_at",
                     "updated_at",
                     "deleted_at"
@@ -26109,6 +26153,13 @@
                     "last_used_at": {
                       "type": ["string", "null"]
                     },
+                    "size_bytes": {
+                      "type": ["integer", "null"],
+                      "minimum": 0
+                    },
+                    "last_saved_at": {
+                      "type": ["string", "null"]
+                    },
                     "created_at": {
                       "type": "string"
                     },
@@ -26122,6 +26173,8 @@
                     "archetype",
                     "description",
                     "last_used_at",
+                    "size_bytes",
+                    "last_saved_at",
                     "created_at",
                     "updated_at"
                   ]
@@ -26230,6 +26283,13 @@
                           "last_used_at": {
                             "type": ["string", "null"]
                           },
+                          "size_bytes": {
+                            "type": ["integer", "null"],
+                            "minimum": 0
+                          },
+                          "last_saved_at": {
+                            "type": ["string", "null"]
+                          },
                           "created_at": {
                             "type": "string"
                           },
@@ -26246,6 +26306,8 @@
                           "archetype",
                           "description",
                           "last_used_at",
+                          "size_bytes",
+                          "last_saved_at",
                           "created_at",
                           "updated_at",
                           "deleted_at"
@@ -26344,6 +26406,13 @@
                     "last_used_at": {
                       "type": ["string", "null"]
                     },
+                    "size_bytes": {
+                      "type": ["integer", "null"],
+                      "minimum": 0
+                    },
+                    "last_saved_at": {
+                      "type": ["string", "null"]
+                    },
                     "created_at": {
                       "type": "string"
                     },
@@ -26357,6 +26426,8 @@
                     "archetype",
                     "description",
                     "last_used_at",
+                    "size_bytes",
+                    "last_saved_at",
                     "created_at",
                     "updated_at"
                   ]
@@ -26734,6 +26805,13 @@
                     "last_used_at": {
                       "type": ["string", "null"]
                     },
+                    "size_bytes": {
+                      "type": ["integer", "null"],
+                      "minimum": 0
+                    },
+                    "last_saved_at": {
+                      "type": ["string", "null"]
+                    },
                     "created_at": {
                       "type": "string"
                     },
@@ -26747,6 +26825,8 @@
                     "archetype",
                     "description",
                     "last_used_at",
+                    "size_bytes",
+                    "last_saved_at",
                     "created_at",
                     "updated_at"
                   ]
@@ -26872,6 +26952,13 @@
                         "last_used_at": {
                           "type": ["string", "null"]
                         },
+                        "size_bytes": {
+                          "type": ["integer", "null"],
+                          "minimum": 0
+                        },
+                        "last_saved_at": {
+                          "type": ["string", "null"]
+                        },
                         "created_at": {
                           "type": "string"
                         },
@@ -26885,6 +26972,8 @@
                         "archetype",
                         "description",
                         "last_used_at",
+                        "size_bytes",
+                        "last_saved_at",
                         "created_at",
                         "updated_at"
                       ]
@@ -27634,6 +27723,13 @@
                     "last_used_at": {
                       "type": ["string", "null"]
                     },
+                    "size_bytes": {
+                      "type": ["integer", "null"],
+                      "minimum": 0
+                    },
+                    "last_saved_at": {
+                      "type": ["string", "null"]
+                    },
                     "created_at": {
                       "type": "string"
                     },
@@ -27647,6 +27743,8 @@
                     "archetype",
                     "description",
                     "last_used_at",
+                    "size_bytes",
+                    "last_saved_at",
                     "created_at",
                     "updated_at"
                   ]

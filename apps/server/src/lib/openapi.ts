@@ -5209,6 +5209,9 @@ function buildRegistry(): OpenAPIRegistry {
     archetype: z.string(),
     description: z.string().nullable(),
     last_used_at: z.string().nullable(),
+    // doc-150 item 5 — per-profile sealed-store size + last save-back time.
+    size_bytes: z.number().int().nonnegative().nullable(),
+    last_saved_at: z.string().nullable(),
     created_at: z.string(),
     updated_at: z.string(),
   });

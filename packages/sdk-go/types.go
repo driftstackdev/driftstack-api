@@ -698,8 +698,14 @@ type Profile struct {
 	Icon       *string    `json:"icon"`
 	Note       *string    `json:"note"`
 	LastUsedAt *time.Time `json:"last_used_at"`
-	CreatedAt  time.Time  `json:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
+	// SizeBytes + LastSavedAt — doc-150 item 5. SizeBytes is the byte size of
+	// the last saved sealed store (the opaque encrypted browser-state blob);
+	// nil until the profile is first saved. *int64: a sealed store can exceed
+	// the 2^31 int ceiling. LastSavedAt is when it was last saved back.
+	SizeBytes   *int64     `json:"size_bytes"`
+	LastSavedAt *time.Time `json:"last_saved_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 	// DeletedAt — L4b recycle bin. nil for a live profile; set to the trash
 	// timestamp for a soft-deleted one (only ListTrash returns trashed rows).
 	DeletedAt *time.Time `json:"deleted_at"`

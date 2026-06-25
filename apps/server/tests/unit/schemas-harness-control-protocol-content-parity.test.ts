@@ -289,10 +289,12 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     ).toBe(false); // missing challengeId
   });
 
-  it('profileSaved (A3 W417) pinned to the outbound union + shape (sessionId camelCase + profile_id/sealed_blob snake_case + stored)', () => {
+  it('profileSaved (A3 W417 + doc-150 item 5) pinned to the outbound union + shape (sessionId camelCase + profile_id/sealed_blob snake_case + stored + size_bytes optional)', () => {
     expect(body).toMatch(
-      /export const ProfileSavedSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('profileSaved'\),\s*\n?\s*sessionId: z\.string\(\),\s*\n?\s*profile_id: z\.string\(\),\s*\n?\s*sealed_blob: z\.string\(\)\.optional\(\),\s*\n?\s*stored: z\.boolean\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const ProfileSavedSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('profileSaved'\),\s*\n?\s*sessionId: z\.string\(\),\s*\n?\s*profile_id: z\.string\(\),\s*\n?\s*sealed_blob: z\.string\(\)\.optional\(\),\s*\n?\s*stored: z\.boolean\(\)\.optional\(\),/,
     );
+    // doc-150 item 5 — optional/forward-compat size_bytes (int, >= 0).
+    expect(body).toContain('size_bytes: z.number().int().nonnegative().optional(),');
     // inline + large shapes both parse via the union; sessionId required.
     expect(
       HarnessOutboundSchema.safeParse({
@@ -310,6 +312,26 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
         stored: true,
       }).success,
     ).toBe(true);
+    // doc-150 item 5 — a frame carrying size_bytes parses (both shapes).
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'profileSaved',
+        sessionId: 's1',
+        profile_id: 'p1',
+        stored: true,
+        size_bytes: 9_000_000_000,
+      }).success,
+    ).toBe(true);
+    // a negative size_bytes is rejected (nonnegative).
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'profileSaved',
+        sessionId: 's1',
+        profile_id: 'p1',
+        sealed_blob: 'YmxvYg==',
+        size_bytes: -1,
+      }).success,
+    ).toBe(false);
     expect(
       HarnessOutboundSchema.safeParse({ type: 'profileSaved', profile_id: 'p1' }).success,
     ).toBe(false);

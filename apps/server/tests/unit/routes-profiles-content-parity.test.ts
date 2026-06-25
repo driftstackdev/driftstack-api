@@ -85,6 +85,9 @@ describe('W437.B apps/server/src/routes/profiles.ts content parity', () => {
     expect(body).toContain('folder: p.folder,');
     expect(body).toContain('tags: p.tags,');
     expect(body).toContain('last_used_at: p.lastUsedAt ? p.lastUsedAt.toISOString() : null,');
+    // doc-150 item 5 — per-profile sealed-store size + save-back time.
+    expect(body).toContain('size_bytes: p.sizeBytes,');
+    expect(body).toContain('last_saved_at: p.lastSavedAt ? p.lastSavedAt.toISOString() : null,');
     expect(body).toContain('created_at: p.createdAt.toISOString(),');
     expect(body).toContain('updated_at: p.updatedAt.toISOString(),');
   });

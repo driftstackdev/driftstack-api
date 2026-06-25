@@ -36,6 +36,8 @@ function toRecord(r: typeof profiles.$inferSelect): ProfileRecord {
     icon: r.icon,
     note: r.note,
     lastUsedAt: r.lastUsedAt,
+    sizeBytes: r.sizeBytes,
+    lastSavedAt: r.lastSavedAt,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     deletedAt: r.deletedAt,
@@ -239,6 +241,26 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
     await this.database.db
       .update(profiles)
       .set({ lastUsedAt: args.at })
+      .where(and(eq(profiles.id, args.id), eq(profiles.accountId, args.accountId), notDeleted));
+  }
+
+  // doc-150 item 5 — record a sealed-store save-back. Fire-and-forget from the
+  // profileSaved consumer: stamp last_saved_at = now() and (when the harness
+  // emitted it) the sealed-store byte size. `sizeBytes` undefined → leave the
+  // column untouched (a pre-emit harness must not clobber a known size with
+  // NULL); a missing size on this save just keeps the prior value. Account-
+  // scoped + notDeleted like touch() — a no-op for a wrong-account / trashed id.
+  async recordSave(args: {
+    id: string;
+    accountId: string;
+    at: Date;
+    sizeBytes?: number;
+  }): Promise<void> {
+    const sets: Record<string, unknown> = { lastSavedAt: args.at };
+    if (args.sizeBytes !== undefined) sets.sizeBytes = args.sizeBytes;
+    await this.database.db
+      .update(profiles)
+      .set(sets)
       .where(and(eq(profiles.id, args.id), eq(profiles.accountId, args.accountId), notDeleted));
   }
 

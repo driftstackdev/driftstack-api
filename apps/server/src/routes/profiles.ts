@@ -64,6 +64,11 @@ function publicProfile(p: ProfileRecord): Record<string, unknown> {
     icon: p.icon,
     note: p.note,
     last_used_at: p.lastUsedAt ? p.lastUsedAt.toISOString() : null,
+    // doc-150 item 5 — per-profile sealed-store size + last save-back time.
+    // Customer-safe metadata only (a byte count + a timestamp) — never the
+    // opaque sealed blob itself, which lives in R2 and never rides this record.
+    size_bytes: p.sizeBytes,
+    last_saved_at: p.lastSavedAt ? p.lastSavedAt.toISOString() : null,
     created_at: p.createdAt.toISOString(),
     updated_at: p.updatedAt.toISOString(),
     // L4b recycle bin — null for a live profile; the trash timestamp for a

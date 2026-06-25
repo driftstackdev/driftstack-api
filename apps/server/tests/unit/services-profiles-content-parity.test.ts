@@ -53,10 +53,13 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
     );
   });
 
-  it('ProfileRecord: 8 fields (id/accountId/name/archetype + description nullable + lastUsedAt nullable + createdAt/updatedAt)', () => {
+  it('ProfileRecord: id/accountId/name/archetype + description nullable + lastUsedAt nullable + sizeBytes/lastSavedAt (doc-150 item 5) + createdAt/updatedAt', () => {
     expect(body).toMatch(/export interface ProfileRecord \{/);
     expect(body).toMatch(/description: string \| null;/);
     expect(body).toMatch(/lastUsedAt: Date \| null;/);
+    // doc-150 item 5 — per-profile sealed-store size + save-back time.
+    expect(body).toMatch(/sizeBytes: number \| null;/);
+    expect(body).toMatch(/lastSavedAt: Date \| null;/);
   });
 
   it('V-225 emitAuditBestEffort: 5-action union (profile.created/deleted/restored/V-480 exported/imported)', () => {
@@ -177,6 +180,10 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
     );
     expect(body).toMatch(
       /\/\*\* Mark `last_used_at` — fire-and-forget from sessions service\. \*\/\s*\n?\s*touch\(args: \{ id: string; accountId: string; at: Date \}\): Promise<void>;/,
+    );
+    // doc-150 item 5 — sealed-store save-back recorder (last_saved_at + size_bytes).
+    expect(body).toMatch(
+      /recordSave\(args: \{ id: string; accountId: string; at: Date; sizeBytes\?: number \}\): Promise<void>;/,
     );
   });
 

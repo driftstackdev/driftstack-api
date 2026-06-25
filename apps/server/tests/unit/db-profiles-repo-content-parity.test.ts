@@ -55,7 +55,7 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
     expect(body).toMatch(/const DEFAULT_PAGE = 50;\s*\n?\s*const MAX_PAGE = 100;/);
   });
 
-  it('toRecord: 10-field ProfileRecord (id + accountId + name + archetype + description + folder + tags + lastUsedAt + created/updated_at)', () => {
+  it('toRecord: full ProfileRecord (id + accountId + name + archetype + description + folder + tags + icon + note + lastUsedAt + sizeBytes + lastSavedAt + created/updated_at + deletedAt)', () => {
     // Per-field toContain (no long \s*\n?\s* chains — see
     // feedback_no_long_chain_parity_regex).
     expect(body).toMatch(
@@ -69,6 +69,9 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
     expect(body).toContain('folder: r.folder,');
     expect(body).toContain('tags: r.tags,');
     expect(body).toContain('lastUsedAt: r.lastUsedAt,');
+    // doc-150 item 5 — per-profile sealed-store size + save-back time.
+    expect(body).toContain('sizeBytes: r.sizeBytes,');
+    expect(body).toContain('lastSavedAt: r.lastSavedAt,');
     expect(body).toContain('createdAt: r.createdAt,');
     expect(body).toContain('updatedAt: r.updatedAt,');
     expect(body).toContain('deletedAt: r.deletedAt,'); // L4b recycle bin
@@ -143,6 +146,14 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
     expect(body).toMatch(
       /async touch\(args: \{ id: string; accountId: string; at: Date \}\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(profiles\)\s*\n?\s*\.set\(\{ lastUsedAt: args\.at \}\)\s*\n?\s*\.where\(and\(eq\(profiles\.id, args\.id\), eq\(profiles\.accountId, args\.accountId\), notDeleted\)\);\s*\n?\s*\}/,
     );
+  });
+
+  it('recordSave (doc-150 item 5): stamps lastSavedAt + (when provided) sizeBytes; account-scoped + notDeleted; sizeBytes undefined leaves the column untouched (no clobber-with-NULL)', () => {
+    expect(body).toMatch(
+      /async recordSave\(args: \{\s*\n?\s*id: string;\s*\n?\s*accountId: string;\s*\n?\s*at: Date;\s*\n?\s*sizeBytes\?: number;\s*\n?\s*\}\): Promise<void> \{/,
+    );
+    expect(body).toContain('const sets: Record<string, unknown> = { lastSavedAt: args.at };');
+    expect(body).toContain('if (args.sizeBytes !== undefined) sets.sizeBytes = args.sizeBytes;');
   });
 
   it('L4b notDeleted predicate present: const notDeleted = isNull(profiles.deletedAt)', () => {

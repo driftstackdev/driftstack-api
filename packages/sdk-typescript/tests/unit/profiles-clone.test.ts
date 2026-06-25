@@ -19,6 +19,8 @@ const fakeProfile = (id: string): Profile => ({
   folder: null,
   tags: [],
   last_used_at: null,
+  size_bytes: null,
+  last_saved_at: null,
   created_at: '2026-05-09T00:00:00Z',
   updated_at: '2026-05-09T00:00:00Z',
   deleted_at: null,

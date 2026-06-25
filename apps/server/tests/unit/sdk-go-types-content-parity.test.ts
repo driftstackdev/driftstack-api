@@ -201,6 +201,10 @@ describe('W589.C packages/sdk-go/types.go content parity', () => {
     expect(body).toMatch(/\/\/ Profile — V-426\./);
     expect(body).toMatch(/\/\/ CreateProfileRequest — V-426\./);
     expect(body).toMatch(/\/\/ UpdateProfileRequest — V-426\./);
+    // doc-150 item 5 — per-profile sealed-store size (*int64, can exceed 2^31)
+    // + save-back time on the Profile struct.
+    expect(body).toMatch(/SizeBytes\s+\*int64\s+`json:"size_bytes"`/);
+    expect(body).toMatch(/LastSavedAt \*time\.Time\s+`json:"last_saved_at"`/);
   });
 
   it('file exists at canonical path', () => {

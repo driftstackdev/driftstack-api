@@ -79,6 +79,8 @@ func TestWireShape_Profile_RealServerShape(t *testing.T) {
 		"archetype": "iphone16pro_ios18_7_safari26_4",
 		"description": "EU shopping flow",
 		"last_used_at": "2026-05-08T12:00:00.000Z",
+		"size_bytes": 9000000000,
+		"last_saved_at": "2026-05-08T12:00:00.000Z",
 		"created_at": "2026-04-15T08:00:00.000Z",
 		"updated_at": "2026-05-08T12:00:00.000Z"
 	}`
@@ -97,6 +99,13 @@ func TestWireShape_Profile_RealServerShape(t *testing.T) {
 	}
 	if got.LastUsedAt == nil {
 		t.Errorf("LastUsedAt should be populated")
+	}
+	// doc-150 item 5 — size_bytes is *int64 (sealed stores can exceed 2^31).
+	if got.SizeBytes == nil || *got.SizeBytes != 9000000000 {
+		t.Errorf("SizeBytes=%v (expected 9000000000)", got.SizeBytes)
+	}
+	if got.LastSavedAt == nil {
+		t.Errorf("LastSavedAt should be populated")
 	}
 }
 

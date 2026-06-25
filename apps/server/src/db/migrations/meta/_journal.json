@@ -617,6 +617,13 @@
       "when": 1780317600000,
       "tag": "0087_agent_sessions_model_opus_4_8",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1780321200000,
+      "tag": "0088_profile_size_bytes",
+      "breakpoints": true
     }
   ]
 }

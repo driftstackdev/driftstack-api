@@ -30,6 +30,8 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
       icon: input.icon ?? null,
       note: input.note ?? null,
       lastUsedAt: null,
+      sizeBytes: null,
+      lastSavedAt: null,
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
@@ -74,6 +76,8 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
       icon: input.icon ?? null,
       note: input.note ?? null,
       lastUsedAt: null,
+      sizeBytes: null,
+      lastSavedAt: null,
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
@@ -155,6 +159,20 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
     const r = this.rows.get(args.id);
     if (!r || r.accountId !== args.accountId || r.deletedAt !== null) return Promise.resolve();
     this.rows.set(r.id, { ...r, lastUsedAt: args.at });
+    return Promise.resolve();
+  }
+
+  // doc-150 item 5 — stamp last_saved_at (+ size_bytes when provided). Mirrors
+  // the prod recordSave: account-scoped + notDeleted; a missing sizeBytes leaves
+  // the column untouched (no clobber-with-NULL).
+  recordSave(args: { id: string; accountId: string; at: Date; sizeBytes?: number }): Promise<void> {
+    const r = this.rows.get(args.id);
+    if (!r || r.accountId !== args.accountId || r.deletedAt !== null) return Promise.resolve();
+    this.rows.set(r.id, {
+      ...r,
+      lastSavedAt: args.at,
+      sizeBytes: args.sizeBytes !== undefined ? args.sizeBytes : r.sizeBytes,
+    });
     return Promise.resolve();
   }
 

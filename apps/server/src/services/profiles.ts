@@ -32,6 +32,15 @@ export interface ProfileRecord {
   /** UI metadata — short inline note, distinct from the create-time `description`. */
   note: string | null;
   lastUsedAt: Date | null;
+  /**
+   * doc-150 item 5 — byte size of the last saved sealed store (the opaque
+   * LZFSE + AES-GCM-256 blob). NULL = never saved / pre-column row / a harness
+   * that didn't emit `size_bytes`. Surfaced to the customer for per-profile
+   * storage + an account-wide total; quota enforcement is item 6.
+   */
+  sizeBytes: number | null;
+  /** doc-150 item 5 — last time the harness saved this profile's sealed store back. NULL = never saved. */
+  lastSavedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   /**
@@ -140,6 +149,13 @@ export interface ProfilesRepo {
   purgeTrashed(args: { id: string; accountId: string }): Promise<boolean>;
   /** Mark `last_used_at` — fire-and-forget from sessions service. */
   touch(args: { id: string; accountId: string; at: Date }): Promise<void>;
+  /**
+   * doc-150 item 5 — record a sealed-store save-back: stamp `last_saved_at` and
+   * (when the harness emitted it) the sealed-store `size_bytes`. Fire-and-forget
+   * from the profileSaved consumer; `sizeBytes` undefined leaves the column
+   * untouched (a pre-emit harness must not clobber a known size with NULL).
+   */
+  recordSave(args: { id: string; accountId: string; at: Date; sizeBytes?: number }): Promise<void>;
   /**
    * Read ONLY the wrapped DEK for a profile (file 57). Deliberately NOT on
    * ProfileRecord — the wrapped DEK is a secret that must never ride a record
