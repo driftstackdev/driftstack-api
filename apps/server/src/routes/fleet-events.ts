@@ -112,8 +112,6 @@ export async function registerFleetEventsRoutes(
         return;
       }
       const conn = deps.registry.register(nodeId, (data) => socket.send(data));
-      // TEMP [fleet-diag] (W2893) — root-causing the -1011 silent-link flap; remove once closed.
-      req.log.info({ nodeId }, '[fleet-diag] node connected (fleet WS upgraded)');
       socket.on('message', (data: WsMessageData) => conn.handleInbound(messageToString(data)));
       // Explicitly PONG every inbound ping from the node. With autoPong:false in
       // the plugin options, ws no longer auto-replies, so this is the single,
@@ -124,7 +122,6 @@ export async function registerFleetEventsRoutes(
       socket.on('ping', () => {
         try {
           socket.pong();
-          req.log.info({ nodeId }, '[fleet-diag] pong sent (replied to node ping)');
         } catch {
           // socket already closing — ignore
         }
@@ -140,7 +137,6 @@ export async function registerFleetEventsRoutes(
       const keepalive = setInterval(() => {
         try {
           socket.ping();
-          req.log.info({ nodeId }, '[fleet-diag] keepalive ping sent');
         } catch {
           // socket already closing — ignore
         }
