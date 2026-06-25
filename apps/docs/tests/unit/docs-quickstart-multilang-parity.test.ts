@@ -67,10 +67,12 @@ describe('W260.D docs/quickstart (multi-lang) ↔ live surface parity', () => {
     }
   });
 
-  it('Node + Python + Go version requirements line up with the per-SDK quickstarts', () => {
+  it('Node + Python + Go version requirements line up with the per-SDK quickstarts (2026-06-24: go.mod declares go 1.22, so the Go floor is 1.22+, was a stale 1.21+)', () => {
     expect(doc).toMatch(/Node\.js 18\+/);
     expect(doc).toMatch(/Python 3\.10\+/);
-    expect(doc).toMatch(/Go 1\.21\+/);
+    expect(doc).toMatch(/Go 1\.22\+/);
+    // The stale Go 1.21+ floor must NOT return.
+    expect(doc).not.toMatch(/Go 1\.21\+/);
   });
 
   it('cross-link targets exist', () => {

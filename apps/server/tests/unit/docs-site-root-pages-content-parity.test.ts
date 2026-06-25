@@ -71,7 +71,9 @@ describe('W600 apps/docs root pages content parity', () => {
       /This guide takes you from a fresh signup to your first iPhone Safari session\./,
     );
     expect(body).toMatch(/Allow about five minutes\./);
-    expect(body).toMatch(/- Node\.js 18\+, Python 3\.10\+, or Go 1\.21\+/);
+    // 2026-06-24: go.mod declares `go 1.22`, so the Go floor is 1.22+ (was a stale 1.21+).
+    expect(body).toMatch(/- Node\.js 18\+, Python 3\.10\+, or Go 1\.22\+/);
+    expect(body).not.toMatch(/Go 1\.21\+/);
     expect(body).toMatch(/^## 1\. Get an API key$/m);
     expect(body).toMatch(/^## 2\. Install the SDK$/m);
     expect(body).toMatch(/^## 3\. Run your first session$/m);

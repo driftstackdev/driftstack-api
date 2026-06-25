@@ -1,13 +1,14 @@
 // W512.B — drift guard for apps/marketing-site/src/pages/docs/sdk-typescript.astro.
 // V-703 TypeScript SDK quickstart. Drift here either changes the
 // @driftstack/sdk package name (would create marketing↔npm-registry
-// divergence) or shifts the ESM-only commitment (would mislead CJS
-// users who land here).
+// divergence) or shifts the dual-published (ESM + CommonJS)
+// commitment (would mislead CJS users who land here).
 //
 //   • V-703 doc-comment framing + V-680 posture + companion to
 //     /docs/api-quickstart + /docs/cli-quickstart.
 //   • Package: @driftstack/sdk (npm/bun/pnpm install matrix).
-//   • Node ≥ 20 + Bun ≥ 1.1 + Deno ≥ 1.40 + ESM-only commitment.
+//   • Node ≥ 20 + Bun ≥ 1.1 + Deno ≥ 1.40 + dual-published (ESM +
+//     CommonJS via conditional exports) commitment.
 //   • new Driftstack({ apiKey, baseUrl }) constructor + reusable.
 //   • Session lifecycle: creating → ready → busy → destroyed / errored.
 //   • sessions.create no target URL; navigate separately.
@@ -50,10 +51,12 @@ describe('W512.B apps/marketing-site/src/pages/docs/sdk-typescript.astro content
     expect(body).toMatch(/pnpm add @driftstack\/sdk/);
   });
 
-  it("Runtime floor + ESM-only commitment pinned: 'Node ≥ 20, Bun ≥ 1.1, and Deno ≥ 1.40 are supported. The SDK ships ESM-only; if you're still on CommonJS, use a dynamic import().' — pinned so the 3-runtime floor + ESM-only + dynamic-import fallback survive (drift to a different runtime floor would create marketing↔package.json engines divergence; drift to claiming CJS support would mislead about module format)", () => {
+  it("Runtime floor + dual-publish commitment pinned (2026-06-24): 'Node ≥ 20, Bun ≥ 1.1, and Deno ≥ 1.40 are supported. The package is dual-published (ESM + CommonJS via conditional exports); both import and require('@driftstack/sdk') work out of the box.' — pinned so the 3-runtime floor + dual-publish (ESM + CJS) commitment survive. The previous pin asserted 'ships ESM-only ... use a dynamic import()' but @driftstack/sdk is dual-published — packages/sdk-typescript/package.json has main './dist/index.cjs' + exports['.'].require './dist/index.cjs', so both import and require work; the stale claim misled CJS consumers. Drift to a different runtime floor would create marketing↔package.json engines divergence; drift back to an ESM-only claim would re-introduce the falsehood.", () => {
     expect(body).toMatch(
-      /Node ≥ 20, Bun ≥ 1\.1, and Deno ≥ 1\.40 are supported\. The SDK\s*\n?\s*ships ESM-only; if you're still on CommonJS, use a dynamic\s*\n?\s*<code>import\(\)<\/code>\./,
+      /Node ≥ 20, Bun ≥ 1\.1, and Deno ≥ 1\.40 are supported\. The\s*\n?\s*package is dual-published \(ESM \+ CommonJS via conditional\s*\n?\s*<code>exports<\/code>\); both <code>import<\/code> and\s*\n?\s*<code>require\('@driftstack\/sdk'\)<\/code> work out of the box\./,
     );
+    // The stale ESM-only / dynamic-import-required framing must NOT return.
+    expect(body).not.toMatch(/ships ESM-only/);
   });
 
   it("Constructor framing pinned: 'new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY!, ... })' + 'The constructor does not make any network calls. Reuse one client across your process — it is internally pooled and safe for concurrent use.' — pinned so the apiKey + baseUrl-override + no-network-on-construct + reuse-pooled-concurrent commitments survive (drift to claiming a network call at construct-time would mislead about init cost)", () => {

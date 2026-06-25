@@ -10,7 +10,7 @@ This guide takes you from a fresh signup to your first iPhone Safari session. Al
 
 - A Driftstack account ([sign up](https://app.driftstack.dev/signup) or [sign in](https://app.driftstack.dev/login))
 - An API key (created in the dashboard under **API keys**)
-- Node.js 18+, Python 3.10+, or Go 1.21+
+- Node.js 18+, Python 3.10+, or Go 1.22+
 
 ## 1. Get an API key
 

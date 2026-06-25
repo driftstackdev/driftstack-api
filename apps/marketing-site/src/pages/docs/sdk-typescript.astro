@@ -31,9 +31,10 @@ npm install @driftstack/sdk
 pnpm add @driftstack/sdk`}</code></pre>
 
     <p>
-      Node ≥ 20, Bun ≥ 1.1, and Deno ≥ 1.40 are supported. The SDK
-      ships ESM-only; if you're still on CommonJS, use a dynamic
-      <code>import()</code>.
+      Node ≥ 20, Bun ≥ 1.1, and Deno ≥ 1.40 are supported. The
+      package is dual-published (ESM + CommonJS via conditional
+      <code>exports</code>); both <code>import</code> and
+      <code>require('@driftstack/sdk')</code> work out of the box.
     </p>
 
     <h2>2. Construct the client</h2>

@@ -105,9 +105,14 @@ describe('W361.A /docs/sdk-typescript parity', () => {
     expect(body).toMatch(/~12 kB gzipped/);
   });
 
-  it('Node ≥ 20 / Bun ≥ 1.1 / Deno ≥ 1.40 + ESM-only posture pinned', () => {
+  it('Node ≥ 20 / Bun ≥ 1.1 / Deno ≥ 1.40 + dual-published (ESM + CommonJS) posture pinned (2026-06-24). The previous pin asserted "SDK ships ESM-only" but @driftstack/sdk is dual-published (package.json main ./dist/index.cjs + exports["."].require) so both import and require work — the prior claim misled CJS consumers.', () => {
     expect(body).toMatch(/Node ≥ 20, Bun ≥ 1\.1, and Deno ≥ 1\.40 are supported/);
-    expect(body).toMatch(/SDK\s+ships ESM-only/);
+    expect(body).toMatch(/package is dual-published \(ESM \+ CommonJS via conditional/);
+    expect(body).toMatch(
+      /both <code>import<\/code> and\s+<code>require\('@driftstack\/sdk'\)<\/code> work out of the box/,
+    );
+    // The stale ESM-only claim must NOT return.
+    expect(body).not.toMatch(/ships ESM-only/);
   });
 
   it('thread-safety + connection-pooling claim pinned (reuse-one-client guidance)', () => {

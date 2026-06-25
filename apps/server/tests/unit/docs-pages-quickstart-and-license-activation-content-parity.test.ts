@@ -42,14 +42,16 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     );
   });
 
-  it('CRITICAL quickstart 3-prerequisite list pinned — Driftstack account + API key + Node 18+/Python 3.10+/Go 1.21+. Drift to a different toolchain floor would mismatch W779 quickstart triplet.', () => {
+  it('CRITICAL quickstart 3-prerequisite list pinned — Driftstack account + API key + Node 18+/Python 3.10+/Go 1.22+. 2026-06-24: packages/sdk-go/go.mod declares `go 1.22`, so the Go floor is 1.22+ (was a stale 1.21+); matches the per-language quickstarts + installation.md. Drift to a different toolchain floor would mismatch W779 quickstart triplet.', () => {
     const p = read(QS);
 
     expect(p).toMatch(
       /A Driftstack account \(\[sign up\]\(https:\/\/app\.driftstack\.dev\/signup\) or \[sign in\]\(https:\/\/app\.driftstack\.dev\/login\)\)/,
     );
     expect(p).toMatch(/An API key \(created in the dashboard under \*\*API keys\*\*\)/);
-    expect(p).toMatch(/Node\.js 18\+, Python 3\.10\+, or Go 1\.21\+/);
+    expect(p).toMatch(/Node\.js 18\+, Python 3\.10\+, or Go 1\.22\+/);
+    // The stale Go 1.21+ floor must NOT return.
+    expect(p).not.toMatch(/Go 1\.21\+/);
   });
 
   it("CRITICAL quickstart ds_live_ key-prefix framing pinned. The 'API keys are scoped to the account that created them. The key prefix (ds_live_) tells you it\\'s a production key. Trial-pack and pre-billing accounts get the same key shape' wording matches W760 + W762 + W764 ds_live_/ds_test_ prefix contract.", () => {
