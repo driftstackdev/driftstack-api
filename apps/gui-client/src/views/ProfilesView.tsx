@@ -3510,7 +3510,11 @@ function CreateProfileModal({
                 disabled reference baselines — honest registry facts only. */}
                   <div className="grid grid-cols-3 gap-2">
                     {ARCHETYPE_REGISTRY.map((a) => {
-                      const selectable = a.status === 'launch';
+                      // Match the dropdown + KNOWN_ARCHETYPES: BOTH 'launch' and
+                      // 'available' archetypes are selectable + bit-exact (the grid was
+                      // missed in the SELECTABLE_STATUSES migration, so only iPhone 17
+                      // was clickable — the other 80 rendered as disabled "reference").
+                      const selectable = SELECTABLE_STATUSES.has(a.status);
                       const on = archetype === a.id;
                       return (
                         <button

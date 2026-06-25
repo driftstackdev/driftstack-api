@@ -103,4 +103,25 @@ describe('create-profile modal "Test proxy" draft validation', () => {
       expect.objectContaining({ host: 'proxy.example.com', port: 1080 }),
     );
   });
+
+  it('the device-card grid makes ALL selectable (launch+available) archetypes clickable — not only iPhone 17', async () => {
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    const open = await screen.findByRole('button', { name: 'Create your first profile' });
+    fireEvent.click(open);
+    // Device cards live on the default '📱 Identity' tab. Each card carries a
+    // '✓ bit-exact' (selectable) or 'reference' (disabled) badge; a card is clickable
+    // iff its status is in SELECTABLE_STATUSES {launch, available}. The grid previously
+    // gated on status==='launch', leaving only iPhone 17 clickable.
+    const bitExact = await screen.findAllByText('✓ bit-exact');
+    // The full catalog (1 launch + 80 available) → far more than one selectable card.
+    expect(bitExact.length).toBeGreaterThan(1);
+    // Each '✓ bit-exact' badge sits inside an ENABLED device-card button.
+    for (const badge of bitExact) {
+      const btn = badge.closest('button');
+      expect(btn).not.toBeNull();
+      expect(btn).not.toBeDisabled();
+    }
+    // The Randomize button is enabled (KNOWN_ARCHETYPES.length ≥ 2 now).
+    expect(screen.getByRole('button', { name: 'Randomize' })).not.toBeDisabled();
+  });
 });
