@@ -173,8 +173,12 @@ func (e *QuotaExceededError) Is(target error) bool { return target == ErrQuotaEx
 // and never does.
 type StorageQuotaExceededError struct {
 	apiError
-	UsedBytes int
-	CapBytes  int
+	// UsedBytes/CapBytes are int64: a tier's storage cap is GiB-scale and can
+	// exceed 2^31 bytes (e.g. api_scale = 250 GiB), so a 32-bit `int` would
+	// truncate the value on a 32-bit build (GOARCH=386/arm). int64 is exact on
+	// every target.
+	UsedBytes int64
+	CapBytes  int64
 	Tier      string
 }
 

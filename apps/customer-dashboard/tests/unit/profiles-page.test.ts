@@ -138,7 +138,13 @@ function makeRouter(profiles: Array<Record<string, unknown>>): (c: MockFetchCall
       profiles.push(created);
       return json({ id: created.id, name: created.name }, 201);
     }
-    if (/\/v1\/profiles$/.test(u) && method === 'GET') return json({ data: profiles });
+    // doc-150 item 6 — the page now fetches the FULL profile set via
+    // fetchAllProfiles, so the GET list carries `?limit=100` (and would carry a
+    // `&cursor=` on a second page). Match the path with an optional query string,
+    // and return has_more:false / next_cursor:null so the single-page walk
+    // terminates here (the test fixtures are all ≤ one page).
+    if (/\/v1\/profiles(\?|$)/.test(u) && method === 'GET')
+      return json({ data: profiles, has_more: false, next_cursor: null });
     // eslint-disable-next-line no-console
     console.warn('[profiles-page test] unrouted fetch:', method, u);
     return json({}, 500);
@@ -160,7 +166,7 @@ describe('profiles page — local integration', () => {
     });
     win = window;
     await flush();
-    expect(fetchCalls.some((c) => /\/v1\/profiles$/.test(c.url))).toBe(true);
+    expect(fetchCalls.some((c) => /\/v1\/profiles(\?|$)/.test(c.url))).toBe(true);
     expect(isHidden(window, '[data-empty]')).toBe(false);
     expect(isHidden(window, '[data-list]')).toBe(true);
   });

@@ -1373,6 +1373,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // create + ship its DEK in the dispatch. Wired unconditionally (the
       // validation runs even without the fleet CP).
       ...(deps.profilesService !== undefined ? { profilesService: deps.profilesService } : {}),
+      // doc-150 item 6 — account-auth repo for the per-account storage-quota gate
+      // on a profile-backed create (resolves the OWNER's tier for team-scoped
+      // launches, mirroring /v1/sessions). Same repo /v1/sessions uses.
+      authRepo: deps.authRepo,
       // ARC A: validate an owned proxy_id on create + resolve it (owner-scoped
       // unwrap + SSRF re-guard) into the dispatch's inlineProxyConfig.
       ...(deps.accountProxiesService !== undefined

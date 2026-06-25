@@ -9,7 +9,7 @@
 //      decompose → execute → transcript flow exercised.
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { PROBLEM_TYPES } from '@driftstack/api-types';
+import { PROBLEM_TYPES, TIER_STORAGE_BYTES_CAP } from '@driftstack/api-types';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
 describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)', () => {
@@ -1733,5 +1733,107 @@ describe('AI-D /v1/agent-sessions/* gui_control_key control-auth', () => {
       url: `/v1/agent-sessions/${id}`,
     });
     expect(res.statusCode).toBe(401);
+  });
+});
+
+// doc-150 item 6 — the SAME per-account storage-quota gate that POST /v1/sessions
+// enforces ALSO runs on POST /v1/agent-sessions when the create is profile-backed.
+// Without it, an over-cap account could keep minting profile-backed agent sessions
+// (each dispatch writes the R2 sealed blob → grows size_bytes) via this path,
+// bypassing the gate that only /v1/sessions had. Mirrors the
+// 'POST /v1/sessions storage quota (doc-150 item 6)' block in sessions.test.ts.
+describe('POST /v1/agent-sessions storage quota (doc-150 item 6)', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  // Create a profile via the API, then seed its sealed-store size directly on the
+  // repo (the harness emits size_bytes post-save; recordSave is that path).
+  async function createProfileWithSize(
+    fixture: TestAppFixture,
+    name: string,
+    sizeBytes: number,
+  ): Promise<string> {
+    const res = await fixture.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fixture.plaintext}` },
+      payload: { name },
+    });
+    if (res.statusCode !== 200)
+      throw new Error(`profile create failed ${String(res.statusCode)}: ${res.body}`);
+    const prefixed = res.json<{ id: string }>().id; // prof_<uuid>
+    const bareId = prefixed.replace(/^prof_/, '');
+    await fixture.profilesRepo.recordSave({
+      id: bareId,
+      accountId: fixture.accountId,
+      at: new Date(),
+      sizeBytes,
+    });
+    return prefixed;
+  }
+
+  it('409 storage_quota_exceeded when the account is at its hard cap + a profile is bound', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, tier: 'solo_manual' });
+    const profileId = await createProfileWithSize(
+      fx,
+      'fat-profile',
+      TIER_STORAGE_BYTES_CAP.solo_manual, // exactly at the cap → hard
+    );
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, profile_id: profileId },
+    });
+    expect(res.statusCode).toBe(409);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.type).toBe(PROBLEM_TYPES.StorageQuotaExceeded);
+    expect(body.used_bytes).toBe(TIER_STORAGE_BYTES_CAP.solo_manual);
+    expect(body.cap_bytes).toBe(TIER_STORAGE_BYTES_CAP.solo_manual);
+  });
+
+  it('201 when the account is UNDER the cap + a profile is bound', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, tier: 'solo_manual' });
+    const profileId = await createProfileWithSize(fx, 'lean-profile', 1024);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, profile_id: profileId },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('201 for enterprise over its cap — enterprise is soft-only (no hard block)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, tier: 'enterprise' });
+    const profileId = await createProfileWithSize(
+      fx,
+      'huge-profile',
+      TIER_STORAGE_BYTES_CAP.enterprise + 1, // over the soft floor
+    );
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, profile_id: profileId },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('201 with NO profile_id even when the account is over what would be its cap — no-profile is never gated', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, tier: 'solo_manual' });
+    // A fat profile on the account, but the create binds NO profile → the quota
+    // gate only applies to profile-backed launches, so it's never consulted.
+    await createProfileWithSize(fx, 'fat-profile', TIER_STORAGE_BYTES_CAP.solo_manual);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000 },
+    });
+    expect(res.statusCode).toBe(201);
   });
 });

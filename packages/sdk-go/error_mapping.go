@@ -214,9 +214,11 @@ func buildQuotaExceeded(base apiError, problem map[string]any, _ string) error {
 func buildStorageQuotaExceeded(base apiError, problem map[string]any, _ string) error {
 	tier, _ := problem["tier"].(string)
 	return &StorageQuotaExceededError{
-		apiError:  base,
-		UsedBytes: intFromProblem(problem, "used_bytes"),
-		CapBytes:  intFromProblem(problem, "cap_bytes"),
+		apiError: base,
+		// int64FromProblem (not intFromProblem) — a GiB-scale byte count can
+		// exceed 2^31, which a 32-bit int would truncate on a 32-bit build.
+		UsedBytes: int64FromProblem(problem, "used_bytes"),
+		CapBytes:  int64FromProblem(problem, "cap_bytes"),
 		Tier:      tier,
 	}
 }
@@ -234,6 +236,29 @@ func intFromProblem(m map[string]any, key string) int {
 	case json.Number:
 		if n, err := x.Int64(); err == nil {
 			return int(n)
+		}
+	}
+	return 0
+}
+
+// int64FromProblem mirrors intFromProblem but returns int64 so byte counts
+// that exceed 2^31 (GiB-scale storage caps) survive on 32-bit builds. Used for
+// the storage-quota fields, where a 32-bit int would truncate the value.
+func int64FromProblem(m map[string]any, key string) int64 {
+	v, ok := m[key]
+	if !ok {
+		return 0
+	}
+	switch x := v.(type) {
+	case float64:
+		return int64(x)
+	case int:
+		return int64(x)
+	case int64:
+		return x
+	case json.Number:
+		if n, err := x.Int64(); err == nil {
+			return n
 		}
 	}
 	return 0

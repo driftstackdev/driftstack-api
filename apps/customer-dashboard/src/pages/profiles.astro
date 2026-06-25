@@ -588,17 +588,22 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!iso) return '—';
         return new Date(iso).toISOString().slice(0, 10);
       }
-      // doc-150 item 5 — human-readable byte size. null/undefined → "—" (never
-      // saved). Decimal units (1000-based) to match how customers read storage
-      // ("12.3 MB"); 1 decimal place above KB. Negative / non-finite → "—".
+      // doc-150 item 5/6 — human-readable byte size. null/undefined → "—" (never
+      // saved). BINARY units (1024-based, KiB/MiB/GiB) so the quota cap renders
+      // the EXACT plan number: TIER_STORAGE_BYTES_CAP is declared in GiB
+      // (N * 2**30), so a decimal (1000-based) basis would show "1 GiB" as
+      // "1.1 GB" (~7% high) and overstate the customer's allowance. The used
+      // bytes go through this same function, so used + cap share one basis and
+      // the % / bar stay correct. 1 decimal place above KiB. Negative /
+      // non-finite → "—".
       function fmtBytes(n) {
         if (typeof n !== 'number' || !isFinite(n) || n < 0) return '—';
-        if (n < 1000) return n + ' B';
-        const units = ['KB', 'MB', 'GB', 'TB'];
-        let v = n / 1000;
+        if (n < 1024) return n + ' B';
+        const units = ['KiB', 'MiB', 'GiB', 'TiB'];
+        let v = n / 1024;
         let i = 0;
-        while (v >= 1000 && i < units.length - 1) {
-          v /= 1000;
+        while (v >= 1024 && i < units.length - 1) {
+          v /= 1024;
           i++;
         }
         return v.toFixed(1) + ' ' + units[i];
@@ -728,11 +733,34 @@ const apiBaseUrl = resolveApiBaseUrl();
         });
       }
 
+      // doc-150 item 6 — fetch the account's ENTIRE profile set by walking the
+      // cursor (`/v1/profiles` paginates at 50/default, 100/max). The storage
+      // meter sums size_bytes across ALL profiles, so a first-page-only fetch
+      // understated the used-bytes + the quota %/bar for accounts with >50
+      // profiles. We page at the 100 max to minimise round-trips, and cap the
+      // walk defensively so a server `has_more` that never clears can't loop
+      // forever (1000 pages × 100 = 100k profiles — far beyond any real tier).
+      function fetchAllProfiles() {
+        const all = [];
+        function page(cursor) {
+          const qs = '?limit=100' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
+          return authedFetch('/v1/profiles' + qs)
+            .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+            .then((body) => {
+              const data = (body && body.data) || [];
+              for (let i = 0; i < data.length; i++) all.push(data[i]);
+              if (body && body.has_more && body.next_cursor && all.length < 100000) {
+                return page(body.next_cursor);
+              }
+              return all;
+            });
+        }
+        return page(null);
+      }
+
       function refresh() {
         if (!token) return;
-        const profilesP = authedFetch('/v1/profiles')
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-          .then((body) => body.data || []);
+        const profilesP = fetchAllProfiles();
         const meP = authedFetch('/v1/account/me')
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .catch(() => null);

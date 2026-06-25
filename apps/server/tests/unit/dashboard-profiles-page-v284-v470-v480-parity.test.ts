@@ -208,10 +208,16 @@ describe('W752 dashboard /profiles page V-284 + V-470 + V-480 parity', () => {
     );
   });
 
-  it('CRITICAL parallel-fetch refresh — /v1/profiles + /v1/account/me run via Promise.all. The /v1/account/me failure is non-fatal (.catch(() => null)) so profile rendering keeps working.', () => {
+  it('CRITICAL parallel-fetch refresh — the FULL profile set (fetchAllProfiles, cursor-walked) + /v1/account/me run via Promise.all. The /v1/account/me failure is non-fatal (.catch(() => null)) so profile rendering keeps working.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/const profilesP = authedFetch\('\/v1\/profiles'\)/);
+    // doc-150 item 6 — profilesP fetches EVERY page (the storage meter sums all
+    // profiles' size_bytes; a first-page-only fetch understated the quota). The
+    // walk pages at the 100 max and follows next_cursor while has_more.
+    expect(p).toMatch(/const profilesP = fetchAllProfiles\(\);/);
+    expect(p).toMatch(/function fetchAllProfiles\(\) \{/);
+    expect(p).toMatch(/'\/v1\/profiles' \+ qs/);
+    expect(p).toMatch(/body\.has_more && body\.next_cursor/);
     expect(p).toMatch(
       /const meP = authedFetch\('\/v1\/account\/me'\)\s*\n\s+\.then\(\(r\) => \(r\.ok \? r\.json\(\) : Promise\.reject\(new Error\('HTTP ' \+ r\.status\)\)\)\)\s*\n\s+\.catch\(\(\) => null\);/,
     );

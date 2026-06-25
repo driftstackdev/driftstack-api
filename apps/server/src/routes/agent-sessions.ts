@@ -26,12 +26,14 @@ import {
   SendInputEventRequestSchema,
   ResumeSessionRequestSchema,
   type AgentModel,
+  type AccountTier,
 } from '@driftstack/api-types';
 import type { AgentRuntime } from '../services/agent-runtime.js';
 import { consequentialSignature } from '../services/agent-executor.js';
 import type { DecomposeUsage } from '../services/agent-decomposer.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { ProfilesService } from '../services/profiles.js';
+import type { AccountAuthRepo } from '../services/auth.js';
 import type { AccountProxiesService } from '../services/account-proxies.js';
 import type { SessionRepo } from '../services/sessions.js';
 import { buildAssignProfileBlock } from '../services/profile-store.js';
@@ -90,7 +92,7 @@ import {
   UnauthorizedError,
   ValidationError,
 } from '../lib/errors.js';
-import { resolveEffectiveAccount } from '../services/auth.js';
+import { resolveEffectiveAccount, type EffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
@@ -502,6 +504,16 @@ export interface AgentSessionsRoutesDeps {
    * unsupported (no profiles service to validate against).
    */
   profilesService?: ProfilesService;
+  /**
+   * doc-150 item 6 — account-auth repo, used to resolve the OWNER's tier for the
+   * per-account storage-quota gate on a profile-backed create. Mirrors how
+   * routes/sessions.ts obtains the owner tier: self-scoped uses the caller's own
+   * tier (ctx.account.tier), team-scoped (X-Driftstack-Account) looks the owner
+   * account up here. Wired alongside `profilesService`; when absent (or no
+   * profile_id on the create) the gate is skipped — a no-profile launch never
+   * grows persisted state, so it's never gated (parity with /v1/sessions).
+   */
+  authRepo?: AccountAuthRepo;
   /**
    * ARC A — per-account customer proxies service. When wired + a create carries
    * a `proxy_id`, the route validates ownership and the dispatch resolves it
@@ -999,6 +1011,7 @@ export function registerAgentSessionsRoutes(
     sessionLivenessStore,
     sessionDispatch,
     profilesService,
+    authRepo,
     accountProxiesService,
     driverSessionsRepo,
     r2,
@@ -1006,6 +1019,30 @@ export function registerAgentSessionsRoutes(
     relayMaxAccountInFlight = 16,
     uploadMaxAccountInFlightCount = 4,
   } = deps;
+
+  /**
+   * doc-150 item 6 — resolve the OWNER's tier for the storage-quota gate, mirroring
+   * routes/sessions.ts: self-scoped uses the caller's own tier; team-scoped (an
+   * admin acting under X-Driftstack-Account) looks the owner account up via authRepo,
+   * since the stored profiles + their quota belong to the owner. A missing owner (or
+   * no authRepo wired) is a Forbidden — we can't safely meter an account we can't read.
+   */
+  async function resolveOwnerTier(
+    ctx: NonNullable<FastifyRequest['account']>,
+    effective: EffectiveAccount,
+  ): Promise<AccountTier> {
+    if (effective.kind !== 'team') {
+      return ctx.account.tier;
+    }
+    if (authRepo === undefined) {
+      throw new ForbiddenError('Owner account tier is unavailable.');
+    }
+    const owner = await authRepo.getAccount(effective.accountId);
+    if (!owner) {
+      throw new ForbiddenError('Owner account no longer exists.');
+    }
+    return owner.tier;
+  }
 
   /** LK.4 — auto-mint a LiveKit token for the just-created (or
    *  replayed) agent session. Returns undefined when:
@@ -1221,6 +1258,22 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`Profile ${parsed.data.profile_id} not found.`);
         }
         await profilesService.get({ id: profileBareId, accountId: ownerAccountId });
+        // doc-150 item 6 — HARD per-account storage-quota gate. A profile-backed
+        // create is the point where NEW persisted state starts growing (the
+        // dispatch mints the R2 sealed-blob save-back URL → bumps size_bytes), so
+        // we refuse the launch (409 storage_quota_exceeded) BEFORE dispatch when
+        // the OWNER's aggregate profile size_bytes has reached its tier's hard
+        // cap. Mirrors routes/sessions.ts resolveProfileBinding exactly: the gate
+        // runs AFTER ownership is confirmed (we only meter the owner that actually
+        // owns the resolved profile) and uses the OWNER's tier — self-scoped is
+        // the caller's own tier; team-scoped looks the owner account up via
+        // authRepo. Enterprise is soft-only (never blocks — that's in the helper).
+        // A create WITHOUT a profile_id never reaches here, so it's never gated.
+        const ownerTier = await resolveOwnerTier(ctx, effective);
+        await profilesService.assertWithinStorageQuotaForLaunch({
+          accountId: ownerAccountId,
+          tier: ownerTier,
+        });
       }
 
       // ARC A — a supplied proxy_id MUST reference an owned proxy; validate
