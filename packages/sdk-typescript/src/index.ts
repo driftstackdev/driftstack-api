@@ -118,6 +118,7 @@ export {
   NotFoundError,
   PairModeConflictError,
   PairModeStateInvalidTransitionError,
+  ProxyValidationFailedError,
   RateLimitError,
   RevokedKeyError,
   SessionDestroyedError,

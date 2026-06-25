@@ -1,0 +1,441 @@
+// Founder directive #63 — CP-side LIVE proxy connectivity probe.
+//
+// "A proxy must be TESTED LIVE + validated BEFORE a profile launch — not just
+// asked. If the live test fails, BLOCK the launch with a clean specific error —
+// zero session dispatched, zero simulator spin-up."
+//
+// This is the server-side half. Given an already-resolved proxy (host / port /
+// protocol / credentials — the output of AccountProxiesService.resolveForDispatch,
+// owner-scoped + decrypted + SSRF-guarded), it CONNECTs THROUGH the proxy to a
+// stable neutral target and performs a real egress round-trip (a tiny HTTP GET).
+// It returns a typed result the launch gate maps to a clean 422 on failure or a
+// dispatch on success.
+//
+// Distinct from the GUI-side device probe (docs/internal/2026-06-12-proxy-probe-
+// backend-design.md): THAT probes device-only, locally-stored proxies through the
+// native Rust layer (privacy promise — never uploaded). THIS probes the SEPARATE
+// org-level proxy population the customer uploaded to the control plane on purpose
+// (account_proxies, resolved at dispatch). The design doc itself flags this as the
+// distinct "server-side probing of session-wired proxies … with consent" path —
+// uploading a proxy to the CP for dispatch IS that consent.
+//
+// Reuse, don't reinvent: the SocksProxyBackend already does a raw TCP CONNECT
+// pre-flight (proxy-backends/socks5.ts). That catches "wrong host/port/firewall"
+// but NOT "the proxy speaks SOCKS5", "the credentials are right", or "the proxy
+// can actually reach the internet". This probe goes the rest of the way — a full
+// SOCKS5 (or HTTP CONNECT) handshake plus an egress round-trip — which is exactly
+// what the founder asked for: validate the proxy WORKS, not just that the port is
+// open.
+//
+// Forward-compatible with A3's W2931 (post-dispatch box-reported egress failure):
+// the same { ok, reason } shape + the same ProxyValidationFailedError problem-type
+// surface a box-reported launch failure the same clean way. See the route gate.
+
+import { connect, type Socket } from 'node:net';
+import { classifyUnsafeHost } from '../lib/webhook-target-guard.js';
+
+/** Default neutral egress target. The Driftstack-owned exit-IP echo
+ *  (GET /v1/egress/echo) is the design-doc-recommended endpoint (option A):
+ *  Driftstack-operated (no third-party leak of customer exit IPs), tiny 2xx
+ *  response, already the established convention. Overridable via env so the
+ *  target can be retuned without a code change. */
+export const DEFAULT_PROBE_TARGET_URL = 'https://api.driftstack.dev/v1/egress/echo';
+
+/** Tight per-probe deadline. The whole live test (TCP connect + proxy handshake +
+ *  egress GET) must finish within this — a slow/half-open proxy is a `timeout`
+ *  failure, not a hung launch. Founder asked for ~6s. */
+export const DEFAULT_PROBE_TIMEOUT_MS = 6_000;
+
+/** Machine-readable failure enum. Mirrors ProxyValidationFailedError's `reason`
+ *  so the route gate maps one to the other 1:1, and A3's W2931 box-reported
+ *  failure can reuse the same vocabulary. */
+export type ProxyProbeReason = 'unreachable' | 'auth_failed' | 'timeout' | 'egress_blocked';
+
+export interface ProxyProbeResult {
+  ok: boolean;
+  reason?: ProxyProbeReason;
+  /** Human one-liner for logs / the 422 detail. Never contains credentials. */
+  detail?: string;
+}
+
+/** The minimal resolved-proxy shape the probe needs. A superset of
+ *  SocksProxyConfig (host/port/username/password) plus the protocol. The launch
+ *  gate adapts AccountProxiesService.resolveForDispatch's output into this. VPN
+ *  (openvpn/wireguard) schemes are NOT probed here — they tunnel at the box, not
+ *  via a CP-dialable proxy protocol; the gate skips the probe for them (see the
+ *  route). */
+export interface ProbeProxyDescriptor {
+  protocol: 'socks5' | 'http';
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+}
+
+export interface ProxyConnectivityProbeDeps {
+  /** Injectable dialer — opens a RAW TCP socket to (host, port). Tests pass a
+   *  deterministic stub (a paired in-memory socket / a rejecting one) so unit
+   *  tests never open real sockets. Default uses node:net connect(). */
+  dial?: (host: string, port: number, timeoutMs: number) => Promise<Socket>;
+  /** Probe deadline; default 6000ms. */
+  timeoutMs?: number;
+  /** Neutral egress target URL; default the Driftstack echo. */
+  targetUrl?: string;
+}
+
+/** Default dialer: a RAW TCP connect with a bounded deadline. Re-asserts the
+ *  connection-time SSRF guard (the SocksProxyBackend's defaultTcpProbe does the
+ *  same): a customer host that is a DOMAIN resolving to an internal IP slips the
+ *  literal-host guard, but the connected peer address is the real resolved IP —
+ *  reject it so the probe never reaches Driftstack's internal network. */
+function defaultDial(host: string, port: number, timeoutMs: number): Promise<Socket> {
+  return new Promise<Socket>((resolve, reject) => {
+    const socket = connect({ host, port }, () => {
+      clearTimeout(timer);
+      const peer = socket.remoteAddress;
+      if (peer !== undefined && classifyUnsafeHost(peer) !== null) {
+        socket.destroy();
+        reject(
+          new ProbeDialError('unreachable', `proxy host resolved to internal address ${peer}`),
+        );
+        return;
+      }
+      resolve(socket);
+    });
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new ProbeDialError('timeout', `timed out connecting to ${host}:${port}`));
+    }, timeoutMs);
+    socket.on('error', (err) => {
+      clearTimeout(timer);
+      reject(new ProbeDialError('unreachable', err.message));
+    });
+  });
+}
+
+/** A dial failure that already carries a classified probe reason (so the default
+ *  dialer can distinguish "timed out connecting" from "connection refused"). */
+export class ProbeDialError extends Error {
+  constructor(
+    readonly reason: ProxyProbeReason,
+    detail: string,
+  ) {
+    super(detail);
+    this.name = 'ProbeDialError';
+  }
+}
+
+/**
+ * CP-side live proxy connectivity probe. One public method, `probe`, returns a
+ * typed pass/fail. Never throws for an expected failure (unreachable / auth /
+ * timeout / egress-blocked) — those are `{ ok: false, reason }` so the gate maps
+ * them to a clean 422. A genuinely unexpected internal error (bug) propagates so
+ * it isn't silently swallowed into a false "ok".
+ */
+export class ProxyConnectivityProbe {
+  private readonly dial: (host: string, port: number, timeoutMs: number) => Promise<Socket>;
+  private readonly timeoutMs: number;
+  private readonly target: URL;
+
+  constructor(deps: ProxyConnectivityProbeDeps = {}) {
+    this.dial = deps.dial ?? defaultDial;
+    this.timeoutMs = deps.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
+    this.target = new URL(deps.targetUrl ?? DEFAULT_PROBE_TARGET_URL);
+  }
+
+  async probe(proxy: ProbeProxyDescriptor): Promise<ProxyProbeResult> {
+    const targetHost = this.target.hostname;
+    const targetPort = this.target.port !== '' ? Number(this.target.port) : 443;
+    const useTls = this.target.protocol === 'https:';
+
+    let socket: Socket;
+    try {
+      socket = await this.dial(proxy.host, proxy.port, this.timeoutMs);
+    } catch (err) {
+      if (err instanceof ProbeDialError) {
+        return { ok: false, reason: err.reason, detail: err.message };
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      return { ok: false, reason: 'unreachable', detail: message };
+    }
+
+    // A single deadline spans the whole post-connect exchange (handshake +
+    // egress round-trip). On expiry, destroy the socket → any pending read
+    // rejects → `timeout`.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        socket.destroy();
+        reject(new ProbeDialError('timeout', `proxy did not complete the round-trip in time`));
+      }, this.timeoutMs);
+    });
+
+    try {
+      const result = await Promise.race([
+        proxy.protocol === 'socks5'
+          ? this.runSocks5RoundTrip(socket, proxy, targetHost, targetPort, useTls)
+          : this.runHttpRoundTrip(socket, proxy, targetHost, targetPort, useTls),
+        deadline,
+      ]);
+      return result;
+    } catch (err) {
+      if (err instanceof ProbeDialError) {
+        return { ok: false, reason: err.reason, detail: err.message };
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      return { ok: false, reason: 'egress_blocked', detail: message };
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      socket.destroy();
+    }
+  }
+
+  // ── SOCKS5 ────────────────────────────────────────────────────────────────
+  // RFC 1928 greeting + (RFC 1929) username/password auth + CONNECT, then the
+  // egress round-trip over the tunneled socket.
+  private async runSocks5RoundTrip(
+    socket: Socket,
+    proxy: ProbeProxyDescriptor,
+    targetHost: string,
+    targetPort: number,
+    useTls: boolean,
+  ): Promise<ProxyProbeResult> {
+    const reader = new SocketReader(socket);
+    const hasAuth = proxy.username !== undefined && proxy.password !== undefined;
+
+    // Greeting: VER=5, advertise NO-AUTH (0x00) and, when we have creds,
+    // USERNAME/PASSWORD (0x02).
+    const methods = hasAuth ? [0x00, 0x02] : [0x00];
+    socket.write(Buffer.from([0x05, methods.length, ...methods]));
+    const methodSel = await reader.read(2);
+    if (methodSel[0] !== 0x05) {
+      return { ok: false, reason: 'unreachable', detail: 'not a SOCKS5 proxy (bad version byte)' };
+    }
+    const chosen = methodSel[1] ?? 0xff;
+    if (chosen === 0xff) {
+      // No acceptable method — the proxy wants auth we didn't (or couldn't) offer.
+      return {
+        ok: false,
+        reason: 'auth_failed',
+        detail: 'proxy requires authentication that was not supplied',
+      };
+    }
+    if (chosen === 0x02) {
+      if (!hasAuth) {
+        return {
+          ok: false,
+          reason: 'auth_failed',
+          detail: 'proxy demanded username/password auth but none was configured',
+        };
+      }
+      const user = Buffer.from(proxy.username as string, 'utf8');
+      const pass = Buffer.from(proxy.password as string, 'utf8');
+      socket.write(Buffer.from([0x01, user.length, ...user, pass.length, ...pass]));
+      const authResp = await reader.read(2);
+      // RFC 1929: STATUS 0x00 = success; anything else = bad credentials.
+      if ((authResp[1] ?? 0xff) !== 0x00) {
+        return { ok: false, reason: 'auth_failed', detail: 'proxy rejected the credentials' };
+      }
+    } else if (chosen !== 0x00) {
+      return {
+        ok: false,
+        reason: 'unreachable',
+        detail: `proxy selected an unsupported auth method (0x${chosen.toString(16)})`,
+      };
+    }
+
+    // CONNECT to the target by DOMAINNAME (ATYP 0x03) so DNS resolves at the
+    // proxy's exit — matches the dispatch's require_remote_dns posture (no local
+    // resolver leak) and probes the proxy's own egress resolver.
+    const hostBytes = Buffer.from(targetHost, 'utf8');
+    const req = Buffer.from([
+      0x05, // VER
+      0x01, // CMD = CONNECT
+      0x00, // RSV
+      0x03, // ATYP = DOMAINNAME
+      hostBytes.length,
+      ...hostBytes,
+      (targetPort >> 8) & 0xff,
+      targetPort & 0xff,
+    ]);
+    socket.write(req);
+    // Reply: VER REP RSV ATYP + BND.ADDR + BND.PORT. Read the fixed head then the
+    // variable address by ATYP.
+    const replyHead = await reader.read(4);
+    const rep = replyHead[1] ?? 0xff;
+    if (rep !== 0x00) {
+      // REP != succeeded. 0x05 = connection refused by host, etc. — the proxy
+      // reached the upstream attempt but egress failed.
+      return {
+        ok: false,
+        reason: 'egress_blocked',
+        detail: `proxy CONNECT failed (SOCKS5 reply 0x${rep.toString(16)})`,
+      };
+    }
+    const atyp = replyHead[3];
+    const addrLen = atyp === 0x01 ? 4 : atyp === 0x04 ? 16 : ((await reader.read(1))[0] ?? 0);
+    await reader.read(addrLen + 2); // BND.ADDR + BND.PORT, discarded
+
+    return this.egressRoundTrip(socket, reader, targetHost, targetPort, useTls);
+  }
+
+  // ── HTTP CONNECT ────────────────────────────────────────────────────────────
+  // For an HTTP proxy: issue an HTTP CONNECT to tunnel to the target, then the
+  // egress round-trip over the tunnel.
+  private async runHttpRoundTrip(
+    socket: Socket,
+    proxy: ProbeProxyDescriptor,
+    targetHost: string,
+    targetPort: number,
+    useTls: boolean,
+  ): Promise<ProxyProbeResult> {
+    const reader = new SocketReader(socket);
+    const authority = `${targetHost}:${targetPort}`;
+    let connectReq = `CONNECT ${authority} HTTP/1.1\r\nHost: ${authority}\r\n`;
+    if (proxy.username !== undefined && proxy.password !== undefined) {
+      const creds = Buffer.from(`${proxy.username}:${proxy.password}`, 'utf8').toString('base64');
+      connectReq += `Proxy-Authorization: Basic ${creds}\r\n`;
+    }
+    connectReq += '\r\n';
+    socket.write(connectReq);
+
+    const head = await reader.readUntil('\r\n\r\n');
+    const statusLine = head.split('\r\n')[0] ?? '';
+    const statusMatch = /\s(\d{3})\s/.exec(` ${statusLine} `);
+    const status = statusMatch ? Number(statusMatch[1]) : 0;
+    if (status === 407 || status === 401) {
+      return { ok: false, reason: 'auth_failed', detail: 'proxy rejected the credentials (407)' };
+    }
+    if (status < 200 || status >= 300) {
+      return {
+        ok: false,
+        reason: status === 0 ? 'unreachable' : 'egress_blocked',
+        detail: `proxy CONNECT returned "${statusLine.trim()}"`,
+      };
+    }
+
+    return this.egressRoundTrip(socket, reader, targetHost, targetPort, useTls);
+  }
+
+  // ── egress round-trip ─────────────────────────────────────────────────────
+  // Over the now-tunneled socket, do a real HTTP request to the neutral target
+  // and require a 2xx/3xx status line back — proving the proxy can actually reach
+  // the internet, not merely accept a CONNECT. We send a bare HTTP/1.1 GET; for an
+  // https target this would need a TLS handshake over the tunnel, which a raw
+  // socket can't do alone — so we upgrade with node:tls when useTls. Tests inject
+  // a paired socket that answers the GET directly (the dial stub), so the TLS
+  // upgrade only runs against a real https target.
+  private async egressRoundTrip(
+    socket: Socket,
+    reader: SocketReader,
+    targetHost: string,
+    _targetPort: number,
+    useTls: boolean,
+  ): Promise<ProxyProbeResult> {
+    let stream: Socket = socket;
+    let streamReader: SocketReader = reader;
+    if (useTls) {
+      // Upgrade the tunneled socket to TLS (SNI = target host). Lazy-import so the
+      // unit tests (which use a plaintext paired socket + useTls=false) don't pull
+      // node:tls. Any handshake failure = the proxy's egress can't complete TLS.
+      const tls = await import('node:tls');
+      stream = await new Promise<Socket>((resolve, reject) => {
+        const tlsSocket = tls.connect({ socket, servername: targetHost }, () => resolve(tlsSocket));
+        tlsSocket.on('error', (err: Error) =>
+          reject(new ProbeDialError('egress_blocked', err.message)),
+        );
+      });
+      streamReader = new SocketReader(stream);
+    }
+
+    const reqPath = this.target.pathname + this.target.search;
+    stream.write(
+      `GET ${reqPath} HTTP/1.1\r\nHost: ${targetHost}\r\nUser-Agent: driftstack-proxy-probe\r\nAccept: */*\r\nConnection: close\r\n\r\n`,
+    );
+    const head = await streamReader.readUntil('\r\n');
+    const statusMatch = /HTTP\/1\.[01]\s(\d{3})/.exec(head);
+    const status = statusMatch ? Number(statusMatch[1]) : 0;
+    if (status >= 200 && status < 400) {
+      return { ok: true };
+    }
+    return {
+      ok: false,
+      reason: status === 0 ? 'egress_blocked' : 'egress_blocked',
+      detail: `egress round-trip returned status ${status || 'none'}`,
+    };
+  }
+}
+
+/**
+ * Buffered reader over a node Socket. The probe needs to read EXACT byte counts
+ * (SOCKS5 framing) and read-until-delimiter (HTTP head) off a stream that delivers
+ * arbitrary chunks. This collects incoming data and resolves reads as enough
+ * arrives; a socket close/error before a read completes rejects it (mapped to a
+ * probe failure by the caller).
+ */
+class SocketReader {
+  private buf: Buffer = Buffer.alloc(0);
+  private waiter: (() => void) | null = null;
+  private closed = false;
+  private errored: Error | null = null;
+
+  constructor(socket: Socket) {
+    socket.on('data', (chunk: Buffer) => {
+      this.buf = Buffer.concat([this.buf, chunk]);
+      this.wake();
+    });
+    socket.on('end', () => {
+      this.closed = true;
+      this.wake();
+    });
+    socket.on('close', () => {
+      this.closed = true;
+      this.wake();
+    });
+    socket.on('error', (err: Error) => {
+      this.errored = err;
+      this.wake();
+    });
+  }
+
+  private wake(): void {
+    const w = this.waiter;
+    this.waiter = null;
+    w?.();
+  }
+
+  /** Read EXACTLY n bytes (consuming them from the buffer). */
+  async read(n: number): Promise<Buffer> {
+    while (this.buf.length < n) {
+      if (this.errored !== null) throw new ProbeDialError('egress_blocked', this.errored.message);
+      if (this.closed)
+        throw new ProbeDialError('egress_blocked', 'proxy closed the connection mid-handshake');
+      await new Promise<void>((resolve) => {
+        this.waiter = resolve;
+      });
+    }
+    const out = this.buf.subarray(0, n);
+    this.buf = this.buf.subarray(n);
+    return out;
+  }
+
+  /** Read until `delimiter` appears, returning everything up to AND including it. */
+  async readUntil(delimiter: string): Promise<string> {
+    const delim = Buffer.from(delimiter, 'utf8');
+    for (;;) {
+      const idx = this.buf.indexOf(delim);
+      if (idx !== -1) {
+        const end = idx + delim.length;
+        const out = this.buf.subarray(0, end).toString('utf8');
+        this.buf = this.buf.subarray(end);
+        return out;
+      }
+      if (this.errored !== null) throw new ProbeDialError('egress_blocked', this.errored.message);
+      if (this.closed)
+        throw new ProbeDialError('egress_blocked', 'proxy closed the connection before a response');
+      await new Promise<void>((resolve) => {
+        this.waiter = resolve;
+      });
+    }
+  }
+}

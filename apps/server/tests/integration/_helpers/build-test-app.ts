@@ -106,6 +106,7 @@ import { InMemoryStripeWebhooksRepo } from './in-memory-stripe-webhooks-repo.js'
 import { InMemoryProfilesRepo } from './in-memory-profiles-repo.js';
 import { InMemoryAccountProxiesRepo } from '../../../src/db/account-proxies-repo.js';
 import { AccountProxiesService } from '../../../src/services/account-proxies.js';
+import type { ProxyConnectivityProbe } from '../../../src/services/proxy-connectivity-probe.js';
 import { InMemoryProfileSnapshotsRepo } from './in-memory-profile-snapshots-repo.js';
 import { InMemoryBillingProvider, InMemoryBillingRepo } from './in-memory-billing.js';
 import { BillingService } from '../../../src/services/billing.js';
@@ -325,6 +326,18 @@ export interface TestAppOptions {
    * (matches prod posture until founder flips the LLM key path on).
    */
   enableAgentRuntime?: boolean;
+  /**
+   * Founder directive #63 — inject a CP-side live proxy connectivity probe so the
+   * pre-launch gate runs in tests. Omitted → no probe wired → the gate is a no-op
+   * (matches today's behaviour; the existing proxy_id → 201 tests stay green).
+   * The gate tests pass a stub whose `.probe()` returns pass/fail/timeout.
+   */
+  proxyConnectivityProbe?: ProxyConnectivityProbe;
+  /**
+   * Founder directive #63 — override the pre-launch probe on/off flag in tests
+   * (default true in the route, ON in prod). Lets a test assert the disable path.
+   */
+  proxyPrelaunchProbeEnabled?: boolean;
   /**
    * v2-#18 — when `true` AND `enableAgentRuntime` is also `true`,
    * AgentRuntime is wired with a capturing usage recorder that
@@ -1463,6 +1476,14 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     profilesRepo,
     accountProxiesRepo,
     accountProxiesService,
+    // Founder directive #63 — CP-side live proxy pre-launch probe. Only wired when
+    // a test injects a stub (default: unwired → gate no-op, today's behaviour).
+    ...(opts.proxyConnectivityProbe !== undefined
+      ? { proxyConnectivityProbe: opts.proxyConnectivityProbe }
+      : {}),
+    ...(opts.proxyPrelaunchProbeEnabled !== undefined
+      ? { proxyPrelaunchProbeEnabled: opts.proxyPrelaunchProbeEnabled }
+      : {}),
     profileMasterKey: proxyMasterKey,
     // ARC A slice 4b — deterministic probe so the proxy test endpoint doesn't
     // open real sockets: TEST-NET hosts (203.0.113.x) resolve, anything else

@@ -1,0 +1,282 @@
+// Founder directive #63 — unit tests for the CP-side live proxy connectivity
+// probe. The probe CONNECTs THROUGH a proxy (SOCKS5 / HTTP CONNECT) to a neutral
+// target + does a real egress round-trip; on failure the launch gate maps the
+// typed reason to a clean 422 (no dispatch).
+//
+// We don't open real outbound sockets. A local TCP server plays the role of the
+// PROXY: the probe's injected dialer connects to it, the server speaks a scripted
+// SOCKS5 / HTTP-CONNECT handshake + a canned egress HTTP response. This exercises
+// the real handshake bytes (pass), the auth-reject framing (auth_failed), and the
+// CONNECT-refused framing (egress_blocked). Connect-level failures (refused /
+// timeout) use a rejecting dial stub.
+
+import { createServer, connect, type Server, type Socket } from 'node:net';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  ProxyConnectivityProbe,
+  ProbeDialError,
+  type ProbeProxyDescriptor,
+} from '../../src/services/proxy-connectivity-probe.js';
+
+// Plaintext HTTP target (useTls=false) so the egress round-trip stays on the raw
+// tunneled socket — no TLS upgrade in unit tests.
+const TARGET = 'http://probe-target.test/v1/egress/echo';
+
+const SOCKS5_PROXY: ProbeProxyDescriptor = {
+  protocol: 'socks5',
+  host: '127.0.0.1', // overwritten per-test with the fake-proxy port host
+  port: 0,
+};
+
+const servers: Server[] = [];
+// net.Server has no closeAllConnections (that's http.Server) — track accepted
+// sockets ourselves so the silent-proxy timeout test doesn't leave one hanging
+// and stall server.close().
+const liveSockets = new Set<Socket>();
+
+afterEach(async () => {
+  for (const s of liveSockets) s.destroy();
+  liveSockets.clear();
+  await Promise.all(servers.splice(0).map((s) => new Promise<void>((r) => s.close(() => r()))));
+});
+
+/** Spin a local TCP server that runs `handler` on each connection, then return a
+ *  dialer that connects to it (so the probe dials the fake proxy, not the real
+ *  internet). */
+async function fakeProxy(handler: (sock: Socket) => void): Promise<{
+  dial: (host: string, port: number, timeoutMs: number) => Promise<Socket>;
+}> {
+  const server = createServer((sock) => {
+    liveSockets.add(sock);
+    sock.on('close', () => liveSockets.delete(sock));
+    handler(sock);
+  });
+  servers.push(server);
+  await new Promise<void>((res) => server.listen(0, '127.0.0.1', res));
+  const addr = server.address();
+  const port = typeof addr === 'object' && addr !== null ? addr.port : 0;
+  const dial = (_host: string, _port: number): Promise<Socket> =>
+    new Promise<Socket>((resolve, reject) => {
+      const s = connect({ host: '127.0.0.1', port }, () => resolve(s));
+      s.on('error', reject);
+    });
+  return { dial };
+}
+
+const EGRESS_204 = 'HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n';
+const EGRESS_200 =
+  'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}';
+
+describe('ProxyConnectivityProbe — SOCKS5', () => {
+  it('PASS: no-auth handshake + CONNECT success + 2xx egress round-trip → { ok: true }', async () => {
+    const { dial } = await fakeProxy((sock) => {
+      let step = 0;
+      sock.on('data', (chunk) => {
+        if (step === 0) {
+          // greeting: VER=5, n methods… → choose NO-AUTH (0x00)
+          expect(chunk[0]).toBe(0x05);
+          sock.write(Buffer.from([0x05, 0x00]));
+          step = 1;
+        } else if (step === 1) {
+          // CONNECT request → reply succeeded (REP=0x00) with a dummy bound addr
+          expect(chunk[1]).toBe(0x01); // CMD = CONNECT
+          sock.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
+          step = 2;
+        } else {
+          // tunneled HTTP GET → canned 204
+          sock.write(EGRESS_204);
+        }
+      });
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe(SOCKS5_PROXY);
+    expect(res).toEqual({ ok: true });
+  });
+
+  it('PASS: username/password auth accepted (RFC 1929 status 0x00) → { ok: true }', async () => {
+    const { dial } = await fakeProxy((sock) => {
+      let step = 0;
+      sock.on('data', (chunk) => {
+        if (step === 0) {
+          // greeting advertises NO-AUTH + USER/PASS → choose USER/PASS (0x02)
+          expect(Array.from(chunk.subarray(2))).toContain(0x02);
+          sock.write(Buffer.from([0x05, 0x02]));
+          step = 1;
+        } else if (step === 1) {
+          // username/password sub-negotiation → STATUS 0x00 (success)
+          expect(chunk[0]).toBe(0x01); // auth VER
+          sock.write(Buffer.from([0x01, 0x00]));
+          step = 2;
+        } else if (step === 2) {
+          sock.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
+          step = 3;
+        } else {
+          sock.write(EGRESS_200);
+        }
+      });
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe({ ...SOCKS5_PROXY, username: 'alice', password: 'pw' });
+    expect(res).toEqual({ ok: true });
+  });
+
+  it('AUTH_FAILED: proxy rejects the credentials (RFC 1929 status != 0) → { ok:false, auth_failed }', async () => {
+    const { dial } = await fakeProxy((sock) => {
+      let step = 0;
+      sock.on('data', () => {
+        if (step === 0) {
+          sock.write(Buffer.from([0x05, 0x02])); // choose USER/PASS
+          step = 1;
+        } else {
+          sock.write(Buffer.from([0x01, 0x01])); // STATUS=0x01 → bad creds
+          step = 2;
+        }
+      });
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe({ ...SOCKS5_PROXY, username: 'alice', password: 'wrong' });
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('auth_failed');
+  });
+
+  it('AUTH_FAILED: proxy offers no acceptable method (0xff) → { ok:false, auth_failed }', async () => {
+    const { dial } = await fakeProxy((sock) => {
+      sock.on('data', () => sock.write(Buffer.from([0x05, 0xff])));
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe(SOCKS5_PROXY);
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('auth_failed');
+  });
+
+  it('EGRESS_BLOCKED: CONNECT reply REP != 0 (proxy connected but upstream failed) → { ok:false, egress_blocked }', async () => {
+    const { dial } = await fakeProxy((sock) => {
+      let step = 0;
+      sock.on('data', () => {
+        if (step === 0) {
+          sock.write(Buffer.from([0x05, 0x00]));
+          step = 1;
+        } else {
+          // REP=0x05 connection refused by destination host
+          sock.write(Buffer.from([0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
+          step = 2;
+        }
+      });
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe(SOCKS5_PROXY);
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('egress_blocked');
+  });
+
+  it('UNREACHABLE: first byte is not SOCKS5 version 5 (not a SOCKS5 proxy) → { ok:false, unreachable }', async () => {
+    const { dial } = await fakeProxy((sock) => {
+      sock.on('data', () => sock.write(Buffer.from([0x04, 0x00]))); // SOCKS4-ish / garbage
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe(SOCKS5_PROXY);
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('unreachable');
+  });
+
+  it('EGRESS_BLOCKED: tunnel established but egress GET returns 5xx → { ok:false, egress_blocked }', async () => {
+    const { dial } = await fakeProxy((sock) => {
+      let step = 0;
+      sock.on('data', () => {
+        if (step === 0) {
+          sock.write(Buffer.from([0x05, 0x00]));
+          step = 1;
+        } else if (step === 1) {
+          sock.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
+          step = 2;
+        } else {
+          sock.write('HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n');
+        }
+      });
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe(SOCKS5_PROXY);
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('egress_blocked');
+  });
+});
+
+describe('ProxyConnectivityProbe — HTTP CONNECT', () => {
+  const HTTP_PROXY: ProbeProxyDescriptor = { protocol: 'http', host: '127.0.0.1', port: 0 };
+
+  it('PASS: 200 CONNECT + 2xx egress round-trip → { ok: true }', async () => {
+    const { dial } = await fakeProxy((sock) => {
+      let connected = false;
+      sock.on('data', (chunk) => {
+        const text = chunk.toString('utf8');
+        if (!connected && text.startsWith('CONNECT')) {
+          sock.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+          connected = true;
+        } else {
+          sock.write(EGRESS_204);
+        }
+      });
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe(HTTP_PROXY);
+    expect(res).toEqual({ ok: true });
+  });
+
+  it('AUTH_FAILED: 407 Proxy Authentication Required → { ok:false, auth_failed }', async () => {
+    const { dial } = await fakeProxy((sock) => {
+      sock.on('data', () =>
+        sock.write('HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 0\r\n\r\n'),
+      );
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe({ ...HTTP_PROXY, username: 'a', password: 'b' });
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('auth_failed');
+  });
+
+  it('EGRESS_BLOCKED: CONNECT 502 (proxy reached but upstream refused) → { ok:false, egress_blocked }', async () => {
+    const { dial } = await fakeProxy((sock) => {
+      sock.on('data', () => sock.write('HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n'));
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe(HTTP_PROXY);
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('egress_blocked');
+  });
+});
+
+describe('ProxyConnectivityProbe — connect-level failures (rejecting dial stub)', () => {
+  const PROXY: ProbeProxyDescriptor = { protocol: 'socks5', host: '203.0.113.9', port: 1080 };
+
+  it('UNREACHABLE: dial rejects with connection-refused → { ok:false, unreachable }', async () => {
+    const dial = (): Promise<Socket> =>
+      Promise.reject(new ProbeDialError('unreachable', 'ECONNREFUSED'));
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe(PROXY);
+    expect(res).toMatchObject({ ok: false, reason: 'unreachable' });
+  });
+
+  it('TIMEOUT: dial rejects with a classified timeout → { ok:false, timeout }', async () => {
+    const dial = (): Promise<Socket> =>
+      Promise.reject(new ProbeDialError('timeout', 'connect timed out'));
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe(PROXY);
+    expect(res).toMatchObject({ ok: false, reason: 'timeout' });
+  });
+
+  it('UNREACHABLE: a plain (unclassified) dial error defaults to unreachable', async () => {
+    const dial = (): Promise<Socket> => Promise.reject(new Error('getaddrinfo ENOTFOUND'));
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe(PROXY);
+    expect(res).toMatchObject({ ok: false, reason: 'unreachable' });
+  });
+
+  it('TIMEOUT: a proxy that connects but never answers the handshake trips the deadline', async () => {
+    const { dial } = await fakeProxy(() => {
+      /* accept the socket, then say nothing — the post-connect deadline fires */
+    });
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET, timeoutMs: 80 });
+    const res = await probe.probe({ protocol: 'socks5', host: '127.0.0.1', port: 0 });
+    expect(res).toMatchObject({ ok: false, reason: 'timeout' });
+  });
+});

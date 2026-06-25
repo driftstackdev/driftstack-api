@@ -68,6 +68,7 @@ import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import type { AccountProxiesRepo } from '../db/account-proxies-repo.js';
 import type { AccountProxiesService } from '../services/account-proxies.js';
+import type { ProxyConnectivityProbe } from '../services/proxy-connectivity-probe.js';
 import { registerAccountMeRoutes } from '../routes/account-me.js';
 import { registerAccountWebSessionsRoutes } from '../routes/account-web-sessions.js';
 import { registerAccountMfaRoutes } from '../routes/account-mfa.js';
@@ -545,6 +546,13 @@ export interface AppDeps {
   /** ARC A: proxies service — validates proxy_id on agent-session create +
    *  resolves it (owner-scoped unwrap + SSRF re-guard) into the dispatch. */
   accountProxiesService?: AccountProxiesService;
+  /** Founder directive #63: CP-side live proxy connectivity probe — gates a
+   *  proxied agent-session launch on a real egress round-trip BEFORE dispatch.
+   *  Wired in bootstrap; tests inject a stub-dial instance. */
+  proxyConnectivityProbe?: ProxyConnectivityProbe;
+  /** Founder directive #63: master switch for the pre-launch probe (ON by default
+   *  in bootstrap via DRIFTSTACK_PROXY_PRELAUNCH_PROBE; set 0 to disable). */
+  proxyPrelaunchProbeEnabled?: boolean;
   /** ARC A slice 4b: injectable TCP-reachability probe for the proxy test
    *  endpoint (tests inject a deterministic stub; prod uses the default). */
   proxyTcpProbe?: (host: string, port: number, timeoutMs: number) => Promise<void>;
@@ -1394,6 +1402,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // unwrap + SSRF re-guard) into the dispatch's inlineProxyConfig.
       ...(deps.accountProxiesService !== undefined
         ? { accountProxiesService: deps.accountProxiesService }
+        : {}),
+      // Founder directive #63: TEST the proxy LIVE before creating the session +
+      // dispatching a worker. When the probe is wired, a proxied create is gated
+      // on a real egress round-trip; a failure blocks the launch with a 422 (no
+      // dispatch). The flag (ON by default) lets a deployment disable it.
+      ...(deps.proxyConnectivityProbe !== undefined
+        ? { proxyConnectivityProbe: deps.proxyConnectivityProbe }
+        : {}),
+      ...(deps.proxyPrelaunchProbeEnabled !== undefined
+        ? { proxyPrelaunchProbeEnabled: deps.proxyPrelaunchProbeEnabled }
         : {}),
       // Strict-FK: validate an owned driftstack_session_id on create (closes the
       // latent cross-account pointer gap). The driver SessionRepo is the same

@@ -48,6 +48,8 @@ var problemTypeToFactory = map[string]func(base apiError, problem map[string]any
 	// Arc 2 sub-slice 8.10 (v2-#8) — pair-mode 409 paths.
 	"https://errors.driftstack.dev/pair-mode-conflict":           buildPairModeConflict,
 	"https://errors.driftstack.dev/pair-mode-invalid-transition": buildPairModeInvalidTransition,
+	// Live pre-launch proxy validation (422 at launch).
+	"https://errors.driftstack.dev/proxy-validation-failed": buildProxyValidationFailed,
 }
 
 // errorFromResponse parses an HTTP response body as RFC 7807
@@ -221,6 +223,11 @@ func buildStorageQuotaExceeded(base apiError, problem map[string]any, _ string) 
 		CapBytes:  int64FromProblem(problem, "cap_bytes"),
 		Tier:      tier,
 	}
+}
+
+func buildProxyValidationFailed(base apiError, problem map[string]any, _ string) error {
+	reason, _ := problem["reason"].(string)
+	return &ProxyValidationFailedError{apiError: base, Reason: reason}
 }
 
 func intFromProblem(m map[string]any, key string) int {

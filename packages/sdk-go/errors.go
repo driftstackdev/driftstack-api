@@ -82,6 +82,8 @@ var (
 	// Arc 2 sub-slice 8.10 (v2-#8) — pair-mode 409 paths.
 	ErrPairModeConflict               = errors.New("pair-mode takeover already in flight")
 	ErrPairModeStateInvalidTransition = errors.New("invalid pair-mode transition")
+	// Live pre-launch proxy validation (422 at launch).
+	ErrProxyValidationFailed = errors.New("proxy validation failed")
 )
 
 // AuthError covers any of the auth-related problem types. Use the
@@ -183,6 +185,21 @@ type StorageQuotaExceededError struct {
 }
 
 func (e *StorageQuotaExceededError) Is(target error) bool { return target == ErrStorageQuotaExceeded }
+
+// ProxyValidationFailedError — 422. The proxy attached to a launch failed the
+// server's LIVE pre-launch connectivity test (a real egress round-trip THROUGH
+// the proxy). The launch was BLOCKED before any session or worker started. Reason
+// is a stable enum for branching: "unreachable" (check host/port/online),
+// "auth_failed" (re-enter credentials), "timeout" (proxy slow/down), or
+// "egress_blocked" (proxy connects but its upstream can't reach the internet).
+type ProxyValidationFailedError struct {
+	apiError
+	Reason string
+}
+
+func (e *ProxyValidationFailedError) Is(target error) bool {
+	return target == ErrProxyValidationFailed
+}
 
 // SessionDestroyedError — 410 when an op targets a destroyed session.
 type SessionDestroyedError struct{ apiError }

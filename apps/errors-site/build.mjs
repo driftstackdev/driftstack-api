@@ -109,6 +109,13 @@ export const ERROR_PAGES = {
       'A profile-backed session-launch was refused because your profiles’ combined stored size reached your tier’s storage cap. The body carries used_bytes, cap_bytes, and tier. Sessions without a profile are never blocked; Enterprise is soft-only.',
     fix: 'Delete or trim a profile to free space, or upgrade your tier, then launch again.',
   },
+  'proxy-validation-failed': {
+    status: 422,
+    title: 'Proxy validation failed',
+    meaning:
+      'The proxy attached to this launch failed a LIVE pre-launch connectivity test — the server connected THROUGH your proxy and ran a real egress round-trip, which did not succeed. The launch was blocked before any session or worker started. The body carries a `reason`: `unreachable` (host/port wrong or offline), `auth_failed` (bad credentials), `timeout` (proxy too slow), or `egress_blocked` (proxy connects but its upstream can’t reach the internet).',
+    fix: 'Fix the proxy per the `reason` — verify host/port and that it is online, re-enter credentials, or check the proxy’s own upstream egress — then launch again.',
+  },
   'session-destroyed': {
     status: 410,
     title: 'Session destroyed',

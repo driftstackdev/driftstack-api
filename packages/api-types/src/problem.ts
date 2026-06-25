@@ -94,6 +94,17 @@ export const PROBLEM_TYPES = {
   // SDK consumers can render the exact overage. Enterprise is soft-only
   // and never raises this. Sessions WITHOUT a profile are never blocked.
   StorageQuotaExceeded: 'https://errors.driftstack.dev/storage-quota-exceeded',
+  // Founder directive #63 — a proxy must be TESTED LIVE + validated BEFORE a
+  // profile launch, not just declared. Fires at session-launch when the CP-side
+  // live connectivity probe (connect THROUGH the resolved proxy + a real egress
+  // round-trip) fails: the launch is BLOCKED with this 422 (zero session row,
+  // zero worker spin-up) instead of dispatching a session that would dead-end at
+  // the box. The `reason` extension is a machine-readable enum
+  // (`unreachable` | `auth_failed` | `timeout` | `egress_blocked`) so the
+  // dashboard + SDK can render a specific "fix your proxy" message; `detail`
+  // carries a human one-liner. Forward-compatible with A3's W2931 post-dispatch
+  // box-reported egress failure (same problem-type, surfaced post-launch).
+  ProxyValidationFailed: 'https://errors.driftstack.dev/proxy-validation-failed',
 } as const;
 
 export type ProblemType = (typeof PROBLEM_TYPES)[keyof typeof PROBLEM_TYPES];

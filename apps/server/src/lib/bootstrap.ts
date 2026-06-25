@@ -78,6 +78,7 @@ import { DrizzleStripeWebhooksRepo } from '../db/stripe-webhooks-repo.js';
 import { DrizzleProfilesRepo } from '../db/profiles-repo.js';
 import { DrizzleAccountProxiesRepo } from '../db/account-proxies-repo.js';
 import { AccountProxiesService } from '../services/account-proxies.js';
+import { ProxyConnectivityProbe } from '../services/proxy-connectivity-probe.js';
 import { SessionsService } from '../services/sessions.js';
 import { ApiKeysService } from '../services/api-keys.js';
 import { MfaService } from '../services/mfa.js';
@@ -1079,6 +1080,21 @@ export async function createProductionDeps(
   // ARC A — proxies service (owner-scoped resolve + unwrap + SSRF guard) shares
   // the same master key as the profile DEK.
   const accountProxiesService = new AccountProxiesService(accountProxiesRepo, profileMasterKeyBuf);
+  // Founder directive #63 — CP-side LIVE proxy connectivity probe. Gates every
+  // proxied agent-session launch on a real egress round-trip BEFORE dispatch (a
+  // failed live test → 422, no session row, no worker). ON by default (the
+  // founder's ask: validate EVERY proxied launch live); set
+  // DRIFTSTACK_PROXY_PRELAUNCH_PROBE=0 (or =false) to disable if it ever
+  // false-negatives a working proxy. DRIFTSTACK_PROXY_PROBE_TARGET_URL overrides
+  // the neutral egress target (default the Driftstack exit-IP echo).
+  const proxyPrelaunchProbeEnabled = !['0', 'false'].includes(
+    (process.env.DRIFTSTACK_PROXY_PRELAUNCH_PROBE ?? '').toLowerCase(),
+  );
+  const proxyConnectivityProbe = new ProxyConnectivityProbe({
+    ...(process.env.DRIFTSTACK_PROXY_PROBE_TARGET_URL !== undefined
+      ? { targetUrl: process.env.DRIFTSTACK_PROXY_PROBE_TARGET_URL }
+      : {}),
+  });
   const profilesService = new ProfilesService(
     profilesRepo,
     accountAuditService,
@@ -1602,6 +1618,9 @@ export async function createProductionDeps(
     // wrapping proxy passwords; both feed /v1/account/me/proxies.
     accountProxiesRepo,
     accountProxiesService,
+    // Founder directive #63 — live pre-launch proxy probe + its on/off flag.
+    proxyConnectivityProbe,
+    proxyPrelaunchProbeEnabled,
     profileMasterKey: profileMasterKeyBuf,
     // V-352b — public-bucket R2 client used by avatar upload + the
     // presigned-GET URL on /v1/account/me. Same client the V-295c2

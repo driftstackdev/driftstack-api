@@ -232,6 +232,45 @@ export class StorageQuotaExceededError extends ApiError {
   }
 }
 
+/**
+ * Founder directive #63 — the CP-side live proxy connectivity probe rejected the
+ * proxy at launch time, so the launch is BLOCKED (zero session row, zero worker
+ * spin-up) instead of dispatching a session that would dead-end at the box.
+ *
+ * 422 Unprocessable Entity — the request is syntactically valid + the proxy is
+ * owned, but the named entity (the proxy) cannot be used right now: it failed a
+ * real egress round-trip. `reason` is a stable machine enum so the dashboard +
+ * SDK can branch ("auth failed → re-enter credentials", "unreachable → check the
+ * host", "timeout → the proxy is slow/down", "egress_blocked → the proxy connects
+ * but can't reach the internet"). `detail` is the human one-liner. Forward-
+ * compatible with A3's W2931 post-dispatch box-reported egress failure (same
+ * problem-type + reason enum, surfaced after launch instead of before it).
+ */
+export class ProxyValidationFailedError extends ApiError {
+  constructor(args: {
+    reason: 'unreachable' | 'auth_failed' | 'timeout' | 'egress_blocked';
+    detail?: string;
+  }) {
+    const human: Record<typeof args.reason, string> = {
+      unreachable:
+        'The proxy could not be reached — check the host and port, and that the proxy is online.',
+      auth_failed:
+        'The proxy rejected the supplied credentials — re-enter the username and password.',
+      timeout: 'The proxy did not respond in time — it may be slow or offline. Try again shortly.',
+      egress_blocked:
+        'The proxy connected but could not reach the internet — its upstream egress is blocked.',
+    };
+    super({
+      type: PROBLEM_TYPES.ProxyValidationFailed,
+      title: 'Proxy validation failed',
+      status: 422,
+      detail: args.detail ?? human[args.reason],
+      extensions: { reason: args.reason, resource: 'proxy' },
+    });
+    this.name = 'ProxyValidationFailedError';
+  }
+}
+
 // Render a byte count as GiB for the human-facing storage-quota message. Whole
 // GiB show with no decimal ("5 GiB"); a fractional amount shows up to 2 decimals
 // trimmed of trailing zeros ("2.5 GiB", "1.25 GiB"). Used ONLY for `detail` —

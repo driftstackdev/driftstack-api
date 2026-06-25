@@ -37,6 +37,10 @@ import type { ProfilesService } from '../services/profiles.js';
 import type { AccountAuthRepo } from '../services/auth.js';
 import type { AccountProxiesService } from '../services/account-proxies.js';
 import { UnsafeProxyHostError } from '../services/account-proxies.js';
+import type {
+  ProxyConnectivityProbe,
+  ProbeProxyDescriptor,
+} from '../services/proxy-connectivity-probe.js';
 import type { SessionRepo } from '../services/sessions.js';
 import { buildAssignProfileBlock } from '../services/profile-store.js';
 import type { R2 } from '../lib/r2.js';
@@ -92,6 +96,7 @@ import {
   NotFoundError,
   PairModeConflictError,
   PairModeStateInvalidTransitionRouteError,
+  ProxyValidationFailedError,
   ValidationError,
 } from '../lib/errors.js';
 import { resolveEffectiveAccount, type EffectiveAccount } from '../services/auth.js';
@@ -524,6 +529,26 @@ export interface AgentSessionsRoutesDeps {
    */
   accountProxiesService?: AccountProxiesService;
   /**
+   * Founder directive #63 — CP-side LIVE proxy connectivity probe. When wired
+   * (+ proxyPrelaunchProbeEnabled), a create carrying a `proxy_id` is gated on a
+   * real egress round-trip THROUGH the resolved proxy BEFORE the session row is
+   * created and the worker dispatched: a failed live test BLOCKS the launch with
+   * a clean 422 (ProxyValidationFailed), zero session, zero spin-up. Absent → the
+   * gate is skipped (the proxy is still resolved + SSRF-guarded at dispatch as
+   * today). VPN schemes (openvpn/wireguard) tunnel at the box, not via a
+   * CP-dialable protocol, so the probe is skipped for them — A3's W2931 box-
+   * reported failure is their forward-compatible surface (same 422 problem-type).
+   */
+  proxyConnectivityProbe?: ProxyConnectivityProbe;
+  /**
+   * Founder directive #63 — master switch for the pre-launch probe. ON by default
+   * in bootstrap (the founder's ask: gate EVERY proxied launch live). Exposed so a
+   * deployment can disable it via DRIFTSTACK_PROXY_PRELAUNCH_PROBE=0 if the probe
+   * ever false-negatives a working proxy. When false, the gate is a no-op even
+   * with the probe wired.
+   */
+  proxyPrelaunchProbeEnabled?: boolean;
+  /**
    * Strict-FK (2026-06-16) — driver SessionsRepo. When wired + a create carries
    * `driftstack_session_id`, the route validates the referenced session is owned
    * by the same (owner) account before storing the uuid, closing the latent
@@ -914,6 +939,86 @@ async function closeUnresolvedEgressSession(
 }
 
 /**
+ * Founder directive #63 — FAIL-CLOSED pre-launch proxy gate. Runs at session
+ * CREATE, after ownership + scheme validation, BEFORE the session row is created
+ * and the worker dispatched. Resolves the (already-owned) proxy_id to its
+ * decrypted host/port/credentials, then live-probes it: CONNECT THROUGH the proxy
+ * + a real egress round-trip. On failure it THROWS ProxyValidationFailedError
+ * (422) so the route blocks the launch with a clean, specific reason — zero
+ * session row, zero simulator spin-up. On pass it returns and the create proceeds.
+ *
+ * No-op (returns) when the probe isn't wired or the flag is off (then the dispatch
+ * path's own resolve + SSRF re-guard remain the only egress check, as before).
+ *
+ * VPN schemes (openvpn/wireguard) are NOT CP-dialable proxies — they tunnel at the
+ * box — so resolveForDispatch returns the FLAT VPN wire (with a `type` field) and
+ * we SKIP the live probe for them. Their forward-compatible failure surface is
+ * A3's W2931 (post-dispatch, box-reported), which raises the SAME 422 problem-type
+ * + `reason` enum once the box reports an egress failure. socks5 is the only
+ * scheme this gate live-tests pre-launch today (http was already rejected above).
+ *
+ * resolveForDispatch can throw UnsafeProxyHostError (SSRF re-guard) — that
+ * propagates as the route's existing fail-closed (the outer handler maps it), so a
+ * private-host proxy never even reaches the live probe.
+ */
+async function runProxyPrelaunchGate(args: {
+  probe: ProxyConnectivityProbe | undefined;
+  enabled: boolean;
+  accountProxiesService: AccountProxiesService;
+  proxyId: string;
+  accountId: string;
+  logger?: { info: (obj: unknown, msg: string) => void; warn: (obj: unknown, msg: string) => void };
+}): Promise<void> {
+  const { probe, enabled, accountProxiesService, proxyId, accountId, logger } = args;
+  if (probe === undefined || !enabled) return;
+
+  // Resolve to the decrypted dispatch config (owner-scoped + SSRF re-guard).
+  // Null = unresolvable (decrypt fail / non-dispatchable) — the dispatch path
+  // already fails closed on null, so don't block the create here on it; let the
+  // create proceed and the dispatch close it (preserves today's behavior for the
+  // edge case and avoids a confusing 422 for a decrypt/config issue the probe
+  // can't even attempt).
+  const resolved = await accountProxiesService.resolveForDispatch({ proxyId, accountId });
+  if (resolved === null) return;
+
+  // VPN wire carries a `type` discriminator (openvpn|wireguard) — not a
+  // CP-dialable socks5/http proxy. Skip the live probe (box-side W2931 covers it).
+  if ('type' in resolved) return;
+
+  const descriptor: ProbeProxyDescriptor = {
+    protocol: 'socks5',
+    host: resolved.host,
+    port: resolved.port,
+    ...(resolved.username !== undefined ? { username: resolved.username } : {}),
+    ...(resolved.password !== undefined ? { password: resolved.password } : {}),
+  };
+
+  const result = await probe.probe(descriptor);
+  if (!result.ok) {
+    // Log the host (NOT credentials) for ops triage; the customer gets the typed
+    // reason + a human one-liner (ProxyValidationFailedError fills detail).
+    logger?.warn(
+      {
+        component: 'proxy-prelaunch-probe',
+        proxyId,
+        host: descriptor.host,
+        port: descriptor.port,
+        reason: result.reason,
+      },
+      'pre-launch proxy probe FAILED; blocking launch (no dispatch)',
+    );
+    throw new ProxyValidationFailedError({
+      reason: result.reason ?? 'unreachable',
+      ...(result.detail !== undefined ? { detail: result.detail } : {}),
+    });
+  }
+  logger?.info(
+    { component: 'proxy-prelaunch-probe', proxyId, host: descriptor.host },
+    'pre-launch proxy probe passed',
+  );
+}
+
+/**
  * Best-effort `sessionEnd` dispatch when an agent-session closes — tells the
  * harness to tear the session down (fork + proxy + capture) and free its
  * concurrency slot (A3 W420 sessionEnd teardown site). Without it, a closed
@@ -1073,6 +1178,8 @@ export function registerAgentSessionsRoutes(
     profilesService,
     authRepo,
     accountProxiesService,
+    proxyConnectivityProbe,
+    proxyPrelaunchProbeEnabled = true,
     driverSessionsRepo,
     r2,
     uploadMaxAccountInFlightBytes = 512 * 1024 * 1024,
@@ -1334,6 +1441,24 @@ export function registerAgentSessionsRoutes(
             'HTTP proxies cannot drive a browser session yet — use a SOCKS5, OpenVPN, or WireGuard proxy.',
           );
         }
+
+        // Founder directive #63 — TEST THE PROXY LIVE before we create a session
+        // row or spin a worker. We resolve the proxy (owner-scoped decrypt + SSRF
+        // re-guard), then CONNECT THROUGH it to a neutral target + do a real egress
+        // round-trip. A failed live test BLOCKS the launch with a clean 422 here —
+        // BEFORE sessions.create + dispatchSessionAssignOnCreate — so a dead/
+        // misconfigured proxy never dispatches a session that dead-ends at the box
+        // (zero session row, zero simulator spin-up). The dispatch path keeps its
+        // own resolve + SSRF re-guard as defense-in-depth; this gate is the
+        // pre-flight the founder asked for.
+        await runProxyPrelaunchGate({
+          probe: proxyConnectivityProbe,
+          enabled: proxyPrelaunchProbeEnabled,
+          accountProxiesService,
+          proxyId,
+          accountId: ownerAccountId,
+          logger: req.log,
+        });
       }
 
       // Strict-FK (2026-06-16) — normalize the optional driftstack_session_id

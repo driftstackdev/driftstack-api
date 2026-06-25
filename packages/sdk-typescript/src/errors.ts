@@ -29,6 +29,7 @@
 //   https://errors.driftstack.dev/email-not-verified   → EmailNotVerifiedError
 //   https://errors.driftstack.dev/feature-unavailable  → FeatureUnavailableError
 //   https://errors.driftstack.dev/mfa-step-up-required → MfaStepUpRequiredError
+//   https://errors.driftstack.dev/proxy-validation-failed → ProxyValidationFailedError
 //
 // Anything else (network failure, parse error, etc.) surfaces as a
 // `DriftstackError` with `kind: 'transport'` set on the instance.
@@ -64,6 +65,7 @@ export type DriftstackErrorKind =
   | 'feature_unavailable'
   | 'mfa_step_up_required'
   | 'byok_anthropic_required'
+  | 'proxy_validation_failed'
   | 'transport';
 
 export class DriftstackError extends Error {
@@ -236,6 +238,24 @@ export class SessionDestroyedError extends DriftstackError {
   constructor(p: Problem) {
     super(toOpts('session_destroyed', p));
     this.name = 'SessionDestroyedError';
+  }
+}
+
+/**
+ * 422 — the proxy attached to a launch failed the server's LIVE pre-launch
+ * connectivity test (a real egress round-trip THROUGH the proxy). The launch was
+ * BLOCKED before any session or worker started. `err.reason` is a stable enum so
+ * you can branch on the cause: `'unreachable'` (check host/port/online),
+ * `'auth_failed'` (re-enter credentials), `'timeout'` (proxy slow/down), or
+ * `'egress_blocked'` (proxy connects but its upstream can't reach the internet).
+ * Not retryable as-is — fix the proxy, then launch again.
+ */
+export class ProxyValidationFailedError extends DriftstackError {
+  readonly reason: string | undefined;
+  constructor(p: Problem) {
+    super(toOpts('proxy_validation_failed', p));
+    this.name = 'ProxyValidationFailedError';
+    this.reason = (p as { reason?: string }).reason;
   }
 }
 
@@ -449,6 +469,8 @@ const TYPE_TO_CTOR: Record<string, (p: Problem) => DriftstackError> = {
   'https://errors.driftstack.dev/tier-limit': (p) => new TierLimitError(p),
   // doc-150 item 6 — per-account profile-storage quota (409 at session-launch).
   'https://errors.driftstack.dev/storage-quota-exceeded': (p) => new StorageQuotaExceededError(p),
+  // Live pre-launch proxy validation (422 at launch).
+  'https://errors.driftstack.dev/proxy-validation-failed': (p) => new ProxyValidationFailedError(p),
   'https://errors.driftstack.dev/session-destroyed': (p) => new SessionDestroyedError(p),
   'https://errors.driftstack.dev/session-timeout': (p) => new SessionTimeoutError(p),
   'https://errors.driftstack.dev/legal-acceptance-required': (p) =>

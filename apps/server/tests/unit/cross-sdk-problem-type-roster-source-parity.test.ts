@@ -131,11 +131,11 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
     );
   });
 
-  it('CRITICAL all 30 problem-type URIs share the https://errors.driftstack.dev/ prefix. The shared origin is what lets clients pattern-match (e.g. `if (problem.type.startsWith("https://errors.driftstack.dev/"))`). Drift to a different host on any entry would silently break consumers.', () => {
+  it('CRITICAL all 31 problem-type URIs share the https://errors.driftstack.dev/ prefix. The shared origin is what lets clients pattern-match (e.g. `if (problem.type.startsWith("https://errors.driftstack.dev/"))`). Drift to a different host on any entry would silently break consumers.', () => {
     const src = read(PROBLEM_SCHEMA);
     // Count problem-type URIs.
     const errorUris = (src.match(/'https:\/\/errors\.driftstack\.dev\/[a-z-]+'/g) ?? []).length;
-    expect(errorUris, 'PROBLEM_TYPES entry count').toBe(30);
+    expect(errorUris, 'PROBLEM_TYPES entry count').toBe(31);
   });
 
   it('CRITICAL slug format pinned — all URI path slugs are lowercase + hyphens (no underscores, no camelCase). Drift to mixed casing would break URL-template clients that match on hyphen-only slugs.', () => {
@@ -184,9 +184,9 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
     expect(src).toMatch(/keep these URIs forever/);
     expect(src).toMatch(/\} as const;/);
 
-    // 29 URIs.
+    // 31 URIs.
     const errorUris = (src.match(/'https:\/\/errors\.driftstack\.dev\/[a-z-]+'/g) ?? []).length;
-    expect(errorUris).toBe(30);
+    expect(errorUris).toBe(31);
 
     // 7 V-anchor comments.
     for (const anchor of ['V-079', 'V-352b', 'V-353e']) {

@@ -61,6 +61,7 @@ const REQUIRED_ALL_ENTRIES = [
   'BundledLlmConsentRequiredError',
   'PairModeConflictError',
   'PairModeStateInvalidTransitionError',
+  'ProxyValidationFailedError',
   // Customer-facing return-type pydantic models (re-exported so
   // callers can annotate handlers without deep-importing via
   // driftstack.resources.*).
@@ -146,7 +147,7 @@ describe('W835 Python SDK __all__ list parity', () => {
 
   // ─── Total count matches expected ─────────────────────────────
 
-  it('CRITICAL Python __all__ contains exactly the REQUIRED_ALL_ENTRIES snapshot (currently 47 entries after Q.1.d ByokAnthropic + Arc 1 bundled-LLM + Arc 3 pair-mode + BadRequestError + customer-facing pydantic-model re-exports + doc-150 item 6 StorageQuotaExceededError). Drift would either grow the public surface accidentally (broader test surface) or shrink it (break customer code). New additions must update both the SDK source AND this parity test.', () => {
+  it('CRITICAL Python __all__ contains exactly the REQUIRED_ALL_ENTRIES snapshot (currently 48 entries after Q.1.d ByokAnthropic + Arc 1 bundled-LLM + Arc 3 pair-mode + BadRequestError + customer-facing pydantic-model re-exports + doc-150 item 6 StorageQuotaExceededError + live pre-launch ProxyValidationFailedError). Drift would either grow the public surface accidentally (broader test surface) or shrink it (break customer code). New additions must update both the SDK source AND this parity test.', () => {
     const p = read(PY_INIT);
     const allMatch = p.match(/__all__ = \[([\s\S]+?)\]/);
     expect(allMatch).not.toBeNull();

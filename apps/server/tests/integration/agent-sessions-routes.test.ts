@@ -11,6 +11,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { PROBLEM_TYPES, TIER_STORAGE_BYTES_CAP } from '@driftstack/api-types';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import type {
+  ProxyConnectivityProbe,
+  ProxyProbeResult,
+} from '../../src/services/proxy-connectivity-probe.js';
 
 describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)', () => {
   let fx: TestAppFixture;
@@ -274,6 +278,146 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     // message instead of a 30s "the proxy may be down" timeout.
     expect(res.statusCode).toBe(400);
     expect(res.json<{ detail?: string }>().detail).toMatch(/HTTP proxies cannot drive/);
+  });
+
+  // ── #63 LIVE proxy pre-launch validation gate ─────────────────────────────
+  // A proxy must be TESTED LIVE + validated BEFORE a launch. A failing live test
+  // BLOCKS the launch with a clean 422 (ProxyValidationFailed) — zero session row,
+  // zero worker dispatch. A passing test proceeds to create as today.
+  //
+  // The stub probe stands in for ProxyConnectivityProbe (its `.probe()` returns a
+  // typed pass/fail) so these tests don't open sockets; the probe's own handshake
+  // logic is covered in proxy-connectivity-probe.test.ts.
+  const stubProbe = (result: ProxyProbeResult): ProxyConnectivityProbe =>
+    ({ probe: () => Promise.resolve(result) }) as unknown as ProxyConnectivityProbe;
+
+  async function seedOwnSocks5Proxy(fixture: TestAppFixture): Promise<string> {
+    const proxy = await fixture.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { authorization: `Bearer ${fixture.plaintext}`, 'content-type': 'application/json' },
+      payload: { label: 'mine', host: '203.0.113.7', port: 1080, password: 'pw' },
+    });
+    expect(proxy.statusCode).toBe(201);
+    return proxy.json<{ id: string }>().id;
+  }
+
+  it('#63 probe PASS → 201 (launch proceeds; the live test succeeded)', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: stubProbe({ ok: true }),
+    });
+    const proxyId = await seedOwnSocks5Proxy(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, proxy_id: proxyId },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('#63 probe FAIL (unreachable) → 422 ProxyValidationFailed + NO session created (zero dispatch)', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: stubProbe({ ok: false, reason: 'unreachable' }),
+    });
+    const proxyId = await seedOwnSocks5Proxy(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, proxy_id: proxyId },
+    });
+    expect(res.statusCode).toBe(422);
+    const body = res.json<{ type: string; reason?: string }>();
+    expect(body.type).toBe(PROBLEM_TYPES.ProxyValidationFailed);
+    expect(body.reason).toBe('unreachable');
+    // Fail-CLOSED: the session row was never created (no phantom active slot, no
+    // worker spin-up). countActive stays 0.
+    expect(await fx.agentSessionsRepo!.countActive(fx.accountId)).toBe(0);
+  });
+
+  it('#63 probe FAIL (auth_failed) → 422 with the auth_failed reason', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: stubProbe({ ok: false, reason: 'auth_failed' }),
+    });
+    const proxyId = await seedOwnSocks5Proxy(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, proxy_id: proxyId },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json<{ reason?: string }>().reason).toBe('auth_failed');
+  });
+
+  it('#63 probe TIMEOUT → 422 (a slow/half-open proxy blocks the launch, not hangs it) + no session', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: stubProbe({ ok: false, reason: 'timeout' }),
+    });
+    const proxyId = await seedOwnSocks5Proxy(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, proxy_id: proxyId },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json<{ reason?: string }>().reason).toBe('timeout');
+    expect(await fx.agentSessionsRepo!.countActive(fx.accountId)).toBe(0);
+  });
+
+  it('#63 gate DISABLED (proxyPrelaunchProbeEnabled:false) → a failing probe does NOT block (201) — the operator escape hatch', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: stubProbe({ ok: false, reason: 'unreachable' }),
+      proxyPrelaunchProbeEnabled: false,
+    });
+    const proxyId = await seedOwnSocks5Proxy(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, proxy_id: proxyId },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('#63 no probe wired → gate is a no-op (proxied create still 201, today’s behaviour)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const proxyId = await seedOwnSocks5Proxy(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, proxy_id: proxyId },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('#63 a create WITHOUT proxy_id never invokes the probe (no proxy = no gate)', async () => {
+    let probeCalls = 0;
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: {
+        probe: () => {
+          probeCalls += 1;
+          return Promise.resolve<ProxyProbeResult>({ ok: false, reason: 'unreachable' });
+        },
+      } as unknown as ProxyConnectivityProbe,
+    });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000 },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(probeCalls).toBe(0);
   });
 
   it('initial_url validation: http(s) accepted (201); javascript:/file:/data:/garbage + over-length rejected (400) — customer start URL is scheme-guarded at the route', async () => {

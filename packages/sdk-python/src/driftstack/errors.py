@@ -252,6 +252,30 @@ class StorageQuotaExceededError(DriftstackError):
         self.tier = tier
 
 
+class ProxyValidationFailedError(DriftstackError):
+    """422 — the proxy on a launch failed the server's LIVE pre-launch test.
+
+    The server connected THROUGH the proxy and ran a real egress round-trip before
+    dispatching; it failed, so the launch was BLOCKED (no session, no worker).
+    ``reason`` is a stable enum for branching: ``"unreachable"`` (check
+    host/port/online), ``"auth_failed"`` (re-enter credentials), ``"timeout"``
+    (proxy slow/down), or ``"egress_blocked"`` (proxy connects but its upstream
+    can't reach the internet). Fix the proxy, then launch again.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str | None = None,
+        status: int | None = 422,
+        problem_type: str | None = None,
+        problem: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message, status=status, problem_type=problem_type, problem=problem)
+        self.reason = reason
+
+
 # ── Driver / upstream (502) ───────────────────────────────────────────────
 
 
@@ -415,6 +439,8 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/tier-limit": QuotaExceededError,
     # doc-150 item 6 — per-account profile-storage quota (409 at session-launch).
     "https://errors.driftstack.dev/storage-quota-exceeded": StorageQuotaExceededError,
+    # Live pre-launch proxy validation (422 at launch).
+    "https://errors.driftstack.dev/proxy-validation-failed": ProxyValidationFailedError,
     "https://errors.driftstack.dev/revoked-key": RevokedKeyError,
     "https://errors.driftstack.dev/expired-key": ExpiredKeyError,
     "https://errors.driftstack.dev/invalid-key": InvalidKeyError,
