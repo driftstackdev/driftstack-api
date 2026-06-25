@@ -80,7 +80,6 @@ const NAV_URL = process.env.DRIFTSTACK_NAV_URL ?? 'https://example.com';
 const STREAM_TIMEOUT_MS = 30_000;
 const NAVIGATE_TIMEOUT_MS = 20_000;
 const TAB_TIMEOUT_MS = 20_000;
-const SCROLL_TIMEOUT_MS = 12_000;
 const TAP_TIMEOUT_MS = 20_000;
 const COOKIES_TIMEOUT_MS = 15_000;
 
