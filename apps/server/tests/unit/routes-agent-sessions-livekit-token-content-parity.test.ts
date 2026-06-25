@@ -58,7 +58,7 @@ describe('routes/agent-sessions-livekit-token content parity', () => {
 
   it("Cross-account-404-and-status!=active-403 framing pinned: 'Cross-account access is a 404 (anti-enumeration; same posture as /v1/sessions/:id and the rest of the customer-facing surface).' + 'Cannot mint LiveKit token for ${session.status} agent session.' + '403 rather than 404 — the customer DID own this session, they just can't mint a token for a closed one. Matches the existing pair-mode-action posture.' — pinned so the cross-account-404 + same-account-but-closed-403 + pair-mode-action-symmetry contract all stay documented (drift to 403 on cross-account would leak existence; drift to 404 on closed would lose the helpful 'you owned this but it's done' UX)", () => {
     expect(body).toMatch(
-      /\/\/ Cross-account access is a 404 \(anti-enumeration; same posture\s*\n?\s*\/\/ as \/v1\/sessions\/:id and the rest of the customer-facing surface\)\./,
+      /\/\/ Account path: enforce cross-account access is a 404 \(anti-enumeration;\s*\n?\s*\/\/ same posture as \/v1\/sessions\/:id\)\. Control-key path: the key was already\s*\n?\s*\/\/ decrypt-matched against THIS session in the preHandler/,
     );
     expect(body).toMatch(
       /\/\/ 403 rather than 404 — the customer DID own this session,\s*\n?\s*\/\/ they just can't mint a token for a closed one\. Matches the\s*\n?\s*\/\/ existing pair-mode-action posture\./,
@@ -86,8 +86,10 @@ describe('routes/agent-sessions-livekit-token content parity', () => {
     expect(body).not.toMatch(/Underlying: \$\{err/);
   });
 
-  it("mintLivekitToken subscriber-for-tracks call shape pinned: identity: `customer-${ctx.account.id}` + room: sessionId + canPublish: false (no customer-injected video — the capability-boundary leak guard) + canSubscribe: true + canPublishData: true (the simulator's input-capture publishes InputEvents over the DataChannel to the Mac CGEvent decoder — explicit, not LiveKit's default)", () => {
-    expect(body).toMatch(/identity: `customer-\$\{ctx\.account\.id\}`,/);
+  it("mintLivekitToken subscriber-for-tracks call shape pinned: identity: `customer-${ownerAccountId}` + room: sessionId + canPublish: false (no customer-injected video — the capability-boundary leak guard) + canSubscribe: true + canPublishData: true (the simulator's input-capture publishes InputEvents over the DataChannel to the Mac CGEvent decoder — explicit, not LiveKit's default)", () => {
+    // ownerAccountId is session.accountId on both the account path (== ctx) and
+    // the control-key reconnect path (sweep-3) — the identity is the owner either way.
+    expect(body).toMatch(/identity: `customer-\$\{ownerAccountId\}`,/);
     expect(body).toMatch(
       /canPublish: false,\s*\n?\s*canSubscribe: true,\s*\n?\s*canPublishData: true,/,
     );
@@ -98,7 +100,7 @@ describe('routes/agent-sessions-livekit-token content parity', () => {
 
   it('Response 5-field shape pinned: ws_url + room + token + participant_identity + expires_at (ISO from nowMs + ttlSeconds * 1000). + bump("subscriber", "ok") + bump on every error branch. Drift to dropping expires_at would force clients to re-derive token-expiry from JWT exp claim', () => {
     expect(body).toMatch(
-      /const expiresAt = new Date\(tokenNowMs \+ ttlSeconds \* 1000\)\.toISOString\(\);\s*\n?\s*return reply\.code\(200\)\.send\(\{\s*\n?\s*ws_url: mac\.livekit\.wsUrl,\s*\n?\s*room: sessionId,\s*\n?\s*token,\s*\n?\s*participant_identity: `customer-\$\{ctx\.account\.id\}`,\s*\n?\s*expires_at: expiresAt,\s*\n?\s*\}\);/,
+      /const expiresAt = new Date\(tokenNowMs \+ ttlSeconds \* 1000\)\.toISOString\(\);\s*\n?\s*return reply\.code\(200\)\.send\(\{\s*\n?\s*ws_url: mac\.livekit\.wsUrl,\s*\n?\s*room: sessionId,\s*\n?\s*token,\s*\n?\s*participant_identity: `customer-\$\{ownerAccountId\}`,\s*\n?\s*expires_at: expiresAt,\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(/bump\('ok'\);/);
     expect(body).toMatch(/bump\('not_found'\);/);

@@ -297,14 +297,28 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     return { cleared: rows.length };
   }
 
-  async enqueueDelivery(input: NewWebhookDeliveryInput): Promise<void> {
-    await this.database.db.insert(webhookDeliveries).values({
-      webhookId: input.webhookId,
-      eventId: input.eventId,
-      eventType: input.eventType,
-      payload: input.payload,
-      ...(input.nextAttemptAt !== undefined ? { nextAttemptAt: input.nextAttemptAt } : {}),
-    });
+  async enqueueDelivery(input: NewWebhookDeliveryInput): Promise<string> {
+    // RETURNING the DB-generated primary key — the same `id` the deliveries-list
+    // (`wdl_${row.id}`) + replay routes resolve against. The test-event path
+    // returns this so its delivery_id is actually look-up-able (was returning the
+    // eventId, which is a SEPARATE column → 404 on lookup/replay).
+    const [row] = await this.database.db
+      .insert(webhookDeliveries)
+      .values({
+        webhookId: input.webhookId,
+        eventId: input.eventId,
+        eventType: input.eventType,
+        payload: input.payload,
+        ...(input.nextAttemptAt !== undefined ? { nextAttemptAt: input.nextAttemptAt } : {}),
+      })
+      .returning({ id: webhookDeliveries.id });
+    if (row === undefined) {
+      // An INSERT ... RETURNING always yields exactly one row; the guard is
+      // purely to satisfy the type-narrowing (and would only fire on a driver
+      // contract break, which we'd want surfaced).
+      throw new Error('enqueueDelivery: INSERT returned no row');
+    }
+    return row.id;
   }
 
   async listEndpointsSubscribedTo(

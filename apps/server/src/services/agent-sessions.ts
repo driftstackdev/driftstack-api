@@ -171,6 +171,17 @@ export interface CreateAgentSessionArgs {
   profileId?: string;
 }
 
+/**
+ * Keyset page of agent sessions, newest-first on (created_at, id) desc.
+ * `nextCursor` is the last row's bare `id` when more rows follow, else null —
+ * the route maps it to the standard `{ data, has_more, next_cursor }` envelope,
+ * exactly as /v1/sessions does (see SessionListPage).
+ */
+export interface AgentSessionListPage {
+  items: ReadonlyArray<AgentSessionRecord>;
+  nextCursor: string | null;
+}
+
 export interface AgentSessionsRepo {
   create(args: CreateAgentSessionArgs): Promise<AgentSessionRecord>;
   get(id: string): Promise<AgentSessionRecord | null>;
@@ -178,6 +189,16 @@ export interface AgentSessionsRepo {
     accountId: string,
     opts?: { limit?: number },
   ): Promise<ReadonlyArray<AgentSessionRecord>>;
+  /**
+   * Cursor-paginated list for GET /v1/agent-sessions — keyset on
+   * (created_at, id) desc, so a busy account can page its full AI-session
+   * history (the old `listByAccount({ limit: 100 })` capped it at 100 with no
+   * cursor). `cursor` is the bare `id` of the last row on the prior page.
+   */
+  listPageByAccount(
+    accountId: string,
+    opts: { limit: number; cursor?: string },
+  ): Promise<AgentSessionListPage>;
   appendTranscript(id: string, entry: TranscriptEntry): Promise<AgentSessionRecord>;
   debitTokens(id: string, tokens: number): Promise<AgentSessionRecord>;
   closeWithReason(id: string, reason: string): Promise<AgentSessionRecord>;
@@ -397,6 +418,40 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
     });
     return Promise.resolve(opts?.limit !== undefined ? out.slice(0, opts.limit) : out);
+  }
+
+  listPageByAccount(
+    accountId: string,
+    opts: { limit: number; cursor?: string },
+  ): Promise<AgentSessionListPage> {
+    // Mirror the Drizzle keyset: most-recent first on (created_at, id) desc,
+    // cursor = the last row's id, select strictly-after rows so same-createdAt
+    // rows aren't dropped at a page boundary. Over-fetch one to detect has_more.
+    const all: AgentSessionRecord[] = [];
+    for (const rec of this.records.values()) {
+      if (rec.accountId === accountId) all.push(rec);
+    }
+    all.sort((a, b) => {
+      const at = a.createdAt instanceof Date ? a.createdAt.getTime() : 0;
+      const bt = b.createdAt instanceof Date ? b.createdAt.getTime() : 0;
+      if (bt !== at) return bt - at;
+      return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+    });
+    let start = 0;
+    if (opts.cursor !== undefined) {
+      const idx = all.findIndex((r) => r.id === opts.cursor);
+      // Unknown cursor → first page (matches the DB repo's "cursor row not
+      // found → first page" semantics).
+      start = idx === -1 ? 0 : idx + 1;
+    }
+    const slice = all.slice(start, start + opts.limit + 1);
+    const hasMore = slice.length > opts.limit;
+    const items = hasMore ? slice.slice(0, opts.limit) : slice;
+    const last = items[items.length - 1];
+    return Promise.resolve({
+      items,
+      nextCursor: hasMore && last ? last.id : null,
+    });
   }
 
   appendTranscript(id: string, entry: TranscriptEntry): Promise<AgentSessionRecord> {

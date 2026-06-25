@@ -45,11 +45,22 @@ describe('V-326 — auth path loads teams[] into AccountContext', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = res.json<{
-      teams: { owner_account_id: string; role: string; membership_id: string }[];
+      teams: {
+        owner_account_id: string;
+        owner_email: string;
+        owner_name: string | null;
+        role: string;
+        membership_id: string;
+      }[];
     }>();
     expect(body.teams).toHaveLength(1);
     expect(body.teams[0]).toEqual({
       owner_account_id: `acc_${OWNER_ACCOUNT_ID}`,
+      // Owner identity (sweep-3) — the in-memory auth repo fills a synthetic
+      // email when the owner account isn't seeded into its accounts map; the
+      // real Drizzle path joins the actual accounts.email/.name.
+      owner_email: `${OWNER_ACCOUNT_ID}@example.test`,
+      owner_name: null,
       role: 'admin',
       membership_id: `mem_${MEMBERSHIP_ID}`,
     });
@@ -71,11 +82,19 @@ describe('V-326 — auth path loads teams[] into AccountContext', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = res.json<{
-      data: { owner_account_id: string; role: string; membership_id: string }[];
+      data: {
+        owner_account_id: string;
+        owner_email: string;
+        owner_name: string | null;
+        role: string;
+        membership_id: string;
+      }[];
     }>();
     expect(body.data).toEqual([
       {
         owner_account_id: `acc_${OWNER_ACCOUNT_ID}`,
+        owner_email: `${OWNER_ACCOUNT_ID}@example.test`,
+        owner_name: null,
         role: 'member',
         membership_id: `mem_${MEMBERSHIP_ID}`,
       },

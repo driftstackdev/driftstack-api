@@ -13,11 +13,23 @@ Discriminated message response: branch on ``["kind"]`` —
 from __future__ import annotations
 
 import builtins
+from collections.abc import AsyncIterator, Iterator
 from typing import Any, Literal, TypedDict
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from driftstack.http import AsyncHttpClient, HttpClient
+from driftstack.pagination import aiterate_paginated, iterate_paginated
 from driftstack.resources._common import coerce_body
+
+
+def _encode_query(query: dict[str, Any]) -> str:
+    items: list[tuple[str, str]] = []
+    for key, value in query.items():
+        if value is None:
+            continue
+        items.append((key, str(value)))
+    return urlencode(items)
+
 
 # Slice 6 cross-SDK lock 2026-05-20 — canonical modifier vocabulary
 # mirrored from packages/api-types/src/agent-input-event.ts:
@@ -110,11 +122,30 @@ class AgentSessionsResource:
         """Read agent session state."""
         return self._http.request("GET", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}")
 
-    def list(self) -> dict[str, Any]:
-        """List the account's agent sessions (newest first, capped at 100
-        server-side). Returns the ``{"data": [...]}`` envelope. Mirrors the
-        TS + Go SDK list()."""
-        return self._http.request("GET", "/v1/agent-sessions")
+    def list(self, *, limit: int | None = None, cursor: str | None = None) -> dict[str, Any]:
+        """List the account's agent sessions, newest first. Cursor-paginated.
+
+        Returns the standard ``{"data": [...], "has_more": bool,
+        "next_cursor": str | None}`` envelope (was a non-paginated ``{"data"}``
+        hard-capped at 100, leaving older sessions unreachable). Pass ``cursor``
+        (the prior page's ``next_cursor``) to page, or use :meth:`iterate` to
+        walk every page. Mirrors the TS + Go SDK list().
+        """
+        qs = _encode_query({"limit": limit, "cursor": cursor})
+        path = "/v1/agent-sessions" + (f"?{qs}" if qs else "")
+        return self._http.request("GET", path)
+
+    def iterate(self, *, limit: int | None = None) -> Iterator[dict[str, Any]]:
+        """Lazily walk every agent session across cursor pages (newest first).
+
+        Replaces the old hard 100-cap — a busy account can now reach its full
+        AI-session history.
+        """
+
+        def fetch_page(cursor: str | None) -> dict[str, Any]:
+            return self.list(limit=limit, cursor=cursor)
+
+        return iterate_paginated(fetch_page)
 
     def message(
         self,
@@ -355,9 +386,19 @@ class AsyncAgentSessionsResource:
             "GET", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}"
         )
 
-    async def list(self) -> dict[str, Any]:
-        """Async counterpart to AgentSessionsResource.list."""
-        return await self._http.request("GET", "/v1/agent-sessions")
+    async def list(self, *, limit: int | None = None, cursor: str | None = None) -> dict[str, Any]:
+        """Async counterpart to AgentSessionsResource.list. Cursor-paginated."""
+        qs = _encode_query({"limit": limit, "cursor": cursor})
+        path = "/v1/agent-sessions" + (f"?{qs}" if qs else "")
+        return await self._http.request("GET", path)
+
+    def iterate(self, *, limit: int | None = None) -> AsyncIterator[dict[str, Any]]:
+        """Async counterpart to AgentSessionsResource.iterate."""
+
+        async def fetch_page(cursor: str | None) -> dict[str, Any]:
+            return await self.list(limit=limit, cursor=cursor)
+
+        return aiterate_paginated(fetch_page)
 
     async def message(
         self,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"strconv"
 )
 
 // CanonicalModifierNames — Slice 6 cross-SDK lock 2026-05-20 — mirrored
@@ -180,23 +181,80 @@ func (r *AgentSessionsResource) Get(ctx context.Context, agentSessionID string) 
 }
 
 // AgentSessionsListPage is the GET /v1/agent-sessions envelope — newest
-// first, capped at 100 by the server (no cursor).
+// first, cursor-paginated (the standard { data, has_more, next_cursor }
+// shape shared by recipes / crypto-orders). Was a non-paginated { data }
+// hard-capped at 100, leaving older sessions unreachable.
 type AgentSessionsListPage struct {
-	Data []AgentSession `json:"data"`
+	Data       []AgentSession `json:"data"`
+	HasMore    bool           `json:"has_more"`
+	NextCursor *string        `json:"next_cursor"`
 }
 
-// List returns the account's agent sessions (newest first, capped at 100 by
-// the server). Mirrors the TS + Python SDK list().
-func (r *AgentSessionsResource) List(ctx context.Context) (*AgentSessionsListPage, error) {
+// ListAgentSessionsQuery holds the pagination knobs for List / Iterate.
+type ListAgentSessionsQuery struct {
+	Limit  int
+	Cursor string
+}
+
+// List returns a page of the account's agent sessions, newest first. Pass nil
+// for defaults; pass a Cursor (the prior page's NextCursor) to page. Mirrors
+// the TS + Python SDK list().
+func (r *AgentSessionsResource) List(ctx context.Context, query *ListAgentSessionsQuery) (*AgentSessionsListPage, error) {
 	var out AgentSessionsListPage
+	q := url.Values{}
+	if query != nil {
+		if query.Limit > 0 {
+			q.Set("limit", strconv.Itoa(query.Limit))
+		}
+		if query.Cursor != "" {
+			q.Set("cursor", query.Cursor)
+		}
+	}
 	if err := r.client.do(ctx, requestOptions{
 		method: "GET",
 		path:   "/v1/agent-sessions",
+		query:  q,
 		out:    &out,
 	}); err != nil {
 		return nil, err
 	}
 	return &out, nil
+}
+
+// Iterate yields every agent session across cursor pages (newest first). The
+// callback returns false to stop early; an error from it is propagated back.
+// Replaces the old hard 100-cap — a busy account can now reach its full
+// AI-session history.
+func (r *AgentSessionsResource) Iterate(ctx context.Context, query *ListAgentSessionsQuery, fn func(*AgentSession) (bool, error)) error {
+	cursor := ""
+	limit := 0
+	if query != nil {
+		limit = query.Limit
+		cursor = query.Cursor
+	}
+	for {
+		page, err := r.List(ctx, &ListAgentSessionsQuery{Limit: limit, Cursor: cursor})
+		if err != nil {
+			return err
+		}
+		for i := range page.Data {
+			cont, err := fn(&page.Data[i])
+			if err != nil {
+				return err
+			}
+			if !cont {
+				return nil
+			}
+		}
+		next, done, err := advanceCursor(cursor, page.NextCursor)
+		if err != nil {
+			return err
+		}
+		if done {
+			return nil
+		}
+		cursor = next
+	}
 }
 
 // ConsequentialActionApproval re-sends a consequential action a prior turn

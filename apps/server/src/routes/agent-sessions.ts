@@ -17,7 +17,7 @@
 // v0 launch — tier-derived caps land in B3 (separate slice). Founder
 // reviews this constant before flipping the gate on.
 
-import { timingSafeEqual, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -25,6 +25,7 @@ import {
   ConsequentialActionCategorySchema,
   SendInputEventRequestSchema,
   ResumeSessionRequestSchema,
+  PaginationQuerySchema,
   type AgentModel,
   type AccountTier,
 } from '@driftstack/api-types';
@@ -78,6 +79,7 @@ import {
   encryptGuiControlKey,
   generateGuiControlKey,
 } from '../lib/gui-control-key-encryption.js';
+import { validateGuiControlKey } from '../lib/agent-session-control-key.js';
 import {
   BundledLlmBudgetExhaustedError,
   BundledLlmConsentRequiredError,
@@ -90,7 +92,6 @@ import {
   NotFoundError,
   PairModeConflictError,
   PairModeStateInvalidTransitionRouteError,
-  UnauthorizedError,
   ValidationError,
 } from '../lib/errors.js';
 import { resolveEffectiveAccount, type EffectiveAccount } from '../services/auth.js';
@@ -1190,47 +1191,21 @@ export function registerAgentSessionsRoutes(
     req: FastifyRequest,
     sessionId: string,
   ): Promise<{ authorized: false } | { authorized: true; ownerAccountId: string }> {
+    // Only hit the DB when a header is actually present (the no-header case
+    // falls straight through to the account path — avoids a needless get()).
     const headerRaw = req.headers[GUI_CONTROL_KEY_HEADER];
     const header = Array.isArray(headerRaw) ? headerRaw[0] : headerRaw;
     if (header === undefined || header.length === 0) {
-      // No control key offered → account-auth path decides.
       return { authorized: false };
     }
-    // A control key was presented; from here every failure is a hard
-    // 401 (never a fallthrough to account data).
-    if (guiControlKeyEncryptionKey === undefined) {
-      // Control-key auth isn't enabled on this deployment.
-      throw new UnauthorizedError('gui_control_key auth is not enabled on this deployment.');
-    }
     const rec = await sessions.get(sessionId);
-    if (
-      rec === null ||
-      rec.guiControlKeyCiphertext === null ||
-      rec.guiControlKeyExpiresAt === null ||
-      rec.guiControlKeyExpiresAt.getTime() <= Date.now()
-    ) {
-      // Unknown session, never-minted key, or expired → reject. Never
-      // confirm whether the session exists for another account.
-      throw new UnauthorizedError('gui_control_key is missing, expired, or invalid.');
-    }
-    let expected: string;
-    try {
-      expected = decryptGuiControlKey(rec.guiControlKeyCiphertext, guiControlKeyEncryptionKey);
-    } catch {
-      // Ciphertext that won't decrypt (key rotation / corruption) is
-      // treated as no valid key — reject, don't 500.
-      throw new UnauthorizedError('gui_control_key is missing, expired, or invalid.');
-    }
-    const presented = Buffer.from(header, 'utf8');
-    const expectedBuf = Buffer.from(expected, 'utf8');
-    // timingSafeEqual requires equal-length buffers; the length check
-    // short-circuits before the constant-time compare. The plaintext
-    // format is fixed-length (`gck_` + 32 base32 chars), so a correct
-    // key always matches length; differing lengths are always wrong.
-    if (presented.length !== expectedBuf.length || !timingSafeEqual(presented, expectedBuf)) {
-      throw new UnauthorizedError('gui_control_key is missing, expired, or invalid.');
-    }
-    return { authorized: true, ownerAccountId: rec.accountId };
+    // Shared validator (lib/agent-session-control-key.ts) — single source of
+    // truth, also used by the livekit-token re-mint route.
+    return validateGuiControlKey({
+      headerRaw,
+      session: rec,
+      encryptionKey: guiControlKeyEncryptionKey,
+    });
   }
 
   /**
@@ -1560,26 +1535,25 @@ export function registerAgentSessionsRoutes(
   // 2026-05-22 — list customer's agent sessions, newest first. Used
   // by the dashboard's /agent-sessions page to render a history.
   // Returns the public envelope (no transcript inline; the detail
-  // route serves that). Hard-capped at 100 results per call; the
-  // dashboard pages locally if a customer has more than that.
+  // route serves that). Cursor-paginated on (created_at, id) desc —
+  // the standard `{ data, has_more, next_cursor }` envelope shared by
+  // /v1/sessions et al., so a busy account can page its full AI-session
+  // history (was hard-capped at 100 with no cursor — older sessions
+  // were unreachable via the API/SDK entirely).
   app.get(
     '/v1/agent-sessions',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
-      // Most-recent 100 only — the repo now sorts + caps at the DB so a busy
-      // account's full history isn't pulled into memory on every list call. The
-      // re-sort below is a cheap defensive belt over the ≤100 returned rows.
-      const all = await sessions.listByAccount(ctx.account.id, { limit: 100 });
-      const sorted = [...all].sort((a, b) => {
-        const aT = a.createdAt instanceof Date ? a.createdAt.getTime() : 0;
-        const bT = b.createdAt instanceof Date ? b.createdAt.getTime() : 0;
-        return bT - aT;
+      const query = PaginationQuerySchema.parse(req.query ?? {});
+      const page = await sessions.listPageByAccount(ctx.account.id, {
+        limit: query.limit,
+        ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
       });
       return {
-        data: sorted
-          .slice(0, 100)
-          .map((rec) => publicAgentSession(rec, undefined, sessionLivenessStore)),
+        data: page.items.map((rec) => publicAgentSession(rec, undefined, sessionLivenessStore)),
+        has_more: page.nextCursor !== null,
+        next_cursor: page.nextCursor,
       };
     },
   );

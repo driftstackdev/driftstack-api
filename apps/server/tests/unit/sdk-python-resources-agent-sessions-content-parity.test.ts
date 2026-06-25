@@ -60,7 +60,13 @@ describe('sdk-python resources/agent_sessions content parity', () => {
       /def create\(\s*\n?\s*self,\s*\n?\s*body: dict\[str, Any\] \| None = None,\s*\n?\s*\*,\s*\n?\s*idempotency_key: str \| None = None,\s*\n?\s*\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(/def get\(self, agent_session_id: str\) -> dict\[str, Any\]:/);
-    expect(body).toMatch(/def list\(self\) -> dict\[str, Any\]:/);
+    // sweep-3 — cursor pagination + iterate (was a non-paginated def list(self)).
+    expect(body).toMatch(
+      /def list\(self, \*, limit: int \| None = None, cursor: str \| None = None\) -> dict\[str, Any\]:/,
+    );
+    expect(body).toMatch(
+      /def iterate\(self, \*, limit: int \| None = None\) -> Iterator\[dict\[str, Any\]\]:/,
+    );
     expect(body).toMatch(
       /def message\(\s*\n?\s*self,\s*\n?\s*agent_session_id: str,\s*\n?\s*user_message: str,\s*\n?\s*\*,\s*\n?\s*byok_api_key: str \| None = None,\s*\n?\s*approve_consequential_actions: builtins\.list\[dict\[str, str\]\] \| None = None,\s*\n?\s*\) -> dict\[str, Any\]:/,
     );
@@ -94,7 +100,9 @@ describe('sdk-python resources/agent_sessions content parity', () => {
     expect(body).toMatch(/class AsyncAgentSessionsResource:/);
     expect(body).toMatch(/async def create\(/);
     expect(body).toMatch(/async def get\(/);
-    expect(body).toMatch(/async def list\(self\) -> dict\[str, Any\]:/);
+    expect(body).toMatch(
+      /async def list\(\s*\n?\s*self, \*, limit: int \| None = None, cursor: str \| None = None\s*\n?\s*\) -> dict\[str, Any\]:/,
+    );
     expect(body).toMatch(/async def message\(/);
     expect(body).toMatch(/async def close\(self, agent_session_id: str\) -> None:/);
     expect(body).toMatch(/async def set_mode\(/);

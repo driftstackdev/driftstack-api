@@ -110,17 +110,26 @@ export class DrizzleAccountAuthRepo implements AccountAuthRepo {
   }
 
   async findTeamMemberships(memberAccountId: string): Promise<TeamMembership[]> {
+    // Join the owner account so the membership carries the owner's email + name
+    // (the dashboard labels a team by who owns it, not a bare acc_<uuid>). An
+    // innerJoin is correct here: a membership row always references a live owner
+    // account (FK), so the join can never drop a row.
     const rows = await this.database.db
       .select({
         id: teamMembers.id,
         ownerAccountId: teamMembers.ownerAccountId,
+        ownerEmail: accounts.email,
+        ownerName: accounts.name,
         role: teamMembers.role,
       })
       .from(teamMembers)
+      .innerJoin(accounts, eq(accounts.id, teamMembers.ownerAccountId))
       .where(eq(teamMembers.memberAccountId, memberAccountId));
     return rows.map((r) => ({
       membershipId: r.id,
       ownerAccountId: r.ownerAccountId,
+      ownerEmail: r.ownerEmail,
+      ownerName: r.ownerName,
       role: r.role,
     }));
   }

@@ -108,10 +108,12 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     expect(body).toMatch(/secretPrev: sql`\$\{webhookEndpoints\.secret\}`,/);
   });
 
-  it('enqueueDelivery: 4-field base values (webhookId + eventId + eventType + payload) + conditional nextAttemptAt spread', () => {
+  it('enqueueDelivery: 4-field base values (webhookId + eventId + eventType + payload) + conditional nextAttemptAt spread + RETURNING id (returns the real delivery row id)', () => {
     expect(body).toMatch(
-      /await this\.database\.db\.insert\(webhookDeliveries\)\.values\(\{\s*\n?\s*webhookId: input\.webhookId,\s*\n?\s*eventId: input\.eventId,\s*\n?\s*eventType: input\.eventType,\s*\n?\s*payload: input\.payload,\s*\n?\s*\.\.\.\(input\.nextAttemptAt !== undefined \? \{ nextAttemptAt: input\.nextAttemptAt \} : \{\}\),\s*\n?\s*\}\);/,
+      /const \[row\] = await this\.database\.db\s*\n?\s*\.insert\(webhookDeliveries\)\s*\n?\s*\.values\(\{\s*\n?\s*webhookId: input\.webhookId,\s*\n?\s*eventId: input\.eventId,\s*\n?\s*eventType: input\.eventType,\s*\n?\s*payload: input\.payload,\s*\n?\s*\.\.\.\(input\.nextAttemptAt !== undefined \? \{ nextAttemptAt: input\.nextAttemptAt \} : \{\}\),\s*\n?\s*\}\)\s*\n?\s*\.returning\(\{ id: webhookDeliveries\.id \}\);/,
     );
+    // returns the real DB row id (not the eventId) so a test-event delivery_id resolves.
+    expect(body).toMatch(/return row\.id;/);
   });
 
   it('listEndpointsSubscribedTo: events @> ARRAY[<eventType>] raw SQL contains-array on Postgres enum array; account+active filter', () => {

@@ -177,10 +177,10 @@ describe('W819 cross-SDK client constructor parity', () => {
 
   // ─── Go base-url + retry + http triple ────────────────────────
 
-  it('CRITICAL Go Client struct fields pinned — apiKey + baseURL + http + retry. Drift to a different internal layout would break the WithXxx options + the package-private impl methods.', () => {
+  it('CRITICAL Go Client struct fields pinned — apiKey + baseURL + http + timeout + retry. Drift to a different internal layout would break the WithXxx options + the package-private impl methods. (sweep-3 added a `timeout time.Duration` field so a body-declared long-running op can auto-raise the per-request context deadline.)', () => {
     const p = read(GO);
     expect(p).toMatch(
-      /apiKey +string\s*\n\s+baseURL string\s*\n(\s*\/\/[^\n]*\n)*\s+effectiveAccount string\s*\n\s+http +\*http\.Client\s*\n\s+retry +RetryConfig/,
+      /apiKey +string\s*\n\s+baseURL string\s*\n(\s*\/\/[^\n]*\n)*\s+effectiveAccount string\s*\n\s+http +\*http\.Client\s*\n(\s*\/\/[^\n]*\n)*\s+timeout +time\.Duration\s*\n\s+retry +RetryConfig/,
     );
   });
 

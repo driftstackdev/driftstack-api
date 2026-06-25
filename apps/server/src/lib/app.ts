@@ -1497,6 +1497,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       fleetNodesRepo: deps.drizzleFleetNodesRepo,
       agentSessionsRepo: deps.agentSessionsRepo,
       encryptionKey: deps.livekitSecretEncryptionKey,
+      // Reconnect re-mint via the per-session gui_control_key — the Simulator
+      // app holds only that key (not the account API key). Wired when present.
+      ...(deps.guiControlKeyEncryptionKey !== undefined
+        ? { guiControlKeyEncryptionKey: deps.guiControlKeyEncryptionKey }
+        : {}),
       ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
     });
   }

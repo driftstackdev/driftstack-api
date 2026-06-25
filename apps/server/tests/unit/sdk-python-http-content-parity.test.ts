@@ -97,7 +97,7 @@ describe('W585.C packages/sdk-python/src/driftstack/http.py content parity', () 
       /"""Thin wrapper around ``httpx\.Client`` for the sync :class:`Driftstack`\."""/,
     );
     expect(body).toMatch(
-      /def __init__\(\s*\n\s*self,\s*\n\s*api_key: str,\s*\n\s*\*,\s*\n\s*base_url: str,\s*\n\s*timeout_s: float = DEFAULT_TIMEOUT_S,\s*\n\s*retry: RetryConfig \| None = None,\s*\n\s*client: httpx\.Client \| None = None,\s*\n\s*effective_account: str \| None = None,\s*\n\s*\) -> None:\s*\n\s*self\._api_key = api_key\s*\n\s*self\._effective_account = effective_account\s*\n\s*self\._base_url = base_url\.rstrip\("\/"\)\s*\n\s*self\._retry = retry\s*\n\s*self\._client = client or httpx\.Client\(timeout=timeout_s\)\s*\n\s*self\._owns_client = client is None/m,
+      /def __init__\(\s*\n\s*self,\s*\n\s*api_key: str,\s*\n\s*\*,\s*\n\s*base_url: str,\s*\n\s*timeout_s: float = DEFAULT_TIMEOUT_S,\s*\n\s*retry: RetryConfig \| None = None,\s*\n\s*client: httpx\.Client \| None = None,\s*\n\s*effective_account: str \| None = None,\s*\n\s*\) -> None:\s*\n\s*self\._api_key = api_key\s*\n\s*self\._effective_account = effective_account\s*\n\s*self\._base_url = base_url\.rstrip\("\/"\)\s*\n\s*self\._retry = retry\s*\n\s*self\._timeout_s = timeout_s\s*\n\s*self\._client = client or httpx\.Client\(timeout=timeout_s\)\s*\n\s*self\._owns_client = client is None/m,
     );
     expect(body).toMatch(
       /def close\(self\) -> None:\s*\n\s*if self\._owns_client:\s*\n\s*self\._client\.close\(\)/,

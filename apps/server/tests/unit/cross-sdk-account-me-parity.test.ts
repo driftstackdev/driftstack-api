@@ -204,9 +204,12 @@ describe('W704 cross-SDK V-237/V-352/V-355 account-me parity', () => {
     expect(ts).toMatch(/status: 'active' \| 'suspended' \| 'deleted'/);
   });
 
-  it("CRITICAL RateLimitBucket V-258 2-bucket-key enum pinned in sdk-typescript: 'global' | 'sessions:create'. The closed-2 set is the rate-limit-bucket roster. Drift to adding a 3rd bucket would silently widen the rate-limit attack surface.", () => {
+  it("CRITICAL RateLimitBucket V-258 4-bucket-key enum pinned in sdk-typescript: 'global' | 'sessions:create' | 'agent_sessions:message' | 'agent_sessions:input_event' (mirrors server BUCKET_KEYS — sweep-3). The set is the rate-limit-bucket roster; an exhaustive switch must cover every bucket the server actually returns.", () => {
     const ts = read(TS_ACCT);
-    expect(ts).toMatch(/bucket_key: 'global' \| 'sessions:create'/);
+    expect(ts).toMatch(/'global'/);
+    expect(ts).toMatch(/'sessions:create'/);
+    expect(ts).toMatch(/'agent_sessions:message'/);
+    expect(ts).toMatch(/'agent_sessions:input_event'/);
   });
 
   it("CRITICAL RateLimitBucket source 2-value enum pinned in sdk-typescript: 'tier_default' | 'override'. The 'override' value flags accounts that have a per-account rate-limit override (tier-default-overridden by support); drift to dropping would lose the audit signal.", () => {

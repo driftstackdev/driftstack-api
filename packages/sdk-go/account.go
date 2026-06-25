@@ -172,7 +172,8 @@ func (r *AccountResource) RevokeAllOtherWebSessions(ctx context.Context) error {
 
 // RateLimitBucket — V-258 per-bucket effective rate-limit config.
 type RateLimitBucket struct {
-	BucketKey         string  `json:"bucket_key"` // "global" | "sessions:create"
+	// "global" | "sessions:create" | "agent_sessions:message" | "agent_sessions:input_event"
+	BucketKey         string  `json:"bucket_key"`
 	Capacity          int     `json:"capacity"`
 	RefillPerSecond   float64 `json:"refill_per_second"`
 	Source            string  `json:"source"` // "tier_default" | "override"

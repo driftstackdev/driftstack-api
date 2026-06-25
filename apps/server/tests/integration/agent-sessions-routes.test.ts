@@ -297,6 +297,78 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect((await post('https://x.com/' + 'a'.repeat(2100))).statusCode).toBe(400);
   });
 
+  it('GET /v1/agent-sessions is cursor-paginated: { data, has_more, next_cursor } — limit pages, the cursor reaches older sessions (was hard-capped at 100, no cursor)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    // Create 3 sessions (newest last). created_at desc → the list returns them
+    // most-recent first.
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const created = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/agent-sessions',
+        headers: auth,
+        payload: { token_budget: 50_000 },
+      });
+      expect(created.statusCode).toBe(201);
+      ids.push(created.json<{ id: string }>().id);
+    }
+
+    // Page 1 (limit=2) → 2 rows + has_more + a next_cursor.
+    const page1 = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions?limit=2',
+      headers: auth,
+    });
+    expect(page1.statusCode).toBe(200);
+    const b1 = page1.json<{
+      data: { id: string }[];
+      has_more: boolean;
+      next_cursor: string | null;
+    }>();
+    expect(b1.data).toHaveLength(2);
+    expect(b1.has_more).toBe(true);
+    expect(b1.next_cursor).not.toBeNull();
+
+    // Page 2 (the cursor) → the remaining 1 row, no more pages. Every created
+    // id is reachable across the two pages (no silent truncation).
+    const page2 = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions?limit=2&cursor=${encodeURIComponent(b1.next_cursor ?? '')}`,
+      headers: auth,
+    });
+    expect(page2.statusCode).toBe(200);
+    const b2 = page2.json<{
+      data: { id: string }[];
+      has_more: boolean;
+      next_cursor: string | null;
+    }>();
+    expect(b2.data).toHaveLength(1);
+    expect(b2.has_more).toBe(false);
+    expect(b2.next_cursor).toBeNull();
+
+    const seen = new Set([...b1.data, ...b2.data].map((s) => s.id));
+    for (const id of ids) expect(seen.has(id)).toBe(true);
+  });
+
+  it('GET /v1/agent-sessions tolerates a malformed cursor → first page (never a 500)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: auth,
+      payload: { token_budget: 50_000 },
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions?cursor=not-a-real-cursor',
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ data: unknown[] }>().data.length).toBeGreaterThanOrEqual(1);
+  });
+
   // Teams member-launch (898cb5f) — the SECURITY-SENSITIVE positive + RBAC
   // paths, exercised against a REAL seeded membership (the fail-closed
   // non-member / malformed cases are covered above). These pin the three

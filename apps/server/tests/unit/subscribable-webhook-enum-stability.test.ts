@@ -1,5 +1,5 @@
 // W250.C — stability guard for SubscribableWebhookEventTypeSchema.
-// A downstream change that removed any of the eight shipped events
+// A downstream change that removed any of the ten shipped events
 // would silently break:
 //   - SDK webhook verifiers (TS/Python/Go)
 //   - /docs/webhooks event-type table
@@ -9,11 +9,17 @@
 // This guard fails fast if any current event leaves the enum and
 // forces the change to land alongside SDK + doc updates.
 //
-// Eight shipped: the original 5 (session.completed, session.failed,
+// Ten shipped: the original 5 (session.completed, session.failed,
 // quota.warning_80pct, quota.exceeded, api_key.revoked) plus the
 // Arc 5 EGRESS eg.7 addition session.egress_capability_changed plus
 // the V-666 crypto-order pair (crypto.order.paid + crypto.order.failed)
-// wired end-to-end 2026-05-22.
+// wired end-to-end 2026-05-22 plus W393 + A3 W1364.
+//
+// NOTE (sweep-3): quota.warning_80pct / quota.exceeded stay subscribable but
+// have NO usage-threshold emitter yet (a subscription never delivers — docs
+// mark them [DECLARED]). Kept here to preserve the cross-surface contract
+// until the emitter lands + the dashboard gets a "coming soon" caveat; a
+// flagged follow-up, not silently dropped.
 
 import { describe, expect, it } from 'vitest';
 import { SubscribableWebhookEventTypeSchema } from '@driftstack/api-types';

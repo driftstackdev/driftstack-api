@@ -180,14 +180,21 @@ func TestAgentSessions_List(t *testing.T) {
 			t.Errorf("method=%q path=%q", r.Method, r.URL.Path)
 		}
 		w.Header().Set("content-type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{agentSessionEnvelope}})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data":        []any{agentSessionEnvelope},
+			"has_more":    false,
+			"next_cursor": nil,
+		})
 	})
-	page, err := client.AgentSessions.List(context.Background())
+	page, err := client.AgentSessions.List(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(page.Data) != 1 {
 		t.Errorf("len(data)=%d", len(page.Data))
+	}
+	if page.HasMore {
+		t.Errorf("has_more=%v want false", page.HasMore)
 	}
 }
 

@@ -142,6 +142,8 @@ export function registerTeamRoutes(app: FastifyInstance, opts: TeamRoutesOptions
       return {
         data: ctx.teams.map((t) => ({
           owner_account_id: `acc_${t.ownerAccountId}`,
+          owner_email: t.ownerEmail ?? `acc_${t.ownerAccountId}`,
+          owner_name: t.ownerName ?? null,
           role: t.role,
           membership_id: `mem_${t.membershipId}`,
         })),

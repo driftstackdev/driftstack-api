@@ -173,6 +173,11 @@ const AccountMeResponseSchema = z.object({
   teams: z.array(
     z.object({
       owner_account_id: z.string(),
+      // Owner identity so the dashboard can label a team by who owns it
+      // (instead of a bare acc_<uuid>). email is always present; name is
+      // null when the owner never set a display name.
+      owner_email: z.string(),
+      owner_name: z.string().nullable(),
       role: z.enum(['admin', 'member']),
       membership_id: z.string(),
     }),
@@ -850,10 +855,13 @@ function buildRegistry(): OpenAPIRegistry {
     .openapi('TeamInvite');
 
   // V-326c — minimal "owner" view of a membership for the
-  // member-facing GET /v1/team/owners endpoint.
+  // member-facing GET /v1/team/owners endpoint. Carries the owner's
+  // email/name so the dashboard labels a team by who owns it.
   const TeamOwnerSchema = z
     .object({
       owner_account_id: z.string(),
+      owner_email: z.string(),
+      owner_name: z.string().nullable(),
       role: z.enum(['member', 'admin']),
       membership_id: z.string(),
     })

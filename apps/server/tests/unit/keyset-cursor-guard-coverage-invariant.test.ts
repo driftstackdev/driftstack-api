@@ -27,7 +27,10 @@ const DB_DIR = resolve(HERE, '..', '..', 'src', 'db');
 const CURSOR_ID_LOOKUP = /eq\(\w+\.id,\s*\w+\.cursor\)/;
 
 // Text-PK repos (id is `text(...)`, not `uuid(...)`) — exempt + MUST NOT guard.
-const TEXT_PK_EXEMPT = new Set(['recipes-repo.ts']);
+// agent-sessions-repo's id is `agt_<uuid>` text (sweep-3 added its keyset
+// pagination); it guards the cursor with AGENT_SESSION_ID_RE (the prefixed
+// shape), not parseUuidCursor (which only accepts a bare uuid).
+const TEXT_PK_EXEMPT = new Set(['recipes-repo.ts', 'agent-sessions-repo.ts']);
 
 describe('keyset-cursor UUID-guard coverage invariant', () => {
   const repos = readdirSync(DB_DIR).filter((f) => f.endsWith('-repo.ts'));

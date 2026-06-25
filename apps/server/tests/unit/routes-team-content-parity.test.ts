@@ -111,7 +111,7 @@ describe('W437.C apps/server/src/routes/team.ts content parity', () => {
       /\/\/ V-326c — list owner accounts the caller is a member of\. Read\s*\n?\s*\/\/ straight from ctx\.teams \(already loaded on auth-cache miss\); no\s*\n?\s*\/\/ DB call\. The mirror of GET \/v1\/team\/members \(which lists "MY\s*\n?\s*\/\/ members"\); this is "teams I am ON"\./,
     );
     expect(body).toMatch(
-      /return \{\s*\n?\s*data: ctx\.teams\.map\(\(t\) => \(\{\s*\n?\s*owner_account_id: `acc_\$\{t\.ownerAccountId\}`,\s*\n?\s*role: t\.role,\s*\n?\s*membership_id: `mem_\$\{t\.membershipId\}`,\s*\n?\s*\}\)\),\s*\n?\s*\};/,
+      /return \{\s*\n?\s*data: ctx\.teams\.map\(\(t\) => \(\{\s*\n?\s*owner_account_id: `acc_\$\{t\.ownerAccountId\}`,\s*\n?\s*owner_email: t\.ownerEmail \?\? `acc_\$\{t\.ownerAccountId\}`,\s*\n?\s*owner_name: t\.ownerName \?\? null,\s*\n?\s*role: t\.role,\s*\n?\s*membership_id: `mem_\$\{t\.membershipId\}`,\s*\n?\s*\}\)\),\s*\n?\s*\};/,
     );
   });
 

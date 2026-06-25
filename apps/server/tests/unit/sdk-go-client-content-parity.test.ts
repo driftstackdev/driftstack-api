@@ -84,25 +84,29 @@ describe('W588.A packages/sdk-go/client.go content parity', () => {
     expect(body).toMatch(
       /func WithBaseURL\(baseURL string\) Option \{\s*\n\s*return func\(c \*Client\) \{ c\.baseURL = strings\.TrimRight\(baseURL, "\/"\) \}\s*\n\}/,
     );
+    // sweep-3 — WithHTTPClient now also zeroes c.timeout (caller's client owns
+    // timeouts); WithTimeout sets c.timeout (applied via a per-request context
+    // deadline in do(), so a body-declared long-running op can auto-raise it).
     expect(body).toMatch(
-      /func WithHTTPClient\(h \*http\.Client\) Option \{\s*\n\s*return func\(c \*Client\) \{ c\.http = h \}\s*\n\}/,
+      /func WithHTTPClient\(h \*http\.Client\) Option \{\s*\n\s*return func\(c \*Client\) \{\s*\n\s*c\.http = h\s*\n(\s*\/\/[^\n]*\n)*\s*c\.timeout = 0\s*\n\s*\}\s*\n\}/,
     );
     expect(body).toMatch(
       /func WithRetry\(cfg RetryConfig\) Option \{\s*\n\s*return func\(c \*Client\) \{ c\.retry = cfg \}\s*\n\}/,
     );
     expect(body).toMatch(/func WithTimeout\(d time\.Duration\) Option \{/);
-    expect(body).toMatch(
-      /if c\.http == nil \{\s*\n\s*c\.http = &http\.Client\{Timeout: d\}\s*\n\s*\}/,
-    );
+    expect(body).toMatch(/if c\.http == nil \{\s*\n\s*c\.timeout = d\s*\n\s*\}/);
   });
 
-  it('New() factory: api_key required + DefaultBaseURL + DefaultRetry() + apply opts + default http.Client{Timeout: DefaultTimeout} + 15 resource wirings pinned', () => {
+  it('New() factory: api_key required + DefaultBaseURL + DefaultRetry() + timeout: DefaultTimeout + apply opts + default http.Client{} (no hard Timeout — per-request context deadline governs) + 15 resource wirings pinned', () => {
     expect(body).toMatch(
-      /^func New\(apiKey string, opts \.\.\.Option\) \*Client \{\s*\n\s*c := &Client\{\s*\n\s*apiKey: {2}apiKey,\s*\n\s*baseURL: DefaultBaseURL,\s*\n\s*retry: {3}DefaultRetry\(\),\s*\n\s*\}/m,
+      /^func New\(apiKey string, opts \.\.\.Option\) \*Client \{\s*\n\s*c := &Client\{\s*\n\s*apiKey: {2}apiKey,\s*\n\s*baseURL: DefaultBaseURL,\s*\n\s*retry: {3}DefaultRetry\(\),\s*\n\s*timeout: DefaultTimeout,\s*\n\s*\}/m,
     );
     expect(body).toMatch(/for _, opt := range opts \{\s*\n\s*opt\(c\)\s*\n\s*\}/);
+    // sweep-3 — no hard http.Client.Timeout; the per-request context deadline
+    // in do() governs, so a body-declared long-running timeout can raise above
+    // the base (DefaultTimeout / WithTimeout).
     expect(body).toMatch(
-      /if c\.http == nil \{\s*\n\s*c\.http = &http\.Client\{Timeout: DefaultTimeout\}\s*\n\s*\}/,
+      /if c\.http == nil \{\s*\n(\s*\/\/[^\n]*\n)*\s*c\.http = &http\.Client\{\}\s*\n\s*\}/,
     );
     expect(body).toMatch(/c\.Sessions = &SessionsResource\{client: c\}/);
     expect(body).toMatch(/c\.APIKeys = &APIKeysResource\{client: c\}/);
@@ -128,8 +132,16 @@ describe('W588.A packages/sdk-go/client.go content parity', () => {
     expect(body).toMatch(/\/\/ User-Agent \+ Content-Type defaults\. Resource methods use this/);
     expect(body).toMatch(/\/\/ for one-shot needs like Idempotency-Key \(V-666\.AO\)\./);
     expect(body).toMatch(/headers map\[string\]string/);
+    // sweep-3 — do() first applies the per-request timeout as a context
+    // deadline (skipped for c.timeout==0 or an earlier caller deadline), then
+    // the retry-safety gate.
     expect(body).toMatch(
-      /func \(c \*Client\) do\(ctx context\.Context, opts requestOptions\) error \{\s*\n\s*if !isRetrySafe\(opts\.method, opts\.headers\) \{\s*\n\s*return c\.doOnce\(ctx, opts\)\s*\n\s*\}\s*\n\s*return withRetry\(ctx, c\.retry, func\(\) error \{\s*\n\s*return c\.doOnce\(ctx, opts\)\s*\n\s*\}\)\s*\n\}/,
+      /func \(c \*Client\) do\(ctx context\.Context, opts requestOptions\) error \{/,
+    );
+    expect(body).toMatch(/if d := c\.resolveTimeout\(opts\); d > 0 \{/);
+    expect(body).toMatch(/ctx, cancel = context\.WithTimeout\(ctx, d\)/);
+    expect(body).toMatch(
+      /if !isRetrySafe\(opts\.method, opts\.headers\) \{\s*\n\s*return c\.doOnce\(ctx, opts\)\s*\n\s*\}\s*\n\s*return withRetry\(ctx, c\.retry, func\(\) error \{\s*\n\s*return c\.doOnce\(ctx, opts\)\s*\n\s*\}\)\s*\n\}/,
     );
     // The retry-safety gate predicate itself (idempotent methods OR an
     // Idempotency-Key header) — the audit-2026-06-23 double-submit guard.

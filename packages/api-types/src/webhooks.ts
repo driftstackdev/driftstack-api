@@ -9,6 +9,12 @@ export const WebhookDeliveryIdSchema = PrefixedId('wdl');
 export const WebhookEventTypeSchema = z.enum([
   'session.completed',
   'session.failed',
+  // quota.warning_80pct / quota.exceeded are DECLARED in the contract +
+  // subscribable, but NOT yet wired to a usage-threshold emitter (no
+  // enqueueEvent call site exists). The docs mark them [DECLARED]; the
+  // dashboard should carry the same "coming soon" caveat (cross-agent
+  // follow-up) + a usage-threshold emitter is the founder-review feature
+  // that makes them actually fire (sweep-3 flagged).
   'quota.warning_80pct',
   'quota.exceeded',
   'api_key.revoked',
@@ -51,6 +57,14 @@ export type WebhookEventType = z.infer<typeof WebhookEventTypeSchema>;
  * `test.ping`, which is only ever emitted via the explicit test
  * endpoint (subscribing to it would be meaningless — the test
  * endpoint dispatches regardless of subscription).
+ *
+ * NOTE (sweep-3): `quota.warning_80pct` / `quota.exceeded` are subscribable
+ * here but have NO usage-threshold emitter yet (no enqueueEvent call site), so
+ * a subscription to them currently never delivers — the docs mark them
+ * [DECLARED]. Kept subscribable to preserve the cross-surface contract
+ * (marketing/docs/dashboard) until the metered-usage threshold emitter lands
+ * (founder-review feature) + the dashboard gets a matching "coming soon"
+ * caveat. Tracked as a flagged follow-up rather than silently removed.
  */
 export const SubscribableWebhookEventTypeSchema = z.enum([
   'session.completed',

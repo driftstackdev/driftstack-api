@@ -107,9 +107,16 @@ describe('sdk-go agent_sessions content parity', () => {
       /func \(r \*AgentSessionsResource\) Get\(ctx context\.Context, agentSessionID string\) \(\*AgentSession, error\)/,
     );
     expect(body).toMatch(
-      /func \(r \*AgentSessionsResource\) List\(ctx context\.Context\) \(\*AgentSessionsListPage, error\)/,
+      /func \(r \*AgentSessionsResource\) List\(ctx context\.Context, query \*ListAgentSessionsQuery\) \(\*AgentSessionsListPage, error\)/,
     );
-    expect(body).toMatch(/type AgentSessionsListPage struct \{[\s\S]*?Data \[\]AgentSession/);
+    // sweep-3 — cursor pagination: { data, has_more, next_cursor } + an Iterate
+    // walker (was a non-paginated { data } hard-capped at 100).
+    expect(body).toMatch(
+      /type AgentSessionsListPage struct \{[\s\S]*?Data\s+\[\]AgentSession[\s\S]*?HasMore\s+bool[\s\S]*?NextCursor\s+\*string/,
+    );
+    expect(body).toMatch(
+      /func \(r \*AgentSessionsResource\) Iterate\(ctx context\.Context, query \*ListAgentSessionsQuery, fn func\(\*AgentSession\) \(bool, error\)\) error/,
+    );
     expect(body).toMatch(
       /func \(r \*AgentSessionsResource\) Message\(ctx context\.Context, agentSessionID, userMessage string, opts \*MessageOptions\) \(\*AgentMessageResponse, error\)/,
     );

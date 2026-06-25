@@ -77,10 +77,10 @@ describe('W899 V-386 AccountMeResponse cross-source invariant', () => {
 
   // ─── V-326c teams array ─────────────────────────────────────
 
-  it("CRITICAL AccountMeResponse.teams is z.array of objects with 3 fields — owner_account_id + role ('admin' | 'member') + membership_id. The 3-field team membership matches V-298c TeamRole + the V-326c 'acting as' picker.", () => {
+  it("CRITICAL AccountMeResponse.teams is z.array of objects with 5 fields — owner_account_id + owner_email + owner_name (nullable) + role ('admin' | 'member') + membership_id. owner_email/owner_name (sweep-3) let the dashboard label a team by who owns it. The role matches V-298c TeamRole + the V-326c 'acting as' picker.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
     expect(p).toMatch(
-      /teams: z\.array\(\s*\n\s*z\.object\(\{\s*\n\s*owner_account_id: z\.string\(\),\s*\n\s*role: z\.enum\(\['admin', 'member'\]\),\s*\n\s*membership_id: z\.string\(\),/,
+      /teams: z\.array\(\s*\n\s*z\.object\(\{\s*\n\s*owner_account_id: z\.string\(\),(?:\s*\n\s*\/\/[^\n]*)*\s*\n\s*owner_email: z\.string\(\),\s*\n\s*owner_name: z\.string\(\)\.nullable\(\),\s*\n\s*role: z\.enum\(\['admin', 'member'\]\),\s*\n\s*membership_id: z\.string\(\),/,
     );
   });
 
@@ -94,7 +94,7 @@ describe('W899 V-386 AccountMeResponse cross-source invariant', () => {
     expect(p).toMatch(/profile_cap: profileCapFor\(tier\)/);
     expect(p).toMatch(/profile_count: profileCount/);
     expect(p).toMatch(
-      /teams: ctx\.teams\.map\(\(t\) => \(\{\s*\n\s*owner_account_id: `acc_\$\{t\.ownerAccountId\}`,\s*\n\s*role: t\.role,\s*\n\s*membership_id: `mem_\$\{t\.membershipId\}`,/,
+      /teams: ctx\.teams\.map\(\(t\) => \(\{\s*\n\s*owner_account_id: `acc_\$\{t\.ownerAccountId\}`,\s*\n\s*owner_email: t\.ownerEmail \?\? `acc_\$\{t\.ownerAccountId\}`,\s*\n\s*owner_name: t\.ownerName \?\? null,\s*\n\s*role: t\.role,\s*\n\s*membership_id: `mem_\$\{t\.membershipId\}`,/,
     );
   });
 
@@ -133,14 +133,14 @@ describe('W899 V-386 AccountMeResponse cross-source invariant', () => {
 
   // ─── 15-field cardinality ────────────────────────────────────
 
-  it('CRITICAL AccountMeResponse has at least 15 top-level fields (counted including nested teams-object fields = 18 total matches). The 15-top-level rich shape distinguishes /v1/account/me (dashboard) from the lean AccountSchema (SDKs).', () => {
+  it('CRITICAL AccountMeResponse has 15 top-level fields + 5 nested teams-object fields = 20 total matches (sweep-3 added owner_email + owner_name to the nested teams object). The 15-top-level rich shape distinguishes /v1/account/me (dashboard) from the lean AccountSchema (SDKs).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
     const m = p.match(/AccountMeResponseSchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(m).not.toBeNull();
     const body = m![1] ?? '';
-    // Count top-level + nested fields together (15 top + 3 nested = 18).
+    // Count top-level + nested fields together (15 top + 5 nested = 20).
     const fieldCount = (body.match(/^\s*[a-z_]+:/gm) || []).length;
-    expect(fieldCount).toBe(18);
+    expect(fieldCount).toBe(20);
   });
 
   it('test file metadata — file exists at canonical path', () => {

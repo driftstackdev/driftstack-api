@@ -97,9 +97,15 @@ interface SerializedRateLimitOverride {
 // V-326 — team membership entries serialized as plain JSON. Older
 // pre-V-326 cache entries lack this field; deserialize() treats
 // absence as an empty array (safe default — no implicit team grants).
+// ownerEmail/ownerName are optional in the serialized shape: a pre-fix
+// cache entry lacks them, and deserialize defaults email to the bare
+// owner-id form + name to null until the 30s TTL refreshes the entry
+// with the real values from the joined findTeamMemberships.
 interface SerializedTeamMembership {
   membershipId: string;
   ownerAccountId: string;
+  ownerEmail?: string;
+  ownerName?: string | null;
   role: 'member' | 'admin';
 }
 
@@ -172,6 +178,8 @@ function serialize(ctx: AccountContext): SerializedContext {
     teams: ctx.teams.map((t) => ({
       membershipId: t.membershipId,
       ownerAccountId: t.ownerAccountId,
+      ownerEmail: t.ownerEmail,
+      ownerName: t.ownerName,
       role: t.role,
     })),
     webSession: ctx.webSession
@@ -229,6 +237,10 @@ function deserialize(s: SerializedContext): AccountContext {
     teams: (s.teams ?? []).map((t) => ({
       membershipId: t.membershipId,
       ownerAccountId: t.ownerAccountId,
+      // Pre-fix cache entries lack owner identity → fall back to the bare
+      // owner-id form + null name; the 30s TTL refreshes with real values.
+      ownerEmail: t.ownerEmail ?? `acc_${t.ownerAccountId}`,
+      ownerName: t.ownerName ?? null,
       role: t.role,
     })),
     webSession: s.webSession

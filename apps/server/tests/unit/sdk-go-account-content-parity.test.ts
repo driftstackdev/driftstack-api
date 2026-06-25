@@ -161,10 +161,10 @@ describe('W590.B packages/sdk-go/account.go content parity', () => {
     );
   });
 
-  it('RateLimitBucket + RateLimits — V-258 per-bucket effective rate-limit config. BucketKey inline-comment enum example ("global" | "sessions:create") + Source enum ("tier_default" | "override") + nullable OverrideExpiresAt. Source enum is load-bearing for dashboards rendering "this row is overridden until X" vs "this row is your tier default" — drift would silently collapse the two rendering paths.', () => {
+  it('RateLimitBucket + RateLimits — V-258 per-bucket effective rate-limit config. BucketKey enum-example comment (all 4 buckets incl. agent_sessions:message + agent_sessions:input_event — sweep-3) + Source enum ("tier_default" | "override") + nullable OverrideExpiresAt. Source enum is load-bearing for dashboards rendering "this row is overridden until X" vs "this row is your tier default" — drift would silently collapse the two rendering paths.', () => {
     expect(body).toMatch(/\/\/ RateLimitBucket — V-258 per-bucket effective rate-limit config\./);
     expect(body).toMatch(
-      /^type RateLimitBucket struct \{\s*\n\s*BucketKey\s+string\s+`json:"bucket_key"` \/\/ "global" \| "sessions:create"\s*\n\s*Capacity\s+int\s+`json:"capacity"`\s*\n\s*RefillPerSecond\s+float64 `json:"refill_per_second"`\s*\n\s*Source\s+string\s+`json:"source"` \/\/ "tier_default" \| "override"\s*\n\s*OverrideExpiresAt \*string `json:"override_expires_at"`\s*\n\}/m,
+      /^type RateLimitBucket struct \{\s*\n\s*\/\/ "global" \| "sessions:create" \| "agent_sessions:message" \| "agent_sessions:input_event"\s*\n\s*BucketKey\s+string\s+`json:"bucket_key"`\s*\n\s*Capacity\s+int\s+`json:"capacity"`\s*\n\s*RefillPerSecond\s+float64 `json:"refill_per_second"`\s*\n\s*Source\s+string\s+`json:"source"` \/\/ "tier_default" \| "override"\s*\n\s*OverrideExpiresAt \*string `json:"override_expires_at"`\s*\n\}/m,
     );
     expect(body).toMatch(
       /^type GetAccountRateLimitsResponse struct \{\s*\n\s*Tier\s+string\s+`json:"tier"`\s*\n\s*Buckets \[\]RateLimitBucket `json:"buckets"`\s*\n\}/m,

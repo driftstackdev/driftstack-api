@@ -29,17 +29,23 @@
 // db-agent-sessions-concurrency-drizzle.test.ts (CI; skips locally w/o DB).
 
 import { randomUUID } from 'node:crypto';
-import { and, count, desc, eq, lt, notInArray } from 'drizzle-orm';
+import { and, count, desc, eq, lt, notInArray, or, type SQL } from 'drizzle-orm';
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import type { Database } from './client.js';
 import { agentSessions } from './schema.js';
 import type { TranscriptEntry } from '../services/agent-decomposer.js';
 import type {
+  AgentSessionListPage,
   AgentSessionRecord,
   AgentSessionStatus,
   AgentSessionsRepo,
   CreateAgentSessionArgs,
 } from '../services/agent-sessions.js';
+
+// `agt_<uuid>` — the cursor we emit is the last row's id, so the keyset
+// anchor lookup only runs for a well-formed id (guards a hand-crafted cursor;
+// a non-matching value falls through to a first-page response).
+const AGENT_SESSION_ID_RE = /^agt_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function rowToRecord(row: typeof agentSessions.$inferSelect): AgentSessionRecord {
   return {
@@ -148,6 +154,48 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       .orderBy(desc(agentSessions.createdAt), desc(agentSessions.id));
     const rows = opts?.limit !== undefined ? await base.limit(opts.limit) : await base;
     return rows.map(rowToRecord);
+  }
+
+  async listPageByAccount(
+    accountId: string,
+    opts: { limit: number; cursor?: string },
+  ): Promise<AgentSessionListPage> {
+    // Keyset cursor on (createdAt desc, id desc) — mirrors sessions-repo
+    // listSessions. Cursor = the last row's id; resolve its (createdAt, id)
+    // anchor and select strictly-after rows so same-createdAt rows aren't
+    // dropped at a page boundary. The `id` PK is `agt_<uuid>` text (not a uuid
+    // column), so an unknown cursor just resolves to no anchor → first page,
+    // matching the in-memory double + the sessions-repo semantics.
+    const conds: SQL[] = [eq(agentSessions.accountId, accountId)];
+    if (opts.cursor !== undefined && AGENT_SESSION_ID_RE.test(opts.cursor)) {
+      const [c] = await this.database.db
+        .select({ createdAt: agentSessions.createdAt, id: agentSessions.id })
+        .from(agentSessions)
+        .where(and(eq(agentSessions.id, opts.cursor), eq(agentSessions.accountId, accountId)))
+        .limit(1);
+      if (c) {
+        const keyset = or(
+          lt(agentSessions.createdAt, c.createdAt),
+          and(eq(agentSessions.createdAt, c.createdAt), lt(agentSessions.id, c.id)),
+        );
+        if (keyset) conds.push(keyset);
+      }
+    }
+
+    const rows = await this.database.db
+      .select()
+      .from(agentSessions)
+      .where(and(...conds))
+      .orderBy(desc(agentSessions.createdAt), desc(agentSessions.id))
+      .limit(opts.limit + 1);
+
+    const hasMore = rows.length > opts.limit;
+    const items = hasMore ? rows.slice(0, opts.limit) : rows;
+    const last = items[items.length - 1];
+    return {
+      items: items.map(rowToRecord),
+      nextCursor: hasMore && last ? last.id : null,
+    };
   }
 
   async countActive(accountId: string): Promise<number> {

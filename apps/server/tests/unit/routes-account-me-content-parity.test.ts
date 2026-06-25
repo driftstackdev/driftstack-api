@@ -113,12 +113,12 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
     expect(body).toMatch(/profile_count: profileCount,/);
   });
 
-  it('V-326c teams shape: ctx.teams.map → { owner_account_id=acc_ + role + membership_id=mem_ }', () => {
+  it('V-326c teams shape: ctx.teams.map → { owner_account_id=acc_ + owner_email + owner_name + role + membership_id=mem_ }', () => {
     expect(body).toMatch(
-      /\/\/ V-326c — owner accounts the caller is a member of \(empty\s*\n?\s*\/\/ array when not on any team\)\. Each entry exposes the public\s*\n?\s*\/\/ owner id \+ the role granted to the caller\. Used by the\s*\n?\s*\/\/ dashboard \/ GUI to render an "acting as" account picker\./,
+      /\/\/ V-326c — owner accounts the caller is a member of \(empty\s*\n?\s*\/\/ array when not on any team\)\. Each entry exposes the public\s*\n?\s*\/\/ owner id \+ the owner's email\/name/,
     );
     expect(body).toMatch(
-      /teams: ctx\.teams\.map\(\(t\) => \(\{\s*\n?\s*owner_account_id: `acc_\$\{t\.ownerAccountId\}`,\s*\n?\s*role: t\.role,\s*\n?\s*membership_id: `mem_\$\{t\.membershipId\}`,\s*\n?\s*\}\)\),/,
+      /teams: ctx\.teams\.map\(\(t\) => \(\{\s*\n?\s*owner_account_id: `acc_\$\{t\.ownerAccountId\}`,\s*\n?\s*owner_email: t\.ownerEmail \?\? `acc_\$\{t\.ownerAccountId\}`,\s*\n?\s*owner_name: t\.ownerName \?\? null,\s*\n?\s*role: t\.role,\s*\n?\s*membership_id: `mem_\$\{t\.membershipId\}`,\s*\n?\s*\}\)\),/,
     );
   });
 

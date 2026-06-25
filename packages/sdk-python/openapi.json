@@ -141,6 +141,12 @@
                 "owner_account_id": {
                   "type": "string"
                 },
+                "owner_email": {
+                  "type": "string"
+                },
+                "owner_name": {
+                  "type": ["string", "null"]
+                },
                 "role": {
                   "type": "string",
                   "enum": ["admin", "member"]
@@ -149,7 +155,7 @@
                   "type": "string"
                 }
               },
-              "required": ["owner_account_id", "role", "membership_id"]
+              "required": ["owner_account_id", "owner_email", "owner_name", "role", "membership_id"]
             }
           }
         },
@@ -2775,6 +2781,12 @@
           "owner_account_id": {
             "type": "string"
           },
+          "owner_email": {
+            "type": "string"
+          },
+          "owner_name": {
+            "type": ["string", "null"]
+          },
           "role": {
             "type": "string",
             "enum": ["member", "admin"]
@@ -2783,7 +2795,7 @@
             "type": "string"
           }
         },
-        "required": ["owner_account_id", "role", "membership_id"]
+        "required": ["owner_account_id", "owner_email", "owner_name", "role", "membership_id"]
       },
       "UploadAvatarResponse": {
         "type": "object",
@@ -9124,6 +9136,12 @@
                           "owner_account_id": {
                             "type": "string"
                           },
+                          "owner_email": {
+                            "type": "string"
+                          },
+                          "owner_name": {
+                            "type": ["string", "null"]
+                          },
                           "role": {
                             "type": "string",
                             "enum": ["admin", "member"]
@@ -9132,7 +9150,13 @@
                             "type": "string"
                           }
                         },
-                        "required": ["owner_account_id", "role", "membership_id"]
+                        "required": [
+                          "owner_account_id",
+                          "owner_email",
+                          "owner_name",
+                          "role",
+                          "membership_id"
+                        ]
                       }
                     }
                   },
@@ -9313,6 +9337,12 @@
                           "owner_account_id": {
                             "type": "string"
                           },
+                          "owner_email": {
+                            "type": "string"
+                          },
+                          "owner_name": {
+                            "type": ["string", "null"]
+                          },
                           "role": {
                             "type": "string",
                             "enum": ["admin", "member"]
@@ -9321,7 +9351,13 @@
                             "type": "string"
                           }
                         },
-                        "required": ["owner_account_id", "role", "membership_id"]
+                        "required": [
+                          "owner_account_id",
+                          "owner_email",
+                          "owner_name",
+                          "role",
+                          "membership_id"
+                        ]
                       }
                     }
                   },

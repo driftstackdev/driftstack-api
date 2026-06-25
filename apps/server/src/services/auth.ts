@@ -172,6 +172,17 @@ export interface RateLimitOverride {
 export interface TeamMembership {
   membershipId: string;
   ownerAccountId: string;
+  /**
+   * The owner account's email — loaded via a join (findTeamMemberships) so the
+   * dashboard can label a team by who owns it (instead of a bare `acc_<uuid>`).
+   * The accounts.email column is NOT NULL, so the repos always populate this;
+   * it's optional in the type only so the in-memory test seam can omit it (the
+   * repo fills a fallback on read). Route serializers default a missing value.
+   */
+  ownerEmail?: string;
+  /** The owner account's display name; null when the owner never set one.
+   *  Optional for the same test-seam reason as `ownerEmail`. */
+  ownerName?: string | null;
   role: 'member' | 'admin';
 }
 

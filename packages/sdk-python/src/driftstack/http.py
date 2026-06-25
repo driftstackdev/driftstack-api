@@ -38,6 +38,50 @@ from driftstack.retry import RetryConfig, with_retry, with_retry_async
 DEFAULT_TIMEOUT_S = 30.0
 USER_AGENT = f"driftstack-sdk-python/{__version__}"
 
+# Headroom added on top of a body-declared long-running operation timeout when
+# deriving the per-request transport timeout — covers network round-trip + the
+# server's scheduling slack so the client never aborts a request the server
+# would still honour. Mirrors the TS/Go SDKs.
+_BODY_TIMEOUT_HEADROOM_S = 15.0
+
+
+def _body_operation_timeout_s(json_body: Any) -> float | None:
+    """Extract a long-running-operation deadline from a request body, in seconds.
+
+    Recognises the two server contract fields: ``timeout_ms`` (milliseconds —
+    navigate / wait / interact) and ``timeout_seconds`` (login / search).
+    Returns ``None`` when the body carries neither (or isn't a dict), so the
+    caller falls back to the configured client timeout. A non-positive /
+    non-numeric value is ignored (treated as absent).
+    """
+    if not isinstance(json_body, dict):
+        return None
+    ms = json_body.get("timeout_ms")
+    if isinstance(ms, (int, float)) and not isinstance(ms, bool) and ms > 0:
+        return float(ms) / 1000.0
+    secs = json_body.get("timeout_seconds")
+    if isinstance(secs, (int, float)) and not isinstance(secs, bool) and secs > 0:
+        return float(secs)
+    return None
+
+
+def _resolve_request_timeout_s(base_timeout_s: float, json_body: Any) -> float | None:
+    """Resolve the per-request transport timeout (seconds).
+
+    Auto-raises the configured base to a body-declared long-running deadline +
+    headroom when the body carries ``timeout_ms`` / ``timeout_seconds`` (the
+    navigate / wait / login / search contract, up to 120s server-side) — so a
+    30s base never aborts a 90s op the server would honour. The body timeout
+    only ever RAISES the floor. Returns ``None`` (httpx "no override" → use the
+    client's own timeout) when the body declares no longer deadline.
+    """
+    body_timeout = _body_operation_timeout_s(json_body)
+    if body_timeout is None:
+        return None
+    raised = body_timeout + _BODY_TIMEOUT_HEADROOM_S
+    return raised if raised > base_timeout_s else None
+
+
 # HTTP methods that are idempotent by RFC 7231 semantics — always safe to
 # auto-retry. POST and PATCH are excluded; they're only retried when the
 # caller supplies an Idempotency-Key (see :func:`_is_retry_safe`).
@@ -229,6 +273,7 @@ class HttpClient:
         self._effective_account = effective_account
         self._base_url = base_url.rstrip("/")
         self._retry = retry
+        self._timeout_s = timeout_s
         self._client = client or httpx.Client(timeout=timeout_s)
         self._owns_client = client is None
 
@@ -261,6 +306,18 @@ class HttpClient:
         if extra_headers:
             headers.update(extra_headers)
 
+        # Auto-raise the per-request transport timeout when the body carries a
+        # long-running-op deadline (timeout_ms / timeout_seconds), so a 30s
+        # default never aborts a 90s navigate / wait / login the server would
+        # honour. Only when the SDK owns the client (a caller-supplied client
+        # owns its own timeouts). httpx merges an unset field from the client
+        # default, so passing the raised value is a per-request override.
+        request_kwargs: dict[str, Any] = {}
+        if self._owns_client:
+            raised = _resolve_request_timeout_s(self._timeout_s, json_body)
+            if raised is not None:
+                request_kwargs["timeout"] = raised
+
         def _do() -> Any:
             try:
                 response = self._client.request(
@@ -269,6 +326,7 @@ class HttpClient:
                     params=params,
                     json=json_body,
                     headers=headers,
+                    **request_kwargs,
                 )
             except httpx.TimeoutException as err:
                 raise TransportError("request timed out", status=0) from err
@@ -307,6 +365,7 @@ class AsyncHttpClient:
         self._effective_account = effective_account
         self._base_url = base_url.rstrip("/")
         self._retry = retry
+        self._timeout_s = timeout_s
         self._client = client or httpx.AsyncClient(timeout=timeout_s)
         self._owns_client = client is None
 
@@ -339,6 +398,15 @@ class AsyncHttpClient:
         if extra_headers:
             headers.update(extra_headers)
 
+        # See the sync :meth:`HttpClient.request` — auto-raise the per-request
+        # timeout for a body-declared long-running op (only when the SDK owns
+        # the client).
+        request_kwargs: dict[str, Any] = {}
+        if self._owns_client:
+            raised = _resolve_request_timeout_s(self._timeout_s, json_body)
+            if raised is not None:
+                request_kwargs["timeout"] = raised
+
         async def _do() -> Any:
             try:
                 response = await self._client.request(
@@ -347,6 +415,7 @@ class AsyncHttpClient:
                     params=params,
                     json=json_body,
                     headers=headers,
+                    **request_kwargs,
                 )
             except httpx.TimeoutException as err:
                 raise TransportError("request timed out", status=0) from err

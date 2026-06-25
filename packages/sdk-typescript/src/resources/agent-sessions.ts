@@ -12,7 +12,9 @@
 // should expect FeatureUnavailableError until AI chat ships. SDK
 // surface is stable so dashboard + e2e tests can compile against it now.
 
+import type { PaginationQueryInput } from '@driftstack/api-types';
 import type { HttpClient } from '../http.js';
+import { iteratePaginated } from '../pagination.js';
 
 /**
  * Slice 4 (Wave 29-NNN ARC 3) — LK.6 InputEvent wire shape mirrored
@@ -139,9 +141,16 @@ export interface AgentSession {
   liveness?: { state: 'active' | 'provisioning' | 'idle' | 'terminating' | null; fresh: boolean };
 }
 
-/** GET /v1/agent-sessions envelope — newest-first, server-capped at 100. */
+/**
+ * GET /v1/agent-sessions envelope — newest-first, cursor-paginated. Mirrors
+ * the standard `{ data, has_more, next_cursor }` shape shared by sessions /
+ * recipes / crypto-orders (was a non-paginated `{ data }` hard-capped at 100,
+ * so older sessions were unreachable).
+ */
 export interface AgentSessionsListPage {
   data: AgentSession[];
+  has_more: boolean;
+  next_cursor: string | null;
 }
 
 export interface CreateAgentSessionRequest {
@@ -300,16 +309,37 @@ export class AgentSessionsResource {
   }
 
   /**
-   * List the account's agent sessions (newest first, capped at 100 by the
-   * server). Mirrors the GET /v1/agent-sessions envelope `{ data: [...] }`.
+   * List the account's agent sessions, newest first. Cursor-paginated —
+   * mirrors the GET /v1/agent-sessions envelope `{ data, has_more, next_cursor }`.
    * Used by the dashboard's recent-sessions list + the desktop GUI's live
-   * "running for" timer (it reads each session's `created_at`).
+   * "running for" timer (it reads each session's `created_at`). Pass a
+   * `cursor` (the prior page's `next_cursor`) to page; or use `iterate()` to
+   * walk every page automatically.
    */
-  list(): Promise<AgentSessionsListPage> {
+  list(query: PaginationQueryInput = {}): Promise<AgentSessionsListPage> {
     return this.http.request<AgentSessionsListPage>({
       method: 'GET',
       path: '/v1/agent-sessions',
+      query: {
+        ...(query.limit !== undefined ? { limit: query.limit } : {}),
+        ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
+      },
     });
+  }
+
+  /**
+   * Lazily iterate every agent session for the calling account, walking
+   * cursor pages automatically (newest first). See `iteratePaginated` for
+   * semantics. Replaces the old hard 100-cap — a busy account can now reach
+   * its full AI-session history.
+   */
+  iterate(opts: { limit?: number } = {}): AsyncGenerator<AgentSession, void, void> {
+    return iteratePaginated<AgentSession>((cursor) =>
+      this.list({
+        ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+        ...(cursor !== null ? { cursor } : {}),
+      }),
+    );
   }
 
   /**

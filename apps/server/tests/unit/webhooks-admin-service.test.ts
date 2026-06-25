@@ -13,6 +13,7 @@
 // hard-deleting a now-active delivery. (The repo-side AND status='dlq'
 // clause itself is pinned by db-webhooks-repo-content-parity.)
 
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { ApiKeyScope } from '@driftstack/api-types';
 import {
@@ -96,7 +97,7 @@ function makeRepo(rows: WebhookDeliveryRow[] = []): {
     updateEndpoint: () => Promise.resolve(null),
     rotateSecret: () => Promise.resolve(null),
     deliveryCountsByEndpoint: () => Promise.resolve(new Map()),
-    enqueueDelivery: () => Promise.resolve(),
+    enqueueDelivery: () => Promise.resolve(randomUUID()),
     listEndpointsSubscribedTo: () => Promise.resolve([]),
     claim: () => Promise.resolve([]),
     findEndpointById: () => Promise.resolve(null),

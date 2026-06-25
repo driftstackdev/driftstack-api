@@ -116,9 +116,9 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
     );
   });
 
-  it('CRITICAL V-326c teams membership array — Array<{owner_account_id + role (admin|member) + membership_id}>. "Empty when none" framing tells dashboards an empty array is the canonical "I\'m not on any team" signal (not absence of the field). 2-value role union pinned (admin|member). Drift to dropping owner_account_id would prevent dashboards from rendering "you\'re a member of X\'s team" cross-account links.', () => {
+  it('CRITICAL V-326c teams membership array — Array<{owner_account_id + owner_email + owner_name + role (admin|member) + membership_id}>. "Empty when none" framing tells dashboards an empty array is the canonical "I\'m not on any team" signal (not absence of the field). 2-value role union pinned (admin|member). owner_email/owner_name (sweep-3) let dashboards label a team by who owns it. Drift to dropping owner_account_id would prevent dashboards from rendering "you\'re a member of X\'s team" cross-account links.', () => {
     expect(body).toMatch(
-      /\/\*\* V-326c — team memberships the calling account holds\. Empty when none\. \*\/\s*\n?\s*teams: Array<\{\s*\n?\s*owner_account_id: string;\s*\n?\s*role: 'admin' \| 'member';\s*\n?\s*membership_id: string;\s*\n?\s*\}>;/,
+      /\/\*\* V-326c — team memberships the calling account holds\. Empty when none\.(?:[\s\S]*?)\*\/\s*\n?\s*teams: Array<\{\s*\n?\s*owner_account_id: string;\s*\n?\s*owner_email: string;\s*\n?\s*owner_name: string \| null;\s*\n?\s*role: 'admin' \| 'member';\s*\n?\s*membership_id: string;\s*\n?\s*\}>;/,
     );
   });
 
@@ -141,12 +141,12 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
     );
   });
 
-  it('CRITICAL V-258 RateLimitBucket — bucket_key 2-value union (global|sessions:create) + source 2-value union (tier_default|override) + override_expires_at nullable. Drift to widening bucket_key would let dashboards render unknown buckets; drift to widening source would lose the tier-vs-override distinction the dashboard uses to render "tier default" badges. GetAccountRateLimitsResponse wraps tier (string, not AccountTier — admins can override) + buckets[].', () => {
+  it('CRITICAL V-258 RateLimitBucket — bucket_key 4-value union (global|sessions:create|agent_sessions:message|agent_sessions:input_event, mirroring the server BUCKET_KEYS — sweep-3) + source 2-value union (tier_default|override) + override_expires_at nullable. Drift to NARROWING bucket_key would make an exhaustive switch silently mishandle a real bucket the server returns; drift to widening source would lose the tier-vs-override distinction the dashboard uses to render "tier default" badges. GetAccountRateLimitsResponse wraps tier (string, not AccountTier — admins can override) + buckets[].', () => {
     expect(body).toMatch(
       /\/\/ V-258 — effective rate-limit config \(per-bucket capacity \+ refill\)\./,
     );
     expect(body).toMatch(
-      /export interface RateLimitBucket \{\s*\n?\s*bucket_key: 'global' \| 'sessions:create';\s*\n?\s*capacity: number;\s*\n?\s*refill_per_second: number;\s*\n?\s*source: 'tier_default' \| 'override';\s*\n?\s*override_expires_at: string \| null;\s*\n?\s*\}/,
+      /export interface RateLimitBucket \{\s*\n?\s*bucket_key:\s*\n?\s*\| 'global'\s*\n?\s*\| 'sessions:create'\s*\n?\s*\| 'agent_sessions:message'\s*\n?\s*\| 'agent_sessions:input_event';\s*\n?\s*capacity: number;\s*\n?\s*refill_per_second: number;\s*\n?\s*source: 'tier_default' \| 'override';\s*\n?\s*override_expires_at: string \| null;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
       /export interface GetAccountRateLimitsResponse \{\s*\n?\s*tier: string;\s*\n?\s*buckets: RateLimitBucket\[\];\s*\n?\s*\}/,

@@ -100,11 +100,13 @@ describe('W423.B packages/sdk-typescript/src/http.ts content parity', () => {
     expect(body).toMatch(/async request<T>\(opts: RequestOptions\): Promise<T> \{/);
   });
 
-  it('CRITICAL fetch + timeout + URL setup — 3-line setup: (1) `fetchImpl = this.config.fetch ?? fetch` (custom override OR global fetch); (2) `timeoutMs = opts.timeoutMs ?? this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS` (3-level precedence); (3) `url = this.buildUrl(opts.path, opts.query)`. Drift to `||` instead of `??` would let `timeoutMs: 0` (disable-timeout intent) fall through to default.', () => {
+  it('CRITICAL fetch + timeout + URL setup — (1) `fetchImpl = this.config.fetch ?? fetch`; (2) `timeoutMs = this.resolveTimeoutMs(opts)` which keeps the precedence: explicit per-call opts.timeoutMs wins, else `config.timeoutMs ?? DEFAULT_TIMEOUT_MS`, auto-raised for a body-declared long-running deadline (sweep-3); (3) `url = this.buildUrl(opts.path, opts.query)`. Drift to `||` instead of `??` would let `timeoutMs: 0` fall through to default.', () => {
     expect(body).toMatch(/const fetchImpl = this\.config\.fetch \?\? fetch;/);
-    expect(body).toMatch(
-      /const timeoutMs = opts\.timeoutMs \?\? this\.config\.timeoutMs \?\? DEFAULT_TIMEOUT_MS;/,
-    );
+    expect(body).toMatch(/const timeoutMs = this\.resolveTimeoutMs\(opts\);/);
+    // The precedence + body-raise lives in resolveTimeoutMs.
+    expect(body).toMatch(/if \(opts\.timeoutMs !== undefined\) return opts\.timeoutMs;/);
+    expect(body).toMatch(/const base = this\.config\.timeoutMs \?\? DEFAULT_TIMEOUT_MS;/);
+    expect(body).toMatch(/return Math\.max\(base, bodyTimeoutMs \+ BODY_TIMEOUT_HEADROOM_MS\);/);
     expect(body).toMatch(/const url = this\.buildUrl\(opts\.path, opts\.query\);/);
   });
 

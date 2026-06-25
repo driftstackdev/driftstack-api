@@ -45,8 +45,10 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
   });
 
   it('WebhookEventType enum: 5 customer events + V-356 test.ping (synthetic, NOT subscribable); UpdateSubscriptionsSchema-rejects-test-ping rationale comment', () => {
+    // A sweep-3 [DECLARED]-status comment now precedes quota.* — tolerate it
+    // between session.failed and the quota entries.
     expect(body).toMatch(
-      /export const WebhookEventTypeSchema = z\.enum\(\[\s*\n?\s*'session\.completed',\s*\n?\s*'session\.failed',\s*\n?\s*'quota\.warning_80pct',\s*\n?\s*'quota\.exceeded',\s*\n?\s*'api_key\.revoked',/,
+      /export const WebhookEventTypeSchema = z\.enum\(\[\s*\n?\s*'session\.completed',\s*\n?\s*'session\.failed',(?:\s*\n?\s*\/\/[^\n]*)*\s*\n?\s*'quota\.warning_80pct',\s*\n?\s*'quota\.exceeded',\s*\n?\s*'api_key\.revoked',/,
     );
     expect(body).toMatch(
       /\/\/ V-356 — synthetic test event, sent only via POST\s*\n?\s*\/\/ \/v1\/webhooks\/:id\/test\. Customers cannot subscribe to it\s*\n?\s*\/\/ \(UpdateSubscriptionsSchema rejects it\) — the endpoint dispatches\s*\n?\s*\/\/ a one-off delivery regardless of subscription, so the customer\s*\n?\s*\/\/ can verify their handler before relying on it for real events\.\s*\n?\s*'test\.ping',/,

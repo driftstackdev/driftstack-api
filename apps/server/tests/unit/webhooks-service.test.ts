@@ -6,6 +6,7 @@
 // the existing route-level integration tests; this suite pins the
 // service-layer contract on the operations a customer can perform.
 
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import type { ApiKeyScope } from '@driftstack/api-types';
 import {
@@ -109,7 +110,7 @@ function makeRepo(initial: WebhookEndpointRow[] = []): {
       return Promise.resolve(row);
     },
     deliveryCountsByEndpoint: () => Promise.resolve(new Map<string, EndpointDeliveryCounts>()),
-    enqueueDelivery: () => Promise.resolve(),
+    enqueueDelivery: () => Promise.resolve(randomUUID()),
     listEndpointsSubscribedTo: () => Promise.resolve([]),
     claim: () => Promise.resolve([]),
     findEndpointById: () => Promise.resolve(null),

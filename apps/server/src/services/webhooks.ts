@@ -226,8 +226,10 @@ export interface WebhooksRepo {
    */
   deliveryCountsByEndpoint(accountId: string): Promise<Map<string, EndpointDeliveryCounts>>;
 
-  // Event emission
-  enqueueDelivery(input: NewWebhookDeliveryInput): Promise<void>;
+  // Event emission. Returns the inserted delivery row's id (the same id the
+  // deliveries-list + replay routes key off — `wdl_<id>`), so a test-event
+  // caller can hand back a delivery_id that actually resolves.
+  enqueueDelivery(input: NewWebhookDeliveryInput): Promise<string>;
   listEndpointsSubscribedTo(
     accountId: string,
     eventType: WebhookEventType,
@@ -680,7 +682,10 @@ export class WebhooksService {
       },
     };
 
-    await this.repo.enqueueDelivery({
+    // The REAL delivery row id (DB-generated PK), not the eventId — so the
+    // returned delivery_id resolves in the deliveries list + replay routes
+    // (which key off `wdl_${row.id}`). The eventId is a separate column.
+    const deliveryId = await this.repo.enqueueDelivery({
       webhookId: endpointId,
       eventId,
       eventType: 'test.ping',
@@ -711,7 +716,7 @@ export class WebhooksService {
       }
     }
 
-    return { deliveryId: eventId, eventId };
+    return { deliveryId, eventId };
   }
 
   /**

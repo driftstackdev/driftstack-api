@@ -155,10 +155,14 @@ describe('W706 cross-SDK Client defaults + HTTP layer parity', () => {
     expect(go).toMatch(/return withRetry\(ctx, c\.retry,/);
   });
 
-  it('CRITICAL per-request timeout override pinned per-SDK. The `timeoutMs` / per-request timeout lets callers tune individual slow operations (e.g. browser-session capture which takes longer than default 30s).', () => {
+  it('CRITICAL per-request timeout override pinned per-SDK. The `timeoutMs` / per-request timeout lets callers tune individual slow operations (e.g. browser-session capture which takes longer than default 30s). sweep-3: an explicit per-call timeoutMs still wins; otherwise the base (config.timeoutMs ?? DEFAULT_TIMEOUT_MS) is auto-raised for a body-declared timeout_ms / timeout_seconds.', () => {
     const tsHttp = read(TS_HTTP);
     expect(tsHttp).toMatch(/timeoutMs\?:\s*number;?/);
-    expect(tsHttp).toMatch(/opts\.timeoutMs \?\? this\.config\.timeoutMs \?\? DEFAULT_TIMEOUT_MS/);
+    // Explicit per-call timeoutMs wins, else the base default.
+    expect(tsHttp).toMatch(/if \(opts\.timeoutMs !== undefined\) return opts\.timeoutMs;/);
+    expect(tsHttp).toMatch(/const base = this\.config\.timeoutMs \?\? DEFAULT_TIMEOUT_MS;/);
+    // Body-declared long-running deadline auto-raises the floor.
+    expect(tsHttp).toMatch(/Math\.max\(base, bodyTimeoutMs \+ BODY_TIMEOUT_HEADROOM_MS\)/);
   });
 
   it('CRITICAL sdk-go functional-options pattern pinned (Option type + WithBaseURL/WithHTTPClient/WithRetry/WithTimeout). The functional-options pattern is Go-idiomatic for SDK configuration; drift to a struct-config would break callers using these options.', () => {

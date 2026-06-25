@@ -39,9 +39,14 @@ export interface AccountSelfProfile {
   profile_cap: number | null;
   /** Existing profiles right now (live count, not cached). */
   profile_count: number;
-  /** V-326c — team memberships the calling account holds. Empty when none. */
+  /** V-326c — team memberships the calling account holds. Empty when none.
+   *  `owner_email`/`owner_name` let the dashboard label a team by who owns it
+   *  (instead of a bare acc_<uuid>); email is always present, name is null
+   *  when the owner never set a display name. */
   teams: Array<{
     owner_account_id: string;
+    owner_email: string;
+    owner_name: string | null;
     role: 'admin' | 'member';
     membership_id: string;
   }>;
@@ -70,8 +75,16 @@ export interface UploadAvatarResponse {
 }
 
 // V-258 — effective rate-limit config (per-bucket capacity + refill).
+// Bucket keys mirror the server's BUCKET_KEYS / TIER_RATE_LIMIT_DEFAULTS —
+// all four enforced buckets, so an exhaustive switch over `bucket_key` covers
+// every limit the server actually returns (the agent_sessions:* pair was
+// previously omitted, leaving real buckets unhandled).
 export interface RateLimitBucket {
-  bucket_key: 'global' | 'sessions:create';
+  bucket_key:
+    | 'global'
+    | 'sessions:create'
+    | 'agent_sessions:message'
+    | 'agent_sessions:input_event';
   capacity: number;
   refill_per_second: number;
   source: 'tier_default' | 'override';

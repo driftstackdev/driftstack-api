@@ -224,10 +224,14 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         profile_count: profileCount,
         // V-326c — owner accounts the caller is a member of (empty
         // array when not on any team). Each entry exposes the public
-        // owner id + the role granted to the caller. Used by the
-        // dashboard / GUI to render an "acting as" account picker.
+        // owner id + the owner's email/name (so the dashboard can label
+        // a team by who owns it, not a bare acc_<uuid>) + the role granted
+        // to the caller. Used by the dashboard / GUI to render an
+        // "acting as" account picker.
         teams: ctx.teams.map((t) => ({
           owner_account_id: `acc_${t.ownerAccountId}`,
+          owner_email: t.ownerEmail ?? `acc_${t.ownerAccountId}`,
+          owner_name: t.ownerName ?? null,
           role: t.role,
           membership_id: `mem_${t.membershipId}`,
         })),
@@ -308,6 +312,8 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         profile_count: profileCount,
         teams: ctx.teams.map((t) => ({
           owner_account_id: `acc_${t.ownerAccountId}`,
+          owner_email: t.ownerEmail ?? `acc_${t.ownerAccountId}`,
+          owner_name: t.ownerName ?? null,
           role: t.role,
           membership_id: `mem_${t.membershipId}`,
         })),

@@ -212,7 +212,7 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     return Promise.resolve(updated);
   }
 
-  enqueueDelivery(input: NewWebhookDeliveryInput): Promise<void> {
+  enqueueDelivery(input: NewWebhookDeliveryInput): Promise<string> {
     const now = new Date();
     const row: WebhookDeliveryRow = {
       id: randomUUID(),
@@ -231,7 +231,7 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       updatedAt: now,
     };
     this.deliveries.set(row.id, row);
-    return Promise.resolve();
+    return Promise.resolve(row.id);
   }
 
   listEndpointsSubscribedTo(

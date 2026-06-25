@@ -44,12 +44,21 @@ export interface RequestOptions {
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+/**
+ * Headroom added on top of a body-declared operation timeout when deriving the
+ * transport timeout, covering network round-trip + the server's own scheduling
+ * slack so the client never aborts a request the server would still have
+ * honoured. Generous on purpose — the transport timeout is a backstop against a
+ * truly hung socket, not the operation's deadline (the server enforces that).
+ */
+const BODY_TIMEOUT_HEADROOM_MS = 15_000;
+
 export class HttpClient {
   constructor(private readonly config: HttpClientConfig) {}
 
   async request<T>(opts: RequestOptions): Promise<T> {
     const fetchImpl = this.config.fetch ?? fetch;
-    const timeoutMs = opts.timeoutMs ?? this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const timeoutMs = this.resolveTimeoutMs(opts);
     const url = this.buildUrl(opts.path, opts.query);
 
     // Retry SAFETY gate. Idempotent methods are always safe to re-attempt;
@@ -141,6 +150,30 @@ export class HttpClient {
     }, retryConfig);
   }
 
+  /**
+   * Resolve the per-request transport (abort) timeout.
+   *
+   * Precedence:
+   *   1. An explicit per-call `opts.timeoutMs` always wins (caller override).
+   *   2. Otherwise, if the request BODY carries a long-running-operation
+   *      deadline (`timeout_ms` in ms, or `timeout_seconds` in seconds — the
+   *      navigate/wait/login/search contract, up to 120s server-side), the
+   *      transport timeout is auto-raised to that deadline + headroom, so a
+   *      30s client default never aborts a 90s op the server would honour.
+   *   3. Otherwise the configured client `timeoutMs`, else DEFAULT_TIMEOUT_MS.
+   *
+   * The body-derived timeout only ever RAISES the floor (max with the
+   * configured default) — a tiny body timeout never shortens an explicitly
+   * configured longer client timeout.
+   */
+  private resolveTimeoutMs(opts: RequestOptions): number {
+    if (opts.timeoutMs !== undefined) return opts.timeoutMs;
+    const base = this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const bodyTimeoutMs = bodyOperationTimeoutMs(opts.body);
+    if (bodyTimeoutMs === undefined) return base;
+    return Math.max(base, bodyTimeoutMs + BODY_TIMEOUT_HEADROOM_MS);
+  }
+
   private buildUrl(path: string, query?: Record<string, string | number | undefined>): string {
     // Concatenate rather than `new URL(path, baseUrl)`: an absolute-path
     // reference (`/v1/...`) passed as the first arg to `new URL` REPLACES
@@ -176,6 +209,30 @@ function isRetrySafe(method: string, headers?: Record<string, string>): boolean 
   if (IDEMPOTENT_METHODS.has(method.toUpperCase())) return true;
   if (headers === undefined) return false;
   return Object.keys(headers).some((k) => k.toLowerCase() === 'idempotency-key');
+}
+
+/**
+ * Extract a long-running-operation deadline from a request body, in
+ * milliseconds. Recognises the two server contract fields: `timeout_ms`
+ * (already ms — navigate/wait/interact) and `timeout_seconds` (login/search;
+ * converted to ms). Returns `undefined` when the body carries neither (or
+ * isn't a plain object), so the caller falls back to the configured timeout.
+ * A non-finite / non-positive value is ignored (treated as absent).
+ */
+function bodyOperationTimeoutMs(body: unknown): number | undefined {
+  if (typeof body !== 'object' || body === null) return undefined;
+  const r = body as Record<string, unknown>;
+  if (typeof r.timeout_ms === 'number' && Number.isFinite(r.timeout_ms) && r.timeout_ms > 0) {
+    return r.timeout_ms;
+  }
+  if (
+    typeof r.timeout_seconds === 'number' &&
+    Number.isFinite(r.timeout_seconds) &&
+    r.timeout_seconds > 0
+  ) {
+    return r.timeout_seconds * 1000;
+  }
+  return undefined;
 }
 
 function isProblem(x: unknown): x is Problem {

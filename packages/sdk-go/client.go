@@ -20,6 +20,43 @@ const DefaultBaseURL = "https://api.driftstack.dev"
 // doesn't pass http.Client with their own Timeout set.
 const DefaultTimeout = 30 * time.Second
 
+// bodyTimeoutHeadroom is added on top of a body-declared long-running
+// operation timeout when deriving the transport timeout — covers network
+// round-trip + the server's scheduling slack so the client never aborts a
+// request the server would still honour. Mirrors the TS/Python SDKs.
+const bodyTimeoutHeadroom = 15 * time.Second
+
+// bodyOperationTimeout extracts a long-running-operation deadline from a
+// request body. Recognises the two server contract fields: timeout_ms
+// (milliseconds — navigate / wait / interact) and timeout_seconds
+// (login / search). Returns 0 when the body carries neither (or isn't a
+// JSON object), so the caller falls back to the configured base timeout.
+// Reads via a JSON round-trip so it tracks the body structs' json tags
+// exactly (omitempty zero values serialise away → treated as absent).
+func bodyOperationTimeout(body any) time.Duration {
+	if body == nil {
+		return 0
+	}
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return 0
+	}
+	var fields struct {
+		TimeoutMS      int64 `json:"timeout_ms"`
+		TimeoutSeconds int64 `json:"timeout_seconds"`
+	}
+	if err := json.Unmarshal(buf, &fields); err != nil {
+		return 0
+	}
+	if fields.TimeoutMS > 0 {
+		return time.Duration(fields.TimeoutMS) * time.Millisecond
+	}
+	if fields.TimeoutSeconds > 0 {
+		return time.Duration(fields.TimeoutSeconds) * time.Second
+	}
+	return 0
+}
+
 // Client is the top-level Driftstack SDK client. All resource
 // accessors hang off it. Construct with [New]; close with Close
 // (which is a no-op when the underlying http.Client is the default
@@ -33,7 +70,13 @@ type Client struct {
 	// (writes additionally require the admin role, server-enforced).
 	effectiveAccount string
 	http             *http.Client
-	retry            RetryConfig
+	// timeout is the base per-request transport timeout, applied via a
+	// per-request context deadline in do() (not http.Client.Timeout, so a
+	// long-running op can auto-raise it — see resolveTimeout). Zero means no
+	// SDK-applied timeout (a caller-supplied *http.Client via WithHTTPClient
+	// owns its own Timeout instead).
+	timeout time.Duration
+	retry   RetryConfig
 
 	// Resource accessors (filled in by New).
 	Sessions         *SessionsResource
@@ -85,9 +128,15 @@ func WithEffectiveAccount(ownerAccountID string) Option {
 
 // WithHTTPClient lets callers supply their own *http.Client (custom
 // Transport, timeouts, etc.). When set, the SDK won't apply its
-// default timeout on top.
+// default timeout on top (the supplied client's own Timeout / the
+// caller's context deadline govern instead).
 func WithHTTPClient(h *http.Client) Option {
-	return func(c *Client) { c.http = h }
+	return func(c *Client) {
+		c.http = h
+		// The caller's client owns timeouts; don't layer the SDK's context
+		// deadline on top.
+		c.timeout = 0
+	}
 }
 
 // WithRetry overrides the retry policy.
@@ -95,12 +144,15 @@ func WithRetry(cfg RetryConfig) Option {
 	return func(c *Client) { c.retry = cfg }
 }
 
-// WithTimeout sets a per-request timeout. Ignored if WithHTTPClient
-// is also passed (the caller's *http.Client wins).
+// WithTimeout sets the base per-request timeout. Ignored if WithHTTPClient
+// is also passed (the caller's *http.Client wins). Applied via a per-request
+// context deadline — a long-running op whose body carries a longer
+// timeout_ms / timeout_seconds auto-raises above this base so the SDK never
+// aborts a request the server would still honour (see resolveTimeout).
 func WithTimeout(d time.Duration) Option {
 	return func(c *Client) {
 		if c.http == nil {
-			c.http = &http.Client{Timeout: d}
+			c.timeout = d
 		}
 	}
 }
@@ -112,12 +164,16 @@ func New(apiKey string, opts ...Option) *Client {
 		apiKey:  apiKey,
 		baseURL: DefaultBaseURL,
 		retry:   DefaultRetry(),
+		timeout: DefaultTimeout,
 	}
 	for _, opt := range opts {
 		opt(c)
 	}
 	if c.http == nil {
-		c.http = &http.Client{Timeout: DefaultTimeout}
+		// No hard http.Client.Timeout — the per-request context deadline in
+		// do() governs instead, so a body-declared long-running timeout can
+		// raise above the base (DefaultTimeout / WithTimeout).
+		c.http = &http.Client{}
 	}
 
 	c.Sessions = &SessionsResource{client: c}
@@ -181,12 +237,47 @@ type requestOptions struct {
 // — a transient 5xx / network blip might already have been applied
 // server-side, so retrying it could double-submit.
 func (c *Client) do(ctx context.Context, opts requestOptions) error {
+	// Apply the SDK's per-request transport timeout via a context deadline so a
+	// long-running op (body timeout_ms / timeout_seconds) can auto-raise it,
+	// and so the deadline covers the WHOLE retry loop (not just one attempt).
+	// Skipped when timeout is 0 (caller-supplied http.Client owns timeouts) or
+	// when the caller's context already carries an EARLIER deadline.
+	if d := c.resolveTimeout(opts); d > 0 {
+		if dl, ok := ctx.Deadline(); !ok || time.Until(dl) > d {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, d)
+			defer cancel()
+		}
+	}
 	if !isRetrySafe(opts.method, opts.headers) {
 		return c.doOnce(ctx, opts)
 	}
 	return withRetry(ctx, c.retry, func() error {
 		return c.doOnce(ctx, opts)
 	})
+}
+
+// resolveTimeout returns the effective per-request transport timeout. It's the
+// configured base (DefaultTimeout / WithTimeout), auto-raised to a body-
+// declared long-running deadline + headroom when the request body carries a
+// timeout_ms / timeout_seconds (the navigate / wait / login / search contract,
+// up to 120s server-side) — so a 30s base never aborts a 90s op the server
+// would honour. The body timeout only ever RAISES the floor; a tiny body
+// timeout never shortens a longer configured base. Zero base (custom client)
+// returns zero (no SDK-applied timeout).
+func (c *Client) resolveTimeout(opts requestOptions) time.Duration {
+	if c.timeout <= 0 {
+		return 0
+	}
+	bodyTimeout := bodyOperationTimeout(opts.body)
+	if bodyTimeout <= 0 {
+		return c.timeout
+	}
+	raised := bodyTimeout + bodyTimeoutHeadroom
+	if raised > c.timeout {
+		return raised
+	}
+	return c.timeout
 }
 
 // isRetrySafe reports whether a request may be transparently retried.

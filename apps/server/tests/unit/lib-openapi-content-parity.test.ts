@@ -71,9 +71,15 @@ describe('W439.C apps/server/src/lib/openapi.ts content parity', () => {
     );
   });
 
-  it('AccountMeResponseSchema shape: id + email + name nullable + tier + status + timezone nullable + slug nullable + region nullable + avatar_url nullable + mfa_enrolled bool + 4 capacity ints + teams array of {owner_account_id + role admin|member + membership_id}', () => {
+  it('AccountMeResponseSchema shape: id + email + name nullable + tier + status + timezone nullable + slug nullable + region nullable + avatar_url nullable + mfa_enrolled bool + 4 capacity ints + teams array of {owner_account_id + owner_email + owner_name nullable + role admin|member + membership_id}', () => {
     expect(body).toMatch(
-      /const AccountMeResponseSchema = z\.object\(\{\s*\n?\s*id: z\.string\(\),\s*\n?\s*email: z\.string\(\)\.email\(\),\s*\n?\s*name: z\.string\(\)\.nullable\(\),\s*\n?\s*tier: AccountTierSchema,\s*\n?\s*status: AccountStatusSchema,\s*\n?\s*timezone: z\.string\(\)\.nullable\(\),\s*\n?\s*slug: z\.string\(\)\.nullable\(\),\s*\n?\s*region: AccountRegionSchema\.nullable\(\),\s*\n?\s*avatar_url: z\.string\(\)\.nullable\(\),\s*\n?\s*mfa_enrolled: z\.boolean\(\),\s*\n?\s*concurrent_session_cap: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*concurrent_session_active: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*profile_cap: z\.number\(\)\.int\(\)\.nonnegative\(\)\.nullable\(\),\s*\n?\s*profile_count: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*teams: z\.array\(\s*\n?\s*z\.object\(\{\s*\n?\s*owner_account_id: z\.string\(\),\s*\n?\s*role: z\.enum\(\['admin', 'member'\]\),\s*\n?\s*membership_id: z\.string\(\),\s*\n?\s*\}\),\s*\n?\s*\),\s*\n?\s*\}\);/,
+      /const AccountMeResponseSchema = z\.object\(\{\s*\n?\s*id: z\.string\(\),\s*\n?\s*email: z\.string\(\)\.email\(\),\s*\n?\s*name: z\.string\(\)\.nullable\(\),\s*\n?\s*tier: AccountTierSchema,\s*\n?\s*status: AccountStatusSchema,\s*\n?\s*timezone: z\.string\(\)\.nullable\(\),\s*\n?\s*slug: z\.string\(\)\.nullable\(\),\s*\n?\s*region: AccountRegionSchema\.nullable\(\),\s*\n?\s*avatar_url: z\.string\(\)\.nullable\(\),\s*\n?\s*mfa_enrolled: z\.boolean\(\),\s*\n?\s*concurrent_session_cap: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*concurrent_session_active: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*profile_cap: z\.number\(\)\.int\(\)\.nonnegative\(\)\.nullable\(\),\s*\n?\s*profile_count: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*teams: z\.array\(/,
+    );
+  });
+
+  it('AccountMeResponseSchema teams entries carry owner_account_id + owner_email + owner_name nullable + role + membership_id (owner identity for the dashboard team label)', () => {
+    expect(body).toMatch(
+      /teams: z\.array\(\s*\n?\s*z\.object\(\{\s*\n?\s*owner_account_id: z\.string\(\),(?:\s*\n?\s*\/\/[^\n]*)*\s*\n?\s*owner_email: z\.string\(\),\s*\n?\s*owner_name: z\.string\(\)\.nullable\(\),\s*\n?\s*role: z\.enum\(\['admin', 'member'\]\),\s*\n?\s*membership_id: z\.string\(\),\s*\n?\s*\}\),\s*\n?\s*\),/,
     );
   });
 

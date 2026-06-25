@@ -20,13 +20,14 @@
 // is the agent_session id (one room per session); the participant
 // identity is `customer-<account-id>` so the SFU can dedupe joins.
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import { mintLivekitToken, resolveSessionPublisherNode } from '../lib/livekit-token.js';
 import { decryptLivekitSecret } from '../lib/livekit-secret-encryption.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { FeatureUnavailableError } from '../lib/errors.js';
+import { GUI_CONTROL_KEY_HEADER, validateGuiControlKey } from '../lib/agent-session-control-key.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 
 const AGENT_SESSION_ID_RE = /^agt_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -42,6 +43,15 @@ export interface RegisterAgentSessionsLivekitTokenRouteDeps {
   agentSessionsRepo: AgentSessionsRepo;
   /** MFA_ENCRYPTION_KEY (base64-encoded 32-byte AES-256 key). */
   encryptionKey: string;
+  /**
+   * MFA_ENCRYPTION_KEY (base64) used to decrypt the per-session
+   * gui_control_key. When wired, the Simulator app — which holds ONLY the
+   * per-session control key, not the account API key — can re-mint a LiveKit
+   * token on reconnect via that key (mirrors the `controlKeyOrAccountAuth`
+   * path on the other agent-session control routes). Absent → control-key
+   * auth is disabled and only the account path is accepted.
+   */
+  guiControlKeyEncryptionKey?: string;
   /** Now-provider (test-injectable). Defaults to `() => Date.now()`. */
   nowMs?: () => number;
   /** Optional metrics registry — when wired, every mint outcome
@@ -56,6 +66,7 @@ export function registerAgentSessionsLivekitTokenRoute(
   deps: RegisterAgentSessionsLivekitTokenRouteDeps,
 ): void {
   const { fleetNodesRepo, agentSessionsRepo, encryptionKey } = deps;
+  const guiControlKeyEncryptionKey = deps.guiControlKeyEncryptionKey;
   const nowMs = deps.nowMs ?? (() => Date.now());
   const metrics = deps.metrics;
   const bump = (outcome: string): void => {
@@ -69,19 +80,60 @@ export function registerAgentSessionsLivekitTokenRoute(
     }
   };
 
+  // Auth path (b): a valid per-session gui_control_key re-mints a token for
+  // THIS `:id` session. The Simulator app holds only this key (never the
+  // account API key), so reconnect would otherwise be unable to re-mint. When
+  // the control key validates, requireAuth/requireScope('write') are SKIPPED
+  // (the key is already a write-equivalent control credential, bound to this
+  // one session) and the owning account is stashed for rate-limiting + the
+  // handler. Mirrors controlKeyOrAccountAuth in routes/agent-sessions.ts.
+  const controlKeyOrAccountAuth = async (
+    req: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const headerRaw = req.headers[GUI_CONTROL_KEY_HEADER];
+    const header = Array.isArray(headerRaw) ? headerRaw[0] : headerRaw;
+    if (header !== undefined && header.length > 0) {
+      // A control key was presented; validateGuiControlKey throws a hard 401 on
+      // any failure (never falls through to the account path).
+      const sessionId = (req.params as { id?: string }).id ?? '';
+      const session = await agentSessionsRepo.get(sessionId);
+      const result = validateGuiControlKey({
+        headerRaw,
+        session,
+        encryptionKey: guiControlKeyEncryptionKey,
+        nowMs,
+      });
+      if (result.authorized) {
+        req.guiControlKeyAuthorized = true;
+        // rateLimit() keys off request.account (absent here); charge the owner.
+        req.guiControlKeyRateLimitAccountId = result.ownerAccountId;
+        return;
+      }
+    }
+    // No control key → normal account auth chain (requireScope('write') because
+    // the token carries canPublishData:true — a control credential).
+    await app.requireAuth(req, reply);
+    await app.requireScope('write')(req, reply);
+  };
+
   app.post<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id/livekit-token',
     {
       // requireScope('write'): this mints a token with canPublishData:true — a
       // CONTROL credential (the DataChannel drives mouse/keyboard InputEvents to
       // the Mac). A read-only key minting one could DRIVE the session, so the mint
-      // is write-equivalent (same posture as the gui-control-key route).
-      preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')],
+      // is write-equivalent (same posture as the gui-control-key route). The
+      // control-key path is the alternative for the Simulator's reconnect.
+      preHandler: [controlKeyOrAccountAuth, app.rateLimit('global')],
     },
     async (req, reply) => {
-      const ctx = req.account;
-      if (!ctx) throw new Error('account context missing after requireAuth');
       const sessionId = req.params.id;
+      const controlKeyAuthorized = req.guiControlKeyAuthorized === true;
+      const ctx = req.account;
+      if (!controlKeyAuthorized && !ctx) {
+        throw new Error('account context missing after requireAuth');
+      }
 
       // Cheap shape-check — junk ids fail before the db hit.
       if (!AGENT_SESSION_ID_RE.test(sessionId)) {
@@ -94,9 +146,11 @@ export function registerAgentSessionsLivekitTokenRoute(
         bump('not_found');
         throw new NotFoundError(`Agent session "${sessionId}" not found.`);
       }
-      // Cross-account access is a 404 (anti-enumeration; same posture
-      // as /v1/sessions/:id and the rest of the customer-facing surface).
-      if (session.accountId !== ctx.account.id) {
+      // Account path: enforce cross-account access is a 404 (anti-enumeration;
+      // same posture as /v1/sessions/:id). Control-key path: the key was already
+      // decrypt-matched against THIS session in the preHandler, so it is
+      // authorized for this one session and skips the ownership check.
+      if (!controlKeyAuthorized && session.accountId !== ctx?.account.id) {
         bump('not_found');
         throw new NotFoundError(`Agent session "${sessionId}" not found.`);
       }
@@ -107,6 +161,17 @@ export function registerAgentSessionsLivekitTokenRoute(
         bump('forbidden');
         throw new ForbiddenError(`Cannot mint LiveKit token for ${session.status} agent session.`);
       }
+
+      // The owning account id drives the participant identity (SFU join-dedupe)
+      // and the LiveKit room scoping. It's session.accountId either way — on the
+      // account path it equals ctx.account.id (ownership was just checked); on
+      // the control-key path it's the owner the key validated against. Region is
+      // only used for the publisher-node FALLBACK (a NULL/legacy node_id); the
+      // control-key path has no account region in hand, so it passes null —
+      // reconnect runs against an active, already-dispatched session whose
+      // node_id is bound, so the fallback isn't exercised.
+      const ownerAccountId = session.accountId;
+      const region = controlKeyAuthorized ? null : (ctx?.account.region ?? null);
 
       // Bind the token to the Mac that ACTUALLY publishes this session's stream
       // (agent_sessions.node_id, set at dispatch) — NOT the region's
@@ -119,7 +184,7 @@ export function registerAgentSessionsLivekitTokenRoute(
       const mac = await resolveSessionPublisherNode(
         fleetNodesRepo,
         session.nodeId,
-        ctx.account.region,
+        region,
         req.log,
       );
       if (mac === null || mac.livekit === null) {
@@ -153,7 +218,7 @@ export function registerAgentSessionsLivekitTokenRoute(
       const token = mintLivekitToken({
         apiKey: mac.livekit.apiKey,
         apiSecret,
-        identity: `customer-${ctx.account.id}`,
+        identity: `customer-${ownerAccountId}`,
         ttlSeconds,
         nowMs: tokenNowMs,
         video: {
@@ -178,7 +243,7 @@ export function registerAgentSessionsLivekitTokenRoute(
         ws_url: mac.livekit.wsUrl,
         room: sessionId,
         token,
-        participant_identity: `customer-${ctx.account.id}`,
+        participant_identity: `customer-${ownerAccountId}`,
         expires_at: expiresAt,
       });
     },
