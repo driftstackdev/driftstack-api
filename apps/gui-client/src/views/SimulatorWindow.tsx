@@ -2470,14 +2470,18 @@ export function SimulatorWindow(): JSX.Element {
     };
   }, [browserMode, info]);
 
-  // Live page state from the device (A3 page_state over the LiveKit data channel,
-  // bus W2719) — drives the browser-mode address bar's live URL + loading bar.
-  // Until the harness emits it, onNavigate optimistically shows a loading sweep
-  // that a watchdog clears (graceful fallback).
+  // DERIVED address-bar view of the ACTIVE tab (live-state accuracy refactor,
+  // doc-150 item 4). liveUrl/liveTitle are NOT the source of truth and are NEVER
+  // written back into tab storage — they mirror the active tab so the BrowserBar +
+  // window title can read a plain string. The SINGLE writer of a tab's stored
+  // url/title is a box-sourced page_state frame (data channel OR the ~2s poll),
+  // routed by tabId when present, else to the active tab. onNavigate / onActivateTab
+  // seed them optimistically for instant feedback; a useEffect re-derives them from
+  // the active tab whenever the tab record changes (so a box update reflows here).
   const [liveUrl, setLiveUrl] = useState('');
-  // Live page TITLE from page_state (doc-150 item 4) — feeds the active tab's label
-  // (the tab shows title || url). Separate from liveUrl so a title-only update still
-  // refreshes the tab. Empty until the box reports one.
+  // Title half of the derived active-tab view (feeds the tab label `title || url`
+  // AND the window title). Separate from liveUrl so a title-only frame still
+  // refreshes the bar. Empty until the active tab has a title.
   const [liveTitle, setLiveTitle] = useState('');
   const [pageLoading, setPageLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState<number | null>(null);
@@ -2524,6 +2528,59 @@ export function SimulatorWindow(): JSX.Element {
   // grace after a navigate, the poll won't turn loading OFF (the watchdog still
   // bounds it), so the loading bar survives until the box reports the new page.
   const lastNavAtRef = useRef(0);
+  // Timestamp of the last tab SWITCH (onActivateTab). Same grace role as
+  // lastNavAtRef for navigates: the ~2s page-state poll can carry the PRIOR tab's
+  // url (the box hasn't re-reported the switched page yet, and prod's poll frames
+  // don't carry a tabId) and would clobber the just-switched active tab's url back
+  // to the old page — the founder's "2nd switch stays on the same url" bug. Within
+  // a short grace after a switch the poll won't overwrite the active tab's url
+  // (the one-shot reconcile + a real data-channel frame refresh it instead).
+  const lastSwitchAtRef = useRef(0);
+  // Live mirror of activeTabId for the data-channel + poll callbacks (which close
+  // over a stale activeTabId — their effects don't re-subscribe per switch). Used
+  // to resolve "the active tab" when a box frame carries no tabId.
+  const activeTabIdRef = useRef(activeTabId);
+  useEffect(() => {
+    activeTabIdRef.current = activeTabId;
+  }, [activeTabId]);
+  // SINGLE writer of a tab's stored url/title (live-state accuracy refactor). Applies
+  // a box-sourced page_state to ONE tab: the frame's tabId when present (forward-
+  // compatible per-tab routing — activates automatically once the box sends tabId),
+  // else the active tab. Re-publishes the full list only when something actually
+  // changed (no wire storm from the ~2s poll re-asserting the same values). liveUrl/
+  // liveTitle are mirrored separately (only when the written tab IS the active one).
+  const writeTabPageState = useCallback(
+    (frame: { tabId?: string | null; url?: string | null; title?: string | null }): void => {
+      const targetId =
+        typeof frame.tabId === 'string' && frame.tabId !== ''
+          ? frame.tabId
+          : activeTabIdRef.current;
+      setTabs((prev) => {
+        let changed = false;
+        const next = prev.map((t) => {
+          if (t.id !== targetId) return t;
+          const patch: Partial<SimTab> = {};
+          if (typeof frame.url === 'string' && frame.url !== '' && frame.url !== t.url)
+            patch.url = frame.url;
+          if (typeof frame.title === 'string' && frame.title !== '' && frame.title !== t.title)
+            patch.title = frame.title;
+          if (Object.keys(patch).length === 0) return t;
+          changed = true;
+          return { ...t, ...patch };
+        });
+        if (!changed) return prev;
+        emitTabListRef.current(next, activeTabIdRef.current);
+        return next;
+      });
+    },
+    [],
+  );
+  // emitTabList is defined later (after the tab callbacks); a ref lets the
+  // box-sourced writer above publish without a forward-reference cycle.
+  const emitTabListRef = useRef<(tabs: SimTab[], activeId: string) => void>(() => {});
+  // reconcilePageState is defined later too; a ref lets the data-channel onData handler
+  // (the activateTabResult path) trigger a one-shot reconcile without a forward cycle.
+  const reconcilePageStateRef = useRef<() => void>(() => {});
   const clearLoadWatchdog = (): void => {
     if (loadWatchdogRef.current !== null) {
       window.clearTimeout(loadWatchdogRef.current);
@@ -2542,6 +2599,11 @@ export function SimulatorWindow(): JSX.Element {
           title?: string;
           loading?: boolean;
           progress?: number;
+          // tabId (doc-150 item 4 → live-state accuracy) — a page_state frame the box
+          // attributes to a specific renderer. When present we route url/title to THAT
+          // tab; absent → the active tab. Forward-compatible: per-tab routing activates
+          // automatically the moment the box starts stamping it.
+          tabId?: string | null;
           // activateTabResult (doc-150 item 4) — the harness's reply to activateTab.
           requestId?: string;
           ok?: boolean;
@@ -2568,6 +2630,13 @@ export function SimulatorWindow(): JSX.Element {
             setActiveTabId(pending.prevTabId);
             setNotice('Could not switch tab');
             window.setTimeout(() => setNotice(null), 3000);
+          } else if (pending !== undefined) {
+            // CONFIRMED switch — the box acknowledged it landed on `pending.tabId`.
+            // Fire a one-shot reconcile so the now-active tab refreshes from the box
+            // even if the data-channel page_state for the switched page dropped (the
+            // immediate pull in onActivateTab can race ahead of the box settling; this
+            // is the catch-up). Routes by tabId when the box stamps it, else active.
+            reconcilePageStateRef.current();
           }
           return;
         }
@@ -2621,10 +2690,17 @@ export function SimulatorWindow(): JSX.Element {
           msg.state === 'errored' ||
           msg.state === 'stalled';
         if (msg.type !== 'page_state' && !isHarnessState) return;
-        if (typeof msg.url === 'string' && msg.url !== '') setLiveUrl(msg.url);
-        // Page title → active tab label (doc-150 item 4). Only set when present so a
-        // url-only state frame doesn't wipe a previously-known title.
-        if (typeof msg.title === 'string' && msg.title !== '') setLiveTitle(msg.title);
+        // Box is the ONLY writer of a tab's stored url/title (live-state accuracy
+        // refactor). Route by tabId when the frame carries one, else the active tab;
+        // a title-only frame (no url) still refreshes the label. The derived effect
+        // re-mirrors the active tab into liveUrl/liveTitle, so the address bar +
+        // window title follow automatically when the written tab is the active one.
+        if (
+          (typeof msg.url === 'string' && msg.url !== '') ||
+          (typeof msg.title === 'string' && msg.title !== '')
+        ) {
+          writeTabPageState({ tabId: msg.tabId, url: msg.url, title: msg.title });
+        }
         // A3 W2845 — a 'stalled' frame surfaces the frozen-renderer badge; any
         // other harness state clears it (the page is responsive again).
         if (isHarnessState) setPageStalled(msg.state === 'stalled');
@@ -2664,7 +2740,7 @@ export function SimulatorWindow(): JSX.Element {
         /* ignore */
       }
     };
-  }, [room]);
+  }, [room, writeTabPageState]);
 
   // Live URL via the page-state API (A3 W2730): the box reports pageState over the
   // CONTROL PLANE (→ server sessionPageStateStore), NOT the LiveKit data channel —
@@ -2680,7 +2756,25 @@ export function SimulatorWindow(): JSX.Element {
       void getAgentSessionPageState(sessionId, controlAuth)
         .then((ps) => {
           if (cancelled || ps === null) return;
-          if (typeof ps.url === 'string' && ps.url !== '') setLiveUrl(ps.url);
+          // Box-sourced url/title → tab storage (the box is the only writer). When
+          // the poll frame carries a tabId, route precisely — no grace needed (it
+          // lands on the right tab). When it does NOT (today's prod page-state poll),
+          // it targets the ACTIVE tab and could carry the PRIOR tab's url for ~2s
+          // after a switch/navigate (the box hasn't re-reported the new page yet) →
+          // the founder's "2nd switch stays on the same url" clobber. So within the
+          // grace window suppress the URL but STILL apply the title (titles self-heal
+          // even if a data-channel frame dropped; a wrong title is far less jarring
+          // and the next non-grace tick corrects it). With a tabId the box change
+          // makes this fully precise automatically.
+          const hasTabId = typeof ps.tabId === 'string' && ps.tabId !== '';
+          const inGrace =
+            Date.now() - lastSwitchAtRef.current < 2500 || Date.now() - lastNavAtRef.current < 2500;
+          const suppressUrl = !hasTabId && inGrace;
+          writeTabPageState({
+            tabId: ps.tabId,
+            url: suppressUrl ? null : ps.url,
+            title: ps.title,
+          });
           // A3 W2845 — surface/clear the frozen-renderer badge from the poll too
           // (independent of the loading grace window; a stall is real regardless).
           setPageStalled(ps.state === 'stalled');
@@ -2706,7 +2800,7 @@ export function SimulatorWindow(): JSX.Element {
       cancelled = true;
       window.clearInterval(handle);
     };
-  }, [sessionId, controlAuth, room, browserMode]);
+  }, [sessionId, controlAuth, room, browserMode, writeTabPageState]);
 
   // Founder #48 — live cookie-jar view. Polls GET /v1/agent-sessions/:id/cookies
   // ONLY while the session-info / diagnostics panel is open (no background load on
@@ -3288,15 +3382,39 @@ export function SimulatorWindow(): JSX.Element {
     },
     [room, sessionId],
   );
+  // Keep the forward-reference ref (consumed by writeTabPageState, declared above
+  // the tab callbacks) pointing at the latest emitTabList so a box-sourced page_state
+  // write can publish the reconciled list without a declaration-order cycle.
+  useEffect(() => {
+    emitTabListRef.current = emitTabList;
+  }, [emitTabList]);
+  // One-shot page-state pull (live-state accuracy refactor). Fired right after a tab
+  // switch so the active tab reconciles from the box immediately rather than waiting
+  // up to ~2s for the next poll tick. Same routing as the poll (tabId → that tab, else
+  // active) but NOT grace-gated: a deliberate reconcile WANTS the box's current url —
+  // and routing by tabId (when present) is precise regardless. Best-effort + guarded.
+  const reconcilePageState = useCallback(async (): Promise<void> => {
+    if (sessionId === '') return;
+    try {
+      const ps = await getAgentSessionPageState(sessionId, controlAuth);
+      if (ps === null) return;
+      writeTabPageState({ tabId: ps.tabId, url: ps.url, title: ps.title });
+    } catch {
+      /* best-effort reconcile — transient errors are non-fatal */
+    }
+  }, [sessionId, controlAuth, writeTabPageState]);
+  useEffect(() => {
+    reconcilePageStateRef.current = () => void reconcilePageState();
+  }, [reconcilePageState]);
   // Patch the active tab's fields (url/title/scrollY) and re-publish the list. Used by
-  // onNavigate (url) + the page_state sync effect (url/title). A functional setState so
-  // it composes with concurrent updates; the list is emitted from the SAME next state.
+  // onNavigate to point the active tab at a just-submitted address (the OPTIMISTIC
+  // local write — the box then becomes the authoritative writer via writeTabPageState).
+  // A functional setState so it composes with concurrent updates; the list is emitted
+  // from the SAME next state, only when something actually changed.
   const updateActiveTab = useCallback(
     (patch: Partial<Omit<SimTab, 'id'>>): void => {
       setTabs((prev) => {
         const next = prev.map((t) => (t.id === activeTabId ? { ...t, ...patch } : t));
-        // Only re-publish when something actually changed (avoid a wire storm from the
-        // ~2s page-state poll re-asserting the same url/title every tick).
         const changed = next.some((t, i) => t !== prev[i]);
         if (changed) emitTabList(next, activeTabId);
         return changed ? next : prev;
@@ -3315,13 +3433,11 @@ export function SimulatorWindow(): JSX.Element {
       return next;
     });
     setActiveTabId(tab.id);
-    // Reset the live page identity for the freshly-activated blank tab. Without
-    // this the active-tab sync effect (keyed on activeTabId) fires with the PRIOR
-    // page's liveUrl/liveTitle still set and stamps them onto the new blank tab —
-    // the "+" tab would inherit the previous site's URL + title (audit). The box
-    // re-reports a fresh page_state once the operator navigates the new tab.
-    setLiveUrl('');
-    setLiveTitle('');
+    // Mark a switch so the ~2s poll's grace window suppresses a stale prior-tab url
+    // landing on the fresh blank tab. liveUrl/liveTitle re-derive from the new active
+    // tab automatically (the about:blank/'New Tab' record), so there's no manual
+    // reset to do — and no stamp-back loop to carry the prior page onto the + tab.
+    lastSwitchAtRef.current = Date.now();
   }, [emitTabList]);
   // Close a tab — remove it; if it was active, activate the nearest neighbor (prefer
   // the one to the left, else the right). NEVER drops below one tab (the close button
@@ -3358,15 +3474,14 @@ export function SimulatorWindow(): JSX.Element {
       const target = tabs.find((t) => t.id === id);
       if (target === undefined || id === activeTabId) return;
       const prevActive = activeTabId;
+      // Mark the switch BEFORE flipping active so the ~2s poll's grace window is
+      // armed for the moment the activeTabId changes — without it a poll tick that
+      // already carries the PRIOR tab's url (no tabId) would clobber the just-
+      // switched active tab's url back to the old page (the founder's "2nd switch
+      // stays on the same url" bug). liveUrl/liveTitle re-derive from the target
+      // tab's OWN stored url/title via the derived effect below — NO stamp-back.
+      lastSwitchAtRef.current = Date.now();
       setActiveTabId(id);
-      // Reflect the target tab's known url + title in the address bar / label
-      // immediately (optimistic); page_state will refine them once the box
-      // publishes the switched page. BOTH must be seeded from the target tab: the
-      // sync effect re-runs on the activeTabId change, and a stale liveTitle from
-      // the previous tab would otherwise be stamped onto the newly-active tab
-      // (tab labels flickering to the wrong site on every switch — audit).
-      setLiveUrl(target.url);
-      setLiveTitle(target.title);
       emitTabList(tabs, id);
       if (room !== null) {
         void sendActivateTab(room, {
@@ -3382,24 +3497,53 @@ export function SimulatorWindow(): JSX.Element {
             /* benign teardown — swallowed in the wrapper; nothing to track */
           },
         );
+        // One-shot reconcile: pull the box's current page-state immediately so the
+        // active tab refreshes from the device without waiting for the next ~2s poll
+        // tick. void it (no floating promise) — best-effort, transient errors ignored.
+        void reconcilePageState();
       }
     },
-    [tabs, activeTabId, emitTabList, room, sessionId],
+    [tabs, activeTabId, emitTabList, room, sessionId, reconcilePageState],
   );
-  // Keep the ACTIVE tab's url/title in lock-step with the live page (page_state /
-  // redirects / link-taps surface via liveUrl + liveTitle, NOT only the omnibox).
-  // updateActiveTab only re-publishes when a field actually changed, so this won't
-  // storm the wire on the ~2s poll re-asserting the same values.
+  // DERIVE the address-bar view (liveUrl/liveTitle) from the ACTIVE tab's stored
+  // url/title (live-state accuracy refactor). This REPLACES the old stamp-back sync
+  // effect that wrote liveUrl/liveTitle INTO the active tab — the inverted loop that
+  // converged every tab onto one url. Now the box (via writeTabPageState) is the sole
+  // writer of tab storage; this effect is read-only on tabs and only mirrors the
+  // active tab outward for the BrowserBar + window title. Re-runs whenever the active
+  // tab's record OR which tab is active changes.
+  const activeTab = tabs.find((t) => t.id === activeTabId);
+  const activeTabUrl = activeTab?.url ?? '';
+  const activeTabTitle = activeTab?.title ?? '';
   useEffect(() => {
-    if (liveUrl === '' && liveTitle === '') return;
-    const patch: Partial<Omit<SimTab, 'id'>> = {};
-    if (liveUrl !== '') patch.url = liveUrl;
-    if (liveTitle !== '') patch.title = liveTitle;
-    updateActiveTab(patch);
-    // Re-run on a live url/title change (the sync we want) + activeTabId (so a switch
-    // re-seeds the newly-active tab's fields from the current page). updateActiveTab is
-    // stable per (activeTabId, emitTabList) and only re-publishes on an actual change.
-  }, [liveUrl, liveTitle, activeTabId, updateActiveTab]);
+    setLiveUrl(activeTabUrl);
+    // A blank/new tab's placeholder 'New Tab' title is chrome, not a real page title —
+    // don't surface it as the window title; leave liveTitle empty so the title falls
+    // back to the url/host (matches the tab-label rule). A real box title overrides.
+    setLiveTitle(activeTabTitle === 'New Tab' ? '' : activeTabTitle);
+    // Re-derive whenever the active tab's stored url/title changes (a box page_state
+    // write) or which tab is active changes (a switch reads the new tab's own values).
+  }, [activeTabUrl, activeTabTitle]);
+  // Reflect the live page title in the OS window title in REALTIME (founder pain #2:
+  // "browser title doesn't update on a new page"). The derived liveTitle now flows
+  // from the active tab's box-sourced title on EVERY title-bearing frame — not just
+  // a load-commit — so this updates as the page's <title> changes. Fall back to the
+  // page host, then the device/profile name, so the window is never untitled. No-op
+  // outside Tauri (jsdom tests) via withCurrentWindow's guard.
+  useEffect(() => {
+    const base = profileName !== '' ? profileName : deviceName;
+    let host = '';
+    if (liveUrl !== '' && liveUrl !== 'about:blank') {
+      try {
+        host = new URL(liveUrl).host;
+      } catch {
+        /* not a parseable URL — leave host empty, fall back to the base name */
+      }
+    }
+    const page = liveTitle !== '' ? liveTitle : host;
+    const title = page !== '' ? `${page} — ${base}` : base;
+    void withCurrentWindow((w) => w.setTitle(title));
+  }, [liveTitle, liveUrl, deviceName, profileName]);
   const onNavigate = (raw: string): void => {
     if (room === null) return;
     // Omnibox behaviour: a URL navigates, anything else becomes a web search —

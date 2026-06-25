@@ -53,12 +53,24 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
   },
 }));
 
+// Controllable page-state poll source (live-state accuracy refactor). Defaults to
+// null (no box report) so the existing data-channel tests are unaffected; a test can
+// set pageStateValue to simulate a STALE poll frame (the prior tab's url) and assert
+// the grace window blocks the just-switched url from being clobbered.
+let pageStateValue: {
+  state: 'loading' | 'loaded' | 'errored' | 'stalled';
+  url: string | null;
+  title: string | null;
+  tabId?: string | null;
+  error: { kind?: string; message?: string } | null;
+} | null = null;
+const getAgentSessionPageState = vi.fn(() => Promise.resolve(pageStateValue));
 vi.mock('../../src/lib/agent-session-control', () => ({
   uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
   listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
   fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),
   getAgentSession: () => Promise.resolve({ mode: 'manual', pairKind: null }),
-  getAgentSessionPageState: () => Promise.resolve(null),
+  getAgentSessionPageState,
   getAgentSessionCookies: () => Promise.resolve({ status: 'unavailable', cookies: null }),
   navigateAgentSessionHistory: vi.fn(() => Promise.resolve()),
   setSessionMode: vi.fn(),
@@ -99,8 +111,25 @@ describe('SimulatorWindow — page tab strip', () => {
     sendTabListUpdate.mockClear();
     sendActivateTab.mockClear();
     sendNavigate.mockClear();
+    getAgentSessionPageState.mockClear();
+    pageStateValue = null;
     dataHandler = null;
   });
+
+  // Inject a page_state frame over the data channel (the box → GUI live path).
+  function pushPageState(frame: Record<string, unknown>): void {
+    act(() => {
+      dataHandler?.(new TextEncoder().encode(JSON.stringify(frame)));
+    });
+  }
+  // The most recent full tab list the GUI published, by id.
+  function tabsById(): Map<string, { id: string; url: string; title: string }> {
+    const m = new Map<string, { id: string; url: string; title: string }>();
+    for (const t of lastTabListCall().tabs as Array<{ id: string; url: string; title: string }>) {
+      m.set(t.id, t);
+    }
+    return m;
+  }
 
   it('renders a single seed tab with a + new-tab button (always ≥1 tab)', () => {
     const { container } = renderSim();
@@ -334,5 +363,130 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(t1?.title).not.toBe('Google');
     // Google's tab is untouched.
     expect(t2?.title).toBe('Google');
+  });
+
+  // ── Live-state accuracy refactor (founder pain: "2nd switch stays on the same
+  //    url"; "title doesn't update realtime") ───────────────────────────────────
+
+  it('(a) a two-tab round-trip switch keeps each tab on its OWN url/title (no convergence)', () => {
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+    // Tab 1 (seed) loads site A.
+    pushPageState({ state: 'loaded', url: 'https://alpha.example/', title: 'Alpha' });
+    const tab1Id = (lastTabListCall().tabs[0] as { id: string }).id;
+    // Open tab 2 and load site B into it.
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    pushPageState({ state: 'loaded', url: 'https://bravo.example/', title: 'Bravo' });
+    const tab2Id = (lastTabListCall().tabs[1] as { id: string }).id;
+
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    // Switch back to tab 1 — address bar shows A; both tabs keep their own url.
+    fireEvent.click(tabEls(container)[0]);
+    expect(addressInput.value).toBe('https://alpha.example/');
+    // Switch to tab 2 — this is the exact "2nd switch" the founder hit. It must show
+    // B, NOT stay on A (the old self-reinforcing clobber converged both to one url).
+    fireEvent.click(tabEls(container)[1]);
+    expect(addressInput.value).toBe('https://bravo.example/');
+    // And back to tab 1 a THIRD time — still A. Neither tab's stored url drifted.
+    fireEvent.click(tabEls(container)[0]);
+    expect(addressInput.value).toBe('https://alpha.example/');
+
+    const byId = tabsById();
+    expect(byId.get(tab1Id)?.url).toBe('https://alpha.example/');
+    expect(byId.get(tab1Id)?.title).toBe('Alpha');
+    expect(byId.get(tab2Id)?.url).toBe('https://bravo.example/');
+    expect(byId.get(tab2Id)?.title).toBe('Bravo');
+  });
+
+  it('(b) a title-only page_state frame after load updates the active tab label (no url)', () => {
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+    // Load a page (url + initial title).
+    pushPageState({ state: 'loaded', url: 'https://shop.example/', title: 'Shop' });
+    const tabId = (lastTabListCall().tabs[0] as { id: string }).id;
+    expect(tabsById().get(tabId)?.title).toBe('Shop');
+    // A later title-only update (a SPA route change / late <title> mutation): a
+    // page_state frame with NO new url, only a new title (here a 'loaded' frame, but
+    // the title path fires on ANY state — not just the initial load-commit). It must
+    // refresh the active tab's label.
+    pushPageState({ state: 'loaded', title: 'Shop — Checkout' });
+    const byId = tabsById();
+    expect(byId.get(tabId)?.title).toBe('Shop — Checkout');
+    // The url is untouched by a title-only frame.
+    expect(byId.get(tabId)?.url).toBe('https://shop.example/');
+    // The visible tab strip label reflects the new title.
+    expect(tabEls(container)[0].textContent).toContain('Shop — Checkout');
+  });
+
+  it('(c) a STALE poll within the grace window does NOT clobber a just-switched url', async () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderSim();
+      expect(dataHandler).not.toBeNull();
+      // Tab 1 = site A; tab 2 = site B.
+      pushPageState({ state: 'loaded', url: 'https://aaa.example/', title: 'A' });
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+      pushPageState({ state: 'loaded', url: 'https://bbb.example/', title: 'B' });
+      const tab2Id = (lastTabListCall().tabs[1] as { id: string }).id;
+
+      const addressInput = container.querySelector(
+        '[aria-label="Address bar"]',
+      ) as HTMLInputElement;
+      // Switch back to tab 1 (active = A). Arm a STALE poll that still reports B (the
+      // prior tab) with NO tabId — exactly the prod page-state poll lagging a switch.
+      fireEvent.click(tabEls(container)[0]);
+      expect(addressInput.value).toBe('https://aaa.example/');
+      pageStateValue = {
+        state: 'loaded',
+        url: 'https://bbb.example/',
+        title: 'B',
+        tabId: null,
+        error: null,
+      };
+      // Fire a poll tick INSIDE the grace window. The stale B url must be suppressed —
+      // the active tab stays on A (the founder's clobber bug). Flush the poll promise.
+      await act(async () => {
+        vi.advanceTimersByTime(2000);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(addressInput.value).toBe('https://aaa.example/');
+      // Tab 1's stored url is still A; tab 2 (B) is untouched.
+      const byId = tabsById();
+      expect([...byId.values()].some((t) => t.url === 'https://aaa.example/')).toBe(true);
+      expect(byId.get(tab2Id)?.url).toBe('https://bbb.example/');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('(d) a page_state carrying tabId routes url/title to THAT tab (not the active one)', () => {
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+    // Tab 1 = site A (active); tab 2 = site B (active after open).
+    pushPageState({ state: 'loaded', url: 'https://one.example/', title: 'One' });
+    const tab1Id = (lastTabListCall().tabs[0] as { id: string }).id;
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    pushPageState({ state: 'loaded', url: 'https://two.example/', title: 'Two' });
+    const tab2Id = (lastTabListCall().tabs[1] as { id: string }).id;
+
+    // While tab 2 is active, the box reports a background-tab page_state for tab 1
+    // (a redirect / push-navigation in the non-foreground renderer). It must land on
+    // tab 1 — NOT the active tab 2.
+    pushPageState({
+      state: 'loaded',
+      tabId: tab1Id,
+      url: 'https://one.example/redirected',
+      title: 'One Redirected',
+    });
+    const byId = tabsById();
+    expect(byId.get(tab1Id)?.url).toBe('https://one.example/redirected');
+    expect(byId.get(tab1Id)?.title).toBe('One Redirected');
+    // The active tab 2 is untouched by a frame addressed to tab 1.
+    expect(byId.get(tab2Id)?.url).toBe('https://two.example/');
+    expect(byId.get(tab2Id)?.title).toBe('Two');
+    // And the address bar (active = tab 2) still shows tab 2's url, not tab 1's.
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    expect(addressInput.value).toBe('https://two.example/');
   });
 });

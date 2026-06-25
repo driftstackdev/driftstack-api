@@ -174,6 +174,18 @@ export interface AgentPageState {
   // over the (still-visible) last frame, NOT a black screen.
   state: 'loading' | 'loaded' | 'errored' | 'stalled';
   url: string | null;
+  // Page title (doc-150 item 4 → live-state accuracy). The box reports the page
+  // title alongside the url so a title-only update (a SPA route change, a late
+  // <title> mutation) refreshes the active tab's label without waiting for a new
+  // load-commit. null/omitted until the box reports one (forward-compatible: the
+  // GUI already reads it; older boxes that don't send it just leave it null).
+  title: string | null;
+  // The tab this page-state belongs to (doc-150 item 4 → live-state accuracy).
+  // When the box attributes a frame to a specific renderer the GUI routes the
+  // url/title to THAT tab's record instead of the active tab. Forward-compatible:
+  // absent today → the GUI falls back to the active tab; once the box sends it,
+  // per-tab routing activates automatically with no GUI change.
+  tabId?: string | null;
   error: { kind?: string; message?: string } | null;
 }
 export async function getAgentSessionPageState(
