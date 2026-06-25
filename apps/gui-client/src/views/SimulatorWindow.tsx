@@ -2168,7 +2168,13 @@ export function SimulatorWindow(): JSX.Element {
   const sawFramesRef = useRef(false);
   const freezeSinceRef = useRef<number | null>(null);
   useEffect(() => {
-    if (room === null) {
+    // Suppress the freeze badge when the LiveKit connection itself isn't connected: a
+    // transport drop (disconnected/reconnecting) naturally zeroes decodeFps, and the
+    // panel's own "The live stream disconnected" overlay + Reconnect is the single
+    // source of truth there. Without this the parent's "Video frozen — reconnecting"
+    // pill contradicted the panel's overlay (one says auto-reconnecting, the other asks
+    // the founder to act). Only a freeze WHILE connected is a genuine client decode stall.
+    if (room === null || connState !== 'connected') {
       sawFramesRef.current = false;
       freezeSinceRef.current = null;
       setVideoFrozen(false);
@@ -2194,7 +2200,7 @@ export function SimulatorWindow(): JSX.Element {
     tick();
     const handle = window.setInterval(tick, 1000);
     return () => window.clearInterval(handle);
-  }, [room, conn.decodeFps]);
+  }, [room, conn.decodeFps, connState]);
   // #48 item 2 — "Copy diagnostics": a paste-ready snapshot of the session-info
   // overlay (the founder keeps reporting streaming/latency issues and needs the
   // exact figures for a bug report). formatSessionDiagnostics is pure + tested;
