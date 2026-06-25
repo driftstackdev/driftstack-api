@@ -405,6 +405,11 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // buttons have no iPhone touch analogue, so they're ignored.
     const onMouseDown = (e: MouseEvent): void => {
       if (mouseButton(e.button) !== 0) return;
+      // Defense-in-depth: if a prior committed drag never saw its release (a lost
+      // pointercancel/blur the handlers below missed), lift that orphaned finger BEFORE
+      // starting this gesture — otherwise the box would have two touchIds down at once
+      // (a spurious multi-touch/pinch or a wrong-place tap). A no-op normally.
+      liftActiveFinger();
       // A new touch during a glide stops it (iOS: tap-to-halt momentum) and lifts
       // the gliding finger before this press starts its own.
       cancelFling(true);
@@ -545,6 +550,36 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       }
       send({ type: 'touchEnd', x: p.x, y: devY(p.y), touchId: g.touchId }, true);
     };
+    // Lift a COMMITTED active finger at its last known point + null the gesture. A no-op
+    // for an uncommitted (buffered tap — no touchStart sent yet) or absent gesture. Used
+    // by both the lost-gesture cleanup (pointercancel/blur) and the defense at the top of
+    // onMouseDown, so a release we never see can't strand a pressed finger on the device.
+    const liftActiveFinger = (): void => {
+      const g = active.current;
+      active.current = null;
+      if (g === null || !g.committed) return;
+      send(
+        {
+          type: 'touchEnd',
+          x: clampX(g.lastX ?? g.startX),
+          y: devY(clampY(g.lastY ?? g.startY)),
+          touchId: g.touchId,
+        },
+        true,
+      );
+    };
+    // A gesture stream interrupted mid-flight WITHOUT a release: a system gesture
+    // (3/4-finger swipe, Mission Control → pointercancel), the window losing focus
+    // (blur), or any lost pointer-capture. Without this the device keeps the finger
+    // pressed (page frozen/half-scrolled) and the NEXT press would put a SECOND touch
+    // down (a spurious pinch / wrong-place tap). Run the same lift cleanup a real
+    // release would: lift the committed finger, end the wheel drag, cancel any fling.
+    const onLostGesture = (): void => {
+      liftActiveFinger();
+      cancelFling(true);
+      window.clearTimeout(wheelTimer);
+      endWheelDrag();
+    };
     // Wheel/trackpad scroll → a CONTINUOUS touch drag on ONE virtual finger, NOT a
     // per-event `swipe` (the fork momentum-glides every `swipe` → overlapping glides =
     // jumpy/overshoot, W2736). The founder scrolls with a MacBook TRACKPAD (A3 W2764):
@@ -600,18 +635,28 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       wheelDirX = 0;
       wheelDirY = 0;
     };
-    const endWheelDrag = (): void => {
+    // Lift the virtual wheel-finger (touchEnd + reset the drag/accumulators) WITHOUT
+    // clearing the pending carry. The mid-flush re-centre / reversal paths invoke this so
+    // the remainder of a big flick (anything above WHEEL_MAX_FRAME_DELTA in a single
+    // coalesced frame) keeps draining across the lift instead of being silently dropped —
+    // the founder's "big scroll only moves a bit" class. The idle-end / cleanup paths call
+    // endWheelDrag below, which lifts AND clears the pending (a true end of the gesture).
+    const liftWheelFinger = (): void => {
       if (wheelRaf !== 0) {
         cancelAnimationFrame(wheelRaf);
         wheelRaf = 0;
       }
-      wheelPendingDx = 0;
-      wheelPendingDy = 0;
       const wd = wheelDrag;
       wheelDrag = null;
       resetWheelAccum();
       if (wd === null) return;
       send({ type: 'touchEnd', x: clampX(wd.x), y: devY(clampY(wd.y)), touchId: wd.touchId }, true);
+    };
+    const endWheelDrag = (): void => {
+      // True end of the gesture — drop any remainder too (idle timeout / new mousedown).
+      wheelPendingDx = 0;
+      wheelPendingDy = 0;
+      liftWheelFinger();
     };
     const startWheelDrag = (x: number, y: number): { touchId: number; x: number; y: number } => {
       const touchId = touchIdSeq.current++;
@@ -705,7 +750,9 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         const reverseProj = proj - wheelTravel;
         const lockedDirX = wheelDirX;
         const lockedDirY = wheelDirY;
-        endWheelDrag(); // touchEnd at the current finger position; resets accum + dir
+        // liftWheelFinger (NOT endWheelDrag): touchEnd + reset accum/dir but KEEP the
+        // pending carry so the rest of a big flick still drains into the fresh gesture.
+        liftWheelFinger();
         wheelAccDx = reverseProj * lockedDirX;
         wheelAccDy = reverseProj * lockedDirY;
         if (!tryLockWheelDir()) {
@@ -739,7 +786,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       if (ny < margin || ny > vh - margin || nx < margin || nx > vw - margin) {
         const keepDirX = wheelDirX;
         const keepDirY = wheelDirY;
-        endWheelDrag();
+        // liftWheelFinger (NOT endWheelDrag): KEEP wheelPendingDx/Dy so a flick whose
+        // single coalesced frame carried more than WHEEL_MAX_FRAME_DELTA still drains its
+        // remainder after the re-centre instead of silently dropping it.
+        liftWheelFinger();
         const re = startWheelDrag(wheelCursorX, Math.round(vh / 2));
         wheelDirX = keepDirX;
         wheelDirY = keepDirY;
@@ -762,8 +812,14 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       const p = pointerToViewport(e, video);
       if (p === null) return;
       wheelCursorX = clampX(p.x);
-      wheelPendingDx += e.deltaX;
-      wheelPendingDy += e.deltaY;
+      // Normalize deltaMode (line/page → px), mirroring LiveSessionView's wheel path. A
+      // classic mouse wheel (or any input) that reports LINE (1) or PAGE (2) mode emits a
+      // tiny raw count per notch (e.g. ±1/±3) instead of pixels; without this the cumulative
+      // intent barely clears WHEEL_DIR_LOCK_PX and the page crawls (scrolling feels dead).
+      // Page mode = one device viewport-height of scroll in the fixed logical wire space.
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? DEVICE_LOGICAL_HEIGHT : 1;
+      wheelPendingDx += e.deltaX * unit;
+      wheelPendingDy += e.deltaY * unit;
       if (wheelRaf === 0) wheelRaf = requestAnimationFrame(flushWheel);
     };
     // True when focus is in an editable element (a text field / textarea /
@@ -827,6 +883,11 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', finishGesture);
     window.addEventListener('pointerup', finishGesture);
+    // A gesture interrupted without a release (system swipe → pointercancel, the window
+    // losing focus → blur) must lift the finger or the device stays pressed and the next
+    // press double-touches. Both run the same lift cleanup a real release would.
+    window.addEventListener('pointercancel', onLostGesture);
+    window.addEventListener('blur', onLostGesture);
     // Keyboard events go on window so capture works even when the
     // <video> isn't directly focused. Side-effect: the customer can
     // type into the remote browser without first clicking on the
@@ -842,6 +903,8 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', finishGesture);
       window.removeEventListener('pointerup', finishGesture);
+      window.removeEventListener('pointercancel', onLostGesture);
+      window.removeEventListener('blur', onLostGesture);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       // Lift any in-flight finger so a control-flip (manual→AI, which re-runs this

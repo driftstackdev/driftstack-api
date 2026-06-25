@@ -156,6 +156,44 @@ describe('useInputCapture — FAITHFUL real-timing macOS trackpad scroll', () =>
     ).toBe(starts);
   });
 
+  it('a big flick whose coalesced frame exceeds the per-frame cap AND re-centres still delivers its FULL travel (#3 carry not dropped)', () => {
+    const video = mountCapture();
+    vi.useFakeTimers();
+    // Fire several large wheel events with NO time between them so they COALESCE into one
+    // pending delta processed across rAF frames. The total far exceeds the runway (~389px)
+    // so an edge re-centre fires mid-flush — exactly where the pending remainder used to be
+    // clobbered to 0 (the "big scroll only moves a bit" deficit).
+    let totalInput = 0;
+    for (let i = 0; i < 6; i++) {
+      fireWheel(video, 0, 300); // 6 × 300 = 1800px of intended scroll, coalesced
+      totalInput += 300;
+    }
+    // Drain: advance many rAF frames (each ~16ms) so every carried remainder flushes, then
+    // pass the idle window so the gesture closes.
+    for (let i = 0; i < 40; i++) vi.advanceTimersByTime(16);
+    vi.advanceTimersByTime(400);
+    // Sum the absolute vertical finger travel delivered across ALL legs (each leg runs from
+    // its touchStart y to its last move y; a re-centre starts a fresh leg). The deficit bug
+    // dropped the carry on each re-centre, so delivered travel fell well short of the input.
+    const evs = emitted();
+    const startY = new Map<number, number>();
+    const lastY = new Map<number, number>();
+    for (const e of evs) {
+      if (e.type === 'touchStart') {
+        startY.set(e.touchId, e.y);
+        lastY.set(e.touchId, e.y);
+      } else if (e.type === 'touchMove') {
+        lastY.set(e.touchId, e.y);
+      }
+    }
+    let delivered = 0;
+    for (const [id, s] of startY) delivered += Math.abs((lastY.get(id) ?? s) - s);
+    // With the carry preserved, the delivered travel tracks the input closely. Allow a
+    // modest tolerance for the deadband lock + per-frame rounding; the bug delivered far
+    // less (a large fraction lost on each re-centre).
+    expect(delivered).toBeGreaterThan(totalInput * 0.85);
+  });
+
   it('a hard vertical reversal re-locks on the VERTICAL axis, not sideways (#6)', () => {
     const video = mountCapture();
     vi.useFakeTimers();

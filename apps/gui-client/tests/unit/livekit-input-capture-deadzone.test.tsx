@@ -214,6 +214,52 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
     expect(types.filter((t) => t === 'touchEnd').length).toBe(1);
   });
 
+  it('LOST GESTURE (pointercancel): a committed drag interrupted by a system gesture lifts the finger (no stuck touch)', () => {
+    const video = mountCapture();
+    fireMouse(video, 'mousedown', 200, 400, 1000);
+    fireMouse(video, 'mousemove', 200, 300, 1010); // 100px up → commit
+    expect(emittedTypes().filter((t) => t === 'touchStart').length).toBe(1);
+    expect(emittedTypes().filter((t) => t === 'touchEnd').length).toBe(0); // still pressed
+    // A system gesture (3/4-finger swipe / Mission Control) cancels the pointer stream
+    // with NO release. The finger must be lifted, not left pressed.
+    window.dispatchEvent(new Event('pointercancel'));
+    expect(emittedTypes().filter((t) => t === 'touchEnd').length).toBe(1);
+  });
+
+  it('LOST GESTURE (blur): a committed drag interrupted by the window losing focus lifts the finger', () => {
+    const video = mountCapture();
+    fireMouse(video, 'mousedown', 200, 400, 1000);
+    fireMouse(video, 'mousemove', 200, 300, 1010); // commit
+    expect(emittedTypes().filter((t) => t === 'touchEnd').length).toBe(0);
+    window.dispatchEvent(new Event('blur'));
+    expect(emittedTypes().filter((t) => t === 'touchEnd').length).toBe(1);
+  });
+
+  it('a TAP (uncommitted) interrupted by pointercancel sends NO orphan touchEnd (no touchStart was sent)', () => {
+    const video = mountCapture();
+    fireMouse(video, 'mousedown', 200, 400, 1000); // buffered — no touchStart yet
+    window.dispatchEvent(new Event('pointercancel'));
+    // An uncommitted (buffered) gesture never sent a touchStart, so it needs no touchEnd.
+    expect(emittedTypes()).not.toContain('touchEnd');
+    expect(emittedTypes()).not.toContain('touchStart');
+  });
+
+  it('DOUBLE-PRESS DEFENSE: a new press after an orphaned committed drag lifts the old finger first (no two touchIds down)', () => {
+    const video = mountCapture();
+    // First drag commits (finger down), but its release is LOST entirely (no up/cancel/blur).
+    fireMouse(video, 'mousedown', 200, 400, 1000);
+    fireMouse(video, 'mousemove', 200, 300, 1010); // commit
+    const firstStart = eventsOfType('touchStart')[0] as InputEvent & { touchId: number };
+    sendInputEvent.mockClear();
+    // A fresh press. onMouseDown must lift the orphaned finger BEFORE starting the new one,
+    // so the box never has two touchIds down at once (a spurious pinch / wrong-place tap).
+    fireMouse(video, 'mousedown', 100, 100, 2000);
+    const ends = eventsOfType('touchEnd') as (InputEvent & { touchId: number })[];
+    // Exactly the orphaned finger was ended (its touchId), and it was ended.
+    expect(ends.length).toBeGreaterThanOrEqual(1);
+    expect(ends[0].touchId).toBe(firstStart.touchId);
+  });
+
   it('OFF-VIDEO DRAG keeps scrolling: a committed drag that moves off the element still streams touchMove (clamped), not freeze', () => {
     const video = mountCapture();
     fireMouse(video, 'mousedown', 200, 400, 1000);
@@ -252,6 +298,33 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
     expect(emittedTypes()).not.toContain('swipe');
     const ts0 = eventsOfType('touchStart')[0] as InputEvent & { y: number };
     expect(moves.at(-1)!.y).toBeLessThan(ts0.y);
+  });
+
+  it('WHEEL deltaMode=LINE (classic mouse wheel) is normalized to px so it actually scrolls', () => {
+    const video = mountCapture();
+    // A classic mouse wheel reports LINE mode with a tiny raw count per notch (e.g. ±3).
+    // Without deltaMode normalization (×16) the cumulative intent barely clears the
+    // direction-lock deadband (8px) and nothing scrolls. A few notches must scroll.
+    for (let i = 0; i < 3; i++) {
+      video.dispatchEvent(
+        new WheelEvent('wheel', {
+          clientX: 200,
+          clientY: 400,
+          deltaX: 0,
+          deltaY: 3,
+          deltaMode: 1, // LINE
+          bubbles: true,
+        }),
+      );
+    }
+    flushRaf();
+    // 3 notches × 3 = 9 raw, ×16 normalize = 144px → comfortably past the 8px lock; it
+    // starts a drag and streams a real move (raw 9 would have barely locked / crawled).
+    expect(eventsOfType('touchStart').length).toBe(1);
+    const moves = eventsOfType('touchMove') as (InputEvent & { y: number })[];
+    expect(moves.length).toBeGreaterThanOrEqual(1);
+    const ts0 = eventsOfType('touchStart')[0] as InputEvent & { y: number };
+    expect(moves.at(-1)!.y).toBeLessThan(ts0.y); // scrolled down → finger up
   });
 
   it('WHEEL during a COMMITTED mouse drag is IGNORED — no second concurrent finger (audit: spurious pinch)', () => {
