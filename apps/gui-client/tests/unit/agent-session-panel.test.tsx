@@ -8,6 +8,7 @@ import { render, fireEvent, waitFor, act } from '@testing-library/react';
 import {
   AgentSessionPanel,
   friendlyConnectError,
+  isAuthConnectError,
   NO_PUBLISHER_TIMEOUT_MS,
 } from '../../src/components/AgentSessionPanel';
 
@@ -32,12 +33,15 @@ vi.mock('../../src/lib/livekit', () => ({
 const INFO = { ws_url: 'wss://lk', token: 'tok' } as never;
 
 describe('friendlyConnectError — raw LiveKit errors → customer copy', () => {
-  it('maps an invalid/expired token to a friendly Reconnect message', () => {
+  it('maps an invalid/expired token to an HONEST relaunch message (Reconnect cannot mint a fresh token)', () => {
     const m = friendlyConnectError(
       new Error('could not establish signal connection: invalid authorization token'),
     );
-    expect(m).toMatch(/video link is no longer valid/i);
+    // Honest copy: relaunch the profile (mints a new token) — NOT "Reconnect to get a
+    // fresh one", which would just loop on the same dead token.
+    expect(m).toMatch(/expired — relaunch the profile/i);
     expect(m).not.toMatch(/authorization token/i); // raw jargon hidden
+    expect(isAuthConnectError(m)).toBe(true);
   });
   it('maps a transport/signal failure to a connection-check message', () => {
     expect(friendlyConnectError(new Error('could not establish signal connection'))).toMatch(
@@ -104,6 +108,21 @@ describe('AgentSessionPanel overlay UX', () => {
     await waitFor(() => {
       expect(connectMock.mock.calls.length).toBeGreaterThan(callsBeforeClick);
     });
+  });
+
+  it('on an EXPIRED-TOKEN error shows the relaunch instruction and NO Reconnect button (it cannot mint a fresh token)', async () => {
+    connectMock.mockReset();
+    connectMock.mockRejectedValueOnce(
+      new Error('could not establish signal connection: invalid authorization token'),
+    );
+    const { container } = render(<AgentSessionPanel info={INFO} />);
+    await waitFor(() => {
+      const overlay = container.querySelector('[data-overlay="connection-state"]');
+      if (overlay?.getAttribute('data-state') !== 'error') throw new Error('not errored yet');
+    });
+    // Honest relaunch copy, and NO Reconnect button (it would loop on the dead token).
+    expect(container.textContent).toMatch(/expired — relaunch the profile/i);
+    expect(container.querySelector('[data-action="reconnect-stream"]')).toBeNull();
   });
 
   // #59 — a launch that connects the room but never publishes a video track

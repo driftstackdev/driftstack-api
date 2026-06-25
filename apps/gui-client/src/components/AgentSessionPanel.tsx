@@ -101,7 +101,11 @@ export const NO_PUBLISHER_TIMEOUT_MS = 30_000;
 export function friendlyConnectError(err: unknown): string {
   const raw = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
   if (/authorization token|permission|unauthorized|\b401\b|expired/i.test(raw)) {
-    return "This session's video link is no longer valid — Reconnect to get a fresh one.";
+    // HONEST copy (edge-errors review): the standalone Simulator captured its token at
+    // open and CANNOT mint a fresh one, so Reconnect would just replay the same dead
+    // token and loop. Tell the founder to relaunch the profile (which mints a new token)
+    // rather than promising Reconnect fetches a fresh one.
+    return "This session's video link expired — relaunch the profile to continue.";
   }
   if (
     /signal connection|could not connect|websocket|network|timeout|ECONN|getaddrinfo|dns/i.test(raw)
@@ -112,6 +116,13 @@ export function friendlyConnectError(err: unknown): string {
     return 'The live connection closed — Reconnect, or close this window if the session ended.';
   }
   return raw.length > 0 ? raw : 'Could not connect to the live stream.';
+}
+
+/** True when the connect error is an expired/invalid token. For these, Reconnect can't
+ *  help in the standalone Simulator (no path to mint a fresh token), so the overlay
+ *  drops the Reconnect button and shows the relaunch instruction instead of looping. */
+export function isAuthConnectError(message: string): boolean {
+  return /video link expired/i.test(message);
 }
 
 const IPHONE_16_PRO_ASPECT_RATIO = 1206 / 2622; // ≈ 0.46
@@ -443,7 +454,12 @@ export function AgentSessionPanel({
             {state.kind === 'disconnected' && 'The live stream disconnected.'}
             {state.kind === 'error' && `Couldn’t connect: ${state.message}`}
           </span>
-          {(state.kind === 'disconnected' || state.kind === 'error') && (
+          {/* Reconnect retries the SAME captured token, so it's offered for a transport
+              drop (disconnected) and non-auth errors — but NOT an expired-token error,
+              where it can only loop on the dead token (the copy already tells the founder
+              to relaunch the profile, which mints a fresh token). */}
+          {(state.kind === 'disconnected' ||
+            (state.kind === 'error' && !isAuthConnectError(state.message))) && (
             <button
               type="button"
               data-action="reconnect-stream"
