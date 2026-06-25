@@ -97,8 +97,12 @@ describe('W437.B apps/server/src/routes/profiles.ts content parity', () => {
       /\*\s*V-326e4 — needed to look up the OWNER's tier for the profile-cap\s*\n?\s*\*\s*check on POST \/v1\/profiles when team-scoped\./,
     );
     expect(body).toMatch(
-      /export interface ProfileRoutesDeps \{\s*\n?\s*service: ProfilesService;[\s\S]*?authRepo: AccountAuthRepo;\s*\n?\s*\}/,
+      /export interface ProfileRoutesDeps \{\s*\n?\s*service: ProfilesService;[\s\S]*?authRepo: AccountAuthRepo;[\s\S]*?\}/,
     );
+    // doc-150 §8 — the optional fleet registry + R2 the trim endpoint reuses
+    // (absent → POST /:id/trim returns a graceful `unavailable`, like cookies).
+    expect(body).toMatch(/fleetControlRegistry\?: FleetControlRegistry;/);
+    expect(body).toMatch(/r2\?: R2;/);
   });
 
   it('V-326e4 POST /v1/profiles: admin-only when team-scoped; profile cap + accountId derive from OWNER; member 403; CreateProfileRequestSchema safeParse → ValidationError; owner.tier/id substitution', () => {

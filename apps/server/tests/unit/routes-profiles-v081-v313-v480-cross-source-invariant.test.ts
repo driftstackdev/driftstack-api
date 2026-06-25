@@ -178,10 +178,11 @@ describe('W1051 routes/profiles V-081 + V-313 + V-480 + V-326e4 cross-source inv
     expect(authRefs.length, 'requireAuth on every route').toBeGreaterThanOrEqual(11);
     const rateRefs = p.match(/app\.rateLimit\('global'\)/g) ?? [];
     expect(rateRefs.length, 'global rate-limit on every route').toBeGreaterThanOrEqual(11);
-    // write:profiles on the 8 mutations: create, update, delete, clone,
-    // import, transfer, restore (L4b), purge (L4b). Trash-list is read-only.
+    // write:profiles on the 9 mutations: create, update, delete, clone,
+    // import, transfer, restore (L4b), purge (L4b), trim (doc-150 §8 storage
+    // eviction). Trash-list is read-only.
     const scopeRefs = p.match(/app\.requireScope\('write:profiles'\)/g) ?? [];
-    expect(scopeRefs.length, 'write:profiles on the profile mutations').toBe(8);
+    expect(scopeRefs.length, 'write:profiles on the profile mutations').toBe(9);
   });
 
   // ─── 204 on delete ───────────────────────────────────────────

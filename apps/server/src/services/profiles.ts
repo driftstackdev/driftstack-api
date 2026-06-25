@@ -406,6 +406,27 @@ export class ProfilesService {
     }
   }
 
+  /**
+   * doc-150 §8 — persist the new sealed size after a successful out-of-session
+   * trim. Reuses the SAME account-scoped `recordSave` repo path the profileSaved
+   * persister uses (stamps `last_saved_at = now` + `size_bytes = newSizeBytes` on
+   * the owning, non-deleted row), so the storage meter + the launch quota gate pick
+   * up the reclaimed bytes immediately. Account-scoped → a foreign id is a no-op.
+   * Only called on a confirmed `trimResult{ok}`; an error/timeout never reaches here.
+   */
+  async recordTrim(args: {
+    profileId: string;
+    accountId: string;
+    newSizeBytes: number;
+  }): Promise<void> {
+    await this.repo.recordSave({
+      id: args.profileId,
+      accountId: args.accountId,
+      at: new Date(),
+      sizeBytes: args.newSizeBytes,
+    });
+  }
+
   async list(args: ListProfilesArgs): Promise<ListProfilesPage> {
     return this.repo.list(args);
   }

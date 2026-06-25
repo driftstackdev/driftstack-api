@@ -708,6 +708,16 @@ const apiBaseUrl = resolveApiBaseUrl();
           '" data-snapshot-name="' +
           escapeHtml(p.name) +
           '" class="text-sm text-tk-accent hover:underline">Snapshot</button>' +
+          // doc-150 §8 — Trim: clear the profile's re-fetchable caches (HTTP /
+          // media / DOMCache / service-workers) while KEEPING logins, localStorage,
+          // IndexedDB + tabs. The headline reclaim action when over the storage cap;
+          // labeled "Clear cache, keep logins" so the customer knows nothing
+          // identity-bearing is dropped.
+          '<button type="button" data-trim="' +
+          escapeHtml(p.id) +
+          '" data-trim-name="' +
+          escapeHtml(p.name) +
+          '" title="Clear cache, keep logins" class="text-sm text-tk-accent hover:underline">Trim</button>' +
           '<button type="button" data-delete="' +
           escapeHtml(p.id) +
           '" data-delete-name="' +
@@ -951,6 +961,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           wireSnapshotButtons();
           wireExportButtons();
           wireTransferButtons();
+          wireTrimButtons();
           wireLaunchButtons();
           if (searchWrap) searchWrap.classList.remove('hidden');
           applyProfilesSearch();
@@ -1067,6 +1078,81 @@ const apiBaseUrl = resolveApiBaseUrl();
                 showBanner(
                   'Transfer failed: ' + (err && err.message ? err.message : 'network error'),
                 );
+              })
+              .finally(() => {
+                btn.disabled = false;
+                btn.textContent = original;
+              });
+          });
+        });
+      }
+
+      // doc-150 §8 — Trim button: POST /v1/profiles/:id/trim reclaims the profile's
+      // re-fetchable caches (keeps logins / localStorage / IndexedDB / tabs). The
+      // server returns a DISCRIMINATED 200 body in every case (ok / unavailable /
+      // timeout / error), so we branch on `status` rather than HTTP code. On ok we
+      // show "Freed N" (bytes_reclaimed via fmtBytes) + refresh so the size meter +
+      // quota bar pick up the smaller size_bytes immediately.
+      function wireTrimButtons() {
+        const buttons = list.querySelectorAll('[data-trim]');
+        buttons.forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const id = btn.getAttribute('data-trim');
+            const name = btn.getAttribute('data-trim-name') || 'profile';
+            if (!id) return;
+            const proceed = await window.driftstackConfirm(
+              'Clear cached website data for "' +
+                name +
+                '"?\n\n' +
+                'This frees re-fetchable caches (images, scripts, service workers) ' +
+                'to reclaim storage. Your logins, saved site data and open tabs are KEPT — ' +
+                'they reload from the network on the next visit, just like clearing a browser cache.',
+              { confirmLabel: 'Clear cache' },
+            );
+            if (!proceed) return;
+            btn.disabled = true;
+            const original = btn.textContent;
+            btn.textContent = 'Trimming…';
+            authedFetch('/v1/profiles/' + encodeURIComponent(id) + '/trim', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+            })
+              .then((r) =>
+                r.ok
+                  ? r.json()
+                  : r
+                      .json()
+                      .catch(() => ({}))
+                      .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+              )
+              .then((body) => {
+                const status = body && body.status;
+                if (status === 'ok') {
+                  const freed =
+                    typeof body.bytes_reclaimed === 'number' ? fmtBytes(body.bytes_reclaimed) : '0 B';
+                  showBanner('Cleared cache for "' + name + '" — freed ' + freed + '.');
+                  return refresh();
+                }
+                if (status === 'error') {
+                  showBanner(
+                    'Trim failed: ' + (body.reason || 'the session node reported an error') + '.',
+                  );
+                  return;
+                }
+                if (status === 'timeout') {
+                  showBanner('Trim timed out — the node did not respond. Try again shortly.');
+                  return;
+                }
+                // unavailable (not wired / no node / nothing to trim) — informative,
+                // not an error: a fresh profile with no saved state has nothing to clear.
+                showBanner(
+                  'Nothing to trim: ' +
+                    (body && body.reason ? body.reason : 'no cached data for this profile yet') +
+                    '.',
+                );
+              })
+              .catch((err) => {
+                showBanner('Trim failed: ' + (err && err.message ? err.message : 'network error') + '.');
               })
               .finally(() => {
                 btn.disabled = false;

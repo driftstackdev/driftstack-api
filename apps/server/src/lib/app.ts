@@ -1238,7 +1238,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     accountsAdminService: deps.accountsAdminService,
   });
   if (deps.profilesService !== undefined) {
-    registerProfileRoutes(app, { service: deps.profilesService, authRepo: deps.authRepo });
+    registerProfileRoutes(app, {
+      service: deps.profilesService,
+      authRepo: deps.authRepo,
+      // doc-150 §8 — out-of-session profile trim picks a healthy node + presigns R2.
+      // Both optional: absent (stateless deploy / fleet off) → POST /:id/trim returns
+      // a graceful `unavailable`, exactly like the cookies route.
+      ...(deps.fleetControlRegistry !== undefined
+        ? { fleetControlRegistry: deps.fleetControlRegistry }
+        : {}),
+      ...(deps.r2 ? { r2: deps.r2 } : {}),
+    });
     // V-312 — profile snapshots routes share the profiles service +
     // auth repo. Registers only when profilesService is wired.
     if (deps.profileSnapshotsService !== undefined) {

@@ -60,12 +60,18 @@ import {
   type DownloadOutcome,
 } from './download-request-correlator.js';
 import {
+  TrimProfileRequestCorrelator,
+  type TrimProfileTransport,
+  type TrimProfileOutcome,
+} from './trim-profile-request-correlator.js';
+import {
   serializeCookiesRequest,
   serializeSetCookies,
   serializeNavigateHistory,
   serializeUploadFile,
   serializeListDownloads,
   serializeFetchDownload,
+  serializeTrimProfile,
   serializeSessionEnd,
 } from './harness-control-codec.js';
 import type { Cookie } from '../schemas/harness-control-protocol.js';
@@ -100,6 +106,10 @@ export class FleetControlConnection {
    *  (listDownloads→downloadsList, fetchDownload→downloadData) over this node's
    *  socket, keyed by requestId. Owned like above. */
   readonly downloadCorrelator: DownloadRequestCorrelator;
+  /** Profile-trim (doc-150 §8.3) — correlates POST /v1/profiles/:id/trim eviction
+   *  (trimProfile → trimResult) over this node's socket, keyed by requestId. The
+   *  OUT-OF-SESSION sibling of the others; owned here like above. */
+  readonly trimProfileCorrelator: TrimProfileRequestCorrelator;
   private readonly send: FleetNodeSocketSend;
   private readonly onProfileSaved?: (frame: ProfileSaved) => void;
   // audit M1 — the cross-node frames now carry the connection's authenticated
@@ -160,6 +170,34 @@ export class FleetControlConnection {
       sendFetch: (r) => send(JSON.stringify(r)),
     };
     this.downloadCorrelator = new DownloadRequestCorrelator(downloadTransport, log);
+    const trimProfileTransport: TrimProfileTransport = { send: (r) => send(JSON.stringify(r)) };
+    this.trimProfileCorrelator = new TrimProfileRequestCorrelator(trimProfileTransport, log);
+  }
+
+  /**
+   * Profile-trim (doc-150 §8.3) — relay a profile's JIT crypto envelope (dek +
+   * presigned GET/PUT) to a HEALTHY node so it opens the sealed blob, drops the
+   * re-fetchable cache subtrees, re-seals under the SAME dek, and PUTs the trimmed
+   * blob back. Sends a `trimProfile` (correlated by `requestId`) and awaits the
+   * matching `trimResult`; resolves a uniform TrimProfileOutcome (ok / error /
+   * timeout) and NEVER rejects, so the route maps each case to a response.
+   * OUT-OF-SESSION: keyed by `profileId` (no live session). `requestId` is
+   * caller-generated (the route mints a uuid) so the correlation key stays testable.
+   * NEVER log `dek`.
+   */
+  requestTrim(
+    args: {
+      requestId: string;
+      profileId: string;
+      dek: string;
+      sealedBlob?: string;
+      sealedBlobURL?: string;
+      sealedBlobPutURL: string;
+    },
+    timeoutMs?: number,
+  ): Promise<TrimProfileOutcome> {
+    const req = serializeTrimProfile(args);
+    return this.trimProfileCorrelator.request(req, timeoutMs);
   }
 
   /**
@@ -440,6 +478,14 @@ export class FleetControlConnection {
           // id → no-op (already settled).
           this.downloadCorrelator.onResultFrame(frame);
           break;
+        case 'trimResult':
+          // Profile-trim (doc-150 §8.3) — settles the pending POST /v1/profiles/:id/trim
+          // eviction keyed by requestId (the harness echoes it). Self-contained
+          // request/reply like cookiesResult: no injected consumer; the awaiting route
+          // holds the promise via the connection's trim correlator. The correlator's
+          // own cross-account guard checks profileId before settling. Unknown id → no-op.
+          this.trimProfileCorrelator.onResultFrame(frame);
+          break;
         case 'heartbeat':
           // Liveness + fleet telemetry (file-48 §A5, fleet-admin-panel-design
           // Phase 0). SECURITY: cross-check the frame's self-reported macNodeId
@@ -477,8 +523,8 @@ export class FleetControlConnection {
   }
 
   /** The socket closed/errored: fail every in-flight dispatch + cookies pull +
-   *  cookie-import + history-step + upload + download on this node (so an awaiting
-   *  request resolves immediately, not at timeout). */
+   *  cookie-import + history-step + upload + download + profile-trim on this node
+   *  (so an awaiting request resolves immediately, not at timeout). */
   close(reason: string): void {
     this.correlator.failAll(reason);
     this.cookiesCorrelator.failAll(reason);
@@ -486,6 +532,7 @@ export class FleetControlConnection {
     this.navigateHistoryCorrelator.failAll(reason);
     this.uploadCorrelator.failAll(reason);
     this.downloadCorrelator.failAll(reason);
+    this.trimProfileCorrelator.failAll(reason);
   }
 }
 
@@ -635,6 +682,22 @@ export class FleetControlRegistry {
 
   get(nodeId: string): FleetControlConnection | undefined {
     return this.connections.get(nodeId);
+  }
+
+  /**
+   * Profile-trim (doc-150 §8.3) — pick ANY connected node. Trim is OUT-OF-SESSION:
+   * a profile at rest in R2 has no assigned node, and the work (open → drop caches →
+   * re-seal → PUT) is a self-contained blob→blob transform that any healthy node can
+   * run (it needs only the JIT crypto envelope, no session state). A live WS in the
+   * registry means the node authenticated + is reachable on the control plane, which
+   * is the liveness bar this picker needs; the FIRST connection is returned (the Map
+   * preserves insertion order — deterministic for tests). Returns undefined when no
+   * node is connected (the route maps that to a graceful `unavailable`). A finer
+   * health/least-loaded policy is a future refinement (out of v1 scope).
+   */
+  pickAnyConnected(): FleetControlConnection | undefined {
+    const first = this.connections.values().next();
+    return first.done ? undefined : first.value;
   }
 
   /**

@@ -227,7 +227,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       /export const TERMINAL_SESSION_STATUSES = new Set<string>\(\['ended', 'errored'\]\);/,
     );
     expect(body).toMatch(
-      /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*ProfileSavedSchema,\s*\n?\s*ChallengeDetectedSchema,\s*\n?\s*PageStateFrameSchema,\s*\n?\s*ProfileSaveFailedSchema,\s*\n?\s*CookiesResultSchema,\s*\n?\s*SetCookiesResultSchema,\s*\n?\s*NavigateHistoryResultSchema,\s*\n?\s*UploadResultSchema,\s*\n?\s*DownloadsListResultSchema,\s*\n?\s*DownloadDataResultSchema,\s*\n?\s*\]\);/,
+      /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*ProfileSavedSchema,\s*\n?\s*ChallengeDetectedSchema,\s*\n?\s*PageStateFrameSchema,\s*\n?\s*ProfileSaveFailedSchema,\s*\n?\s*CookiesResultSchema,\s*\n?\s*SetCookiesResultSchema,\s*\n?\s*NavigateHistoryResultSchema,\s*\n?\s*UploadResultSchema,\s*\n?\s*DownloadsListResultSchema,\s*\n?\s*DownloadDataResultSchema,\s*\n?\s*TrimProfileResultSchema,\s*\n?\s*\]\);/,
     );
     // ControlInbound.sessionEnd — the trivial W122 teardown envelope (source-pinned).
     expect(body).toMatch(
@@ -256,6 +256,19 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     // node→CP RESULT — ok?/error?, lenient forward-compat like setCookiesResult.
     expect(body).toMatch(
       /export const NavigateHistoryResultSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('navigateHistoryResult'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*ok: z\.boolean\(\)\.optional\(\),\s*\n?\s*error: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+    );
+  });
+
+  it('profile-trim frames pinned: trimProfile (CP→node, strict, JIT crypto envelope) + trimResult (node→CP, in union)', () => {
+    // CP→node REQUEST — strict, carries the JIT crypto envelope (dek + presigned
+    // GET/PUT) keyed by profileId (OUT-OF-SESSION, no sessionId); sealedBlobPutURL
+    // REQUIRED, one of sealedBlob/sealedBlobURL supplies the input.
+    expect(body).toMatch(
+      /export const TrimProfileRequestSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('trimProfile'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*profileId: z\.string\(\)\.min\(1\),\s*\n?\s*dek: z\.string\(\)\.min\(1\),\s*\n?\s*sealedBlob: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*sealedBlobURL: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*sealedBlobPutURL: z\.string\(\)\.min\(1\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
+    );
+    // node→CP RESULT — ok?/newSizeBytes?/bytesReclaimed?/error?, lenient like cookiesResult.
+    expect(body).toMatch(
+      /export const TrimProfileResultSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('trimResult'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*profileId: z\.string\(\)\.min\(1\),\s*\n?\s*ok: z\.boolean\(\)\.optional\(\),\s*\n?\s*newSizeBytes: z\.number\(\)\.int\(\)\.nonnegative\(\)\.optional\(\),\s*\n?\s*bytesReclaimed: z\.number\(\)\.int\(\)\.nonnegative\(\)\.optional\(\),\s*\n?\s*error: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
     );
   });
 

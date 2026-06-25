@@ -879,6 +879,53 @@ export const DownloadDataResultSchema = z.object({
 });
 export type DownloadDataResult = z.infer<typeof DownloadDataResultSchema>;
 
+// ── Profile TRIM / eviction (doc-150 §8.3 — storage cleanup) ──────────
+// CP→node REQUEST (`serializeTrimProfile`): POST /v1/profiles/:id/trim issues this
+// over ANY healthy node's LIVE control WSS, keyed by `requestId`; A3's harness opens
+// the sealed blob with `dek`, drops the re-fetchable cache subtrees (NetworkCache /
+// MediaCache + per-origin CacheStorage / ServiceWorkers) from `opaqueStorage` while
+// KEEPING cookies / localStorage / IndexedDB / openTabs, re-seals under the SAME dek,
+// PUTs the trimmed blob to `sealedBlobPutURL`, and replies with the `trimResult` below.
+// UNLIKE the cookies/history frames this is OUT-OF-SESSION (a profile at rest in R2 has
+// no live node), so it carries the JIT crypto envelope (the same fields
+// SessionAssign.ProfileInfo carries) keyed by `profileId` instead of a `sessionId`.
+// NOT in HarnessOutbound (that's node→CP); this is CP→node like cookiesRequest.
+// `sealedBlobPutURL` is REQUIRED (the trimmed blob must be written back); one of
+// `sealedBlob` (inline ≤256KB) / `sealedBlobURL` (presigned GET) supplies the input.
+// Field notes: `dek` = base64 of the 32-byte per-profile DEK (JIT, like
+// SessionAssign.ProfileInfo.dek). One of `sealedBlob` (inline ≤256KB) / `sealedBlobURL`
+// (presigned GET) supplies the input; `sealedBlobPutURL` (REQUIRED) is where the node
+// PUTs the trimmed blob back.
+export const TrimProfileRequestSchema = z
+  .object({
+    type: z.literal('trimProfile'),
+    requestId: z.string().min(1),
+    profileId: z.string().min(1),
+    dek: z.string().min(1),
+    sealedBlob: z.string().min(1).optional(),
+    sealedBlobURL: z.string().min(1).optional(),
+    sealedBlobPutURL: z.string().min(1),
+  })
+  .strict();
+export type TrimProfileRequest = z.infer<typeof TrimProfileRequestSchema>;
+
+// node→CP RESULT: echoes `requestId` + `profileId`. SUCCESS → `ok:true` +
+// `newSizeBytes` (the re-sealed trimmed byte count, which A2 persists as the new
+// size_bytes) + `bytesReclaimed` (oldSealed.count - newSizeBytes, for the "freed N
+// MB" UI). FAILURE (open / seal / PUT) → `error` set + `ok` absent/false, and the CP
+// fast-fails the pending request WITHOUT updating the row. Plain object (lenient
+// forward-compat), like the sibling result frames.
+export const TrimProfileResultSchema = z.object({
+  type: z.literal('trimResult'),
+  requestId: z.string().min(1),
+  profileId: z.string().min(1),
+  ok: z.boolean().optional(),
+  newSizeBytes: z.number().int().nonnegative().optional(),
+  bytesReclaimed: z.number().int().nonnegative().optional(),
+  error: z.string().optional(),
+});
+export type TrimProfileResult = z.infer<typeof TrimProfileResultSchema>;
+
 // ── HarnessOutbound union (server DECODES) ────────────────────────────
 // All 13 variants pinned. intentResult + sessionStatus are consumed precisely;
 // heartbeat / capabilityReport / errorEvent / profileSaved / challengeDetected
@@ -896,6 +943,9 @@ export type DownloadDataResult = z.infer<typeof DownloadDataResultSchema>;
 // navigateHistoryResult (sim back/forward, A3 W2870) is likewise the write-twin of
 // setCookiesResult — correlated by `requestId` inside the connection's
 // NavigateHistoryRequestCorrelator, settling a pending POST /:id/history.
+// trimResult (doc-150 §8.3, profile storage eviction) is the OUT-OF-SESSION sibling
+// — correlated by `requestId` inside the connection's TrimProfileRequestCorrelator
+// (keyed by `profileId`, not sessionId), settling a pending POST /:id/trim.
 export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   IntentResultEnvelopeSchema,
   SessionStatusSchema,
@@ -912,6 +962,7 @@ export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   UploadResultSchema,
   DownloadsListResultSchema,
   DownloadDataResultSchema,
+  TrimProfileResultSchema,
 ]);
 export type HarnessOutbound = z.infer<typeof HarnessOutboundSchema>;
 export type ProfileSaved = z.infer<typeof ProfileSavedSchema>;

@@ -19,11 +19,15 @@ import {
   ProfileImportRequestSchema,
   UpdateProfileRequestSchema,
 } from '@driftstack/api-types';
+import { randomUUID } from 'node:crypto';
 import type { ProfileRecord, ProfilesService } from '../services/profiles.js';
 import { BadRequestError, ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';
 import type { AccountAuthRepo } from '../services/auth.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
+import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
+import { buildAssignProfileBlock } from '../services/profile-store.js';
+import type { R2 } from '../lib/r2.js';
 
 /**
  * V-326e4 — admin-only gate for profile write operations on team
@@ -89,10 +93,23 @@ export interface ProfileRoutesDeps {
    * check on POST /v1/profiles when team-scoped.
    */
   authRepo: AccountAuthRepo;
+  /**
+   * doc-150 §8 — fleet control-plane registry for the out-of-session trim
+   * eviction (POST /:id/trim picks any healthy node + relays a `trimProfile`).
+   * Absent (stateless deploy / FLEET_CONTROL_PLANE_ENABLED off) → trim returns a
+   * graceful `unavailable`, exactly like the cookies route.
+   */
+  fleetControlRegistry?: FleetControlRegistry;
+  /**
+   * doc-150 §8 — R2 client to mint the presigned GET/PUT the trim op carries (the
+   * sealed blob flows R2 ↔ node directly; the CP never holds it). Absent → trim
+   * returns `unavailable` (no blob to fetch/write back).
+   */
+  r2?: R2;
 }
 
 export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesDeps): void {
-  const { service, authRepo } = deps;
+  const { service, authRepo, fleetControlRegistry, r2 } = deps;
 
   // ── POST /v1/profiles ────────────────────────────────────────────────
   // V-326e4 — admin-only when targeting a team owner; profile cap +
@@ -410,6 +427,103 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
         new_profile: publicProfile(newProfile),
         recipient_account_id: `acc_${recipient.id}`,
       };
+    },
+  );
+
+  // ── POST /v1/profiles/:id/trim (doc-150 §8 — storage cleanup / eviction) ──
+  // A customer over their storage cap reclaims space by trimming a profile's
+  // re-fetchable caches (HTTP/Media cache + per-origin CacheStorage/ServiceWorkers)
+  // while KEEPING the high-value identity bytes (cookies / localStorage / IndexedDB /
+  // tabs). Trim runs OUT-OF-SESSION on a node (the harness is the only decryptor):
+  // we resolve the profile's DEK + a presigned R2 GET/PUT (the SAME envelope a
+  // session-assign mints, via buildAssignProfileBlock), pick any healthy node, relay
+  // a `trimProfile` op, await `trimResult`, then UPDATE size_bytes from the re-sealed
+  // size on success. Owner-checked + write-scoped like every mutating profile route.
+  //
+  // DISCRIMINATED 200 body in every case (mirrors GET /:id/cookies' "null when not
+  // wired" style) so the dashboard renders expected-inert states without HTTP-error
+  // noise. NEVER log the DEK.
+  //   status:'ok'          → { size_bytes, bytes_reclaimed }   (trimmed + persisted)
+  //   status:'unavailable' → not wired (R2/fleet off) / no node connected / no stored
+  //                          state to trim (a fresh profile has no sealed blob)
+  //   status:'timeout'     → node didn't reply (A3 handler pending)
+  //   status:'error'       → node reported a failure (reason set) — row NOT updated
+  app.post<{ Params: { id: string } }>(
+    '/v1/profiles/:id/trim',
+    { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
+    async (req) => {
+      const ctx = requireCtx(req);
+      const id = uuidFromProfileId(req.params.id);
+      // Owner-check exactly like the other mutating routes: the trim scopes to the
+      // OWNER account (self → caller; admin-on-team → owner), and `service.get`
+      // 404s an unknown/foreign id so we never confirm another account's profile.
+      const eff = effectiveAccountIdForWrite(req, ctx);
+      const accountId = eff ?? ctx.account.id;
+      await service.get({ id, accountId }); // throws NotFoundError on unknown/foreign
+
+      // Control plane / R2 not wired (stateless deploy) → graceful unavailable.
+      if (fleetControlRegistry === undefined || r2 === undefined) {
+        return { status: 'unavailable' as const, reason: 'profile storage trim is not enabled' };
+      }
+      // Resolve the per-profile DEK (KMS→TMK→DEK, file 57). Null → profiles feature
+      // inert (PROFILE_MASTER_KEY unset) or this profile has no stored DEK → nothing
+      // we can open, so there's nothing to trim. NEVER log the DEK.
+      const dek = await service.getProfileDek({ profileId: id, accountId });
+      if (dek === null) {
+        return {
+          status: 'unavailable' as const,
+          reason: 'profile has no encrypted store to trim',
+        };
+      }
+      // Mint the JIT crypto envelope the trim op carries — the SAME presigned GET/PUT
+      // path session-dispatch uses (buildAssignProfileBlock). sealedBlobUrl is present
+      // ONLY when a sealed blob already exists in R2; absent → a fresh profile with no
+      // persisted state → nothing to trim (unavailable, not an error).
+      const dekBase64 = dek.toString('base64');
+      let block: Awaited<ReturnType<typeof buildAssignProfileBlock>>;
+      try {
+        block = await buildAssignProfileBlock(r2, id, dekBase64);
+      } catch (err) {
+        req.log.warn(
+          { component: 'profile-trim', profileId: id, err },
+          'profile trim R2 url-mint failed',
+        );
+        return { status: 'unavailable' as const, reason: 'could not prepare profile storage' };
+      }
+      if (block.sealedBlobUrl === undefined) {
+        return {
+          status: 'unavailable' as const,
+          reason: 'profile has no saved state to trim yet',
+        };
+      }
+      // Pick ANY healthy (connected) node — trim is out-of-session so the profile has
+      // no assigned node; any reachable node can run the blob→blob transform.
+      const conn = fleetControlRegistry.pickAnyConnected();
+      if (conn === undefined) {
+        return { status: 'unavailable' as const, reason: 'no fleet node is connected' };
+      }
+      const outcome = await conn.requestTrim({
+        requestId: randomUUID(),
+        profileId: id,
+        dek: dekBase64,
+        sealedBlobURL: block.sealedBlobUrl,
+        sealedBlobPutURL: block.sealedBlobPutUrl,
+      });
+      if (outcome.status === 'ok') {
+        // Persist the new (smaller) sealed size so the storage meter + launch quota
+        // gate reflect the reclaimed bytes immediately. Only on a confirmed ok.
+        await service.recordTrim({ profileId: id, accountId, newSizeBytes: outcome.newSizeBytes });
+        return {
+          status: 'ok' as const,
+          size_bytes: outcome.newSizeBytes,
+          bytes_reclaimed: outcome.bytesReclaimed,
+        };
+      }
+      if (outcome.status === 'error') {
+        // Node reported a failure — do NOT update the row (the old blob is untouched).
+        return { status: 'error' as const, reason: outcome.message };
+      }
+      return { status: 'timeout' as const };
     },
   );
 }

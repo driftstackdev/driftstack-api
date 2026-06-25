@@ -30,6 +30,7 @@ import {
   UploadFileRequestSchema,
   ListDownloadsRequestSchema,
   FetchDownloadRequestSchema,
+  TrimProfileRequestSchema,
   HARNESS_INTENT_PARAM_SCHEMAS,
   type IntentDispatch,
   type IntentResultEnvelope,
@@ -46,6 +47,7 @@ import {
   type UploadFileRequest,
   type ListDownloadsRequest,
   type FetchDownloadRequest,
+  type TrimProfileRequest,
   type SessionAssignTransportMode,
   type HarnessIntentName,
   type HarnessErrorCode,
@@ -413,6 +415,34 @@ export function serializeFetchDownload(args: {
     requestId: args.requestId,
     sessionId: args.sessionId,
     name: args.name,
+  });
+}
+
+/**
+ * Profile-trim (doc-150 §8.3) — build a wire-ready `trimProfile` to reclaim a
+ * profile's re-fetchable cache bytes OUT-OF-SESSION over any healthy node's WSS.
+ * Carries the JIT crypto envelope (the same dek + presigned GET/PUT a session-assign
+ * mints) so the node can open → trim → re-seal → PUT the trimmed blob. Correlated by
+ * `requestId` (the harness echoes it on the `trimResult` reply). `sealedBlobPutURL`
+ * is required; one of `sealedBlob` / `sealedBlobURL` supplies the input. Re-validated
+ * so a malformed envelope never leaves the server. NEVER log `dek`.
+ */
+export function serializeTrimProfile(args: {
+  requestId: string;
+  profileId: string;
+  dek: string;
+  sealedBlob?: string;
+  sealedBlobURL?: string;
+  sealedBlobPutURL: string;
+}): TrimProfileRequest {
+  return TrimProfileRequestSchema.parse({
+    type: 'trimProfile',
+    requestId: args.requestId,
+    profileId: args.profileId,
+    dek: args.dek,
+    ...(args.sealedBlob !== undefined ? { sealedBlob: args.sealedBlob } : {}),
+    ...(args.sealedBlobURL !== undefined ? { sealedBlobURL: args.sealedBlobURL } : {}),
+    sealedBlobPutURL: args.sealedBlobPutURL,
   });
 }
 
