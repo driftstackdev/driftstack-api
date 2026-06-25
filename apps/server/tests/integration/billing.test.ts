@@ -273,4 +273,83 @@ describe('GET /v1/billing', () => {
     expect(body.subscription?.tier).toBe('api_builder');
     expect(body.subscription?.status).toBe('active');
   });
+
+  // V-326c — GET /v1/billing honors the X-Driftstack-Account act-as
+  // header like /v1/usage. A team member acting as the owner reads the
+  // OWNER's subscription, so the Billing page agrees with the rest of the
+  // dashboard instead of silently showing the member's own (empty) plan.
+  describe('X-Driftstack-Account act-as context', () => {
+    const TEAM_OWNER_ID = '00000000-0000-4000-8000-000000000d01';
+    const TEAM_MEMBERSHIP_ID = '00000000-0000-4000-8000-000000000d02';
+
+    it("returns the OWNER's subscription when a team member acts as the owner (not the member's own)", async () => {
+      fx = await buildTestApp();
+      // Caller is a member of the owner's team.
+      fx.authRepo.setTeamMemberships(fx.accountId, [
+        { membershipId: TEAM_MEMBERSHIP_ID, ownerAccountId: TEAM_OWNER_ID, role: 'member' },
+      ]);
+      // Owner exists in the billing repo + has an active api_scale sub.
+      fx.billingRepo.upsertAccount({
+        id: TEAM_OWNER_ID,
+        email: 'owner@driftstack.local',
+        name: 'Owner',
+        tier: 'api_scale',
+        stripeCustomerId: 'cus_owner_test',
+      });
+      fx.billingRepo.upsertSubscription({
+        id: 'sub_owner_d01',
+        accountId: TEAM_OWNER_ID,
+        stripeSubscriptionId: 'sub_test_owner_d01',
+        stripePriceId: 'price_api_scale_monthly',
+        tier: 'api_scale',
+        status: 'active',
+        currentPeriodEnd: new Date('2026-07-01T00:00:00Z'),
+        cancelAtPeriodEnd: false,
+        canceledAt: null,
+        createdAt: new Date('2026-06-01T00:00:00Z'),
+        updatedAt: new Date('2026-06-01T00:00:00Z'),
+      });
+      // The member has NO subscription of their own.
+      const res = await fx.app.inject({
+        method: 'GET',
+        url: '/v1/billing',
+        headers: {
+          authorization: `Bearer ${fx.plaintext}`,
+          'x-driftstack-account': `acc_${TEAM_OWNER_ID}`,
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json<BillingState>();
+      expect(body.subscription).not.toBeNull();
+      expect(body.subscription?.tier).toBe('api_scale');
+      expect(body.subscription?.status).toBe('active');
+    });
+
+    it('fails closed (4xx, not 200) when acting as an account the caller is not a member of', async () => {
+      fx = await buildTestApp();
+      seedActiveSubscription(fx, { tier: 'api_builder' });
+      const res = await fx.app.inject({
+        method: 'GET',
+        url: '/v1/billing',
+        headers: {
+          authorization: `Bearer ${fx.plaintext}`,
+          'x-driftstack-account': `acc_${TEAM_OWNER_ID}`,
+        },
+      });
+      expect(res.statusCode).toBeGreaterThanOrEqual(400);
+      expect(res.statusCode).toBeLessThan(500);
+    });
+
+    it("self-scope (no header) still returns the caller's own subscription", async () => {
+      fx = await buildTestApp();
+      seedActiveSubscription(fx, { tier: 'api_builder' });
+      const res = await fx.app.inject({
+        method: 'GET',
+        url: '/v1/billing',
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json<BillingState>().subscription?.tier).toBe('api_builder');
+    });
+  });
 });

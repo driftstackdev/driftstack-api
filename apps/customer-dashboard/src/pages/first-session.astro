@@ -109,6 +109,43 @@ const apiBaseUrl = resolveApiBaseUrl();
         banner.classList.remove('hidden');
       }
 
+      // Problem-type URI the server returns (409) when an operation is gated
+      // on outstanding legal-document acceptances. A brand-new web-signup
+      // account has accepted nothing, so the very first mint-key call here
+      // hits this — without handling it the customer saw a raw "requires
+      // acceptance of N document(s)" banner with no way forward.
+      const LEGAL_ACCEPTANCE_TYPE = 'https://errors.driftstack.dev/legal-acceptance-required';
+
+      // Accept every pending legal document for the account, then resolve.
+      // Mirrors DashboardLayout's "Accept all" logic: GET /v1/legal/required
+      // for the catalog (each entry carries the content_hash POST /accept
+      // requires), then POST /v1/legal/accept per document. Rejects if any
+      // acceptance fails so the caller can surface a clear error.
+      async function acceptPendingLegal() {
+        const headers = { 'content-type': 'application/json', authorization: 'Bearer ' + token };
+        const reqRes = await fetch(apiBaseUrl + '/v1/legal/required', { headers });
+        if (!reqRes.ok) throw new Error('legal/required HTTP ' + reqRes.status);
+        const reqBody = await reqRes.json().catch(() => ({}));
+        const required = Array.isArray(reqBody.data) ? reqBody.data : [];
+        if (required.length === 0) return; // nothing pending — let the retry proceed
+        const responses = await Promise.all(
+          required.map((doc) =>
+            fetch(apiBaseUrl + '/v1/legal/accept', {
+              method: 'POST',
+              headers: headers,
+              body: JSON.stringify({
+                document_key: doc.document_key,
+                version: doc.current_version,
+                content_hash: doc.content_hash,
+              }),
+            }),
+          ),
+        );
+        if (!responses.every((r) => r.ok)) {
+          throw new Error('One or more legal acceptances failed.');
+        }
+      }
+
       // Wave 1086+ — Stripe-success-redirect confirmation banner.
       // /select-tier sets success_url to /first-session?subscribed=<tier>
       // for paid tiers; without this handler the customer arrives with no
@@ -163,16 +200,33 @@ const apiBaseUrl = resolveApiBaseUrl();
           // retries), reuse it instead of minting a SECOND "default" key.
           let apiKeyPlaintext = sessionStorage.getItem('ds_first_api_key_plaintext');
           if (!apiKeyPlaintext) {
-            // Mint an API key with web session.
-            const mintRes = await fetch(apiBaseUrl + '/v1/api-keys', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
-              credentials: 'include',
-              body: JSON.stringify({ name: 'default', scopes: ['read', 'write'] }),
-            });
+            // Mint an API key with the web session. A fresh account has
+            // accepted no legal docs, so this returns 409 LegalAcceptance-
+            // Required; when it does, accept all pending docs inline and
+            // retry once (so the customer isn't dead-ended on the CTA).
+            async function mintKey() {
+              return fetch(apiBaseUrl + '/v1/api-keys', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+                credentials: 'include',
+                body: JSON.stringify({ name: 'default', scopes: ['read', 'write'] }),
+              });
+            }
+            let mintRes = await mintKey();
             if (!mintRes.ok) {
               const errBody = await mintRes.json().catch(() => ({}));
-              throw new Error(errBody.detail || 'mint key HTTP ' + mintRes.status);
+              if (mintRes.status === 409 && errBody.type === LEGAL_ACCEPTANCE_TYPE) {
+                showBanner('Recording your acceptance of our terms…');
+                await acceptPendingLegal();
+                banner.classList.add('hidden');
+                mintRes = await mintKey();
+                if (!mintRes.ok) {
+                  const retryBody = await mintRes.json().catch(() => ({}));
+                  throw new Error(retryBody.detail || 'mint key HTTP ' + mintRes.status);
+                }
+              } else {
+                throw new Error(errBody.detail || 'mint key HTTP ' + mintRes.status);
+              }
             }
             const apiKey = await mintRes.json();
             // Stash plaintext for the customer to copy from the

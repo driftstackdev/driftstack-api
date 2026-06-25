@@ -21,8 +21,9 @@
 //   • "Invoice PDFs hosted by Stripe with permanent URLs" claim
 //     pinned (no-expire commitment for accounting bookmark).
 //   • Back-link to /billing for at-a-glance view.
-//   • Three CTAs: Upgrade plan / Downgrade plan / Open Stripe
-//     portal (all #anchor placeholders pre-wire-up).
+//   • Three CTAs wired to real flows: Upgrade/Downgrade plan →
+//     /select-tier checkout; Open Stripe portal → POST
+//     /v1/billing/portal-session (was dead #anchor placeholders).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -59,8 +60,14 @@ describe('W374.C customer-dashboard /subscription page content parity', () => {
     expect(body).not.toMatch(/in_test_/);
   });
 
-  it('MOCK_SUBSCRIPTION still imported for the live-hydrated Current-plan card (SSG paint, replaced by /v1/billing)', () => {
-    expect(body).toMatch(/import \{ MOCK_SUBSCRIPTION \} from '\.\.\/data\/mocks\.ts';/);
+  it('MOCK_SUBSCRIPTION + TIER_DISPLAY_NAMES imported for the live-hydrated Current-plan card (SSG paint, replaced by /v1/billing; tier id mapped to a plan name)', () => {
+    expect(body).toMatch(
+      /import \{ MOCK_SUBSCRIPTION, TIER_DISPLAY_NAMES \} from '\.\.\/data\/mocks\.ts';/,
+    );
+    // SSG + live hydration both render the friendly plan name, never the
+    // raw tier id (e.g. "API Builder", not "api_builder").
+    expect(body).toMatch(/TIER_DISPLAY_NAMES\[MOCK_SUBSCRIPTION\.tier\]/);
+    expect(body).toMatch(/setText\('sub-tier', tierLabel\(body\.subscription\.tier\)\)/);
   });
 
   it('"Upgrades immediate + prorate; downgrades at end of period" billing-claim framing pinned', () => {
@@ -78,9 +85,21 @@ describe('W374.C customer-dashboard /subscription page content parity', () => {
     expect(body).toMatch(/<a href="\/billing" class="text-tk-accent underline">\/billing<\/a>/);
   });
 
-  it('3 plan-management CTAs pinned (Upgrade / Downgrade / Stripe portal)', () => {
-    expect(body).toMatch(/<a href="#upgrade" class="btn-primary">Upgrade plan<\/a>/);
-    expect(body).toMatch(/<a href="#downgrade" class="btn-secondary">Downgrade plan<\/a>/);
-    expect(body).toMatch(/<a href="#portal" class="btn-secondary">Open Stripe portal<\/a>/);
+  it('3 plan-management CTAs wired to real flows (Upgrade/Downgrade → /select-tier; Stripe portal → POST /v1/billing/portal-session)', () => {
+    // Previously these were dead `href="#..."` anchors with no handler.
+    // Now Upgrade/Downgrade link to the working /select-tier checkout page
+    // and "Open Stripe portal" is a button wired to the portal endpoint.
+    expect(body).toMatch(/<a href="\/select-tier" class="btn-primary">Upgrade plan<\/a>/);
+    expect(body).toMatch(/<a href="\/select-tier" class="btn-secondary">Downgrade plan<\/a>/);
+    expect(body).toMatch(
+      /<button type="button" class="btn-secondary" data-action="portal">Open Stripe portal<\/button>/,
+    );
+    // No dead hash anchors left behind.
+    expect(body).not.toMatch(/href="#upgrade"/);
+    expect(body).not.toMatch(/href="#downgrade"/);
+    expect(body).not.toMatch(/href="#portal"/);
+    // Portal handler POSTs the portal-session endpoint + redirects.
+    expect(body).toMatch(/\/v1\/billing\/portal-session/);
+    expect(body).toMatch(/if \(body\.portal_url\) window\.location\.href = body\.portal_url/);
   });
 });

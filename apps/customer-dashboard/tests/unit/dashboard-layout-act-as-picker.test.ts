@@ -39,4 +39,16 @@ describe('W334.C DashboardLayout act-as picker baseline', () => {
   it('renders a clear-act-as control', () => {
     expect(body).toMatch(/data-act-as-clear/);
   });
+
+  it('picker + banner show a human owner label (name/email/slug) with the UUID as a graceful fallback — not the raw account id alone', () => {
+    // Prefer owner_name / owner_email / owner_slug when the API exposes
+    // them; fall back to the opaque id only when no label is available.
+    expect(body).toMatch(/t\.owner_name \|\| t\.owner_email \|\| t\.owner_slug/);
+    expect(body).toMatch(/function ownerLabel\(t\)/);
+    // The "Acting as" banner is re-labelled with the same friendly name
+    // once /account/me resolves (the early toggle could only show the id).
+    expect(body).toMatch(/ownerEl\.textContent = ownerLabelById\[active\]/);
+    // The raw-id-only option label is gone.
+    expect(body).not.toMatch(/t\.owner_account_id \+ ' \(' \+ t\.role \+ '\)'/);
+  });
 });

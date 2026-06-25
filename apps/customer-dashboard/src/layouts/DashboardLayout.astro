@@ -1094,12 +1094,25 @@ const navSections: NavSection[] = [
               }
 
               if (!Array.isArray(me.teams) || me.teams.length === 0) return;
+              // Human label for a team-owner account. Prefer the owner's
+              // name / email / slug when the API exposes it (so a multi-team
+              // user can tell workspaces apart); fall back to the opaque
+              // account id only when no label is available. Keep a copy of
+              // the id→label map so the "Acting as" banner can show the same
+              // friendly name instead of the raw UUID.
+              const ownerLabelById = {};
+              function ownerLabel(t) {
+                const name = t.owner_name || t.owner_email || t.owner_slug;
+                return name ? String(name) : t.owner_account_id;
+              }
               // Build options: Self + each team owner.
               const options = [{ value: '', label: 'Self (' + (me.email || me.id) + ')' }];
               for (const t of me.teams) {
+                const label = ownerLabel(t);
+                ownerLabelById[t.owner_account_id] = label;
                 options.push({
                   value: t.owner_account_id,
-                  label: t.owner_account_id + ' (' + t.role + ')',
+                  label: label + ' (' + t.role + ')',
                 });
               }
               picker.innerHTML = '';
@@ -1109,6 +1122,12 @@ const navSections: NavSection[] = [
                 el.textContent = opt.label;
                 if (opt.value === active) el.selected = true;
                 picker.appendChild(el);
+              }
+              // Re-label the "Acting as" banner with the friendly owner name
+              // now that the team list resolved (the early banner toggle ran
+              // before /account/me returned, so it could only show the id).
+              if (active && ownerEl && ownerLabelById[active]) {
+                ownerEl.textContent = ownerLabelById[active];
               }
               // 2026-05-21 — clear the pre-paint reserved slot so the
               // picker takes its natural layout (rather than the

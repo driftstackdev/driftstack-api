@@ -77,6 +77,16 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     expect(body).toMatch(/old sessions stay signed in until they naturally expire/);
   });
 
+  it('change-password uses the known account email (captured from /account/me), no re-prompt that a typo could silently fail', () => {
+    // me.email captured into a module-scoped var on the /account/me load.
+    expect(body).toMatch(/let accountEmail = null/);
+    expect(body).toMatch(/if \(me\.email\) accountEmail = me\.email/);
+    // The reset is sent to the known email directly when available; the
+    // prompt is only a defensive fallback (pre-filled with the email).
+    expect(body).toMatch(/let email = accountEmail/);
+    expect(body).toMatch(/defaultValue: accountEmail/);
+  });
+
   it('V-353h TOTP enrollment: SHA-1 / 30s / 6-digit (RFC 6238 defaults) pinned', () => {
     expect(body).toMatch(/SHA-1 \/ 30s \/ 6-digit \(RFC 6238 defaults/);
   });

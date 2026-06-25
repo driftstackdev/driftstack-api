@@ -73,18 +73,24 @@ describe('W758 dashboard /subscription page V-134 parity', () => {
     );
   });
 
-  it('CRITICAL 3-action CTA set — Upgrade + Downgrade + Stripe portal. The dashboard-card flex-wrap-gap-3 layout keeps the 3 buttons together on desktop + stacks on narrow screens.', () => {
+  it('CRITICAL 3-action CTA set wired to real flows — Upgrade/Downgrade → /select-tier; Stripe portal → POST /v1/billing/portal-session. The dashboard-card flex-wrap-gap-3 layout keeps the 3 buttons together on desktop + stacks on narrow screens. (Was dead #anchor placeholders with no handler.)', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/<a href="#upgrade" class="btn-primary">Upgrade plan<\/a>/);
-    expect(p).toMatch(/<a href="#downgrade" class="btn-secondary">Downgrade plan<\/a>/);
-    expect(p).toMatch(/<a href="#portal" class="btn-secondary">Open Stripe portal<\/a>/);
+    expect(p).toMatch(/<a href="\/select-tier" class="btn-primary">Upgrade plan<\/a>/);
+    expect(p).toMatch(/<a href="\/select-tier" class="btn-secondary">Downgrade plan<\/a>/);
+    expect(p).toMatch(
+      /<button type="button" class="btn-secondary" data-action="portal">Open Stripe portal<\/button>/,
+    );
+    expect(p).not.toMatch(/href="#upgrade"/);
+    expect(p).toMatch(/\/v1\/billing\/portal-session/);
   });
 
-  it('CRITICAL MOCK_SUBSCRIPTION null-coalescing for status display. The "No subscription" header copy + the conditional "renews" row is what avoids rendering null status to customers.', () => {
+  it('CRITICAL MOCK_SUBSCRIPTION null-coalescing for status display, with the tier id mapped to a friendly plan name. The "No subscription" header copy + the conditional "renews" row is what avoids rendering null status to customers; TIER_DISPLAY_NAMES avoids leaking the raw "api_builder" id.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/\{MOCK_SUBSCRIPTION \? MOCK_SUBSCRIPTION\.tier : 'No subscription'\}/);
+    expect(p).toMatch(
+      /\{MOCK_SUBSCRIPTION \? TIER_DISPLAY_NAMES\[MOCK_SUBSCRIPTION\.tier\] : 'No subscription'\}/,
+    );
     expect(p).toMatch(/\{\s*\n\s+MOCK_SUBSCRIPTION && \(/);
   });
 

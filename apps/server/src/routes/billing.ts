@@ -12,6 +12,8 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { CreateCheckoutSessionRequestSchema } from '@driftstack/api-types';
 import type { BillingService, SubscriptionMirror } from '../services/billing.js';
 import { BadRequestError, FeatureUnavailableError, ValidationError } from '../lib/errors.js';
+import { resolveEffectiveAccount } from '../services/auth.js';
+import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 
 // V-248 / V-246-P1-001 — Stripe checkout return URL allowlist.
 // Customer-supplied success_url + cancel_url are passed through to
@@ -142,7 +144,16 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
-      const state = await service.getBillingState(ctx.account.id);
+      // V-326c — honor the X-Driftstack-Account act-as header like
+      // GET /v1/usage does. A team member who switched the dashboard
+      // "Acting as <owner>" picker reads the OWNER's subscription, so the
+      // Billing page agrees with every other account-scoped page (Usage
+      // etc.) instead of silently showing the member's own (likely free)
+      // plan while the banner claims they're acting as the owner.
+      // resolveEffectiveAccount fails-closed (403) when the header
+      // references an account the caller isn't a member of.
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));
+      const state = await service.getBillingState(effective.accountId);
       return {
         subscription: state.subscription !== null ? publicSubscription(state.subscription) : null,
       };

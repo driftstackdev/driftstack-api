@@ -105,4 +105,17 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
   it('credentials: "include" on signup fetch (cookie-session post-issuance)', () => {
     expect(body).toMatch(/credentials: 'include'/);
   });
+
+  it('email-already-registered (409) renders inline Sign in + Reset password links carrying the entered email (not a dead text banner)', () => {
+    // Match on the problem `type` URI (server EmailAlreadyRegisteredError).
+    expect(body).toContain('https://errors.driftstack.dev/email-already-registered');
+    expect(body).toMatch(/err\.problemType\s*=\s*b\.type/);
+    // The inline-link branch is invoked on that problem type.
+    expect(body).toMatch(/showAlreadyRegistered\(payload\.email\)/);
+    // The banner gains a /login link + a /forgot-password link, both
+    // carrying the email through the query string.
+    expect(body).toMatch(/'\/login' \+ q/);
+    expect(body).toMatch(/'\/forgot-password' \+ q/);
+    expect(body).toMatch(/encodeURIComponent\(email\)/);
+  });
 });

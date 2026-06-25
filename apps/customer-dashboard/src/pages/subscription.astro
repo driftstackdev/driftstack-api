@@ -1,6 +1,6 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import { MOCK_SUBSCRIPTION } from '../data/mocks.ts';
+import { MOCK_SUBSCRIPTION, TIER_DISPLAY_NAMES } from '../data/mocks.ts';
 
 // V-134 scaffolding. Real reads against /v1/billing land later.
 // /subscription is a deeper drill-down from /billing — plan history,
@@ -36,6 +36,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       </p>
     </header>
 
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-tk-border bg-tk-bg px-4 py-3 text-sm text-tk-ink-2"
+      role="status"
+    >
+    </div>
+
     {/* 2026-05-23 — icon header on Current plan card. */}
     <!-- Current plan -->
     <section class="dashboard-card">
@@ -49,7 +56,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         <div>
           <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Current plan</p>
           <h2 class="mt-2 text-2xl font-semibold text-tk-ink" data-field="sub-tier">
-            {MOCK_SUBSCRIPTION ? MOCK_SUBSCRIPTION.tier : 'No subscription'}
+            {MOCK_SUBSCRIPTION ? TIER_DISPLAY_NAMES[MOCK_SUBSCRIPTION.tier] : 'No subscription'}
           </h2>
         </div>
       </div>
@@ -64,9 +71,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         )
       }
       <div class="mt-6 flex flex-wrap gap-3">
-        <a href="#upgrade" class="btn-primary">Upgrade plan</a>
-        <a href="#downgrade" class="btn-secondary">Downgrade plan</a>
-        <a href="#portal" class="btn-secondary">Open Stripe portal</a>
+        <a href="/select-tier" class="btn-primary">Upgrade plan</a>
+        <a href="/select-tier" class="btn-secondary">Downgrade plan</a>
+        <button type="button" class="btn-secondary" data-action="portal">Open Stripe portal</button>
       </div>
       <p class="mt-4 text-xs text-tk-ink-3">
         Upgrades take effect immediately and prorate your remaining period.
@@ -122,7 +129,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     `.finally(window.dashboardHydrated)` pattern as the rest of the
     dashboard pages.
   */}
-  <script is:inline define:vars={{ apiBaseUrl }}>
+  <script is:inline define:vars={{ apiBaseUrl, tierDisplayNames: TIER_DISPLAY_NAMES }}>
     (function () {
       function setText(field, value) {
         const el = document.querySelector('[data-field="' + field + '"]');
@@ -132,12 +139,62 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!iso) return '—';
         return new Date(iso).toISOString().slice(0, 10);
       }
+      // Backend tier id → human plan name so the customer sees "API
+      // Builder", not the raw "api_builder" id (same mapping billing.astro
+      // uses). Falls back to the raw id if the table ever lacks a key.
+      function tierLabel(t) {
+        return (t && tierDisplayNames[t]) || t || '—';
+      }
+      const banner = document.querySelector('[data-banner]');
+      function showBanner(text) {
+        if (!banner) return;
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
       let token = null;
       try {
         token = localStorage.getItem('ds_web_session_token');
       } catch (_) {
         /* swallow */
       }
+
+      // Wire the "Open Stripe portal" button: POST /v1/billing/portal-session
+      // then redirect to the returned Stripe URL (mirrors billing.astro's
+      // handlePortal). Wired regardless of token so it shows a banner rather
+      // than silently no-oping when signed out. (Upgrade/Downgrade are plain
+      // links to /select-tier — the working checkout page.)
+      const portalBtn = document.querySelector('[data-action="portal"]');
+      function handlePortal() {
+        if (!token) {
+          showBanner('Sign in to manage billing.');
+          return;
+        }
+        fetch(apiBaseUrl + '/v1/billing/portal-session', {
+          method: 'POST',
+          headers: {
+            authorization: 'Bearer ' + token,
+            'content-type': 'application/json',
+            ...(typeof window.driftstackActAsHeaders === 'function'
+              ? window.driftstackActAsHeaders()
+              : {}),
+          },
+          credentials: 'include',
+          body: '{}',
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => {
+            if (body.portal_url) window.location.href = body.portal_url;
+          })
+          .catch((err) => {
+            showBanner(
+              "Couldn't open Stripe portal (" +
+                (err && err.message ? err.message : 'network error') +
+                ').',
+            );
+          });
+      }
+      if (portalBtn) portalBtn.addEventListener('click', handlePortal);
+
       if (!token) return;
       fetch(apiBaseUrl + '/v1/billing', {
         headers: {
@@ -162,7 +219,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         )
         .then((body) => {
           if (body.subscription) {
-            setText('sub-tier', body.subscription.tier);
+            setText('sub-tier', tierLabel(body.subscription.tier));
             const summary =
               'Status ' +
               body.subscription.status +

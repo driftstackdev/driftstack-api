@@ -28,6 +28,7 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 // fetch path is real; the data is empty until writers land.
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
+import { TIER_DISPLAY_NAMES } from '../data/mocks.ts';
 const apiBaseUrl = resolveApiBaseUrl();
 
 const SPARK_W = 200;
@@ -274,7 +275,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       localStorage.setItem('ds_web_session_token', '<token>')
     then reload.
   -->
-  <script is:inline define:vars={{ apiBaseUrl, SPARK_W, SPARK_H }}>
+  <script is:inline define:vars={{ apiBaseUrl, SPARK_W, SPARK_H, tierDisplayNames: TIER_DISPLAY_NAMES }}>
     (function () {
       const root = document.querySelector('[data-page="usage"]');
       if (!root) return;
@@ -285,6 +286,13 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
         if (!banner) return;
         banner.textContent = text;
         banner.classList.remove('hidden');
+      }
+
+      // Backend tier id → human plan name, so the customer sees "Personal"
+      // not "solo_manual" in the period header (mirrors index/billing).
+      // Falls back to the raw id if the table ever lacks the key.
+      function tierLabel(t) {
+        return (t && tierDisplayNames[t]) || t || '—';
       }
 
       if (!token) {
@@ -310,13 +318,14 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       ])
         .then(([summary, series]) => {
           // Update period + tier label.
+          const tierName = tierLabel(summary.tier);
           const tierEl = root.querySelector('[data-field="tier"]');
-          if (tierEl) tierEl.textContent = summary.tier;
+          if (tierEl) tierEl.textContent = tierName;
           const periodEl = root.querySelector('[data-field="period"]');
           if (periodEl) {
             const start = summary.period_start.slice(0, 10);
             const end = summary.period_end.slice(0, 10);
-            periodEl.textContent = start + ' → ' + end + ' · ' + summary.tier + ' tier';
+            periodEl.textContent = start + ' → ' + end + ' · ' + tierName + ' tier';
           }
 
           // Update tile totals.

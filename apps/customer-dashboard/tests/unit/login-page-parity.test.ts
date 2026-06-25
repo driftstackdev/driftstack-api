@@ -101,4 +101,25 @@ describe('W351.B /login page parity', () => {
     expect(body).toContain('/forgot-password');
     expect(existsSync(FORGOT_PAGE)).toBe(true);
   });
+
+  it('unverified-email recovery: detects the 403 email-not-verified problem type + offers resend + a /verify-email link (no dead banner)', () => {
+    // Match on the problem `type` URI (server EmailNotVerifiedError), not
+    // the human detail string which can change.
+    expect(body).toContain('https://errors.driftstack.dev/email-not-verified');
+    // The login error carries the problem type so the catch can branch.
+    expect(body).toMatch(/err\.problemType\s*=\s*b\.type/);
+    // Resend posts the resend-verification endpoint with the entered email.
+    expect(body).toContain('/v1/auth/resend-verification');
+    expect(read(AUTH_ROUTE)).toContain("'/v1/auth/resend-verification'");
+    expect(body).toMatch(/data-resend-verification/);
+    // Stash the email so /verify-email prefills it (same key signup uses).
+    expect(body).toMatch(/sessionStorage\.setItem\('ds_signup_email'/);
+    // A link to /verify-email exists for entering the code.
+    expect(body).toMatch(/data-verify-link/);
+    expect(body).toContain('/verify-email');
+  });
+
+  it('prefills the email input from ?email= (carried from a signup → sign-in link)', () => {
+    expect(body).toMatch(/params\.get\('email'\)/);
+  });
 });

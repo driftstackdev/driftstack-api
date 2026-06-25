@@ -668,6 +668,11 @@ const EMAIL_EVENTS = [
       if (!root) return;
       const banner = root.querySelector('[data-banner]');
       const token = localStorage.getItem('ds_web_session_token');
+      // Captured from the /v1/account/me load below so the change-password
+      // flow doesn't re-prompt the signed-in customer for an email they
+      // could mistype (a typo silently fails — the server returns
+      // { sent: true } for ANY address as anti-enumeration).
+      let accountEmail = null;
 
       function showBanner(text) {
         if (!banner) return;
@@ -769,6 +774,9 @@ const EMAIL_EVENTS = [
           .then((r) => (r.ok ? r.json() : null))
           .then((me) => {
             if (!me) return;
+            // Capture the account email for the change-password flow so we
+            // don't re-prompt the customer for an address we already know.
+            if (me.email) accountEmail = me.email;
             if (me.name) profileNameInput.value = me.name;
             if (me.timezone) profileTzInput.value = me.timezone;
             if (profileSlugInput && me.slug) profileSlugInput.value = me.slug;
@@ -1357,21 +1365,32 @@ const EMAIL_EVENTS = [
           showBanner('Sign in to change password.');
           return;
         }
-        // Email comes from the JWT-mirrored web session; the customer-
-        // dashboard fetches /v1/account when that endpoint exists. For
-        // V-217, prompt for the email so the password-reset link goes
-        // to the right address. Self-derived email comes via /v1/account
-        // follow-up.
-        const email = await window.driftstackPrompt(
-          'Enter your account email to send the password-reset link:',
-          { placeholder: 'you@example.com', confirmLabel: 'Send link' },
-        );
-        if (!email || !email.trim()) return;
+        // The page already knows the signed-in customer's email (captured
+        // from /v1/account/me on load), so send the reset link straight to
+        // it — no re-prompt. Re-prompting was a footgun: the server returns
+        // { sent: true } for ANY address (anti-enumeration), so a typo'd
+        // email silently "succeeds" but no usable email ever arrives.
+        // Defensive fallback: if /account/me hasn't resolved yet (e.g. the
+        // profile inputs were absent so the load was gated out), prompt
+        // with whatever email we have pre-filled.
+        let email = accountEmail;
+        if (!email) {
+          const entered = await window.driftstackPrompt(
+            'Confirm your account email to send the password-reset link:',
+            {
+              placeholder: 'you@example.com',
+              confirmLabel: 'Send link',
+              defaultValue: accountEmail || '',
+            },
+          );
+          if (!entered || !entered.trim()) return;
+          email = entered.trim();
+        }
         showBanner('Sending password-reset email…');
         fetch(apiBaseUrl + '/v1/auth/password-reset/request', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ email: email.trim() }),
+          body: JSON.stringify({ email: email }),
         })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then(() => {

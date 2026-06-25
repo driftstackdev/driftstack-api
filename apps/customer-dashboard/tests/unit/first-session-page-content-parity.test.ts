@@ -136,4 +136,19 @@ describe('W373.B customer-dashboard /first-session page content parity', () => {
     expect(fetchBlocks).not.toBeNull();
     expect(fetchBlocks!.length).toBeGreaterThanOrEqual(2);
   });
+
+  it('handles the LegalAcceptanceRequired 409 on mint: accepts all pending docs inline then retries (fresh accounts have accepted nothing, so the CTA must not dead-end on a raw 409)', () => {
+    // Detected on the problem `type` URI, not the human detail string.
+    expect(body).toContain('https://errors.driftstack.dev/legal-acceptance-required');
+    expect(body).toMatch(/mintRes\.status === 409 && errBody\.type === LEGAL_ACCEPTANCE_TYPE/);
+    // Accept-all logic reads /v1/legal/required (carries content_hash) +
+    // POSTs /v1/legal/accept per doc — mirrors DashboardLayout.
+    expect(body).toContain('/v1/legal/required');
+    expect(body).toContain('/v1/legal/accept');
+    expect(body).toMatch(/document_key: doc\.document_key/);
+    expect(body).toMatch(/content_hash: doc\.content_hash/);
+    // Retry the mint after acceptance.
+    expect(body).toMatch(/await acceptPendingLegal\(\)/);
+    expect(body).toMatch(/mintRes = await mintKey\(\)/);
+  });
 });

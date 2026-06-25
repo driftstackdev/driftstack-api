@@ -40,6 +40,26 @@ const apiBaseUrl = resolveApiBaseUrl();
     <div class="auth-card mt-8">
       <div data-banner class="banner-warn mb-5 hidden" role="status"></div>
 
+      <!-- Unverified-email recovery. Hidden until /v1/auth/login returns
+           403 EmailNotVerified; then this surfaces a resend action + a link
+           to /verify-email so the customer isn't stranded on a dead banner
+           (the common "lost the verification email" onboarding dead-end). -->
+      <div data-verify-prompt class="banner-warn mb-5 hidden" role="status">
+        <p>Your email isn't verified yet. Verify it before signing in.</p>
+        <div class="mt-3 flex flex-wrap items-center gap-3">
+          <button type="button" data-resend-verification class="btn-secondary text-sm">
+            Resend verification email
+          </button>
+          <a
+            data-verify-link
+            href="/verify-email"
+            class="text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft text-xs"
+            >Enter a verification code</a
+          >
+        </div>
+        <p data-resend-status class="mt-2 text-xs text-tk-ink-3"></p>
+      </div>
+
       <form data-form="login" class="space-y-5">
         <div>
           <label class="form-label" for="login-email">Email</label>
@@ -234,6 +254,15 @@ const apiBaseUrl = resolveApiBaseUrl();
       const form = root.querySelector('[data-form="login"]');
       const banner = root.querySelector('[data-banner]');
       const signupLink = root.querySelector('[data-signup-link]');
+      const verifyPrompt = root.querySelector('[data-verify-prompt]');
+      const verifyLink = root.querySelector('[data-verify-link]');
+      const resendBtn = root.querySelector('[data-resend-verification]');
+      const resendStatus = root.querySelector('[data-resend-status]');
+
+      // Problem-type URI the server returns when login is refused because
+      // the account's email isn't verified (403). Matched on the body
+      // `type` (not the human detail string, which can change).
+      const EMAIL_NOT_VERIFIED_TYPE = 'https://errors.driftstack.dev/email-not-verified';
 
       // V-269 — preserve ?next= when bouncing the user to /signup so a
       // returning user who clicks "Create one" doesn't lose their deep-
@@ -248,6 +277,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       const next = safeNextPath(rawNext, window.location.origin);
       if (rawNext && signupLink) {
         signupLink.setAttribute('href', '/signup?next=' + encodeURIComponent(next));
+      }
+
+      // Prefill the email from ?email= (carried over from the signup
+      // "already registered → sign in" link) so the customer doesn't retype.
+      const prefillEmail = params.get('email');
+      if (prefillEmail) {
+        const emailInput = root.querySelector('#login-email');
+        if (emailInput && !emailInput.value) emailInput.value = prefillEmail;
       }
 
       function showBanner(text) {
@@ -286,9 +323,17 @@ const apiBaseUrl = resolveApiBaseUrl();
               ? r.json()
               : r
                   .json()
-                  .then((b) =>
-                    Promise.reject(new Error(b.detail || 'HTTP ' + r.status.toString())),
-                  ),
+                  .catch(() => ({}))
+                  .then((b) => {
+                    // Carry the problem `type` + status on the rejected
+                    // error so the catch can branch (e.g. email-not-verified
+                    // → resend path) instead of showing a dead banner.
+                    const err = new Error(b.detail || 'HTTP ' + r.status.toString());
+                    err.problemType = b.type;
+                    err.status = r.status;
+                    err.email = payload.email;
+                    return Promise.reject(err);
+                  }),
           )
           .then((body) => {
             // V-353d — /v1/auth/login returns a discriminated union:
@@ -304,10 +349,66 @@ const apiBaseUrl = resolveApiBaseUrl();
             completeSession(body);
           })
           .catch((err) => {
+            // Email-not-verified (403): surface the resend path instead of
+            // a dead banner. Stash the entered email so /verify-email and
+            // the resend action prefill it.
+            if (err && err.problemType === EMAIL_NOT_VERIFIED_TYPE) {
+              showEmailNotVerified(err.email || payload.email);
+              return;
+            }
             showBanner(err && err.message ? err.message : 'Sign-in failed.');
           })
           .finally(() => setSubmitting(false));
       });
+
+      // Reveal the unverified-email recovery block + wire the resend action.
+      function showEmailNotVerified(email) {
+        banner.classList.add('hidden');
+        if (email) {
+          try {
+            sessionStorage.setItem('ds_signup_email', email);
+          } catch (_) {
+            /* sessionStorage blocked — verify-email falls back to its own copy */
+          }
+        }
+        if (verifyLink) {
+          verifyLink.setAttribute(
+            'href',
+            next && next !== '/' ? '/verify-email?next=' + encodeURIComponent(next) : '/verify-email',
+          );
+        }
+        if (verifyPrompt) verifyPrompt.classList.remove('hidden');
+      }
+
+      if (resendBtn) {
+        resendBtn.addEventListener('click', () => {
+          const email = (form.querySelector('#login-email') || {}).value || '';
+          if (!email.trim()) {
+            if (resendStatus) resendStatus.textContent = 'Enter your email above first.';
+            return;
+          }
+          resendBtn.disabled = true;
+          if (resendStatus) resendStatus.textContent = 'Sending…';
+          fetch(apiBaseUrl + '/v1/auth/resend-verification', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ email: email.trim() }),
+          })
+            .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+            .then(() => {
+              if (resendStatus)
+                resendStatus.textContent =
+                  'Verification email sent. Check your inbox, then enter the code.';
+            })
+            .catch(() => {
+              if (resendStatus)
+                resendStatus.textContent = "Couldn't resend right now — try again shortly.";
+            })
+            .finally(() => {
+              resendBtn.disabled = false;
+            });
+        });
+      }
 
       // Shared session-completion path: plain login + MFA challenge both
       // land here with { session: { token } }.
