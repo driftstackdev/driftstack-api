@@ -56,6 +56,50 @@ export const AgentSessionSchema = z.object({
 export type AgentSession = z.infer<typeof AgentSessionSchema>;
 
 /**
+ * Agent-session live page-state — the body of `GET /v1/agent-sessions/{id}/
+ * page-state` (W650 / A3 W1254 / W2730). Distinct from the DRIVER session's
+ * `state.page_state` ({@link import('./sessions.js').PageStateSchema}, a 3-state
+ * lifecycle): this is the AGENT/simulator view the box reports over the fleet
+ * control plane, so it carries the 4th `stalled` state (A3 W2845 — a
+ * frozen-but-alive renderer) and the apps/server `SessionPageState` store shape
+ * field-for-field.
+ *
+ * `title` is nullable (NOT optional): the box may emit a title-only change frame
+ * on ANY state, and the store always normalizes an absent title to null, so the
+ * response key is always present. `tabId` is the forward-compat per-tab
+ * attribution (A3 contract pending — see the server PageStateFrameSchema); the
+ * store carries it as null until the box sends it, so it's `nullable().optional()`
+ * here (older clients that never read it are unaffected).
+ *
+ * `error` is the relaxed harness shape (`kind` lenient — A3 emits net|timeout;
+ * `http_status` is never emitted, so it's not modelled here). Mirrors the
+ * gui-client `AgentPageState` so a later coordinated pass can import this in
+ * place of the local interface (gui-client scope — not done here).
+ */
+export const AgentPageStateSchema = z.object({
+  state: z.enum(['loading', 'loaded', 'errored', 'stalled']),
+  url: z.string().nullable(),
+  title: z.string().nullable(),
+  tabId: z.string().nullable().optional(),
+  error: z
+    .object({
+      kind: z.string(),
+      message: z.string(),
+    })
+    .nullable(),
+});
+export type AgentPageState = z.infer<typeof AgentPageStateSchema>;
+
+/**
+ * `GET /v1/agent-sessions/{id}/page-state` response envelope: `page_state` is
+ * null until the box has reported a frame (or the fleet control plane is absent).
+ */
+export const AgentPageStateResponseSchema = z.object({
+  page_state: AgentPageStateSchema.nullable(),
+});
+export type AgentPageStateResponse = z.infer<typeof AgentPageStateResponseSchema>;
+
+/**
  * W393 — POST /v1/agent-sessions/:id/resume body. Resume a session the harness
  * auto-paused on a detected bot-challenge (after the customer resolves it).
  * `challenge_id` (optional) correlates to the `session.challenge_detected` the

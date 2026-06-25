@@ -20,6 +20,15 @@ import type { PageStateFrame } from '../schemas/harness-control-protocol.js';
 export interface SessionPageState {
   state: PageStateFrame['state'];
   url: string | null;
+  // The page title as the box last reported it; lets the GUI address bar
+  // self-heal the title from a title-only change frame (the box may emit `title`
+  // on ANY state, not just 'loaded'). null when no frame has carried one yet.
+  title: string | null;
+  // Forward-compat: the tab this frame is attributed to (A3 contract pending —
+  // see harness-control-protocol PageStateFrameSchema). Carried through so the
+  // GUI can eventually key live state per tab; null until the box sends it. The
+  // store stays a per-session record for now (no per-tab Map restructure yet).
+  tabId: string | null;
   error: PageStateFrame['error'];
 }
 
@@ -33,11 +42,14 @@ export class SessionPageStateStore {
     // delete+set moves the key to newest in the Map's insertion order, so the
     // size-cap eviction below drops the genuinely-stalest session.
     this.map.delete(frame.sessionId);
-    // url/error are OMITTED on some frames (reload omits url; non-error states omit
-    // error) → normalize the absent key to null for a stable customer-facing shape.
+    // url/title/tabId/error are OMITTED on some frames (reload omits url; non-error
+    // states omit error; title/tabId only when the box sends them) → normalize the
+    // absent key to null for a stable customer-facing shape.
     this.map.set(frame.sessionId, {
       state: frame.state,
       url: frame.url ?? null,
+      title: frame.title ?? null,
+      tabId: frame.tabId ?? null,
       error: frame.error ?? null,
     });
     if (this.map.size > this.maxEntries) {

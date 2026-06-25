@@ -3,6 +3,7 @@
 // wire-routing type/sessionId).
 
 import { describe, expect, it } from 'vitest';
+import { AgentPageStateSchema } from '@driftstack/api-types';
 import { SessionPageStateStore } from '../../src/services/session-page-state-store.js';
 import type { PageStateFrame } from '../../src/schemas/harness-control-protocol.js';
 
@@ -23,10 +24,30 @@ describe('SessionPageStateStore', () => {
     expect(store.get('agt_unknown')).toBeNull();
   });
 
-  it('set stores the customer-facing slice (state/url/error), dropping type + sessionId', () => {
+  it('set stores the customer-facing slice (state/url/title/tabId/error), dropping type + sessionId', () => {
     const store = new SessionPageStateStore();
     store.set(frame('agt_a', { state: 'loaded', url: 'https://x.test' }));
-    expect(store.get('agt_a')).toEqual({ state: 'loaded', url: 'https://x.test', error: null });
+    expect(store.get('agt_a')).toEqual({
+      state: 'loaded',
+      url: 'https://x.test',
+      title: null,
+      tabId: null,
+      error: null,
+    });
+  });
+
+  it('set carries title + tabId through (forward-compat per-tab plumbing), on ANY state', () => {
+    const store = new SessionPageStateStore();
+    // title-only change frame on a NON-loaded state (the box may emit title on any
+    // state) → both fields persisted, normalized when absent.
+    store.set(frame('agt_a', { state: 'loading', url: null, title: 'New Title', tabId: 'tab_2' }));
+    expect(store.get('agt_a')).toEqual({
+      state: 'loading',
+      url: null,
+      title: 'New Title',
+      tabId: 'tab_2',
+      error: null,
+    });
   });
 
   it('set overwrites with the latest per session', () => {
@@ -42,6 +63,8 @@ describe('SessionPageStateStore', () => {
     expect(store.get('agt_a')).toEqual({
       state: 'errored',
       url: null,
+      title: null,
+      tabId: null,
       error: { kind: 'net', http_status: null, message: 'refused' },
     });
   });
@@ -74,5 +97,26 @@ describe('SessionPageStateStore', () => {
     store.set(frame('agt_4')); // evicts agt_2 (now the oldest), NOT agt_1
     expect(store.get('agt_1')).not.toBeNull();
     expect(store.get('agt_2')).toBeNull();
+  });
+
+  // Cross-package contract: the api-types `AgentPageStateSchema` is the shared
+  // wire shape for GET /v1/agent-sessions/:id/page-state, so a stored record must
+  // round-trip through it (incl. the new title/tabId fields). If the store shape
+  // and the shared schema drift, this fails — the GUI's typed response breaks.
+  it('a stored record validates against the shared api-types AgentPageStateSchema', () => {
+    const store = new SessionPageStateStore();
+    store.set(
+      frame('agt_a', {
+        state: 'stalled',
+        url: 'https://example.com/app',
+        title: 'App',
+        tabId: 'tab_3',
+      }),
+    );
+    const parsed = AgentPageStateSchema.safeParse(store.get('agt_a'));
+    expect(parsed.success).toBe(true);
+    // and the null-normalized empty case (no title/tabId/url/error reported yet).
+    store.set(frame('agt_b', { state: 'loading', url: null }));
+    expect(AgentPageStateSchema.safeParse(store.get('agt_b')).success).toBe(true);
   });
 });

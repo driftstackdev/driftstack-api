@@ -416,6 +416,9 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toContain("state: z.enum(['loading', 'loaded', 'errored', 'stalled']),");
     expect(body).toContain('url: z.string().nullable().optional(),');
     expect(body).toContain('title: z.string().nullable().optional(),');
+    // Forward-compat per-tab attribution (A3 contract pending) — optional so a
+    // frame without it still validates + is carried as null downstream.
+    expect(body).toContain('tabId: z.string().optional(),');
     expect(body).toContain('kind: z.string().min(1),');
     expect(body).toContain('http_status: z.null().optional(),');
     // The exact A3 W2730 wire shapes must ALL parse (these are what the box sends):
@@ -485,6 +488,36 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
         error: { kind: 'net', http_status: 404, message: 'x' },
       }).success,
     ).toBe(false);
+    // title-only change frame on a NON-loaded state (the box may emit `title` on
+    // ANY state, e.g. an in-page document.title update with no navigation) — must
+    // validate so the GUI poll can self-heal the address-bar title.
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'pageState',
+        sessionId: 'agt_1',
+        state: 'loading',
+        title: 'Renamed Tab',
+      }).success,
+    ).toBe(true);
+    // tabId (forward-compat per-tab attribution) — present validates …
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'pageState',
+        sessionId: 'agt_1',
+        state: 'loaded',
+        url: 'https://example.com',
+        tabId: 'tab_2',
+      }).success,
+    ).toBe(true);
+    // … and a frame WITHOUT it still validates (optional → backward-compatible).
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'pageState',
+        sessionId: 'agt_1',
+        state: 'loaded',
+        url: 'https://example.com',
+      }).success,
+    ).toBe(true);
   });
 
   it('all 6 HarnessOutbound payloads pinned to A3 W124 field-sets (heartbeat/errorEvent/capabilityReport typed, not passthrough)', () => {

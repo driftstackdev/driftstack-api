@@ -29,6 +29,8 @@ describe('audit-M1 makeSessionPageStateRelay', () => {
     expect(store.get('agt_1')).toEqual({
       state: 'loaded',
       url: 'https://example.com',
+      title: null,
+      tabId: null,
       error: null,
     });
   });

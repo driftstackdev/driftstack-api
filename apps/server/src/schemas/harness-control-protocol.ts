@@ -656,14 +656,27 @@ export const PageStateFrameSchema = z.object({
   // hard page error) and `loading` (a navigation in flight).
   state: z.enum(['loading', 'loaded', 'errored', 'stalled']),
   // A3 W2730 (authoritative wire spec — Swift encodeIfPresent → nil keys are
-  // OMITTED, not null): `url` is absent on reload, `title` only on 'loaded',
-  // `error` only on 'errored', and `http_status` is NEVER emitted. The previous
-  // REQUIRED url / error / error.http_status therefore failed safeParse on EVERY
-  // real frame → it was silently dropped → the page-state store stayed empty → no
-  // live URL in the GUI. All three are now optional; `kind` is lenient (A3 emits
-  // net|timeout; earlier docs listed http|tls|dns) so a frame is never dropped.
+  // OMITTED, not null): `url` is absent on reload, `error` only on 'errored', and
+  // `http_status` is NEVER emitted. The previous REQUIRED url / error /
+  // error.http_status therefore failed safeParse on EVERY real frame → it was
+  // silently dropped → the page-state store stayed empty → no live URL in the
+  // GUI. All three are now optional; `kind` is lenient (A3 emits net|timeout;
+  // earlier docs listed http|tls|dns) so a frame is never dropped.
+  //
+  // `title` is accepted on ALL states (loading/loaded/stalled/errored), not just
+  // 'loaded': the box may emit a title-only change frame (e.g. an in-page
+  // document.title update with no navigation) and the GUI poll must be able to
+  // self-heal the address-bar title from it. Top-level + optional, so it's never
+  // required and a frame that omits it still validates.
+  //
+  // `tabId` (forward-compat plumbing — A3 contract pending, Q1 channel) lets the
+  // box attribute a frame to a specific tab so the GUI can key live page-state
+  // per tab instead of per session. Optional → backward-compatible (frames
+  // without it validate + are carried as null downstream); the store stays a
+  // per-session record until the per-tab keying contract is locked.
   url: z.string().nullable().optional(),
   title: z.string().nullable().optional(),
+  tabId: z.string().optional(),
   error: z
     .object({
       kind: z.string().min(1),
