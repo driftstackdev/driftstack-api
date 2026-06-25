@@ -1796,7 +1796,10 @@ export function ProfilesView({
         }
       }
       if (envelopes.length > 0) {
-        downloadJson(timestampedFilename('driftstack-profiles', 'json', new Date()), envelopes);
+        await downloadJson(
+          timestampedFilename('driftstack-profiles', 'json', new Date()),
+          envelopes,
+        );
       } else {
         setState((s) => ({ ...s, error: 'Could not export the selected profiles.' }));
       }
@@ -1811,7 +1814,7 @@ export function ProfilesView({
     if (!client) return;
     try {
       const envelope = await client.profiles.export(id);
-      downloadJson(timestampedFilename('driftstack-profile', 'json', new Date()), envelope);
+      await downloadJson(timestampedFilename('driftstack-profile', 'json', new Date()), envelope);
       // Confirm the download fired — like every other handler, give feedback
       // instead of silently completing.
       const name = state.profiles.find((p) => p.id === id)?.name ?? 'profile';

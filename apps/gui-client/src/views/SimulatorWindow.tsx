@@ -1579,7 +1579,7 @@ function CookiesPane({
 
   const canExport = cookies !== null && cookies.length >= 1;
   const onExport = (): void => {
-    downloadBlob(
+    void downloadBlob(
       `cookies-${sessionId !== '' ? sessionId : 'session'}.json`,
       new Blob([JSON.stringify(cookies ?? [], null, 2)], { type: 'application/json' }),
     );
@@ -1977,7 +1977,7 @@ export function SimulatorWindow(): JSX.Element {
   // #36 store: buildRecordingExport → downloadJson, the proven blob/anchor path).
   function exportRecording(rec: Recording): void {
     const now = new Date();
-    downloadJson(recordingExportFilename(rec, now), buildRecordingExport(rec, now));
+    void downloadJson(recordingExportFilename(rec, now), buildRecordingExport(rec, now));
   }
   // Stop the capture loop if the window unmounts mid-recording.
   useEffect(() => {
@@ -2883,7 +2883,7 @@ export function SimulatorWindow(): JSX.Element {
             const bin = atob(res.file.dataB64);
             const bytes = new Uint8Array(bin.length);
             for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
-            downloadBlob(
+            void downloadBlob(
               res.file.name,
               new Blob([bytes], { type: res.file.mime || 'application/octet-stream' }),
             );

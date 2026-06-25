@@ -169,7 +169,10 @@ export function RecordingPlayerView({
   function handleExport(): void {
     if (recording === null || recording.frames.length === 0) return;
     const now = new Date();
-    downloadJson(recordingExportFilename(recording, now), buildRecordingExport(recording, now));
+    void downloadJson(
+      recordingExportFilename(recording, now),
+      buildRecordingExport(recording, now),
+    );
     pushToast({
       title: 'Exported',
       body: `${recording.frames.length} frames saved as JSON.`,

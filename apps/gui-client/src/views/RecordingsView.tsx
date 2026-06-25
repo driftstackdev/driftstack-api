@@ -69,7 +69,7 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
         return;
       }
       const now = new Date();
-      downloadJson(recordingExportFilename(full, now), buildRecordingExport(full, now));
+      await downloadJson(recordingExportFilename(full, now), buildRecordingExport(full, now));
       pushToast({
         title: 'Exported',
         body: `${full.frames.length} frames saved as JSON.`,
