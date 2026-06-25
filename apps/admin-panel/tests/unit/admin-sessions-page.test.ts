@@ -33,6 +33,7 @@ interface AdminSession {
 }
 interface SetUpOpts {
   promptReturns?: string | null;
+  confirmReturns?: boolean;
   route: (call: MockFetchCall) => Response;
 }
 
@@ -64,6 +65,9 @@ function setUpDom(
   const pr = opts.promptReturns === undefined ? 'support ticket #42' : opts.promptReturns;
   // @ts-expect-error — driftstackPrompt is injected by AdminLayout
   window.driftstackPrompt = () => Promise.resolve(pr);
+  const cr = opts.confirmReturns === undefined ? true : opts.confirmReturns;
+  // @ts-expect-error — driftstackConfirm is injected by AdminLayout; force-destroy is gated behind it
+  window.driftstackConfirm = () => Promise.resolve(cr);
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="admin-sessions"'));
   if (!pageScript) throw new Error('admin sessions inline script not found');
