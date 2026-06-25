@@ -24,8 +24,9 @@ function proxyRequiredError(): DriftstackError {
   });
 }
 
-const agentCreate = vi.fn<(b: unknown) => Promise<unknown>>();
+const agentCreate = vi.fn<(b: unknown, opts?: unknown) => Promise<unknown>>();
 const agentClose = vi.fn<(id: string) => Promise<unknown>>(() => Promise.resolve({}));
+const clearSession = vi.fn<(profileId: string) => Promise<void>>(() => Promise.resolve());
 const sessionCreate = vi.fn<(b: unknown) => Promise<unknown>>(() =>
   Promise.resolve({ id: 'ses_fallback' }),
 );
@@ -64,7 +65,7 @@ vi.mock('../../src/lib/SettingsContext', () => {
         create: (b: unknown) => sessionCreate(b),
       },
       agentSessions: {
-        create: (b: unknown) => agentCreate(b),
+        create: (b: unknown, opts?: unknown) => agentCreate(b, opts),
         close: (id: string) => agentClose(id),
         // W624 — Live-view re-open path for an already-running agent session.
         livekitToken: () => Promise.resolve(LIVEKIT),
@@ -101,7 +102,7 @@ vi.mock('../../src/lib/profile-bindings', () => ({
   getBinding: () => Promise.resolve(null),
   setDefaultProxy: vi.fn(() => Promise.resolve()),
   markLaunched: vi.fn(() => Promise.resolve()),
-  clearSession: vi.fn(() => Promise.resolve()),
+  clearSession: (profileId: string) => clearSession(profileId),
   deleteBinding: vi.fn(() => Promise.resolve()),
 }));
 
@@ -155,11 +156,17 @@ describe('ProfilesView launch → stream', () => {
     // manual mode (a GUI launch opens the simulator for the user to drive).
     // initial_url = the normalized Start URL setting (normalizeNavigateUrl runs the
     // value through new URL().toString(), which adds the root trailing slash).
-    expect(agentCreate).toHaveBeenCalledWith({
-      profile_id: 'prof_1',
-      mode: 'manual',
-      initial_url: 'https://driftstack.dev/',
-    });
+    expect(agentCreate).toHaveBeenCalledWith(
+      {
+        profile_id: 'prof_1',
+        mode: 'manual',
+        initial_url: 'https://driftstack.dev/',
+      },
+      // A client-generated Idempotency-Key rides on create so a founder retry after a
+      // perceived hang (the ~12s proxy probe) replays the cached 201 instead of creating
+      // a SECOND billed session.
+      { idempotencyKey: expect.any(String) as string },
+    );
     // The simulator is ONLY the separate window now (founder 2026-06-18: the
     // scaled in-app overlay was removed). Launch hands the session + livekit
     // join info to the opener; no in-app overlay renders.
@@ -183,6 +190,22 @@ describe('ProfilesView launch → stream', () => {
     expect(sessionCreate).toHaveBeenCalledWith({ profile_id: 'prof_1' });
     // The old dead-end message is gone — the launch opens a working viewer.
     expect(screen.queryByText(/no live stream was returned/i)).toBeNull();
+  });
+
+  it('a FAILED simulator-window open closes the just-created session (no leaked billed session) and clears the binding', async () => {
+    agentCreate.mockResolvedValueOnce({ id: 'agt_leak', livekit: LIVEKIT });
+    // The floating-iPhone window fails to open (Tauri error / non-collision failure).
+    vi.mocked(openSimulatorWindow).mockResolvedValueOnce({ opened: false, reason: 'boom' });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
+    // The created session is closed so it isn't left running with no UI to stop it.
+    await waitFor(() => expect(agentClose).toHaveBeenCalledWith('agt_leak'));
+    // The binding is cleared, and the error no longer tells the founder to "close it" —
+    // nothing opened, and the session was stopped.
+    await waitFor(() => expect(clearSession).toHaveBeenCalledWith('prof_1'));
+    await waitFor(() =>
+      expect(screen.getByText(/The session was stopped — try launching again/i)).toBeTruthy(),
+    );
   });
 
   it('polling fallback on an egress-required deployment surfaces a SPECIFIC message (not the raw "proxy configuration is required" 400)', async () => {

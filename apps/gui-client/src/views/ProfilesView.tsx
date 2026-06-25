@@ -1557,7 +1557,15 @@ export function ProfilesView({
               ...(skipProxyProbe ? { skip_proxy_probe: true } : {}),
             }
           : { profile_id: profile.id, mode: 'manual', initial_url: startUrl };
-      const created = await client.agentSessions.create(createBody);
+      // Idempotency-Key on create: the server runs a pre-launch proxy probe (up to ~12s)
+      // before responding, so a launch feels slow and a network blip can drop the 201
+      // AFTER the server already created the session. With a stable key the SDK can
+      // replay the cached 201 (and a founder retry of the same intent the server dedupes)
+      // instead of re-probing and creating a SECOND billed session. The SDK ONLY retries
+      // a transient failure when a key is present (no key → maxAttempts:0), so this also
+      // arms the retry path. crypto.randomUUID is available in the Tauri webview.
+      const idempotencyKey = crypto.randomUUID();
+      const created = await client.agentSessions.create(createBody, { idempotencyKey });
       await markLaunched(profile.id, created.id);
       if (created.livekit) {
         // Mint the per-session gui_control_key so the SEPARATE simulator
@@ -1597,9 +1605,17 @@ export function ProfilesView({
           // No in-app full-page fallback — founder 2026-06-18: the in-app view
           // looked bad (a phone scaled into the full GUI page). The simulator is
           // ONLY ever the separate window now; surface why it didn't open.
+          //
+          // The session was already created + markLaunched'd, so a window-open failure
+          // would otherwise STRAND a billed browser session with no UI to control or
+          // stop it. Close it and clear the binding before surfacing the error so a
+          // failed open never leaks a running session. Best-effort — a close failure
+          // still surfaces the open error (the row's manual Stop remains as a backstop).
+          await client.agentSessions.close(created.id).catch(() => undefined);
+          await clearProfileSession(profile.id).catch(() => undefined);
           setState((s) => ({
             ...s,
-            error: `Couldn't open the simulator window: ${sim.reason ?? 'unknown'}. If one is already open for this session, close it and relaunch.`,
+            error: `Couldn't open the simulator window: ${sim.reason ?? 'unknown'}. The session was stopped — try launching again.`,
           }));
         } else {
           // A live LiveKit launch succeeded → clear any stale polling/mock-driver
