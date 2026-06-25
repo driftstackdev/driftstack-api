@@ -1701,6 +1701,14 @@ function CookiesPane({
         setImportNote('Not a valid cookies file (expected an array of cookies).');
         return;
       }
+      // Client-side cap to match the server schema (z.array(CookieSchema).min(1).max(2000)).
+      // A heavy browser export easily exceeds 2000; catch it before the round-trip so the
+      // founder gets a precise reason instead of a generic server 422.
+      if (validated.length > 2000) {
+        setImporting(false);
+        setImportNote('That cookies file has too many cookies (max 2000).');
+        return;
+      }
       void setAgentSessionCookies(sessionId, validated, controlAuth)
         .then((res) => {
           if (res.status === 'ok') {
@@ -1717,9 +1725,21 @@ function CookiesPane({
             );
           }
         })
-        .catch(() => {
-          // Gated 503 / 404 / network — cookie import isn't live on this build/box yet.
-          setImportNote('Import pending — cookie import ships with the next device update.');
+        .catch((err: unknown) => {
+          // Surface the REAL failure instead of masking every error as "ships with the
+          // next device update". A 422 = the server rejected the jar (too many cookies /
+          // an invalid field); a 404 = the session is gone; only a 503 (gated/not-live)
+          // gets the calm pending copy. authedFetch throws AgentSessionControlError(status).
+          const status = err instanceof AgentSessionControlError ? err.status : 0;
+          if (status === 422) {
+            setImportNote('That cookies file was rejected (too many cookies or an invalid field).');
+          } else if (status === 404) {
+            setImportNote('Session is no longer live.');
+          } else if (status === 503) {
+            setImportNote('Import pending — cookie import ships with the next device update.');
+          } else {
+            setImportNote('Could not import cookies — please try again.');
+          }
         })
         .finally(() => {
           setImporting(false);
@@ -3086,17 +3106,22 @@ export function SimulatorWindow(): JSX.Element {
           // getAgentSessionCookies throws (via authedFetch) on any non-2xx, with
           // the HTTP status attached to AgentSessionControlError. Branch on it so
           // the note reflects the real state instead of one blanket message:
+          //   401/403 → the per-session gui_control_key expired (24h TTL) — manual
+          //             control over LiveKit still works, so degrade calmly (mirrors
+          //             refreshControl) instead of an endless "retrying" loop.
           //   404 → no cookie jar yet (no page has loaded in the session)
           //   503 → the cookies route is gated off on this deployment
           //   else (network / 5xx) → a transient hiccup we'll retry on the next tick
           setCookies(null);
           const status = err instanceof AgentSessionControlError ? err.status : 0;
           setCookiesNote(
-            status === 404
-              ? 'cookies will appear once a page loads in the session'
-              : status === 503
-                ? "cookies aren't enabled on this deployment"
-                : "couldn't load cookies — retrying",
+            status === 401 || status === 403
+              ? 'Session control credential expired — reopen the session to refresh.'
+              : status === 404
+                ? 'cookies will appear once a page loads in the session'
+                : status === 503
+                  ? "cookies aren't enabled on this deployment"
+                  : "couldn't load cookies — retrying",
           );
         });
     };
@@ -3115,6 +3140,16 @@ export function SimulatorWindow(): JSX.Element {
   // harness piece, so we just collect handles for now.
   const [files, setFiles] = useState<SessionFileHandle[]>([]);
   const [uploadNote, setUploadNote] = useState<string | null>(null);
+  // Reset the uploaded-handle list on every session swap (the standalone window can swap
+  // the live session in place via the 'ds-session' relaunch listener, changing sessionId
+  // WITHOUT a remount). The upload handles are bound to the OLD session's upload jail, so
+  // they're meaningless/invalid for the new session — clear them (and the note) so the
+  // Files pane doesn't list the prior session's stale handles. Mirrors how the cookies/
+  // downloads polls self-heal by re-keying on sessionId.
+  useEffect(() => {
+    setFiles([]);
+    setUploadNote(null);
+  }, [sessionId]);
   const [uploading, setUploading] = useState(false);
   // Visual-only: highlight the drop-zone while a file is dragged over it.
   const [fileDragOver, setFileDragOver] = useState(false);
@@ -3200,11 +3235,19 @@ export function SimulatorWindow(): JSX.Element {
             );
           }
         })
-        .catch(() => {
+        .catch((err: unknown) => {
           if (cancelled) return;
-          // Gated 503 / 404 / network — downloads aren't live on this build/box yet.
+          // An expired per-session control key (401/403) degrades calmly to a reopen
+          // hint instead of the misleading "ships with the next device update" pending
+          // copy (matching the cookies pane + refreshControl graceful degradation).
+          // Everything else (gated 503 / 404 / network) keeps the calm pending note.
           setDownloads(null);
-          setDownloadsNote('pending — downloads ship with the next device update');
+          const status = err instanceof AgentSessionControlError ? err.status : 0;
+          setDownloadsNote(
+            status === 401 || status === 403
+              ? 'Session control credential expired — reopen the session to refresh.'
+              : 'pending — downloads ship with the next device update',
+          );
         });
     };
     tick();

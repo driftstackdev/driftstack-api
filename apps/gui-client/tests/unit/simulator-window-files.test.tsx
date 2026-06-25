@@ -5,9 +5,19 @@
 
 import { useEffect } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/react';
+import { render, fireEvent, waitFor, act } from '@testing-library/react';
 
 const uploadMock = vi.fn();
+
+// Capture the 'ds-session' relaunch listener so a test can drive an in-place session
+// swap (the standalone window changes sessionId WITHOUT a remount).
+let dsSessionCb: ((e: { payload: string }) => void) | null = null;
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: (name: string, cb: (e: { payload: string }) => void) => {
+    if (name === 'ds-session') dsSessionCb = cb;
+    return Promise.resolve(() => {});
+  },
+}));
 
 vi.mock('../../src/lib/livekit', () => ({
   createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
@@ -81,6 +91,10 @@ function fileInput(c: HTMLElement): HTMLInputElement {
 describe('SimulatorWindow — file-upload Files section (A3 W2851)', () => {
   beforeEach(() => {
     uploadMock.mockReset();
+    dsSessionCb = null;
+    // The ds-session relaunch listener only registers in a Tauri window. Mark the env
+    // so the listener mounts and captures the callback for the swap test.
+    (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
   });
 
   it('uploading a file lists the returned opaque handle in the Files section', async () => {
@@ -101,6 +115,34 @@ describe('SimulatorWindow — file-upload Files section (A3 W2851)', () => {
       );
     });
     expect(uploadMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the uploaded-handle list on an in-place session swap (the handles are bound to the OLD session jail)', async () => {
+    uploadMock.mockResolvedValue({
+      status: 'ok',
+      handle: { id: 'f1', name: 'old-session.txt', mime: 'text/plain', size: 1024 },
+    });
+    const { container } = renderSim();
+    openDrawer(container);
+    fireEvent.change(fileInput(container), {
+      target: { files: [new File(['hi'], 'old-session.txt', { type: 'text/plain' })] },
+    });
+    await waitFor(() => {
+      expect(container.querySelector('[data-component="simulator-files"]')?.textContent).toMatch(
+        /old-session\.txt/,
+      );
+    });
+    // The 'ds-session' relaunch swaps the live session in place (new sessionId, no
+    // remount). The prior session's handles are invalid for the new jail → the list clears.
+    expect(dsSessionCb).not.toBeNull();
+    act(() => {
+      dsSessionCb?.({ payload: btoa('?window=simulator&ws=wss://lk&token=tok&session=agt_y') });
+    });
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-component="simulator-files"]')?.textContent,
+      ).not.toMatch(/old-session\.txt/);
+    });
   });
 
   it("an 'unavailable' upload result shows the calm pending note (not an error)", async () => {

@@ -286,6 +286,94 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
     expect(setCookiesMock).toHaveBeenCalledTimes(1);
   });
 
+  it('Import surfaces the REAL reason on a 422 (rejected jar), not the "next device update" mask', async () => {
+    cookiesMock.mockResolvedValue({ status: 'ok', cookies: [] });
+    setCookiesMock.mockRejectedValue(new AgentSessionControlError('too many cookies', 422));
+    const { container } = renderSim();
+    openCookies(container);
+    const input = (await waitFor(() => {
+      const i = container.querySelector('[data-component="simulator-cookies-import-input"]');
+      if (!i) throw new Error('not yet');
+      return i;
+    })) as HTMLInputElement;
+    const jar = [{ domain: 'example.com', name: 'sid', value: 'abc' }];
+    const file = new File([JSON.stringify(jar)], 'cookies.json', { type: 'application/json' });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => {
+      const note = container.querySelector('[data-component="simulator-cookies-import-note"]');
+      if (!note || !note.textContent?.toLowerCase().includes('rejected'))
+        throw new Error('not yet');
+      return note;
+    });
+    expect(
+      container
+        .querySelector('[data-component="simulator-cookies-import-note"]')
+        ?.textContent?.toLowerCase(),
+    ).not.toContain('next device update');
+  });
+
+  it('Import surfaces "Session is no longer live" on a 404', async () => {
+    cookiesMock.mockResolvedValue({ status: 'ok', cookies: [] });
+    setCookiesMock.mockRejectedValue(new AgentSessionControlError('gone', 404));
+    const { container } = renderSim();
+    openCookies(container);
+    const input = (await waitFor(() => {
+      const i = container.querySelector('[data-component="simulator-cookies-import-input"]');
+      if (!i) throw new Error('not yet');
+      return i;
+    })) as HTMLInputElement;
+    const jar = [{ domain: 'example.com', name: 'sid', value: 'abc' }];
+    const file = new File([JSON.stringify(jar)], 'cookies.json', { type: 'application/json' });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => {
+      const note = container.querySelector('[data-component="simulator-cookies-import-note"]');
+      if (!note || !note.textContent?.toLowerCase().includes('no longer live'))
+        throw new Error('not yet');
+      return note;
+    });
+  });
+
+  it('Import catches an over-cap jar (>2000 cookies) client-side WITHOUT calling the server', async () => {
+    cookiesMock.mockResolvedValue({ status: 'ok', cookies: [] });
+    const { container } = renderSim();
+    openCookies(container);
+    const input = (await waitFor(() => {
+      const i = container.querySelector('[data-component="simulator-cookies-import-input"]');
+      if (!i) throw new Error('not yet');
+      return i;
+    })) as HTMLInputElement;
+    const jar = Array.from({ length: 2001 }, (_, n) => ({
+      domain: 'example.com',
+      name: `c${n}`,
+      value: 'v',
+    }));
+    const file = new File([JSON.stringify(jar)], 'cookies.json', { type: 'application/json' });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => {
+      const note = container.querySelector('[data-component="simulator-cookies-import-note"]');
+      if (!note || !note.textContent?.toLowerCase().includes('too many cookies'))
+        throw new Error('not yet');
+      return note;
+    });
+    // The over-cap jar never went to the server (caught before the round-trip).
+    expect(setCookiesMock).not.toHaveBeenCalled();
+  });
+
+  it('an EXPIRED control key (401) degrades the cookies pane calmly — a reopen hint, NOT an endless "retrying"', async () => {
+    cookiesMock.mockRejectedValue(new AgentSessionControlError('control key expired', 401));
+    const { container } = renderSim();
+    openCookies(container);
+    await waitFor(() => {
+      const pane = container.querySelector('[data-component="simulator-cookies"]');
+      if (!pane || !pane.textContent?.toLowerCase().includes('credential expired'))
+        throw new Error('not yet');
+      return pane;
+    });
+    const pane = container.querySelector('[data-component="simulator-cookies"]') as HTMLElement;
+    expect(pane.textContent?.toLowerCase()).toContain('reopen the session');
+    expect(pane.textContent?.toLowerCase()).not.toContain("couldn't load cookies — retrying");
+  });
+
   it('search filters by cookie name or domain', async () => {
     cookiesMock.mockResolvedValue({
       status: 'ok',
