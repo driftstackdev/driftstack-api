@@ -55,6 +55,24 @@ export interface Recording {
   totalBytes: number;
 }
 
+/** The recording that failed to write to disk on Stop. Surfaced (toast) so the
+ *  user knows the capture is in-memory only and will be lost on app close —
+ *  rather than the old behaviour of silently swallowing the failure while the
+ *  list still showed a "Saved" pill. */
+export interface RecordingPersistError {
+  id: string;
+  sessionId: string;
+  label: string | null;
+  /** Distinguishes repeated failures of the same recording so a consumer effect
+   *  re-fires (a plain id wouldn't change). */
+  at: number;
+}
+
+/** Window CustomEvent name fired alongside the context `persistError` state so a
+ *  global toast bridge can surface it even from a window with no Toast provider
+ *  above the RecordingsProvider (the simulator window). */
+export const RECORDING_PERSIST_FAILED_EVENT = 'driftstack:recording-persist-failed';
+
 interface RecordingsContextValue {
   recordings: Map<string, Recording>;
   /** Recording ids actively recording. */
@@ -69,6 +87,11 @@ interface RecordingsContextValue {
   hydrateFrames: (id: string) => Promise<Recording | null>;
   /** Convenience: the recording id that is currently active for a given session, if any. */
   activeRecordingFor: (sessionId: string) => string | null;
+  /** The most recent recording whose disk write FAILED on Stop (null = none).
+   *  A view watches this to warn the user the capture is memory-only. */
+  persistError: RecordingPersistError | null;
+  /** Acknowledge/dismiss the current persistError (after surfacing it). */
+  clearPersistError: () => void;
 }
 
 const RecordingsCtx = createContext<RecordingsContextValue | null>(null);
@@ -77,6 +100,9 @@ export function RecordingsProvider({ children }: { children: ReactNode }): JSX.E
   // Single state slot; mutations replace the Map ref so React re-renders.
   const [recordings, setRecordings] = useState<Map<string, Recording>>(() => new Map());
   const [loading, setLoading] = useState(true);
+  // Set when a Stop-time disk write fails — surfaced (toast) so the user knows
+  // the recording is in-memory only and won't survive an app restart.
+  const [persistError, setPersistError] = useState<RecordingPersistError | null>(null);
   // Latest recordings ref for the unmount-flush effect.
   const recordingsRef = useRef(recordings);
   recordingsRef.current = recordings;
@@ -143,30 +169,62 @@ export function RecordingsProvider({ children }: { children: ReactNode }): JSX.E
   }, []);
 
   const stopRecording = useCallback(async (id: string): Promise<Recording | null> => {
-    let stopped: Recording | null = null;
-    setRecordings((prev) => {
-      const cur = prev.get(id);
-      if (!cur || cur.endedAt !== null) return prev;
-      const next = new Map(prev);
-      stopped = {
-        ...cur,
-        endedAt: Date.now(),
-        frameCount: cur.frames.length,
-        totalBytes: cur.frames.reduce((acc, f) => acc + f.bytes, 0),
-      };
-      next.set(id, stopped);
-      return next;
-    });
-    if (stopped !== null) {
+    // Compute the finalised recording DETERMINISTICALLY from the latest committed
+    // state (the ref) rather than reading a `let` assigned inside the setState
+    // updater — that updater can run lazily, so the closure read could see the
+    // pre-update value and skip the persist entirely.
+    const cur = recordingsRef.current.get(id);
+    const finalized: Recording | null =
+      !cur || cur.endedAt !== null
+        ? null
+        : {
+            ...cur,
+            endedAt: Date.now(),
+            frameCount: cur.frames.length,
+            totalBytes: cur.frames.reduce((acc, f) => acc + f.bytes, 0),
+          };
+    if (finalized !== null) {
+      const stopped = finalized;
+      setRecordings((prev) => {
+        const c = prev.get(id);
+        if (!c || c.endedAt !== null) return prev;
+        const next = new Map(prev);
+        next.set(id, stopped);
+        return next;
+      });
+    }
+    if (finalized !== null) {
       try {
-        await persistRecording(stopped);
+        await persistRecording(finalized);
       } catch {
-        // Persist failure leaves the recording in memory only — UI still
-        // shows it; on app restart it's lost. Not surfaced as an error
-        // because the user already pressed Stop and the UI updated.
+        // Persist failure leaves the recording in memory only — on app restart
+        // it's lost (RecordingsProvider only hydrates from disk). Previously
+        // swallowed silently while the list still showed a "Saved" pill, so the
+        // user believed their capture was safe. Surface it: set the context
+        // `persistError` (a view warns the user) AND fire a window event so a
+        // global toast bridge can warn even from a window with no Toast provider
+        // above this one (the simulator window).
+        const err: RecordingPersistError = {
+          id: finalized.id,
+          sessionId: finalized.sessionId,
+          label: finalized.label,
+          at: Date.now(),
+        };
+        setPersistError(err);
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+          try {
+            window.dispatchEvent(new CustomEvent(RECORDING_PERSIST_FAILED_EVENT, { detail: err }));
+          } catch {
+            // CustomEvent unsupported (very old/headless) — context state still set.
+          }
+        }
       }
     }
-    return stopped;
+    return finalized;
+  }, []);
+
+  const clearPersistError = useCallback((): void => {
+    setPersistError(null);
   }, []);
 
   const addFrame = useCallback((id: string, frame: RecordingFrame): void => {
@@ -251,6 +309,8 @@ export function RecordingsProvider({ children }: { children: ReactNode }): JSX.E
       deleteRecording,
       hydrateFrames,
       activeRecordingFor,
+      persistError,
+      clearPersistError,
     }),
     [
       recordings,
@@ -262,6 +322,8 @@ export function RecordingsProvider({ children }: { children: ReactNode }): JSX.E
       deleteRecording,
       hydrateFrames,
       activeRecordingFor,
+      persistError,
+      clearPersistError,
     ],
   );
 

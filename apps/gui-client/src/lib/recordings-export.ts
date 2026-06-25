@@ -56,11 +56,23 @@ export function buildRecordingExport(rec: Recording, exportedAt: Date): Recordin
   };
 }
 
-/** Filesystem-safe export filename: driftstack-recording-<session>-YYYY-MM-DD.json.
+/** Filesystem-safe export filename:
+ *  driftstack-recording-<session>-<id8>-YYYY-MM-DD.json.
  *  The session id is sanitised to [A-Za-z0-9_-]; an empty result falls back to
- *  the recording id so the name is never just the bare timestamp. */
+ *  the recording id so the name is never just the bare timestamp. A short slice
+ *  of the recording id is ALWAYS appended (also sanitised) so two distinct
+ *  recordings of the SAME session exported on the SAME day get distinct names
+ *  instead of colliding (the second silently overwriting the first / the OS
+ *  appending " (2)"). */
 export function recordingExportFilename(rec: Recording, now: Date): string {
   const safeSession = rec.sessionId.replace(/[^A-Za-z0-9_-]/g, '');
-  const tag = safeSession.length > 0 ? safeSession : rec.id;
+  const safeId = rec.id.replace(/[^A-Za-z0-9_-]/g, '');
+  const idTag = safeId.slice(0, 8);
+  // Base tag is the session id; fall back to the (full safe) recording id when
+  // the session id sanitises to empty, so the name is never just a timestamp.
+  const base = safeSession.length > 0 ? safeSession : safeId.length > 0 ? safeId : rec.id;
+  // Append the id discriminator unless `base` already IS the recording id
+  // (the empty-session fallback) — no point repeating it.
+  const tag = base === safeId && safeSession.length === 0 ? base : `${base}-${idTag}`;
   return timestampedFilename(`driftstack-recording-${tag}`, 'json', now);
 }

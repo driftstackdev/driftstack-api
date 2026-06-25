@@ -109,6 +109,12 @@ export interface UseAgentChatResult {
    *  server session is dropped — continuing the chat starts a fresh session,
    *  while the restored transcript stays visible as the chat's memory. */
   restore: (turns: ReadonlyArray<ChatTurn>) => void;
+  /** Count of leading turns that were RESTORED from saved history and are NOT
+   *  backed by the (now-absent) live server session. While > 0 and there is no
+   *  live session, continuing the chat starts a FRESH server session that won't
+   *  remember these turns — the view shows an honest divider after them. Cleared
+   *  once a new live session is created (or on reset/new-chat). */
+  restoredHistoryCount: number;
 }
 
 export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
@@ -117,9 +123,38 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   const [session, setSession] = useState<AgentSession | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Latest live session id, mirrored into a ref so the close-on-unmount cleanup
+  // (which can't depend on `session` without re-subscribing every turn) and the
+  // reset/restore handlers can best-effort close the PRIOR server session before
+  // dropping it locally. Without this, every "New chat" / chat-switch / view-
+  // leave abandons the old agent session (and any dispatched Mac) to the idle
+  // reaper — a cost + fleet-slot leak that can hit the per-account active cap.
+  const sessionIdRef = useRef<string | null>(null);
+  sessionIdRef.current = session?.id ?? null;
+  // The SDK client, mirrored into a ref so the unmount cleanup closes via the
+  // client that was current at unmount without re-running the effect on every
+  // client identity change.
+  const clientRef = useRef(client);
+  clientRef.current = client;
+  // Best-effort close a server-side agent session (idempotent server-side). Never
+  // throws: a failed close is a reaper fallback, not a user-visible error.
+  const closeServerSession = useCallback((sid: string | null): void => {
+    if (sid === null) return;
+    const c = clientRef.current;
+    if (c === null || typeof c.agentSessions?.close !== 'function') return;
+    try {
+      void Promise.resolve(c.agentSessions.close(sid)).catch(() => undefined);
+    } catch {
+      // A synchronous throw from close() is also non-fatal here.
+    }
+  }, []);
   // The turn id whose confirmation the customer already approved/denied — hides
   // the gate so it doesn't re-prompt for an action they've already resolved.
   const [resolvedTurnId, setResolvedTurnId] = useState<number | null>(null);
+  // Leading turns that came from a restore and aren't backed by a live server
+  // session (see restore()). Drives the view's honest "continuing starts a new
+  // session" divider. Cleared once a fresh session is created on the next send.
+  const [restoredHistoryCount, setRestoredHistoryCount] = useState(0);
   // The user message that produced the current turn — re-sent verbatim on
   // approve() so the executor re-plans + dispatches the now-approved action.
   const [lastUserMessage, setLastUserMessage] = useState<string | null>(null);
@@ -141,11 +176,16 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   // hook on a sidebar switch) discards instead of setState-ing a dead component —
   // and so a partial send isn't left looking in-flight (adversarial review
   // w6sdz15an #2). (A true request abort via AbortSignal is a follow-up.)
+  // ALSO: best-effort close the live server session so leaving the AI view (or
+  // closing the window) doesn't strand a running agent session + its dispatched
+  // Mac until the idle reaper — a cost + fleet-slot leak that can otherwise hit
+  // the per-account active-session cap on a fresh send (sweep2).
   useEffect(
     () => () => {
       cancelGenRef.current += 1;
+      closeServerSession(sessionIdRef.current);
     },
-    [],
+    [closeServerSession],
   );
 
   const post = useCallback(
@@ -209,6 +249,10 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
             return false;
           }
           setSession(created);
+          // A fresh live session now backs the chat — the restored-history
+          // boundary no longer applies (the new session's transcript grows from
+          // here), so clear the divider marker.
+          setRestoredHistoryCount(0);
           sid = created.id;
         }
         const response = await client.agentSessions.message(sid, userMessage, {
@@ -278,28 +322,47 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     // discards its result on resolve instead of writing the response onto this
     // fresh chat's transcript + session (audit wja3dfl5t P0). Same for restore().
     cancelGenRef.current += 1;
+    // Best-effort close the chat we're leaving so its server session + any
+    // dispatched Mac don't leak until the reaper (sweep2). Read via the ref so we
+    // close the CURRENT session, not a stale closure capture.
+    closeServerSession(sessionIdRef.current);
     setSending(false);
     setTurns([]);
     setSession(null);
     setError(null);
     setResolvedTurnId(null);
     setLastUserMessage(null);
-  }, []);
+    setRestoredHistoryCount(0);
+  }, [closeServerSession]);
 
-  const restore = useCallback((restoredTurns: ReadonlyArray<ChatTurn>): void => {
-    // Invalidate any in-flight post() from the chat we're switching AWAY from, so
-    // its late response can't attach to (and persist onto) the restored chat.
-    cancelGenRef.current += 1;
-    setSending(false);
-    setTurns([...restoredTurns]);
-    setSession(null);
-    setError(null);
-    setResolvedTurnId(null);
-    setLastUserMessage(null);
-    // Keep new turn ids monotonic above the restored max so React keys + the
-    // confirmation lookup stay correct when the customer continues the chat.
-    idRef.current = restoredTurns.reduce((m, t) => Math.max(m, t.id), 0);
-  }, []);
+  const restore = useCallback(
+    (restoredTurns: ReadonlyArray<ChatTurn>): void => {
+      // Invalidate any in-flight post() from the chat we're switching AWAY from, so
+      // its late response can't attach to (and persist onto) the restored chat.
+      cancelGenRef.current += 1;
+      // Best-effort close the chat we're switching AWAY from (same leak as reset).
+      closeServerSession(sessionIdRef.current);
+      setSending(false);
+      setTurns([...restoredTurns]);
+      // Drop the live session: continuing a reopened chat starts a FRESH server
+      // session (the prior one is gone / now closed), and the run-loop rebuilds
+      // history from the server transcript — so the restored turns are local
+      // memory only and the agent won't see them. The view surfaces an honest
+      // "continuing starts a new session" divider so this isn't invisible.
+      setSession(null);
+      setError(null);
+      setResolvedTurnId(null);
+      setLastUserMessage(null);
+      // Mark every restored turn as history the (absent) live session won't
+      // remember, so the view can draw the honest "continuing starts a new
+      // session" divider after them.
+      setRestoredHistoryCount(restoredTurns.length);
+      // Keep new turn ids monotonic above the restored max so React keys + the
+      // confirmation lookup stay correct when the customer continues the chat.
+      idRef.current = restoredTurns.reduce((m, t) => Math.max(m, t.id), 0);
+    },
+    [closeServerSession],
+  );
 
   return {
     turns,
@@ -313,5 +376,6 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     reset,
     restore,
     cancel,
+    restoredHistoryCount,
   };
 }

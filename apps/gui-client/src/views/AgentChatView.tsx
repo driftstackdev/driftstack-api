@@ -11,7 +11,7 @@
 // this deployment until the live webkit driver is enabled (driver:mock). The
 // banner says so — no pretending.
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type {
   AgentIntent,
   AgentIntentResult,
@@ -78,6 +78,12 @@ export function AgentChatView({
   const [chats, setChats] = useState<ReadonlyArray<StoredChat>>([]);
   const [activeChatId, setActiveChatId] = useState<string>(() => crypto.randomUUID());
   const createdAtRef = useRef<Record<string, number>>({});
+  // Set when we've just restored a chat for READING (handleSelectChat). The
+  // persist effect skips the single turns-change the restore itself causes, so
+  // merely opening an old chat to re-read it does NOT bump its updatedAt or
+  // re-sort it to the top of the rail (sweep2). A real new turn afterwards clears
+  // it and persists normally.
+  const justRestoredRef = useRef(false);
   useEffect(() => {
     void loadChats().then(setChats);
   }, []);
@@ -85,6 +91,12 @@ export function AgentChatView({
   // pre-first-message state). createdAt is sticky per chat id.
   useEffect(() => {
     if (chat.turns.length === 0) return;
+    // A read-only restore is not an edit: don't rewrite updatedAt / re-sort the
+    // rail just because the customer opened a chat to look at it.
+    if (justRestoredRef.current) {
+      justRestoredRef.current = false;
+      return;
+    }
     const now = Date.now();
     const createdAt = createdAtRef.current[activeChatId] ?? now;
     createdAtRef.current[activeChatId] = createdAt;
@@ -108,6 +120,10 @@ export function AgentChatView({
   // (audit wja3dfl5t — the surface that made the P0 wrong-chat-attach reachable.)
   function handleNewChat(): void {
     if (chat.sending) return;
+    // A new chat is a clean slate — never carry a pending restore-suppression
+    // into it (defensive: a restore that loaded 0 turns would otherwise leave
+    // the flag set and skip the first real persist).
+    justRestoredRef.current = false;
     chat.reset();
     setActiveChatId(crypto.randomUUID());
     setProfileId(initialProfileId ?? '');
@@ -115,6 +131,10 @@ export function AgentChatView({
   function handleSelectChat(c: StoredChat): void {
     if (chat.sending || c.id === activeChatId) return;
     createdAtRef.current[c.id] = c.createdAt;
+    // Opening a chat to read it is not an edit — suppress the persist that the
+    // restore's turns-change would otherwise trigger (which bumped updatedAt and
+    // jumped the chat to the top of the rail).
+    justRestoredRef.current = true;
     setActiveChatId(c.id);
     setProfileId(c.profileId);
     setModel(c.model);
@@ -335,8 +355,18 @@ export function AgentChatView({
             <EmptyState onPick={(t) => setDraft(t)} />
           ) : (
             <ol className="mx-auto flex max-w-3xl flex-col gap-3">
-              {chat.turns.map((turn) => (
-                <TurnRow key={turn.id} turn={turn} />
+              {chat.turns.map((turn, i) => (
+                <Fragment key={turn.id}>
+                  <TurnRow turn={turn} />
+                  {/* Honest history boundary: the turns above were restored from
+                      saved history and are NOT in a live agent session. Continuing
+                      the chat starts a fresh session that won't remember them — so
+                      say so, rather than presenting one seamless conversation the
+                      agent silently has amnesia about (sweep2). */}
+                  {chat.session === null &&
+                    chat.restoredHistoryCount > 0 &&
+                    i === chat.restoredHistoryCount - 1 && <RestoredHistoryDivider />}
+                </Fragment>
               ))}
               {chat.sending && <TypingRow />}
             </ol>
@@ -745,6 +775,23 @@ function ChatRail({
 }
 
 // ─── turn rendering ───────────────────────────────────────────────
+
+/** Honest boundary between restored (read-only) history and a fresh session.
+ *  Reopening a saved chat does NOT reattach the old agent session — the run-loop
+ *  rebuilds context from the server transcript, which for a brand-new session is
+ *  empty. So tell the customer plainly that continuing won't carry the above as
+ *  memory, instead of pretending it's one seamless conversation. */
+function RestoredHistoryDivider(): JSX.Element {
+  return (
+    <li data-component="ai-chat-restored-history-divider" className="flex items-center gap-2 py-1">
+      <span className="h-px flex-1 bg-surface-divider" aria-hidden="true" />
+      <span className="text-2xs text-ink-muted">
+        Saved history above · continuing starts a new session — the agent won&apos;t remember it
+      </span>
+      <span className="h-px flex-1 bg-surface-divider" aria-hidden="true" />
+    </li>
+  );
+}
 
 function TurnRow({ turn }: { turn: ChatTurn }): JSX.Element {
   if (turn.role === 'user') {

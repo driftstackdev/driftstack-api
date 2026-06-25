@@ -64,21 +64,30 @@ describe('buildRecordingExport', () => {
 });
 
 describe('recordingExportFilename', () => {
-  it('is filesystem-safe: driftstack-recording-<session>-YYYY-MM-DD.json (UTC)', () => {
+  it('is filesystem-safe + disambiguated: driftstack-recording-<session>-<id8>-YYYY-MM-DD.json (UTC)', () => {
     const name = recordingExportFilename(rec(), new Date('2026-06-20T23:30:00.000Z'));
-    expect(name).toBe('driftstack-recording-ses_abc123-2026-06-20.json');
+    expect(name).toBe('driftstack-recording-ses_abc123-rec-1-2026-06-20.json');
   });
 
-  it('strips unsafe characters from the session id', () => {
+  it('strips unsafe characters from the session id (and appends the id discriminator)', () => {
     const name = recordingExportFilename(
       rec({ sessionId: 'ses/../weird name:!' }),
       new Date('2026-01-02T00:00:00.000Z'),
     );
-    // Only [A-Za-z0-9_-] survive.
-    expect(name).toBe('driftstack-recording-sesweirdname-2026-01-02.json');
+    // Only [A-Za-z0-9_-] survive; the recording id slice keeps it unique.
+    expect(name).toBe('driftstack-recording-sesweirdname-rec-1-2026-01-02.json');
   });
 
-  it('falls back to the recording id when the session id sanitises to empty', () => {
+  it('gives two recordings of the SAME session on the SAME day DISTINCT names (no collision)', () => {
+    const day = new Date('2026-06-20T12:00:00.000Z');
+    const a = recordingExportFilename(rec({ id: 'aaaaaaaa1111' }), day);
+    const b = recordingExportFilename(rec({ id: 'bbbbbbbb2222' }), day);
+    expect(a).not.toBe(b);
+    expect(a).toBe('driftstack-recording-ses_abc123-aaaaaaaa-2026-06-20.json');
+    expect(b).toBe('driftstack-recording-ses_abc123-bbbbbbbb-2026-06-20.json');
+  });
+
+  it('falls back to the recording id when the session id sanitises to empty (no duplicate id tag)', () => {
     const name = recordingExportFilename(
       rec({ sessionId: '///', id: 'rec-xyz' }),
       new Date('2026-01-02T00:00:00.000Z'),

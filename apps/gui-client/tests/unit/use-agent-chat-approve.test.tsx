@@ -11,9 +11,10 @@ import type { AgentMessageResponse, AgentSession } from '@driftstack/sdk';
 
 const create = vi.fn();
 const message = vi.fn();
+const close = vi.fn();
 
 vi.mock('../../src/lib/SettingsContext', () => ({
-  useSettings: () => ({ client: { agentSessions: { create, message } } }),
+  useSettings: () => ({ client: { agentSessions: { create, message, close } } }),
 }));
 
 const { useAgentChat } = await import('../../src/lib/use-agent-chat');
@@ -117,7 +118,9 @@ describe('useAgentChat restore()', () => {
   beforeEach(() => {
     create.mockReset();
     message.mockReset();
+    close.mockReset();
     create.mockResolvedValue(SESSION);
+    close.mockResolvedValue(undefined);
   });
 
   it('loads a saved transcript, drops the live session, keeps new ids above the restored max', async () => {
@@ -133,6 +136,9 @@ describe('useAgentChat restore()', () => {
     expect(result.current.turns).toHaveLength(2);
     expect(result.current.turns[0]?.text).toBe('earlier task');
     expect(result.current.session).toBeNull();
+    // The restored turns are flagged as history the (absent) live session won't
+    // remember — drives the view's honest "continuing starts a new session" divider.
+    expect(result.current.restoredHistoryCount).toBe(2);
 
     // Continuing a restored chat starts a fresh session + assigns ids above 6.
     await act(async () => {
@@ -142,5 +148,65 @@ describe('useAgentChat restore()', () => {
     expect(newUser).toBeDefined();
     expect((newUser as { id: number }).id).toBeGreaterThan(6);
     expect(create).toHaveBeenCalledTimes(1);
+    // A fresh live session now backs the chat → the restored-history marker clears.
+    expect(result.current.restoredHistoryCount).toBe(0);
+  });
+});
+
+describe('useAgentChat session-leak close', () => {
+  beforeEach(() => {
+    create.mockReset();
+    message.mockReset();
+    close.mockReset();
+    create.mockResolvedValue(SESSION);
+    message.mockResolvedValue(DONE);
+    close.mockResolvedValue(undefined);
+  });
+
+  it('reset() closes the prior server session (New chat must not leak it)', async () => {
+    const { result } = renderHook(() => useAgentChat());
+    await act(async () => {
+      await result.current.send('do a thing');
+    });
+    expect(result.current.session?.id).toBe('agt_1');
+    expect(close).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.reset();
+    });
+    expect(close).toHaveBeenCalledWith('agt_1');
+    expect(result.current.session).toBeNull();
+    expect(result.current.restoredHistoryCount).toBe(0);
+  });
+
+  it('restore() closes the prior server session before switching chats', async () => {
+    const { result } = renderHook(() => useAgentChat());
+    await act(async () => {
+      await result.current.send('do a thing');
+    });
+    expect(result.current.session?.id).toBe('agt_1');
+
+    act(() => {
+      result.current.restore([{ id: 9, role: 'user', text: 'older' }]);
+    });
+    expect(close).toHaveBeenCalledWith('agt_1');
+  });
+
+  it('does NOT close when there is no live session yet (reset on an empty chat is a no-op)', () => {
+    const { result } = renderHook(() => useAgentChat());
+    act(() => {
+      result.current.reset();
+    });
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it('closes the live session on unmount (leaving the AI view must not leak it)', async () => {
+    const { result, unmount } = renderHook(() => useAgentChat());
+    await act(async () => {
+      await result.current.send('do a thing');
+    });
+    expect(close).not.toHaveBeenCalled();
+    unmount();
+    expect(close).toHaveBeenCalledWith('agt_1');
   });
 });

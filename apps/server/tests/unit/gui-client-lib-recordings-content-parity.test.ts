@@ -74,8 +74,14 @@ describe('W608.B apps/gui-client/src/lib/recordings.tsx content parity', () => {
       /\/\/ Fire-and-forget; the React tree is tearing down so we\s*\n\s*\/\/ can't await\. Tauri's fs plugin queues these through IPC\./,
     );
     expect(body).toMatch(/while \(frames\.length > MAX_FRAMES_PER_RECORDING\) frames\.shift\(\);/);
-    expect(body).toMatch(/\/\/ Persist failure leaves the recording in memory only — UI still/);
-    expect(body).toMatch(/\/\/ shows it; on app restart it's lost\./);
+    // sweep2: a Stop-time persist failure is no longer swallowed silently — it
+    // surfaces via the context `persistError` + a window CustomEvent so a toast
+    // can warn the user the capture is in-memory only.
+    expect(body).toMatch(
+      /\/\/ Persist failure leaves the recording in memory only — on app restart/,
+    );
+    expect(body).toMatch(/setPersistError\(err\);/);
+    expect(body).toMatch(/RECORDING_PERSIST_FAILED_EVENT/);
     expect(body).toMatch(
       /^export function useRecordings\(\): RecordingsContextValue \{\s*\n\s*const ctx = useContext\(RecordingsCtx\);\s*\n\s*if \(!ctx\) throw new Error\('useRecordings must be used inside <RecordingsProvider>'\);/m,
     );
