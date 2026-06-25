@@ -226,7 +226,7 @@ describe('W761 docs /api/sessions content parity', () => {
     }
   });
 
-  it('CRITICAL 6-endpoint canonical action list pinned — POST /v1/sessions + GET /v1/sessions + GET /v1/sessions/:id/state + POST /v1/sessions/:id/{navigate,interact,wait,capture} + DELETE /v1/sessions/:id. Drift would let SDK URL generation diverge.', () => {
+  it('CRITICAL 7-endpoint canonical action list pinned — POST /v1/sessions + GET /v1/sessions + GET /v1/sessions/:id (single resource) + GET /v1/sessions/:id/state + POST /v1/sessions/:id/{navigate,interact,wait,capture} + DELETE /v1/sessions/:id. 2026-06-24: "Get one" now documents the real single-resource GET /v1/sessions/:id (routes/sessions.ts:475, backs sessions.get()); the live-state GET /v1/sessions/:id/state stays the "Get state" endpoint. Drift would let SDK URL generation diverge.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/`POST \/v1\/sessions`/);
@@ -234,6 +234,9 @@ describe('W761 docs /api/sessions content parity', () => {
     // (no `status` filter) — the example must not advertise &status=.
     expect(p).toMatch(/`GET \/v1\/sessions\?limit=50&cursor=<\.\.\.>`/);
     expect(p).not.toMatch(/`GET \/v1\/sessions\?[^`]*&status=/);
+    // Single-resource detail endpoint (the "Get one" section).
+    expect(p).toMatch(/`GET \/v1\/sessions\/:id` — fetch a single session resource\./);
+    // Live-state endpoint stays under "Get state".
     expect(p).toMatch(/`GET \/v1\/sessions\/:id\/state`/);
     expect(p).toMatch(/`POST \/v1\/sessions\/:id\/navigate`/);
     expect(p).toMatch(/`POST \/v1\/sessions\/:id\/interact`/);

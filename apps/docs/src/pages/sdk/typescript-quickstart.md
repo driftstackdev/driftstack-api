@@ -26,8 +26,9 @@ npm install @driftstack/sdk
 # or: yarn add @driftstack/sdk
 ```
 
-The package is ESM-only and ships full TypeScript types. CommonJS
-consumers that can't migrate need to use dynamic `import()`.
+The package is dual-published (ESM + CommonJS via conditional
+`exports`) and ships full TypeScript types. Both `import` and
+`require('@driftstack/sdk')` work out of the box.
 
 ## 2. Configure the client
 

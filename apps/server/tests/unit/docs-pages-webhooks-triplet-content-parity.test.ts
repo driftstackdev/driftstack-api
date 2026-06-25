@@ -83,14 +83,16 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     );
   });
 
-  it('CRITICAL POST /v1/webhooks 3-error set pinned — 400 ValidationFailed (https/empty/>10 entries/test.ping) + 403 Forbidden (account_owner scope) + 429 TierLimit (max-endpoints-per-account cap).', () => {
+  it('CRITICAL POST /v1/webhooks 3-error set pinned — 400 ValidationFailed (https/empty/>10 entries/test.ping) + 403 Forbidden (account_owner scope) + 409 Conflict (max 10 active endpoints). 2026-06-24: the endpoint cap is a ConflictError (HTTP 409), NOT a 429 TierLimit — services/webhooks.ts:376-381 throws ConflictError when active >= MAX_ENDPOINTS_PER_ACCOUNT (=10, line 302).', () => {
     const p = read(EP);
 
     expect(p).toMatch(
       /`400 ValidationFailed` — URL not https:\/\/, or events array empty\s*\n?\s+\/ >10 entries \/ contains `test\.ping`\./,
     );
     expect(p).toMatch(/`403 Forbidden` — `account_owner` scope missing on the calling key\./);
-    expect(p).toMatch(/`429 TierLimit` — account at the max-endpoints-per-account cap\./);
+    expect(p).toMatch(/`409 Conflict` — max 10 active endpoints\./);
+    // The stale 429-TierLimit framing must NOT return (it's a 409 ConflictError).
+    expect(p).not.toMatch(/`429 TierLimit` — account at the max-endpoints-per-account cap\./);
   });
 
   it("CRITICAL PATCH active:false pauses-delivery framing pinned. The 'active: false pauses delivery without deleting the endpoint; useful for maintenance windows or post-incident cooldowns. Resume with active: true' wording matches W753 dashboard /webhooks edit-form behavior.", () => {

@@ -73,10 +73,15 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(body).toMatch(/- Node\.js 18\+ \(Node 22 LTS recommended;/);
     expect(body).toMatch(/`engines\.node: ">=18"`/);
     expect(body).toMatch(/npm install @driftstack\/sdk/);
-    expect(body).toMatch(/The package is ESM-only and ships full TypeScript types\./);
+    // 2026-06-24: @driftstack/sdk is dual-published (package.json main
+    // ./dist/index.cjs + exports["."].require), NOT ESM-only.
     expect(body).toMatch(
-      /CommonJS\s*\n\s*consumers that can't migrate need to use dynamic `import\(\)`\./,
+      /The package is dual-published \(ESM \+ CommonJS via conditional\s*\n?`exports`\) and ships full TypeScript types\./,
     );
+    expect(body).toMatch(
+      /Both `import` and\s*\n?`require\('@driftstack\/sdk'\)` work out of the box\./,
+    );
+    expect(body).not.toMatch(/The package is ESM-only/);
     expect(body).toMatch(/import \{ Driftstack \} from '@driftstack\/sdk';/);
     expect(body).toMatch(/apiKey: process\.env\.DRIFTSTACK_API_KEY!,/);
     expect(body).toMatch(/Authentication is/);
@@ -110,12 +115,13 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(existsSync(PY)).toBe(true);
   });
 
-  it('go-quickstart.md: laser-focused-5-minute framing + Go 1.21+ + go-get module path + alpha pin-to-sha guidance + ctx + client.Close() defer pattern pinned. Re-enabled by slice 320 post the R4 V-NNN scrub (V-504 anchor removed; doc leads with bare em-dash)', () => {
+  it('go-quickstart.md: laser-focused-5-minute framing + Go 1.22+ (2026-06-24: go.mod declares go 1.22) + go-get module path + alpha pin-to-sha guidance + ctx + client.Close() defer pattern pinned. Re-enabled by slice 320 post the R4 V-NNN scrub (V-504 anchor removed; doc leads with bare em-dash)', () => {
     const body = read(GO);
     expect(body).toMatch(/^title: Go quickstart$/m);
     expect(body).toMatch(/^# Go quickstart$/m);
     expect(body).toMatch(/^— laser-focused 5-minute path to a working Go Driftstack$/m);
-    expect(body).toMatch(/- Go 1\.21\+ \(the SDK uses generic constraints \+ `slices` package\)\./);
+    expect(body).toMatch(/- Go 1\.22\+ \(the SDK uses generic constraints \+ `slices` package\)\./);
+    expect(body).not.toMatch(/- Go 1\.21\+/);
     expect(body).toMatch(/go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go/);
     expect(body).toMatch(/> The Go SDK is alpha until the first tagged release lands\./);
     expect(body).toMatch(/specific commit during the alpha/);

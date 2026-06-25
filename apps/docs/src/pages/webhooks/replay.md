@@ -27,7 +27,7 @@ Response (200):
 {
   "id": "wdl_00000000-0000-4000-8000-000000000001",
   "webhook_id": "whk_00000000-0000-4000-8000-000000000099",
-  "event_id": "evt_00000000-0000-4000-8000-0000000000aa",
+  "event_id": "00000000-0000-4000-8000-0000000000aa",
   "event_type": "session.completed",
   "status": "pending",
   "attempts": 0,

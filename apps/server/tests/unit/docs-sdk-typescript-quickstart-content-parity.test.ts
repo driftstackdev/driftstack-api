@@ -35,11 +35,13 @@ describe('docs sdk/typescript-quickstart content parity', () => {
     expect(body).toMatch(/`engines\.node: ">=18"`/);
   });
 
-  it('ESM-only + CommonJS dynamic-import escape-hatch pinned (drift to silently providing CJS would mislead customers about the module format; drift to dropping the dynamic-import note would orphan customers stuck on CJS)', () => {
-    expect(body).toMatch(/ESM-only and ships full TypeScript types/);
+  it('dual-publish (ESM + CommonJS via conditional exports) pinned (2026-06-24). The previous pin asserted "ESM-only ... CommonJS consumers ... dynamic import()" but @driftstack/sdk is dual-published (package.json main ./dist/index.cjs + exports["."].require) so both import and require work — the prior claim misled CJS consumers. Drift back to an ESM-only claim would re-introduce the falsehood.', () => {
+    expect(body).toMatch(/dual-published \(ESM \+ CommonJS via conditional/);
     expect(body).toMatch(
-      /CommonJS\s+consumers that can't migrate need to use dynamic `import\(\)`/,
+      /Both `import` and\s*\n?`require\('@driftstack\/sdk'\)` work out of the box\./,
     );
+    // The stale ESM-only claim must NOT return.
+    expect(body).not.toMatch(/ESM-only and ships full TypeScript types/);
   });
 
   it("client construction doesn't network pinned: 'The constructor doesn't make any network calls. Authentication is deferred to the first request' — drift would mislead customers about the validation timing", () => {

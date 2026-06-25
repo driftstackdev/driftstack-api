@@ -255,12 +255,12 @@ Customer-side grants on the minted token:
 
 Errors:
 
-| Status | Type                | When                                                             |
-| -----: | ------------------- | ---------------------------------------------------------------- |
-|    404 | not-found           | session id unknown OR caller doesn't own it (anti-enumeration)   |
-|    403 | forbidden           | session is closed (cannot mint a token for a non-active session) |
-|    503 | feature-unavailable | no Mac has registered LiveKit credentials yet                    |
-|    503 | feature-unavailable | stored Mac secret is unreadable (ops-actionable; rotate key)     |
+| Status | Type                | When                                                                             |
+| -----: | ------------------- | -------------------------------------------------------------------------------- |
+|    404 | not-found           | session id unknown OR caller doesn't own it (anti-enumeration)                   |
+|    403 | forbidden           | session is not active (closed or paused) — only active sessions can mint a token |
+|    503 | feature-unavailable | no Mac has registered LiveKit credentials yet                                    |
+|    503 | feature-unavailable | stored Mac secret is unreadable (ops-actionable; rotate key)                     |
 
 ## Live transcript stream (SSE)
 

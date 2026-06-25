@@ -177,8 +177,9 @@ Errors:
   (deliberate anti-enumeration — cross-account `profile_id` is
   indistinguishable from a missing one).
 - Any error the underlying `POST /v1/sessions` can return — most
-  commonly `429` (concurrent-session cap reached) or `503` if the
-  EGRESS gate fires on a tier that requires a `proxy` envelope.
+  commonly `429` (concurrent-session cap reached) or `400` if the
+  EGRESS gate requires a `proxy` envelope on this deployment and the
+  launch body omits it.
 
 ## Clone
 
@@ -249,6 +250,78 @@ Errors:
   found / not owned by you.
 - `429` — the recipient is at their tier's profile cap, or has hit the
   per-billing-cycle inbound-transfer cap (twice their profile cap).
+
+## Export / Import
+
+Export a profile as a versioned, metadata-only JSON envelope, then
+import it (in the same account or another) to mint a fresh profile
+from it. This is a file-based alternative to [Transfer](#transfer):
+the source profile is left intact, and you move the JSON yourself
+(commit it, attach it, hand it to a teammate). Only the metadata
+travels — `name`, `archetype`, `description`. Underlying browser
+state is not in the envelope.
+
+**Export**
+
+`GET /v1/profiles/:id/export`
+
+```json
+{
+  "version": 1,
+  "exported_at": "2026-05-20T12:00:00.000Z",
+  "source_profile_id": "prof_<uuid>",
+  "source_account_id": "<account-uuid>",
+  "profile": {
+    "name": "production",
+    "archetype": "iphone17_ios18_7_safari26_4",
+    "description": "primary prod-data scrape profile"
+  }
+}
+```
+
+`source_profile_id` and `source_account_id` are informational only —
+they record where the file came from. Importing always mints a fresh
+id, into whatever account holds the calling key. The envelope is
+versioned so a future v2 (extending to driver state) stays
+back-compat.
+
+**Import**
+
+`POST /v1/profiles/import`
+
+```json
+{
+  "envelope": { "version": 1, "...": "..." },
+  "name_override": "production-copy"
+}
+```
+
+`envelope` is a v1 export envelope (paste the file). `name_override`
+is optional — rename on import without editing the file; when
+omitted, `envelope.profile.name` is used. Returns the created
+profile (same shape as create). Tier-cap + name-conflict semantics
+match [Create](#create): `429` if the import would exceed your
+profile cap, `409` if the name already exists. Importing an envelope
+from a different account is permitted (file-based transfer between
+teammates).
+
+Errors:
+
+- `400 ValidationFailed` — the envelope is malformed or not a v1 shape.
+- `409 Conflict` — `name` (or `name_override`) already exists.
+- `429 TierLimit` — importing would exceed your tier's profile cap.
+
+**SDK usage:**
+
+```ts
+const envelope = await client.profiles.export('prof_<uuid>');
+const restored = await client.profiles.import({ envelope });
+```
+
+Export is a read — any valid bearer with `read` scope. Import
+requires the `write:profiles` scope on the calling key (a broad
+`write` key also satisfies it). Team RBAC: `X-Driftstack-Account`
+is honored — admin members can import on the owner's account.
 
 ## Snapshots
 

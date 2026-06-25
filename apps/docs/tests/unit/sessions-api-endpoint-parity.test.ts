@@ -47,9 +47,14 @@ describe('W311.A /api/sessions ↔ sessions route parity', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('there is no fictional GET /v1/sessions/:id endpoint anywhere in the doc', () => {
-    // The doc was historically wrong about a metadata-only GET; we
-    // pinned it to /state. Don't let it regress.
-    expect(page).not.toMatch(/`GET\s+\/v1\/sessions\/:id`(?!\/state)/);
+  it('documents the real single-resource GET /v1/sessions/:id endpoint (2026-06-24)', () => {
+    // Earlier this guard asserted GET /v1/sessions/:id was "fictional" and
+    // forced the "Get one" section to redirect to /state — but the single-
+    // resource detail endpoint IS registered (routes/sessions.ts:475, backs
+    // SDK sessions.get()). The doc now documents it; /state stays the
+    // separate "Get state" endpoint.
+    expect(page).toMatch(/`GET \/v1\/sessions\/:id` — fetch a single session resource\./);
+    // And it must resolve to a live route registration (not fictional).
+    expect(liveRoutes.has('/v1/sessions/:id')).toBe(true);
   });
 });

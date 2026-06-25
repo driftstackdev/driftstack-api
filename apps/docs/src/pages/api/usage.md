@@ -36,7 +36,7 @@ Response (200):
     "screenshot_capture": 78
   },
   "quotas": {
-    "session_minute": 50000,
+    "session_minute": null,
     "navigate": null,
     "interact": null,
     "wait": null,
@@ -58,26 +58,29 @@ Response (200):
   `interact`, `wait`, `state_capture`, `screenshot_capture`. Both
   maps always carry all six keys.
 - `totals.session_minute` — wall-clock minutes a session was
-  active, summed across the calendar month. Drives the
-  session-minutes meter on Stripe.
+  active, summed across the calendar month. A granular usage
+  primitive for analytics; not gated against a per-tier cap.
 - `totals.navigate` / `interact` / `wait` — count of each driver
   action invoked. Free across all tiers; surfaced for
   observability.
 - `totals.state_capture` / `screenshot_capture` — count of state
   reads + screenshot endpoint hits. Same: count-only, no per-tier
   cap.
-- `quotas.session_minute` — calendar-month soft cap from the tier
-  table. Crossing the cap triggers a 402-style billing-overage
-  signal at the BillingService layer (this endpoint reports raw
-  counters; the cap is informational here).
+- `quotas.session_minute` — `null` on every tier. Per ADR-004 the
+  paid tiers are concurrent-only and no per-minute meter is gated;
+  the field is preserved (rather than removed) so the response
+  shape stays stable.
 - `quotas.<other>` is `null` for record types that are unmetered
-  on the calling tier (free / count-only). A non-null value here
-  means a hard cap exists; cross-check against `totals.<same-key>`
-  to see how much headroom remains.
+  (the operation-count meters are free / count-only). A non-null
+  value here would mean a hard cap exists; cross-check against
+  `totals.<same-key>` to see how much headroom remains.
 
-For the enterprise tier, `quotas.session_minute` may be `null`
-(meaning "no fixed cap; see your contract"). All other tiers
-return a numeric value.
+`quotas.session_minute` is `null` for every tier, including
+enterprise (no per-meter cap is gated at any tier). The free tier
+instead enforces a 20-minute **per-session** wall-clock cap
+(`MAX_SESSION_MINUTES_PER_TIER` free → 20) — a session
+auto-destroys after 20 minutes — but that is a session-lifecycle
+bound, not a monthly meter, and is not surfaced here.
 
 This endpoint does not surface the concurrent-sessions cap or the
 profile-count cap — those are tier-table values enforced at create
@@ -149,28 +152,31 @@ for _, b := range series.Buckets {
 The locked tier table is driven by `TIER_CONCURRENT_SESSION_LIMITS`
 and `PROFILES_PER_TIER` in `@driftstack/api-types`. Snapshot:
 
-| Tier            | Concurrent sessions | Profiles | Session minutes / month |
-| --------------- | ------------------: | -------: | ----------------------: |
-| `free`          |                   1 |        1 |                       — |
-| `solo_manual`   |                   1 |       10 |                     600 |
-| `team_manual`   |                   3 |       50 |                   6,000 |
-| `agency_manual` |                   8 |      200 |                  24,000 |
-| `api_starter`   |                   2 |       25 |                   6,000 |
-| `api_builder`   |                   8 |      100 |                  50,000 |
-| `api_scale`     |                  24 |      500 |                 250,000 |
-| `enterprise`    |                  32 |   custom |                  custom |
+| Tier            | Concurrent sessions | Profiles |
+| --------------- | ------------------: | -------: |
+| `free`          |                   1 |        1 |
+| `solo_manual`   |                   1 |       10 |
+| `team_manual`   |                   3 |       50 |
+| `agency_manual` |                   8 |      200 |
+| `api_starter`   |                   2 |       25 |
+| `api_builder`   |                   8 |      100 |
+| `api_scale`     |                  24 |      500 |
+| `enterprise`    |                  32 |   custom |
 
-Crossing the soft cap doesn't cut off the API — it triggers a
-billing-overage flag and (per ADR-004) Stripe overage billing at
-the configured per-unit rate. Customers approaching the cap get
-quota-warning webhooks (`quota.warning_80pct`, `quota.exceeded`)
-when an endpoint is subscribed.
+Per ADR-004 the paid tiers are concurrent-only: there is no monthly
+session-minute meter and no per-meter overage billing. The
+operation counters (`navigate` / `interact` / `wait` /
+`state_capture` / `screenshot_capture`) are surfaced for
+observability and are never charged. The only minute-based bound is
+the free tier's 20-minute per-session wall-clock cap, enforced at
+the session-lifecycle layer (the session auto-destroys), not as a
+billing event.
 
 ## Auth + scoping
 
 Both endpoints accept any valid bearer (API key OR web session)
 with `read` scope. The X-Driftstack-Account header is honored for
-team scopes per the (member roles read the owner's usage).
+team scopes — member roles read the owner's usage.
 
 ## Errors
 
@@ -182,7 +188,6 @@ team scopes per the (member roles read the owner's usage).
 
 ## Backend notes
 
-The `usage_records` table is the source of truth (per the +
-. The dashboard currently renders zeros for buckets that
-predate the writers landing in production; that's expected
-empty-state, not a bug.
+The `usage_records` table is the source of truth. The dashboard
+currently renders zeros for buckets that predate the writers
+landing in production; that's expected empty-state, not a bug.

@@ -133,9 +133,19 @@ Cursor-paginated, newest-first.
 
 ## Get one
 
-`GET /v1/sessions/:id/state` — a session's current live state (`url`,
-`page_state`, and the screenshot-capable payload). See [Get state](#get-state)
-below for the response shape.
+`GET /v1/sessions/:id` — fetch a single session resource. Returns
+the full session record in the [Resource shape](#resource-shape)
+above (`id`, `status`, `archetype`, `purpose`, `label`, `metadata`,
+`egress_capabilities`, timestamps, etc.). Backs the SDK's
+`sessions.get(id)`.
+
+Returns `404` if the session id is unknown or belongs to a
+different account (anti-enumeration — cross-account ids are
+indistinguishable from missing ones).
+
+For the live page state (`url`, `page_state`, cookies, screenshot
+payload) rather than the resource record, use
+[`GET /v1/sessions/:id/state`](#get-state) below.
 
 ## Navigate
 

@@ -86,7 +86,7 @@ Errors:
 - `400 ValidationFailed` — URL not https://, or events array empty
   / >10 entries / contains `test.ping`.
 - `403 Forbidden` — `account_owner` scope missing on the calling key.
-- `429 TierLimit` — account at the max-endpoints-per-account cap.
+- `409 Conflict` — max 10 active endpoints.
 
 ## List + get
 

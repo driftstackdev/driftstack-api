@@ -28,8 +28,9 @@ describe('docs sdk/go-quickstart content parity', () => {
     expect(body).toMatch(/description: 5-minute getting-started for the driftstack-sdk Go client/);
   });
 
-  it('Go version contract pinned: Go 1.21+ minimum (uses generics + slices package). Drift to dropping the version floor would surprise customers running older Go', () => {
-    expect(body).toMatch(/Go 1\.21\+ \(the SDK uses generic constraints \+ `slices` package\)/);
+  it('Go version contract pinned: Go 1.22+ minimum (uses generics + slices package). 2026-06-24: packages/sdk-go/go.mod declares `go 1.22`, so the doc floor is 1.22+ (was a stale 1.21+). Drift to dropping/lowering the version floor would surprise customers running older Go', () => {
+    expect(body).toMatch(/Go 1\.22\+ \(the SDK uses generic constraints \+ `slices` package\)/);
+    expect(body).not.toMatch(/Go 1\.21\+/);
   });
 
   it('alpha-pin-to-sha caveat pinned: drift to claiming a stable v1 release would mislead customers about API-stability guarantees during alpha', () => {

@@ -96,10 +96,12 @@ describe('W779 docs /sdk quickstart triplet content parity', () => {
     expect(p).toMatch(/Python 3\.10\+ \(the SDK uses modern type hints \+ structural matches\)\./);
   });
 
-  it("CRITICAL Go 1.21+ prerequisite pinned. The 'SDK uses generic constraints + slices package' framing explains the toolchain floor.", () => {
+  it("CRITICAL Go 1.22+ prerequisite pinned (2026-06-24). The previous pin asserted 'Go 1.21+' but packages/sdk-go/go.mod declares `go 1.22` (and installation.md already says 1.22+). The 'SDK uses generic constraints + slices package' framing explains the toolchain floor.", () => {
     const p = read(GO_PAGE);
 
-    expect(p).toMatch(/Go 1\.21\+ \(the SDK uses generic constraints \+ `slices` package\)\./);
+    expect(p).toMatch(/Go 1\.22\+ \(the SDK uses generic constraints \+ `slices` package\)\./);
+    // The stale 1.21 floor must NOT return (go.mod declares go 1.22).
+    expect(p).not.toMatch(/Go 1\.21\+/);
   });
 
   it('CRITICAL 3-language install commands pinned. TS:npm/pnpm/yarn add @driftstack/sdk + Python:pip/uv/poetry driftstack-sdk + Go:go get driftstackdev/...', () => {
@@ -116,12 +118,15 @@ describe('W779 docs /sdk quickstart triplet content parity', () => {
     );
   });
 
-  it("CRITICAL TS ESM-only framing pinned. The 'The package is ESM-only and ships full TypeScript types. CommonJS consumers that can\\'t migrate need to use dynamic import()' wording matches @driftstack/sdk package.json type:module convention.", () => {
+  it("CRITICAL TS dual-publish framing pinned (2026-06-24). The previous pin asserted 'The package is ESM-only ... CommonJS consumers ... dynamic import()' but @driftstack/sdk is dual-published — packages/sdk-typescript/package.json has main './dist/index.cjs' + exports['.'].require './dist/index.cjs', so both import and require work. The doc now states the package is dual-published (ESM + CommonJS via conditional exports).", () => {
     const p = read(TS_PAGE);
 
     expect(p).toMatch(
-      /The package is ESM-only and ships full TypeScript types\. CommonJS\s*\n?consumers that can't migrate need to use dynamic `import\(\)`\./,
+      /The package is dual-published \(ESM \+ CommonJS via conditional\s*\n?`exports`\) and ships full TypeScript types\. Both `import` and\s*\n?`require\('@driftstack\/sdk'\)` work out of the box\./,
     );
+    // The stale ESM-only / dynamic-import-required framing must NOT return.
+    expect(p).not.toMatch(/The package is ESM-only/);
+    expect(p).not.toMatch(/need to use dynamic `import\(\)`/);
   });
 
   it('CRITICAL Python sync+async dual-client framing pinned. Driftstack (sync) + AsyncDriftstack (async) on the same wire shape.', () => {

@@ -36,7 +36,7 @@ not on HTTP status.
 | `concurrency-limit`                   | `ConcurrencyLimitError`        | `ConcurrencyLimitError`        | `*ConcurrencyLimitError`        | no        |
 | `tier-limit`                          | `TierLimitError`               | `QuotaExceededError`           | `*QuotaExceededError`           | no        |
 | `legal-acceptance-required`           | `LegalAcceptanceRequiredError` | `LegalAcceptanceRequiredError` | `*LegalAcceptanceRequiredError` | no        |
-| `driver-not-integrated`               | `DriverError`                  | `DriverError`                  | `*DriverError`                  | no        |
+| `driver-not-integrated`               | `DriverNotIntegratedError`     | `DriverError`                  | `*DriverError`                  | no        |
 | `session-timeout`                     | `SessionTimeoutError`          | `SessionTimeoutError`          | `*SessionTimeoutError`          | no        |
 | `session-destroyed`                   | `SessionDestroyedError`        | `SessionDestroyedError`        | `*SessionDestroyedError`        | no        |
 | transport (network / parse / timeout) | `TransportError`               | `TransportError`               | `*TransportError`               | yes       |

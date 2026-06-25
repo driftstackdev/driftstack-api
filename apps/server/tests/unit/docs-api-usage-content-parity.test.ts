@@ -42,14 +42,18 @@ describe('docs/api/usage content parity', () => {
     );
   });
 
-  it("Quota enterprise-null + soft-cap-doesn't-cut-off framing pinned: 'For the enterprise tier, quotas.session_minute may be null (meaning \"no fixed cap; see your contract\"). All other tiers return a numeric value.' + 'Crossing the soft cap doesn't cut off the API — it triggers a billing-overage flag and (per ADR-004) Stripe overage billing at the configured per-unit rate. Customers approaching the cap get quota-warning webhooks (quota.warning_80pct, quota.exceeded) when an endpoint is subscribed.' — pinned so the enterprise-null-no-fixed-cap + ADR-004 overage-billing + quota-warning-webhooks contract all stay documented", () => {
+  it("Quota all-tiers-null + concurrent-only-no-overage framing pinned (2026-06-24, ADR-004). The previous pin asserted enterprise quotas.session_minute 'may be null' (others numeric) + 'soft cap ... Stripe overage billing' + quota-warning webhooks. Per ADR-004 (services/usage.ts:45-125) hours metering was retired — every TIER_QUOTAS value is null, so there is no per-meter cap or overage billing at any tier. The doc now states quotas.session_minute is null for every tier including enterprise, the paid tiers are concurrent-only with no monthly meter, and the only minute-based bound is the free tier's 20-minute per-session cap (session-lifecycle auto-destroy, not a billing event).", () => {
     expect(body).toMatch(
-      /For the enterprise tier, `quotas\.session_minute` may be `null`\s*\n?\s*\(meaning "no fixed cap; see your contract"\)\. All other tiers\s*\n?\s*return a numeric value\./,
+      /`quotas\.session_minute` is `null` for every tier, including\s*\n?\s*enterprise \(no per-meter cap is gated at any tier\)\./,
     );
     expect(body).toMatch(
-      /Crossing the soft cap doesn't cut off the API — it triggers a\s*\n?\s*billing-overage flag and \(per ADR-004\) Stripe overage billing at\s*\n?\s*the configured per-unit rate\./,
+      /Per ADR-004 the paid tiers are concurrent-only: there is no monthly\s*\n?\s*session-minute meter and no per-meter overage billing\./,
     );
-    expect(body).toMatch(/quota-warning webhooks \(`quota\.warning_80pct`, `quota\.exceeded`\)/);
+    // The retired overage/Stripe + quota-warning-webhook framing must NOT return.
+    expect(body).not.toMatch(/Stripe overage billing/);
+    expect(body).not.toMatch(/billing-overage flag/);
+    expect(body).not.toMatch(/quota-warning webhooks/);
+    expect(body).not.toMatch(/quota\.warning_80pct/);
   });
 
   it("Series response shape framing pinned: 'totals is a record keyed by record type (singular form, matching the UsageRecordType enum + the field names on the current_period totals). days parameter: 1-90, default 30. The series is right-aligned on \"yesterday\" (the most-recent fully-closed UTC day); today's partial bucket is intentionally not surfaced — the dashboard's sparkline renders cleaner without a half-empty trailing bucket.' + 'Empty days return zeros for every counter (not omitted from the response) so the dashboard can render an empty-state without client-side date-fill logic.' — pinned so the right-aligned-on-yesterday + zeros-not-omitted contract all stay documented", () => {
@@ -61,16 +65,19 @@ describe('docs/api/usage content parity', () => {
     );
   });
 
-  it("8-tier quota table snapshot pinned: free (1/1/—) + solo_manual (1/10/600) + team_manual (3/50/6,000) + agency_manual (8/200/24,000) + api_starter (2/25/6,000) + api_builder (8/100/50,000) + api_scale (24/500/250,000) + enterprise (32/custom/custom). + 'driven by TIER_CONCURRENT_SESSION_LIMITS and PROFILES_PER_TIER in @driftstack/api-types' source-of-truth pointer — pinned so the 8-tier×3-cap snapshot + canonical constant names contract all stay documented (drift on numbers would mismatch the tier-cap source-of-truth + likely under/over-charge customers)", () => {
+  it("8-tier quota table snapshot pinned: 2-column (concurrent / profiles) — free (1/1) + solo_manual (1/10) + team_manual (3/50) + agency_manual (8/200) + api_starter (2/25) + api_builder (8/100) + api_scale (24/500) + enterprise (32/custom). + 'driven by TIER_CONCURRENT_SESSION_LIMITS and PROFILES_PER_TIER in @driftstack/api-types' source-of-truth pointer. 2026-06-24: the previous 3rd 'Session minutes / month' column (with per-tier monthly numbers) was removed — per ADR-004 (services/usage.ts retired hours metering) there is no monthly session-minute meter. Concurrent + profiles still match the tier-cap source-of-truth.", () => {
     expect(body).toMatch(
       /`TIER_CONCURRENT_SESSION_LIMITS`\s*\n?\s*and `PROFILES_PER_TIER` in `@driftstack\/api-types`/,
     );
-    expect(body).toMatch(/\|\s*`free`\s*\|\s+1 \|\s+1 \|\s+— \|/);
-    expect(body).toMatch(/\|\s*`solo_manual`\s*\|\s+1 \|\s+10 \|\s+600 \|/);
-    expect(body).toMatch(/\|\s*`api_starter`\s*\|\s+2 \|\s+25 \|\s+6,000 \|/);
-    expect(body).toMatch(/\|\s*`api_builder`\s*\|\s+8 \|\s+100 \|\s+50,000 \|/);
-    expect(body).toMatch(/\|\s*`api_scale`\s*\|\s+24 \|\s+500 \|\s+250,000 \|/);
-    expect(body).toMatch(/\|\s*`enterprise`\s*\|\s+32 \|\s+custom \|\s+custom \|/);
+    expect(body).toMatch(/\|\s*`free`\s*\|\s+1 \|\s+1 \|/);
+    expect(body).toMatch(/\|\s*`solo_manual`\s*\|\s+1 \|\s+10 \|/);
+    expect(body).toMatch(/\|\s*`api_starter`\s*\|\s+2 \|\s+25 \|/);
+    expect(body).toMatch(/\|\s*`api_builder`\s*\|\s+8 \|\s+100 \|/);
+    expect(body).toMatch(/\|\s*`api_scale`\s*\|\s+24 \|\s+500 \|/);
+    expect(body).toMatch(/\|\s*`enterprise`\s*\|\s+32 \|\s+custom \|/);
+    // The retired monthly session-minute column must NOT return.
+    expect(body).not.toMatch(/Session minutes \/ month/);
+    expect(body).not.toMatch(/250,000/);
   });
 
   it("Auth scoping framing pinned: 'Both endpoints accept any valid bearer (API key OR web session) with read scope. The X-Driftstack-Account header is honored for team scopes per the (member roles read the owner's usage).' + 3-row errors (401 unauthorized + 403 forbidden cross-account + 400 validation-failed days-out-of-range) — pinned so the API-key-OR-web-session + read-scope-sufficient + 3-error-status contract all stay documented", () => {

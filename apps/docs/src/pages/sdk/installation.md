@@ -67,6 +67,8 @@ client.recipes.create(body); // snapshot an agent-session intent_log
 client.profiles.create(body);
 client.profiles.list(query?);
 client.profiles.get(id);
+client.profiles.export(id); // metadata-only JSON envelope
+client.profiles.import(body); // mint a profile from an envelope
 client.profiles.delete(id);
 
 client.profileSnapshots.capture(profileId, body?);

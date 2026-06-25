@@ -51,14 +51,16 @@ describe('W769 docs /api/usage content parity', () => {
     );
   });
 
-  it("CRITICAL session_minute meter framing pinned — 'wall-clock minutes a session was active, summed across the calendar month'. The previous pin asserted `session_minutes` (plural, fictional) but the UsageRecordType enum is singular per packages/api-types/src/usage.ts:4-11. Refreshed against source-of-truth + simplified wording (no BYOK/bundled hedge — the meter sums session minutes regardless of the LLM rail).", () => {
+  it("CRITICAL session_minute meter framing pinned — 'wall-clock minutes a session was active, summed across the calendar month'. The previous pin asserted `session_minutes` (plural, fictional) but the UsageRecordType enum is singular per packages/api-types/src/usage.ts:4-11. Refreshed 2026-06-24: per ADR-004 (services/usage.ts:45-59 retired hours metering — every TIER_QUOTAS value is null) the meter is now framed as 'a granular usage primitive for analytics; not gated against a per-tier cap', NOT a Stripe-billed meter.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`totals\.session_minute` — wall-clock minutes a session was\s*\n?\s+active, summed across the calendar month\./,
+      /`totals\.session_minute` — wall-clock minutes a session was\s*\n?\s+active, summed across the calendar month\. A granular usage\s*\n?\s+primitive for analytics; not gated against a per-tier cap\./,
     );
     // The fictional plural must NOT return.
     expect(p).not.toMatch(/`totals\.session_minutes`/);
+    // The retired Stripe-meter framing must NOT return (ADR-004).
+    expect(p).not.toMatch(/Drives the\s*\n?\s+session-minutes meter on Stripe\./);
   });
 
   it("CRITICAL navigates/interacts/waits free-across-tiers framing pinned. The 'Free across all tiers; surfaced for observability' wording matches W754 dashboard /usage ADR-004 'count everything, charge for nothing-but-concurrent' framing.", () => {
@@ -67,19 +69,25 @@ describe('W769 docs /api/usage content parity', () => {
     expect(p).toMatch(/Free across all tiers; surfaced for\s*\n?\s+observability\./);
   });
 
-  it("CRITICAL 402-style billing-overage signal framing pinned. The 'Crossing the cap triggers a 402-style billing-overage signal at the BillingService layer (this endpoint reports raw counters; the cap is informational here).' wording is the canonical overage-contract.", () => {
+  it("CRITICAL quotas.session_minute-is-null framing pinned (2026-06-24, ADR-004). The previous pin asserted a '402-style billing-overage signal at the BillingService layer' but services/usage.ts:60-125 sets session_minute (and every other key) to null for every tier — no overage enforcement exists. The doc now states 'quotas.session_minute — null on every tier ... no per-minute meter is gated; the field is preserved (rather than removed) so the response shape stays stable'.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Crossing the cap triggers a 402-style billing-overage\s*\n?\s+signal at the BillingService layer \(this endpoint reports raw\s*\n?\s+counters; the cap is informational here\)\./,
+      /`quotas\.session_minute` — `null` on every tier\. Per ADR-004 the\s*\n?\s+paid tiers are concurrent-only and no per-minute meter is gated;\s*\n?\s+the field is preserved \(rather than removed\) so the response\s*\n?\s+shape stays stable\./,
     );
+    // The retired overage-signal framing must NOT return.
+    expect(p).not.toMatch(/402-style billing-overage/);
+    expect(p).not.toMatch(/BillingService layer/);
   });
 
-  it('CRITICAL enterprise null-quota framing pinned. The previous pin asserted `quotas.profiles_limit` which is fictional — UsageRecordType has no "profiles_limit" member; the actual quotas map uses the singular UsageRecordType keys (session_minute, navigate, etc.). For enterprise the singular `session_minute` cap may be null. Drift would let SDK consumers crash on a null cap.', () => {
+  it('CRITICAL null-quota + free-tier-20-min-per-session-cap framing pinned (2026-06-24). The previous pin asserted enterprise `quotas.session_minute` "may be null"; per ADR-004 (services/usage.ts) it is null for EVERY tier. The doc now states quotas.session_minute is null for every tier including enterprise, and that the free tier instead enforces a 20-minute per-session wall-clock cap (MAX_SESSION_MINUTES_PER_TIER free → 20, packages/api-types/src/common.ts:183-192) at the session-lifecycle layer — NOT a monthly meter. Fictional `quotas.profiles_limit` key must NOT return.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /For the enterprise tier, `quotas\.session_minute` may be `null`\s*\n?\(meaning "no fixed cap; see your contract"\)\./,
+      /`quotas\.session_minute` is `null` for every tier, including\s*\n?enterprise \(no per-meter cap is gated at any tier\)\./,
+    );
+    expect(p).toMatch(
+      /The free tier\s*\n?instead enforces a 20-minute \*\*per-session\*\* wall-clock cap\s*\n?\(`MAX_SESSION_MINUTES_PER_TIER` free → 20\)/,
     );
     // Fictional key must NOT return.
     expect(p).not.toMatch(/`quotas\.profiles_limit`/);
@@ -123,42 +131,43 @@ describe('W769 docs /api/usage content parity', () => {
     );
   });
 
-  it('CRITICAL 8-tier table pinned with concurrent + profiles + session minutes columns. Drift would mismatch W761 + W763 cross-reference table + V-186 + V-136 server-side enforcement.', () => {
+  it('CRITICAL 8-tier table pinned with concurrent + profiles columns (2026-06-24). The previous pin asserted a 4th "Session minutes / month" column with per-tier monthly numbers; per ADR-004 (services/usage.ts retired hours metering) there is no monthly session-minute meter, so the column was removed. Concurrent + profiles columns still match TIER_CONCURRENT_SESSION_LIMITS + PROFILES_PER_TIER (W761 + W763 + V-186 + V-136).', () => {
     const p = read(PAGE);
 
-    const tierData: Array<[string, string, string, string]> = [
-      ['free', '1', '1', '—'],
-      ['solo_manual', '1', '10', '600'],
-      ['team_manual', '3', '50', '6,000'],
-      ['agency_manual', '8', '200', '24,000'],
-      ['api_starter', '2', '25', '6,000'],
-      ['api_builder', '8', '100', '50,000'],
-      ['api_scale', '24', '500', '250,000'],
-      ['enterprise', '32', 'custom', 'custom'],
+    const tierData: Array<[string, string, string]> = [
+      ['free', '1', '1'],
+      ['solo_manual', '1', '10'],
+      ['team_manual', '3', '50'],
+      ['agency_manual', '8', '200'],
+      ['api_starter', '2', '25'],
+      ['api_builder', '8', '100'],
+      ['api_scale', '24', '500'],
+      ['enterprise', '32', 'custom'],
     ];
-    for (const [tier, conc, profiles, mins] of tierData) {
-      expect(p, `${tier} → ${conc}/${profiles}/${mins}`).toMatch(
-        new RegExp(
-          `\\| \`${tier}\`\\s+\\|\\s+${conc}\\s+\\|\\s+${profiles.replace(/,/g, ',')}\\s+\\|\\s+${mins.replace(/,/g, ',')}\\s+\\|`,
-        ),
+    for (const [tier, conc, profiles] of tierData) {
+      expect(p, `${tier} → ${conc}/${profiles}`).toMatch(
+        new RegExp(`\\| \`${tier}\`\\s+\\|\\s+${conc}\\s+\\|\\s+${profiles}\\s+\\|`),
       );
     }
+    // The retired monthly session-minute numbers must NOT return.
+    expect(p).not.toMatch(/Session minutes \/ month/);
+    expect(p).not.toMatch(/250,000/);
   });
 
-  it("CRITICAL soft-cap-doesn't-cut-off + Stripe overage billing framing pinned. The 'Crossing the soft cap doesn\\'t cut off the API — it triggers a billing-overage flag and (per ADR-004) Stripe overage billing at the configured per-unit rate' wording is the load-bearing customer-comms.", () => {
+  it("CRITICAL concurrent-only + no-overage-billing framing pinned (2026-06-24, ADR-004). The previous pin asserted 'Crossing the soft cap doesn't cut off the API — it triggers a billing-overage flag and (per ADR-004) Stripe overage billing' + quota-warning webhooks. Per ADR-004 (services/usage.ts) the paid tiers are concurrent-only: no monthly session-minute meter and no overage billing exists. The doc now states the operation counters are never charged, and the only minute-based bound is the free tier's 20-minute per-session cap enforced at the session-lifecycle layer (auto-destroy), not a billing event.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Crossing the soft cap doesn't cut off the API — it triggers a\s*\n?billing-overage flag and \(per ADR-004\) Stripe overage billing at\s*\n?the configured per-unit rate\./,
+      /Per ADR-004 the paid tiers are concurrent-only: there is no monthly\s*\n?session-minute meter and no per-meter overage billing\./,
     );
-  });
-
-  it('CRITICAL quota webhook event-name pair pinned — quota.warning_80pct + quota.exceeded. Matches W753 dashboard /webhooks event-subscription list.', () => {
-    const p = read(PAGE);
-
     expect(p).toMatch(
-      /Customers approaching the cap get\s*\n?quota-warning webhooks \(`quota\.warning_80pct`, `quota\.exceeded`\)\s*\n?when an endpoint is subscribed\./,
+      /The only minute-based bound is\s*\n?the free tier's 20-minute per-session wall-clock cap, enforced at\s*\n?the session-lifecycle layer \(the session auto-destroys\), not as a\s*\n?billing event\./,
     );
+    // The retired overage/Stripe + quota-warning-webhook framing must NOT return.
+    expect(p).not.toMatch(/Stripe overage billing/);
+    expect(p).not.toMatch(/billing-overage flag/);
+    expect(p).not.toMatch(/quota\.warning_80pct/);
+    expect(p).not.toMatch(/quota\.exceeded/);
   });
 
   it("CRITICAL 3-error-row table pinned — 401/403/400. The 403 'X-Driftstack-Account points at an account the caller isn't a member of' matches W768 audit-log error table.", () => {
@@ -176,8 +185,11 @@ describe('W769 docs /api/usage content parity', () => {
 
     expect(p).toMatch(/The `usage_records` table is the source of truth/);
     expect(p).toMatch(
-      /The dashboard currently renders zeros for buckets that\s*\n?predate the writers landing in production; that's expected\s*\n?empty-state, not a bug\./,
+      /The dashboard\s*\n?currently renders zeros for buckets that predate the writers\s*\n?landing in production; that's expected empty-state, not a bug\./,
     );
+    // 2026-06-24: the broken placeholder "(per the +\n." fragment that
+    // followed "source of truth" was removed — it must not return.
+    expect(p).not.toMatch(/the source of truth \(per the \+/);
   });
 
   it('CRITICAL SDK series anchor pinned: "**SDK usage:**" precedes the 3-language code block. The previous skip pinned `(V-452)` with the inline internal version anchor; the V-452 anchor was removed from the customer-rendered copy as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.dev pages); the framing itself survives without it.', () => {

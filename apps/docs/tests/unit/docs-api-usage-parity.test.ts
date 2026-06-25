@@ -45,8 +45,13 @@ describe('W253.C docs/api/usage ↔ tier-constants parity', () => {
     }
   });
 
-  it('mentions the quota.* warning webhooks by their enum names', () => {
-    expect(doc).toMatch(/quota\.warning_80pct/);
-    expect(doc).toMatch(/quota\.exceeded/);
+  it('does NOT advertise quota.* overage webhooks (2026-06-24, ADR-004)', () => {
+    // Per ADR-004 (services/usage.ts retired hours metering — every
+    // TIER_QUOTAS value is null), there is no per-meter cap and no
+    // overage enforcement, so the usage doc must not claim quota-warning
+    // webhooks fire on a session-minute cap (the previous revision did).
+    expect(doc).not.toMatch(/quota\.warning_80pct/);
+    expect(doc).not.toMatch(/quota\.exceeded/);
+    expect(doc).not.toMatch(/Stripe overage billing/);
   });
 });
