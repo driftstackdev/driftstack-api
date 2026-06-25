@@ -2047,9 +2047,31 @@ export function SimulatorWindow(): JSX.Element {
         window.clearInterval(recordTimerRef.current);
         recordTimerRef.current = null;
       }
-      void stopRecording(recordingId);
+      // Await the stop so we can tell an EMPTY recording (every captureFrame
+      // early-returned because the stream was black/connecting/frozen — videoWidth===0)
+      // from a real one. A 0-frame recording reading "Recording saved" is an error state
+      // masquerading as success (the saved file is blank); surface the honest result and
+      // discard the empty recording so it doesn't litter the list.
+      const idToStop = recordingId;
+      void stopRecording(idToStop).then((rec) => {
+        if (rec !== null && rec.frameCount === 0) {
+          void deleteRecording(idToStop);
+          setNotice('Recording was empty — no video was streaming');
+        } else {
+          setNotice('Recording saved');
+        }
+        window.setTimeout(() => setNotice(null), 4000);
+      });
       activeRecIdRef.current = null;
-      setNotice('Recording saved');
+      return;
+    }
+    // No video yet (black / connecting / frozen) → starting would capture zero frames.
+    // Tell the founder why instead of silently recording nothing (they'd click Record
+    // precisely when they want to capture a problem). publisherState/videoWidth both
+    // gate the capture, so check the live element directly.
+    const el = videoElRef.current;
+    if (publisherState !== 'publishing' || el === null || el.videoWidth === 0) {
+      setNotice('No video yet — wait for the stream before recording');
       window.setTimeout(() => setNotice(null), 4000);
       return;
     }

@@ -28,10 +28,23 @@ const fakeRoom = {
   off: vi.fn(),
   localParticipant: { publishData: vi.fn(() => Promise.resolve()) },
 };
+// A sized, "publishing" video so toggleRecord's no-video guard passes and captureFrame
+// grabs real frames (a recording with frames). The empty-recording test overrides
+// videoWidth to 0 to exercise the black/connecting/frozen path.
+let fakeVideoWidth = 402;
 vi.mock('../../src/components/AgentSessionPanel', () => ({
-  AgentSessionPanel: (props: { onRoom?: (room: unknown) => void }) => {
+  AgentSessionPanel: (props: {
+    onRoom?: (room: unknown) => void;
+    onPublisher?: (p: string) => void;
+    onVideoEl?: (el: HTMLVideoElement | null) => void;
+  }) => {
     useEffect(() => {
       props.onRoom?.(fakeRoom);
+      props.onPublisher?.('publishing');
+      const el = document.createElement('video');
+      Object.defineProperty(el, 'videoWidth', { get: () => fakeVideoWidth, configurable: true });
+      Object.defineProperty(el, 'videoHeight', { value: 874, configurable: true });
+      props.onVideoEl?.(el);
     }, [props]);
     return <div data-component="agent-session-panel-mock" />;
   },
@@ -81,7 +94,16 @@ describe('SimulatorWindow — Recording pane (SLICE 3)', () => {
   // (mirrors simulator-window.test.tsx).
   const lsStore = new Map<string, string>();
   beforeEach(() => {
+    fakeVideoWidth = 402; // default: a live, sized stream
     lsStore.clear();
+    // jsdom has no canvas backend; stub the 2d context + toDataURL so captureFrame
+    // produces a (non-empty) frame instead of throwing — mirrors a real capture.
+    const proto = HTMLCanvasElement.prototype as unknown as {
+      getContext: () => unknown;
+      toDataURL: () => string;
+    };
+    proto.getContext = () => ({ drawImage: () => undefined });
+    proto.toDataURL = () => 'data:image/jpeg;base64,AAAA';
     vi.stubGlobal('localStorage', {
       getItem: (k: string): string | null => lsStore.get(k) ?? null,
       setItem: (k: string, v: string): void => {
@@ -166,6 +188,25 @@ describe('SimulatorWindow — Recording pane (SLICE 3)', () => {
       delete u.createObjectURL;
       delete u.revokeObjectURL;
     }
+  });
+
+  it('Record while the stream is black/connecting (videoWidth 0) is blocked with an honest notice — no empty recording', async () => {
+    fakeVideoWidth = 0; // no video yet (black / connecting / frozen)
+    const { container } = renderSim();
+    const pane = openRecordingPane(container);
+    // The Start control is present, but clicking it must NOT start a recording.
+    fireEvent.click(pane.querySelector('[aria-label="Start recording"]') as Element);
+    // No transition to Stop (recording never started), and an honest notice surfaces.
+    expect(
+      container
+        .querySelector('[data-component="drawer-recording"]')
+        ?.querySelector('[aria-label="Stop recording"]'),
+    ).toBeNull();
+    await waitFor(() => {
+      expect(container.textContent).toMatch(/no video yet/i);
+    });
+    // No recording was created (still the empty saved-list state).
+    expect(container.textContent).toContain('No recordings yet.');
   });
 
   it('Delete removes the recording → returns to the empty state', async () => {
