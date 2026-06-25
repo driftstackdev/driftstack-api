@@ -338,6 +338,47 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(await fx.agentSessionsRepo!.countActive(fx.accountId)).toBe(0);
   });
 
+  it('#63 TRANSIENT unreachable then ok → retried ONCE → 201 (rotating-exit resilience, A3 W2949)', async () => {
+    let calls = 0;
+    const seqProbe = {
+      probe: () => {
+        calls += 1;
+        return Promise.resolve(calls === 1 ? { ok: false, reason: 'unreachable' } : { ok: true });
+      },
+    } as unknown as ProxyConnectivityProbe;
+    fx = await buildTestApp({ enableAgentRuntime: true, proxyConnectivityProbe: seqProbe });
+    const proxyId = await seedOwnSocks5Proxy(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, proxy_id: proxyId },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(calls).toBe(2); // first attempt transient-unreachable, retried, second passed
+  });
+
+  it('#63 auth_failed is NOT retried (wrong creds cannot self-heal) → 422 after exactly ONE probe', async () => {
+    let calls = 0;
+    const authProbe = {
+      probe: () => {
+        calls += 1;
+        return Promise.resolve({ ok: false, reason: 'auth_failed' as const });
+      },
+    } as unknown as ProxyConnectivityProbe;
+    fx = await buildTestApp({ enableAgentRuntime: true, proxyConnectivityProbe: authProbe });
+    const proxyId = await seedOwnSocks5Proxy(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, proxy_id: proxyId },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json<{ reason?: string }>().reason).toBe('auth_failed');
+    expect(calls).toBe(1); // auth_failed is terminal — no retry
+  });
+
   it('#63 probe FAIL (auth_failed) → 422 with the auth_failed reason', async () => {
     fx = await buildTestApp({
       enableAgentRuntime: true,

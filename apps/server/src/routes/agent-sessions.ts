@@ -999,7 +999,21 @@ async function runProxyPrelaunchGate(args: {
     ...(resolved.password !== undefined ? { password: resolved.password } : {}),
   };
 
-  const result = await probe.probe(descriptor);
+  let result = await probe.probe(descriptor);
+  // Single retry on a TRANSIENT failure only. Rotating residential exits (e.g.
+  // NodeMaven, with many A-records) can momentarily route the dial to a dead exit
+  // IP → a `unreachable` timeout, while a second attempt lands on a live exit and
+  // streams fine. We do NOT retry `auth_failed` (wrong creds — a retry can't help
+  // and just doubles latency) or `egress_blocked` (the proxy tunneled but the
+  // target refused — not a transient connect issue). This narrows the residual
+  // false-block window A3 flagged (W2949) without weakening the gate's intent.
+  if (!result.ok && result.reason === 'unreachable') {
+    logger?.info(
+      { component: 'proxy-prelaunch-probe', proxyId, host: descriptor.host, reason: result.reason },
+      'pre-launch proxy probe transient-unreachable; retrying once',
+    );
+    result = await probe.probe(descriptor);
+  }
   if (!result.ok) {
     // Log the host (NOT credentials) for ops triage; the customer gets the typed
     // reason + a human one-liner (ProxyValidationFailedError fills detail).
