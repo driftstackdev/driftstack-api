@@ -7,15 +7,18 @@
 //
 //   • Version 1.0 effective 2026-05-07 + B2B-only (Dutch BW 7:5 +
 //     Directive 2011/83/EU) + incorporates Privacy + DPA + AUP.
-//   • Section 8.1 fee tiers: Free / $39 / $99 / $299 / $999 /
-//     Enterprise (from $3000).
+//   • Section 8.1 fee tiers: perpetual Free + Manual ladder
+//     (Personal/Team/Agency) + API ladder (API Starter/Builder/Scale)
+//     + custom-priced Enterprise; current prices published at
+//     driftstack.dev/pricing (NOT hardcoded in the contract).
 //   • Section 8.4 VAT 4-rule: NL 21% BTW + EU reverse-charge + non-EU
 //     no-BTW + place-of-supply 2006/112/EC.
 //   • Section 8.5 late-payment AWB 6:119a wettelijke handelsrente.
 //   • Section 8.7 refunds non-refundable-default + 8.7.1 crypto
 //     non-refundable specifically.
-//   • Section 9 SLA: no-contractual-SLA on Free/$39/$99/$299 + 99.9%
-//     SLA on $999/Enterprise.
+//   • Section 9 SLA: no-contractual-SLA on Free/Personal/Team/Agency/
+//     API-Starter/API-Builder + 99.9% monthly SLA on API-Scale/
+//     Enterprise (Severity-1 first-response 4h API-Scale / 1h Enterprise).
 //   • Section 11 'as is' + 'as available' disclaimer.
 //   • Section 13.1 12-month-Fees liability cap.
 //   • Section 13.3 carve-outs: gross-negligence (Dutch opzet of
@@ -53,10 +56,14 @@ describe('W506.C apps/marketing-site/src/pages/legal/terms.md content parity', (
     );
   });
 
-  it("Section 8.1 fee-tier ladder: Free / $39/mo / $99/mo / $299/mo / $999/mo / Enterprise (currently $3,000/mo and up) — pinned so the 6-tier ToS ladder stays consistent (drift to changing any tier price would create marketing↔Stripe-invoice divergence at the contractual level; drift to dropping 'Enterprise — currently $3,000/mo and up' would lose the floor-price commitment)", () => {
+  it("Section 8.1 fee-tier ladder: perpetual Free tier + Manual ladder (Personal, Team, Agency) + API ladder (API Starter, API Builder, API Scale) + custom-priced Enterprise, with current prices published at driftstack.dev/pricing — pinned so the two-ladder ToS framing stays consistent (drift to dropping the published-at-pricing-page reference would re-introduce hardcoded marketing↔Stripe-invoice divergence at the contractual level; drift to dropping 'custom-priced Enterprise' would lose the Enterprise commitment)", () => {
     expect(body).toMatch(
-      /Customer pays the Fees for the Subscription tier\s*\n?\s*selected at signup \(Free, \$39\/mo, \$99\/mo, \$299\/mo, \$999\/mo, or\s*\n?\s*Enterprise — currently \$3,000\/mo and up\)\./,
+      /Customer pays the Fees for the Subscription tier\s*\n?\s*selected at signup\. Driftstack offers a perpetual Free tier, a\s*\n?\s*Manual ladder \(Personal, Team, Agency\), and an API ladder \(API\s*\n?\s*Starter, API Builder, API Scale\), with a custom-priced Enterprise\s*\n?\s*tier\. The current tiers and prices are published at\s*\n?\s*<https:\/\/driftstack\.dev\/pricing>\./,
     );
+    // The contract must NOT hardcode tier prices — those live on the
+    // pricing page (single source of truth). Drift back to baked-in
+    // dollar figures would desync from Stripe at the contractual level.
+    expect(body).not.toMatch(/\$39\/mo, \$99\/mo, \$299\/mo, \$999\/mo/);
   });
 
   it('Section 8.3 payment methods 4-list: Stripe Card (Visa/MC/Amex) + SEPA Direct Debit + iDEAL + Bancontact — pinned so the 4-payment-method scope stays consistent (drift to dropping iDEAL would orphan Dutch customers from their preferred channel; drift to dropping SEPA would orphan EUR-bank customers)', () => {
@@ -98,14 +105,14 @@ describe('W506.C apps/marketing-site/src/pages/legal/terms.md content parity', (
     );
   });
 
-  it("Section 9 SLA-tier split pinned: 9.1 'No guaranteed SLA at launch tiers' (Free/$39/$99/$299) + 9.2 99.9% monthly + 8-hour first-response Severity-1 on $999 (Scale) + Enterprise — pinned so the per-tier SLA framing + the explicit 99.9%-availability + 8h-first-response Severity-1 commitments survive (drift to claiming SLA on lower tiers would over-promise; drift to dropping the 99.9% would weaken the contractual commitment to Scale/Enterprise customers)", () => {
-    expect(body).toMatch(/9\.1 \*\*No guaranteed SLA at launch tiers\.\*\*/);
+  it("Section 9 SLA-tier split pinned: 9.1 'No guaranteed SLA at lower tiers' (Free, Manual-ladder Personal/Team/Agency, API Starter, API Builder) + 9.2 Commercial SLA on API Scale + Enterprise (99.9% monthly; first-response Severity-1 of four (4) hours on API Scale + one (1) hour on Enterprise) — pinned so the per-tier SLA framing + the explicit 99.9%-availability + the API-Scale-4h / Enterprise-1h first-response Severity-1 commitments survive (drift to claiming SLA on lower tiers would over-promise; drift to dropping the 99.9% or the named per-tier first-response windows would weaken the contractual commitment to Scale/Enterprise customers)", () => {
+    expect(body).toMatch(/9\.1 \*\*No guaranteed SLA at lower tiers\.\*\*/);
     expect(body).toMatch(
-      /The Free, \$39, \$99, and\s*\n?\s*\$299 tiers are provided \*\*without\*\* a contractually-binding service\s*\n?\s*level agreement\./,
+      /The Free, Manual-ladder\s*\n?\s*\(Personal, Team, Agency\), API Starter, and API Builder tiers are\s*\n?\s*provided \*\*without\*\* a contractually-binding service level\s*\n?\s*agreement\./,
     );
     expect(body).toMatch(/9\.2 \*\*Commercial SLA at higher tiers\.\*\*/);
     expect(body).toMatch(
-      /\(currently: 99\.9% monthly availability; 8-hour first-response SLA on\s*\n?\s*Severity-1 incidents\)/,
+      /The API Scale and Enterprise\s*\n?\s*tiers carry a contractual SLA published separately \(currently: 99\.9%\s*\n?\s*monthly availability; first-response SLA on Severity-1 incidents of\s*\n?\s*four \(4\) hours on API Scale and one \(1\) hour on Enterprise\)\./,
     );
   });
 

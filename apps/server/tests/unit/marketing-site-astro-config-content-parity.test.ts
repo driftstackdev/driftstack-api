@@ -47,8 +47,12 @@ describe('W525.A apps/marketing-site/astro.config.mjs content parity', () => {
     expect(body).toMatch(
       /\/\/ V-106: @astrojs\/sitemap auto-generates `dist\/sitemap-index\.xml` \+\s*\n?\s*\/\/ `dist\/sitemap-0\.xml` from every `\.astro` page in `src\/pages\/` \(excludes\s*\n?\s*\/\/ 404\.astro automatically\)\. The companion `public\/robots\.txt` points\s*\n?\s*\/\/ crawlers at the sitemap\./,
     );
-    expect(body).toMatch(/\/\/ 404 doesn't belong in the sitemap\./);
-    expect(body).toMatch(/filter: \(page\) => !page\.includes\('\/404'\),/);
+    expect(body).toMatch(
+      /\/\/ 404 and noindex utility routes \(e\.g\. \/newtab\) don't belong\s*\n?\s*\/\/ in the sitemap\./,
+    );
+    expect(body).toMatch(
+      /filter: \(page\) => !page\.includes\('\/404'\) && !page\.includes\('\/newtab'\),/,
+    );
   });
 
   it("V-469 Sentry integration framing pinned: 'V-469 — @sentry/astro integration. Activates when PUBLIC_SENTRY_DSN_MARKETING is set at build time; skips entirely when unset.' + 'const SENTRY_DSN = process.env.PUBLIC_SENTRY_DSN_MARKETING ?? \"\";' + 'const SENTRY_RELEASE = process.env.SENTRY_RELEASE ?? process.env.GIT_SHA ?? \"unknown\";' + 'const SENTRY_AUTH_TOKEN = process.env.SENTRY_AUTH_TOKEN ?? \"\";' — pinned so the V-469 anchor + build-time-DSN-opt-in + 3-level-release-fallback (SENTRY_RELEASE → GIT_SHA → 'unknown') + auth-token-from-env commitment survives", () => {
