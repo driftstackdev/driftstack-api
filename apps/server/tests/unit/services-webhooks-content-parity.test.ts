@@ -100,13 +100,14 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     );
   });
 
-  it('create: events.length===0 → ConflictError; MAX_ENDPOINTS_PER_ACCOUNT limit; emits webhook_endpoint.created audit', () => {
+  it('create: events.length===0 → ConflictError; atomic insertEndpointIfUnderLimit cap (null → ConflictError); emits webhook_endpoint.created audit', () => {
     expect(body).toMatch(
       /if \(input\.events\.length === 0\) \{\s*\n?\s*throw new ConflictError\('events must contain at least one event type\.'\);/,
     );
-    expect(body).toMatch(
-      /if \(active >= MAX_ENDPOINTS_PER_ACCOUNT\) \{\s*\n?\s*throw new ConflictError\(/,
-    );
+    // TOCTOU fix — the cap is enforced atomically by insertEndpointIfUnderLimit
+    // (count+insert under a per-account advisory lock); null → over the cap.
+    expect(body).toMatch(/await this\.repo\.insertEndpointIfUnderLimit\(/);
+    expect(body).toMatch(/if \(row === null\) \{\s*\n?\s*throw new ConflictError\(/);
     expect(body).toMatch(
       /await this\.emitAuditBestEffort\(ctx, 'webhook_endpoint\.created', `webhook_endpoint_\$\{row\.id\}`, \{\s*\n?\s*url: url\.toString\(\),\s*\n?\s*events: input\.events,\s*\n?\s*\}\);/,
     );

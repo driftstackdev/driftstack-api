@@ -74,6 +74,23 @@ function makeRepo(initial: WebhookEndpointRow[] = []): {
       rows.push(row);
       return Promise.resolve(row);
     },
+    insertEndpointIfUnderLimit: (input, limit) => {
+      const active = rows.filter(
+        (r) => r.accountId === input.accountId && r.disabledAt === null,
+      ).length;
+      if (active >= limit) return Promise.resolve(null);
+      const row = baseRow({
+        id: `wh_${(rows.length + 1).toString()}`,
+        accountId: input.accountId,
+        url: input.url,
+        secret: input.secret,
+        secretPrefix: input.secretPrefix,
+        events: input.events,
+        description: input.description,
+      });
+      rows.push(row);
+      return Promise.resolve(row);
+    },
     listEndpoints: (accountId) => Promise.resolve(rows.filter((r) => r.accountId === accountId)),
     findEndpoint: (id, accountId) =>
       Promise.resolve(rows.find((r) => r.id === id && r.accountId === accountId) ?? null),

@@ -48,6 +48,22 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     return Promise.resolve(row);
   }
 
+  insertEndpointIfUnderLimit(
+    input: NewWebhookEndpointInput,
+    limit: number,
+  ): Promise<WebhookEndpointRow | null> {
+    // Synchronous twin of the Drizzle advisory-lock atomic insert: count
+    // active endpoints, refuse if at/over the cap, else insert. No await gap
+    // here so there is no race to serialise (the lock matters only against a
+    // real multi-connection Postgres — see db-webhooks-concurrency-drizzle).
+    let active = 0;
+    for (const r of this.endpoints.values()) {
+      if (r.accountId === input.accountId && r.active) active += 1;
+    }
+    if (active >= limit) return Promise.resolve(null);
+    return this.insertEndpoint(input);
+  }
+
   listEndpoints(accountId: string): Promise<WebhookEndpointRow[]> {
     const rows = Array.from(this.endpoints.values())
       .filter((r) => r.accountId === accountId)

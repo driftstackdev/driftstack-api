@@ -140,6 +140,18 @@ export interface EndpointDeliveryCounts {
 export interface WebhooksRepo {
   // Management
   insertEndpoint(input: NewWebhookEndpointInput): Promise<WebhookEndpointRow>;
+  /**
+   * Atomic insert-if-under-cap: insert the endpoint only if the account has
+   * fewer than `limit` active endpoints, else return null. The count + insert
+   * happen under a per-account advisory xact lock so concurrent creates can't
+   * all pass a stale count and exceed the cap (the count-then-insert TOCTOU).
+   * Mirrors SessionsRepo.insertSessionIfUnderLimit /
+   * AgentSessionsRepo.createIfUnderActiveCap.
+   */
+  insertEndpointIfUnderLimit(
+    input: NewWebhookEndpointInput,
+    limit: number,
+  ): Promise<WebhookEndpointRow | null>;
   listEndpoints(accountId: string): Promise<WebhookEndpointRow[]>;
   findEndpoint(id: string, accountId: string): Promise<WebhookEndpointRow | null>;
   countActiveEndpoints(accountId: string): Promise<number>;
@@ -375,24 +387,28 @@ export class WebhooksService {
       throw new ConflictError('events must contain at least one event type.');
     }
 
-    const active = await this.repo.countActiveEndpoints(accountId);
-    if (active >= MAX_ENDPOINTS_PER_ACCOUNT) {
-      throw new ConflictError(
-        `Account already has ${active.toString()} active webhook endpoints; limit is ${MAX_ENDPOINTS_PER_ACCOUNT.toString()}.`,
-      );
-    }
-
     const plaintextSecret = generateWebhookSecret();
     const secretPrefix = webhookSecretPrefix(plaintextSecret);
 
-    const row = await this.repo.insertEndpoint({
-      accountId,
-      url,
-      secret: plaintextSecret,
-      secretPrefix,
-      events: input.events,
-      description: input.description,
-    });
+    // Atomic count-then-insert under a per-account advisory lock — closes the
+    // count-then-insert TOCTOU (concurrent creates all passing a stale count
+    // and exceeding the cap). Null → already at/over the limit.
+    const row = await this.repo.insertEndpointIfUnderLimit(
+      {
+        accountId,
+        url,
+        secret: plaintextSecret,
+        secretPrefix,
+        events: input.events,
+        description: input.description,
+      },
+      MAX_ENDPOINTS_PER_ACCOUNT,
+    );
+    if (row === null) {
+      throw new ConflictError(
+        `Account already has ${MAX_ENDPOINTS_PER_ACCOUNT.toString()} active webhook endpoints; limit is ${MAX_ENDPOINTS_PER_ACCOUNT.toString()}.`,
+      );
+    }
 
     await this.emitAuditBestEffort(ctx, 'webhook_endpoint.created', `webhook_endpoint_${row.id}`, {
       url: url.toString(),

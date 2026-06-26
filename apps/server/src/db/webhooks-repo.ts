@@ -40,6 +40,45 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     return toEndpointRow(row);
   }
 
+  // Atomic "insert only if under the active-endpoint cap" — closes the
+  // count-then-insert TOCTOU in WebhooksService.create (a bare
+  // countActiveEndpoints + insertEndpoint lets N concurrent creates all pass a
+  // stale count and exceed the cap). A per-account advisory lock (xact-scoped →
+  // auto-released on commit/rollback) serialises concurrent creates for the
+  // SAME account so the count + insert are atomic; different accounts hash to
+  // different lock keys (no cross-account contention). Returns null when already
+  // at/over the limit. Mirrors SessionsRepo.insertSessionIfUnderLimit.
+  async insertEndpointIfUnderLimit(
+    input: NewWebhookEndpointInput,
+    limit: number,
+  ): Promise<WebhookEndpointRow | null> {
+    return this.database.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`webhook-endpoint-create:${input.accountId}`}))`,
+      );
+      const [countRow] = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(webhookEndpoints)
+        .where(
+          and(eq(webhookEndpoints.accountId, input.accountId), eq(webhookEndpoints.active, true)),
+        );
+      if ((countRow?.count ?? 0) >= limit) return null;
+      const [row] = await tx
+        .insert(webhookEndpoints)
+        .values({
+          accountId: input.accountId,
+          url: input.url,
+          secret: input.secret,
+          secretPrefix: input.secretPrefix,
+          events: input.events,
+          description: input.description,
+        })
+        .returning();
+      if (!row) throw new Error('insertEndpointIfUnderLimit returned no row');
+      return toEndpointRow(row);
+    });
+  }
+
   async listEndpoints(accountId: string): Promise<WebhookEndpointRow[]> {
     const rows = await this.database.db
       .select()
