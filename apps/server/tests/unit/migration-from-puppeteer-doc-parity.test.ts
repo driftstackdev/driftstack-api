@@ -36,8 +36,13 @@ describe('W227.A migration-from-puppeteer doc parity', () => {
     // schema check no longer asserts profile_id is absent.
     expect(shape).toHaveProperty('profile_id');
     expect(shape).not.toHaveProperty('record');
-    // Doc body must use the real fields:
-    expect(doc).toMatch(/"archetype":\s*"default"/);
+    // The curl create example uses the schema-accepted "label" field and
+    // omits archetype to inherit the locked launch default (both real
+    // schema fields). The stale generic "archetype": "default" literal is
+    // gone; "label" is schema-accepted.
+    expect(shape).toHaveProperty('label');
+    expect(doc).toMatch(/\{\s*"label":\s*"qa-login"\s*\}/);
+    expect(doc).not.toMatch(/"archetype":\s*"default"/);
     // The stale "record" field stays banned (never existed):
     expect(doc).not.toMatch(/"record":\s*true/);
   });

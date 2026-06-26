@@ -61,7 +61,11 @@ describe('W215.A sdk-python doc parity', () => {
   it('session-create body uses archetype/purpose, not target_url/profile_archetype', () => {
     expect(doc).not.toMatch(/target_url=/);
     expect(doc).not.toMatch(/profile_archetype=/);
-    expect(doc).toMatch(/"archetype":\s*"default"/);
+    // The create example sets the schema-accepted "purpose" key and
+    // references "archetype" (omitted in the example to inherit the
+    // locked launch default).
+    expect(doc).toMatch(/"purpose":\s*"production_customer"/);
+    expect(doc).toMatch(/"archetype"/);
   });
 
   it('driftstack package exports Driftstack and AsyncDriftstack', () => {

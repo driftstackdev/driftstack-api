@@ -49,7 +49,11 @@ describe('W215.B sdk-go doc parity', () => {
   it('session-create body uses Archetype/Purpose, not TargetURL/ProfileArchetype', () => {
     expect(doc).not.toMatch(/TargetURL:/);
     expect(doc).not.toMatch(/ProfileArchetype:/);
-    expect(doc).toMatch(/Archetype:\s*"default"/);
+    // The CreateSessionRequest example sets Purpose with the typed
+    // SessionPurpose constant and references the Archetype field
+    // (omitted in the example to inherit the locked launch default).
+    expect(doc).toMatch(/Purpose:\s*driftstack\.PurposeProductionCustomer/);
+    expect(doc).toMatch(/Archetype/);
   });
 
   it('SessionStatus constants named in the doc exist in types.go', () => {

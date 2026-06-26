@@ -141,7 +141,9 @@ describe('W719 sdk-python-crypto-orders marketing-doc parity', () => {
     const doc = read(DOC);
     expect(doc).toMatch(/from driftstack\.errors import DriftstackError/);
     expect(doc).toMatch(/except DriftstackError as err:/);
-    expect(doc).toMatch(/err\.status, err\.title/);
+    // The Python DriftstackError exposes .status + .message (not .title,
+    // which is the JS SDK naming); the example reads the real attributes.
+    expect(doc).toMatch(/err\.status, err\.message/);
   });
 
   it('CRITICAL cancel-409 + cancel-404 error-code claims match SDK error roster.', () => {
