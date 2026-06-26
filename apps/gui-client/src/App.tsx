@@ -35,6 +35,7 @@ import { SessionsView } from './views/SessionsView';
 import { SettingsView } from './views/SettingsView';
 import { BillingView } from './views/BillingView';
 import { UpdateBanner } from './components/UpdateBanner';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { checkForUpdate, type AvailableUpdate } from './lib/updater';
 
 type View =
@@ -351,7 +352,36 @@ function Shell(): JSX.Element {
             key={view.kind}
             className="min-w-0 flex-1 overflow-auto bg-surface-base animate-view-in"
           >
-            <CurrentView view={view} onNavigate={setView} />
+            {/* Scope a view render-crash to this panel — the sidebar/chrome
+                stay alive and the customer gets a Retry, instead of an
+                unexpected throw bubbling to RootErrorBoundary and blanking the
+                whole window (no recover path there). Keyed by view.kind so
+                navigating to another view always lands a fresh boundary. */}
+            <ErrorBoundary
+              key={view.kind}
+              fallback={(retry) => (
+                <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+                  <div className="max-w-md space-y-2">
+                    <h2 className="text-base font-semibold text-ink-primary">
+                      This view ran into a problem
+                    </h2>
+                    <p className="text-sm text-ink-muted">
+                      Something went wrong rendering this screen. The rest of the app is still
+                      running — you can retry, or switch to another view in the sidebar.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={retry}
+                    className="rounded border border-surface-divider px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-surface-raised"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+            >
+              <CurrentView view={view} onNavigate={setView} />
+            </ErrorBoundary>
           </main>
         </div>
         <CommandPalette
