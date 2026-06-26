@@ -30,7 +30,7 @@ async function createSession(): Promise<string> {
   return create.json<{ id: string }>().id;
 }
 
-function sendTurn(id: string): ReturnType<TestAppFixture['app']['inject']> {
+function sendTurn(id: string) {
   return fx.app.inject({
     method: 'POST',
     url: `/v1/agent-sessions/${id}/message`,

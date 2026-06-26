@@ -24,6 +24,9 @@ function makeCountingRepo(): { repo: AccountAuthRepo; prefixLookups: () => numbe
     findTeamMemberships: () => Promise.resolve([]),
     findActiveWebSession: () => Promise.resolve(null),
     touchWebSessionLastUsed: () => Promise.resolve(),
+    updateAccountBasics: () => Promise.resolve(null),
+    getOrganization: () => Promise.resolve(null),
+    setOrganization: () => Promise.resolve(),
   };
   return { repo, prefixLookups: () => prefixLookups };
 }
