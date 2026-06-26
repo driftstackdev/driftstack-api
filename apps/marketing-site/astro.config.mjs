@@ -27,8 +27,9 @@ export default defineConfig({
   integrations: [
     tailwind({ applyBaseStyles: false }),
     sitemap({
-      // 404 doesn't belong in the sitemap.
-      filter: (page) => !page.includes('/404'),
+      // 404 and noindex utility routes (e.g. /newtab) don't belong
+      // in the sitemap.
+      filter: (page) => !page.includes('/404') && !page.includes('/newtab'),
     }),
     sentry({
       enabled: SENTRY_DSN.length > 0,
