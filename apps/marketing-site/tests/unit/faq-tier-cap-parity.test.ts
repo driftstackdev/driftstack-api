@@ -44,10 +44,14 @@ describe('W261.C /faq ↔ TIER_CONCURRENT_SESSION_LIMITS parity', () => {
     expect(page).toMatch(/RFC 7807 problem-detail/i);
   });
 
-  it('free-tier framing pinned: $0-forever / one concurrent / API-within-free-limits / no metering', () => {
+  it('free-tier framing pinned: $0-forever / one concurrent / manual-only (no API) / no metering', () => {
     expect(page).toMatch(/The free tier is \$0 forever/);
     expect(page).toMatch(/The free tier has no metering at all/);
-    expect(page).toMatch(/within the free limits/);
+    // Free tier is manual-only (GUI client); programmatic API/SDK access
+    // starts on the API ladder. Old "API-within-free-limits" framing is
+    // superseded.
+    expect(page).toMatch(/The free tier is manual-only \(no programmatic API\/SDK access\)/);
+    expect(page).not.toMatch(/within the free limits/);
   });
 
   it('annual discount label matches the live ANNUAL_DISCOUNT_LABEL', () => {

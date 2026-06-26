@@ -36,7 +36,11 @@ describe('W247.B faq doc parity', () => {
   it('free tier framed as $0 forever, no metering, manual-only', () => {
     expect(doc).toMatch(/The free tier is \$0 forever/);
     expect(doc).toMatch(/The free tier has no metering at all/);
-    expect(doc).toMatch(/within the free limits/);
+    // Free tier is manual-only (GUI client); programmatic API/SDK access
+    // starts on the API ladder. Old "API-within-free-limits" framing is
+    // superseded (common.ts:76 "free $0 — manual-only (no API)").
+    expect(doc).toMatch(/The free tier is manual-only \(no programmatic API\/SDK access\)/);
+    expect(doc).not.toMatch(/within the free limits/);
   });
 
   it('does not assert customer-controlled egress as a shipped pricing pillar', () => {

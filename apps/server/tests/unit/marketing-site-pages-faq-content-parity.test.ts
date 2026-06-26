@@ -12,7 +12,8 @@
 //   • Concurrent caps: Solo/Team/Agency 1/3/8 + API
 //     Starter/Builder/Scale 2/8/24.
 //   • Free-tier mechanic: $0 forever + one profile + one concurrent +
-//     manual-only (no API) + perpetual + no metering.
+//     manual-only (GUI-only, no API/SDK) + perpetual + no metering.
+//     Programmatic API/SDK access starts on the API ladder.
 //   • Enterprise from $4,000/mo.
 //   • Stripe payment processor + EU VAT/BTW reverse-charge.
 //   • Support SLA ladder: 48h/24h/12h+Slack/4h+Slack/1h+CSM.
@@ -61,12 +62,17 @@ describe('W500.A apps/marketing-site/src/pages/faq.astro content parity', () => 
     );
   });
 
-  it("Free-tier mechanic pinned: 'One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from the API or the desktop GUI client — $0 forever, no card required.' + perpetual (no expiry) + API-within-free-limits + no metering — pinned so the founder-locked free-tier shape survives. (2026-05-28: free has API access within the 1-session/20-min limits per the accept-+-reconcile-copy decision; the old 'manual-only / no API' framing was dropped.)", () => {
+  it("Free-tier mechanic pinned: 'One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from the desktop GUI client — $0 forever, no card required. The free tier is manual-only (no programmatic API/SDK access)' + perpetual (no expiry) + manual-only + no metering — pinned so the founder-locked free-tier shape survives. (Free tier is MANUAL-GUI-ONLY; programmatic API/SDK access starts on the API ladder, API Starter from $149/mo. The prior 2026-05-28 'API-within-free-limits' framing is superseded — common.ts:76 'free $0 — manual-only (no API)'.)", () => {
     expect(body).toMatch(
-      /One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from the API or the desktop GUI client — \$0 forever, no card required\./,
+      /One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from the desktop GUI client — \$0 forever, no card required\./,
     );
+    expect(body).toMatch(/The free tier is manual-only \(no programmatic API\/SDK access\)/);
     expect(body).toMatch(/The free tier is perpetual/);
-    expect(body).toMatch(/within the free limits/);
+    expect(body).toMatch(
+      /Programmatic API\/SDK access starts on the API ladder \(API Starter from \$149\/mo\)/,
+    );
+    expect(body).not.toMatch(/within the free limits/);
+    expect(body).not.toMatch(/driven from the API or the desktop GUI client/);
     expect(body).toMatch(/No per-hour metering, no credit decrement, no overage/);
   });
 

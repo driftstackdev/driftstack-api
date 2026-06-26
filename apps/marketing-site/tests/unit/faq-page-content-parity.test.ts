@@ -8,14 +8,16 @@
 //     a group" change should require a deliberate decision, not
 //     a drive-by.
 //   • Free-tier mechanics: $0 forever / one profile / one
-//     concurrent / API-within-free-limits / perpetual / no
-//     metering.
+//     concurrent / manual-only (no API) / perpetual / no
+//     metering. (Free is GUI-only; programmatic API/SDK access
+//     starts on the API ladder.)
 //   • Concurrent-cap ladder (Personal = 1 / Team = 3
 //     / Agency = 8 / API Starter = 2 / Builder = 8 /
 //     Scale = 24 / Enterprise = custom).
 //   • 429 + RFC 7807 problem-detail on cap reached.
 //   • Annual billing 20% off / 30-day cancel-before-renewal.
-//   • Cancel → 90d "suspended" + DPA retention archive.
+//   • Cancel → "suspended" + 30-day grace-period + DPA
+//     retention schedule.
 //   • Card details never touch Driftstack servers (Stripe only).
 //   • "What if Driftstack goes away" two-protection answer
 //     (data portability + source escrow).
@@ -60,13 +62,21 @@ describe('W368.A marketing-site /faq page content parity', () => {
     expect(body).toContain("title: 'Support + reliability'");
   });
 
-  it('free-tier mechanics pinned: $0-forever / one profile / one concurrent / API-within-free-limits / perpetual / no metering', () => {
+  it('free-tier mechanics pinned: $0-forever / one profile / one concurrent / manual-only (no API) / perpetual / no metering', () => {
     expect(body).toMatch(
-      /One persistent profile, one concurrent session, and sessions up to 20 minutes each/,
+      /One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from the desktop GUI client/,
     );
     expect(body).toMatch(/\$0 forever, no card required/);
+    expect(body).toMatch(/The free tier is manual-only \(no programmatic API\/SDK access\)/);
     expect(body).toMatch(/The free tier is perpetual/);
-    expect(body).toMatch(/within the free limits/);
+    // Free tier is manual-only: programmatic API/SDK access starts on the
+    // API ladder (API Starter from $149/mo). Old "API-within-free-limits"
+    // framing (2026-05-28) is superseded.
+    expect(body).toMatch(
+      /Programmatic API\/SDK access starts on the API ladder \(API Starter from \$149\/mo\)/,
+    );
+    expect(body).not.toMatch(/within the free limits/);
+    expect(body).not.toMatch(/driven from the API or the desktop GUI client/);
     expect(body).toMatch(/No per-hour metering, no credit decrement, no overage/);
   });
 
@@ -87,11 +97,14 @@ describe('W368.A marketing-site /faq page content parity', () => {
     expect(body).toMatch(/auto-renew unless cancelled at least 30 days before renewal/);
   });
 
-  it('cancel posture: 90d "suspended" + DPA retention archive (no immediate delete)', () => {
+  it('cancel posture: "suspended" + 30-day grace-period + DPA retention schedule (no immediate delete)', () => {
+    expect(body).toMatch(/No data is deleted at cancellation/);
     expect(body).toMatch(
-      /account stays in a "suspended" state with recordings and audit logs intact for 90 days/,
+      /account stays in a "suspended" state with a 30-day grace-period for recovery/,
     );
-    expect(body).toMatch(/archived per the DPA retention schedule/);
+    expect(body).toMatch(
+      /your account data \(profiles, sessions, captures\) is deleted per the DPA retention schedule/,
+    );
   });
 
   it('"Card details never touch Driftstack servers" Stripe-PCI claim pinned', () => {
