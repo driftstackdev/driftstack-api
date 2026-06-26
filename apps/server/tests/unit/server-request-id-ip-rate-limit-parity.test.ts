@@ -98,12 +98,13 @@ describe('W714 server-side request-id + V-251 IP rate-limit middleware parity', 
     );
   });
 
-  it('CRITICAL token-bucket store.consume() call shape pinned — 5 fields: key (prefix:ip) + capacity + refillPerSecond + cost=1 + now. The shape mirrors the same primitive the account-keyed limiter uses (RateLimitStore); drift would force a second token-bucket implementation.', () => {
+  it('CRITICAL token-bucket store.consume() call shape pinned — 5 fields: key (prefix:ip) + capacity + refillPerSecond + cost=1 + now (hoisted into consumeArgs so the same args feed the bounded fallback on a store error). The shape mirrors the same primitive the account-keyed limiter uses (RateLimitStore); drift would force a second token-bucket implementation.', () => {
     const src = read(IP_RATE_LIMIT);
 
     expect(src).toMatch(
-      /await store\.consume\(\{\s*\n?\s*key: `\$\{cfg\.bucketPrefix\}:\$\{ip\}`,\s*\n?\s*capacity: cfg\.capacity,\s*\n?\s*refillPerSecond: cfg\.refillPerSecond,\s*\n?\s*cost: 1,\s*\n?\s*now: Date\.now\(\),\s*\n?\s*\}\)/,
+      /const consumeArgs = \{\s*\n?\s*key: `\$\{cfg\.bucketPrefix\}:\$\{ip\}`,\s*\n?\s*capacity: cfg\.capacity,\s*\n?\s*refillPerSecond: cfg\.refillPerSecond,\s*\n?\s*cost: 1,\s*\n?\s*now: Date\.now\(\),\s*\n?\s*\}/,
     );
+    expect(src).toContain('result = await store.consume(consumeArgs);');
   });
 
   it('CRITICAL W200 4-header response set pinned — x-ratelimit-bucket / -limit / -remaining / -reset (same as W199 account-keyed limiter). Consistency across IP + account limiters is what lets dashboards render rate-limit state uniformly.', () => {
