@@ -16,6 +16,11 @@ import type { Database } from './client.js';
 import { fleetNodes } from './schema.js';
 import type { FleetNodePublicKey, FleetNodesRepo } from '../services/fleet-node-auth.js';
 
+/** Canonical uuid shape — used to guard a uuid-only column comparison against a
+ *  caller-supplied key that may be a human node_id (which would otherwise force
+ *  a Postgres uuid cast and raise 22P02, failing the whole query). */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Latest per-node telemetry snapshot (migration 0083), persisted from the
  * heartbeat and overwritten each beat for the admin Fleet panel (file-48 §A5).
@@ -207,12 +212,21 @@ export class DrizzleFleetNodesRepo implements FleetNodesRepo {
    *  via findNearestWithLivekit, which returns the wrong Mac the instant a region
    *  has >=2 LiveKit boxes). Returns null when neither column matches a live row. */
   async getDetailByNodeIdOrId(key: string): Promise<FleetNodeDetail | null> {
+    // `fleetNodes.id` is a Postgres `uuid` column. `key` is the value persisted in
+    // agent_sessions.node_id = `mac.nodeId ?? mac.id`, so it is USUALLY a human
+    // node_id ("mac-macstadium-us-001"), NOT a uuid. Including `eq(id, key)` for a
+    // non-uuid key makes Postgres cast the string to uuid and raise 22P02
+    // (`invalid input syntax for type uuid`), which fails the ENTIRE query — that
+    // bug silently killed LiveKit minting on every dispatched session (the route's
+    // mint catch swallowed it → no `livekit` block → GUI polling fallback). Only
+    // OR-in the uuid PK comparison when `key` is actually uuid-shaped.
+    const matchKey = UUID_RE.test(key)
+      ? or(eq(fleetNodes.nodeId, key), eq(fleetNodes.id, key))
+      : eq(fleetNodes.nodeId, key);
     const rows = await this.database.db
       .select()
       .from(fleetNodes)
-      .where(
-        and(isNull(fleetNodes.revokedAt), or(eq(fleetNodes.nodeId, key), eq(fleetNodes.id, key))),
-      )
+      .where(and(isNull(fleetNodes.revokedAt), matchKey))
       .orderBy(desc(fleetNodes.livekitRegisteredAt))
       .limit(1);
     const row = rows[0];

@@ -1393,9 +1393,18 @@ export function registerAgentSessionsRoutes(
         participant_identity: `customer-${accountId}`,
         expires_at: new Date(nowMs + ttlSeconds * 1000).toISOString(),
       };
-    } catch {
-      // Best-effort: any failure (decrypt error, repo error) drops
-      // to undefined so the session-create response still ships.
+    } catch (err) {
+      // Best-effort: any failure (decrypt error, repo error) drops to undefined
+      // so the session-create response still ships. The expected create-time
+      // "no bound node yet" case returns early above WITHOUT throwing, so a throw
+      // here is a REAL fault — log it (a silent catch here hid a fatal uuid-cast
+      // in the bound-node lookup for days, which killed the floating simulator on
+      // every dispatched session). Not fatal to the response; surface it.
+
+      console.error(
+        `[livekit-mint] failed to mint LiveKit token for session ${sessionId} (node_id=${sessionNodeId ?? 'null'})`,
+        err,
+      );
       return undefined;
     }
   }
