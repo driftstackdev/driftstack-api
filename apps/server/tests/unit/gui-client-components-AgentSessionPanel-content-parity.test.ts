@@ -165,4 +165,27 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     // Both timers are cleared on teardown so a torn-down panel can't fire stale work.
     expect(body).toMatch(/if \(autoReconnectTimer !== null\) clearTimeout\(autoReconnectTimer\);/);
   });
+
+  it("#5/#9 sustained-freeze recovery lever pinned: the panel takes a recoverAction { nonce, mode } prop and reacts to each DISTINCT nonce exactly once — 'resubscribe' toggles the captured remote video publication's subscription off→on (forcing a fresh keyframe via the browser's auto-PLI), 'rebuild' bumps retryNonce (a full Room reconnect). The simulator's frame-progress detector owns WHEN to recover; the panel performs it because it holds the publication + retryNonce in scope. Regression-guard: the publication is captured on TrackSubscribed (the 2nd handler arg) and cleared on TrackUnsubscribed / teardown, and the inert initial nonce 0 must never trigger a recovery.", () => {
+    // The prop is on the interface + destructured.
+    expect(body).toMatch(/recoverAction\?: \{ nonce: number; mode: 'resubscribe' \| 'rebuild' \};/);
+    // The publication is captured (TrackSubscribed's 2nd arg) + cleared.
+    expect(body).toMatch(/const videoPublicationRef = useRef</);
+    expect(body).toMatch(
+      /\(room as any\)\.on\(RoomEvent\.TrackSubscribed, \(track: any, publication: any\) =>/,
+    );
+    expect(body).toMatch(/videoPublicationRef\.current = \(publication \?\? null\)/);
+    // Single-fire per distinct nonce, never the inert initial 0.
+    expect(body).toMatch(/const lastRecoverNonceRef = useRef\(0\);/);
+    expect(body).toMatch(/if \(action === undefined \|\| action\.nonce === 0\) return;/);
+    expect(body).toMatch(/if \(action\.nonce === lastRecoverNonceRef\.current\) return;/);
+    // 'rebuild' escalation bumps retryNonce; 'resubscribe' toggles off→on.
+    expect(body).toMatch(
+      /if \(action\.mode === 'rebuild'\) \{\s*\n?\s*setRetryNonce\(\(n\) => n \+ 1\);/,
+    );
+    expect(body).toMatch(/pub\.setSubscribed\(false\);/);
+    expect(body).toMatch(/videoPublicationRef\.current\?\.setSubscribed\?\.\(true\);/);
+    // The recovery effect keys on the recoverAction prop.
+    expect(body).toMatch(/\}, \[recoverAction\]\);/);
+  });
 });

@@ -278,6 +278,103 @@ describe('AgentSessionPanel overlay UX', () => {
     }
   });
 
+  // #5/#9 — a recoverAction(mode:'resubscribe') toggles the remote video
+  // publication's subscription off→on (forcing a fresh keyframe via the browser's
+  // auto-PLI). The off fires immediately; the on fires after the short re-subscribe
+  // beat so the SFU registers the unsubscribe first.
+  it("#5/#9: recoverAction 'resubscribe' toggles the publication subscription off then on", async () => {
+    vi.useFakeTimers();
+    try {
+      connectMock.mockReset();
+      const handlers: Record<string, (...a: unknown[]) => void> = {};
+      const roomOn = vi.fn((evt: string, cb: (...a: unknown[]) => void) => {
+        handlers[evt] = cb;
+      });
+      createRoomMock.mockReturnValueOnce({ on: roomOn, disconnect: vi.fn() });
+      connectMock.mockResolvedValue(undefined);
+      const { rerender } = render(<AgentSessionPanel info={INFO} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      // A video track arrives WITH its publication (the 2nd TrackSubscribed arg).
+      const setSubscribed = vi.fn();
+      act(() => {
+        handlers['trackSubscribed']?.({ kind: 'video', attach: vi.fn() }, { setSubscribed });
+      });
+      // Drive a resubscribe recovery from the parent.
+      act(() => {
+        rerender(
+          <AgentSessionPanel info={INFO} recoverAction={{ nonce: 1, mode: 'resubscribe' }} />,
+        );
+      });
+      // Off fires immediately; on fires after the ~250ms beat.
+      expect(setSubscribed).toHaveBeenCalledWith(false);
+      expect(setSubscribed).not.toHaveBeenCalledWith(true);
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(setSubscribed).toHaveBeenCalledWith(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #5/#9 — a recoverAction(mode:'rebuild') is the single escalation: it bumps
+  // retryNonce → the connect effect re-runs (a fresh Room + connect), tearing down +
+  // reconnecting the whole stream.
+  it("#5/#9: recoverAction 'rebuild' re-runs the connect effect (a fresh connect call)", async () => {
+    connectMock.mockReset();
+    connectMock.mockResolvedValue(undefined);
+    createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+    const { rerender } = render(<AgentSessionPanel info={INFO} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const callsBefore = connectMock.mock.calls.length;
+    act(() => {
+      rerender(<AgentSessionPanel info={INFO} recoverAction={{ nonce: 1, mode: 'rebuild' }} />);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(connectMock.mock.calls.length).toBeGreaterThan(callsBefore);
+    createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+  });
+
+  // #5/#9 — the SAME nonce re-render (a parent re-render that doesn't change the
+  // recovery trigger) must NOT re-fire the action; only a DISTINCT nonce does.
+  it('#5/#9: a re-render with the same recoverAction nonce does not re-fire the recovery', async () => {
+    vi.useFakeTimers();
+    try {
+      connectMock.mockReset();
+      const handlers: Record<string, (...a: unknown[]) => void> = {};
+      const roomOn = vi.fn((evt: string, cb: (...a: unknown[]) => void) => {
+        handlers[evt] = cb;
+      });
+      createRoomMock.mockReturnValueOnce({ on: roomOn, disconnect: vi.fn() });
+      connectMock.mockResolvedValue(undefined);
+      const action = { nonce: 1, mode: 'resubscribe' as const };
+      const { rerender } = render(<AgentSessionPanel info={INFO} recoverAction={action} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const setSubscribed = vi.fn();
+      act(() => {
+        handlers['trackSubscribed']?.({ kind: 'video', attach: vi.fn() }, { setSubscribed });
+      });
+      // The initial render already consumed nonce 1 (before the track arrived → no-op,
+      // and lastRecoverNonceRef is now 1). A re-render with the SAME nonce must not
+      // toggle the (now-present) publication.
+      act(() => {
+        rerender(<AgentSessionPanel info={INFO} recoverAction={action} />);
+        vi.advanceTimersByTime(300);
+      });
+      expect(setSubscribed).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // #8 — an UNEXPECTED transport Disconnected auto-retries with backoff (it bumps the
   // connect effect via retryNonce → a fresh connect call) before falling back to the
   // manual Reconnect button. A brief network blip recovers itself.

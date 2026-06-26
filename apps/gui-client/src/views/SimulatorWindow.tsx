@@ -2286,6 +2286,64 @@ export function SimulatorWindow(): JSX.Element {
     const handle = window.setInterval(tick, 1000);
     return () => window.clearInterval(handle);
   }, [room, connState]);
+  // #5/#9 — RESUBSCRIBE-TO-RECOVER on a sustained TRUE freeze. The freeze detector
+  // above only SHOWS a badge; a genuine client decode stall (the SFU/encoder stopped
+  // sending frames, severe loss, a wedged decoder) while the transport itself stays
+  // 'connected' won't self-heal from a passive badge. When videoFrozen stays true for
+  // a sustained window we actively pull the recovery lever the GUI has: bump
+  // `recoverAction` so the panel toggles the remote video subscription off→on (the
+  // resubscribe makes the browser send a PLI → the SFU/encoder pushes a fresh
+  // keyframe). If frame-progress doesn't resume within a few seconds we escalate ONCE
+  // to a full Room rebuild (mode:'rebuild' → the panel bumps its retryNonce). The
+  // moment frames resume (videoFrozen flips false) the whole machine resets, so the
+  // next freeze starts a fresh attempt. recoverAction.nonce is monotonic so the panel
+  // reacts to each distinct trigger exactly once.
+  const SUSTAINED_FREEZE_MS = 8_000;
+  const RESUBSCRIBE_GRACE_MS = 4_000;
+  const [recoverAction, setRecoverAction] = useState<{
+    nonce: number;
+    mode: 'resubscribe' | 'rebuild';
+  }>({ nonce: 0, mode: 'resubscribe' });
+  // `recovering` is true ONLY while a recovery is actually in flight (between firing a
+  // lever and frames resuming / the rebuild escalation). It drives the badge copy so
+  // we never claim "recovering" when we're merely showing a passive freeze badge.
+  const [recovering, setRecovering] = useState(false);
+  // Recovery phase, held in a ref so the driver effect doesn't re-run on each phase
+  // change: 'idle' (no freeze) → 'resubscribed' (lever 1 fired, awaiting recovery) →
+  // 'rebuilt' (lever 2 fired, terminal until frames resume or the freeze clears).
+  const recoverPhaseRef = useRef<'idle' | 'resubscribed' | 'rebuilt'>('idle');
+  useEffect(() => {
+    // Frames are flowing (or we're not connected): reset the machine so a future
+    // freeze gets a clean two-stage attempt. The connected-only gate matches the
+    // detector — a transport drop is the panel's overlay + its own auto-reconnect.
+    if (!videoFrozen || connState !== 'connected') {
+      recoverPhaseRef.current = 'idle';
+      setRecovering(false);
+      return;
+    }
+    // videoFrozen has been true since (now − FREEZE_AFTER_MS) when this effect ran.
+    // Stage 1 fires after the freeze has SUSTAINED a further SUSTAINED_FREEZE_MS;
+    // stage 2 fires RESUBSCRIBE_GRACE_MS after stage 1 if it's still frozen. Both
+    // are single-shot per freeze via recoverPhaseRef.
+    let stage2Handle: number | null = null;
+    const stage1Handle = window.setTimeout(() => {
+      if (recoverPhaseRef.current !== 'idle') return;
+      recoverPhaseRef.current = 'resubscribed';
+      setRecovering(true);
+      setRecoverAction((a) => ({ nonce: a.nonce + 1, mode: 'resubscribe' }));
+      // Stage 2 — escalate ONCE to a Room rebuild if the resubscribe didn't restore
+      // frame progress (this effect is still mounted, i.e. still frozen + connected).
+      stage2Handle = window.setTimeout(() => {
+        if (recoverPhaseRef.current !== 'resubscribed') return;
+        recoverPhaseRef.current = 'rebuilt';
+        setRecoverAction((a) => ({ nonce: a.nonce + 1, mode: 'rebuild' }));
+      }, RESUBSCRIBE_GRACE_MS);
+    }, SUSTAINED_FREEZE_MS);
+    return () => {
+      window.clearTimeout(stage1Handle);
+      if (stage2Handle !== null) window.clearTimeout(stage2Handle);
+    };
+  }, [videoFrozen, connState]);
   // #48 item 2 — "Copy diagnostics": a paste-ready snapshot of the session-info
   // overlay (the founder keeps reporting streaming/latency issues and needs the
   // exact figures for a bug report). formatSessionDiagnostics is pure + tested;
@@ -4368,16 +4426,21 @@ export function SimulatorWindow(): JSX.Element {
                 {/* Client-side video-freeze badge (audit). Surfaced ONLY when the
                   box hasn't already reported a renderer stall and there's no
                   page-error overlay (those take priority and explain the frozen
-                  frame); a calm "Video frozen — reconnecting" over the last frame,
-                  same treatment as the page-stalled badge. */}
+                  frame); a calm indicator over the last frame, same treatment as the
+                  page-stalled badge. #5/#9 — the copy reflects REALITY: plain "Video
+                  frozen" while the freeze is just being shown, and "Video frozen —
+                  recovering" only once a recovery (resubscribe / Room rebuild) is
+                  actually in flight (`recovering`). It never claims to be reconnecting
+                  when nothing is. */}
                 {videoFrozen && !pageStalled && pageError === null && (
                   <div
                     role="status"
                     data-component="video-frozen-badge"
+                    data-recovering={recovering ? 'true' : 'false'}
                     className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-black/75 px-4 py-2 text-[11px] font-medium text-white shadow-lg backdrop-blur"
                   >
                     <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
-                    Video frozen — reconnecting
+                    {recovering ? 'Video frozen — recovering' : 'Video frozen'}
                   </div>
                 )}
                 {/* W616 — honest page-navigation error overlay (DNS/TLS/HTTP/
@@ -4464,6 +4527,12 @@ export function SimulatorWindow(): JSX.Element {
                       videoElRef.current = el;
                       if (el !== null) armFpsCounter(el);
                     }}
+                    // #5/#9 — recovery lever for a sustained TRUE freeze. The driver
+                    // above bumps recoverAction.nonce with mode 'resubscribe' (toggle
+                    // the remote video subscription → fresh keyframe) or 'rebuild'
+                    // (full Room reconnect) — the panel holds the publication + the
+                    // retryNonce in scope, so it actually performs the recovery.
+                    recoverAction={recoverAction}
                   />
                   {/* iOS touch-point cursor — a soft fingertip dot that tracks the
                     pointer over the screen (the PC arrow is hidden via cursor-none

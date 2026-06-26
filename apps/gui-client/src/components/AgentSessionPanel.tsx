@@ -87,6 +87,15 @@ export interface AgentSessionPanelProps {
    *  computes it from the <video>'s first full-res natural size ÷ dpr; undefined
    *  falls back to the launch archetype (402×874) inside the hook. */
   inputLogical?: { width: number; height: number };
+  /** #5/#9 — recovery lever for a sustained TRUE video freeze. The simulator's
+   *  frame-progress detector decides WHEN to recover (it owns the <video> element's
+   *  frame signal); the panel performs the recovery because it holds the remote
+   *  publication + the connect-effect retryNonce in scope. Each distinct `nonce`
+   *  bump triggers exactly one action: `'resubscribe'` toggles the remote video
+   *  subscription off→on (the browser then auto-sends a PLI → the SFU/encoder
+   *  pushes a fresh keyframe), and `'rebuild'` tears down + reconnects the whole
+   *  Room (bumps retryNonce). nonce 0 is the inert initial value (no recovery). */
+  recoverAction?: { nonce: number; mode: 'resubscribe' | 'rebuild' };
 }
 
 /** #1 — grace window after the SFU drops the video track (TrackUnsubscribed /
@@ -171,6 +180,7 @@ export function AgentSessionPanel({
   // prop is destructured (default off) only to keep the call-site shape stable.
   coverChromeBand: _coverChromeBand = false,
   inputLogical,
+  recoverAction,
 }: AgentSessionPanelProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // The video element as STATE (not just the ref) so useInputCapture re-runs
@@ -216,9 +226,17 @@ export function AgentSessionPanel({
   const [publisherReconnecting, setPublisherReconnecting] = useState(false);
   // Manual reconnect: bumping this re-runs the connect effect (new Room +
   // reconnect). Lets the customer recover from an error/disconnect without
-  // reloading the whole app. Only bumped on the Reconnect button — not a
-  // render-driven dep, so it can't cause reconnect-thrash.
+  // reloading the whole app. Only bumped on the Reconnect button — and #5/#9's
+  // sustained-freeze rebuild escalation — not a render-driven dep, so it can't
+  // cause reconnect-thrash.
   const [retryNonce, setRetryNonce] = useState(0);
+  // #5/#9 — the live remote VIDEO publication, captured on TrackSubscribed and
+  // cleared on TrackUnsubscribed. setSubscribed(false→true) on it is the GUI's lever
+  // to force a fresh keyframe (the browser auto-sends a PLI on re-subscribe). Held in
+  // a ref so the recovery effect can read the latest publication WITHOUT re-running
+  // the connect effect (which would thrash the room). `.setSubscribed` is on the
+  // RemoteTrackPublication the SFU surfaces for the worker's published video track.
+  const videoPublicationRef = useRef<{ setSubscribed?: (s: boolean) => void } | null>(null);
 
   // Keep the latest onStateChange in a ref so the connect effect does NOT
   // depend on the callback's identity. onStateChange exists for consumers (the
@@ -272,11 +290,14 @@ export function AgentSessionPanel({
     // livekit-client surface where exact typing isn't worth the
     // import-churn — the runtime contract is documented in the
     // wrapper's RoomEvent re-export.
-    (room as any).on(RoomEvent.TrackSubscribed, (track: any) => {
+    (room as any).on(RoomEvent.TrackSubscribed, (track: any, publication: any) => {
       if (cancelled) return;
       if (track.kind !== 'video') return;
       const el = videoRef.current;
       if (el !== null) track.attach(el);
+      // #5/#9 — stash the publication so a sustained-freeze recovery can toggle its
+      // subscription (forcing a fresh keyframe) without re-running the connect effect.
+      videoPublicationRef.current = (publication ?? null) as typeof videoPublicationRef.current;
       // Minimize the receiver-side jitter buffer for the interactive simulator:
       // a deep buffer trades latency for jitter-smoothing, but this is a live
       // control surface where input→pixel lag matters most. Pairs with the
@@ -325,7 +346,12 @@ export function AgentSessionPanel({
       });
     };
     (room as any).on(RoomEvent.TrackUnsubscribed, (track: any) => {
-      if (track?.kind === 'video') onPublisherLost();
+      if (track?.kind === 'video') {
+        // #5/#9 — the publication's track is gone; drop the stale handle so a
+        // recovery toggle can't act on a detached track. A re-subscribe re-stashes it.
+        videoPublicationRef.current = null;
+        onPublisherLost();
+      }
     });
     (room as any).on(RoomEvent.ParticipantDisconnected, onPublisherLost);
     (room as any).on(RoomEvent.Disconnected, () => {
@@ -385,6 +411,9 @@ export function AgentSessionPanel({
       // can't flip publisher state or schedule a stray reconnect after unmount.
       clearPublisherLostTimer();
       if (autoReconnectTimer !== null) clearTimeout(autoReconnectTimer);
+      // #5/#9 — drop the publication handle so a stray recovery toggle can't fire on a
+      // torn-down room (a fresh connect re-stashes it on the next TrackSubscribed).
+      videoPublicationRef.current = null;
       setRoom(null);
       onRoom?.(null);
       // .catch the teardown: disconnect() can reject on a teardown race with a
@@ -399,6 +428,45 @@ export function AgentSessionPanel({
     // `retryNonce` re-runs the effect on a manual Reconnect (intentional, not a
     // render-thrash — it changes only on the button click).
   }, [info.ws_url, info.token, retryNonce]);
+
+  // #5/#9 — perform the recovery action the simulator's freeze driver requests. We
+  // react to each DISTINCT recoverAction.nonce exactly once (the last-handled nonce
+  // is tracked in a ref so a re-render with the same nonce never re-fires, and the
+  // inert initial nonce 0 never triggers). 'resubscribe' toggles the remote video
+  // subscription off→on — the browser auto-sends a PLI on re-subscribe, forcing the
+  // SFU/encoder to emit a fresh keyframe (the GUI lever for a wedged decoder / a
+  // stream the SFU stopped delivering). 'rebuild' (the driver's single escalation
+  // when the resubscribe didn't restore frame progress) bumps retryNonce → the
+  // connect effect tears down + reconnects the whole Room. All calls are guarded:
+  // an absent publication / an older livekit-client without setSubscribed just no-ops.
+  const lastRecoverNonceRef = useRef(0);
+  useEffect(() => {
+    const action = recoverAction;
+    if (action === undefined || action.nonce === 0) return;
+    if (action.nonce === lastRecoverNonceRef.current) return;
+    lastRecoverNonceRef.current = action.nonce;
+    if (action.mode === 'rebuild') {
+      setRetryNonce((n) => n + 1);
+      return;
+    }
+    // 'resubscribe' — off then back on after a short beat so the SFU registers the
+    // unsubscribe before the re-subscribe (a same-tick toggle can collapse to a no-op).
+    const pub = videoPublicationRef.current;
+    if (pub?.setSubscribed === undefined) return;
+    try {
+      pub.setSubscribed(false);
+    } catch {
+      /* publication detached mid-toggle — ignore */
+    }
+    const resubHandle = setTimeout(() => {
+      try {
+        videoPublicationRef.current?.setSubscribed?.(true);
+      } catch {
+        /* publication detached mid-toggle — ignore */
+      }
+    }, 250);
+    return () => clearTimeout(resubHandle);
+  }, [recoverAction]);
 
   return (
     <div

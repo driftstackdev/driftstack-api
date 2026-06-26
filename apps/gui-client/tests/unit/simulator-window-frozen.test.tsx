@@ -92,16 +92,26 @@ const panelCbs: {
   onStateChange?: (s: { kind: string }) => void;
   onPublisher?: (p: string) => void;
   video?: FakeVideo;
-} = {};
+  // #5/#9 — every distinct recoverAction the simulator pushes down (the panel reacts
+  // to each .nonce bump; the test asserts the resubscribe→rebuild sequence).
+  recoverActions: Array<{ nonce: number; mode: string }>;
+} = { recoverActions: [] };
 vi.mock('../../src/components/AgentSessionPanel', () => ({
   AgentSessionPanel: (props: {
     onRoom?: (room: unknown) => void;
     onStateChange?: (s: { kind: string }) => void;
     onPublisher?: (p: string) => void;
     onVideoEl?: (el: HTMLVideoElement | null) => void;
+    recoverAction?: { nonce: number; mode: string };
   }) => {
     panelCbs.onStateChange = props.onStateChange;
     panelCbs.onPublisher = props.onPublisher;
+    // Record each distinct recoverAction nonce the simulator drives (skip the inert
+    // initial nonce 0 / repeats — mirrors the real panel's single-fire-per-nonce).
+    const a = props.recoverAction;
+    if (a !== undefined && a.nonce !== 0 && panelCbs.recoverActions.at(-1)?.nonce !== a.nonce) {
+      panelCbs.recoverActions.push({ nonce: a.nonce, mode: a.mode });
+    }
     const ref = useRef<FakeVideo | null>(null);
     if (ref.current === null) {
       ref.current = makeFakeVideo();
@@ -164,6 +174,7 @@ function advance(seconds: number, onStep?: () => void): void {
 describe('SimulatorWindow — client video-freeze detector', () => {
   beforeEach(() => {
     conn.decodeFps = null;
+    panelCbs.recoverActions = [];
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -229,5 +240,72 @@ describe('SimulatorWindow — client video-freeze detector', () => {
     });
     advance(6);
     expect(frozenBadge(container)).toBeNull();
+  });
+
+  // #5/#9 — a SUSTAINED true freeze (while connected) must actively recover, not just
+  // show a badge: first toggle the remote subscription (resubscribe → fresh keyframe),
+  // then escalate ONCE to a Room rebuild if frame-progress still hasn't resumed. The
+  // badge copy reflects reality (plain "Video frozen" until a recovery is in flight).
+  it('drives resubscribe then escalates to rebuild on a sustained freeze that never recovers', () => {
+    vi.useFakeTimers();
+    conn.decodeFps = 30;
+    const { container } = renderSim();
+    // Arm the detector with real frames, then freeze (no rVFC, currentTime pinned).
+    let t = 1;
+    advance(2, () => {
+      panelCbs.video?.__fireFrame();
+      panelCbs.video?.__setCurrentTime(t);
+      t += 1;
+    });
+    expect(frozenBadge(container)).toBeNull();
+    // FREEZE_AFTER_MS (4s) → the badge shows; while it's only being SHOWN (no recovery
+    // yet) the copy is the plain "Video frozen", never claiming to be recovering.
+    advance(5);
+    const badge = frozenBadge(container);
+    expect(badge).not.toBeNull();
+    expect(badge?.getAttribute('data-recovering')).toBe('false');
+    expect(badge?.textContent).toMatch(/^Video frozen$/);
+    expect(panelCbs.recoverActions).toHaveLength(0);
+    // SUSTAINED_FREEZE_MS (8s) after the badge → stage 1: a resubscribe is driven and
+    // the copy flips to "— recovering" (now it's actually true).
+    advance(9);
+    expect(panelCbs.recoverActions.map((r) => r.mode)).toEqual(['resubscribe']);
+    const recoveringBadge = frozenBadge(container);
+    expect(recoveringBadge?.getAttribute('data-recovering')).toBe('true');
+    expect(recoveringBadge?.textContent).toMatch(/recovering/i);
+    // RESUBSCRIBE_GRACE_MS (4s) later, still frozen → stage 2: escalate ONCE to a
+    // Room rebuild. Exactly one escalation, then no further actions.
+    advance(5);
+    expect(panelCbs.recoverActions.map((r) => r.mode)).toEqual(['resubscribe', 'rebuild']);
+    advance(5);
+    expect(panelCbs.recoverActions.map((r) => r.mode)).toEqual(['resubscribe', 'rebuild']);
+  });
+
+  // #5/#9 — if the resubscribe restores frame-progress before the escalation window,
+  // the rebuild must NOT fire and the badge clears (frames are flowing again).
+  it('does NOT escalate to rebuild if frame-progress resumes after the resubscribe', () => {
+    vi.useFakeTimers();
+    conn.decodeFps = 30;
+    const { container } = renderSim();
+    let t = 1;
+    advance(2, () => {
+      panelCbs.video?.__fireFrame();
+      panelCbs.video?.__setCurrentTime(t);
+      t += 1;
+    });
+    // Freeze long enough to reach stage 1 (4s detect + 8s sustained + margin).
+    advance(13);
+    expect(panelCbs.recoverActions.map((r) => r.mode)).toEqual(['resubscribe']);
+    // Frames resume (the resubscribe worked) BEFORE the escalation window → the
+    // machine resets: no rebuild, and the badge clears.
+    advance(2, () => {
+      panelCbs.video?.__fireFrame();
+      panelCbs.video?.__setCurrentTime(t);
+      t += 1;
+    });
+    expect(frozenBadge(container)).toBeNull();
+    // Keep advancing — the escalation must never fire now.
+    advance(6);
+    expect(panelCbs.recoverActions.map((r) => r.mode)).toEqual(['resubscribe']);
   });
 });
