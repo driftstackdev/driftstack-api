@@ -445,7 +445,13 @@ function CurrentView({
       );
     case 'recording-player':
       return (
+        // key by recordingId so swapping to a DIFFERENT recording without an
+        // intervening unmount forces a clean remount — otherwise cursorMs /
+        // playing / the tick interval would persist across the swap (new
+        // recording starts mid-scrub). Latent today (list→player→list remounts),
+        // but any 'next recording' / deep-link affordance would hit it. (audit)
         <RecordingPlayerView
+          key={view.recordingId}
           recordingId={view.recordingId}
           onBack={() => onNavigate({ kind: 'recordings' })}
         />
