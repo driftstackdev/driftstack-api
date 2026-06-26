@@ -161,9 +161,9 @@ await sendInput({ type: 'swipe', x1: 200, y1: 700, x2: 200, y2: 200, durationMs:
 The `mouse*` variants remain for desktop-style tooling but the iPhone
 target has no cursor; the touch vocabulary is the canonical path.
 
-Coordinates are viewport-space logical pixels (the locked iPhone 16 Pro
-archetype is 402×874 logical points / 1206×2622 physical pixels by
-default). Send via the LocalParticipant:
+Coordinates are viewport-space logical pixels (the locked iPhone 17 /
+iOS 18.7 / Safari 26.4 archetype is 402×874 logical points / 1206×2622
+physical pixels by default). Send via the LocalParticipant:
 
 ```ts
 async function sendInput(event: InputEvent, reliable = true): Promise<void> {

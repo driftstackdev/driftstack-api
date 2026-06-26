@@ -100,9 +100,10 @@ nullable on every read.
 }
 ```
 
-All fields optional. `archetype` defaults to the locked iPhone-16
-Pro / iOS / Safari archetype when omitted (LOCKED_ARCHETYPE_ID).
-`purpose` defaults to `production_customer`.
+All fields optional. `archetype` defaults to the locked iPhone 17 /
+iOS 18.7 / Safari 26.4 archetype when omitted (`LOCKED_ARCHETYPE_ID`
+= `iphone17_ios18_7_safari26_4`). `purpose` defaults to
+`production_customer`.
 
 When `profile_id` is supplied (2026-05-20, commit `fa8cb83a`) the
 server inherits the profile's `archetype` as the default, stamps
