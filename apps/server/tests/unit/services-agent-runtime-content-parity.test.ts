@@ -93,7 +93,10 @@ describe('services/agent-runtime content parity', () => {
     // W589 — task-refusal start-gate: optional pattern list (founder/AUP data)
     // + optional audit logger. Both optional ⇒ inert until activated.
     expect(body).toMatch(/refusalPatterns\?: readonly RefusalPattern\[\];/);
-    expect(body).toMatch(/logger\?: \{ warn\?: /);
+    // Billing-integrity hardening — logger now also exposes `error?` for the
+    // bundled-LLM spend-meter loud-log (the cost row is the only soft-cap input).
+    expect(body).toMatch(/logger\?: \{\s*\n?\s*warn\?: /);
+    expect(body).toMatch(/error\?: \(obj: Record<string, unknown>, msg: string\) => void;/);
     expect(body).toMatch(
       /\*\s+Arc 2 sub-slice 8\.3 \(v2-#8\) — optional transcript event bus\.\s*\n?\s*\*\s+When wired, AgentRuntime publishes every transcript-append to\s*\n?\s*\*\s+the bus so the SSE endpoint can stream live turns to dashboard\s*\n?\s*\*\s+subscribers\. Omitting the bus is a silent no-op \(the runtime\s*\n?\s*\*\s+still writes to the repo\)\./,
     );

@@ -119,10 +119,14 @@ describe('W1034 routes/auth-cli V-266 cross-source invariant', () => {
     expect(p).toMatch(/return new BadRequestError\('Authorization code is invalid\.'\);/);
   });
 
-  it("CRITICAL initiate + exchange are public (no preHandler); bind only has [requireAuth, rateLimit('global')].", () => {
+  it("CRITICAL initiate + exchange are public but each carries a dedicated per-IP gate (initiate 5/min, exchange 60/min poll); bind has [requireAuth, rateLimit('global')].", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/auth-cli.ts'));
-    expect(p).toMatch(/app\.post\('\/v1\/auth\/cli-authorize\/initiate', async/);
-    expect(p).toMatch(/app\.post\('\/v1\/auth\/cli-authorize\/exchange', async/);
+    expect(p).toMatch(
+      /app\.post\('\/v1\/auth\/cli-authorize\/initiate', \{ preHandler: \[initiateGate\] \}, async/,
+    );
+    expect(p).toMatch(
+      /app\.post\('\/v1\/auth\/cli-authorize\/exchange', \{ preHandler: \[exchangeGate\] \}, async/,
+    );
     expect(p).toMatch(/preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\]/);
   });
 
