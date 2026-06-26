@@ -460,7 +460,7 @@ export function ProfilesView({
     if (apiKey === null || apiKey.length === 0) return;
     void (async () => {
       try {
-        const org = await fetchOrganization(settings.baseUrl, apiKey);
+        const org = await fetchOrganization(settings.baseUrl, apiKey, activeWorkspace);
         // Don't let a fresh/empty server taxonomy WIPE locally-created (offline) folders/tags:
         // if the server has nothing but the local cache has entries, SEED the server from local
         // instead of clobbering local to empty. (#441 data-loss)
@@ -471,14 +471,19 @@ export function ProfilesView({
             loadTags(),
           ]);
           if (localFolders.length > 0 || localTags.length > 0) {
-            void saveOrganization(settings.baseUrl, apiKey, {
-              folders: localFolders.map((name) =>
-                localIcons[name] !== undefined && localIcons[name].length > 0
-                  ? { name, icon: localIcons[name] }
-                  : { name },
-              ),
-              tags: localTags,
-            }).catch(() => undefined);
+            void saveOrganization(
+              settings.baseUrl,
+              apiKey,
+              {
+                folders: localFolders.map((name) =>
+                  localIcons[name] !== undefined && localIcons[name].length > 0
+                    ? { name, icon: localIcons[name] }
+                    : { name },
+                ),
+                tags: localTags,
+              },
+              activeWorkspace,
+            ).catch(() => undefined);
             setCustomFolders([...localFolders].sort((a, b) => a.localeCompare(b)));
             setCustomFolderIcons(localIcons);
             setCustomTags([...localTags].sort((a, b) => a.localeCompare(b)));
@@ -498,7 +503,7 @@ export function ProfilesView({
         /* offline / unauth → keep the local cache loaded on mount */
       }
     })();
-  }, [settings.apiKey, settings.baseUrl]);
+  }, [settings.apiKey, settings.baseUrl, activeWorkspace]);
 
   // org-sync — push the full account taxonomy to the server after a local
   // mutation (best-effort; the local store stays the source if it fails).
@@ -513,9 +518,11 @@ export function ProfilesView({
         ),
         tags,
       };
-      void saveOrganization(settings.baseUrl, settings.apiKey, org).catch(() => undefined);
+      void saveOrganization(settings.baseUrl, settings.apiKey, org, activeWorkspace).catch(
+        () => undefined,
+      );
     },
-    [settings.apiKey, settings.baseUrl],
+    [settings.apiKey, settings.baseUrl, activeWorkspace],
   );
 
   const refresh = useCallback(

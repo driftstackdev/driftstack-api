@@ -22,15 +22,34 @@ function orgUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, '')}/v1/account/me/organization`;
 }
 
+/** Builds the auth headers, adding the workspace scope header when a team
+ *  workspace is active so the taxonomy resolves against the SAME account the
+ *  profiles do (the SDK client sends this on every profile request). Without it
+ *  the org sync silently resolved against the PERSONAL account while the profiles
+ *  it organizes live in the workspace — an account-scope mismatch. (audit) */
+function orgHeaders(
+  apiKey: string,
+  effectiveAccount: string | null,
+  extra: Record<string, string>,
+): Record<string, string> {
+  return {
+    authorization: `Bearer ${apiKey}`,
+    ...(effectiveAccount !== null ? { 'x-driftstack-account': effectiveAccount } : {}),
+    ...extra,
+  };
+}
+
 /** GET the account's taxonomy. Throws on non-2xx / network error (caller
- *  falls back to the local cache when offline). */
+ *  falls back to the local cache when offline). Pass the active workspace
+ *  (owner account id) or null for personal scope. */
 export async function fetchOrganization(
   baseUrl: string,
   apiKey: string,
+  effectiveAccount: string | null = null,
 ): Promise<AccountOrganization> {
   const res = await fetch(orgUrl(baseUrl), {
     method: 'GET',
-    headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },
+    headers: orgHeaders(apiKey, effectiveAccount, { accept: 'application/json' }),
   });
   if (!res.ok) throw new Error(`organization fetch failed: ${res.status.toString()}`);
   const body = (await res.json()) as Partial<AccountOrganization>;
@@ -45,15 +64,18 @@ export async function fetchOrganization(
 }
 
 /** PUT the full taxonomy (account_owner-scoped server-side). Best-effort from
- *  the caller's perspective — a failure leaves the local cache as the source. */
+ *  the caller's perspective — a failure leaves the local cache as the source.
+ *  Pass the active workspace (owner account id) or null for personal scope so
+ *  the write lands on the SAME account the profiles do. */
 export async function saveOrganization(
   baseUrl: string,
   apiKey: string,
   org: AccountOrganization,
+  effectiveAccount: string | null = null,
 ): Promise<void> {
   const res = await fetch(orgUrl(baseUrl), {
     method: 'PUT',
-    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    headers: orgHeaders(apiKey, effectiveAccount, { 'content-type': 'application/json' }),
     body: JSON.stringify(org),
   });
   if (!res.ok) throw new Error(`organization save failed: ${res.status.toString()}`);

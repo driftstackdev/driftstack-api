@@ -53,6 +53,26 @@ describe('fetchOrganization', () => {
     );
     await expect(fetchOrganization('https://api.driftstack.dev', 'ds_key')).rejects.toThrow();
   });
+
+  it('sends X-Driftstack-Account when an active workspace is passed (matches profile scope)', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(JSON.stringify({ folders: [], tags: [] }), { status: 200 })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await fetchOrganization('https://api.driftstack.dev', 'ds_key', 'acc_team_owner');
+    const headers = (fetchMock.mock.calls[0]?.[1] as RequestInit).headers as Record<string, string>;
+    expect(headers['x-driftstack-account']).toBe('acc_team_owner');
+  });
+
+  it('omits X-Driftstack-Account for personal scope (null)', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(JSON.stringify({ folders: [], tags: [] }), { status: 200 })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await fetchOrganization('https://api.driftstack.dev', 'ds_key', null);
+    const headers = (fetchMock.mock.calls[0]?.[1] as RequestInit).headers as Record<string, string>;
+    expect(headers['x-driftstack-account']).toBeUndefined();
+  });
 });
 
 describe('saveOrganization', () => {
@@ -69,5 +89,18 @@ describe('saveOrganization', () => {
       folders: [{ name: 'QA' }],
       tags: ['warmup'],
     });
+  });
+
+  it('sends X-Driftstack-Account on the PUT when an active workspace is passed', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response('{}', { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+    await saveOrganization(
+      'https://api.driftstack.dev',
+      'ds_key',
+      { folders: [], tags: [] },
+      'acc_team_owner',
+    );
+    const headers = (fetchMock.mock.calls[0]?.[1] as RequestInit).headers as Record<string, string>;
+    expect(headers['x-driftstack-account']).toBe('acc_team_owner');
   });
 });
