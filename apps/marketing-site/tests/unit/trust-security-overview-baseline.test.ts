@@ -40,11 +40,16 @@ describe('W315.B /trust/security-overview baseline', () => {
     expect(body).toMatch(/HMAC[- ]SHA[- ]?256/);
   });
 
-  it('positions EU-only data plane (Hetzner / Neon / Cloudflare R2 EU)', () => {
-    expect(body).toMatch(/EU[- ]only data plane/i);
+  it('positions EU control plane (Hetzner / Neon / Cloudflare R2 EU) with the session-execution fleet on MacStadium US', () => {
+    // The control plane is EU-only; the session-execution driver
+    // fleet runs on MacStadium (US) under SCCs + EU-US DPF, so the
+    // data plane is NOT "EU-only".
+    expect(body).toMatch(/EU control plane/i);
+    expect(body).not.toMatch(/EU[- ]only data plane/i);
     expect(body).toMatch(/Hetzner\s+Nuremberg/);
     expect(body).toMatch(/Neon\s+Frankfurt/);
     expect(body).toMatch(/Cloudflare R2 EU/);
+    expect(body).toMatch(/MacStadium\s+hardware\s+\(US\)/);
   });
 
   it('claims SHA-256 hashed CLI authorization codes', () => {

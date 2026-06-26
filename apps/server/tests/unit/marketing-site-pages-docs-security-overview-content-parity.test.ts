@@ -66,12 +66,12 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
     expect(body).toMatch(/<a href="\/docs\/api-security-headers">API security headers<\/a>/);
   });
 
-  it('Object storage + profile state framing pinned. Re-enabled by slice 278 after verifying both Object-storage (S3-SSE + never-publicly-listable + recordings-roadmap) + Profile-state (encrypted-files + EU-host + Postgres-metadata-only) framings still exist verbatim at docs/security-overview.astro:44-55', () => {
+  it('Object storage + profile state framing pinned. Object-storage (S3-SSE + never-publicly-listable + recordings-roadmap) + Profile-state (encrypted-files on the driver host = the MacStadium fleet, US + Postgres-EU-metadata-only) framings exist verbatim at docs/security-overview.astro:44-55', () => {
     expect(body).toMatch(
       /<strong>Object storage:<\/strong> Customer-generated artefacts\s*\n?\s*that land in Cloudflare R2 use server-side encryption \(S3-SSE\);\s*\n?\s*underlying objects are never publicly listable\. Session\s*\n?\s*recordings are a roadmap item — see\s*\n?\s*<a href="\/docs\/recordings">\/docs\/recordings<\/a> for status\./,
     );
     expect(body).toMatch(
-      /<strong>Profile state:<\/strong> Per-profile browser state\s*\n?\s*\(cookies, localStorage, IndexedDB\) lives in the WebKit driver\s*\n?\s*layer as per-profile encrypted files on disk \(EU host\)\. The\s*\n?\s*Postgres profile row holds metadata only — name, archetype,\s*\n?\s*description\./,
+      /<strong>Profile state:<\/strong> Per-profile browser state\s*\n?\s*\(cookies, localStorage, IndexedDB\) lives in the WebKit driver\s*\n?\s*layer as per-profile encrypted files on disk on the driver\s*\n?\s*host \(the MacStadium fleet, US\)\. The Postgres profile row\s*\n?\s*\(EU\) holds metadata only — name, archetype, description\./,
     );
   });
 
@@ -105,12 +105,12 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
     );
   });
 
-  it("Browser-sandbox 3-bullet framing pinned: 'Driftstack does not execute customer-supplied script bodies server-side — the API surface is action-based (navigate / interact / wait / capture). Arbitrary script eval is intentionally not exposed.' + 'Each session is one isolated WebKit instance backed by an ephemeral context; cross-session state never bleeds. Persistence between sessions only happens via the customer-managed profile mechanism (encrypted browser state on the driver host, EU).' + 'Concurrent-session caps per tier act as the primary cost-control + abuse-mitigation primitive; exceeding the cap returns 429 with the concurrency-limit RFC 7807 type.' — pinned so the no-server-side-script-eval + one-WebKit-per-session + profile-as-only-persistence + concurrency-cap-as-cost-control + 429 concurrency-limit RFC 7807 commitment survives", () => {
+  it("Browser-sandbox 3-bullet framing pinned: 'Driftstack does not execute customer-supplied script bodies server-side — the API surface is action-based (navigate / interact / wait / capture). Arbitrary script eval is intentionally not exposed.' + 'Each session is one isolated WebKit instance backed by an ephemeral context; cross-session state never bleeds. Persistence between sessions only happens via the customer-managed profile mechanism (encrypted browser state on the driver host — the MacStadium fleet, US).' + 'Concurrent-session caps per tier act as the primary cost-control + abuse-mitigation primitive; exceeding the cap returns 429 with the concurrency-limit RFC 7807 type.' — pinned so the no-server-side-script-eval + one-WebKit-per-session + profile-as-only-persistence + concurrency-cap-as-cost-control + 429 concurrency-limit RFC 7807 commitment survives", () => {
     expect(body).toMatch(
       /Driftstack does not execute customer-supplied script bodies\s*\n?\s*server-side — the API surface is action-based\s*\n?\s*\(<code>navigate<\/code> \/ <code>interact<\/code> \/\s*\n?\s*<code>wait<\/code> \/ <code>capture<\/code>\)\. Arbitrary script\s*\n?\s*eval is intentionally not exposed\./,
     );
     expect(body).toMatch(
-      /Each session is one isolated WebKit instance backed by an\s*\n?\s*ephemeral context; cross-session state never bleeds\.\s*\n?\s*Persistence between sessions only happens via the\s*\n?\s*customer-managed <strong>profile<\/strong> mechanism\s*\n?\s*\(encrypted browser state on the driver host, EU\)\./,
+      /Each session is one isolated WebKit instance backed by an\s*\n?\s*ephemeral context; cross-session state never bleeds\.\s*\n?\s*Persistence between sessions only happens via the\s*\n?\s*customer-managed <strong>profile<\/strong> mechanism\s*\n?\s*\(encrypted browser state on the driver host — the MacStadium\s*\n?\s*fleet, US\)\./,
     );
     expect(body).toMatch(
       /Concurrent-session caps per tier act as the primary\s*\n?\s*cost-control \+ abuse-mitigation primitive; exceeding the cap\s*\n?\s*returns <code>429<\/code> with the\s*\n?\s*<code>concurrency-limit<\/code> RFC 7807 type\./,

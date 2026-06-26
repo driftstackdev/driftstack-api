@@ -84,8 +84,12 @@ describe('W342.A /docs/data-residency parity', () => {
   it('Anthropic + MacStadium transfers framed under SCCs + EU-US DPF', () => {
     // Two of the three US transfers must cite the transfer
     // mechanism. Catches the customer-trust posture being toned
-    // down in a future copy revamp.
+    // down in a future copy revamp. The MacStadium item carries a
+    // longer "driver host / VPN tunnel" explanation before the
+    // mechanism clause, so its window is wider than Anthropic's.
     expect(body).toMatch(/Anthropic[\s\S]{0,200}SCCs \+ EU-US DPF/);
-    expect(body).toMatch(/MacStadium[\s\S]{0,200}SCCs \+ EU-US DPF/);
+    expect(body).toMatch(/MacStadium[\s\S]{0,800}SCCs \+ EU-US DPF/);
+    // MacStadium is the US driver fleet, not an EU host.
+    expect(body).toMatch(/MacStadium[\s\S]{0,200}\(US\)/);
   });
 });

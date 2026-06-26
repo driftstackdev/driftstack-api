@@ -101,10 +101,17 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
     expect(body).toMatch(/OpenVPN \(\.ovpn\)/);
   });
 
-  it('EU-only data plane: Hetzner Nuremberg / Neon Frankfurt / R2 EU jurisdiction', () => {
-    expect(body).toMatch(/<p class="font-medium text-tk-ink">EU-only data plane<\/p>/);
+  it('EU control plane: Hetzner Nuremberg / Neon Frankfurt / R2 EU jurisdiction, session-execution fleet on MacStadium US', () => {
+    // Header is "EU control plane" (not "EU-only data plane"): the
+    // EU sub-processors carry the control plane, while the iPhone
+    // Safari session-execution fleet runs on MacStadium (US).
+    expect(body).toMatch(/<p class="font-medium text-tk-ink">EU control plane<\/p>/);
+    expect(body).not.toMatch(/EU-only data plane/);
     expect(body).toMatch(
       /Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\),\s+object storage \(Cloudflare R2 EU jurisdiction\)/,
+    );
+    expect(body).toMatch(
+      /iPhone Safari session-execution fleet runs on MacStadium\s+hardware \(US\) under SCCs \+ EU-US DPF/,
     );
   });
 

@@ -14,8 +14,10 @@
 //     webhook deliveries (7-day retention) / Stripe (US, customer_id only) /
 //     NowPayments (Estonia) / Redis Upstash EU + 5min TTL / Sentry EU /
 //     Postmark EU.
-//   • Never-leaves-EU 4-list: DB + cache + profile state + session-execution
-//     traffic.
+//   • Never-leaves-EU 3-list: DB + cache + profile state AT REST (Neon EU,
+//     Upstash EU, EU-region R2). Profile-state blobs load onto the
+//     MacStadium (US) driver host + session-execution traffic flows
+//     through the US fleet, so neither stays EU.
 //   • Does-leave-EU 4-list: recordings R2 (single-region opt-in) +
 //     Stripe (Stripe Payments Europe Ltd Ireland, SCCs + EU-US DPF) +
 //     Anthropic (US, BYOK bypasses) + MacStadium (US, SCCs + EU-US DPF).
@@ -85,12 +87,23 @@ describe('W519.B apps/marketing-site/src/pages/docs/data-residency.astro content
     expect(body).toMatch(/<td>Postmark \(EU sending region\)<\/td>/);
   });
 
-  it("Never-leaves-EU 4-list pinned: Database content (Postgres Neon EU) + Cache content (Redis Upstash EU) + Profile state blobs on driver host EU + Session-execution traffic between API + driver + customer's target URL — pinned so the 4-list never-leaves-EU commitment survives (drift to letting any of these leave EU would break the EU-default residency story)", () => {
+  it('Never-leaves-EU 3-list pinned: Database content (Postgres Neon EU) + Cache content (Redis Upstash EU) + Profile state AT REST in DB + object storage (Neon EU, Upstash EU, EU-region R2) — pinned so the never-leaves-EU commitment survives. Per the EU control-plane / US driver-fleet split, profile-state BLOBS are loaded onto the MacStadium (US) driver host and session-execution traffic flows through the US fleet, so neither stays in the EU; only profile state AT REST is EU-resident.', () => {
     expect(body).toMatch(/<li>Database content \(Postgres, Neon EU\)\.<\/li>/);
     expect(body).toMatch(/<li>Cache content \(Redis, Upstash EU\)\.<\/li>/);
-    expect(body).toMatch(/<li>Profile state blobs on the driver host \(EU\)\.<\/li>/);
     expect(body).toMatch(
+      /<li>Profile state at rest in the database \+ object storage\s*\n?\s*\(Neon EU, Upstash EU, EU-region R2 where configured\)\.<\/li>/,
+    );
+    // The corrected copy no longer claims the driver host or
+    // session-execution traffic stays in the EU — both run on
+    // MacStadium (US). Ban the old EU-resident driver-host claims.
+    expect(body).not.toMatch(/Profile state blobs on the driver host \(EU\)/);
+    expect(body).not.toMatch(
       /<li>Session-execution traffic between the API server, the\s*\n?\s*browser driver, and the customer's target URL\.<\/li>/,
+    );
+    // The split is stated explicitly: blobs load onto the driver
+    // host and session-execution traffic flows through MacStadium US.
+    expect(body).toMatch(
+      /Profile state blobs are loaded onto the driver host and\s*\n?\s*session-execution traffic[\s\S]*?flows through the MacStadium fleet in the\s*\n?\s*US/,
     );
   });
 
@@ -111,7 +124,7 @@ describe('W519.B apps/marketing-site/src/pages/docs/data-residency.astro content
       /<strong>Anthropic \(bundled-LLM only\):<\/strong> the\s*\n?\s*bundled-LLM agent is opt-in\. When enabled, prompts \+\s*\n?\s*completions traverse Anthropic \(US\) under SCCs \+ EU-US DPF\.\s*\n?\s*BYOK accounts bypass this entirely\./,
     );
     expect(body).toMatch(
-      /<strong>MacStadium \(session execution\):<\/strong> the\s*\n?\s*iPhone Safari driver fleet runs on MacStadium hardware\s*\n?\s*\(US\)\. Session-execution traffic between the API server and\s*\n?\s*the driver fleet uses Driftstack-managed VPN tunnels;\s*\n?\s*contractual transfer is via SCCs \+ EU-US DPF\./,
+      /<strong>MacStadium \(session execution\):<\/strong> the\s*\n?\s*iPhone Safari driver fleet runs on MacStadium hardware\s*\n?\s*\(US\)\. Profile state is loaded onto the driver host for the\s*\n?\s*life of a session, and session-execution traffic between the\s*\n?\s*API server, the driver fleet, and the customer's target URL\s*\n?\s*traverses the US fleet via Driftstack-managed VPN tunnels;\s*\n?\s*contractual transfer is via SCCs \+ EU-US DPF\./,
     );
   });
 

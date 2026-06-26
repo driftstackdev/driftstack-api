@@ -14,7 +14,8 @@
 //     roadmap (○ status).
 //   • Webhooks: HMAC-SHA256 outbound + Stripe V-080 / NowPayments
 //     V-487 inbound verification.
-//   • Data: EU-only data plane + capture retention roadmap (V-540)
+//   • Data: EU control plane (session-execution fleet on MacStadium
+//     US) + capture retention roadmap (V-540)
 //     + 30-day grace then hard delete.
 //   • Observability: public incident history + vulnerability
 //     disclosure 2d/5d + chaos engineering harness (V-547).
@@ -110,10 +111,14 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     );
   });
 
-  it("EU-only data plane claim pinned: 'EU-only data plane' + 'Compute (Hetzner Nuremberg), database (Neon Frankfurt), object storage (Cloudflare R2 EU jurisdiction)' — pinned so the 3-sub-processor location specificity stays consistent with /trust/sub-processors + /trust (drift to dropping the explicit city/jurisdiction would weaken the data-residency credibility; drift to changing a sub-processor would create marketing↔sub-processor-register divergence)", () => {
-    expect(body).toMatch(/EU-only data plane/);
+  it("EU control plane claim pinned: 'EU control plane' + 'Compute (Hetzner Nuremberg), database (Neon Frankfurt), object storage (Cloudflare R2 EU jurisdiction)' + session-execution fleet on MacStadium US — pinned so the 3-sub-processor location specificity stays consistent with /trust/sub-processors + /trust (drift to dropping the explicit city/jurisdiction would weaken the data-residency credibility; drift to changing a sub-processor would create marketing↔sub-processor-register divergence). The data plane is NOT EU-only: the iPhone Safari driver fleet runs on MacStadium (US).", () => {
+    expect(body).toMatch(/EU control plane/);
+    expect(body).not.toMatch(/EU-only data plane/);
     expect(body).toMatch(
       /Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\),\s*\n?\s*object storage \(Cloudflare R2 EU jurisdiction\)\./,
+    );
+    expect(body).toMatch(
+      /iPhone Safari session-execution fleet runs on MacStadium\s*\n?\s*hardware \(US\) under SCCs \+ EU-US DPF/,
     );
   });
 
