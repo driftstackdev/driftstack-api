@@ -100,7 +100,17 @@ export function subscribeNotifications(opts: SubscribeOpts): () => void {
   opts.onState?.('connecting');
   const es = new Ctor(opts.url);
 
+  // Bounded reconnect — a server that's reachable at TCP level but keeps
+  // 5xx-ing / dropping (proxy, expired token) makes native EventSource retry
+  // FOREVER, so the banner reads "reconnecting…" permanently and never resolves
+  // to the actionable "closed — open Settings" state. Count consecutive errors;
+  // after the cap, give up: close the source and report 'closed' so the user
+  // gets the Settings affordance. A successful 'open' resets the counter.
+  const MAX_CONSECUTIVE_ERRORS = 6;
+  let consecutiveErrors = 0;
+
   const handleOpen = (): void => {
+    consecutiveErrors = 0;
     opts.onState?.('open');
   };
   const handleError = (err: Event): void => {
@@ -115,7 +125,16 @@ export function subscribeNotifications(opts: SubscribeOpts): () => void {
     if (es.readyState === 2) {
       opts.onState?.('closed');
     } else {
-      opts.onState?.('reconnecting');
+      consecutiveErrors += 1;
+      if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        // Give up retrying — close the flapping source and surface the terminal
+        // 'closed' state so the user gets the "open Settings" affordance instead
+        // of a permanent "reconnecting…".
+        es.close();
+        opts.onState?.('closed');
+      } else {
+        opts.onState?.('reconnecting');
+      }
     }
     opts.onError?.(err);
   };

@@ -238,6 +238,46 @@ describe('subscribeNotifications', () => {
     expect(states).toEqual(['connecting', 'reconnecting', 'closed']);
   });
 
+  it('after a run of consecutive transient errors, gives up: closes and reports "closed"', () => {
+    const states: string[] = [];
+    subscribeNotifications({
+      url: 'https://api.example/notifications',
+      onEvent: vi.fn(),
+      onState: (s) => states.push(s),
+      eventSourceFactory: FakeEventSource as unknown as typeof EventSource,
+    });
+    const es = FakeEventSource.instances[0];
+    if (!es) throw new Error('expected instance');
+    // A flapping endpoint: many transient errors with no successful open. The
+    // bound (6) flips it to terminal 'closed' so the user gets the Settings
+    // affordance instead of a permanent "reconnecting…".
+    for (let i = 0; i < 6; i += 1) es.fireError(true);
+    expect(states).toContain('closed');
+    expect(states[states.length - 1]).toBe('closed');
+    // The source was closed so it stops retrying forever.
+    expect(es.readyState).toBe(FakeEventSource.CLOSED);
+  });
+
+  it('a successful open RESETS the error budget (transient blips before a reconnect don’t accumulate to closed)', () => {
+    const states: string[] = [];
+    subscribeNotifications({
+      url: 'https://api.example/notifications',
+      onEvent: vi.fn(),
+      onState: (s) => states.push(s),
+      eventSourceFactory: FakeEventSource as unknown as typeof EventSource,
+    });
+    const es = FakeEventSource.instances[0];
+    if (!es) throw new Error('expected instance');
+    // 5 transient errors (under the cap of 6)…
+    for (let i = 0; i < 5; i += 1) es.fireError(true);
+    // …then a successful reconnect resets the budget…
+    es.fireOpen();
+    // …so 5 more transient errors still don't trip the cap.
+    for (let i = 0; i < 5; i += 1) es.fireError(true);
+    expect(states).not.toContain('closed');
+    expect(es.readyState).not.toBe(FakeEventSource.CLOSED);
+  });
+
   it('malformed JSON on a frame routes through onError without throwing', () => {
     const onError = vi.fn();
     subscribeNotifications({
