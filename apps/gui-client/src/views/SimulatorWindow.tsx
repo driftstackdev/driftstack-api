@@ -2174,10 +2174,21 @@ export function SimulatorWindow(): JSX.Element {
   // this, multiple rVFC chains stack on the same element and fps reads
   // multiplied (caught in the night distance-audit).
   const fpsArmedElRef = useRef<HTMLVideoElement | null>(null);
+  // #3/#6 — wall-clock timestamp of the LAST frame the <video> ELEMENT actually
+  // produced (rVFC fired). This is the freeze detector's source of truth: a
+  // legitimately idle-but-live stream (A3's idle frame-pump down-clock, W2952)
+  // STILL fires rVFC at the down-clocked rate, so its last-frame time keeps
+  // advancing — only a TRUE freeze (the element stops producing frames) lets it
+  // go stale. Down-clock-invariant by construction (unlike decodeFps===0, which
+  // an idle stream trivially hits). Updated by the same rVFC chain as the fps
+  // counter so there's a single per-frame callback.
+  const lastVideoFrameAtRef = useRef(0);
   function armFpsCounter(el: HTMLVideoElement): void {
     if (fpsArmedElRef.current === el) return;
     fpsArmedElRef.current = el;
     const tick = (now: number): void => {
+      // Every rVFC tick is a real produced frame → the element is live.
+      lastVideoFrameAtRef.current = Date.now();
       const c = fpsCounterRef.current;
       if (c.windowStart === 0) c.windowStart = now;
       c.frames += 1;
@@ -2201,50 +2212,80 @@ export function SimulatorWindow(): JSX.Element {
   // WebRTC transport diagnostics (relay/tcp? loss? freezes?) — founder's
   // "is it slow because we're on TCP?" question. Read-only stats poll.
   const conn = useConnectionStats({ room, enabled: room !== null });
-  // Client-side VIDEO-FREEZE heuristic (audit). The box-reported 'stalled'
-  // page_state covers a frozen RENDERER, and the transport badge covers a
-  // TCP/relay slow link — but a pure CLIENT decode freeze (decoder stalls / SFU
-  // stops delivering frames / severe loss) WITHOUT a box-side stall leaves the
-  // last frame frozen with no indicator. Flag it only once frames were ACTUALLY
-  // flowing (decodeFps > 0 at some point) and then decodeFps holds 0 for ~4s — so
-  // the pre-first-frame connect phase (decodeFps naturally 0) never false-fires.
+  // Client-side VIDEO-FREEZE detector (#3/#6). The box-reported 'stalled' page_state
+  // covers a frozen RENDERER, and the transport badge covers a TCP/relay slow link —
+  // but a pure CLIENT decode freeze (decoder stalls / SFU stops delivering frames /
+  // severe loss) WITHOUT a box-side stall leaves the last frame frozen with no
+  // indicator.
+  //
+  // Source of truth = the <video> ELEMENT's OWN frame progress, NOT decodeFps. A3's
+  // idle frame-pump down-clock (W2952) drives the publish FPS to ~0 on a static/idle
+  // page → a decodeFps===0-for-Ns heuristic FALSE-FIRES "Video frozen" on a perfectly
+  // healthy idle stream (the reported "reconnecting, happens too often"). But a
+  // legitimately idle-but-LIVE stream STILL advances currentTime / fires rVFC at the
+  // down-clocked rate, so the element's last-frame time keeps moving — only a TRUE
+  // freeze (the element stops producing frames) lets it go stale. We declare frozen
+  // only when BOTH the rVFC last-frame time AND el.currentTime have stopped advancing
+  // for the window (currentTime is the fallback for a browser without rVFC). This is
+  // down-clock-invariant by construction. Connected-only (a transport drop is the
+  // panel's overlay, not ours).
   const [videoFrozen, setVideoFrozen] = useState(false);
   const sawFramesRef = useRef(false);
   const freezeSinceRef = useRef<number | null>(null);
+  // currentTime-advance fallback: the last sampled currentTime + the wall-clock when
+  // it last CHANGED. A live (even down-clocked) stream keeps advancing currentTime;
+  // a true freeze pins it.
+  const lastSampledCurrentTimeRef = useRef<number | null>(null);
+  const lastCurrentTimeAdvanceAtRef = useRef(0);
   useEffect(() => {
     // Suppress the freeze badge when the LiveKit connection itself isn't connected: a
-    // transport drop (disconnected/reconnecting) naturally zeroes decodeFps, and the
+    // transport drop (disconnected/reconnecting) naturally stops frame progress, and the
     // panel's own "The live stream disconnected" overlay + Reconnect is the single
-    // source of truth there. Without this the parent's "Video frozen — reconnecting"
-    // pill contradicted the panel's overlay (one says auto-reconnecting, the other asks
-    // the founder to act). Only a freeze WHILE connected is a genuine client decode stall.
+    // source of truth there. Without this the parent's "Video frozen" pill contradicted
+    // the panel's overlay. Only a freeze WHILE connected is a genuine client decode stall.
     if (room === null || connState !== 'connected') {
       sawFramesRef.current = false;
       freezeSinceRef.current = null;
+      lastSampledCurrentTimeRef.current = null;
+      lastCurrentTimeAdvanceAtRef.current = 0;
       setVideoFrozen(false);
       return;
     }
     const FREEZE_AFTER_MS = 4000;
     const tick = (): void => {
-      const fpsNow = conn.decodeFps;
-      // Only arm the detector after we've genuinely decoded frames (avoids the
-      // pre-first-frame 0-fps false positive). Once armed, a sustained 0 fps is a
-      // freeze; any fps > 0 clears it immediately.
-      if (typeof fpsNow === 'number' && fpsNow > 0) {
-        sawFramesRef.current = true;
-        freezeSinceRef.current = null;
-        setVideoFrozen(false);
-        return;
-      }
-      if (!sawFramesRef.current) return; // never decoded a frame yet — not a freeze
       const now = Date.now();
-      if (freezeSinceRef.current === null) freezeSinceRef.current = now;
-      setVideoFrozen(now - freezeSinceRef.current >= FREEZE_AFTER_MS);
+      const el = videoElRef.current;
+      // currentTime advancement (rVFC-independent fallback). Treat a change of >1ms as
+      // progress so float jitter doesn't read as advance/freeze either way.
+      const ct = el !== null && Number.isFinite(el.currentTime) ? el.currentTime : null;
+      if (ct !== null) {
+        const prev = lastSampledCurrentTimeRef.current;
+        if (prev === null || Math.abs(ct - prev) > 0.001) {
+          lastSampledCurrentTimeRef.current = ct;
+          lastCurrentTimeAdvanceAtRef.current = now;
+        }
+      }
+      // The most-recent moment the element produced a frame, by EITHER signal: rVFC
+      // fired (last-frame time) OR currentTime advanced. Either advancing = the element
+      // is live (incl. an idle down-clocked stream — that's the whole point).
+      const lastProgressAt = Math.max(
+        lastVideoFrameAtRef.current,
+        lastCurrentTimeAdvanceAtRef.current,
+      );
+      // Only arm after the element has genuinely produced a frame (avoids the
+      // pre-first-frame false positive). lastProgressAt === 0 → nothing ever produced.
+      if (lastProgressAt > 0) sawFramesRef.current = true;
+      if (!sawFramesRef.current) return;
+      // Frozen iff no frame progressed for the full window. The freeze "since" is the
+      // last progress moment itself, so detection takes exactly FREEZE_AFTER_MS after
+      // frames stop (not 2× the window). Any fresh frame clears it immediately.
+      freezeSinceRef.current = lastProgressAt;
+      setVideoFrozen(now - lastProgressAt >= FREEZE_AFTER_MS);
     };
     tick();
     const handle = window.setInterval(tick, 1000);
     return () => window.clearInterval(handle);
-  }, [room, conn.decodeFps, connState]);
+  }, [room, connState]);
   // #48 item 2 — "Copy diagnostics": a paste-ready snapshot of the session-info
   // overlay (the founder keeps reporting streaming/latency issues and needs the
   // exact figures for a bug report). formatSessionDiagnostics is pure + tested;
