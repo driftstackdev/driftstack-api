@@ -60,6 +60,17 @@ describe('loadConfig', () => {
     ).toBe(1);
   });
 
+  it('bundledTurnMaxConcurrency — prod default 3; tunable via BUNDLED_TURN_MAX_CONCURRENCY (billing-integrity TOCTOU bound)', () => {
+    const base = {
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+    };
+    expect(loadConfig(base).bundledTurnMaxConcurrency).toBe(3);
+    expect(
+      loadConfig({ ...base, BUNDLED_TURN_MAX_CONCURRENCY: '5' }).bundledTurnMaxConcurrency,
+    ).toBe(5);
+  });
+
   it('globalIpRateLimitPerMin — prod default 600/min/IP; tunable via GLOBAL_IP_RATE_LIMIT_PER_MIN; 0 disables (DoS hardening)', () => {
     const base = {
       DATABASE_URL: 'postgres://u:p@localhost:5432/db',

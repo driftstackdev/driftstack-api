@@ -195,6 +195,14 @@ const ConfigSchema = z.object({
   // CONCURRENT in-flight uploads for POST /v1/agent-sessions/:id/files, alongside
   // the byte cap. Default 4; tune via AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT.
   agentUploadMaxAccountInFlightCount: z.coerce.number().int().positive().default(4),
+  // Billing-integrity hardening — per-account ceiling on CONCURRENT
+  // bundled-LLM turns. The bundled-LLM soft-cap gate is read-then-act (the
+  // cost row lands only after the turn), so N concurrent turns can all
+  // read the same pre-increment spend and overspend the cap. Bounding N
+  // caps the overshoot to (N-1) turns x the flat per-turn cost. Default 3;
+  // tune via BUNDLED_TURN_MAX_CONCURRENCY. Only consulted when the
+  // bundled-LLM leg is wired (deploymentFallbackKey + bundledLlmService).
+  bundledTurnMaxConcurrency: z.coerce.number().int().positive().default(3),
   // V-079: where the user-facing auth-flow links point. The plaintext
   // single-use token gets appended as `?token=<...>` to each. Defaults
   // are dev-friendly localhost URLs; production sets these to the real
@@ -703,6 +711,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // defaults (16 / 4) apply when unset.
     agentRelayMaxAccountInFlight: env.AGENT_RELAY_MAX_ACCOUNT_INFLIGHT,
     agentUploadMaxAccountInFlightCount: env.AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT,
+    bundledTurnMaxConcurrency: env.BUNDLED_TURN_MAX_CONCURRENCY,
     authFlowUrls: deriveAuthFlowUrls(env),
     dashboardOrigin: env.DASHBOARD_ORIGIN,
     mfaEncryptionKey: env.MFA_ENCRYPTION_KEY,

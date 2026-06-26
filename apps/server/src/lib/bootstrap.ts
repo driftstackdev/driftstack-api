@@ -1694,6 +1694,10 @@ export async function createProductionDeps(
     // unconditionally; the route's resolution chain skips this leg
     // unless deploymentFallbackKey is also configured.
     bundledLlmService,
+    // Billing-integrity hardening — per-account concurrent bundled-LLM-turn
+    // ceiling (bounds the soft-cap TOCTOU overshoot). Only consulted when
+    // the bundled-LLM leg is live.
+    bundledTurnMaxConcurrency: config.bundledTurnMaxConcurrency,
     // EG-API-1.6 — concrete SocksProxyBackend for the Phase 1 SOCKS5
     // customer-egress path. Wired unconditionally: the backend is pure
     // config-to-env-var translation with no external deps, so it

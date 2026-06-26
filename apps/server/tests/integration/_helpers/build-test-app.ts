@@ -25,6 +25,7 @@ import type { DecomposeUsage } from '../../../src/services/agent-decomposer.js';
 import { StubAgentExecutor } from '../../../src/services/agent-executor.js';
 import { InMemoryAgentSessionsRepo } from '../../../src/services/agent-sessions.js';
 import { BundledLlmService, InMemoryBundledLlmRepo } from '../../../src/services/bundled-llm.js';
+import { BundledTurnConcurrencyLimiter } from '../../../src/services/bundled-turn-concurrency.js';
 import {
   BYOKAnthropicService,
   InMemoryBYOKAnthropicRepo,
@@ -360,6 +361,12 @@ export interface TestAppOptions {
     monthlyCapUsdCents: number;
   };
   /**
+   * Billing-integrity hardening — override the per-account CONCURRENT
+   * bundled-LLM-turn ceiling so a test can trip the limiter at 1-2
+   * concurrent turns. Omitted → the route's default of 3.
+   */
+  bundledTurnMaxConcurrency?: number;
+  /**
    * Wires the active BYOKAnthropicService (backed by
    * InMemoryBYOKAnthropicRepo) so the GET/PUT/DELETE byok-anthropic
    * routes register their real handlers instead of the 503
@@ -489,6 +496,10 @@ export interface TestAppFixture {
    * prior bundled-LLM cost rows before issuing a chat turn.
    */
   bundledLlmRepo: InMemoryBundledLlmRepo;
+  /** Billing-integrity hardening — the bundled-turn concurrency limiter
+   *  wired into the app. Tests pre-occupy slots (tryAcquire) to assert the
+   *  /message route 429s when an account is at its bundled-turn ceiling. */
+  bundledTurnConcurrency: BundledTurnConcurrencyLimiter;
   /** Exposed when `enableByokAnthropic` is set so tests can assert
    *  stored-key state directly (findByAccount) after route calls. */
   byokAnthropicRepo: InMemoryBYOKAnthropicRepo;
@@ -885,6 +896,13 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     });
   }
   const bundledLlmService = new BundledLlmService(bundledLlmRepo);
+  // Billing-integrity hardening — bundled-turn concurrency limiter. Always
+  // constructed so the fixture can expose it (a test pre-occupies slots to
+  // assert the route 429s when full); ceiling defaults to 3 unless the
+  // test overrides via opts.bundledTurnMaxConcurrency.
+  const bundledTurnConcurrency = new BundledTurnConcurrencyLimiter(
+    opts.bundledTurnMaxConcurrency ?? undefined,
+  );
 
   // BYOK Anthropic — active service wired only when opts.enableByokAnthropic
   // is set; otherwise byokAnthropicService stays undefined and the routes
@@ -1442,6 +1460,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // leg on deploymentFallbackKey being set; sub-slice 6.6 GET +
     // PATCH need the service regardless.
     bundledLlmService,
+    // Billing-integrity hardening — inject the fixture-built bundled-turn
+    // limiter so a test can pre-occupy slots and assert the route 429s.
+    bundledTurnConcurrency,
     ...(byokAnthropicService !== undefined ? { byokAnthropicService } : {}),
     // V-820 — wire the fleet control-plane deps so the live WS handler
     // registers. All three are required by the app.ts activation gate.
@@ -1550,6 +1571,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     broadcastFetchCalls,
     agentDecomposerUsageRecords,
     bundledLlmRepo,
+    bundledTurnConcurrency,
     byokAnthropicRepo,
     fleetNodesRepo,
     fleetControlRegistry,

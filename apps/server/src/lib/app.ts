@@ -84,6 +84,7 @@ import type { R2 } from './r2.js';
 import type { MfaService } from '../services/mfa.js';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import type { BundledLlmService } from '../services/bundled-llm.js';
+import { BundledTurnConcurrencyLimiter } from '../services/bundled-turn-concurrency.js';
 import type { AgentSessionEventBus } from '../services/agent-session-event-bus.js';
 import type { NotificationEventBus } from '../services/notification-event-bus.js';
 import { registerAccountNotificationsRoutes } from '../routes/account-notifications.js';
@@ -456,6 +457,21 @@ export interface AppDeps {
    * sub-slice 6.5.
    */
   bundledLlmService?: BundledLlmService;
+  /**
+   * Billing-integrity hardening — per-account ceiling on CONCURRENT
+   * bundled-LLM turns (bounds the soft-cap read-then-act TOCTOU overshoot).
+   * Default 3 (see BundledTurnConcurrencyLimiter). Tune via
+   * BUNDLED_TURN_MAX_CONCURRENCY. Only consulted when bundledLlmService is
+   * wired.
+   */
+  bundledTurnMaxConcurrency?: number;
+  /**
+   * Billing-integrity hardening — inject a pre-built bundled-turn limiter
+   * instead of constructing one from `bundledTurnMaxConcurrency`. Tests
+   * pass this so they can pre-occupy slots + assert the route 429s when
+   * full. Wins over `bundledTurnMaxConcurrency` when both are set.
+   */
+  bundledTurnConcurrency?: BundledTurnConcurrencyLimiter;
   /**
    * Arc 2 sub-slice 8.3 (v2-#8) — pub/sub bus for the SSE transcript
    * stream. AgentRuntime publishes every transcript append; the SSE
@@ -1401,7 +1417,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // wired AND customer has consent=true AND BYOK path didn't
       // resolve, route falls through to the deployment fallback key.
       ...(deps.bundledLlmService !== undefined
-        ? { bundledLlmService: deps.bundledLlmService }
+        ? {
+            bundledLlmService: deps.bundledLlmService,
+            // Billing-integrity hardening — bound concurrent bundled-LLM
+            // turns per account so the soft-cap's read-then-act TOCTOU race
+            // can't overspend the cap unboundedly. Use an injected limiter
+            // when provided (tests pre-occupy slots), else construct one
+            // (pure in-process, no external deps) from the configured
+            // ceiling (BUNDLED_TURN_MAX_CONCURRENCY; default 3).
+            bundledTurnConcurrency:
+              deps.bundledTurnConcurrency ??
+              new BundledTurnConcurrencyLimiter(deps.bundledTurnMaxConcurrency ?? undefined),
+          }
         : {}),
       // Arc 2 sub-slice 8.3 (v2-#8) — SSE transcript bus. When
       // wired, GET /v1/agent-sessions/:id/transcript registers as
