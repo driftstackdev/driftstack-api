@@ -44,6 +44,7 @@ function base(over: Partial<ProfilePhoneCardProps>): ProfilePhoneCardProps {
     },
     checkedAtIso: '2026-06-15T06:30:00.000Z',
     busy: false,
+    anyBusy: false,
     testing: false,
     testDisabled: false,
     launchDisabled: false,

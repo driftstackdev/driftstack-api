@@ -61,6 +61,11 @@ export interface ProfilesTableProps {
   allSelected: boolean;
   onToggleSelectAll: () => void;
   onToggleSelect: (id: string) => void;
+  /** True when SOME profile is busy (a global single-flight is held — e.g.
+   *  another row launching through the ~12s server probe). The mutate actions
+   *  (Duplicate / Trim / Delete) early-return on that global guard, so they're
+   *  disabled with a tooltip rather than silently no-op'ing on a click. */
+  anyBusy?: boolean;
   onPrimary: (id: string) => void; // Launch (idle) / Open session (running)
   onWatch: (id: string) => void;
   onStop: (id: string) => void;
@@ -163,11 +168,17 @@ export function ProfilesTable(p: ProfilesTableProps): JSX.Element {
   );
 }
 
+const OTHER_BUSY_HINT = 'Another profile is busy — wait for it to finish';
+
 function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Element {
   const stop = (fn: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();
     fn();
   };
+  // A global single-flight (busyId) makes the mutate handlers early-return; when
+  // ANOTHER row holds it, disable this row's mutate actions with a hint so the
+  // click gives feedback instead of silently no-op'ing. `r.busy` is THIS row.
+  const otherBusy = (p.anyBusy ?? false) && !r.busy;
   const [editingNote, setEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState(r.note);
   const commitNote = (): void => {
@@ -426,8 +437,10 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               type="button"
               className="text-[11px] text-ink-muted hover:text-ink-primary disabled:opacity-50"
               onClick={stop(() => p.onClone?.(r.id))}
-              disabled={r.busy || p.cloneDisabled}
-              title={p.cloneDisabled ? p.cloneDisabledReason : undefined}
+              disabled={r.busy || p.cloneDisabled || otherBusy}
+              title={
+                p.cloneDisabled ? p.cloneDisabledReason : otherBusy ? OTHER_BUSY_HINT : undefined
+              }
             >
               Duplicate
             </button>
@@ -437,8 +450,8 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
             type="button"
             className="text-[11px] text-ink-muted hover:text-ink-primary disabled:opacity-50"
             onClick={stop(() => p.onTrim(r.id))}
-            disabled={r.busy}
-            title="Clear cache, keep logins"
+            disabled={r.busy || otherBusy}
+            title={otherBusy ? OTHER_BUSY_HINT : 'Clear cache, keep logins'}
           >
             Trim
           </button>
@@ -446,8 +459,14 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
             type="button"
             className="text-[11px] text-ink-muted hover:text-status-error disabled:opacity-50"
             onClick={stop(() => p.onDelete(r.id))}
-            disabled={r.busy || r.running}
-            title={r.running ? 'Stop the profile before deleting' : undefined}
+            disabled={r.busy || r.running || otherBusy}
+            title={
+              r.running
+                ? 'Stop the profile before deleting'
+                : otherBusy
+                  ? OTHER_BUSY_HINT
+                  : undefined
+            }
           >
             Delete
           </button>

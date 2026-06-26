@@ -191,6 +191,42 @@ describe('ProfilesTable', () => {
     cleanup();
   });
 
+  it('Delete/Trim/Duplicate on an IDLE row are disabled (with a hint) while ANOTHER profile is busy', () => {
+    // The mutate handlers early-return on a global busyId; without this the
+    // buttons stay enabled and a click silently no-ops (founder thinks it missed).
+    render(
+      <ProfilesTable
+        {...props({ anyBusy: true, onClone: vi.fn(), rows: [row({ id: 'p1', busy: false })] })}
+      />,
+    );
+    const del = screen.getByRole('button', { name: 'Delete' });
+    const trim = screen.getByRole('button', { name: 'Trim' });
+    const dup = screen.getByRole('button', { name: 'Duplicate' });
+    expect(del).toBeDisabled();
+    expect(trim).toBeDisabled();
+    expect(dup).toBeDisabled();
+    // The hint explains WHY (so it isn't a mystery dead button).
+    expect(del.getAttribute('title')).toMatch(/Another profile is busy/i);
+    expect(trim.getAttribute('title')).toMatch(/Another profile is busy/i);
+    expect(dup.getAttribute('title')).toMatch(/Another profile is busy/i);
+    cleanup();
+  });
+
+  it('anyBusy leaves THIS row’s mutate actions live when it is the busy row (its own busy guard governs)', () => {
+    // The busy ROW itself shows its own busy state; anyBusy only gates OTHER rows.
+    // Here the single row IS the busy one, so otherBusy is false and the normal
+    // per-row busy disabling applies (Trim disabled by r.busy, not by the hint).
+    render(
+      <ProfilesTable
+        {...props({ anyBusy: true, onClone: vi.fn(), rows: [row({ id: 'p1', busy: true })] })}
+      />,
+    );
+    const trim = screen.getByRole('button', { name: 'Trim' });
+    expect(trim).toBeDisabled(); // disabled by its own busy, not the other-busy hint
+    expect(trim.getAttribute('title')).toBe('Clear cache, keep logins');
+    cleanup();
+  });
+
   it('no proxy → "no proxy"; never-probed → "untested"; probed-but-no-IP → "no exit IP"', () => {
     render(
       <ProfilesTable

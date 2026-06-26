@@ -37,6 +37,7 @@ function props(over: Partial<ProfilePhoneCardProps> = {}): ProfilePhoneCardProps
     },
     checkedAtIso: null,
     busy: false,
+    anyBusy: false,
     testing: false,
     testDisabled: false,
     launchDisabled: false,
@@ -100,6 +101,31 @@ describe('ProfilePhoneCard', () => {
     expect((stop as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(stop);
     expect(onStop).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('Delete/Trim/Duplicate are disabled (with a hint) while ANOTHER profile is busy', () => {
+    // The mutate handlers early-return on a global busyId; surface that as a
+    // disabled button + tooltip so a click on an idle card isn't a silent no-op.
+    render(
+      <ProfilePhoneCard
+        {...props({
+          busy: false,
+          anyBusy: true,
+          onClone: vi.fn(),
+          onTrim: vi.fn(),
+          onDelete: vi.fn(),
+        })}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText('More actions'));
+    const del = screen.getByLabelText(/^Delete /);
+    const trim = screen.getByLabelText(/^Trim /);
+    const dup = screen.getByLabelText(/^Duplicate /);
+    expect((del as HTMLButtonElement).disabled).toBe(true);
+    expect((trim as HTMLButtonElement).disabled).toBe(true);
+    expect((dup as HTMLButtonElement).disabled).toBe(true);
+    expect(del.getAttribute('title')).toMatch(/Another profile is busy/i);
     cleanup();
   });
 

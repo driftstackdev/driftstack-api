@@ -2906,6 +2906,7 @@ export function ProfilesView({
                             probe?.at !== undefined ? new Date(probe.at).toISOString() : null
                           }
                           busy={busyId === profile.id}
+                          anyBusy={busyId !== null}
                           testing={px !== null && testingProxyId === px.id}
                           testDisabled={testingProxyId !== null}
                           launchDisabled={teamLaunchBlocked}
@@ -3015,6 +3016,7 @@ export function ProfilesView({
                   return (
                     <ProfilesTable
                       rows={rows}
+                      anyBusy={busyId !== null}
                       sortKey={mapSortByToTableKey(sortBy)}
                       sortDir={sortDir}
                       onSort={(k) => changeSort(mapTableSortKey(k))}

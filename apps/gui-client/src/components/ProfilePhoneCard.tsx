@@ -50,6 +50,11 @@ export interface ProfilePhoneCardProps {
   checkedAtIso: string | null;
   // actions
   busy: boolean;
+  /** True when SOME OTHER profile is busy (a global single-flight is held, e.g.
+   *  another row launching through the ~12s server probe). The mutate actions
+   *  (Duplicate / Trim / Delete) early-return on that global guard, so they're
+   *  disabled here with a tooltip rather than no-op'ing silently on a click. */
+  anyBusy: boolean;
   testing: boolean;
   testDisabled: boolean;
   launchDisabled: boolean;
@@ -507,8 +512,14 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 glyph="⧉"
                 caption="Duplicate"
                 label={`Duplicate ${p.name}`}
-                title={p.cloneDisabled ? p.cloneDisabledReason : undefined}
-                disabled={p.cloneDisabled}
+                title={
+                  p.cloneDisabled
+                    ? p.cloneDisabledReason
+                    : p.anyBusy && !p.busy
+                      ? 'Another profile is busy — wait for it to finish'
+                      : undefined
+                }
+                disabled={p.cloneDisabled || p.busy || p.anyBusy}
                 onClick={() => {
                   setActionsOpen(false);
                   p.onClone?.();
@@ -534,8 +545,12 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 glyph="🧹"
                 caption="Trim"
                 label={`Trim ${p.name}`}
-                title="Clear cache, keep logins"
-                disabled={p.busy}
+                title={
+                  p.anyBusy && !p.busy
+                    ? 'Another profile is busy — wait for it to finish'
+                    : 'Clear cache, keep logins'
+                }
+                disabled={p.busy || p.anyBusy}
                 onClick={() => {
                   setActionsOpen(false);
                   p.onTrim?.();
@@ -554,9 +569,15 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                   glyph="🗑"
                   caption="Delete"
                   label={`Delete ${p.name}`}
-                  title={p.running ? 'Stop the session first before deleting' : undefined}
+                  title={
+                    p.running
+                      ? 'Stop the session first before deleting'
+                      : p.anyBusy && !p.busy
+                        ? 'Another profile is busy — wait for it to finish'
+                        : undefined
+                  }
                   tone="danger"
-                  disabled={p.busy || p.running}
+                  disabled={p.busy || p.running || p.anyBusy}
                   onClick={() => {
                     setActionsOpen(false);
                     p.onDelete?.();
