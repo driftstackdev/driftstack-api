@@ -638,6 +638,13 @@
       "when": 1780328400000,
       "tag": "0090_account_mfa_last_used_totp_counter",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1780332000000,
+      "tag": "0091_crypto_orders_idempotency_key",
+      "breakpoints": true
     }
   ]
 }

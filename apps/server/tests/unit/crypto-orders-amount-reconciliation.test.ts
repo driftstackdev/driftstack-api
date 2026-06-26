@@ -167,3 +167,60 @@ describe('crypto IPN payment_id binding (#9)', () => {
     expect(result?.payment_id).toBe('np_from_ipn');
   });
 });
+
+describe('crypto-checkout DB-backed idempotency (#7)', () => {
+  it('insertWithIdempotencyKey dedupes a duplicate scoped key (returns the existing order as a replay)', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const base = {
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+      payment_id: null,
+      status: 'pending' as const,
+      customer_note: null,
+      internal_note: null,
+      events: [{ status: 'pending' as const, at: 1, source: 'create' as const }],
+      created_at: 1,
+      updated_at: 1,
+    };
+    const first = await repo.insertWithIdempotencyKey({ ...base, order_id: 'ord_a' }, 'acc:key1');
+    expect(first.replayed).toBe(false);
+    // A SECOND insert with the SAME scoped key (e.g. a retry on another
+    // instance that minted a different order_id) is deduped to the FIRST order.
+    const second = await repo.insertWithIdempotencyKey({ ...base, order_id: 'ord_b' }, 'acc:key1');
+    expect(second.replayed).toBe(true);
+    expect(second.order.order_id).toBe('ord_a');
+    // Only ONE order exists.
+    expect(await repo.getById('ord_b')).toBeNull();
+  });
+
+  it('createIdempotent surfaces a cross-instance/persistent duplicate as a replay', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    let now = 1_000;
+    const svc = new CryptoOrdersService({ repo, nowFn: () => (now += 1) });
+    const r1 = await svc.createIdempotent({
+      idempotency_key: 'kx',
+      order_id: 'ord_1',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    expect(r1.replayed).toBe(false);
+    // Simulate a retry that reaches a fresh process (clear the in-memory cache
+    // by constructing a NEW service over the SAME repo) — the DB-backed key
+    // still dedupes it.
+    const svc2 = new CryptoOrdersService({ repo, nowFn: () => (now += 1) });
+    const r2 = await svc2.createIdempotent({
+      idempotency_key: 'kx',
+      order_id: 'ord_2',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    expect(r2.replayed).toBe(true);
+    expect(r2.order.order_id).toBe('ord_1');
+  });
+});

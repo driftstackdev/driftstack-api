@@ -100,6 +100,19 @@ export interface CryptoOrdersRepo {
   upsert(order: CryptoOrder): Promise<void>;
   getById(orderId: string): Promise<CryptoOrder | null>;
   /**
+   * Billing-integrity (#7 cross-instance idempotency) — atomically insert
+   * `order` tagged with `scopedIdempotencyKey`, or, if a row with that key
+   * already exists (DB UNIQUE constraint), return the EXISTING order. This is
+   * INSERT ... ON CONFLICT (idempotency_key) DO NOTHING + select-existing, so
+   * two concurrent / cross-instance / post-restart requests with the same key
+   * can never mint two orders. Returns `{ order, replayed }`: replayed=true
+   * means the key already existed and the prior order is returned verbatim.
+   */
+  insertWithIdempotencyKey(
+    order: CryptoOrder,
+    scopedIdempotencyKey: string,
+  ): Promise<{ order: CryptoOrder; replayed: boolean }>;
+  /**
    * Serialize a read-modify-write on ONE order. The DB impl takes a row-level
    * lock (SELECT … FOR UPDATE) inside a transaction, hands the locked committed
    * snapshot to `fn`, persists `fn`'s `updated` (skips the write when `fn` returns
@@ -136,6 +149,25 @@ export class InMemoryCryptoOrdersRepo implements CryptoOrdersRepo {
   // eslint-disable-next-line @typescript-eslint/require-await
   async getById(orderId: string): Promise<CryptoOrder | null> {
     return this.orders.get(orderId) ?? null;
+  }
+  private readonly byIdempotencyKey = new Map<string, string>(); // scopedKey -> order_id
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async insertWithIdempotencyKey(
+    order: CryptoOrder,
+    scopedIdempotencyKey: string,
+  ): Promise<{ order: CryptoOrder; replayed: boolean }> {
+    // Single-threaded JS → the check-and-insert is naturally atomic; mirrors
+    // the DB impl's INSERT ... ON CONFLICT DO NOTHING contract. The real
+    // cross-instance race lives only in the multi-connection Postgres path.
+    const existingId = this.byIdempotencyKey.get(scopedIdempotencyKey);
+    if (existingId !== undefined) {
+      const existing = this.orders.get(existingId);
+      if (existing !== undefined) return { order: existing, replayed: true };
+      this.byIdempotencyKey.delete(scopedIdempotencyKey);
+    }
+    this.orders.set(order.order_id, order);
+    this.byIdempotencyKey.set(scopedIdempotencyKey, order.order_id);
+    return { order, replayed: false };
   }
   // eslint-disable-next-line @typescript-eslint/require-await
   async withOrderLock<T>(
@@ -447,27 +479,53 @@ export class CryptoOrdersService {
       return { order, replayed: true, bodyFingerprintMismatch: mismatch };
     }
 
-    const createPromise = this.create({
-      order_id: args.order_id,
-      account_id: args.account_id,
-      product: args.product,
-      price_cents: args.price_cents,
-      price_currency: args.price_currency,
-    });
-    this.idempotencyInflight.set(scopeKey, { promise: createPromise, fingerprint });
-    let order: CryptoOrder;
+    // Billing-integrity (#7) — the create goes through the DB-backed
+    // insertWithIdempotencyKey (INSERT ... ON CONFLICT (idempotency_key) DO
+    // NOTHING), so a duplicate same-key request on ANOTHER instance (or after a
+    // restart, where the in-memory cache + single-flight above are empty) is
+    // deduped by the DB UNIQUE constraint instead of minting a second order.
+    // The in-memory layers above stay as a same-process fast-path; the DB is
+    // the cross-instance source of truth, and its `replayed` flag is honoured.
+    const createPromise = (async (): Promise<{ order: CryptoOrder; replayed: boolean }> => {
+      const candidate: CryptoOrder = {
+        order_id: args.order_id,
+        account_id: args.account_id,
+        product: args.product,
+        price_cents: args.price_cents,
+        price_currency: args.price_currency,
+        payment_id: null,
+        status: 'pending',
+        customer_note: null,
+        internal_note: null,
+        events: [{ status: 'pending', at: now, source: 'create' }],
+        created_at: now,
+        updated_at: now,
+      };
+      return this.opts.repo.insertWithIdempotencyKey(candidate, scopeKey);
+    })();
+    // Single-flight awaits the order (not the {order,replayed} envelope) so the
+    // existing inflight-replay contract is unchanged.
+    const orderPromise = createPromise.then((r) => r.order);
+    this.idempotencyInflight.set(scopeKey, { promise: orderPromise, fingerprint });
+    let result: { order: CryptoOrder; replayed: boolean };
     try {
-      order = await createPromise;
+      result = await createPromise;
     } finally {
       this.idempotencyInflight.delete(scopeKey);
     }
     this.idempotencyKeys.set(scopeKey, {
-      order_id: order.order_id,
+      order_id: result.order.order_id,
       recorded_at: now,
       fingerprint,
     });
+    if (result.replayed) {
+      // The DB found a prior order for this key (cross-instance / post-restart
+      // duplicate) — surface it as a replay, not a fresh write.
+      this.idempotentReplays += 1;
+      return { order: result.order, replayed: true, bodyFingerprintMismatch: false };
+    }
     this.idempotentFirstWrites += 1;
-    return { order, replayed: false, bodyFingerprintMismatch: false };
+    return { order: result.order, replayed: false, bodyFingerprintMismatch: false };
   }
 
   private readonly idempotencyKeys = new Map<

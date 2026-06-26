@@ -2240,6 +2240,13 @@ export const cryptoOrders = pgTable(
     priceCents: integer('price_cents').notNull(),
     priceCurrency: text('price_currency').notNull(),
     paymentId: text('payment_id'),
+    // Billing-integrity (#7 cross-instance idempotency) — the scoped
+    // idempotency key (`<account_id|_anon>:<Idempotency-Key>`) that minted this
+    // order. A UNIQUE index on it makes duplicate same-key checkouts a DB-level
+    // no-op (INSERT ... ON CONFLICT), so concurrent / cross-instance / post-
+    // restart retries can't mint multiple orders. Null for orders created
+    // without an Idempotency-Key (the unique index is partial: WHERE NOT NULL).
+    idempotencyKey: text('idempotency_key'),
     status: text('status')
       .notNull()
       .$type<'pending' | 'confirming' | 'paid' | 'failed' | 'partial' | 'cancelled'>(),
@@ -2260,5 +2267,13 @@ export const cryptoOrders = pgTable(
     accountIdx: index('crypto_orders_account_id_idx').on(table.accountId),
     statusIdx: index('crypto_orders_status_idx').on(table.status),
     createdAtIdx: index('crypto_orders_created_at_idx').on(table.createdAt),
+    // Billing-integrity (#7) — partial UNIQUE on the scoped idempotency key so
+    // a duplicate same-key checkout INSERT conflicts (ON CONFLICT DO NOTHING),
+    // making cross-instance / concurrent retries a no-op instead of minting a
+    // second order. Partial (WHERE idempotency_key IS NOT NULL) so the many
+    // legacy / no-key orders don't collide on a shared NULL.
+    idempotencyKeyUnique: uniqueIndex('crypto_orders_idempotency_key_unique')
+      .on(table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} IS NOT NULL`),
   }),
 );

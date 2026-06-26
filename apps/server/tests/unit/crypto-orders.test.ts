@@ -2328,7 +2328,13 @@ describe('V-666.AO createIdempotent', () => {
     expect(r2.order.order_id).toBe(r1.order.order_id);
   });
 
-  it('expires the key after 24h — replay window is bounded', async () => {
+  it('after the 24h in-memory cache window the DB UNIQUE constraint still dedupes the SAME key (#7 cross-instance/persistent dedup is stronger than the old TTL window)', async () => {
+    // Billing-integrity (#7): the in-memory cache is pruned after 24h (it's
+    // only a same-process fast-path now), but the DB-backed
+    // insertWithIdempotencyKey is the source of truth — so the SAME key still
+    // replays the ORIGINAL order, never minting a second one. This is the
+    // stronger guarantee the DB UNIQUE index buys (a key maps to one order,
+    // forever + across instances), replacing the old bounded-TTL replay window.
     let now = 1_700_000_000_000;
     const { svc } = makeSvc(() => now);
     const r1 = await svc.createIdempotent({
@@ -2339,18 +2345,19 @@ describe('V-666.AO createIdempotent', () => {
       price_cents: 100,
       price_currency: 'USD',
     });
-    // Jump forward 24h + 1ms so the record is past TTL.
+    // Jump forward 24h + 1ms so the in-memory record is past its cache TTL.
     now += 24 * 60 * 60 * 1000 + 1;
     const r2 = await svc.createIdempotent({
       idempotency_key: 'k1',
-      order_id: 'ord_b',
+      order_id: 'ord_b', // a fresh order_id is minted by the route, but the key dedupes
       account_id: 'acc',
       product: 'p',
       price_cents: 100,
       price_currency: 'USD',
     });
-    expect(r2.replayed).toBe(false);
-    expect(r2.order.order_id).not.toBe(r1.order.order_id);
+    // The DB constraint deduped it → the ORIGINAL order is replayed, not a new one.
+    expect(r2.replayed).toBe(true);
+    expect(r2.order.order_id).toBe(r1.order.order_id);
   });
 
   it('keeps the key within the 24h window — replay still hits', async () => {

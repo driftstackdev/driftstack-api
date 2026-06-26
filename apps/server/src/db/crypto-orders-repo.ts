@@ -85,6 +85,53 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
     return rows[0] ? rowToEnvelope(rows[0]) : null;
   }
 
+  // Billing-integrity (#7 cross-instance idempotency) — INSERT ... ON CONFLICT
+  // (idempotency_key) DO NOTHING. When the key already exists the insert
+  // returns zero rows; we then SELECT the prior order by that key and return it
+  // as a replay. The DB UNIQUE index is the source of truth, so two concurrent
+  // / cross-instance / post-restart same-key requests can never mint two rows.
+  async insertWithIdempotencyKey(
+    order: CryptoOrder,
+    scopedIdempotencyKey: string,
+  ): Promise<{ order: CryptoOrder; replayed: boolean }> {
+    const inserted = await this.database.db
+      .insert(cryptoOrders)
+      .values({
+        orderId: order.order_id,
+        accountId: order.account_id,
+        product: order.product,
+        priceCents: order.price_cents,
+        priceCurrency: order.price_currency,
+        paymentId: order.payment_id,
+        idempotencyKey: scopedIdempotencyKey,
+        status: order.status,
+        customerNote: order.customer_note,
+        internalNote: order.internal_note,
+        events: order.events,
+        createdAt: new Date(order.created_at),
+        updatedAt: new Date(order.updated_at),
+      })
+      .onConflictDoNothing({ target: cryptoOrders.idempotencyKey })
+      .returning();
+    if (inserted[0] !== undefined) {
+      return { order: rowToEnvelope(inserted[0]), replayed: false };
+    }
+    // Key already existed → fetch + replay the prior order.
+    const existing = await this.database.db
+      .select()
+      .from(cryptoOrders)
+      .where(eq(cryptoOrders.idempotencyKey, scopedIdempotencyKey))
+      .limit(1);
+    if (existing[0] !== undefined) {
+      return { order: rowToEnvelope(existing[0]), replayed: true };
+    }
+    // Extremely unlikely (conflict on insert but the row vanished between the
+    // insert + select). Fall back to a plain upsert so the checkout still
+    // completes rather than 500ing.
+    await this.upsert(order);
+    return { order, replayed: false };
+  }
+
   // Row-level locked read-modify-write (mirrors stripe-webhooks-repo.setAccountTier).
   // Closes the IPN dup-fire (#3) + note/cancel lost-update (#7) races: the decision is
   // computed against the SELECT … FOR UPDATE snapshot, so concurrent IPNs/edits serialize
