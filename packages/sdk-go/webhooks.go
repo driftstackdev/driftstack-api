@@ -88,6 +88,45 @@ func (r *WebhooksResource) ListDeliveries(ctx context.Context, webhookID string,
 	return &out, nil
 }
 
+// IterateDeliveries yields every delivery for an endpoint across cursor
+// pages. Mirrors the TS + Python iterateDeliveries / iterate_deliveries
+// helpers. The callback returns false to stop early; an error from it is
+// propagated back. The optional query's Limit + Status thread through
+// every page (the Status filter walks just one bucket, e.g. "dlq");
+// Cursor is managed internally, so a caller-set query.Cursor is ignored.
+func (r *WebhooksResource) IterateDeliveries(ctx context.Context, webhookID string, query *ListDeliveriesQuery, fn func(*WebhookDelivery) (bool, error)) error {
+	limit := 0
+	var status WebhookDeliveryStatus
+	if query != nil {
+		limit = query.Limit
+		status = query.Status
+	}
+	cursor := ""
+	for {
+		page, err := r.ListDeliveries(ctx, webhookID, &ListDeliveriesQuery{Limit: limit, Cursor: cursor, Status: status})
+		if err != nil {
+			return err
+		}
+		for i := range page.Data {
+			cont, err := fn(&page.Data[i])
+			if err != nil {
+				return err
+			}
+			if !cont {
+				return nil
+			}
+		}
+		next, done, err := advanceCursor(cursor, page.NextCursor)
+		if err != nil {
+			return err
+		}
+		if done {
+			return nil
+		}
+		cursor = next
+	}
+}
+
 // ReplayDelivery is V-307 — resets a webhook delivery to pending so the
 // worker re-fires it. Account-scoped: the delivery must belong to an
 // endpoint the calling account owns.

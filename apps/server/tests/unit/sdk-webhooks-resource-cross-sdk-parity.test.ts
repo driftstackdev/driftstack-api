@@ -60,11 +60,14 @@ describe('W823 cross-SDK WebhooksResource methods parity', () => {
 
   // ─── iterateDeliveries helper ─────────────────────────────────
 
-  it('CRITICAL iterateDeliveries / iterate_deliveries helper exists in TS + Python. Used by W798 cross-SDK pagination example to walk DLQ deliveries. Go uses manual cursor loop on ListDeliveries (pre-1.23 no generators).', () => {
+  it('CRITICAL the delivery-iterator helper exists in ALL 3 SDKs — TS iterateDeliveries / Python iterate_deliveries / Go IterateDeliveries. Used by W798 cross-SDK pagination example to walk DLQ deliveries. (Go previously lacked it on the stale "pre-1.23 no generators" rationale; it now ships a callback-based IterateDeliveries matching every other Go resource iterator — profiles / recipes / agent_sessions — so all three SDKs can walk every delivery.)', () => {
     expect(read(TS)).toMatch(/iterateDeliveries\(/);
     expect(read(PY)).toMatch(/def iterate_deliveries\(/);
-    // Go does NOT have a top-level iterate_deliveries — uses ListDeliveries directly.
-    expect(read(GO)).not.toMatch(/func \(r \*WebhooksResource\) IterateDeliveries\(/);
+    // Go ships a callback-based IterateDeliveries (func(*WebhookDelivery)
+    // (bool, error)), the same idiom as ProfilesResource.Iterate et al.
+    expect(read(GO)).toMatch(
+      /func \(r \*WebhooksResource\) IterateDeliveries\(ctx context\.Context, webhookID string, query \*ListDeliveriesQuery, fn func\(\*WebhookDelivery\) \(bool, error\)\) error/,
+    );
   });
 
   // ─── Python sync + async dual ─────────────────────────────────

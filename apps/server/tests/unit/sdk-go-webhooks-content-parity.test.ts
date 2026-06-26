@@ -100,6 +100,21 @@ describe('W593.A packages/sdk-go/webhooks.go content parity', () => {
     );
   });
 
+  it('IterateDeliveries — cursor-walking variant of ListDeliveries (cross-SDK parity with TS iterateDeliveries + Python iterate_deliveries). callback returns false to stop early; Limit + Status thread through every page; Cursor managed internally. Drift to dropping this method would leave Go customers unable to walk every delivery the way the other two SDKs do.', () => {
+    expect(body).toMatch(
+      /\/\/ IterateDeliveries yields every delivery for an endpoint across cursor/,
+    );
+    expect(body).toMatch(
+      /func \(r \*WebhooksResource\) IterateDeliveries\(ctx context\.Context, webhookID string, query \*ListDeliveriesQuery, fn func\(\*WebhookDelivery\) \(bool, error\)\) error/,
+    );
+    // Threads Limit + Status into the per-page ListDeliveries call + uses
+    // the shared advanceCursor guard (no inline cursor-equality loop).
+    expect(body).toMatch(
+      /r\.ListDeliveries\(ctx, webhookID, &ListDeliveriesQuery\{Limit: limit, Cursor: cursor, Status: status\}\)/,
+    );
+    expect(body).toMatch(/next, done, err := advanceCursor\(cursor, page\.NextCursor\)/);
+  });
+
   it('ReplayDelivery — V-307 POST /v1/webhook-deliveries/{deliveryID}/replay with empty struct body + account-scope enforcement framing ("delivery must belong to an endpoint the calling account owns") pinned (drift to dropping the account-scope comment would lose the contract context customers reason about; the server-side enforcement is the actual guard but the SDK comment is the customer-facing contract)', () => {
     expect(body).toMatch(
       /\/\/ ReplayDelivery is V-307 — resets a webhook delivery to pending so the/,
