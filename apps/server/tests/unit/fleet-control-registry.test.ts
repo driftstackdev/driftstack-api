@@ -305,7 +305,21 @@ describe('FleetControlConnection', () => {
     expect(seen).toHaveLength(2);
     expect((seen[0] as { reason: string }).reason).toBe('upload_failed');
     expect((seen[1] as { detail?: string }).detail).toBeUndefined();
-    // An unknown reason value fails the enum \u2192 frame ignored (no crash).
+    // degenerate_dump (A3 W2977/W2979) is now an accepted reason — it routes and
+    // keeps its value (the data-loss guard skipped a save-back to preserve a prior).
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'profileSaveFailed',
+        sessionId: 'agt_x',
+        profile_id: 'prof_1',
+        reason: 'degenerate_dump',
+      }),
+    );
+    expect(seen).toHaveLength(3);
+    expect((seen[2] as { reason: string }).reason).toBe('degenerate_dump');
+    // An unknown FUTURE reason no longer DROPS the frame (forward-compat .catch):
+    // it routes with the reason coerced to the generic 'upload_failed' bucket, so
+    // the CP never silently loses a save-failure signal on an enum it predates.
     conn.handleInbound(
       JSON.stringify({
         type: 'profileSaveFailed',
@@ -314,7 +328,8 @@ describe('FleetControlConnection', () => {
         reason: 'gremlins',
       }),
     );
-    expect(seen).toHaveLength(2);
+    expect(seen).toHaveLength(4);
+    expect((seen[3] as { reason: string }).reason).toBe('upload_failed');
   });
 
   it('a profileSaveFailed frame with no handler wired is accepted + ignored (no crash \u2014 stateless deploy)', () => {
