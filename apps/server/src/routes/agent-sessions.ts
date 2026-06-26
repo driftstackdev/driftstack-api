@@ -977,7 +977,17 @@ export async function dispatchSessionAssignOnCreate(args: {
     }
     conn.sendSessionAssign(assign);
     logger?.info(
-      { component: 'fleet-session-dispatch', sessionId, nodeId: dispatchedNodeId },
+      {
+        component: 'fleet-session-dispatch',
+        sessionId,
+        nodeId: dispatchedNodeId,
+        // Observability for the per-session archetype the box is told to provision
+        // (profile-bound archetype, or the static operator default for stateless
+        // runs). Lets us confirm the CP sent the right fingerprint vs what the box
+        // actually rendered, without re-deriving from the DB.
+        archetype: profileArchetype ?? sessionDispatch.archetype,
+        archetypeSource: profileArchetype !== undefined ? 'profile' : 'static-default',
+      },
       'dispatched sessionAssign to fleet node',
     );
   } catch (err) {
