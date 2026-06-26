@@ -216,6 +216,42 @@ describe('useAgentChat session-leak close', () => {
     expect(result.current.restoredHistoryCount).toBe(0);
   });
 
+  it('Stop while the first message is in flight closes the just-created server session (no leak)', async () => {
+    // create() resolves only after we Stop, so the gen-mismatch branch runs with a
+    // `created` session that was never stored — it must be closed, not leaked.
+    let resolveCreate: ((s: AgentSession) => void) | null = null;
+    create.mockReset();
+    create.mockImplementation(
+      () =>
+        new Promise<AgentSession>((res) => {
+          resolveCreate = res;
+        }),
+    );
+    close.mockReset();
+    close.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useAgentChat());
+
+    // Kick off the first send (create() hangs, unresolved).
+    let sendPromise: Promise<boolean> = Promise.resolve(false);
+    act(() => {
+      sendPromise = result.current.send('place my order');
+    });
+    // User hits Stop while create() is still in flight.
+    act(() => {
+      result.current.cancel();
+    });
+    // Now create() resolves — the gen mismatch fires and the session is closed.
+    await act(async () => {
+      resolveCreate?.({ ...SESSION, id: 'agt_orphan' });
+      await sendPromise;
+    });
+
+    expect(close).toHaveBeenCalledWith('agt_orphan');
+    // The abandoned session was never adopted as the chat's live session.
+    expect(result.current.session).toBeNull();
+  });
+
   it('restore() closes the prior server session before switching chats', async () => {
     const { result } = renderHook(() => useAgentChat());
     await act(async () => {

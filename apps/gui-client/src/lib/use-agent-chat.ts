@@ -246,6 +246,12 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
           // (adversarial review w6sdz15an #1).
           if (cancelGenRef.current !== gen) {
             rollbackUserTurn();
+            // The chat was abandoned (Stop / New chat / chat switch) WHILE create()
+            // was in flight. `created` is never stored (setSession is skipped), so
+            // without this it leaks: never closed, billable, and pressuring the
+            // per-account active-session cap until the idle reaper. Best-effort
+            // close it now (audit: stranded just-created server session).
+            closeServerSession(created.id);
             return false;
           }
           setSession(created);
@@ -279,7 +285,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         if (cancelGenRef.current === gen) setSending(false);
       }
     },
-    [client, session, opts.model, opts.tokenBudget, opts.profileId, nextId],
+    [client, session, opts.model, opts.tokenBudget, opts.profileId, nextId, closeServerSession],
   );
 
   const send = useCallback((userMessage: string): Promise<boolean> => post(userMessage), [post]);
