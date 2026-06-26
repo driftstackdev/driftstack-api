@@ -59,7 +59,7 @@ describe('W369.A marketing-site /roadmap page content parity', () => {
     expect(titles.length).toBe(10);
     // Each title pinned verbatim.
     expect(titles).toEqual([
-      'iPhone family fingerprint parity (15 Pro · 16 Pro · 17 lineup)',
+      'iPhone family fingerprint parity (81 profiles, iPhone 13 → 17 Pro Max)',
       'TypeScript · Python · Go SDKs',
       'Customer dashboard at app.driftstack.dev',
       'Webhook delivery infrastructure',
@@ -88,7 +88,7 @@ describe('W369.A marketing-site /roadmap page content parity', () => {
     const titles = extractList(body, 'LATER');
     expect(titles.length).toBe(5);
     for (const t of [
-      'Older iOS archetypes (iPhone 14 + earlier iOS)',
+      'Older iOS archetypes (iPhone 12 + earlier)',
       'Android Chrome archetypes',
       'Hardware-key MFA (WebAuthn)',
       'Public benchmark page',

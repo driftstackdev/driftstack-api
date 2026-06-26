@@ -25,9 +25,15 @@ describe('W262.A /roadmap ↔ live LOCKED_ARCHETYPE_ID + roadmap framing parity'
     expect(LOCKED_ARCHETYPE_ID).toBe('iphone17_ios18_7_safari26_4');
   });
 
-  it('roadmap names the live iOS 18.7 / Safari 26.4 combo, not the legacy "iOS 26.4"', () => {
-    expect(page).toMatch(/iOS 18\.7/);
-    expect(page).toMatch(/Safari 26\.4/);
+  it('roadmap names the live iOS 18.6 / 18.7 + Safari 18.6–26.5 span, not the legacy "iOS 26.4"', () => {
+    // The launch catalog spans iOS 18.6 / 18.7 and Safari 18.6
+    // through 26.5; the live LOCKED_ARCHETYPE_ID combo
+    // (iphone17_ios18_7_safari26_4) sits inside that span. The
+    // roadmap names the iOS + Safari versioning correctly rather
+    // than the legacy conflated "iOS 26.4".
+    expect(page).toMatch(/iOS 18\.6 \/ 18\.7/);
+    expect(page).toMatch(/Safari 18\.6/);
+    expect(page).toMatch(/26\.5/);
     // The legacy mistake conflated iOS and Safari versions.
     expect(page).not.toMatch(/iOS 26\.4/);
   });

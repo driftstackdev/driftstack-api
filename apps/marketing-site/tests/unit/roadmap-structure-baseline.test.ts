@@ -25,23 +25,28 @@ describe('W297.A /roadmap structure baseline', () => {
     expect(body).toMatch(/const LATER:\s*RoadmapItem\[\]/);
   });
 
-  it('uses the multi-archetype iPhone family canonical label (M.6 Path A: iPhone 15 Pro / 16 Pro / 17 lineup, iOS 18.7 / Safari 26.4-26.5)', () => {
-    // The page MUST name at least two of the launch iPhone families
-    // somewhere in the NOW bucket so the multi-archetype-at-launch
-    // commitment survives a copy rewrite. The OS span MUST mention
-    // both Safari 26.4 and 26.5 since the latter is the rolling-out
-    // version covered at v1.0 per the founder verdict 2026-05-17.
-    expect(body).toMatch(/iPhone 15 Pro/);
-    expect(body).toMatch(/iPhone 16 Pro/);
-    expect(body).toMatch(/iPhone 17/);
-    expect(body).toMatch(/Safari 26\.4/);
-    expect(body).toMatch(/Safari 26\.5/);
+  it('uses the 81-archetype iPhone family canonical label (iPhone 13 → 17 Pro Max, iOS 18.6 / 18.7 / Safari 18.6–26.5)', () => {
+    // The page MUST name the launch catalog as the 81-profile
+    // iPhone 13 → 17 Pro Max family in the NOW bucket so the
+    // multi-archetype-at-launch commitment survives a copy rewrite.
+    // The OS span MUST mention both ends of the Safari range (18.6
+    // through 26.5) covered at v1.0.
+    expect(body).toMatch(/81 (?:device )?profiles/);
+    expect(body).toMatch(/iPhone 13/);
+    expect(body).toMatch(/17 Pro Max/);
+    expect(body).toMatch(/iOS 18\.6 \/ 18\.7/);
+    expect(body).toMatch(/Safari 18\.6/);
+    expect(body).toMatch(/26\.5/);
     // Pre-M.6 single-archetype framing must NOT return on the NOW
     // item title line (would re-introduce the single-archetype
     // launch implication the orchestrator surfaced in §6 / Item 6).
     expect(body).not.toMatch(
       /title: 'iPhone 16 Pro · iOS 18\.7 · Safari 26\.4 fingerprint parity'/,
     );
+    // The pre-broadening narrow "15 Pro / 16 Pro / 17 lineup" framing
+    // must not return — the catalog spans the full iPhone 13 → 17
+    // Pro Max family.
+    expect(body).not.toMatch(/iPhone 15 Pro · 16 Pro · 17 lineup/);
   });
 
   it('does not commit to specific calendar quarters in the bucket titles', () => {

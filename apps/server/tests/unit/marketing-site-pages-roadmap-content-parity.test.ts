@@ -64,9 +64,9 @@ describe('W499.B apps/marketing-site/src/pages/roadmap.astro content parity', ()
     expect(body).toMatch(/Customer demand is the single best ordering signal we have\./);
   });
 
-  it("NOW section 10-item list (2026-05-19 promotion: status-site + V-667.C OAuth + api-keys.rotate + write-only recipes + AI/manual/pair agent sessions joined the 5 launch pillars): 'iPhone family fingerprint parity (15 Pro · 16 Pro · 17 lineup)' + 'TypeScript · Python · Go SDKs' + 'Customer dashboard at app.driftstack.dev' + 'Webhook delivery infrastructure' + 'GUI client for human operators' + 'Public status page' + 'OAuth signup (Google · GitHub)' + 'API key rotation with grace window' + 'Recipe library (write-only at v1.0)' + 'Agent sessions — natural-language automation with AI / manual / pair modes' — pinned so the live-today scope covers ALL 10 shipped customer-facing pillars (drift to demoting any of them back to NEXT or LATER would mis-represent what's actually deployed; agent sessions specifically are the v1.0 primary differentiator per the founder strategic-directive 2026-05-17 and changelog 2026-05-18, so leaving them in LATER directly contradicts marketing positioning)", () => {
+  it("NOW section 10-item list (2026-05-19 promotion: status-site + V-667.C OAuth + api-keys.rotate + write-only recipes + AI/manual/pair agent sessions joined the 5 launch pillars): 'iPhone family fingerprint parity (81 profiles, iPhone 13 → 17 Pro Max)' + 'TypeScript · Python · Go SDKs' + 'Customer dashboard at app.driftstack.dev' + 'Webhook delivery infrastructure' + 'GUI client for human operators' + 'Public status page' + 'OAuth signup (Google · GitHub)' + 'API key rotation with grace window' + 'Recipe library (write-only at v1.0)' + 'Agent sessions — natural-language automation with AI / manual / pair modes' — pinned so the live-today scope covers ALL 10 shipped customer-facing pillars (drift to demoting any of them back to NEXT or LATER would mis-represent what's actually deployed; agent sessions specifically are the v1.0 primary differentiator per the founder strategic-directive 2026-05-17 and changelog 2026-05-18, so leaving them in LATER directly contradicts marketing positioning)", () => {
     expect(body).toMatch(
-      /title: 'iPhone family fingerprint parity \(15 Pro · 16 Pro · 17 lineup\)',/,
+      /title: 'iPhone family fingerprint parity \(81 profiles, iPhone 13 → 17 Pro Max\)',/,
     );
     expect(body).toMatch(/title: 'TypeScript · Python · Go SDKs',/);
     expect(body).toMatch(/title: 'Customer dashboard at app\.driftstack\.dev',/);
@@ -103,8 +103,8 @@ describe('W499.B apps/marketing-site/src/pages/roadmap.astro content parity', ()
     expect(nextBlock).not.toMatch(/Recipe library/);
   });
 
-  it("LATER section 5-item list (post-2026-05-19 promotion: AI agent layer graduated to NOW; LATER now holds the genuinely-still-on-the-deck items): 'Older iOS archetypes (iPhone 14 + earlier iOS)' + 'Android Chrome archetypes' + 'Hardware-key MFA (WebAuthn)' + 'Public benchmark page' + 'Self-hosted parity polish' — pinned so the on-the-deck surface covers the 5 directions actually still in scope for v1.1+ (drift to re-adding 'AI agent layer' here would resurrect a contradiction with the changelog 2026-05-18 + founder strategic-directive 2026-05-17)", () => {
-    expect(body).toMatch(/title: 'Older iOS archetypes \(iPhone 14 \+ earlier iOS\)',/);
+  it("LATER section 5-item list (post-2026-05-19 promotion: AI agent layer graduated to NOW; LATER now holds the genuinely-still-on-the-deck items): 'Older iOS archetypes (iPhone 12 + earlier)' + 'Android Chrome archetypes' + 'Hardware-key MFA (WebAuthn)' + 'Public benchmark page' + 'Self-hosted parity polish' — pinned so the on-the-deck surface covers the 5 directions actually still in scope for v1.1+ (drift to re-adding 'AI agent layer' here would resurrect a contradiction with the changelog 2026-05-18 + founder strategic-directive 2026-05-17)", () => {
+    expect(body).toMatch(/title: 'Older iOS archetypes \(iPhone 12 \+ earlier\)',/);
     expect(body).toMatch(/title: 'Android Chrome archetypes',/);
     expect(body).toMatch(/title: 'Hardware-key MFA \(WebAuthn\)',/);
     expect(body).toMatch(/title: 'Public benchmark page',/);
