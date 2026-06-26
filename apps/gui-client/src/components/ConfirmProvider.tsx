@@ -44,7 +44,15 @@ export function ConfirmProvider({ children }: { children: ReactNode }): JSX.Elem
 
   const confirm = useCallback<ConfirmFn>((message, opts) => {
     return new Promise<boolean>((resolve) => {
-      setPending({ message, confirmLabel: opts?.confirmLabel ?? 'Confirm', resolve });
+      setPending((current) => {
+        // A second confirm() opened while one is already pending: resolve the
+        // PREVIOUS one as `false` (cancelled) before replacing it. Without this,
+        // overwriting `pending` orphaned the first resolve — the first
+        // `await confirm(...)` hung forever and its caller's loading state never
+        // cleared. Fail-safe to false (the dropped action does NOT proceed). (audit)
+        if (current !== null) current.resolve(false);
+        return { message, confirmLabel: opts?.confirmLabel ?? 'Confirm', resolve };
+      });
     });
   }, []);
 

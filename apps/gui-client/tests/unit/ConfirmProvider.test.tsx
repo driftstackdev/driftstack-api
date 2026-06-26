@@ -129,4 +129,33 @@ describe('ConfirmProvider / useConfirm (desktop branded confirm)', () => {
     fireEvent.keyDown(window, { key: 'Tab' });
     await waitFor(() => expect(document.activeElement).toBe(cancelBtn)); // wrapped to first
   });
+
+  it('a second confirm() opened while one is pending resolves the FIRST (false) — no permanent hang', async () => {
+    const results: Array<'a' | 'b'> = [];
+    function DoubleHarness(): JSX.Element {
+      const confirm = useConfirm();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            // Fire two confirms back-to-back; the second replaces the first.
+            void confirm('First?').then(() => results.push('a'));
+            void confirm('Second?').then(() => results.push('b'));
+          }}
+        >
+          go
+        </button>
+      );
+    }
+    render(
+      <ConfirmProvider>
+        <DoubleHarness />
+      </ConfirmProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'go' }));
+    // The first promise must settle (it used to hang forever) — confirm 'a' resolved.
+    await waitFor(() => expect(results).toContain('a'));
+    // The SECOND dialog is the one showing now.
+    expect(await screen.findByText('Second?')).toBeInTheDocument();
+  });
 });
