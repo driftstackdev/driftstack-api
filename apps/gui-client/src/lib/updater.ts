@@ -71,6 +71,30 @@ const defaultDeps: UpdaterDeps = {
  * down, signature/manifest error, or running outside a Tauri context)
  * is swallowed to `null`, so a startup check can't break the app.
  */
+/**
+ * True iff `offered` is a strictly newer semver than `current`. Tolerant of a
+ * leading `v`, pre-release/build suffixes (compared on the numeric core only),
+ * and unparseable input (returns false — never offer a version we can't reason
+ * about). Pure + exported for tests.
+ */
+export function isNewerVersion(offered: string, current: string): boolean {
+  const core = (v: string): number[] | null => {
+    const m = /^v?(\d+)\.(\d+)\.(\d+)/.exec(v.trim());
+    if (m === null) return null;
+    return [Number(m[1]), Number(m[2]), Number(m[3])];
+  };
+  const a = core(offered);
+  const b = core(current);
+  if (a === null || b === null) return false;
+  for (let i = 0; i < 3; i += 1) {
+    const av = a[i] ?? 0;
+    const bv = b[i] ?? 0;
+    if (av > bv) return true;
+    if (av < bv) return false;
+  }
+  return false; // equal core → not newer
+}
+
 export async function checkForUpdate(
   deps: UpdaterDeps = defaultDeps,
 ): Promise<AvailableUpdate | null> {
@@ -83,6 +107,13 @@ export async function checkForUpdate(
   if (!update) return null;
 
   const offered = update;
+  // Defend against a botched/rolled-back manifest that lists the installed
+  // version (or older): Tauri's check() USUALLY filters, but with no app-side
+  // guard a same/older manifest would render an "Update X available (current X)"
+  // banner whose Install reinstalls the same build. Only offer a strictly NEWER
+  // version. (audit)
+  if (!isNewerVersion(offered.version, offered.currentVersion)) return null;
+
   return {
     version: offered.version,
     currentVersion: offered.currentVersion,

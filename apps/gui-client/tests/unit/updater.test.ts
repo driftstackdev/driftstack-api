@@ -6,7 +6,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { Update } from '@tauri-apps/plugin-updater';
-import { checkForUpdate, type UpdaterDeps } from '../../src/lib/updater';
+import { checkForUpdate, isNewerVersion, type UpdaterDeps } from '../../src/lib/updater';
 
 function fakeUpdate(over: Partial<Record<string, unknown>> = {}): Update {
   return {
@@ -38,6 +38,22 @@ describe('V-243 checkForUpdate', () => {
       relaunch: vi.fn(noopRelaunch),
     };
     await expect(checkForUpdate(deps)).resolves.toBeNull();
+  });
+
+  it('returns null when the manifest lists the SAME version as installed (botched/rolled-back release)', async () => {
+    const deps: UpdaterDeps = {
+      check: () => Promise.resolve(fakeUpdate({ version: '0.1.0', currentVersion: '0.1.0' })),
+      relaunch: vi.fn(noopRelaunch),
+    };
+    expect(await checkForUpdate(deps)).toBeNull();
+  });
+
+  it('returns null when the manifest lists an OLDER version than installed', async () => {
+    const deps: UpdaterDeps = {
+      check: () => Promise.resolve(fakeUpdate({ version: '0.0.9', currentVersion: '0.1.0' })),
+      relaunch: vi.fn(noopRelaunch),
+    };
+    expect(await checkForUpdate(deps)).toBeNull();
   });
 
   it('surfaces the offered version + current version + notes when an update is available', async () => {
@@ -88,5 +104,27 @@ describe('V-243 checkForUpdate', () => {
     const upd = await checkForUpdate(deps);
     await expect(upd!.install()).rejects.toThrow(/signature/);
     expect(relaunch).not.toHaveBeenCalled();
+  });
+});
+
+describe('isNewerVersion', () => {
+  it('true only for a strictly newer semver', () => {
+    expect(isNewerVersion('0.1.0', '0.0.1')).toBe(true);
+    expect(isNewerVersion('1.0.0', '0.9.9')).toBe(true);
+    expect(isNewerVersion('0.0.2', '0.0.1')).toBe(true);
+  });
+  it('false for equal or older', () => {
+    expect(isNewerVersion('0.1.0', '0.1.0')).toBe(false);
+    expect(isNewerVersion('0.0.1', '0.1.0')).toBe(false);
+    expect(isNewerVersion('1.2.3', '1.2.4')).toBe(false);
+  });
+  it('tolerates a leading v and pre-release/build suffixes (compares the numeric core)', () => {
+    expect(isNewerVersion('v0.2.0', '0.1.0')).toBe(true);
+    expect(isNewerVersion('0.2.0-beta.1', '0.1.0')).toBe(true);
+    expect(isNewerVersion('0.1.0-rc.2', '0.1.0')).toBe(false); // same core → not newer
+  });
+  it('false (never offer) on unparseable input', () => {
+    expect(isNewerVersion('not-a-version', '0.1.0')).toBe(false);
+    expect(isNewerVersion('0.1.0', 'garbage')).toBe(false);
   });
 });
