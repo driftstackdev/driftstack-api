@@ -18,6 +18,8 @@ import type { ApiKeyScope } from '@driftstack/api-types';
 import type { ApiKeysService } from '../services/api-keys.js';
 import { CliAuthorizeError, type CliAuthorizeService } from '../services/cli-authorize.js';
 import { BadRequestError, NotFoundError, ValidationError } from '../lib/errors.js';
+import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
+import type { RateLimitStore } from '../services/rate-limit.js';
 
 const DEFAULT_KEY_NAME = 'Desktop client';
 const DEFAULT_SCOPES: ApiKeyScope[] = ['account_owner'];
@@ -25,12 +27,33 @@ const DEFAULT_SCOPES: ApiKeyScope[] = ['account_owner'];
 export interface AuthCliRoutesDeps {
   cliAuthorizeService: CliAuthorizeService;
   apiKeysService: ApiKeysService;
+  /**
+   * IP-keyed rate-limit store shared with the other public auth routes.
+   * /initiate + /exchange are unauthenticated (the client has no account
+   * yet), so account-keyed limiting is impossible — every other public auth
+   * route adds a dedicated per-IP gate on top of the app-wide pre-auth limiter.
+   */
+  rateLimitStore: RateLimitStore;
 }
 
 export function registerAuthCliRoutes(app: FastifyInstance, deps: AuthCliRoutesDeps): void {
-  const { cliAuthorizeService, apiKeysService } = deps;
+  const { cliAuthorizeService, apiKeysService, rateLimitStore } = deps;
 
-  app.post('/v1/auth/cli-authorize/initiate', async (req) => {
+  // /initiate mints a code + browser URL per call → signup posture (5/min/IP).
+  const initiateGate = ipRateLimit(rateLimitStore, {
+    bucketPrefix: 'auth-ip:cli-authorize-initiate',
+    capacity: AUTH_IP_LIMITS.cliAuthorizeInitiate.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.cliAuthorizeInitiate.refillPerSecond,
+  });
+  // /exchange is a CLI/GUI POLL endpoint → generous bucket (60/min/IP) so a
+  // legitimate poll loop never trips it while a flood still gets friction.
+  const exchangeGate = ipRateLimit(rateLimitStore, {
+    bucketPrefix: 'auth-ip:cli-authorize-exchange',
+    capacity: AUTH_IP_LIMITS.cliAuthorizeExchange.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.cliAuthorizeExchange.refillPerSecond,
+  });
+
+  app.post('/v1/auth/cli-authorize/initiate', { preHandler: [initiateGate] }, async (req) => {
     const parsed = CliAuthorizeInitiateRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
@@ -92,7 +115,7 @@ export function registerAuthCliRoutes(app: FastifyInstance, deps: AuthCliRoutesD
     },
   );
 
-  app.post('/v1/auth/cli-authorize/exchange', async (req) => {
+  app.post('/v1/auth/cli-authorize/exchange', { preHandler: [exchangeGate] }, async (req) => {
     const parsed = CliAuthorizeExchangeRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 

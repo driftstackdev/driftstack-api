@@ -225,4 +225,12 @@ export const AUTH_IP_LIMITS = {
   passwordResetConfirm: { capacity: 10, refillPerSecond: 10 / 60 },
   refresh: { capacity: 60, refillPerSecond: 60 / 60 },
   logout: { capacity: 10, refillPerSecond: 10 / 60 },
+  // V-266 CLI/GUI device-activation flow. /initiate is unauthenticated and
+  // MINTS a server-side authorization-code row + a browser URL on every call —
+  // same abuse posture as signup (5/min/IP). /exchange is a CLI/GUI POLL
+  // endpoint (the client polls until the dashboard binds the code), so it needs
+  // a generous bucket; 60/min/IP matches the refresh/oauth-provider posture so
+  // a legitimate poll loop never trips it while a flood still gets friction.
+  cliAuthorizeInitiate: { capacity: 5, refillPerSecond: 5 / 60 },
+  cliAuthorizeExchange: { capacity: 60, refillPerSecond: 60 / 60 },
 } as const;

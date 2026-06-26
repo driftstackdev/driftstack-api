@@ -251,4 +251,46 @@ describe('V-251 — IP rate limit on auth endpoints', () => {
     });
     expect(login.statusCode).not.toBe(429);
   });
+
+  it('cli-authorize/initiate: 5 attempts/IP/min — 6th from same IP returns 429', async () => {
+    fx = await buildTestApp();
+    const ip = '203.0.113.60';
+    for (let i = 0; i < 5; i++) {
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/auth/cli-authorize/initiate',
+        headers,
+        remoteAddress: ip,
+        payload: { state: `cli-state-nonce-${i.toString()}` },
+      });
+      expect(res.statusCode).not.toBe(429);
+    }
+    const sixth = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/cli-authorize/initiate',
+      headers,
+      remoteAddress: ip,
+      payload: { state: 'cli-state-nonce-6' },
+    });
+    expect(sixth.statusCode).toBe(429);
+    expect(sixth.headers['retry-after']).toBeDefined();
+  });
+
+  it('cli-authorize/exchange: generous poll bucket (60/min) — 6 quick polls from one IP never 429', async () => {
+    fx = await buildTestApp();
+    const ip = '203.0.113.61';
+    // The exchange endpoint is a CLI poll loop; the looser bucket must let a
+    // legitimate poll run without tripping (a non-existent code → not_found,
+    // but never 429 within the bucket).
+    for (let i = 0; i < 6; i++) {
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/auth/cli-authorize/exchange',
+        headers,
+        remoteAddress: ip,
+        payload: { code: 'nonexistent-code-value-1234', state: 'cli-state-nonce-x' },
+      });
+      expect(res.statusCode).not.toBe(429);
+    }
+  });
 });

@@ -1233,6 +1233,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerAuthCliRoutes(app, {
       cliAuthorizeService: deps.cliAuthorizeService,
       apiKeysService: deps.apiKeysService,
+      rateLimitStore: deps.rateLimitStore,
     });
   }
   if (deps.stripeWebhooksService !== undefined && deps.stripeWebhookSigningSecret !== undefined) {

@@ -20,7 +20,8 @@
 //   • CliAuthorizeError → HTTP map: state_mismatch+already_bound+
 //     invalid_code → 400 BadRequestError; not_found+expired → 404
 //     NotFoundError.
-//   • Auth posture: initiate + exchange = public (no preHandler);
+//   • Auth posture: initiate + exchange = public but each carries a
+//     dedicated per-IP gate (initiate 5/min, exchange 60/min poll);
 //     bind = requireAuth + rateLimit('global').
 //   • ValidationError on zod safeParse fail (parsed.error.flatten()).
 
@@ -40,7 +41,7 @@ function read(p: string): string {
 describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
   const body = read(LIB);
 
-  it('V-266 framing pinned: 3 routes — initiate (public) + bind (auth required, dashboard) + exchange (public, CLI polls)', () => {
+  it('V-266 framing pinned: 3 routes — initiate (public, IP-gated) + bind (auth required, dashboard) + exchange (public, IP-gated, CLI polls)', () => {
     expect(body).toMatch(/V-266 — Browser-OAuth-style activation flow for CLI \/ GUI clients\./);
     expect(body).toMatch(
       /POST \/v1\/auth\/cli-authorize\/initiate\s+— public; CLI\/GUI starts the flow/,
@@ -71,10 +72,15 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
     expect(body).toMatch(/import type \{ ApiKeyScope \} from '@driftstack\/api-types';/);
   });
 
-  it('Initiate: public (no preHandler); cliAuthorizeService.initiate; returns code + browser_url + expires_at ISO', () => {
+  it('Initiate: public but IP-gated (initiateGate preHandler, signup posture 5/min); cliAuthorizeService.initiate; returns code + browser_url + expires_at ISO', () => {
     expect(body).toMatch(
-      /app\.post\('\/v1\/auth\/cli-authorize\/initiate', async \(req\) => \{\s*\n?\s*const parsed = CliAuthorizeInitiateRequestSchema\.safeParse\(req\.body\);\s*\n?\s*if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);/,
+      /app\.post\('\/v1\/auth\/cli-authorize\/initiate', \{ preHandler: \[initiateGate\] \}, async \(req\) => \{\s*\n?\s*const parsed = CliAuthorizeInitiateRequestSchema\.safeParse\(req\.body\);\s*\n?\s*if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);/,
     );
+    // The IP gates are built from the shared store + the AUTH_IP_LIMITS buckets.
+    expect(body).toMatch(
+      /const initiateGate = ipRateLimit\(rateLimitStore, \{\s*\n?\s*bucketPrefix: 'auth-ip:cli-authorize-initiate',/,
+    );
+    expect(body).toMatch(/AUTH_IP_LIMITS\.cliAuthorizeInitiate\.capacity/);
     expect(body).toMatch(
       /const result = await cliAuthorizeService\.initiate\(\{\s*\n?\s*state: parsed\.data\.state,\s*\n?\s*client_label: parsed\.data\.client_label \?\? null,\s*\n?\s*\}\);\s*\n?\s*return \{\s*\n?\s*code: result\.code,\s*\n?\s*browser_url: result\.browser_url,\s*\n?\s*expires_at: result\.expires_at\.toISOString\(\),\s*\n?\s*\};/,
     );
@@ -107,10 +113,14 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
     );
   });
 
-  it('Exchange: public; cliAuthorizeService.exchange dispatch; pass-through result; CliAuthorizeError → HTTP map', () => {
+  it('Exchange: public but IP-gated (exchangeGate preHandler, generous 60/min poll bucket); cliAuthorizeService.exchange dispatch; pass-through result; CliAuthorizeError → HTTP map', () => {
     expect(body).toMatch(
-      /app\.post\('\/v1\/auth\/cli-authorize\/exchange', async \(req\) => \{[\s\S]+?const result = await cliAuthorizeService\.exchange\(\{\s*\n?\s*code: parsed\.data\.code,\s*\n?\s*state: parsed\.data\.state,\s*\n?\s*\}\);\s*\n?\s*return result;[\s\S]+?if \(err instanceof CliAuthorizeError\) throw mapCliAuthorizeError\(err\);/,
+      /app\.post\('\/v1\/auth\/cli-authorize\/exchange', \{ preHandler: \[exchangeGate\] \}, async \(req\) => \{[\s\S]+?const result = await cliAuthorizeService\.exchange\(\{\s*\n?\s*code: parsed\.data\.code,\s*\n?\s*state: parsed\.data\.state,\s*\n?\s*\}\);\s*\n?\s*return result;[\s\S]+?if \(err instanceof CliAuthorizeError\) throw mapCliAuthorizeError\(err\);/,
     );
+    expect(body).toMatch(
+      /const exchangeGate = ipRateLimit\(rateLimitStore, \{\s*\n?\s*bucketPrefix: 'auth-ip:cli-authorize-exchange',/,
+    );
+    expect(body).toMatch(/AUTH_IP_LIMITS\.cliAuthorizeExchange\.capacity/);
   });
 
   it('mapCliAuthorizeError: state_mismatch+already_bound+invalid_code → 400; not_found+expired → 404; exhaustive switch over union', () => {
@@ -129,13 +139,13 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
     );
   });
 
-  it('AuthCliRoutesDeps: cliAuthorizeService + apiKeysService', () => {
-    expect(body).toMatch(
-      /export interface AuthCliRoutesDeps \{\s*\n?\s*cliAuthorizeService: CliAuthorizeService;\s*\n?\s*apiKeysService: ApiKeysService;\s*\n?\s*\}/,
-    );
+  it('AuthCliRoutesDeps: cliAuthorizeService + apiKeysService + rateLimitStore (for the public-route IP gates)', () => {
+    expect(body).toMatch(/cliAuthorizeService: CliAuthorizeService;/);
+    expect(body).toMatch(/apiKeysService: ApiKeysService;/);
+    expect(body).toMatch(/rateLimitStore: RateLimitStore;/);
   });
 
-  it('imports: FastifyInstance + ApiKeysService + CliAuthorizeError/Service + BadRequestError/NotFoundError/ValidationError', () => {
+  it('imports: FastifyInstance + ApiKeysService + CliAuthorizeError/Service + BadRequestError/NotFoundError/ValidationError + AUTH_IP_LIMITS/ipRateLimit + RateLimitStore', () => {
     expect(body).toMatch(/import type \{ FastifyInstance \} from 'fastify';/);
     expect(body).toMatch(/import type \{ ApiKeysService \} from '\.\.\/services\/api-keys\.js';/);
     expect(body).toMatch(
@@ -144,6 +154,10 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
     expect(body).toMatch(
       /import \{ BadRequestError, NotFoundError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
     );
+    expect(body).toMatch(
+      /import \{ AUTH_IP_LIMITS, ipRateLimit \} from '\.\.\/middleware\/ip-rate-limit\.js';/,
+    );
+    expect(body).toMatch(/import type \{ RateLimitStore \} from '\.\.\/services\/rate-limit\.js';/);
   });
 
   it('file exists at canonical path', () => {
