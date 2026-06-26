@@ -7,7 +7,7 @@
 // to (the card stays as-is — refactoring it under the hook is a
 // follow-up).
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
 import { useSettings } from './SettingsContext';
 
@@ -41,39 +41,65 @@ export function useAccountMe(opts: UseAccountMeOpts = {}): UseAccountMeResult {
     opts.manual === true ? { kind: 'idle' } : { kind: 'loading' },
   );
 
-  const fetcher = useCallback(async (): Promise<void> => {
-    if (!settings.apiKey) {
-      setState({ kind: 'error', message: 'No API key configured.' });
-      return;
-    }
-    setState({ kind: 'loading' });
-    try {
-      const baseUrl = settings.baseUrl.replace(/\/+$/, '');
-      const res = await fetch(`${baseUrl}/v1/account/me`, {
-        method: 'GET',
-        headers: {
-          authorization: `Bearer ${settings.apiKey}`,
-          accept: 'application/json',
-        },
-      });
-      if (!res.ok) {
-        setState({ kind: 'error', message: await readApiErrorMessage(res) });
+  // Track the latest in-flight request so a key/baseUrl change (or unmount) can
+  // abort the previous one and discard its late resolution — otherwise a slow
+  // response after a key change could setState with data fetched under the OLD
+  // key (+ "setState on unmounted" churn). Mirrors use-connection-status. (audit)
+  const abortRef = useRef<AbortController | null>(null);
+
+  // `isActive` lets the effect-driven call drop its result after cleanup; a
+  // manual refetch (no isActive) always applies.
+  const fetcher = useCallback(
+    async (signal?: AbortSignal, isActive?: () => boolean): Promise<void> => {
+      const apply = (next: AccountMeState): void => {
+        if (isActive === undefined || isActive()) setState(next);
+      };
+      if (!settings.apiKey) {
+        apply({ kind: 'error', message: 'No API key configured.' });
         return;
       }
-      const body = (await res.json()) as AccountMeData;
-      setState({ kind: 'ready', data: body });
-    } catch (err) {
-      setState({
-        kind: 'error',
-        message: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }, [settings.apiKey, settings.baseUrl]);
+      apply({ kind: 'loading' });
+      try {
+        const baseUrl = settings.baseUrl.replace(/\/+$/, '');
+        const res = await fetch(`${baseUrl}/v1/account/me`, {
+          method: 'GET',
+          headers: {
+            authorization: `Bearer ${settings.apiKey}`,
+            accept: 'application/json',
+          },
+          ...(signal !== undefined ? { signal } : {}),
+        });
+        if (!res.ok) {
+          apply({ kind: 'error', message: await readApiErrorMessage(res) });
+          return;
+        }
+        const body = (await res.json()) as AccountMeData;
+        apply({ kind: 'ready', data: body });
+      } catch (err) {
+        // An abort (key/baseUrl change / unmount) is expected — don't surface it.
+        if (err instanceof Error && err.name === 'AbortError') return;
+        apply({
+          kind: 'error',
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+    [settings.apiKey, settings.baseUrl],
+  );
 
   useEffect(() => {
     if (opts.manual === true) return;
-    void fetcher();
+    let active = true;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    void fetcher(controller.signal, () => active);
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [fetcher, opts.manual]);
 
-  return { state, refetch: fetcher };
+  // The public refetch keeps its no-arg signature (user-triggered → always apply).
+  const refetch = useCallback((): Promise<void> => fetcher(), [fetcher]);
+  return { state, refetch };
 }

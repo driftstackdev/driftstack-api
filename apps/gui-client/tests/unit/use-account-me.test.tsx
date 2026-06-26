@@ -150,4 +150,30 @@ describe('V-534.Q useAccountMe — manual mode', () => {
     await waitFor(() => expect(result.current.state.kind).toBe('ready'));
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('passes an AbortSignal on the auto-fetch and aborts it on unmount (no late setState / error)', async () => {
+    // A fetch that never resolves until aborted — the hook unmounts mid-flight.
+    let capturedSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      capturedSignal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+        });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result, unmount } = renderHook(() => useAccountMe());
+    expect(result.current.state.kind).toBe('loading');
+    // The auto-fetch was given a signal…
+    expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    // …and unmount aborts it; the rejected AbortError must NOT flip to 'error'.
+    unmount();
+    expect(capturedSignal?.aborted).toBe(true);
+    // Give the rejected promise a microtask to settle; state stays 'loading'
+    // (the guard dropped the late result instead of setting error).
+    await Promise.resolve();
+    expect(result.current.state.kind).toBe('loading');
+  });
 });

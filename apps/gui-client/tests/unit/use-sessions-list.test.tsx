@@ -163,4 +163,24 @@ describe('V-534.O useSessionsList — manual mode', () => {
     await waitFor(() => expect(result.current.state.kind).toBe('ready'));
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('aborts the auto-fetch on unmount (no late setState / error from the AbortError)', async () => {
+    let capturedSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      capturedSignal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+        });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { result, unmount } = renderHook(() => useSessionsList());
+    expect(result.current.state.kind).toBe('loading');
+    expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    unmount();
+    expect(capturedSignal?.aborted).toBe(true);
+    await Promise.resolve();
+    expect(result.current.state.kind).toBe('loading');
+  });
 });
