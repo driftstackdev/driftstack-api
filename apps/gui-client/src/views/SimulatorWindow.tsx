@@ -100,6 +100,21 @@ function makeTabId(): string {
   }
   return `tab_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
+
+/**
+ * Real encoded byte size of a base64 data URL (the captured JPEG), so the
+ * recording "Size" fact matches the exported file / disk usage. The old
+ * `dataUrl.length * 0.75` over-counted (it included the `data:…;base64,` prefix
+ * and ignored padding) — only coincidentally close. Strip the prefix, then
+ * base64 length × 3/4 minus the `=` padding bytes. Exported for tests.
+ */
+export function dataUrlByteSize(dataUrl: string): number {
+  const comma = dataUrl.indexOf(',');
+  const b64 = comma === -1 ? dataUrl : dataUrl.slice(comma + 1);
+  if (b64.length === 0) return 0;
+  const padding = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((b64.length * 3) / 4) - padding);
+}
 // New-tab destination (founder 2026-06-25: "our own blank about:me page instead
 // of nothing"). The "+" action opens a fresh tab to the branded Driftstack
 // new-tab page (apps/marketing-site/src/pages/newtab.astro) so the box renders an
@@ -2058,7 +2073,7 @@ export function SimulatorWindow(): JSX.Element {
     canvas.height = el.videoHeight;
     canvas.getContext('2d')?.drawImage(el, 0, 0);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-    addFrame(recId, { at: Date.now(), dataUrl, bytes: Math.round(dataUrl.length * 0.75) });
+    addFrame(recId, { at: Date.now(), dataUrl, bytes: dataUrlByteSize(dataUrl) });
   }
   function toggleRecord(): void {
     if (sessionId === '') return;

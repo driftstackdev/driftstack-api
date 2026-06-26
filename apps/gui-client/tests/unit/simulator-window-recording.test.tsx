@@ -65,7 +65,7 @@ vi.mock('../../src/lib/agent-session-control', () => ({
   AgentSessionControlError: class extends Error {},
 }));
 
-const { SimulatorWindow } = await import('../../src/views/SimulatorWindow');
+const { SimulatorWindow, dataUrlByteSize } = await import('../../src/views/SimulatorWindow');
 const { RecordingsProvider } = await import('../../src/lib/recordings');
 
 function renderSim() {
@@ -229,5 +229,29 @@ describe('SimulatorWindow — Recording pane (SLICE 3)', () => {
       pane = container.querySelector('[data-component="drawer-recording"]') as HTMLElement;
       expect(pane.textContent).toContain('No recordings yet.');
     });
+  });
+});
+
+describe('dataUrlByteSize — real encoded bytes (not the dataUrl.length×0.75 approximation)', () => {
+  it('returns the true base64 payload size, excluding the data: prefix + padding', () => {
+    // "Man" → base64 "TWFu" (no padding) = 3 bytes.
+    expect(dataUrlByteSize('data:image/jpeg;base64,TWFu')).toBe(3);
+    // "Ma" → "TWE=" (1 pad) = 2 bytes.
+    expect(dataUrlByteSize('data:image/jpeg;base64,TWE=')).toBe(2);
+    // "M" → "TQ==" (2 pad) = 1 byte.
+    expect(dataUrlByteSize('data:image/jpeg;base64,TQ==')).toBe(1);
+  });
+
+  it('does NOT count the data: prefix (the old approximation over-counted)', () => {
+    const dataUrl = 'data:image/jpeg;base64,TWFu';
+    // The honest size is 3; the old `dataUrl.length * 0.75` would be much larger
+    // because it counted the 23-char prefix too.
+    expect(dataUrlByteSize(dataUrl)).toBe(3);
+    expect(dataUrlByteSize(dataUrl)).toBeLessThan(Math.round(dataUrl.length * 0.75));
+  });
+
+  it('handles an empty payload and a raw (prefix-less) base64 string', () => {
+    expect(dataUrlByteSize('data:image/jpeg;base64,')).toBe(0);
+    expect(dataUrlByteSize('TWFu')).toBe(3); // no comma → treat the whole string as base64
   });
 });
