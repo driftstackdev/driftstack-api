@@ -170,7 +170,7 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
     expect(body).toMatch(/action: 'account\.mfa_disabled',/);
   });
 
-  it('verifyCode: TOTP path (/^\\d{6}$/) → decrypt + verifyTotpCode + touchLastUsed → returns "totp"', () => {
+  it('verifyCode: TOTP path (/^\\d{6}$/) → decrypt + verifyTotpCodeWithCounter + replay guard (consumeTotpCounter) + touchLastUsed → returns "totp"', () => {
     expect(body).toMatch(
       /async verifyCode\(args: \{\s*\n?\s*accountId: string;\s*\n?\s*input: string;\s*\n?\s*nowSeconds\?: number;\s*\n?\s*\}\): Promise<'totp' \| 'recovery' \| null> \{/,
     );
@@ -178,8 +178,20 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
       /if \(!row \|\| row\.enrolledAt === null\) \{\s*\n?\s*throw new NotFoundError\('MFA is not enrolled for this account\.'\);/,
     );
     expect(body).toMatch(/if \(\/\^\\d\{6\}\$\/\.test\(trimmed\)\) \{/);
+    // TOTP replay defence (migration 0090) — match the counter, reject when it
+    // was already consumed, and consume atomically before accepting.
     expect(body).toMatch(
-      /if \(verifyTotpCode\(secretBytes, trimmed, args\.nowSeconds\)\) \{\s*\n?\s*await this\.repo\.touchLastUsed\(args\.accountId, new Date\(\)\);\s*\n?\s*return 'totp';/,
+      /const matchedCounter = verifyTotpCodeWithCounter\(secretBytes, trimmed, args\.nowSeconds\);/,
+    );
+    expect(body).toMatch(/if \(matchedCounter === null\) return null;/);
+    expect(body).toMatch(
+      /if \(lastUsed !== null && matchedCounter <= lastUsed\) \{[\s\S]*?return null;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /const accepted = await this\.repo\.consumeTotpCounter\(\{\s*\n?\s*accountId: args\.accountId,\s*\n?\s*counter: matchedCounter,/,
+    );
+    expect(body).toMatch(
+      /await this\.repo\.touchLastUsed\(args\.accountId, new Date\(\)\);\s*\n?\s*return 'totp';/,
     );
   });
 
@@ -234,10 +246,10 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
     );
   });
 
-  it('imports: hashApiKey+verifyApiKey + mfa-totp helpers (7-import barrel) + BadRequest/Conflict/NotFound from errors + AccountAuditService', () => {
+  it('imports: hashApiKey+verifyApiKey + mfa-totp helpers (8-import barrel incl. verifyTotpCodeWithCounter) + BadRequest/Conflict/NotFound from errors + AccountAuditService', () => {
     expect(body).toMatch(/import \{ hashApiKey, verifyApiKey \} from '\.\.\/lib\/api-keys\.js';/);
     expect(body).toMatch(
-      /import \{\s*\n?\s*decryptSecret,\s*\n?\s*encryptSecret,\s*\n?\s*generateRecoveryCodes,\s*\n?\s*generateTotpSecret,\s*\n?\s*normalizeRecoveryCode,\s*\n?\s*otpauthUri,\s*\n?\s*verifyTotpCode,\s*\n?\s*\} from '\.\.\/lib\/mfa-totp\.js';/,
+      /import \{\s*\n?\s*decryptSecret,\s*\n?\s*encryptSecret,\s*\n?\s*generateRecoveryCodes,\s*\n?\s*generateTotpSecret,\s*\n?\s*normalizeRecoveryCode,\s*\n?\s*otpauthUri,\s*\n?\s*verifyTotpCode,\s*\n?\s*verifyTotpCodeWithCounter,\s*\n?\s*\} from '\.\.\/lib\/mfa-totp\.js';/,
     );
     expect(body).toMatch(
       /import \{ BadRequestError, ConflictError, NotFoundError \} from '\.\.\/lib\/errors\.js';/,

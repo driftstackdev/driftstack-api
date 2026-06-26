@@ -876,6 +876,12 @@ export const accountMfa = pgTable('account_mfa', {
   totpSecretTag: text('totp_secret_tag').notNull(),
   enrolledAt: timestamp('enrolled_at', { withTimezone: true }),
   lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  // TOTP replay defence (migration 0090) — the last successfully-consumed TOTP
+  // timestep counter (floor(now/30)). verifyCode rejects any code whose matched
+  // counter <= this value so each 30s window is single-use across BOTH the
+  // login-challenge and the step-up gate. NULL = no TOTP consumed yet under the
+  // guard (pre-deploy enrollments; first verify stamps it).
+  lastUsedTotpCounter: bigint('last_used_totp_counter', { mode: 'number' }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .default(sql`now()`),

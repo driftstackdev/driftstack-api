@@ -1,6 +1,6 @@
 // V-353b — Drizzle implementation of MfaRepo.
 
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import type { MfaEnrollmentRow, MfaRepo, RecoveryCodeRow } from '../services/mfa.js';
 import type { Database } from './client.js';
 import { accountMfa, accountMfaRecoveryCodes } from './schema.js';
@@ -13,6 +13,7 @@ function toEnrollmentRow(r: typeof accountMfa.$inferSelect): MfaEnrollmentRow {
     totpSecretTag: r.totpSecretTag,
     enrolledAt: r.enrolledAt,
     lastUsedAt: r.lastUsedAt,
+    lastUsedTotpCounter: r.lastUsedTotpCounter,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -81,6 +82,32 @@ export class DrizzleMfaRepo implements MfaRepo {
       .update(accountMfa)
       .set({ lastUsedAt: now, updatedAt: now })
       .where(eq(accountMfa.accountId, accountId));
+  }
+
+  // TOTP replay defence (migration 0090) — atomic strict-monotonic write. The
+  // WHERE clause (last_used_totp_counter IS NULL OR < :counter) makes the
+  // accept-and-write a SINGLE conditional UPDATE, so two concurrent verifies of
+  // the same code can't both succeed (the DB serialises the row write; the
+  // loser matches zero rows). Returns true iff a row was updated.
+  async consumeTotpCounter(args: {
+    accountId: string;
+    counter: number;
+    now: Date;
+  }): Promise<boolean> {
+    const result = await this.database.db
+      .update(accountMfa)
+      .set({ lastUsedTotpCounter: args.counter, updatedAt: args.now })
+      .where(
+        and(
+          eq(accountMfa.accountId, args.accountId),
+          or(
+            isNull(accountMfa.lastUsedTotpCounter),
+            sql`${accountMfa.lastUsedTotpCounter} < ${args.counter}`,
+          ),
+        ),
+      )
+      .returning({ accountId: accountMfa.accountId });
+    return result.length > 0;
   }
 
   async deleteForAccount(accountId: string): Promise<void> {

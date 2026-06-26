@@ -97,11 +97,18 @@ describe('W387.A apps/server/src/lib/mfa-totp.ts content parity', () => {
     expect(body).toMatch(/return mod\.toString\(\)\.padStart\(TOTP_DIGITS, '0'\);/);
   });
 
-  it('verifyTotpCode: regex /^\\d{6}$/ pre-check + constant-time per-window compare', () => {
-    expect(body).toMatch(/if \(!\/\^\\d\{6\}\$\/\.test\(code\)\) return false;/);
+  it('verifyTotpCodeWithCounter: regex /^\\d{6}$/ pre-check + constant-time per-window compare + returns the matched timestep counter (replay defence); verifyTotpCode is the boolean wrapper', () => {
+    // The matching logic now lives in verifyTotpCodeWithCounter (returns the
+    // matched counter so the replay guard can persist + compare it); the regex
+    // pre-check returns null there. verifyTotpCode is a thin boolean wrapper.
+    expect(body).toMatch(/if \(!\/\^\\d\{6\}\$\/\.test\(code\)\) return null;/);
     expect(body).toMatch(/timingSafeEqual\(candidateBuf, codeBuf\)/);
     expect(body).toMatch(
       /for \(let drift = -TOTP_DRIFT_WINDOWS; drift <= TOTP_DRIFT_WINDOWS; drift\+\+\)/,
+    );
+    expect(body).toMatch(/matchedCounter = Math\.floor\(whenSeconds \/ TOTP_PERIOD_SECONDS\);/);
+    expect(body).toMatch(
+      /export function verifyTotpCode\([\s\S]*?\): boolean \{\s*\n?\s*return verifyTotpCodeWithCounter\(secretBytes, code, nowSeconds\) !== null;/,
     );
   });
 

@@ -57,23 +57,42 @@ export function computeTotpCode(secretBytes: Buffer, whenSeconds: number): strin
   return mod.toString().padStart(TOTP_DIGITS, '0');
 }
 
-/** V-353b — verify a 6-digit code against the raw secret with the
- *  ±1-window drift tolerance. Constant-time per-window compare. */
+/**
+ * V-353b — verify a 6-digit code against the raw secret with the ±1-window
+ * drift tolerance. Returns the MATCHED timestep counter (floor(when/30)) on
+ * success, or null on failure. The counter is what the replay guard persists
+ * + compares against last_used_totp_counter so each 30s window is single-use.
+ * Constant-time per-window compare; all windows are checked (no early break)
+ * so the work is independent of which window matched.
+ */
+export function verifyTotpCodeWithCounter(
+  secretBytes: Buffer,
+  code: string,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): number | null {
+  if (!/^\d{6}$/.test(code)) return null;
+  const codeBuf = Buffer.from(code, 'utf8');
+  let matchedCounter: number | null = null;
+  for (let drift = -TOTP_DRIFT_WINDOWS; drift <= TOTP_DRIFT_WINDOWS; drift++) {
+    const whenSeconds = nowSeconds + drift * TOTP_PERIOD_SECONDS;
+    const candidate = computeTotpCode(secretBytes, whenSeconds);
+    const candidateBuf = Buffer.from(candidate, 'utf8');
+    if (candidateBuf.length === codeBuf.length && timingSafeEqual(candidateBuf, codeBuf)) {
+      matchedCounter = Math.floor(whenSeconds / TOTP_PERIOD_SECONDS);
+    }
+  }
+  return matchedCounter;
+}
+
+/** V-353b — boolean convenience wrapper over {@link verifyTotpCodeWithCounter}.
+ *  Use the counter-returning variant on the replay-guarded paths (verifyCode);
+ *  this is for paths that don't persist a counter (enrollment confirmation). */
 export function verifyTotpCode(
   secretBytes: Buffer,
   code: string,
   nowSeconds: number = Math.floor(Date.now() / 1000),
 ): boolean {
-  if (!/^\d{6}$/.test(code)) return false;
-  const codeBuf = Buffer.from(code, 'utf8');
-  for (let drift = -TOTP_DRIFT_WINDOWS; drift <= TOTP_DRIFT_WINDOWS; drift++) {
-    const candidate = computeTotpCode(secretBytes, nowSeconds + drift * TOTP_PERIOD_SECONDS);
-    const candidateBuf = Buffer.from(candidate, 'utf8');
-    if (candidateBuf.length === codeBuf.length && timingSafeEqual(candidateBuf, codeBuf)) {
-      return true;
-    }
-  }
-  return false;
+  return verifyTotpCodeWithCounter(secretBytes, code, nowSeconds) !== null;
 }
 
 /** V-353b — `otpauth://` URI for the QR code. Issuer is fixed

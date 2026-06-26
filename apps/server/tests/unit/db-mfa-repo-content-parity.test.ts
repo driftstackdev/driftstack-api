@@ -45,18 +45,26 @@ describe('W446.A apps/server/src/db/mfa-repo.ts content parity', () => {
     expect(body).toMatch(/\/\/ V-353b — Drizzle implementation of MfaRepo\./);
   });
 
-  it('imports: and/desc/eq/isNull from drizzle-orm; MfaEnrollmentRow/MfaRepo/RecoveryCodeRow from services/mfa; Database; accountMfa + accountMfaRecoveryCodes', () => {
-    expect(body).toMatch(/import \{ and, desc, eq, isNull \} from 'drizzle-orm';/);
+  it('imports: and/desc/eq/isNull/or/sql from drizzle-orm; MfaEnrollmentRow/MfaRepo/RecoveryCodeRow from services/mfa; Database; accountMfa + accountMfaRecoveryCodes', () => {
+    expect(body).toMatch(/import \{ and, desc, eq, isNull, or, sql \} from 'drizzle-orm';/);
     expect(body).toMatch(
       /import type \{ MfaEnrollmentRow, MfaRepo, RecoveryCodeRow \} from '\.\.\/services\/mfa\.js';/,
     );
     expect(body).toMatch(/import \{ accountMfa, accountMfaRecoveryCodes \} from '\.\/schema\.js';/);
   });
 
-  it('toEnrollmentRow: 8-field MfaEnrollmentRow (accountId + totpSecretCiphertext/Iv/Tag + enrolledAt + lastUsedAt + created/updated_at)', () => {
+  it('toEnrollmentRow: 9-field MfaEnrollmentRow (accountId + totpSecretCiphertext/Iv/Tag + enrolledAt + lastUsedAt + lastUsedTotpCounter + created/updated_at)', () => {
     expect(body).toMatch(
-      /function toEnrollmentRow\(r: typeof accountMfa\.\$inferSelect\): MfaEnrollmentRow \{\s*\n?\s*return \{\s*\n?\s*accountId: r\.accountId,\s*\n?\s*totpSecretCiphertext: r\.totpSecretCiphertext,\s*\n?\s*totpSecretIv: r\.totpSecretIv,\s*\n?\s*totpSecretTag: r\.totpSecretTag,\s*\n?\s*enrolledAt: r\.enrolledAt,\s*\n?\s*lastUsedAt: r\.lastUsedAt,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*updatedAt: r\.updatedAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toEnrollmentRow\(r: typeof accountMfa\.\$inferSelect\): MfaEnrollmentRow \{\s*\n?\s*return \{\s*\n?\s*accountId: r\.accountId,\s*\n?\s*totpSecretCiphertext: r\.totpSecretCiphertext,\s*\n?\s*totpSecretIv: r\.totpSecretIv,\s*\n?\s*totpSecretTag: r\.totpSecretTag,\s*\n?\s*enrolledAt: r\.enrolledAt,\s*\n?\s*lastUsedAt: r\.lastUsedAt,\s*\n?\s*lastUsedTotpCounter: r\.lastUsedTotpCounter,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*updatedAt: r\.updatedAt,\s*\n?\s*\};\s*\n?\s*\}/,
     );
+  });
+
+  it('consumeTotpCounter: atomic strict-monotonic conditional UPDATE (TOTP replay defence, migration 0090)', () => {
+    expect(body).toMatch(/async consumeTotpCounter\(args: \{/);
+    expect(body).toMatch(/\.set\(\{ lastUsedTotpCounter: args\.counter, updatedAt: args\.now \}\)/);
+    expect(body).toMatch(/isNull\(accountMfa\.lastUsedTotpCounter\)/);
+    expect(body).toMatch(/sql`\$\{accountMfa\.lastUsedTotpCounter\} < \$\{args\.counter\}`/);
+    expect(body).toMatch(/return result\.length > 0;/);
   });
 
   it('toRecoveryCodeRow: 5-field (id + accountId + codeHash + usedAt + createdAt)', () => {

@@ -29,6 +29,7 @@ export class InMemoryMfaRepo implements MfaRepo {
       totpSecretTag: args.tag,
       enrolledAt: args.enrolledAt !== null ? args.enrolledAt : (existing?.enrolledAt ?? null),
       lastUsedAt: existing?.lastUsedAt ?? null,
+      lastUsedTotpCounter: existing?.lastUsedTotpCounter ?? null,
       createdAt: existing?.createdAt ?? args.now,
       updatedAt: args.now,
     };
@@ -40,6 +41,24 @@ export class InMemoryMfaRepo implements MfaRepo {
     const r = this.enrollments.get(accountId);
     if (r) this.enrollments.set(accountId, { ...r, lastUsedAt: now, updatedAt: now });
     return Promise.resolve();
+  }
+
+  // TOTP replay defence (migration 0090) — atomic strict-monotonic write. The
+  // synchronous in-memory map has no await gap between the read + write, so the
+  // guard is naturally atomic (the real concurrent-replay race lives only in
+  // the multi-connection Postgres path, handled by the conditional UPDATE).
+  consumeTotpCounter(args: { accountId: string; counter: number; now: Date }): Promise<boolean> {
+    const r = this.enrollments.get(args.accountId);
+    if (!r) return Promise.resolve(false);
+    if (r.lastUsedTotpCounter !== null && r.lastUsedTotpCounter >= args.counter) {
+      return Promise.resolve(false);
+    }
+    this.enrollments.set(args.accountId, {
+      ...r,
+      lastUsedTotpCounter: args.counter,
+      updatedAt: args.now,
+    });
+    return Promise.resolve(true);
   }
 
   deleteForAccount(accountId: string): Promise<void> {

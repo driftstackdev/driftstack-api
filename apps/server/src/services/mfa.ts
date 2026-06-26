@@ -28,6 +28,7 @@ import {
   normalizeRecoveryCode,
   otpauthUri,
   verifyTotpCode,
+  verifyTotpCodeWithCounter,
 } from '../lib/mfa-totp.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
 import type { AccountAuditService } from './account-audit.js';
@@ -39,6 +40,9 @@ export interface MfaEnrollmentRow {
   totpSecretTag: string;
   enrolledAt: Date | null;
   lastUsedAt: Date | null;
+  /** TOTP replay defence (migration 0090) — last successfully-consumed TOTP
+   *  timestep counter. null = none consumed yet under the guard. */
+  lastUsedTotpCounter: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -68,6 +72,15 @@ export interface MfaRepo {
   }): Promise<MfaEnrollmentRow>;
   /** V-353b — touch `last_used_at` after a successful verify. */
   touchLastUsed(accountId: string, now: Date): Promise<void>;
+  /**
+   * TOTP replay defence (migration 0090) — persist the matched TOTP timestep
+   * counter so the same 30s window can't be replayed. Done in the SAME locked
+   * step as the read (atomic guard: only write when the new counter strictly
+   * exceeds the stored one) to close the concurrent-replay race; returns true
+   * when the counter was accepted+written, false when a concurrent verify
+   * already consumed this (or a later) counter.
+   */
+  consumeTotpCounter(args: { accountId: string; counter: number; now: Date }): Promise<boolean>;
   /** V-353b — delete the MFA row + recovery codes (cascade). */
   deleteForAccount(accountId: string): Promise<void>;
   /** V-353b — bulk-insert N recovery code hashes for the account. */
@@ -255,11 +268,33 @@ export class MfaService {
         },
         this.config.encryptionKey,
       );
-      if (verifyTotpCode(secretBytes, trimmed, args.nowSeconds)) {
-        await this.repo.touchLastUsed(args.accountId, new Date());
-        return 'totp';
+      // TOTP replay defence (migration 0090). verifyTotpCodeWithCounter returns
+      // the matched timestep counter; the code is only accepted when that
+      // counter is STRICTLY GREATER than the last consumed one — so a code
+      // observed (shoulder-surf / phishing relay / malicious proxy) can't be
+      // replayed within its ~90s validity window, against EITHER the login
+      // challenge OR the step-up gate (both flow through verifyCode). The
+      // strict-monotonic check is enforced atomically in consumeTotpCounter so
+      // two concurrent verifies of the same code can't both win.
+      const matchedCounter = verifyTotpCodeWithCounter(secretBytes, trimmed, args.nowSeconds);
+      if (matchedCounter === null) return null;
+      const lastUsed = row.lastUsedTotpCounter;
+      if (lastUsed !== null && matchedCounter <= lastUsed) {
+        // Replay (or a stale-window code): the counter was already consumed.
+        return null;
       }
-      return null;
+      const accepted = await this.repo.consumeTotpCounter({
+        accountId: args.accountId,
+        counter: matchedCounter,
+        now: new Date(),
+      });
+      if (!accepted) {
+        // Lost the race — a concurrent verify consumed this (or a later)
+        // counter first. Treat as a replay.
+        return null;
+      }
+      await this.repo.touchLastUsed(args.accountId, new Date());
+      return 'totp';
     }
 
     // Recovery code path: normalize, scrypt-verify against any

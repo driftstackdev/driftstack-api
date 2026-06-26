@@ -631,6 +631,13 @@
       "when": 1780324800000,
       "tag": "0089_agent_sessions_profile_id",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1780328400000,
+      "tag": "0090_account_mfa_last_used_totp_counter",
+      "breakpoints": true
     }
   ]
 }

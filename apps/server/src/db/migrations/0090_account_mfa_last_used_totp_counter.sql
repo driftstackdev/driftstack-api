@@ -1,0 +1,13 @@
+-- 2026-06-26 — TOTP replay defence. Persist the last successfully-consumed
+-- TOTP timestep counter (floor(now/30)) per account so a code can only be used
+-- ONCE: verifyCode rejects any code whose matched counter <= the stored value.
+-- Without this, a single observed 6-digit code is replayable for the whole
+-- ~90s validation window (current step +/- 1 drift) — against the login
+-- challenge AND the step-up (POST /v1/auth/mfa/step-up) gate, which consumes no
+-- single-use challenge token.
+--
+-- BIGINT: the counter is floor(unix_seconds/30) which exceeds the 2^31 int
+-- ceiling. Nullable + additive: NULL = no TOTP consumed yet under the new
+-- guard (existing enrollments need no backfill; the first post-deploy verify
+-- stamps it).
+ALTER TABLE "account_mfa" ADD COLUMN IF NOT EXISTS "last_used_totp_counter" bigint;

@@ -49,6 +49,7 @@ function makeRepo(): {
         totpSecretTag: tag,
         enrolledAt,
         lastUsedAt: state.row?.lastUsedAt ?? null,
+        lastUsedTotpCounter: state.row?.lastUsedTotpCounter ?? null,
         createdAt: state.row?.createdAt ?? now,
         updatedAt: now,
       };
@@ -59,6 +60,17 @@ function makeRepo(): {
       state.touchedAt = now;
       if (state.row) state.row.lastUsedAt = now;
       return Promise.resolve();
+    },
+    // TOTP replay defence (migration 0090) — atomic strict-monotonic write.
+    consumeTotpCounter: ({ counter, now }) => {
+      const r = state.row;
+      if (!r) return Promise.resolve(false);
+      if (r.lastUsedTotpCounter !== null && r.lastUsedTotpCounter >= counter) {
+        return Promise.resolve(false);
+      }
+      r.lastUsedTotpCounter = counter;
+      r.updatedAt = now;
+      return Promise.resolve(true);
     },
     deleteForAccount: () => {
       state.row = null;
@@ -125,6 +137,7 @@ describe('V-553.B-11 MfaService.startEnrollment', () => {
       totpSecretTag: 'z',
       enrolledAt: new Date(),
       lastUsedAt: null,
+      lastUsedTotpCounter: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -197,6 +210,7 @@ describe('V-553.B-11 MfaService.disable', () => {
       totpSecretTag: 'z',
       enrolledAt: new Date(),
       lastUsedAt: null,
+      lastUsedTotpCounter: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -228,6 +242,72 @@ describe('V-553.B-11 MfaService.verifyCode', () => {
     const result = await svc.verifyCode({ accountId: 'acc_1', input: code });
     expect(result).toBe('totp');
     expect(state.touchedAt).not.toBeNull();
+  });
+
+  it('TOTP replay defence (migration 0090): the SAME code cannot be used twice within its window', async () => {
+    const { repo, state } = makeRepo();
+    const svc = new MfaService(repo, SVC_CONFIG);
+    const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
+    const secretBytes = base32Decode(start.secretBase32);
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const code = computeTotpCode(secretBytes, nowSeconds);
+    await svc.completeEnrollment({ accountId: 'acc_1', code });
+
+    // First use succeeds + stamps the consumed counter.
+    const first = await svc.verifyCode({ accountId: 'acc_1', input: code, nowSeconds });
+    expect(first).toBe('totp');
+    expect(state.row?.lastUsedTotpCounter).toBe(Math.floor(nowSeconds / TOTP_PERIOD_SECONDS));
+
+    // Replay of the identical code at the same instant is REJECTED (the
+    // counter was already consumed) — closes the ~90s replay window against
+    // both the login challenge AND the step-up gate (both call verifyCode).
+    const replay = await svc.verifyCode({ accountId: 'acc_1', input: code, nowSeconds });
+    expect(replay).toBeNull();
+  });
+
+  it('TOTP replay defence: a code from an EARLIER timestep than the last consumed one is rejected (drift-window replay)', async () => {
+    const { repo, state } = makeRepo();
+    const svc = new MfaService(repo, SVC_CONFIG);
+    const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
+    const secretBytes = base32Decode(start.secretBase32);
+    const t0 = Math.floor(Date.now() / 1000);
+    const enrollCode = computeTotpCode(secretBytes, t0);
+    await svc.completeEnrollment({ accountId: 'acc_1', code: enrollCode });
+
+    // Consume the code at the NEXT timestep first.
+    const tNext = t0 + TOTP_PERIOD_SECONDS;
+    const codeNext = computeTotpCode(secretBytes, tNext);
+    expect(await svc.verifyCode({ accountId: 'acc_1', input: codeNext, nowSeconds: tNext })).toBe(
+      'totp',
+    );
+    expect(state.row?.lastUsedTotpCounter).toBe(Math.floor(tNext / TOTP_PERIOD_SECONDS));
+
+    // An attacker who captured the PREVIOUS timestep's code (still inside the
+    // ±1 drift window of tNext) cannot replay it — its counter <= last consumed.
+    const codePrev = computeTotpCode(secretBytes, t0);
+    expect(
+      await svc.verifyCode({ accountId: 'acc_1', input: codePrev, nowSeconds: tNext }),
+    ).toBeNull();
+  });
+
+  it('TOTP replay defence: a LATER fresh code (next window) is still accepted after a prior consume', async () => {
+    const { repo } = makeRepo();
+    const svc = new MfaService(repo, SVC_CONFIG);
+    const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
+    const secretBytes = base32Decode(start.secretBase32);
+    const t0 = Math.floor(Date.now() / 1000);
+    await svc.completeEnrollment({ accountId: 'acc_1', code: computeTotpCode(secretBytes, t0) });
+
+    const code0 = computeTotpCode(secretBytes, t0);
+    expect(await svc.verifyCode({ accountId: 'acc_1', input: code0, nowSeconds: t0 })).toBe('totp');
+
+    // A genuinely fresh code two windows later (strictly greater counter) is
+    // accepted — the guard rejects replays, not legitimate later logins.
+    const tLater = t0 + 2 * TOTP_PERIOD_SECONDS;
+    const codeLater = computeTotpCode(secretBytes, tLater);
+    expect(await svc.verifyCode({ accountId: 'acc_1', input: codeLater, nowSeconds: tLater })).toBe(
+      'totp',
+    );
   });
 
   it('returns null on a 6-digit code that does not match', async () => {
@@ -277,6 +357,7 @@ describe('V-553.B-11 MfaService.verifyCode', () => {
       totpSecretTag: 'z',
       enrolledAt: new Date(),
       lastUsedAt: null,
+      lastUsedTotpCounter: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
