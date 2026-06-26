@@ -104,24 +104,27 @@ describe('create-profile modal "Test proxy" draft validation', () => {
     );
   });
 
-  it('the device-card grid makes ALL selectable (launch+available) archetypes clickable — not only iPhone 17', async () => {
+  it('the device picker makes ALL selectable (launch+available) archetypes clickable — not only iPhone 17', async () => {
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     const open = await screen.findByRole('button', { name: 'Create your first profile' });
     fireEvent.click(open);
-    // Device cards live on the default '📱 Identity' tab. Each card carries a
-    // '✓ bit-exact' (selectable) or 'reference' (disabled) badge; a card is clickable
-    // iff its status is in SELECTABLE_STATUSES {launch, available}. The grid previously
-    // gated on status==='launch', leaving only iPhone 17 clickable.
+    // The redesigned device picker lives on the default '📱 Identity' tab. Each
+    // list row carries a '✓ bit-exact' (selectable) or 'reference' badge; a row
+    // is keyboard-selectable (tabindex 0) iff its status is in
+    // SELECTABLE_STATUSES {launch, available}. The picker must NOT regress to
+    // status==='launch' (which left only iPhone 17 clickable).
     const bitExact = await screen.findAllByText('✓ bit-exact');
-    // The full catalog (1 launch + 80 available) → far more than one selectable card.
+    // The full catalog (1 launch + 80 available) → far more than one selectable row.
     expect(bitExact.length).toBeGreaterThan(1);
-    // Each '✓ bit-exact' badge sits inside an ENABLED device-card button.
+    // Each '✓ bit-exact' badge sits inside a SELECTABLE option row (focusable,
+    // not aria-disabled).
     for (const badge of bitExact) {
-      const btn = badge.closest('button');
-      expect(btn).not.toBeNull();
-      expect(btn).not.toBeDisabled();
+      const row = badge.closest('[role="option"]');
+      expect(row).not.toBeNull();
+      expect(row).toHaveAttribute('tabindex', '0');
+      expect(row).toHaveAttribute('aria-disabled', 'false');
     }
-    // The Randomize button is enabled (KNOWN_ARCHETYPES.length ≥ 2 now).
-    expect(screen.getByRole('button', { name: 'Randomize' })).not.toBeDisabled();
+    // The Randomize button is enabled (≥ 2 selectable devices visible).
+    expect(screen.getByRole('button', { name: /Randomize/ })).not.toBeDisabled();
   });
 });

@@ -100,10 +100,31 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     );
   });
 
-  it("Form: name input maxLength=120 minLength=1 required + description textarea maxLength=500 rows=2 + archetype select disabled={submitting || KNOWN_ARCHETYPES.length < 2} — pinned so server schema bounds (1-120 name / 500-max description) stay enforced client-side, and select stays disabled while there's only one archetype available", () => {
+  it('Form: name input maxLength=120 minLength=1 required + description textarea maxLength=500 rows=2 — pinned so server schema bounds (1-120 name / 500-max description) stay enforced client-side', () => {
     expect(body).toMatch(/maxLength=\{120\}\s*\n?\s*minLength=\{1\}\s*\n?\s*required/);
     expect(body).toMatch(/maxLength=\{500\}\s*\n?\s*rows=\{2\}/);
-    expect(body).toMatch(/disabled=\{submitting \|\| KNOWN_ARCHETYPES\.length < 2\}/);
+  });
+
+  it("Device picker (2026-06-25 redesign): the device-card grid is replaced by the searchable/chip-filtered <DevicePicker>; the modal still OWNS selection (selectedId={archetype} onSelect={setArchetype}) and feeds the whole registry as PICKER_DEVICES with `selectable` flagged by the SAME SELECTABLE_STATUSES gate, so reference/planned entries render as muted non-selectable rows and randomize lands only on the filtered+selectable set — pinned so a regression can't drop the picker back to a status==='launch' single-device gate", () => {
+    // The picker component is imported + rendered with the modal's selection state.
+    expect(body).toMatch(
+      /import \{ DevicePicker, type PickerDevice \} from '\.\.\/components\/DevicePicker';/,
+    );
+    expect(body).toMatch(/<DevicePicker\b/);
+    expect(body).toMatch(/selectedId=\{archetype\}/);
+    expect(body).toMatch(/onSelect=\{setArchetype\}/);
+    expect(body).toMatch(/disabled=\{submitting\}/);
+    // PICKER_DEVICES flattens the WHOLE registry; `selectable` MUST track the
+    // shared SELECTABLE_STATUSES gate (never a status==='launch' regression).
+    expect(body).toMatch(
+      /const PICKER_DEVICES: readonly PickerDevice\[\] = ARCHETYPE_REGISTRY\.map\(\(a\) => \(\{[\s\S]*?selectable: SELECTABLE_STATUSES\.has\(a\.status\),[\s\S]*?\}\)\);/,
+    );
+    expect(body).toMatch(/engine: 'webkit',/);
+    // randomize picks only from the picker's filtered + selectable candidate set.
+    expect(body).toMatch(
+      /onRandomize=\{\(candidates\) => \{[\s\S]*?candidates\[Math\.floor\(Math\.random\(\) \* candidates\.length\)\][\s\S]*?\}\}/,
+    );
+    expect(body).not.toMatch(/status === 'launch'/);
   });
 
   it("Empty no-profiles framing pinned: 'A profile is a persistent identity — cookies, localStorage, IndexedDB — reused across sessions. Bind a session to a profile to keep login state, returning-visitor signals, and stealth fingerprints stable between runs.' — pinned so customer understands what they're creating", () => {
