@@ -48,9 +48,9 @@ describe('W499.A apps/marketing-site/src/pages/changelog.astro content parity', 
     );
   });
 
-  it("CATEGORY_COLOR 6-entry styling map: launch oxblood / sdk slate-900 / docs slate-200 / security red / pricing amber / self-hosted emerald — pinned so each category has a visually-distinct badge color (drift to dropping any would render that category's badge with no styling; drift to duplicating would lose the 'launch is the loud one, security is alarm-red' visual hierarchy)", () => {
+  it("CATEGORY_COLOR 6-entry styling map: launch accent / sdk raised-ink / docs raised-ink / security red-100/900 / pricing amber-100 / self-hosted emerald-100/900 — pinned so every category resolves to a real badge color (drift to dropping any would render that category's badge with no styling). The security/self-hosted text shades were corrected to -900 for legible dark-on-light contrast.", () => {
     expect(body).toMatch(
-      /const CATEGORY_COLOR: Record<ChangelogEntry\['category'\], string> = \{\s*\n?\s*launch: 'bg-tk-accent text-white',\s*\n?\s*sdk: 'bg-tk-bg text-white',\s*\n?\s*docs: 'bg-tk-raised text-tk-ink',\s*\n?\s*security: 'bg-red-100 text-red-900',\s*\n?\s*pricing: 'bg-amber-100 text-tk-accent-soft',\s*\n?\s*'self-hosted': 'bg-emerald-100 text-emerald-200',\s*\n?\s*\};/,
+      /const CATEGORY_COLOR: Record<ChangelogEntry\['category'\], string> = \{\s*\n?\s*launch: 'bg-tk-accent text-white',\s*\n?\s*sdk: 'bg-tk-raised text-tk-ink',\s*\n?\s*docs: 'bg-tk-raised text-tk-ink',\s*\n?\s*security: 'bg-red-100 text-red-900',\s*\n?\s*pricing: 'bg-amber-100 text-tk-accent-soft',\s*\n?\s*'self-hosted': 'bg-emerald-100 text-emerald-900',\s*\n?\s*\};/,
     );
   });
 

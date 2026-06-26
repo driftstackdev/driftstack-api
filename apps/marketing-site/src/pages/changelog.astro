@@ -83,16 +83,16 @@ const ENTRIES: readonly ChangelogEntry[] = [
     body: 'The three Manual-ladder plans now have clearer names — Personal (formerly Solo Manual), Team (formerly Team Manual), and Agency (formerly Agency Manual) — so the personal-vs-team distinction reads at a glance. Prices, profile counts, concurrent caps, and the underlying tier identifiers are unchanged: this is a display-name change only, so existing subscriptions and API tier ids (solo_manual / team_manual / agency_manual) are unaffected. The API ladder (API Starter / Builder / Scale) and Enterprise keep their names.',
   },
   {
-    date: '2026-05-22',
-    category: 'pricing',
-    title: 'Crypto checkout is live via NowPayments',
-    body: 'The crypto payment rail previously deferred at launch is now live. Self-serve paid tiers ($79/mo and up) can pay with cryptocurrency (BTC, LTC, USDT, USDC, ETH, XMR) through NowPayments — open the crypto checkout from the billing dashboard, send the displayed amount, and the order moves pending → confirming → paid as on-chain confirmations land. crypto.order.paid and crypto.order.failed are emitted and subscribable via POST /v1/webhooks. Stripe remains the default rail; Enterprise settles via wire. Crypto payments are non-refundable. Full reference at docs.driftstack.dev/api/billing-crypto.',
-  },
-  {
     date: '2026-05-27',
     category: 'pricing',
     title: 'Perpetual free tier replaces the one-time trial pack',
     body: 'The entry tier is now a perpetual free tier: $0 forever, one persistent profile, one concurrent session, manual sessions up to 20 minutes each, driven from the desktop GUI client, no card required. It is manual-only — programmatic API/SDK access starts on the API ladder. There is no expiry, no credit to run out, and no usage metering. This replaces the previous one-time $2.99 trial pack entirely.',
+  },
+  {
+    date: '2026-05-22',
+    category: 'pricing',
+    title: 'Crypto checkout is live via NowPayments',
+    body: 'The crypto payment rail previously deferred at launch is now live. Self-serve paid tiers ($79/mo and up) can pay with cryptocurrency (BTC, LTC, USDT, USDC, ETH, XMR) through NowPayments — open the crypto checkout from the billing dashboard, send the displayed amount, and the order moves pending → confirming → paid as on-chain confirmations land. crypto.order.paid and crypto.order.failed are emitted and subscribable via POST /v1/webhooks. Stripe remains the default rail; Enterprise settles via wire. Crypto payments are non-refundable. Full reference at docs.driftstack.dev/api/billing-crypto.',
   },
   {
     date: '2026-05-20',
