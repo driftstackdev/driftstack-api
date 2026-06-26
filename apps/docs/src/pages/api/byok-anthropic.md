@@ -56,8 +56,8 @@ key but cannot manage it — Q3 verdict).
 Validation:
 
 - `api_key` — non-empty string. Server-side validation checks the
-  `sk-ant-` prefix; mismatched prefixes return `400 InvalidKeyFormat`
-  with a clear message naming the expected shape.
+  `sk-ant-` prefix; mismatched prefixes return `400 Bad Request`
+  (type `…/bad-request`) with a clear message naming the expected shape.
 
 On success the key is encrypted at rest via AES-256-GCM (sealed
 with `MFA_ENCRYPTION_KEY`) and the response is the new `set_at`:
@@ -95,30 +95,23 @@ Sends a minimal Anthropic API ping with the stored key and reports
 whether the round-trip succeeded. Required scope: `account_owner`
 (team members would otherwise burn the owner's quota).
 
-Response (200):
+Response (200) on a successful round-trip:
 
 ```json
-{ "ok": true, "tested_at": "2026-05-18T16:42:00Z" }
+{ "ok": true }
 ```
 
-On failure:
+On a failed round-trip the response is still `200` with `ok: false`
+plus a human-readable `reason` string:
 
 ```json
-{
-  "ok": false,
-  "tested_at": "2026-05-18T16:42:00Z",
-  "error_kind": "anthropic_unauthorized",
-  "error_detail": "Anthropic API returned 401 — key may be expired or revoked."
-}
+{ "ok": false, "reason": "Anthropic API returned 401 — key may be expired or revoked." }
 ```
 
-`error_kind` enum:
-
-- `no_key_set` — `has_key: false`; nothing to test.
-- `anthropic_unauthorized` — Anthropic returned 401 / 403.
-- `anthropic_rate_limited` — Anthropic returned 429.
-- `anthropic_server_error` — Anthropic returned 5xx.
-- `network_error` — TCP / TLS / DNS failure reaching Anthropic.
+The `reason` text is advisory only — it is not a stable enum, so do
+not branch on its exact contents. If no key is set on the account,
+the endpoint instead returns `400 Bad Request` (type `…/bad-request`)
+telling you to PUT a key first.
 
 The test response NEVER echoes any part of the key (prefix or
 otherwise) — the customer's only audit trail is `set_at` /
@@ -155,7 +148,7 @@ satisfy the 90-day gate.
 
 | Status | Type                    | When                                                                                                                                                  |
 | -----: | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-|    400 | invalid-key-format      | api_key doesn't match the `sk-ant-` prefix / is empty                                                                                                 |
+|    400 | bad-request             | api_key doesn't match the `sk-ant-` prefix / is empty, or /test was called with no key set                                                            |
 |    401 | unauthorized            | missing or invalid bearer token                                                                                                                       |
 |    403 | forbidden               | scope check failed (write op without account_owner)                                                                                                   |
 |    502 | byok-anthropic-required | session turn resolved no key (no BYOK + no bundled-llm + no fallback) — surfaced from the agent-session message route, not from this surface directly |

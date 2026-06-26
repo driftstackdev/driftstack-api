@@ -2,7 +2,7 @@
 // the BYOK Anthropic customer-facing docs surface — 4-verb endpoint
 // roster + plaintext-never-echoed contract + Q4=A BYOK-always-wins
 // founder verdict + AES-256-GCM at-rest + 90-day staleness window +
-// 5-error_kind enum.
+// test-response { ok } / { ok, reason } shape.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -70,12 +70,15 @@ describe('docs/api/byok-anthropic content parity', () => {
     );
   });
 
-  it('5-error_kind enum pinned: no_key_set + anthropic_unauthorized + anthropic_rate_limited + anthropic_server_error + network_error — pinned so the 5-error-class taxonomy stays stable (drift to a different enum would break dashboard error-routing logic + customer SDK retry classification)', () => {
-    expect(body).toMatch(/- `no_key_set` — `has_key: false`; nothing to test\./);
-    expect(body).toMatch(/- `anthropic_unauthorized` — Anthropic returned 401 \/ 403\./);
-    expect(body).toMatch(/- `anthropic_rate_limited` — Anthropic returned 429\./);
-    expect(body).toMatch(/- `anthropic_server_error` — Anthropic returned 5xx\./);
-    expect(body).toMatch(/- `network_error` — TCP \/ TLS \/ DNS failure reaching Anthropic\./);
+  it('test-response shape pinned: { ok: true } on success + { ok: false, reason } on failure (reason is advisory, not a stable enum) + 400 Bad Request when no key set — pinned so the live route contract (account-byok-anthropic.ts:241 + :219) stays documented; drift to a fabricated tested_at/error_kind/error_detail enum would mislead SDK error-routing logic', () => {
+    expect(body).toMatch(/```json\s*\n\{ "ok": true \}\s*\n```/);
+    expect(body).toMatch(/\{ "ok": false, "reason":/);
+    expect(body).toMatch(
+      /it is not a stable enum, so do\s*\n?\s*not branch on its exact contents\./,
+    );
+    expect(body).toMatch(
+      /If no key is set on the account,\s*\n?\s*the endpoint instead returns `400 Bad Request` \(type `…\/bad-request`\)/,
+    );
   });
 
   it("Test-response-never-echoes-key + Driftstack-does-NOT-proxy framing pinned: 'The test response NEVER echoes any part of the key (prefix or otherwise) — the customer's only audit trail is set_at / last_used_at plus this test result.' + 'Driftstack does NOT proxy or cache responses from the Anthropic API; the customer's BYOK key talks directly to Anthropic from the agent-runtime fork.' — pinned so the no-prefix-echo + direct-talk-no-proxy contract stays documented (privacy commitment to customer)", () => {
@@ -87,8 +90,8 @@ describe('docs/api/byok-anthropic content parity', () => {
     );
   });
 
-  it('Errors table 5-row roster pinned: 400 invalid-key-format + 401 unauthorized + 403 forbidden + 502 byok-anthropic-required + 503 feature-unavailable — pinned so the 5-error-status roster (each with its trigger condition) stays stable', () => {
-    expect(body).toMatch(/\|\s*400 \| invalid-key-format/);
+  it('Errors table 5-row roster pinned: 400 bad-request + 401 unauthorized + 403 forbidden + 502 byok-anthropic-required + 503 feature-unavailable — pinned so the 5-error-status roster (each with its trigger condition) stays stable', () => {
+    expect(body).toMatch(/\|\s*400 \| bad-request/);
     expect(body).toMatch(/\|\s*401 \| unauthorized/);
     expect(body).toMatch(/\|\s*403 \| forbidden/);
     expect(body).toMatch(/\|\s*502 \| byok-anthropic-required/);

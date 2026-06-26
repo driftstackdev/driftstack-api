@@ -50,12 +50,13 @@ describe('Arc 6 docs.byok-anthropic content parity', () => {
     expect(body).toMatch(/plaintext is NEVER echoed/);
   });
 
-  it('test-endpoint error_kind enum documented', () => {
-    expect(body).toMatch(/no_key_set/);
-    expect(body).toMatch(/anthropic_unauthorized/);
-    expect(body).toMatch(/anthropic_rate_limited/);
-    expect(body).toMatch(/anthropic_server_error/);
-    expect(body).toMatch(/network_error/);
+  it('test-endpoint response documented: { ok: true } / { ok: false, reason } + 400 on no-key', () => {
+    // Matches the live route: returns ok:true or ok:false+reason (string,
+    // not a stable enum); a missing key throws 400 Bad Request.
+    expect(body).toMatch(/\{ "ok": true \}/);
+    expect(body).toMatch(/\{ "ok": false, "reason":/);
+    expect(body).toMatch(/not a stable enum/);
+    expect(body).toMatch(/`400 Bad Request`/);
   });
 
   it('encryption at rest documented: AES-256-GCM + MFA_ENCRYPTION_KEY + canonical blob shape', () => {
@@ -71,7 +72,7 @@ describe('Arc 6 docs.byok-anthropic content parity', () => {
   });
 
   it('error table covers 400 / 401 / 403 / 502 / 503', () => {
-    expect(body).toMatch(/\|\s*400\s*\| invalid-key-format/);
+    expect(body).toMatch(/\|\s*400\s*\| bad-request/);
     expect(body).toMatch(/\|\s*401\s*\| unauthorized/);
     expect(body).toMatch(/\|\s*403\s*\| forbidden/);
     expect(body).toMatch(/\|\s*502\s*\| byok-anthropic-required/);
