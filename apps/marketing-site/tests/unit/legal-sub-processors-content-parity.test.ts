@@ -5,19 +5,23 @@
 // standalone-doc load-bearing claims (separate from the DPA Annex 3
 // summary which has different framing):
 //
-//   • Version 1.0 + Effective 2026-05-11.
-//   • 9 Sub-processor rows pinned (AWS / Cloudflare / Stripe /
-//     NowPayments / Postmark+ActiveCampaign / Sentry / Hetzner
-//     dev-staging-only / LiveKit / GitHub).
-//   • Sub-processor definition + 3 exclusions pinned.
+//   • Version 1.0 + Effective 2026-05-10 (matches the register's
+//     SUB_PROCESSOR_REGISTER_LAST_UPDATED in src/data/sub-processors.ts).
+//   • 12 Sub-processor rows pinned to the live register (Hetzner /
+//     Neon / Upstash / Cloudflare R2 / Postmark / Sentry / Stripe /
+//     Anthropic / Moneybird / MacStadium / NowPayments / LiveKit) —
+//     NO AWS, NO GitHub (neither is a Driftstack sub-processor).
+//   • Production topology: Hetzner + Neon (Postgres) + Upstash
+//     (Redis) + Cloudflare R2 (storage) + MacStadium (fleet).
+//   • Sub-processor definition + 2 exclusions pinned.
 //   • 30-day notice + 3 delivery channels (page update / email /
 //     in-dashboard changelog).
 //   • Objection-process: pro-rated refund + terminate-affected-
 //     portion.
 //   • announcements@driftstack.dev mailing list opt-in via
 //     security@.
-//   • 3 substantive change-list entries (NowPayments added /
-//     LiveKit added V-531 / Hetzner narrowed to dev/staging).
+//   • 2 substantive change-list entries (NowPayments added /
+//     LiveKit added).
 //   • Cross-links: dpa.md + privacy.md + /docs/security-overview
 //     + /docs/data-residency.
 //   • security@driftstack.dev + 1-business-day reply.
@@ -38,8 +42,8 @@ function read(p: string): string {
 describe('W379.A marketing-site /legal/sub-processors.md content parity', () => {
   const body = read(PAGE);
 
-  it('version 1.0 + effective 2026-05-11 doc header pinned', () => {
-    expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-11/);
+  it('version 1.0 + effective 2026-05-10 doc header pinned (matches register)', () => {
+    expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-10/);
   });
 
   it('intentionally-short vendor surface posture framing pinned (load-bearing trust signal)', () => {
@@ -49,68 +53,78 @@ describe('W379.A marketing-site /legal/sub-processors.md content parity', () => 
     );
   });
 
-  it('sub-processor definition: 3 exclusions pinned (business-data / customer-direct / self-hosted OSS)', () => {
+  it('sub-processor definition: 2 exclusions pinned (business-data / customer-direct)', () => {
     expect(body).toMatch(/Vendors that only receive Driftstack's own business data/);
     expect(body).toMatch(/Vendors a customer chooses to integrate with directly/);
-    expect(body).toMatch(
-      /Open-source software we self-host \(Postgres, Redis, etc\.\)\. Self-\s*\n?\s*hosted infrastructure runs inside our managed cloud accounts/,
-    );
+    // The old "self-hosted Postgres/Redis" exclusion contradicted Neon/
+    // Upstash being managed sub-processors — it must not reappear.
+    expect(body).not.toMatch(/self-host \(Postgres, Redis/);
   });
 
-  it('9 sub-processor rows pinned (AWS / Cloudflare / Stripe / NowPayments / Postmark+ActiveCampaign / Sentry / Hetzner / LiveKit / GitHub)', () => {
-    expect(body).toMatch(/\*\*Amazon Web Services, Inc\.\*\* \(AWS\)/);
-    expect(body).toMatch(/\*\*Cloudflare, Inc\.\*\*/);
-    expect(body).toMatch(/\*\*Stripe, Inc\.\*\*/);
+  it('12 sub-processor rows pinned to the live register (Hetzner / Neon / Upstash / Cloudflare R2 / Postmark / Sentry / Stripe / Anthropic / Moneybird / MacStadium / NowPayments / LiveKit)', () => {
+    expect(body).toMatch(/\*\*Hetzner Cloud\*\*/);
+    expect(body).toMatch(/\*\*Neon, Inc\.\*\*/);
+    expect(body).toMatch(/\*\*Upstash, Inc\.\*\*/);
+    expect(body).toMatch(/\*\*Cloudflare R2\*\*/);
+    expect(body).toMatch(/\*\*Postmark\*\*/);
+    expect(body).toMatch(/\*\*Sentry\*\*/);
+    expect(body).toMatch(/\*\*Stripe\*\*/);
+    expect(body).toMatch(/\*\*Anthropic\*\*/);
+    expect(body).toMatch(/\*\*Moneybird\*\*/);
+    expect(body).toMatch(/\*\*MacStadium\*\*/);
     expect(body).toMatch(/\*\*NowPayments OÜ\*\*/);
-    expect(body).toMatch(/\*\*Postmark \/ ActiveCampaign\*\* \(Wildbit, LLC\)/);
-    expect(body).toMatch(/\*\*Functional Software, Inc\.\*\* \(Sentry\)/);
-    expect(body).toMatch(/\*\*Hetzner Online GmbH\*\*/);
     expect(body).toMatch(/\*\*LiveKit, Inc\.\*\*/);
-    expect(body).toMatch(/\*\*GitHub, Inc\.\*\* \(Microsoft\)/);
+    // AWS and GitHub are not Driftstack sub-processors — must not appear.
+    expect(body).not.toMatch(/Amazon Web Services|\bAWS\b/);
+    expect(body).not.toMatch(/GitHub/);
   });
 
-  it('AWS regions: EU Ireland + US-East N. Virginia + AP-South Mumbai (pinned per customer region)', () => {
+  it('production topology pinned: Hetzner compute + Neon Postgres + Upstash Redis + Cloudflare R2 storage + MacStadium fleet', () => {
     expect(body).toMatch(
-      /EU \(Ireland\), US-East \(N\. Virginia\), AP-South \(Mumbai\) — pinned per customer region/,
+      /The production control plane runs on \*\*Hetzner Cloud\*\* \(compute\) with\s+\*\*Neon\*\* \(managed Postgres\)/,
     );
+    expect(body).toMatch(/\*\*Upstash\*\* \(managed Redis\)/);
+    expect(body).toMatch(/\*\*Cloudflare R2\*\* for object storage/);
+    expect(body).toMatch(/execution fleet runs on\s+\*\*MacStadium\*\*/);
   });
 
-  it('Stripe: no PAN storage (tokenisation at hosted checkout)', () => {
+  it('Hetzner is production compute, EU-resident (not narrowed to dev/staging)', () => {
     expect(body).toMatch(
-      /Driftstack does not store PAN or full card data; tokenisation happens at Stripe's hosted checkout/,
+      /Compute infrastructure for the Driftstack control plane \(production\)\./,
     );
+    expect(body).toMatch(/Falkenstein, Germany \(EU\)\./);
+    // The old "Hetzner dev/staging only, production on AWS" framing is wrong.
+    expect(body).not.toMatch(/development \+ staging environments only/);
   });
 
-  it('NowPayments: order-ID-only, no customer identity shared', () => {
-    expect(body).toMatch(/No customer identity is shared with NowPayments beyond the order ID/);
-    expect(body).toMatch(/Intra-EEA transfer; no extra-EEA SCCs required/);
+  it('Stripe row pinned: EU (Ireland) entity + SCC/DPF transfer', () => {
+    expect(body).toMatch(/Stripe Payments Europe Ltd \(Ireland\)\./);
   });
 
-  it('Sentry: PII-scrubbing at SDK level before events leave the application', () => {
+  it('NowPayments: crypto-only, engaged at checkout, intra-EEA', () => {
     expect(body).toMatch(
-      /Driftstack PII-scrubs at the SDK level before events leave the application/,
+      /Engaged only when a customer opts to pay with cryptocurrency at checkout; bypassed for Stripe-paying customers/,
     );
+    expect(body).toMatch(/EEA-internal — no transfer mechanism required/);
   });
 
-  it('Hetzner narrowed to dev/staging only (no production customer data)', () => {
+  it('Anthropic: optional AI agent, US, SCC/DPF; session data only when a mode is engaged', () => {
     expect(body).toMatch(
-      /Secondary compute \(development \+ staging environments only\)\. No production customer data/,
+      /Large language model for the optional AI agent feature, engaged in BYOK-proxy or opt-in bundled-LLM mode/,
     );
-    expect(body).toMatch(/None in production\. Dev\/staging fixtures only/);
+    expect(body).toMatch(/United States\./);
   });
 
-  it.skip('LiveKit: opt-in feature for Browser Theatre live sessions (V-531)', () => {
-    expect(body).toMatch(
-      /Real-time audio\/video transport for Browser Theatre live sessions \(opt-in feature\)/,
-    );
-    expect(body).toMatch(/Live sessions are off by default/);
-    expect(body).toMatch(/V-531/);
+  it('MacStadium: US Mac-fleet host for iPhone Safari session execution, SCC/DPF', () => {
+    expect(body).toMatch(/Mac hardware hosting for the iPhone Safari session execution fleet\./);
+    expect(body).toMatch(/Session execution state \(transient\)\./);
   });
 
-  it('GitHub: source-control only, does not process customer workloads', () => {
+  it('LiveKit: opt-in live-session feature, disabled by default', () => {
     expect(body).toMatch(
-      /Source-control hosting for Driftstack's own codebase \+ the customer-facing CLI release pipeline\. Does not process customer workloads/,
+      /WebRTC live-session signaling \+ media SFU for the optional "live session" feature/,
     );
+    expect(body).toMatch(/Disabled by default\./);
   });
 
   it('30-day notice + 3 delivery channels (page-update / announcements@ email / in-dashboard changelog)', () => {
@@ -136,20 +150,20 @@ describe('W379.A marketing-site /legal/sub-processors.md content parity', () => 
     expect(body).toMatch(/We reply\s+within one business day/);
   });
 
-  it('changelog 2026-05-11 v1.0 entry pinned (initial publication)', () => {
+  it('changelog 2026-05-10 v1.0 entry pinned (initial publication)', () => {
     expect(body).toMatch(
-      /\*\*2026-05-11 — v1\.0\.\*\* Initial standalone publication\. Inherits the\s+vendor list from DPA v0\.9/,
+      /\*\*2026-05-10 — v1\.0\.\*\* Initial standalone publication\. Inherits the\s+vendor list from DPA v0\.9 \+ adds NowPayments, LiveKit/,
     );
   });
 
-  it('3 substantive changes pinned (NowPayments added / LiveKit added / Hetzner narrowed)', () => {
+  it('2 substantive changes pinned (NowPayments added / LiveKit added); no Hetzner-narrowed-to-AWS claim', () => {
     expect(body).toMatch(
       /\*\*NowPayments added\*\* for crypto-tier processing\. Previously\s+crypto-payment customers used a manual invoice flow/,
     );
-    expect(body).toMatch(/\*\*LiveKit added\*\* for the Browser Theatre live-session feature/);
-    expect(body).toMatch(
-      /\*\*Hetzner narrowed\*\* to dev\/staging only\. Previously listed as a\s+production secondary; production has been consolidated onto AWS/,
-    );
+    expect(body).toMatch(/\*\*LiveKit added\*\* for the optional live-session feature/);
+    // Production runs on Hetzner; the "narrowed to dev/staging, consolidated onto AWS" claim is wrong.
+    expect(body).not.toMatch(/Hetzner narrowed/);
+    expect(body).not.toMatch(/consolidated onto AWS/);
   });
 
   it('cross-links: dpa.md + privacy.md + /docs/security-overview + /docs/data-residency', () => {

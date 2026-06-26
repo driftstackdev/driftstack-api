@@ -9,12 +9,16 @@
 //     2011/83/EU (excludes consumer-protection regime).
 //   • Service composition (§3): API + SDKs + self-hosted GUI Client
 //     + Mac mini fleet infrastructure.
-//   • Tier-price ladder (§8.1): Free / $39 / $99 / $299 / $999 /
-//     Enterprise $3,000+ — a price drift here is load-bearing.
+//   • Tier structure (§8.1): Free + Manual ladder (Personal/Team/
+//     Agency) + API ladder (Starter/Builder/Scale) + custom
+//     Enterprise; prices live at driftstack.dev/pricing (the
+//     source of truth is src/data/pricing.ts, so §8.1 references
+//     the pricing page rather than hardcoding figures).
 //   • Crypto non-refundable in ALL cases (§8.7.1) — load-bearing
 //     commercial-policy claim.
-//   • SLA posture (§9.1 + §9.2): no SLA at Free/$39/$99/$299;
-//     99.9% + 8h Sev-1 at $999/Enterprise.
+//   • SLA posture (§9.1 + §9.2): no SLA at Free / Manual ladder /
+//     API Starter / API Builder; 99.9% + Sev-1 first-response of
+//     4h (API Scale) / 1h (Enterprise).
 //   • §13.1 12-month-Fees liability cap.
 //   • §13.3 carve-outs: gross negligence + indemnity + confidentiality
 //     + payment + statutory.
@@ -58,10 +62,14 @@ describe('W377.A marketing-site /legal/terms.md content parity', () => {
     expect(body).toMatch(/\*\*Mac mini fleet infrastructure\*\*/);
   });
 
-  it('§8.1 tier-price ladder pinned (Free / $39 / $99 / $299 / $999 / Enterprise $3,000+)', () => {
-    expect(body).toMatch(
-      /Free, \$39\/mo, \$99\/mo, \$299\/mo, \$999\/mo, or\s+Enterprise — currently \$3,000\/mo and up/,
-    );
+  it('§8.1 tier structure pinned (Free + Manual + API ladders) + references driftstack.dev/pricing; no fictional figures', () => {
+    expect(body).toMatch(/perpetual Free tier/);
+    expect(body).toMatch(/Manual ladder \(Personal, Team, Agency\)/);
+    expect(body).toMatch(/API ladder \(API\s+Starter, API Builder, API Scale\)/);
+    expect(body).toMatch(/custom-priced Enterprise/);
+    expect(body).toMatch(/published at\s+<https:\/\/driftstack\.dev\/pricing>/);
+    // Fictional figures must never reappear in §8.1.
+    expect(body).not.toMatch(/\$39\/mo|\$99\/mo|\$299\/mo|\$999\/mo|\$3,000\/mo/);
   });
 
   it('§8.3 4 Stripe payment methods pinned (Card / SEPA DD / iDEAL / Bancontact)', () => {
@@ -85,11 +93,14 @@ describe('W377.A marketing-site /legal/terms.md content parity', () => {
     expect(body).toMatch(/Card refund mechanics \(8\.7, above\) do not apply to crypto-paid/);
   });
 
-  it('§9.1 no SLA at Free/$39/$99/$299 + §9.2 99.9% + 8h Sev-1 at $999/Enterprise', () => {
+  it('§9.1 no SLA at Free/Manual/API Starter/Builder + §9.2 99.9% + Sev-1 first-response 4h API Scale / 1h Enterprise', () => {
     expect(body).toMatch(
-      /Free, \$39, \$99, and\s+\$299 tiers are provided \*\*without\*\* a contractually-binding service\s+level agreement/,
+      /Free, Manual-ladder\s+\(Personal, Team, Agency\), API Starter, and API Builder tiers are\s+provided \*\*without\*\* a contractually-binding service level\s+agreement/,
     );
-    expect(body).toMatch(/99\.9% monthly availability; 8-hour first-response SLA on\s+Severity-1/);
+    expect(body).toMatch(/The API Scale and Enterprise\s+tiers carry a contractual SLA/);
+    expect(body).toMatch(
+      /99\.9%\s+monthly availability; first-response SLA on Severity-1 incidents of\s+four \(4\) hours on API Scale and one \(1\) hour on Enterprise/,
+    );
   });
 
   it('§9.3 maintenance: 48-hour advance notice via status.driftstack.dev', () => {
