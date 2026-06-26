@@ -865,7 +865,22 @@ export async function dispatchSessionAssignOnCreate(args: {
           'profile archetype lookup failed; dispatching with static archetype',
         );
       }
-      const dek = await profilesService.getProfileDek({ profileId, accountId });
+      let dek: Awaited<ReturnType<typeof profilesService.getProfileDek>> = null;
+      try {
+        dek = await profilesService.getProfileDek({ profileId, accountId });
+      } catch (err) {
+        // A corrupted / rotated-but-not-rewrapped profile DEK blob (GCM auth fail)
+        // must NOT abort the dispatch (which would strand the session active-but-
+        // never-dispatched — a phantom concurrency slot until the 12h reaper, and
+        // the GUI spinning on "No frame yet"). Degrade to a DEK-less, stateless
+        // dispatch: the session still runs, it just can't open/seal the encrypted
+        // profile store this run. Mirrors the R2 url-mint degrade just below;
+        // distinct from the outer best-effort catch, which drops the dispatch.
+        logger?.warn(
+          { component: 'agent-session-dispatch', sessionId, profileId, err },
+          'profile DEK unwrap failed; dispatching DEK-less (stateless this run)',
+        );
+      }
       if (dek !== null) {
         const dekBase64 = dek.toString('base64');
         if (r2 !== undefined) {

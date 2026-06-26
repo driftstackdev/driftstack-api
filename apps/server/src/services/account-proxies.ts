@@ -83,9 +83,21 @@ export class AccountProxiesService {
 
     let password: string | undefined;
     if (row.wrappedPassword !== null && this.masterKey !== null) {
-      password = unwrapAccountSecret(this.masterKey, args.accountId, row.wrappedPassword).toString(
-        'utf8',
-      );
+      try {
+        password = unwrapAccountSecret(
+          this.masterKey,
+          args.accountId,
+          row.wrappedPassword,
+        ).toString('utf8');
+      } catch {
+        // wrong-account TMK / corrupted blob / post-rotation un-rewrapped row → GCM
+        // auth fails. Fail CLOSED to null (mirror the VPN branch below) so the
+        // dispatch's `resolved === null` path closes the row honestly + releases the
+        // concurrency slot, instead of letting the throw escape to the best-effort
+        // outer catch — which would strand the session active-but-undispatched
+        // (phantom slot until the 12h reaper) and spin the GUI on "No frame yet".
+        return null;
+      }
     }
     // Proxy UDP pre-detection (A3 W2756): emit the verified capability when fresh
     // so the harness can skip the per-session ~3s probe; omitted (→ fork async-probe
