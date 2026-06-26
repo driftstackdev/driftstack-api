@@ -26,7 +26,7 @@ const ERRORS = [
   { uri: 'invalid-credentials', http: 401, when: 'Login failed (wrong password) OR account does not exist — both surface the same shape on purpose (no enumeration).', action: 'Verify credentials; do not retry-loop.' },
   { uri: 'forbidden', http: 403, when: 'Key is valid but lacks the required scope for this endpoint.', action: 'Mint a key with the right scope (see /docs/api-keys).' },
   { uri: 'mfa-step-up-required', http: 403, when: 'Endpoint requires a fresh MFA step-up confirmation. Extension `requires_mfa_step_up: true`.', action: 'POST a 6-digit code to /v1/auth/mfa/step-up, then retry the original request.' },
-  { uri: 'legal-acceptance-required', http: 403, when: 'A new ToS / Privacy revision hasn\'t been accepted by the calling account.', action: 'POST to /v1/account/legal/accept with the current revision id.' },
+  { uri: 'legal-acceptance-required', http: 403, when: 'A new ToS / Privacy revision hasn\'t been accepted by the calling account.', action: 'POST to /v1/legal/accept with the current revision id.' },
   { uri: 'not-found', http: 404, when: 'Resource id does not exist OR you do not have access (both surface as 404; no enumeration).', action: 'Verify the id; cross-account lookups return 404 by design.' },
   { uri: 'conflict', http: 409, when: 'State conflict (duplicate, sticky tombstone, idempotency-key replay with different body).', action: 'Read `detail` — often "mint a fresh resource instead".' },
   { uri: 'concurrency-limit', http: 429, when: 'Account has hit its tier-bound concurrent-session cap. Extensions `current_sessions` + `limit`.', action: 'Wait for a running session to finish, or upgrade the tier. See /docs/concurrency.' },

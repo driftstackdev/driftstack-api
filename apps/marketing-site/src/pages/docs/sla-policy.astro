@@ -77,18 +77,17 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       our health-probe service (V-295b). The probes target:
     </p>
     <ul>
-      <li><code>GET /v1/health</code> — the API health endpoint.</li>
+      <li><code>GET /health</code> — the API health endpoint (alias
+        <code>/healthz</code>).</li>
       <li><code>GET /</code> on the dashboard — the customer-facing
         SPA shell.</li>
     </ul>
     <p>
-      A probe is "failed" when it returns non-2xx OR exceeds 5s. A
-      minute is counted as downtime when 3+ consecutive probes fail
-      (i.e. ≥ 3 minutes of failure register, mirroring the auto-
- incident threshold from. Probes run every 60s from
-      three geo-distributed locations; the minute counts as down only
-      when ≥ 2 of 3 locations register a failure (avoids regional
-      ISP routing issues being counted against us).
+      A probe is "failed" when it returns non-2xx OR exceeds 5s.
+      Probes run every 60s from three geo-distributed locations, and a
+      minute counts as downtime only when ≥ 2 of 3 locations register
+      a failure for that minute (so a single region's ISP routing
+      issue isn't counted against us).
     </p>
 
     <h2>Credit mechanics</h2>

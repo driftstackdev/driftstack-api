@@ -32,7 +32,7 @@ const BUCKETS = [
   },
   {
     name: 'agent_sessions:message',
-    desc: 'POST /v1/agent-sessions/:id/messages — isolated from global so an LLM-driven message loop can\'t drain the global cap.',
+    desc: 'POST /v1/agent-sessions/:id/message — isolated from global so an LLM-driven message loop can\'t drain the global cap.',
     soloBurst: '40 burst',
     soloSustained: '20 req/min',
     apiBuilderBurst: '300 burst',
@@ -70,7 +70,7 @@ const BUCKETS = [
       Three buckets are enforced today: <code>global</code> (every
       authenticated request), <code>sessions:create</code> (POST
       /v1/sessions), and <code>agent_sessions:message</code> (POST
-      /v1/agent-sessions/:id/messages). Burst is the maximum bucket
+      /v1/agent-sessions/:id/message). Burst is the maximum bucket
       capacity; sustained throughput is the refill rate.
     </p>
     <table>
