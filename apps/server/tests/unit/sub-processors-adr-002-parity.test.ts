@@ -26,6 +26,10 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 const AGENTS = resolve(REPO_ROOT, 'AGENTS.md');
 const LEGAL = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal/sub-processors.md');
 const ADR = resolve(REPO_ROOT, 'docs/adr/ADR-002-stripe-only-payment-processing.md');
@@ -133,38 +137,64 @@ describe('W733 sub-processors + ADR-002 Stripe-only parity', () => {
     );
   });
 
-  it('CRITICAL legal/sub-processors.md customer-facing table includes all 7 wire-active vendors. Each vendor MUST appear in the legal-doc table.', () => {
+  it('CRITICAL legal/sub-processors.md customer-facing table includes all 12 wire-active vendors. Each vendor MUST appear in the legal-doc table (12-vendor register: Hetzner / Neon / Upstash / Cloudflare R2 / Postmark / Sentry / Stripe / Anthropic / Moneybird / MacStadium / NowPayments / LiveKit).', () => {
     const l = read(LEGAL);
 
-    for (const vendor of ['Cloudflare', 'Stripe', 'Postmark', 'Hetzner']) {
-      expect(l, `legal sub-processor ${vendor}`).toMatch(new RegExp(`\\*\\*${vendor}`));
+    for (const vendor of [
+      'Hetzner Cloud',
+      'Neon, Inc.',
+      'Upstash, Inc.',
+      'Cloudflare R2',
+      'Postmark',
+      'Sentry',
+      'Stripe',
+      'Anthropic',
+      'Moneybird',
+      'MacStadium',
+      'NowPayments OÜ',
+      'LiveKit, Inc.',
+    ]) {
+      expect(l, `legal sub-processor ${vendor}`).toMatch(new RegExp(`\\*\\*${escapeRe(vendor)}`));
     }
-    // Sentry appears via the corporate name "Functional Software, Inc."
-    expect(l).toMatch(/Functional Software, Inc.{0,30}\(Sentry\)/);
   });
 
-  it('CRITICAL legal/sub-processors.md customer-facing Stripe row framing — "Driftstack does not store PAN or full card data; tokenisation happens at Stripe\'s hosted checkout". Drift to dropping the PCI-out-of-scope framing would mislead customers about Stripe\'s role.', () => {
+  it('CRITICAL legal/sub-processors.md customer-facing Stripe row framing — the data-category column lists only a "card token" (never the PAN / full card data), tokenised at Stripe, plus Stripe Tax BTW reverse-charge handling. Drift to claiming Driftstack stores card numbers would mislead customers about Stripe\'s PCI role.', () => {
     const l = read(LEGAL);
+    // Stripe row: purpose mentions BTW reverse-charge via Stripe Tax …
     expect(l).toMatch(
-      /Driftstack does not store PAN or full card data; tokenisation happens at Stripe's hosted checkout/,
+      /Payment processing, subscription management, BYOK metered billing, BTW reverse-charge handling via Stripe Tax\./,
     );
+    // … and the only card data category is a token, not the PAN.
+    expect(l).toMatch(/Billing email, line-item description, amount, card token\./);
   });
 
-  it('CRITICAL legal/sub-processors.md Cloudflare row mentions R2 server-side encryption framing. The "encrypted server-side" framing is what tells customers R2 object bytes are encrypted at rest.', () => {
+  it('CRITICAL legal/sub-processors.md Cloudflare R2 row mentions server-side encryption framing. The "encrypted server-side" framing is what tells customers R2 recording/screenshot bytes are encrypted at rest.', () => {
     const l = read(LEGAL);
-    expect(l).toMatch(/R2 object bytes \(encrypted server-side\)/);
+    expect(l).toMatch(/Recording artifacts \+ screenshots \(encrypted server-side\), avatar bytes/);
   });
 
-  it('CRITICAL legal/sub-processors.md EU SCCs framing pinned on every US-residency vendor row. Drift to dropping would weaken the GDPR-Article-46 compliance posture.', () => {
+  it('CRITICAL legal/sub-processors.md SCC + EU-US DPF framing pinned on every US-transfer vendor row (Postmark, Stripe, Anthropic, MacStadium, LiveKit). Drift to dropping would weaken the GDPR-Article-46 compliance posture.', () => {
     const l = read(LEGAL);
 
-    const sccCount = (l.match(/EU SCCs \(2021\/914\)/g) ?? []).length;
-    expect(sccCount, 'EU SCC references on US vendor rows').toBeGreaterThanOrEqual(4);
+    const sccCount = (
+      l.match(/2021 Standard Contractual Clauses \+ EU-US Data Privacy Framework\./g) ?? []
+    ).length;
+    expect(
+      sccCount,
+      'SCC + EU-US DPF references on US-transfer vendor rows',
+    ).toBeGreaterThanOrEqual(4);
   });
 
-  it('CRITICAL legal/sub-processors.md "Hetzner narrowed to dev/staging only" framing pinned. The narrowing matches the V-052 sub-processor revision — Hetzner is NOT in the production data path.', () => {
+  it('CRITICAL legal/sub-processors.md Hetzner = PRIMARY production compute framing pinned. Production runs on Hetzner + Neon + Upstash + Cloudflare R2 (the corrected register; the old "narrowed to dev/staging only" framing is RETRACTED — Hetzner IS the production data plane).', () => {
     const l = read(LEGAL);
-    expect(l).toMatch(/Hetzner narrowed.{0,100}dev\/staging only/);
+    // Hetzner row purpose names production compute.
+    expect(l).toMatch(
+      /\*\*Hetzner Cloud\*\*\s*\|\s*Compute infrastructure for the Driftstack control plane \(production\)\./,
+    );
+    // Production-topology section names the real production stack.
+    expect(l).toMatch(/The production control plane runs on \*\*Hetzner Cloud\*\* \(compute\)/);
+    // The retracted "dev/staging only" narrowing must not return.
+    expect(l).not.toMatch(/Hetzner narrowed.{0,100}dev\/staging only/);
   });
 
   it('CRITICAL cross-file consistency — Stripe + Postmark + Sentry + Cloudflare + Hetzner appear in BOTH AGENTS.md sub-processor list AND legal/sub-processors.md customer table. Drift would let one document show vendors the other does not.', () => {
