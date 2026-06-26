@@ -7,7 +7,7 @@ description: Typed error hierarchy across the TypeScript / Python / Go SDKs; cat
 # SDK error handling
 
 Every Driftstack SDK ships a typed error hierarchy mapping
-`application/problem+json` responses (RFC 7807) to language-native
+`application/problem+json` responses (RFC 9457) to language-native
 exceptions. Catch by category for control-flow logic; catch the
 base type for blanket logging.
 

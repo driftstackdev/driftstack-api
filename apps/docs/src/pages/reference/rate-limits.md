@@ -58,7 +58,7 @@ RPS for a default-cost call is the `refill` column.
 
 ## What happens when you hit the cap
 
-The API returns HTTP 429 with an RFC 7807 problem-details body
+The API returns HTTP 429 with an RFC 9457 problem-details body
 (`application/problem+json`):
 
 ```json

@@ -68,7 +68,7 @@ const session = await client.sessions.create({
 console.log(session.id, session.created_at);
 ```
 
-**Returns** a `Session` with `id`, `archetype`, `state`, `label`, `metadata`, `created_at`. The `id` is the handle for every subsequent call.
+**Returns** a `Session` with `id`, `archetype`, `status`, `label`, `metadata`, `created_at`. The `id` is the handle for every subsequent call.
 
 **Tier check:** if you're at your concurrent cap, the call returns `429 concurrency-limit`. If your tier's profile cap is reached on a profile-binding flow, `429 tier-limit`. If your account is suspended, `403 forbidden`.
 
