@@ -265,4 +265,11 @@ export const METRIC_NAMES = {
   // tracks the successful audit-row writes; this counter sees the
   // pre-audit reject paths too.
   macNodeLivekitRegisterTotal: 'driftstack_mac_node_livekit_register_total',
+  // DoS hardening — rate-limit primary-store (Redis) failure counter.
+  // Incremented each time a limiter's primary store throws and it
+  // degrades to the bounded per-instance memory fallback. Labelled by
+  // limiter ('account' | 'ip'). ANY non-zero value is an alert signal:
+  // the cluster is running on coarse per-instance limiting, not the
+  // shared Redis buckets. Bounded cardinality.
+  rateLimitStoreFallbackTotal: 'driftstack_rate_limit_store_fallback_total',
 } as const;

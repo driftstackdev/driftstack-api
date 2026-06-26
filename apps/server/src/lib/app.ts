@@ -882,17 +882,23 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // bearer / control-key headers reaches findApiKeyByPrefix + scrypt +
   // AES-GCM ungated. This gate caps each source IP regardless of route or
   // auth outcome. It reuses the shared rate-limit store + the proven
-  // ipRateLimit primitive (fails OPEN on a store error so a Redis blip
-  // can't 500 the whole API). Defaults to 600/min/IP; pass null to
-  // disable (tests do, to keep their high-volume inject loops unaffected).
+  // ipRateLimit primitive (on a store error it degrades to a bounded
+  // per-instance fallback rather than removing limiting, so a Redis blip
+  // can't both 500 the API AND open the floodgates). Defaults to
+  // 600/min/IP; pass null to disable (tests do, to keep their high-volume
+  // inject loops unaffected).
   const globalIpGateCfg =
     deps.globalIpRateLimit === undefined ? GLOBAL_IP_RATE_LIMIT_DEFAULT : deps.globalIpRateLimit;
   if (globalIpGateCfg !== null) {
-    const globalIpGate = ipRateLimit(deps.rateLimitStore, {
-      bucketPrefix: 'global_ip',
-      capacity: globalIpGateCfg.capacity,
-      refillPerSecond: globalIpGateCfg.refillPerSecond,
-    });
+    const globalIpGate = ipRateLimit(
+      deps.rateLimitStore,
+      {
+        bucketPrefix: 'global_ip',
+        capacity: globalIpGateCfg.capacity,
+        refillPerSecond: globalIpGateCfg.refillPerSecond,
+      },
+      deps.metricsRegistry,
+    );
     app.addHook('onRequest', globalIpGate);
   }
 

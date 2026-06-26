@@ -94,7 +94,7 @@ describe('services/metrics-registry content parity', () => {
     expect(body).toMatch(/\} as const;/);
   });
 
-  it('METRIC_NAMES 17-entry catalog pinned: pairModeTransition + bundledLlmRequest + bundledLlmError + agentDecompose + byokAnthropicTest + rateLimit + auth + oauthToken + stripeWebhook + nowpaymentsWebhook + accountAuditEmit + adminAuditEmit + livekitTokenMint + emailSend + webhookDeliveryAttempt + webhookDeliveryTerminal + httpRequest + macNodeLivekitRegister. Drift to renaming a key would break every callsite that emits to that metric; drift to dropping a key would let the metric become an orphan-shaped string', () => {
+  it('METRIC_NAMES 18-entry catalog pinned: pairModeTransition + bundledLlmRequest + bundledLlmError + agentDecompose + byokAnthropicTest + rateLimit + auth + oauthToken + stripeWebhook + nowpaymentsWebhook + accountAuditEmit + adminAuditEmit + livekitTokenMint + emailSend + webhookDeliveryAttempt + webhookDeliveryTerminal + httpRequest + macNodeLivekitRegister + rateLimitStoreFallback. Drift to renaming a key would break every callsite that emits to that metric; drift to dropping a key would let the metric become an orphan-shaped string', () => {
     expect(body).toMatch(/pairModeTransitionTotal: 'driftstack_pair_mode_transition_total',/);
     expect(body).toMatch(/bundledLlmRequestTotal: 'driftstack_bundled_llm_request_total',/);
     expect(body).toMatch(/bundledLlmErrorTotal: 'driftstack_bundled_llm_error_total',/);
@@ -118,6 +118,9 @@ describe('services/metrics-registry content parity', () => {
     expect(body).toMatch(/httpRequestTotal: 'driftstack_http_request_total',/);
     expect(body).toMatch(
       /macNodeLivekitRegisterTotal: 'driftstack_mac_node_livekit_register_total',/,
+    );
+    expect(body).toMatch(
+      /rateLimitStoreFallbackTotal: 'driftstack_rate_limit_store_fallback_total',/,
     );
   });
 

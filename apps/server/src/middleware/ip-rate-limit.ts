@@ -19,6 +19,17 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { RateLimitedError } from '../lib/errors.js';
 import type { ConsumeResult, RateLimitStore } from '../services/rate-limit.js';
+import { BoundedMemoryRateLimitStore } from '../lib/bounded-memory-rate-limit-store.js';
+import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
+
+// DoS hardening — bounded per-instance fallback shared across ALL
+// ip-rate-limit gates (signup/login/oauth/... + the global pre-auth gate).
+// When the primary store (Redis) throws, the gates degrade to coarse
+// per-instance IP limiting via THIS store instead of unconditionally
+// allowing every request — so a Redis blip can't remove every IP gate at
+// once. Module-level so the fallback buckets persist across requests +
+// across the many factory-built gate instances during an outage.
+const ipFallbackStore = new BoundedMemoryRateLimitStore();
 
 export interface IpRateLimitConfig {
   /** Bucket-key prefix; final key is `${prefix}:${ip}`. */
@@ -48,6 +59,10 @@ export interface IpRateLimitConfig {
 export function ipRateLimit(
   store: RateLimitStore,
   cfg: IpRateLimitConfig,
+  /** DoS hardening — optional metrics registry. When wired, a primary-store
+   *  failure that degrades to the bounded fallback increments
+   *  `driftstack_rate_limit_store_fallback_total{limiter="ip"}`. */
+  metrics?: MetricsRegistry,
 ): (req: FastifyRequest, reply: FastifyReply) => Promise<void> {
   return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const ip = typeof req.ip === 'string' && req.ip.length > 0 ? req.ip : null;
@@ -58,26 +73,39 @@ export function ipRateLimit(
       return;
     }
 
+    const consumeArgs = {
+      key: `${cfg.bucketPrefix}:${ip}`,
+      capacity: cfg.capacity,
+      refillPerSecond: cfg.refillPerSecond,
+      cost: 1,
+      now: Date.now(),
+    };
     let result: ConsumeResult;
     try {
-      result = await store.consume({
-        key: `${cfg.bucketPrefix}:${ip}`,
-        capacity: cfg.capacity,
-        refillPerSecond: cfg.refillPerSecond,
-        cost: 1,
-        now: Date.now(),
-      });
+      result = await store.consume(consumeArgs);
     } catch (err) {
-      // W384 — fail OPEN on a store error (e.g. Redis down). The IP gate is
-      // defense-in-depth on top of the auth-flow's account-keyed protections; a
-      // backing-store outage must not 500 every auth request and lock out
-      // legitimate customers (same availability bias as the null-IP soft-fail
-      // above). The warn log makes the bounded bypass observable for ops.
+      // W384 / DoS hardening — the primary store (Redis) threw. The IP gate
+      // is defense-in-depth, but previously a store outage failed fully OPEN
+      // (allow), which removed EVERY IP gate (signup/login/oauth/... + the
+      // global pre-auth gate) at once on a Redis blip. Instead degrade to a
+      // bounded PER-INSTANCE memory store so coarse per-IP limiting survives
+      // the outage. The warn + metric make the bounded bypass observable.
       req.log.warn(
         { component: 'ip-rate-limit', bucket_prefix: cfg.bucketPrefix, err },
-        'ip rate-limit store error — failing open (request allowed)',
+        'ip rate-limit store error — degrading to bounded in-process fallback',
       );
-      return;
+      try {
+        metrics?.inc(METRIC_NAMES.rateLimitStoreFallbackTotal, { limiter: 'ip' });
+      } catch {
+        // Swallow; metrics are best-effort.
+      }
+      try {
+        result = await ipFallbackStore.consume(consumeArgs);
+      } catch {
+        // The in-process fallback cannot realistically throw; if it somehow
+        // does, fail open as a last resort rather than 500 the request.
+        return;
+      }
     }
 
     // W200 — full RateLimit-header set documented at /docs/rate-limits.

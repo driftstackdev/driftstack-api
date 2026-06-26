@@ -721,6 +721,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'Rate-limit consume counter, labelled by bucket + outcome (allowed | exceeded).',
     ['bucket', 'outcome'],
   );
+  // DoS hardening — rate-limit primary-store (Redis) failure counter.
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.rateLimitStoreFallbackTotal,
+    'Rate-limit primary-store failures that degraded to the in-process memory fallback, labelled by limiter (account | ip).',
+    ['limiter'],
+  );
   // Arc 7 obs.6 — auth resolution outcome counter.
   metricsRegistry.registerCounter(
     METRIC_NAMES.authTotal,

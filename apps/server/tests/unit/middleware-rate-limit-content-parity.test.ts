@@ -65,19 +65,22 @@ describe('W394.C apps/server/src/middleware/rate-limit.ts content parity', () =>
     );
   });
 
-  it('rateLimitConsume args: accountId + tier + bucketKey + cost + overrides (account path from ctx; gui_control_key control-auth path charges the session-owner account at the free-tier floor with no overrides) (W384 — wrapped in try/catch, fails open on store error)', () => {
-    expect(body).toContain('result = await rateLimitConsume(opts.store, {');
+  it('rateLimitConsume args: accountId + tier + bucketKey + cost + overrides (account path from ctx; gui_control_key control-auth path charges the session-owner account at the free-tier floor with no overrides). Hoisted into a shared consumeInput so the same args feed the bounded fallback on a store error.', () => {
+    expect(body).toContain('result = await rateLimitConsume(opts.store, consumeInput);');
     expect(body).toContain('accountId: ctx ? ctx.account.id : controlKeyAccountId!,');
-    expect(body).toContain("tier: ctx ? ctx.account.tier : 'free',");
+    expect(body).toContain("tier: ctx ? ctx.account.tier : ('free' as const),");
     expect(body).toContain('bucketKey,');
     expect(body).toContain('cost,');
     expect(body).toContain('overrides: ctx ? ctx.rateLimitOverrides : {},');
   });
 
-  it('W384 store-error fail-open: rateLimitConsume wrapped in try/catch; on error → warn log + return (request allowed, not a 500 that takes down the whole API). Only the store call is wrapped so a legit limit-hit RateLimitedError still propagates', () => {
+  it('W384 store-error degrade: rateLimitConsume wrapped in try/catch; on error → warn + fallback-metric + serve from the bounded per-instance memory store (NOT a blanket allow, NOT a 500). Only the store call is wrapped so a legit limit-hit RateLimitedError still propagates', () => {
+    expect(body).toContain('const fallbackStore = new BoundedMemoryRateLimitStore();');
     expect(body).toMatch(
-      /\} catch \(err\) \{[\s\S]*?'rate-limit store error — failing open \(request allowed\)',\s*\n?\s*\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /\} catch \(err\) \{[\s\S]*?'rate-limit store error — degrading to bounded in-process fallback',/,
     );
+    expect(body).toMatch(/result = await rateLimitConsume\(fallbackStore, consumeInput\);/);
+    expect(body).toContain("METRIC_NAMES.rateLimitStoreFallbackTotal, { limiter: 'account' }");
   });
 
   it('W199 framing pinned: full RateLimit-header set documented at /docs/rate-limits', () => {

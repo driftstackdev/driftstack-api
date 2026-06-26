@@ -68,9 +68,9 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
     expect(body).toMatch(/refillPerSecond: number;/);
   });
 
-  it('ipRateLimit factory: preHandler returning (req, reply) => Promise<void>', () => {
+  it('ipRateLimit factory: preHandler returning (req, reply) => Promise<void> (3rd optional metrics arg for the fallback counter)', () => {
     expect(body).toMatch(
-      /export function ipRateLimit\(\s*\n?\s*store: RateLimitStore,\s*\n?\s*cfg: IpRateLimitConfig,\s*\n?\s*\): \(req: FastifyRequest, reply: FastifyReply\) => Promise<void>/,
+      /export function ipRateLimit\(\s*\n?\s*store: RateLimitStore,\s*\n?\s*cfg: IpRateLimitConfig,\s*\n?\s*[\s\S]*?metrics\?: MetricsRegistry,\s*\n?\s*\): \(req: FastifyRequest, reply: FastifyReply\) => Promise<void>/,
     );
   });
 
@@ -84,16 +84,20 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
     expect(body).toMatch(/if \(ip === null\) \{[\s\S]+?return;\s*\n?\s*\}/);
   });
 
-  it('store.consume: bucketKey = `${prefix}:${ip}`, cost=1, now=Date.now() (W384 — wrapped in try/catch, fails open on store error)', () => {
+  it('store.consume: bucketKey = `${prefix}:${ip}`, cost=1, now=Date.now() (hoisted into consumeArgs so the same args feed the bounded fallback on a store error)', () => {
     expect(body).toMatch(
-      /result = await store\.consume\(\{\s*\n?\s*key: `\$\{cfg\.bucketPrefix\}:\$\{ip\}`,\s*\n?\s*capacity: cfg\.capacity,\s*\n?\s*refillPerSecond: cfg\.refillPerSecond,\s*\n?\s*cost: 1,\s*\n?\s*now: Date\.now\(\),\s*\n?\s*\}\);/,
+      /const consumeArgs = \{\s*\n?\s*key: `\$\{cfg\.bucketPrefix\}:\$\{ip\}`,\s*\n?\s*capacity: cfg\.capacity,\s*\n?\s*refillPerSecond: cfg\.refillPerSecond,\s*\n?\s*cost: 1,\s*\n?\s*now: Date\.now\(\),\s*\n?\s*\};/,
     );
+    expect(body).toContain('result = await store.consume(consumeArgs);');
   });
 
-  it('W384 store-error fail-open: consume wrapped in try/catch; on error → warn log + return (request allowed, not 500)', () => {
+  it('W384 store-error degrade: consume wrapped in try/catch; on error → warn + fallback-metric + serve from the bounded module-level memory store (NOT a blanket allow, NOT a 500)', () => {
+    expect(body).toContain('const ipFallbackStore = new BoundedMemoryRateLimitStore();');
     expect(body).toMatch(
-      /\} catch \(err\) \{[\s\S]*?'ip rate-limit store error — failing open \(request allowed\)',\s*\n?\s*\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /\} catch \(err\) \{[\s\S]*?'ip rate-limit store error — degrading to bounded in-process fallback',/,
     );
+    expect(body).toContain('result = await ipFallbackStore.consume(consumeArgs);');
+    expect(body).toContain("METRIC_NAMES.rateLimitStoreFallbackTotal, { limiter: 'ip' }");
   });
 
   it('W200 framing pinned: mirrors W199 + bucket=prefix only (avoid leaking IP through response)', () => {

@@ -12,6 +12,7 @@ import {
 } from '../services/rate-limit.js';
 import { RateLimitedError, UnauthorizedError } from '../lib/errors.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
+import { BoundedMemoryRateLimitStore } from '../lib/bounded-memory-rate-limit-store.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -35,6 +36,13 @@ function rateLimitPlugin(
   opts: RateLimitPluginOptions,
   done: (err?: Error) => void,
 ): void {
+  // DoS hardening — bounded per-instance fallback store. When the primary
+  // store (Redis in prod) throws, the limiter degrades to THIS instead of
+  // unconditionally allowing every request. A Redis blip then drops to
+  // coarse per-instance limiting (still bounded) rather than removing ALL
+  // limiting platform-wide. Created once per plugin instance so the
+  // fallback buckets persist across requests during the outage.
+  const fallbackStore = new BoundedMemoryRateLimitStore();
   app.decorate('rateLimit', (bucketKey: string, cost = 1) => {
     return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
       const ctx = request.account;
@@ -53,26 +61,44 @@ function rateLimitPlugin(
         throw new UnauthorizedError('Rate limit requires an authenticated request.');
       }
 
+      const consumeInput = {
+        accountId: ctx ? ctx.account.id : controlKeyAccountId!,
+        tier: ctx ? ctx.account.tier : ('free' as const),
+        bucketKey,
+        cost,
+        overrides: ctx ? ctx.rateLimitOverrides : {},
+      };
       let result: ConsumeResultWithBucket;
       try {
-        result = await rateLimitConsume(opts.store, {
-          accountId: ctx ? ctx.account.id : controlKeyAccountId!,
-          tier: ctx ? ctx.account.tier : 'free',
-          bucketKey,
-          cost,
-          overrides: ctx ? ctx.rateLimitOverrides : {},
-        });
+        result = await rateLimitConsume(opts.store, consumeInput);
       } catch (err) {
-        // W384 — fail OPEN on a store error (e.g. Redis down). A rate-limiter
-        // must not be a SPOF that 500s the whole API when its backing store is
-        // down; graceful degradation = allow + warn (limiting resumes when the
-        // store recovers). Only the store call is wrapped, so a legitimate
-        // limit-hit RateLimitedError below still propagates normally.
+        // W384 / DoS hardening — the primary store (Redis) threw. A
+        // rate-limiter must not be a SPOF that 500s the whole API when its
+        // backing store is down. Previously this failed fully OPEN (allow),
+        // which removed ALL limiting platform-wide on a Redis blip — turning
+        // a transient Redis outage into an unbounded resource-exhaustion
+        // window on the expensive session-create / LLM-dispatch routes.
+        // Instead degrade to a bounded PER-INSTANCE memory store so coarse
+        // limiting survives the outage; full shared limiting resumes when
+        // Redis recovers. The warn + metric make the bounded bypass
+        // observable/alertable.
         request.log.warn(
           { component: 'rate-limit', bucket: bucketKey, err },
-          'rate-limit store error — failing open (request allowed)',
+          'rate-limit store error — degrading to bounded in-process fallback',
         );
-        return;
+        try {
+          opts.metrics?.inc(METRIC_NAMES.rateLimitStoreFallbackTotal, { limiter: 'account' });
+        } catch {
+          // Swallow; metrics are best-effort.
+        }
+        try {
+          result = await rateLimitConsume(fallbackStore, consumeInput);
+        } catch {
+          // The in-process fallback cannot realistically throw, but if it
+          // somehow does, fail open as a last resort (availability over a
+          // hard 500) rather than error the request.
+          return;
+        }
       }
 
       // W199 — full RateLimit-header set as documented at
