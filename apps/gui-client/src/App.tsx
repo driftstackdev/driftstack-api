@@ -38,7 +38,7 @@ import { UpdateBanner } from './components/UpdateBanner';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { checkForUpdate, type AvailableUpdate } from './lib/updater';
 
-type View =
+export type View =
   | { kind: 'home' }
   | { kind: 'ai'; profileId?: string }
   | { kind: 'recipes' }
@@ -338,7 +338,7 @@ function Shell(): JSX.Element {
         ) : null}
         <div className="flex flex-1 overflow-hidden">
           <Sidebar
-            current={view.kind as SidebarViewKind}
+            current={sidebarSectionFor(view)}
             onNavigate={(kind) => setView({ kind })}
             onSignOut={() => void handleSignOut()}
           />
@@ -473,6 +473,23 @@ function CurrentView({
 }
 
 // ─── chrome ───────────────────────────────────────────────────────
+
+// Map the active view to the sidebar section that should read as "you are here".
+// Most views are 1:1 with a sidebar item, but the DRILLED-IN sub-views
+// ('live-session', 'recording-player') aren't sidebar entries — without this
+// they fell through the old `view.kind as SidebarViewKind` cast and matched
+// nothing, so the nav lost its active highlight. Fold them onto their parent
+// section so drilling in keeps the section lit.
+export function sidebarSectionFor(view: View): SidebarViewKind {
+  switch (view.kind) {
+    case 'live-session':
+      return 'sessions';
+    case 'recording-player':
+      return 'recordings';
+    default:
+      return view.kind;
+  }
+}
 
 // V-240 — derive deployment-mode label from the configured API base
 // URL. Cloud customers see "cloud"; self-hosted customers see
