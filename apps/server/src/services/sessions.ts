@@ -303,6 +303,16 @@ export interface SessionsServiceDeps {
       at: string;
     }) => void;
   } | null;
+  /**
+   * Billing-integrity hardening — optional structured logger. Used to
+   * LOUD-log a post-dispatch slot-release (a DB write that fails AFTER
+   * the worker is live would otherwise leak a `creating` row that
+   * counts against the concurrent-session cap forever on capped-AND
+   * uncapped tiers). Omitted ⇒ no log; the release still happens.
+   */
+  logger?: {
+    error?: (obj: Record<string, unknown>, msg: string) => void;
+  } | null;
 }
 
 export class SessionsService {
@@ -384,11 +394,49 @@ export class SessionsService {
     }
 
     // Bind the real driver session id onto the reserved row now that the
-    // worker is live.
-    await this.deps.repo.setSessionDriverSessionId(reserved.id, driverResult.driverSessionId);
-    const record: SessionRecord = { ...reserved, driverSessionId: driverResult.driverSessionId };
+    // worker is live, then advance to 'ready'.
+    //
+    // Billing-integrity hardening — these two writes run AFTER a successful
+    // dispatch with NO guard previously. A throw here left the row stuck at
+    // status='creating', destroyedAt=NULL forever: it keeps counting against
+    // countActiveSessions, and on paid tiers (null minute-cap) the duration
+    // sweeper never reaps it and the worker is live so the disconnect reaper
+    // won't either → a permanently-leaked concurrency slot. Mirror the
+    // dispatch-failure release path: on throw, release the reserved slot
+    // (mark errored + destroyed), tear down the now-orphaned live worker,
+    // LOUD-log, and rethrow the original error.
+    let record: SessionRecord;
+    try {
+      await this.deps.repo.setSessionDriverSessionId(reserved.id, driverResult.driverSessionId);
+      record = { ...reserved, driverSessionId: driverResult.driverSessionId };
+      await this.deps.repo.updateSessionStatus(record.id, 'ready');
+    } catch (err) {
+      // Release the reserved slot so it stops counting against the cap.
+      // Best-effort; a release failure must not mask the original error.
+      await this.deps.repo
+        .updateSessionStatus(reserved.id, 'errored', { destroyedAt: new Date() })
+        .catch(() => {});
+      // Tear down the orphaned live worker (the row is now a tombstone, so
+      // nothing else will ever destroy it). Best-effort.
+      await this.deps.driver.destroy(driverResult.driverSessionId).catch(() => {});
+      try {
+        this.deps.logger?.error?.(
+          {
+            component: 'sessions-service',
+            event: 'post_dispatch_bind_failed',
+            account_id: accountId,
+            session_id: reserved.id,
+            driver_session_id: driverResult.driverSessionId,
+            err,
+          },
+          'session post-dispatch DB write failed — released the leaked concurrency slot + tore down the orphaned worker',
+        );
+      } catch {
+        // Swallow; logging is best-effort.
+      }
+      throw err;
+    }
 
-    await this.deps.repo.updateSessionStatus(record.id, 'ready');
     await this.deps.repo.recordEvent({
       sessionId: record.id,
       type: 'created',

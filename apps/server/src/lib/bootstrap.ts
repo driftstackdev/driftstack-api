@@ -583,6 +583,9 @@ export async function createProductionDeps(
     // was constructed earlier in bootstrap — see comment near
     // accountAuditService.
     notifications: notificationEventBus,
+    // Billing-integrity hardening — loud-log a post-dispatch slot release
+    // (a leaked concurrent-session slot is otherwise silent).
+    logger,
   });
   const usageService = new UsageService(usageRepo);
 

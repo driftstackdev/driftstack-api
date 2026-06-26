@@ -70,6 +70,10 @@ class StubRepo implements SessionRepo {
    *  (simulates the atomic cap guard rejecting a concurrent-race loser) —
    *  exercises the create() over-cap orphan rollback + ConcurrencyLimitError. */
   overCapOnInsert = false;
+  /** Opt-in (default null): when set, setSessionDriverSessionId rejects with it
+   *  — simulates a post-dispatch DB-write failure AFTER the worker is live.
+   *  Exercises the create() post-dispatch slot-release path. */
+  throwOnSetDriverSessionId: Error | null = null;
 
   insertSession(input: NewSessionInput): Promise<SessionRecord> {
     if (this.throwOnInsert !== null) return Promise.reject(this.throwOnInsert);
@@ -106,6 +110,9 @@ class StubRepo implements SessionRepo {
     return this.insertSession(input);
   }
   setSessionDriverSessionId(id: string, driverSessionId: string): Promise<void> {
+    if (this.throwOnSetDriverSessionId !== null) {
+      return Promise.reject(this.throwOnSetDriverSessionId);
+    }
     const r = this.sessions.get(id);
     if (r) this.sessions.set(id, { ...r, driverSessionId, updatedAt: new Date() });
     return Promise.resolve();
@@ -285,15 +292,22 @@ class ThrowingDriver implements Driver {
   }
 }
 
+interface LoggedError {
+  obj: Record<string, unknown>;
+  msg: string;
+}
+
 function buildService(): {
   service: SessionsService;
   repo: StubRepo;
   driver: ThrowingDriver;
   webhookEvents: RecordedEvent[];
+  loggedErrors: LoggedError[];
 } {
   const repo = new StubRepo();
   const driver = new ThrowingDriver();
   const webhookEvents: RecordedEvent[] = [];
+  const loggedErrors: LoggedError[] = [];
   const service = new SessionsService({
     repo,
     driver,
@@ -303,8 +317,13 @@ function buildService(): {
         return Promise.resolve(1);
       },
     },
+    logger: {
+      error: (obj, msg) => {
+        loggedErrors.push({ obj, msg });
+      },
+    },
   });
-  return { service, repo, driver, webhookEvents };
+  return { service, repo, driver, webhookEvents, loggedErrors };
 }
 
 describe('SessionsService — V-090 driver-failure capture', () => {
@@ -476,6 +495,38 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     const reserved = repo.read('sess-0000');
     expect(reserved?.status).toBe('errored');
     expect(reserved?.destroyedAt).toBeInstanceOf(Date);
+  });
+
+  it('create: a POST-dispatch DB-write failure releases the slot + tears down the orphaned worker + loud-logs', async () => {
+    // Billing-integrity hardening — the worker dispatch SUCCEEDED, then the
+    // setSessionDriverSessionId write throws. Without a guard the row would be
+    // stuck at status=creating, destroyedAt=NULL forever, leaking a concurrency
+    // slot (paid tiers have no minute-cap so the duration sweeper never reaps
+    // it; the worker is live so the disconnect reaper won't either).
+    const { service, repo, driver, loggedErrors } = buildService();
+    const ctx = buildCtx();
+    const writeErr = new Error('post-dispatch DB write failed');
+    repo.throwOnSetDriverSessionId = writeErr;
+
+    let caught: unknown;
+    try {
+      await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+    } catch (e) {
+      caught = e;
+    }
+    // The original write error propagates.
+    expect(caught).toBe(writeErr);
+    // The reserved row was released so it stops counting against the cap.
+    const reserved = repo.read('sess-0000');
+    expect(reserved?.status).toBe('errored');
+    expect(reserved?.destroyedAt).toBeInstanceOf(Date);
+    // The now-orphaned live worker was torn down (nothing else would).
+    expect(driver.destroyedIds).toEqual(['mock-1']);
+    // The leak was logged loudly with the account + session ids.
+    expect(loggedErrors).toHaveLength(1);
+    expect(loggedErrors[0]?.obj.event).toBe('post_dispatch_bind_failed');
+    expect(loggedErrors[0]?.obj.account_id).toBe('acc-uuid-test');
+    expect(loggedErrors[0]?.obj.session_id).toBe('sess-0000');
   });
 
   it('create: a SUCCESSFUL reservation + dispatch spins exactly one worker, no teardown', async () => {
