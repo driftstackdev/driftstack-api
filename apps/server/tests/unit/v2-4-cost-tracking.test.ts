@@ -237,7 +237,10 @@ describe('v2-#4 Q.1.e cost-tracking', () => {
       expect(record).not.toHaveBeenCalled();
     });
 
-    it('swallows recorder failures — chat turn still returns plan-executed', async () => {
+    it('does not break the chat turn when the recorder keeps failing', async () => {
+      // Billing-integrity hardening: a meter outage must NOT 500 the
+      // customer's turn (the deliberate product intent). The write is
+      // retried (bounded) but the turn still returns plan-executed.
       const record = vi.fn(() => Promise.reject(new Error('meter outage')));
       const runtime = new AgentRuntime({
         decomposer: makeFakeDecomposer({
@@ -257,6 +260,81 @@ describe('v2-#4 Q.1.e cost-tracking', () => {
       });
       expect(result.kind).toBe('plan-executed');
       expect(record).toHaveBeenCalled();
+    });
+
+    it('retries the cost-row write a bounded number of times before giving up', async () => {
+      // The cost row is the ONLY input to the bundled-LLM soft-cap, so a
+      // single transient blip must not silently drop it. Three attempts.
+      const record = vi.fn(() => Promise.reject(new Error('meter outage')));
+      const runtime = new AgentRuntime({
+        decomposer: makeFakeDecomposer({
+          kind: 'plan',
+          intents: [{ kind: 'capture', capture: 'screenshot' }],
+          tokensConsumed: 100,
+          usage: { decomposerKind: 'claude', costUsdCents: 10 },
+        }),
+        executor: makeFakeExecutor(),
+        sessions: makeFakeSessions(baseSession),
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+        usageRecorder: { record },
+      });
+      await runtime.runTurn({ agentSessionId: 'aas_test', userMessage: 'open example.com' });
+      expect(record).toHaveBeenCalledTimes(3);
+    });
+
+    it('recovers when a transient write fails then succeeds on retry', async () => {
+      let calls = 0;
+      const record = vi.fn(() => {
+        calls += 1;
+        return calls < 2 ? Promise.reject(new Error('transient blip')) : Promise.resolve(undefined);
+      });
+      const errorLog = vi.fn();
+      const runtime = new AgentRuntime({
+        decomposer: makeFakeDecomposer({
+          kind: 'plan',
+          intents: [{ kind: 'capture', capture: 'screenshot' }],
+          tokensConsumed: 100,
+          usage: { decomposerKind: 'claude', costUsdCents: 10 },
+        }),
+        executor: makeFakeExecutor(),
+        sessions: makeFakeSessions(baseSession),
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+        usageRecorder: { record },
+        logger: { error: errorLog },
+      });
+      const result = await runtime.runTurn({
+        agentSessionId: 'aas_test',
+        userMessage: 'open example.com',
+      });
+      expect(result.kind).toBe('plan-executed');
+      expect(record).toHaveBeenCalledTimes(2);
+      // Succeeded on retry → no loud error.
+      expect(errorLog).not.toHaveBeenCalled();
+    });
+
+    it('LOUD-logs (logger.error) with accountId + turn cost when the cost row never persists', async () => {
+      const record = vi.fn(() => Promise.reject(new Error('meter outage')));
+      const errorLog = vi.fn();
+      const runtime = new AgentRuntime({
+        decomposer: makeFakeDecomposer({
+          kind: 'plan',
+          intents: [{ kind: 'capture', capture: 'screenshot' }],
+          tokensConsumed: 100,
+          usage: { decomposerKind: 'claude', costUsdCents: 10 },
+        }),
+        executor: makeFakeExecutor(),
+        sessions: makeFakeSessions(baseSession),
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+        usageRecorder: { record },
+        logger: { error: errorLog },
+      });
+      await runtime.runTurn({ agentSessionId: 'aas_test', userMessage: 'open example.com' });
+      expect(errorLog).toHaveBeenCalledTimes(1);
+      const [obj, msg] = errorLog.mock.calls[0]! as [Record<string, unknown>, string];
+      expect(obj.event).toBe('usage_record_persist_failed');
+      expect(obj.account_id).toBe('acc_test');
+      expect(obj.cost_usd_cents).toBe(10);
+      expect(msg).toContain('soft-cap');
     });
   });
 });

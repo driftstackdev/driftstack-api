@@ -161,8 +161,37 @@ export interface AgentRuntimeDeps {
   refusalPatterns?: readonly RefusalPattern[];
   /** W589 — optional structured logger for the task-refusal audit trail
    *  (which rule fired: category + patternId). Omitted ⇒ no audit log; the
-   *  gate still works. Wired alongside the founder/AUP pattern list. */
-  logger?: { warn?: (obj: Record<string, unknown>, msg: string) => void };
+   *  gate still works. Wired alongside the founder/AUP pattern list.
+   *  `error` is used for the spend-meter loud-log (see the usageRecorder
+   *  call site): a final record-write failure must be visible because that
+   *  row is the ONLY input to the bundled-LLM monthly soft-cap. */
+  logger?: {
+    warn?: (obj: Record<string, unknown>, msg: string) => void;
+    error?: (obj: Record<string, unknown>, msg: string) => void;
+  };
+}
+
+/**
+ * Billing-integrity hardening — bounded retry for the bundled-LLM cost
+ * row. The $0.10/turn `usage_records` row written by `usageRecorder.record`
+ * is the ONLY input to `sumMonthlySpendCents`, which is the ONLY enforcement
+ * of the monthly soft-cap. A single transient write failure that silently
+ * drops the row makes the cap stop advancing → uncapped upstream cost.
+ *
+ * Design constraint (deliberate): a meter outage must NOT break the
+ * customer's chat turn. So the retry is best-effort + bounded, and a
+ * final failure is logged LOUDLY (logger.error with accountId + the turn
+ * cost) so a silently-stuck cap is visible in alerting rather than
+ * surfacing as a 500 to the customer.
+ */
+const SPEND_RECORD_MAX_ATTEMPTS = 3;
+const SPEND_RECORD_RETRY_BASE_MS = 50;
+
+function delay(ms: number): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 export class AgentRuntime {
@@ -295,27 +324,77 @@ export class AgentRuntime {
     }
 
     // v2-#4 Q.1.e — cost-tracking. Persist a usage_records row per
-    // decompose() call that returns a `usage` block. Best-effort:
-    // record failures are swallowed so a meter-side outage never
-    // breaks the customer-facing chat turn. (Tracked metric: if
-    // recorder failures pile up, we'd see it in Sentry, not in a
-    // 500 to the customer.)
+    // decompose() call that returns a `usage` block.
+    //
+    // Billing-integrity hardening: this cost row is the ONLY input to
+    // sumMonthlySpendCents, which is the ONLY enforcement of the
+    // bundled-LLM monthly soft-cap. A silently-dropped row makes the cap
+    // stop advancing → uncapped upstream cost. So the write is RETRIED a
+    // bounded number of times; the turn never breaks (the deliberate
+    // product intent), but a final failure is logged LOUDLY (logger.error
+    // with accountId + turn cost) so a stuck cap is visible in alerting
+    // rather than failing silently.
     if (this.deps.usageRecorder !== undefined && decomposed.usage !== undefined) {
-      try {
-        await this.deps.usageRecorder.record({
-          accountId: session.accountId,
-          driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
-          agentSessionId: session.id,
-          decomposeResultKind: decomposed.kind,
-          usage: decomposed.usage,
-          tokensConsumed: decomposed.tokensConsumed,
-          now: args.now ?? new Date(),
-          // Arc 1 sub-slice 6.4 (v2-#6) — forward the route-resolved
-          // key source so the recorder writes the right record_type.
-          ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
-        });
-      } catch {
-        // Swallow; see comment above.
+      const recorder = this.deps.usageRecorder;
+      const recordArgs = {
+        accountId: session.accountId,
+        driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
+        agentSessionId: session.id,
+        decomposeResultKind: decomposed.kind,
+        usage: decomposed.usage,
+        tokensConsumed: decomposed.tokensConsumed,
+        now: args.now ?? new Date(),
+        // Arc 1 sub-slice 6.4 (v2-#6) — forward the route-resolved
+        // key source so the recorder writes the right record_type.
+        ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
+      };
+      let lastErr: unknown;
+      let recorded = false;
+      for (let attempt = 1; attempt <= SPEND_RECORD_MAX_ATTEMPTS; attempt++) {
+        try {
+          await recorder.record(recordArgs);
+          recorded = true;
+          break;
+        } catch (err) {
+          lastErr = err;
+          if (attempt < SPEND_RECORD_MAX_ATTEMPTS) {
+            // Linear backoff between attempts (50ms, 100ms). Bounded so a
+            // meter blip recovers without adding noticeable turn latency.
+            await delay(SPEND_RECORD_RETRY_BASE_MS * attempt);
+          }
+        }
+      }
+      if (!recorded) {
+        // LOUD: the cost row never landed after all retries. For bundled
+        // turns this means the soft-cap silently stopped advancing for
+        // this account — surface it so alerting catches a stuck cap.
+        // Best-effort: a throwing logger must not break the turn either.
+        try {
+          this.deps.logger?.error?.(
+            {
+              component: 'agent-runtime',
+              event: 'usage_record_persist_failed',
+              account_id: session.accountId,
+              agent_session_id: session.id,
+              key_source: args.keySource ?? 'none',
+              cost_usd_cents: decomposed.usage.costUsdCents ?? null,
+              attempts: SPEND_RECORD_MAX_ATTEMPTS,
+              err: lastErr,
+            },
+            'bundled-LLM cost row failed to persist after retries — monthly soft-cap will undercount this turn',
+          );
+        } catch {
+          // Swallow; logging is best-effort and must not break the turn.
+        }
+        // Observability counter so a stuck cap is visible on the metrics
+        // dashboard even where structured logs aren't alerted on.
+        try {
+          this.deps.metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, {
+            kind: 'usage_record_persist_failed',
+          });
+        } catch {
+          // Swallow; metrics are best-effort.
+        }
       }
     }
 
