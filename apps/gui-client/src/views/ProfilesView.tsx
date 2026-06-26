@@ -2005,18 +2005,33 @@ export function ProfilesView({
     );
     if (!ok) return;
     setBulkDeleting(true);
+    let failures = 0;
     try {
       for (const id of ids) {
         try {
           await client.profiles.delete(id);
           await deleteBinding(id);
         } catch {
-          /* skip one that failed (e.g. running) — keep deleting the rest */
+          // Skip one that failed (e.g. a RUNNING profile the server 409s) — keep
+          // deleting the rest, but COUNT it so we can tell the user which/how many
+          // survived instead of leaving them silently in the list (mirrors
+          // handleEmptyTrash). (audit)
+          failures += 1;
         }
       }
       setSelectedIds(new Set());
       await refresh(false);
       await refreshAccountMe();
+      if (failures > 0) {
+        await confirm(
+          `Deleted what it could. ${failures.toString()} profile${
+            failures === 1 ? '' : 's'
+          } couldn’t be deleted — stop any running ${
+            failures === 1 ? 'session' : 'sessions'
+          } first, then try again.`,
+          { confirmLabel: 'OK' },
+        );
+      }
     } finally {
       setBulkDeleting(false);
     }
