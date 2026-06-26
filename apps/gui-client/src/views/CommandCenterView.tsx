@@ -429,10 +429,17 @@ export function CommandCenterView({
         <Kpi icon={<IconLayers />} label="Profiles" value={ratio(profileCount, profileCap)} />
         <Kpi
           icon={<IconBolt />}
-          label="Live now"
+          // "Active" (not "Live now") matches the server's
+          // concurrent_session_active semantics: ALL non-destroyed sessions
+          // (creating + ready + busy + errored). The Session-health "Running"
+          // tile below counts ready+busy only, so the two are different measures
+          // by design — labeling this "Active" stops them reading as the same
+          // number and visibly contradicting (audit: liveNow=3 vs Running=1).
+          label="Active"
           value={liveNow !== null ? String(liveNow) : '—'}
           accent
           onClick={liveNowAction}
+          title="Sessions counting against your concurrency cap — includes starting up and errored sessions, not just running ones."
         />
         <Kpi
           icon={<IconGlobe />}
@@ -744,12 +751,14 @@ function Kpi({
   value,
   accent,
   onClick,
+  title,
 }: {
   icon: ReactNode;
   label: string;
   value: string;
   accent?: boolean;
   onClick?: () => void;
+  title?: string;
 }): JSX.Element {
   const inner = (
     <>
@@ -774,6 +783,7 @@ function Kpi({
       <button
         type="button"
         onClick={onClick}
+        title={title}
         className="flex cursor-pointer items-center gap-3 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated hover:ring-1 hover:ring-accent/30"
       >
         {inner}
@@ -781,7 +791,10 @@ function Kpi({
     );
   }
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3">
+    <div
+      title={title}
+      className="flex items-center gap-3 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3"
+    >
       {inner}
     </div>
   );

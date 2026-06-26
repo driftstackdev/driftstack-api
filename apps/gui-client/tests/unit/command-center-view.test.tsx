@@ -263,7 +263,7 @@ describe('CommandCenterView', () => {
     });
     render(<CommandCenterView onNavigate={nav()} />);
     await waitFor(() => expect(screen.getByText('Running')).toBeTruthy());
-    // running=2 (scope to the tile — "Live now" KPI also shows 2 once health
+    // running=2 (scope to the tile — the "Active" KPI also shows 2 once health
     // loads). The Running tile is a button when running>0, so walk to the tile.
     const running = screen.getByText('Running').closest('button, div');
     expect(running?.textContent).toContain('2');
@@ -287,19 +287,19 @@ describe('CommandCenterView', () => {
     expect(onNavigate).toHaveBeenCalledWith('sessions');
   });
 
-  it('the "Live now" KPI is clickable only when there are running sessions', async () => {
+  it('the "Active" KPI is clickable only when there are running sessions', async () => {
     const onNavigate = nav();
     client = makeClient({
       sessions: () =>
         Promise.resolve({ data: [{ status: 'ready' }], has_more: false, next_cursor: null }),
     });
     render(<CommandCenterView onNavigate={onNavigate} />);
-    const live = await screen.findByRole('button', { name: /Live now/ });
+    const live = await screen.findByRole('button', { name: /Active/ });
     fireEvent.click(live);
     expect(onNavigate).toHaveBeenCalledWith('sessions');
   });
 
-  it('with zero running sessions the "Live now" KPI + Running tile are passive (no button)', async () => {
+  it('with zero running sessions the "Active" KPI + Running tile are passive (no button)', async () => {
     client = makeClient({
       // a destroyed session → the health strip renders tiles (total>0) with
       // running 0, so we can assert neither the KPI nor the tile is a button.
@@ -308,7 +308,7 @@ describe('CommandCenterView', () => {
     });
     render(<CommandCenterView onNavigate={nav()} />);
     await screen.findByText('Running'); // health loaded → liveNow resolved to 0
-    expect(screen.queryByRole('button', { name: /Live now/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Active/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Running/ })).toBeNull();
   });
 
