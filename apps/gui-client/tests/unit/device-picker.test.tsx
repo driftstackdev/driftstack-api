@@ -179,6 +179,41 @@ describe('DevicePicker', () => {
     expect(screen.getByTestId('hero-device')).toHaveTextContent('iPhone 16 Pro');
   });
 
+  it('ArrowDown / ArrowUp move roving focus across SELECTABLE rows (the footer advertises ↑↓)', () => {
+    render(<Harness />);
+    // DOM order of selectable rows (families newest-first, name within family):
+    // iPhone 17, iPhone 17 Pro, iPhone 16 Pro, iPhone 13. (iPhone 15 Pro is a
+    // reference row → skipped.)
+    const r17 = screen.getByTestId('device-row-iphone17_ios18_7_safari26_5');
+    const r17pro = screen.getByTestId('device-row-iphone17pro_ios18_7_safari26_4');
+    const r16 = screen.getByTestId('device-row-iphone16pro_ios18_6_safari26_0');
+    const r13 = screen.getByTestId('device-row-iphone13_ios18_6_safari18_6');
+
+    r17.focus();
+    expect(document.activeElement).toBe(r17);
+    fireEvent.keyDown(r17, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(r17pro);
+    fireEvent.keyDown(r17pro, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(r16);
+    fireEvent.keyDown(r16, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(r17pro);
+    // Wrap-around: ArrowUp from the first selectable row lands on the last.
+    fireEvent.keyDown(r17pro, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(r17);
+    fireEvent.keyDown(r17, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(r13);
+
+    // Arrow nav moves FOCUS only; the hero selection is unchanged until Enter.
+    expect(screen.getByTestId('hero-device')).toHaveTextContent('iPhone 17 Pro');
+    fireEvent.keyDown(r13, { key: 'Enter' });
+    expect(screen.getByTestId('hero-device')).toHaveTextContent('iPhone 13');
+  });
+
+  it('the footer hint advertises arrow-key navigation (matches the implemented behaviour)', () => {
+    render(<Harness />);
+    expect(screen.getByText(/↑↓ to move/)).toBeInTheDocument();
+  });
+
   it('randomize only offers the filtered + selectable candidate set', () => {
     const seen = vi.fn<(candidates: readonly PickerDevice[]) => void>();
     render(<Harness onRandomize={seen} />);

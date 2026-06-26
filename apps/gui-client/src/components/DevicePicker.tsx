@@ -207,8 +207,48 @@ export function DevicePicker({
   const heroDims = selected ? (DEVICE_DIMS[selected.device] ?? '—') : '—';
   const count = filtered.length;
 
+  // Flat, DOM-order list of the SELECTABLE rows (reference rows aren't tabbable
+  // and never take roving focus). Drives ArrowUp/ArrowDown navigation across the
+  // grouped list — the footer advertises "↑↓ to move", so the keys must work.
+  const selectableOrder = useMemo(
+    () => grouped.flatMap((g) => g.items.filter((d) => d.selectable).map((d) => d.id)),
+    [grouped],
+  );
+
+  // Move roving focus to the selectable row `delta` steps from the focused one.
+  // Focus (not selection) follows the arrows; Enter/Space commits the selection.
+  // Looks the focused row up by its data-testid so we don't need a ref per row.
+  function focusRowByDelta(currentId: string, delta: 1 | -1): void {
+    if (selectableOrder.length === 0) return;
+    const idx = selectableOrder.indexOf(currentId);
+    // From an unfocused/unknown row, ArrowDown lands on the first, ArrowUp the last.
+    const nextIdx =
+      idx === -1
+        ? delta === 1
+          ? 0
+          : selectableOrder.length - 1
+        : (idx + delta + selectableOrder.length) % selectableOrder.length;
+    const nextId = selectableOrder[nextIdx];
+    if (nextId === undefined) return;
+    const el = document.querySelector<HTMLDivElement>(
+      `[data-testid="device-row-${CSS.escape(nextId)}"]`,
+    );
+    el?.focus();
+  }
+
   function rowKeyDown(e: KeyboardEvent<HTMLDivElement>, d: PickerDevice): void {
-    if (!d.selectable || disabled) return;
+    if (disabled) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      focusRowByDelta(d.id, 1);
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      focusRowByDelta(d.id, -1);
+      return;
+    }
+    if (!d.selectable) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       onSelect(d.id);
