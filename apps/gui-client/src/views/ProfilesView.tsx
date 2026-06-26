@@ -52,6 +52,7 @@ import {
 } from '../components/ProfilesActionBar';
 import { ProxyCapabilityChips, proxyCapabilities } from '../components/ProxyCapabilities';
 import { ProfilePhoneCard } from '../components/ProfilePhoneCard';
+import { DevicePicker, type PickerDevice } from '../components/DevicePicker';
 import { RelativeTime } from '../components/RelativeTime';
 import {
   ProfilesTable,
@@ -118,6 +119,22 @@ const SELECTABLE_STATUSES = new Set<ArchetypeStatus>(['launch', 'available']);
 const KNOWN_ARCHETYPES: ReadonlyArray<{ id: string; label: string }> = ARCHETYPE_REGISTRY.filter(
   (a) => SELECTABLE_STATUSES.has(a.status),
 ).map((a) => ({ id: a.id, label: a.displayLabel }));
+
+// Flattened device catalog feeding the redesigned DevicePicker. Every registry
+// entry is surfaced (selectable + reference), so a `reference`/`planned`
+// archetype still renders as a muted, non-clickable row instead of vanishing —
+// and `selectable` is the SAME SELECTABLE_STATUSES gate as KNOWN_ARCHETYPES, so
+// the hero/list/randomize selection paths can never diverge from the catalog.
+// All current entries are engine WebKit; the field is explicit so a future
+// Chrome archetype is a registry data add, not a picker change.
+const PICKER_DEVICES: readonly PickerDevice[] = ARCHETYPE_REGISTRY.map((a) => ({
+  id: a.id,
+  device: a.device,
+  iosVersion: a.iosVersion,
+  safariVersion: a.safariVersion,
+  engine: 'webkit',
+  selectable: SELECTABLE_STATUSES.has(a.status),
+}));
 
 interface Profile {
   id: string;
@@ -3317,12 +3334,6 @@ function CreateProfileModal({
     }
   }
 
-  function randomizeArchetype(): void {
-    if (KNOWN_ARCHETYPES.length === 0) return;
-    const idx = Math.floor(Math.random() * KNOWN_ARCHETYPES.length);
-    setArchetype(KNOWN_ARCHETYPES[idx]?.id ?? KNOWN_ARCHETYPES[0]?.id ?? '');
-  }
-
   // ESC-to-close — matches the macOS Cmd+W / standard modal convention.
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
@@ -3574,68 +3585,31 @@ function CreateProfileModal({
                   </span>
                 </label>
 
-                <div className="flex flex-col gap-2 rounded border border-surface-divider bg-surface-base/40 p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h4 className="text-sm font-medium text-ink-primary">Device & identity</h4>
-                      <p className="mt-0.5 text-2xs text-ink-muted">
-                        A bit-exact mobile fingerprint, not a spoofed user-agent — pick the device;
-                        everything stays coherent with it.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={randomizeArchetype}
-                      disabled={submitting || KNOWN_ARCHETYPES.length < 2}
-                      className="text-2xs text-accent underline disabled:cursor-not-allowed disabled:text-ink-muted disabled:no-underline"
-                      title={
-                        KNOWN_ARCHETYPES.length < 2
-                          ? 'Only one archetype available today'
-                          : 'Pick a random device'
-                      }
-                    >
-                      Randomize
-                    </button>
+                <div className="flex flex-col gap-2">
+                  <div>
+                    <h4 className="text-sm font-medium text-ink-primary">Device &amp; identity</h4>
+                    <p className="mt-0.5 text-2xs text-ink-muted">
+                      A bit-exact mobile fingerprint, not a spoofed user-agent — pick the device;
+                      everything stays coherent with it. Search or filter to find one of{' '}
+                      {PICKER_DEVICES.length} devices.
+                    </p>
                   </div>
-                  {/* Device cards (demo port): selectable launch archetypes +
-                disabled reference baselines — honest registry facts only. */}
-                  <div className="grid grid-cols-3 gap-2">
-                    {ARCHETYPE_REGISTRY.map((a) => {
-                      // Match the dropdown + KNOWN_ARCHETYPES: BOTH 'launch' and
-                      // 'available' archetypes are selectable + bit-exact (the grid was
-                      // missed in the SELECTABLE_STATUSES migration, so only iPhone 17
-                      // was clickable — the other 80 rendered as disabled "reference").
-                      const selectable = SELECTABLE_STATUSES.has(a.status);
-                      const on = archetype === a.id;
-                      return (
-                        <button
-                          key={a.id}
-                          type="button"
-                          disabled={!selectable || submitting}
-                          aria-pressed={on}
-                          onClick={() => setArchetype(a.id)}
-                          className={`flex flex-col items-start gap-0.5 rounded-md border p-2.5 text-left ${
-                            on ? 'border-accent ring-1 ring-accent' : 'border-surface-divider'
-                          } ${selectable ? 'hover:border-ink-muted/40' : 'cursor-not-allowed opacity-50'}`}
-                        >
-                          <span aria-hidden="true">📱</span>
-                          <span className="text-sm font-medium text-ink-primary">{a.device}</span>
-                          <span className="mono text-2xs text-ink-muted">
-                            iOS {a.iosVersion} · Safari {a.safariVersion}
-                          </span>
-                          <span
-                            className={`mt-1 rounded-full px-1.5 py-0.5 text-2xs ${
-                              selectable
-                                ? 'bg-status-ready/15 text-status-ready'
-                                : 'bg-surface-inset text-ink-muted'
-                            }`}
-                          >
-                            {selectable ? '✓ bit-exact' : 'reference'}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {/* Redesigned device picker (2026-06-25): searchable, chip-
+                      filtered, family-grouped list with a selected-device hero.
+                      Selection state stays owned here (archetype/setArchetype),
+                      and `selectable` is the SAME SELECTABLE_STATUSES gate — so
+                      reference rows render but never become the selection. */}
+                  <DevicePicker
+                    devices={PICKER_DEVICES}
+                    selectedId={archetype}
+                    onSelect={setArchetype}
+                    onRandomize={(candidates) => {
+                      if (candidates.length === 0) return;
+                      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+                      if (pick) setArchetype(pick.id);
+                    }}
+                    disabled={submitting}
+                  />
                 </div>
 
                 <div className="flex flex-col gap-1 rounded border border-surface-divider bg-surface-base/40 p-3">
