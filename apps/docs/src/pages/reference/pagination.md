@@ -37,13 +37,20 @@ prior response's `next_cursor` back.
     { /* resource */ },
     /* … */
   ],
+  "has_more": false,
   "next_cursor": "<opaque-cursor>" | null
 }
 ```
 
 - `data` — the page's resources, ordered newest-first by default.
+- `has_more` — `true` when at least one more page follows. The
+  canonical envelope (`PaginatedListSchema`) carries this for
+  sessions, profiles, recipes, webhooks, agent-sessions, and
+  profile-snapshots.
 - `next_cursor` — opaque token. Pass on the next request to fetch
-  the following page. `null` when the page is the last.
+  the following page. `null` when the page is the last. Some
+  endpoints signal the end only via `next_cursor: null` — treat
+  either `has_more: false` or a null cursor as "stop".
 
 The cursor is **opaque** — do not try to parse it. Its internal
 shape can change between API versions without notice; only the
