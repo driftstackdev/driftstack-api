@@ -59,10 +59,14 @@ async function buildApp(opts: { createError: Error; winner: AgentSessionRecord |
       findCalls += 1;
       return Promise.resolve(findCalls === 1 ? null : opts.winner);
     },
-    // audit #8 — the create handler now checks the per-account active-session cap
-    // before create; 0 keeps this race test exercising the conflict path, not the cap.
+    // audit #8 — the create handler now enforces the per-account active-session
+    // cap atomically INSIDE createIfUnderActiveCap (count+insert under one lock),
+    // so the route calls that instead of countActive + create. Rejecting it with
+    // the createError keeps this race test exercising the 23505 conflict path
+    // (the cap itself isn't hit — a non-null return would mean "under cap").
     countActive: () => Promise.resolve(0),
     create: () => Promise.reject(opts.createError),
+    createIfUnderActiveCap: () => Promise.reject(opts.createError),
   } as unknown as AgentSessionsRepo;
 
   const app = Fastify({ logger: false });

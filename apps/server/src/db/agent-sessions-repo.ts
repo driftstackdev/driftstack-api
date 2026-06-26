@@ -29,7 +29,7 @@
 // db-agent-sessions-concurrency-drizzle.test.ts (CI; skips locally w/o DB).
 
 import { randomUUID } from 'node:crypto';
-import { and, count, desc, eq, lt, notInArray, or, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import type { Database } from './client.js';
 import { agentSessions } from './schema.js';
@@ -127,6 +127,57 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       throw new Error('AgentSession insert returned no rows');
     }
     return rowToRecord(row);
+  }
+
+  async createIfUnderActiveCap(
+    args: CreateAgentSessionArgs,
+    cap: number,
+  ): Promise<AgentSessionRecord | null> {
+    // Audit #8 (atomicity) — count active + insert atomically so concurrent
+    // creates for the same account can't all pass a stale count and overshoot
+    // the cap. A per-account advisory xact lock (auto-released on commit/
+    // rollback) serialises same-account creates; different accounts hash to
+    // different keys so there is no cross-account contention. Mirrors
+    // SessionsRepo.insertSessionIfUnderLimit (the proven pattern for the legacy
+    // sessions table). Returns null when already at/over the cap.
+    const id = `agt_${randomUUID()}`;
+    const now = this.clock();
+    return this.database.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`agent-session-create:${args.accountId}`}))`,
+      );
+      const [countRow] = await tx
+        .select({ n: count() })
+        .from(agentSessions)
+        .where(
+          and(eq(agentSessions.accountId, args.accountId), eq(agentSessions.status, 'active')),
+        );
+      if ((countRow?.n ?? 0) >= cap) return null;
+      const inserted = await tx
+        .insert(agentSessions)
+        .values({
+          id,
+          accountId: args.accountId,
+          driftstackSessionId: args.driftstackSessionId ?? null,
+          status: 'active',
+          transcript: [],
+          tokenBudgetTotal: args.tokenBudgetTotal,
+          tokenBudgetRemaining: args.tokenBudgetTotal,
+          idempotencyKey: args.idempotencyKey ?? null,
+          createdByUserId: args.createdByUserId ?? null,
+          ...(args.mode !== undefined ? { mode: args.mode } : {}),
+          ...(args.model !== undefined ? { model: args.model } : {}),
+          ...(args.profileId !== undefined ? { profileId: args.profileId } : {}),
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      const row = inserted[0];
+      if (!row) {
+        throw new Error('AgentSession insert returned no rows');
+      }
+      return rowToRecord(row);
+    });
   }
 
   async get(id: string): Promise<AgentSessionRecord | null> {

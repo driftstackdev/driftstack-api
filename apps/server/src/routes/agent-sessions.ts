@@ -1637,11 +1637,26 @@ export function registerAgentSessionsRoutes(
             // v2-#21 — pass `now` so a stored key older than the TTL
             // resolves to null + the resolution chain falls through to
             // header / fallback / 502.
-            const stored = await byokService.getPlaintext({
-              accountId: ownerAccountId,
-              now: new Date(),
-            });
-            if (stored !== null) byokKeyCache.set(existing.id, stored);
+            //
+            // Degrade-not-fail: a corrupted / rotated-but-not-rewrapped BYOK blob
+            // (GCM auth failure) must NOT 500 the replay. Without the catch the
+            // throw escapes the route → the create 500s on every retry AND leaks a
+            // concurrency slot (the row already exists), locking the account out.
+            // Match the socks5/DEK fail-closed degrade: log + skip the pre-warm —
+            // the session replays fine, the AI just resolves its key lazily from
+            // header / fallback at first use.
+            try {
+              const stored = await byokService.getPlaintext({
+                accountId: ownerAccountId,
+                now: new Date(),
+              });
+              if (stored !== null) byokKeyCache.set(existing.id, stored);
+            } catch (err) {
+              req.log.warn(
+                { component: 'agent-session-create', sessionId: existing.id, err },
+                'BYOK key hydration failed on idempotency replay; degrading to no cached key',
+              );
+            }
           }
           const livekit = await maybeMintLivekit(
             existing.id,
@@ -1695,31 +1710,43 @@ export function registerAgentSessionsRoutes(
       // (a retry of an existing session already returned 201), so only a genuinely NEW
       // create is gated — bounds unbounded row creation + one account monopolising fleet
       // slots. Conservative fixed v1 ceiling; tier-derivation is a follow-up.
+      //
+      // Atomicity (audit #8 TOCTOU): the cap is enforced INSIDE
+      // createIfUnderActiveCap — it counts active + inserts under a per-account
+      // advisory xact lock, so N concurrent creates can't all read a stale count
+      // and overshoot the cap. A null return means "already at/over the cap" →
+      // the same 429 ConcurrencyLimitError shape as before.
       const MAX_ACTIVE_AGENT_SESSIONS_PER_ACCOUNT = 100;
-      const activeAgentSessions = await sessions.countActive(ownerAccountId);
-      if (activeAgentSessions >= MAX_ACTIVE_AGENT_SESSIONS_PER_ACCOUNT) {
-        throw new ConcurrencyLimitError(activeAgentSessions, MAX_ACTIVE_AGENT_SESSIONS_PER_ACCOUNT);
-      }
       let created: AgentSessionRecord;
       try {
-        created = await sessions.create({
-          accountId: ownerAccountId,
-          tokenBudgetTotal: parsed.data.token_budget ?? DEFAULT_TOKEN_BUDGET,
-          ...(driftstackSessionUuid !== undefined
-            ? { driftstackSessionId: driftstackSessionUuid }
-            : {}),
-          ...(idempotencyKey !== null ? { idempotencyKey } : {}),
-          // Arc 2 sub-slice 8.5 (v2-#8) — forward mode when supplied;
-          // otherwise repo applies the default ('ai').
-          ...(parsed.data.mode !== undefined ? { mode: parsed.data.mode } : {}),
-          // 6.c / #15 — forward the picked model when supplied; otherwise
-          // repo applies the default ('claude-opus-4-8').
-          ...(parsed.data.model !== undefined ? { model: parsed.data.model } : {}),
-          // #14 (migration 0089) — record the profile this session runs so the
-          // out-of-session trim can refuse a trim against a profile bound to a
-          // live session (avoids a two-writer R2 lost-update on the sealed blob).
-          ...(profileBareId !== undefined ? { profileId: profileBareId } : {}),
-        });
+        const maybeCreated = await sessions.createIfUnderActiveCap(
+          {
+            accountId: ownerAccountId,
+            tokenBudgetTotal: parsed.data.token_budget ?? DEFAULT_TOKEN_BUDGET,
+            ...(driftstackSessionUuid !== undefined
+              ? { driftstackSessionId: driftstackSessionUuid }
+              : {}),
+            ...(idempotencyKey !== null ? { idempotencyKey } : {}),
+            // Arc 2 sub-slice 8.5 (v2-#8) — forward mode when supplied;
+            // otherwise repo applies the default ('ai').
+            ...(parsed.data.mode !== undefined ? { mode: parsed.data.mode } : {}),
+            // 6.c / #15 — forward the picked model when supplied; otherwise
+            // repo applies the default ('claude-opus-4-8').
+            ...(parsed.data.model !== undefined ? { model: parsed.data.model } : {}),
+            // #14 (migration 0089) — record the profile this session runs so the
+            // out-of-session trim can refuse a trim against a profile bound to a
+            // live session (avoids a two-writer R2 lost-update on the sealed blob).
+            ...(profileBareId !== undefined ? { profileId: profileBareId } : {}),
+          },
+          MAX_ACTIVE_AGENT_SESSIONS_PER_ACCOUNT,
+        );
+        if (maybeCreated === null) {
+          throw new ConcurrencyLimitError(
+            MAX_ACTIVE_AGENT_SESSIONS_PER_ACCOUNT,
+            MAX_ACTIVE_AGENT_SESSIONS_PER_ACCOUNT,
+          );
+        }
+        created = maybeCreated;
       } catch (err) {
         // v2-#19 — concurrent same-key idempotency race: the
         // findByIdempotencyKey pre-check above can't see a row a sibling
@@ -1735,11 +1762,21 @@ export function registerAgentSessionsRoutes(
           const winner = await sessions.findByIdempotencyKey(ownerAccountId, idempotencyKey);
           if (winner !== null) {
             if (byokService !== undefined && byokKeyCache !== undefined) {
-              const stored = await byokService.getPlaintext({
-                accountId: ownerAccountId,
-                now: new Date(),
-              });
-              if (stored !== null) byokKeyCache.set(winner.id, stored);
+              // Degrade-not-fail (see the idempotency-replay path above): a
+              // corrupted BYOK blob must not turn the unique-violation replay
+              // into a 500 + leaked slot.
+              try {
+                const stored = await byokService.getPlaintext({
+                  accountId: ownerAccountId,
+                  now: new Date(),
+                });
+                if (stored !== null) byokKeyCache.set(winner.id, stored);
+              } catch (err) {
+                req.log.warn(
+                  { component: 'agent-session-create', sessionId: winner.id, err },
+                  'BYOK key hydration failed on idempotency-race replay; degrading to no cached key',
+                );
+              }
             }
             const livekit = await maybeMintLivekit(
               winner.id,
@@ -1758,12 +1795,27 @@ export function registerAgentSessionsRoutes(
       // v2-#21 — pass `now` so the TTL gate fires for stored keys
       // older than maxKeyAgeMs (90d default).
       if (byokService !== undefined && byokKeyCache !== undefined) {
-        const stored = await byokService.getPlaintext({
-          accountId: ownerAccountId,
-          now: new Date(),
-        });
-        if (stored !== null) {
-          byokKeyCache.set(created.id, stored);
+        // Degrade-not-fail: a corrupted / rotated-but-not-rewrapped BYOK blob (GCM
+        // auth failure) must NOT abort the create here — the row already committed,
+        // so an uncaught throw 500s the response AND leaks the concurrency slot
+        // (the row counts against the cap but the caller got no session id), which
+        // locks the account out as corrupted keys keep failing every retry. Match
+        // the socks5/DEK fail-closed degrade: log + skip the pre-warm. The session
+        // still creates; the AI just resolves its key lazily (header / fallback)
+        // on first use instead of from this cache.
+        try {
+          const stored = await byokService.getPlaintext({
+            accountId: ownerAccountId,
+            now: new Date(),
+          });
+          if (stored !== null) {
+            byokKeyCache.set(created.id, stored);
+          }
+        } catch (err) {
+          req.log.warn(
+            { component: 'agent-session-create', sessionId: created.id, err },
+            'BYOK key hydration failed at session create; degrading to no cached key',
+          );
         }
       }
       // Fleet-CP session dispatch — hand the new session to a connected

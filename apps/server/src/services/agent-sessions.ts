@@ -184,6 +184,22 @@ export interface AgentSessionListPage {
 
 export interface AgentSessionsRepo {
   create(args: CreateAgentSessionArgs): Promise<AgentSessionRecord>;
+
+  /**
+   * Audit #8 (atomicity) — atomic "create only if the account is under the
+   * per-account active-session cap". Closes the TOCTOU between a bare
+   * `countActive` + `create`: N concurrent creates each read a stale count and
+   * all pass the gate, overshooting the cap. The Drizzle impl serialises the
+   * count+insert for the SAME account under a per-account advisory xact lock
+   * (auto-released on commit/rollback; different accounts hash to different
+   * keys so there's no cross-account contention). Returns `null` when already
+   * at/over `cap` — the caller surfaces the standard 429 ConcurrencyLimitError.
+   * Mirrors SessionsRepo.insertSessionIfUnderLimit.
+   */
+  createIfUnderActiveCap(
+    args: CreateAgentSessionArgs,
+    cap: number,
+  ): Promise<AgentSessionRecord | null>;
   get(id: string): Promise<AgentSessionRecord | null>;
   listByAccount(
     accountId: string,
@@ -367,6 +383,20 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     };
     this.records.set(id, rec);
     return Promise.resolve(rec);
+  }
+
+  createIfUnderActiveCap(
+    args: CreateAgentSessionArgs,
+    cap: number,
+  ): Promise<AgentSessionRecord | null> {
+    // Single-threaded JS: the count + create below run without interleaving, so
+    // this is naturally atomic (the Drizzle impl does the real serialisation).
+    let active = 0;
+    for (const rec of this.records.values()) {
+      if (rec.accountId === args.accountId && rec.status === 'active') active += 1;
+    }
+    if (active >= cap) return Promise.resolve(null);
+    return this.create(args);
   }
 
   findByIdempotencyKey(
