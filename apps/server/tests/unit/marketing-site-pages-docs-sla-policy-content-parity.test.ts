@@ -94,14 +94,17 @@ describe('W512.A apps/marketing-site/src/pages/docs/sla-policy.astro content par
 
   it('Measurement framing pinned. Re-enabled by slice 292 after restoring V-295b anchor on the health-probe-service phrase at sla-policy.astro:77', () => {
     expect(body).toMatch(/our health-probe service \(V-295b\)/);
-    expect(body).toMatch(/<li><code>GET \/v1\/health<\/code> — the API health endpoint\.<\/li>/);
+    expect(body).toMatch(
+      /<li><code>GET \/health<\/code> — the API health endpoint \(alias\s*\n?\s*<code>\/healthz<\/code>\)\.<\/li>/,
+    );
     expect(body).toMatch(/<li><code>GET \/<\/code> on the dashboard/);
+    expect(body).toMatch(/A probe is "failed" when it returns non-2xx OR exceeds 5s\./);
     expect(body).toMatch(
-      /A probe is "failed" when it returns non-2xx OR exceeds 5s\. A\s*\n?\s*minute is counted as downtime when 3\+ consecutive probes fail/,
+      /Probes run every 60s from three geo-distributed locations, and a\s*\n?\s*minute counts as downtime only when ≥ 2 of 3 locations register\s*\n?\s*a failure for that minute \(so a single region's ISP routing\s*\n?\s*issue isn't counted against us\)\./,
     );
-    expect(body).toMatch(
-      /Probes run every 60s from\s*\n?\s*three geo-distributed locations; the minute counts as down only\s*\n?\s*when ≥ 2 of 3 locations register a failure/,
-    );
+    // Anti-drift: the previous "3+ consecutive probes fail" downtime rule was
+    // superseded by the 2-of-3-locations quorum rule; ban its return.
+    expect(body).not.toMatch(/counted as downtime when 3\+ consecutive probes fail/);
   });
 
   it("Credit-table 3-tier: <target ≥ 99.0% → 5% + <99.0% ≥ 95.0% → 10% + <95.0% → 25% + 'Credits are capped at the customer's monthly subscription fee for that month — they cannot exceed what was paid.' + 'Credits do not apply to per-minute or per-session usage charges, only the tier subscription line.' — pinned so the 3-tier credit ladder + cap-at-monthly-fee + subscription-only commitment survive (drift to higher percentages would put Driftstack on the hook for credits beyond contract; drift to dropping the usage-charge exclusion would expand the credit base beyond what's intended)", () => {

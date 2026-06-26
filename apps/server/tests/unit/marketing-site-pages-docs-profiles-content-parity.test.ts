@@ -73,7 +73,7 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
     );
   });
 
-  it("POST /v1/profiles 3-field body + 201 framing pinned: name + archetype (optional, defaults server-side) + description + 'The response is a flat profile object — no envelope. Profile ids are prefixed prof_.' + 'The archetype field is a lowercase slug (3–120 chars) identifying a Driftstack-managed device profile' + 'Browser state (cookies, localStorage, etc.) is created on first use and is not part of the create request.' — pinned so the 3-field-body + flat-no-envelope + prof_-prefix + 3-120-char-archetype + browser-state-lazy-not-on-create commitments survive (drift to a different archetype slug regex would create marketing↔CreateProfileRequestSchema divergence)", () => {
+  it("POST /v1/profiles 3-field body + 201 framing pinned: name + archetype (optional, defaults server-side) + description + 'The response is a flat profile object — no envelope. Profile ids are prefixed prof_.' + 'The archetype field is a lowercase slug (1–120 chars) identifying a Driftstack-managed device profile' + 'Browser state (cookies, localStorage, etc.) is created on first use and is not part of the create request.' — pinned so the 3-field-body + flat-no-envelope + prof_-prefix + 1-120-char-archetype + browser-state-lazy-not-on-create commitments survive (drift to a different archetype slug length bound would create marketing↔CreateProfileRequestSchema divergence)", () => {
     expect(body).toMatch(/"name": "us-east-sales-bot"/);
     expect(body).toMatch(
       /"archetype": "iphone17_ios18_7_safari26_4",\s+← optional, defaults server-side/,
@@ -83,7 +83,7 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
       /The response is a flat profile object — no envelope\. Profile\s*\n?\s*ids are prefixed <code>prof_<\/code>\./,
     );
     expect(body).toMatch(
-      /The <code>archetype<\/code>\s*\n?\s*field is a lowercase slug \(3–120 chars\) identifying a\s*\n?\s*Driftstack-managed device profile;/,
+      /The <code>archetype<\/code>\s*\n?\s*field is a lowercase slug \(1–120 chars\) identifying a\s*\n?\s*Driftstack-managed device profile;/,
     );
     expect(body).toMatch(
       /Browser state\s*\n?\s*\(cookies, localStorage, etc\.\) is created on first use and is\s*\n?\s*not part of the create request\./,

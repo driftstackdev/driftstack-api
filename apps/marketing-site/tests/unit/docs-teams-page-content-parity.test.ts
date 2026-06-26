@@ -23,8 +23,9 @@
 //     API today" expectations pinned.
 //   • Admin restrictions: cannot change tier / initiate checkout
 //     / manage team / see other members' API keys.
-//   • Audit-log cross-link to /docs/audit-log resolves;
-//     ?action=team.* filter is the documented read path.
+//   • Audit-log cross-link to /docs/audit-log resolves; the
+//     exact-match ?action=team.member_invited filter (no wildcards)
+//     is the documented read path.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -108,8 +109,19 @@ describe('W360.A /docs/teams parity', () => {
     expect(body).toMatch(/each member's keys\s+are private to their account/);
   });
 
-  it('audit-trail framing pinned: team.* action filter on /v1/account/audit-log', () => {
-    expect(body).toMatch(/<code>GET \/v1\/account\/audit-log\?action=team\.\*<\/code>/);
+  it('audit-trail framing pinned: exact-match team.* action filter on /v1/account/audit-log (no wildcards)', () => {
+    // The action filter is exact-match (one action per request, no
+    // wildcards). The cited actions are the real audit-log enum values
+    // from packages/api-types/src/accounts.ts:
+    // team.member_invited / team.invite_accepted / team.member_removed.
+    expect(body).toMatch(
+      /The <code>action<\/code>\s*\n?\s*filter is exact-match \(one action per request, no wildcards\)/,
+    );
+    expect(body).toMatch(/<code>GET \/v1\/account\/audit-log\?action=team\.member_invited<\/code>/);
+    expect(body).toMatch(/<code>team\.invite_accepted<\/code>/);
+    expect(body).toMatch(/<code>team\.member_removed<\/code>/);
+    // The old wildcard syntax was never real — ban it.
+    expect(body).not.toMatch(/\?action=team\.\*/);
     expect(body).toContain('/docs/audit-log');
     expect(
       existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/audit-log.astro')),

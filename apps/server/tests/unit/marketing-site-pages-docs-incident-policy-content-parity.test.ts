@@ -72,7 +72,7 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
 
   it('Detection 3-signal pinned. Re-enabled by slice 270 after restoring the V-295b anchor on the health-probes list-item at incident-policy.astro:77', () => {
     expect(body).toMatch(
-      /<strong>V-295b health probes:<\/strong> 60-second poller\s*\n?\s*against <code>\/v1\/health<\/code> \+ per-region API endpoints\.\s*\n?\s*Three consecutive failures auto-create a Critical incident/,
+      /<strong>V-295b health probes:<\/strong> 60-second poller\s*\n?\s*against <code>\/health<\/code> \+ per-region API endpoints\.\s*\n?\s*Three consecutive failures auto-create a Critical incident/,
     );
     expect(body).toMatch(
       /<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>\s*\n?\s*and Slack channel monitoring\. We acknowledge within 30 min\s*\n?\s*during EU business hours\./,

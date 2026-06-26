@@ -163,14 +163,17 @@ describe('W520.C apps/marketing-site/src/pages/docs/billing-crypto-troubleshooti
     );
   });
 
-  it("3-related-doc cluster: /docs/billing-crypto-overview + /docs/billing-faq + /docs/webhooks-crypto-events (roadmap label) — pinned so the 3-related-doc navigation surface stays complete (drift to dropping the roadmap label on the crypto.order.paid webhook cross-ref would remove the customer-trust signal that the events aren't subscribable yet)", () => {
+  it("3-related-doc cluster: /docs/billing-crypto-overview + /docs/billing-faq + /docs/webhooks-crypto-events (crypto.order.paid webhook events, now subscribable so no roadmap label) — pinned so the 3-related-doc navigation surface stays complete. The crypto.order.paid event was promoted to subscribable, so the previous '(roadmap)' label on the webhook cross-ref is dropped; ban its return so the not-yet-subscribable signal cannot creep back.", () => {
     expect(body).toMatch(
       /<a href="\/docs\/billing-crypto-overview">Crypto payments — how it works<\/a>/,
     );
     expect(body).toMatch(/<a href="\/docs\/billing-faq">Billing FAQ<\/a>/);
     expect(body).toMatch(
-      /<a href="\/docs\/webhooks-crypto-events"><code>crypto\.order\.paid<\/code> webhook events \(roadmap\)<\/a>/,
+      /<a href="\/docs\/webhooks-crypto-events"><code>crypto\.order\.paid<\/code> webhook events<\/a>/,
     );
+    // Anti-drift: the event is now subscribable; the old "(roadmap)" label
+    // on this cross-ref must NOT return.
+    expect(body).not.toMatch(/webhook events \(roadmap\)/);
   });
 
   it('file exists at canonical path', () => {

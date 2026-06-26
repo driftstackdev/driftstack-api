@@ -58,7 +58,18 @@ describe('W224.A admin-csv-export doc parity', () => {
     }
   });
 
-  it('doc warns about the X-Driftstack-Export-Truncated header', () => {
-    expect(doc).toMatch(/X-Driftstack-Export-Truncated/);
+  it('doc explains the 1000-row cap and the no-truncation-header detection method', () => {
+    // The route caps at `limit` (1..1000, default 1000) and sets NO
+    // truncation header — the corrected doc tells integrators to detect
+    // a capped result by checking for a full 1000-row page instead.
+    expect(route).toMatch(/limit must be an integer between 1 and 1000\./);
+    expect(doc).toMatch(/exports up to <strong>1000 rows<\/strong> per/);
+    expect(doc).toMatch(
+      /The CSV\s*\n?\s*endpoint does not set a truncation header, so detect a capped\s*\n?\s*result by checking whether you received a full 1000-row page/,
+    );
+    // The old X-Driftstack-Export-Truncated header was removed from both
+    // the route and the doc — ban it so drift back to it surfaces here.
+    expect(route).not.toMatch(/X-Driftstack-Export-Truncated/);
+    expect(doc).not.toMatch(/X-Driftstack-Export-Truncated/);
   });
 });

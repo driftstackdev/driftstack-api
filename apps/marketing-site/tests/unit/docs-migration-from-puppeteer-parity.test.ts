@@ -106,7 +106,10 @@ describe('W355.C /docs/migration-from-puppeteer parity', () => {
   });
 
   it('back-pressure framing uses concurrency-limit 429 (not a fictional error code)', () => {
-    expect(body).toMatch(/concurrency_limit_reached/);
+    // The real server-side error code is `concurrency_limit_exceeded`
+    // (see packages/api-types/src/common.ts) — NOT `_reached`.
+    expect(body).toMatch(/concurrency_limit_exceeded/);
+    expect(body).not.toMatch(/concurrency_limit_reached/);
     expect(body).toMatch(/429/);
     // Pin "back off + retry" copy — defensive shape.
     expect(body).toMatch(/back off \+ retry/);

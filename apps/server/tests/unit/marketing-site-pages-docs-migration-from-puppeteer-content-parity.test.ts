@@ -55,7 +55,7 @@ describe('W521.A apps/marketing-site/src/pages/docs/migration-from-puppeteer.ast
     );
   });
 
-  it('Concept-mapping 10-row framing pinned: puppeteer.launch/browser.newContext → POST /v1/sessions + page.goto → POST /v1/sessions/:id/navigate + page.click/page.type → POST /v1/sessions/:id/interact + POST /v1/sessions/:id/gui-input for keyboard/pointer at coordinates + page.waitFor → POST /v1/sessions/:id/wait + page.evaluate → GET /v1/sessions/:id/state (DOM + URL + cookies, arbitrary script eval intentionally NOT exposed) + page.screenshot → POST /v1/sessions/:id/capture kind=screenshot (inline base64, no presigned URL) + browser.close → DELETE /v1/sessions/:id + Userdata-dir → Profile resource POST /v1/profiles + Saving+loading session.json → Profile snapshot + restore + browser.tracing/video → /docs/recordings roadmap + Test parallelism via shards → Concurrent-session cap + 429 concurrency_limit_reached — pinned so the 10-row concept-mapping survives (drift would create marketing↔SDK contract divergence)', () => {
+  it('Concept-mapping 10-row framing pinned: puppeteer.launch/browser.newContext → POST /v1/sessions + page.goto → POST /v1/sessions/:id/navigate + page.click/page.type → POST /v1/sessions/:id/interact + POST /v1/sessions/:id/gui-input for keyboard/pointer at coordinates + page.waitFor → POST /v1/sessions/:id/wait + page.evaluate → GET /v1/sessions/:id/state (DOM + URL + cookies, arbitrary script eval intentionally NOT exposed) + page.screenshot → POST /v1/sessions/:id/capture kind=screenshot (inline base64, no presigned URL) + browser.close → DELETE /v1/sessions/:id + Userdata-dir → Profile resource POST /v1/profiles + Saving+loading session.json → Profile snapshot + restore + browser.tracing/video → /docs/recordings roadmap + Test parallelism via shards → Concurrent-session cap + 429 concurrency_limit_exceeded — pinned so the 10-row concept-mapping survives (drift would create marketing↔SDK contract divergence)', () => {
     expect(body).toMatch(
       /<code>puppeteer\.launch\(\)<\/code> \/ <code>browser\.newContext\(\)<\/code>/,
     );
@@ -88,18 +88,32 @@ describe('W521.A apps/marketing-site/src/pages/docs/migration-from-puppeteer.ast
       /Profile snapshot\s*\n?\s*\(<code>POST \/v1\/profiles\/:id\/snapshots<\/code>\) \+\s*\n?\s*restore \(<code>POST \/v1\/profile-snapshots\/:id\/restore<\/code>\)\./,
     );
     expect(body).toMatch(
-      /Concurrent-session cap per tier\. The\s*\n?\s*<code>concurrency_limit_reached<\/code> 429 is your back-\s*\n?\s*pressure signal — back off \+ retry\./,
+      /Concurrent-session cap per tier\. The\s*\n?\s*<code>concurrency_limit_exceeded<\/code> 429 is your back-\s*\n?\s*pressure signal — back off \+ retry\./,
     );
   });
 
-  it('Side-by-side curl-flow framing pinned: POST /v1/sessions with archetype default + label qa-login → 201 Created + ses_… status creating + 3-interact (type #email + type #password + click button[type=submit]) + wait kind selector #dashboard timeout_ms 10000 + GET state → html/url/cookies + DELETE — pinned so the canonical Driftstack curl-flow + 10000ms wait-timeout sample survives', () => {
-    expect(body).toMatch(/"archetype": "default", "label": "qa-login"/);
-    expect(body).toMatch(/→ 201 Created/);
-    expect(body).toMatch(/"action": "type", "selector": "#email", "value": "user@example\.com"/);
-    expect(body).toMatch(/"action": "type", "selector": "#password", "value": "\{\{SECRET\}\}"/);
-    expect(body).toMatch(/"action": "click", "selector": "button\[type=submit\]"/);
-    expect(body).toMatch(/"kind": "selector", "selector": "#dashboard", "timeout_ms": 10000/);
+  it('Side-by-side curl-flow framing pinned: POST /v1/sessions with { label qa-login } (omit archetype to inherit the locked default) → 201 Created + ses_… status creating + 3-interact nested action envelope (type #email + type #password + tap button[type=submit]) + wait condition kind selector #dashboard timeout_ms 10000 + GET state → html/url/cookies + DELETE — pinned so the canonical Driftstack curl-flow + nested action/condition envelope + 10000ms wait-timeout sample survives. The body shape was corrected: interact now wraps a nested action object ({ "action": { "kind": …, "selector": …, "text": … } } not flat "action"/"value"), the submit interaction is kind "tap" not "click", and wait takes a nested condition object ({ "condition": { "kind": "selector", … }, "timeout_ms": … }); the archetype is omitted to inherit the locked default rather than passed explicitly.', () => {
+    expect(body).toMatch(
+      /\{ "label": "qa-login" \}\s+# omit archetype to inherit the locked default/,
+    );
+    expect(body).toMatch(/→ 201 Created\s+\{ "id": "ses_…", "status": "creating", … \}/);
+    expect(body).toMatch(
+      /\{ "action": \{ "kind": "type", "selector": "#email", "text": "user@example\.com" \} \}/,
+    );
+    expect(body).toMatch(
+      /\{ "action": \{ "kind": "type", "selector": "#password", "text": "\{\{SECRET\}\}" \} \}/,
+    );
+    expect(body).toMatch(
+      /\{ "action": \{ "kind": "tap", "selector": "button\[type=submit\]" \} \}/,
+    );
+    expect(body).toMatch(
+      /\{ "condition": \{ "kind": "selector", "selector": "#dashboard" \}, "timeout_ms": 10000 \}/,
+    );
     expect(body).toMatch(/→ \{ "html": "…", "url": "…", "cookies": \[\.\.\.\] \}/);
+    // Anti-drift: the previous (flat) interact/wait shape must NOT return —
+    // customer code copy-pasting the old flat envelope would not validate.
+    expect(body).not.toMatch(/"action": "type", "selector": "#email", "value":/);
+    expect(body).not.toMatch(/"action": "click", "selector": "button\[type=submit\]"/);
   });
 
   it('4-not-equivalent framing pinned. Re-enabled by slice 286 after restoring V-540 anchor on the CDP-alternative recordings sentence at migration-from-puppeteer.astro:153 (V-540 anchor was stripped from "recordings (+ retention)" to "recordings (V-540 + retention)")', () => {

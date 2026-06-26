@@ -102,13 +102,13 @@ describe('W520.A apps/marketing-site/src/pages/docs/billing-crypto-overview.astr
     );
   });
 
-  it("Paid + crypto.order.paid NOT-yet-subscribable framing pinned: 'Your tier upgrade is applied the moment the order transitions to paid. A receipt email is sent to the account address. A server-side crypto.order.paid event is emitted but is not yet on the subscribable webhook event list' + /docs/webhooks-crypto-events cross-ref + poll-GET-/v1/billing/crypto-orders/<order_id> fallback — pinned so the tier-upgrade-on-paid + receipt-email + crypto.order.paid-NOT-subscribable + poll-fallback commitment survives", () => {
+  it("Paid + crypto.order.paid IS-subscribable framing pinned: 'Your tier upgrade is applied the moment the order transitions to paid. A receipt email is sent to the account address. A crypto.order.paid event is emitted and is subscribable — register an endpoint via POST /v1/webhooks (see /docs/webhooks-crypto-events), or poll GET /v1/billing/crypto-orders/<order_id> if you prefer.' — pinned so the tier-upgrade-on-paid + receipt-email + crypto.order.paid-IS-subscribable (register via POST /v1/webhooks) + poll-fallback commitment survives. The event was promoted to subscribable: the previous 'emitted but not yet on the subscribable webhook event list' framing is superseded.", () => {
     expect(body).toMatch(
-      /Your tier upgrade is applied the moment the order transitions\s*\n?\s*to <code>paid<\/code>\. A receipt email is sent to the account\s*\n?\s*address\. A server-side <code>crypto\.order\.paid<\/code> event is\s*\n?\s*emitted but is not yet on the subscribable webhook event list/,
+      /Your tier upgrade is applied the moment the order transitions\s*\n?\s*to <code>paid<\/code>\. A receipt email is sent to the account\s*\n?\s*address\. A <code>crypto\.order\.paid<\/code> event is emitted and\s*\n?\s*is subscribable — register an endpoint via\s*\n?\s*<code>POST \/v1\/webhooks<\/code> \(see\s*\n?\s*<a href="\/docs\/webhooks-crypto-events">\/docs\/webhooks-crypto-events<\/a>\),\s*\n?\s*or poll\s*\n?\s*<code>GET \/v1\/billing\/crypto-orders\/&lt;order_id&gt;<\/code> if\s*\n?\s*you prefer\./,
     );
-    expect(body).toMatch(
-      /<a href="\/docs\/webhooks-crypto-events">\/docs\/webhooks-crypto-events<\/a>\s*\n?\s*and poll\s*\n?\s*<code>GET \/v1\/billing\/crypto-orders\/&lt;order_id&gt;<\/code>/,
-    );
+    // Anti-drift: the event is now subscribable; the old NOT-yet-subscribable
+    // framing must NOT return (would create marketing↔webhook-event-list divergence).
+    expect(body).not.toMatch(/is not yet on the subscribable webhook event list/);
   });
 
   it('Receipt 3-format endpoint surface pinned: GET /v1/billing/crypto-orders/:id/receipt (JSON envelope, programmatic) + .txt (plain-text, cron jobs / curl pipelines) + .pdf (PDF, accounting / archival) — pinned so the 3-receipt-format endpoint shape + per-format-use-case commitment survives (drift to dropping any format would shrink the customer-facing-receipt surface)', () => {

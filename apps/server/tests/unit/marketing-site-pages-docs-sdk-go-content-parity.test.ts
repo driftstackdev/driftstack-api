@@ -48,20 +48,26 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
     );
   });
 
-  it('driftstack.NewClient + Config{APIKey, BaseURL} + no-network-on-construct + http.Client-pooled framing pinned — pinned so the constructor + 2-field-config + no-network-on-construct + http.Client-pooled-reuse commitments survive (drift to claiming a network call at construct-time would mislead about init cost)', () => {
-    expect(body).toMatch(/client, err := driftstack\.NewClient\(driftstack\.Config\{/);
-    expect(body).toMatch(/APIKey: os\.Getenv\("DRIFTSTACK_API_KEY"\)/);
-    expect(body).toMatch(/\/\/ BaseURL defaults to https:\/\/api\.driftstack\.dev/);
+  it('driftstack.New(apiKey, opts...) functional-options constructor + WithBaseURL override + no-error-on-construct + no-network-on-construct + http.Client-pooled framing pinned — pinned so the constructor + WithBaseURL functional option + New-does-not-return-an-error + no-network-on-construct + http.Client-pooled-reuse commitments survive (drift to claiming a network call at construct-time would mislead about init cost). The constructor shape was corrected to driftstack.New(os.Getenv("DRIFTSTACK_API_KEY")) with driftstack.WithBaseURL(...) functional options, matching packages/sdk-go/client.go (func New(apiKey string, opts ...Option) *Client + func WithBaseURL); the previous NewClient(Config{APIKey, BaseURL}) struct-config shape no longer exists.', () => {
+    expect(body).toMatch(/client := driftstack\.New\(os\.Getenv\("DRIFTSTACK_API_KEY"\)\)/);
+    expect(body).toMatch(
+      /\/\/ BaseURL defaults to https:\/\/api\.driftstack\.dev; pass\s*\n?\s*\/\/ driftstack\.WithBaseURL\(\.\.\.\) to override for staging or\s*\n?\s*\/\/ self-hosted deployments\. New does not return an error\./,
+    );
     expect(body).toMatch(
       /The constructor does not make any network calls\. Reuse one\s*\n?\s*client across your process — it is internally pooled via\s*\n?\s*<code>http\.Client<\/code> with sensible defaults/,
     );
+    // Anti-drift: the previous struct-config constructor must NOT return —
+    // NewClient(Config{...}) is not the SDK's exported surface.
+    expect(body).not.toMatch(/driftstack\.NewClient\(driftstack\.Config\{/);
   });
 
-  it("Sessions.Create + 2-field CreateSessionRequest (Archetype + PurposeProductionCustomer) + 5-state SessionStatus constants pinned: SessionCreating + SessionReady + SessionBusy + SessionDestroyed + SessionErrored + 'switch on those for exhaustive compile-time coverage' + no-target-URL framing — pinned so the 5-state-constant + exhaustive-switch + no-URL-on-create commitments survive (drift to dropping any state constant would shrink the typed-status surface)", () => {
+  it('Sessions.Create + CreateSessionRequest (Archetype omitted to inherit the locked launch default iphone17_ios18_7_safari26_4 + PurposeProductionCustomer) + 5-state SessionStatus constants pinned: SessionCreating + SessionReady + SessionBusy + SessionDestroyed + SessionErrored + \'switch on those for exhaustive compile-time coverage\' + no-target-URL framing — pinned so the omit-Archetype-to-inherit-locked-default + Purpose field + 5-state-constant + exhaustive-switch + no-URL-on-create commitments survive (drift to dropping any state constant would shrink the typed-status surface). The Archetype field is now omitted (commented) in the sample to inherit the locked launch default rather than passed as a literal "default".', () => {
     expect(body).toMatch(
       /session, err := client\.Sessions\.Create\(ctx, &driftstack\.CreateSessionRequest\{/,
     );
-    expect(body).toMatch(/Archetype: "default"/);
+    expect(body).toMatch(
+      /\/\/ Omit Archetype to inherit the locked launch default\s*\n?\s*\/\/ \(iphone17_ios18_7_safari26_4\); pass a real registry slug\s*\n?\s*\/\/ to pin a specific device profile\./,
+    );
     expect(body).toMatch(/Purpose:\s+driftstack\.PurposeProductionCustomer/);
     expect(body).toMatch(
       /<code>SessionStatus<\/code> type with the constants\s*\n?\s*<code>SessionCreating<\/code>, <code>SessionReady<\/code>,\s*\n?\s*<code>SessionBusy<\/code>, <code>SessionDestroyed<\/code>, and\s*\n?\s*<code>SessionErrored<\/code> — switch on those for exhaustive\s*\n?\s*compile-time coverage\./,
@@ -91,15 +97,18 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
     );
   });
 
-  it('Sessions.List pagination framing pinned: ListSessionsQuery{Limit: 50} + page.Data range + page.NextCursor empty-string + refeed-as-query.Cursor — pinned so the List + NextCursor-empty + refeed-pattern survives (drift to dropping NextCursor would create marketing↔server-cursor divergence)', () => {
+  it('Sessions.List pagination framing pinned: ListSessionsQuery{Limit: 50} + page.Data range + page.NextCursor nil-pointer + deref *page.NextCursor as query.Cursor — pinned so the List + NextCursor-nil + deref-refeed-pattern survives (drift to dropping NextCursor would create marketing↔server-cursor divergence). NextCursor is a *string (nil when there are no more pages), matching packages/sdk-go/agent_sessions.go:190 (NextCursor *string); the previous empty-string framing was wrong — the refeed dereferences *page.NextCursor.', () => {
     expect(body).toMatch(
       /page, err := client\.Sessions\.List\(ctx, &driftstack\.ListSessionsQuery\{Limit: 50\}\)/,
     );
     expect(body).toMatch(/for _, s := range page\.Data \{/);
     expect(body).toMatch(/s\.Status == driftstack\.SessionDestroyed/);
     expect(body).toMatch(
-      /\/\/ page\.NextCursor is "" when there are no more pages; refeed it as\s*\n?\s*\/\/ query\.Cursor on subsequent calls to walk the full history\./,
+      /\/\/ page\.NextCursor is nil when there are no more pages; otherwise\s*\n?\s*\/\/ pass \*page\.NextCursor as query\.Cursor on the next call to walk\s*\n?\s*\/\/ the full history\./,
     );
+    // Anti-drift: the previous empty-string-sentinel framing must NOT return —
+    // NextCursor is a *string (nil-on-last-page), not a "" empty string.
+    expect(body).not.toMatch(/page\.NextCursor is "" when there are no more pages/);
   });
 
   it('Typed-errors surface pinned: ValidationError + RateLimitError + ConcurrencyLimitError + NotFoundError + errors.As recover-typed-shape + errors.Is sentinel-match + ErrRateLimit + ErrValidation + ErrConflict 409-any-subclass — pinned so the 4-named-error + errors.As/errors.Is + 3-sentinel surface (ErrRateLimit/ErrValidation/ErrConflict) survives (drift to renaming any subclass would create marketing↔SDK divergence)', () => {

@@ -47,8 +47,10 @@ describe('W512.C apps/marketing-site/src/pages/docs/api-quickstart.astro content
     );
   });
 
-  it('3-scope ladder pinned: read (list sessions + fetch session metadata) + write (start sessions + modify profiles) + account_owner (full account control) — pinned so the 3-scope ladder stays consistent (drift to dropping any scope would create marketing↔scope-enum divergence; drift to changing the read/write boundary would shift the least-privilege guidance)', () => {
-    expect(body).toMatch(/<li><code>read<\/code> — list sessions, fetch session metadata\.<\/li>/);
+  it('3-scope ladder pinned: read (read sessions and profiles, covers read:sessions + read:profiles) + write (start sessions + modify profiles) + account_owner (full account control) — pinned so the 3-scope ladder stays consistent (drift to dropping any scope would create marketing↔scope-enum divergence; drift to changing the read/write boundary would shift the least-privilege guidance)', () => {
+    expect(body).toMatch(
+      /<li><code>read<\/code> — read sessions and profiles \(covers\s*\n?\s*<code>read:sessions<\/code> \+ <code>read:profiles<\/code>\)\.<\/li>/,
+    );
     expect(body).toMatch(/<li><code>write<\/code> — start sessions, modify profiles\.<\/li>/);
     expect(body).toMatch(/<li><code>account_owner<\/code> — full account control\.<\/li>/);
   });

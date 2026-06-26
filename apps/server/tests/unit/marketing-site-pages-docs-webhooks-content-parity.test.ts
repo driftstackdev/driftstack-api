@@ -53,9 +53,9 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
     expect(body).toMatch(/name: 'api_key\.revoked'/);
   });
 
-  it("test.ping bypass-only framing pinned: 'test.ping is a sixth event type that exists only for the POST /v1/webhooks/<id>/test endpoint; it bypasses subscriptions, so you don't list it under events when creating an endpoint.' — pinned so the test.ping-bypass + don't-list-on-create commitment survives (drift to claiming test.ping is subscribable would create marketing↔schema divergence)", () => {
+  it("test.ping bypass-only framing pinned: 'test.ping is an additional event type that exists only for the POST /v1/webhooks/<id>/test endpoint; it bypasses subscriptions, so you don't list it under events when creating an endpoint.' — pinned so the test.ping-bypass + don't-list-on-create commitment survives (drift to claiming test.ping is subscribable would create marketing↔schema divergence)", () => {
     expect(body).toMatch(
-      /<code>test\.ping<\/code> is a sixth event type that exists only\s*\n?\s*for the <code>POST \/v1\/webhooks\/&lt;id&gt;\/test<\/code> endpoint;\s*\n?\s*it bypasses subscriptions, so you don't list it under\s*\n?\s*<code>events<\/code> when creating an endpoint\./,
+      /<code>test\.ping<\/code> is an additional event type that exists\s*\n?\s*only for the <code>POST \/v1\/webhooks\/&lt;id&gt;\/test<\/code> endpoint;\s*\n?\s*it bypasses subscriptions, so you don't list it under\s*\n?\s*<code>events<\/code> when creating an endpoint\./,
     );
   });
 

@@ -112,10 +112,13 @@ describe('W519.A apps/marketing-site/src/pages/docs/teams.astro content parity',
     );
   });
 
-  it("Audit-trail framing pinned: 'Team mutations (invite sent, invite accepted, member removed) write entries on the owner's audit log. Read via GET /v1/account/audit-log?action=team.* — see /docs/audit-log.' — pinned so the 3-team-mutation + on-owner-audit-log + ?action=team.* filter + /docs/audit-log cross-ref survives", () => {
+  it("Audit-trail framing pinned: 'Team mutations (invite sent, invite accepted, member removed) write entries on the owner's audit log. The action filter is exact-match (one action per request, no wildcards), e.g. GET /v1/account/audit-log?action=team.member_invited (also team.invite_accepted / team.member_removed) — see /docs/audit-log.' — pinned so the 3-team-mutation + on-owner-audit-log + exact-match-action-filter (no wildcards) + 3 concrete team.* action names + /docs/audit-log cross-ref survives. The filter was corrected: ?action= is exact-match, NOT a team.* wildcard, matching the audit-log action-filter semantics.", () => {
     expect(body).toMatch(
-      /Team mutations \(invite sent, invite accepted, member removed\)\s*\n?\s*write entries on the owner's audit log\. Read via\s*\n?\s*<code>GET \/v1\/account\/audit-log\?action=team\.\*<\/code> — see\s*\n?\s*<a href="\/docs\/audit-log">\/docs\/audit-log<\/a>\./,
+      /Team mutations \(invite sent, invite accepted, member removed\)\s*\n?\s*write entries on the owner's audit log\. The <code>action<\/code>\s*\n?\s*filter is exact-match \(one action per request, no wildcards\),\s*\n?\s*e\.g\. <code>GET \/v1\/account\/audit-log\?action=team\.member_invited<\/code>\s*\n?\s*\(also <code>team\.invite_accepted<\/code> \/\s*\n?\s*<code>team\.member_removed<\/code>\) — see\s*\n?\s*<a href="\/docs\/audit-log">\/docs\/audit-log<\/a>\./,
     );
+    // Anti-drift: the action filter is exact-match, not a wildcard; the old
+    // ?action=team.* glob framing must NOT return (no wildcard support).
+    expect(body).not.toMatch(/audit-log\?action=team\.\*/);
   });
 
   it('file exists at canonical path', () => {

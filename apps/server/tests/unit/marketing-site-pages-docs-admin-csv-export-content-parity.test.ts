@@ -110,11 +110,15 @@ describe('W508.C apps/marketing-site/src/pages/docs/admin-csv-export.astro conte
     );
   });
 
-  it("1000-row max + X-Driftstack-Export-Truncated header + 'walk the cursor-paginated JSON list and stream rows yourself' fallback pinned — pinned so the 1000-row cap + truncation-header signal + cursor-pagination-fallback survive (drift to a different cap would create marketing↔server divergence; drift to dropping the truncation header would let clients silently lose rows; drift to dropping the fallback would orphan high-volume customers)", () => {
+  it("1000-row max + capped-to-most-recently-updated-1000 + no-truncation-header (detect-by-full-1000-row-page) + 'walk the cursor-paginated JSON list and stream rows yourself' fallback pinned — pinned so the 1000-row cap + the explicit no-truncation-header contract (detect a capped result by receiving a full 1000-row page) + cursor-pagination-fallback survive (drift to a different cap would create marketing↔server divergence; drift to claiming a truncation header is set would create marketing↔server divergence since the handler sets none; drift to dropping the fallback would orphan high-volume customers)", () => {
     expect(body).toMatch(
-      /The CSV endpoint exports up to <strong>1000 rows<\/strong> per\s*\n?\s*request\. If the filtered scan would return more than 1000\s*\n?\s*rows, the export is truncated to the most-recently-updated\s*\n?\s*1000 and a warning header is set/,
+      /The CSV endpoint exports up to <strong>1000 rows<\/strong> per\s*\n?\s*request\. If the filtered scan would return more than 1000 rows,\s*\n?\s*the export is capped at the most-recently-updated 1000\. The CSV\s*\n?\s*endpoint does not set a truncation header, so detect a capped\s*\n?\s*result by checking whether you received a full 1000-row page —\s*\n?\s*if you did, there may be more\./,
     );
-    expect(body).toMatch(/X-Driftstack-Export-Truncated: 1/);
+    // Anti-drift: the previous content claimed a warning header was set
+    // (X-Driftstack-Export-Truncated). The handler sets no such header;
+    // ban the old truncation-header framing so it cannot creep back.
+    expect(body).not.toMatch(/X-Driftstack-Export-Truncated/);
+    expect(body).not.toMatch(/a warning header is set/);
     expect(body).toMatch(
       /For full-history exports beyond 1000 rows, walk the\s*\n?\s*<a href="\/docs\/admin-api-pagination">cursor-paginated JSON\s*\n?\s*list<\/a> and stream rows yourself; the CSV endpoint is a\s*\n?\s*convenience for ad-hoc reconciliation, not a bulk-export\s*\n?\s*channel\./,
     );

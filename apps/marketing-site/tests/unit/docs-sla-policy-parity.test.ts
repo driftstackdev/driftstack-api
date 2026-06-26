@@ -41,8 +41,12 @@ describe('W264.C /docs/sla-policy ↔ AccountTierSchema parity', () => {
     expect(page).toMatch(/https:\/\/app\.driftstack\.dev\/\*/);
   });
 
-  it('cites /v1/health as the probe target', () => {
-    expect(page).toMatch(/GET \/v1\/health/);
+  it('cites /health as the probe target (alias /healthz; no /v1 prefix)', () => {
+    // The server registers `/health` + `/healthz` (apps/server/src/lib/app.ts)
+    // with no /v1 prefix — the doc's GET /health is correct.
+    expect(page).toMatch(/GET \/health/);
+    expect(page).toMatch(/\/healthz/);
+    expect(page).not.toMatch(/GET \/v1\/health/);
   });
 
   it('cross-links to /docs/incident-policy + /docs/api-versioning', () => {

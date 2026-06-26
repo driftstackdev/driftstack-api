@@ -104,7 +104,9 @@ describe('W347.A /docs/profiles parity', () => {
     expect(body).toMatch(/Each restore creates a fresh profile/);
   });
 
-  it('archetype slug length range matches the server validator (3–120 chars)', () => {
-    expect(body).toMatch(/lowercase slug \(3–120 chars\)/);
+  it('archetype slug length range matches the server validator (1–120 chars)', () => {
+    // Server validator is z.string().min(1).max(120) in
+    // packages/api-types/src/profiles.ts — the doc's 1–120 is correct.
+    expect(body).toMatch(/lowercase slug \(1–120 chars\)/);
   });
 });

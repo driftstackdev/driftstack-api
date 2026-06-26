@@ -70,15 +70,15 @@ describe('W517.B apps/marketing-site/src/pages/docs/concurrency.astro content pa
     expect(body).not.toMatch(/V-352 30-minute/);
   });
 
-  it("429 concurrency-limit problem-type framing pinned: 'When a POST /v1/sessions would push you past the cap' + sample 429 with type 'https://errors.driftstack.dev/concurrency-limit' + title 'Concurrent session limit reached' + status 429 + detail with '20 active sessions; tier permits 20' + current_sessions + limit extension fields + 'The Retry-After header is a hint, not a contract — it's the time we estimate it'd take for one of your current sessions to naturally complete (based on your average session duration). Don't sleep blindly past it; respond when one of your own sessions finishes.' — pinned so the canonical problem-type URI + title + detail + 2-extension-fields (current_sessions/limit) + Retry-After-as-hint commitment survives", () => {
+  it("429 concurrency-limit problem-type framing pinned: 'When a POST /v1/sessions would push you past the cap' + sample 429 with type 'https://errors.driftstack.dev/concurrency-limit' + title 'Concurrent session limit reached' + status 429 + detail with '24 active sessions; tier permits 24' + current_sessions + limit extension fields + 'The Retry-After header is a hint, not a contract — it's the time we estimate it'd take for one of your current sessions to naturally complete (based on your average session duration). Don't sleep blindly past it; respond when one of your own sessions finishes.' — pinned so the canonical problem-type URI + title + detail + 2-extension-fields (current_sessions/limit) + Retry-After-as-hint commitment survives", () => {
     expect(body).toMatch(/HTTP\/1\.1 429 Too Many Requests/);
     expect(body).toMatch(/Retry-After: 15/);
     expect(body).toMatch(/"type": "https:\/\/errors\.driftstack\.dev\/concurrency-limit"/);
     expect(body).toMatch(/"title": "Concurrent session limit reached"/);
     expect(body).toMatch(/"status": 429/);
-    expect(body).toMatch(/"detail": "Account already has 20 active sessions; tier permits 20\."/);
-    expect(body).toMatch(/"current_sessions": 20/);
-    expect(body).toMatch(/"limit": 20/);
+    expect(body).toMatch(/"detail": "Account already has 24 active sessions; tier permits 24\."/);
+    expect(body).toMatch(/"current_sessions": 24/);
+    expect(body).toMatch(/"limit": 24/);
     expect(body).toMatch(
       /The <code>Retry-After<\/code> header is a hint, not a contract —\s*\n?\s*it's the time we estimate it'd take for one of your current\s*\n?\s*sessions to naturally complete \(based on your average session\s*\n?\s*duration\)\. Don't sleep blindly past it; respond when one of\s*\n?\s*your own sessions finishes\./,
     );
@@ -124,10 +124,14 @@ describe('W517.B apps/marketing-site/src/pages/docs/concurrency.astro content pa
     );
   });
 
-  it("Raising-the-cap framing pinned: 'Upgrade to a higher tier via /pricing — the new cap applies immediately on tier change. For Enterprise overrides above the default 500, email sales@driftstack.dev; we can lift the cap without a tier change for short-term campaign bursts.' — pinned so the immediate-on-tier-change + sales@-channel-for-campaign-bursts + 500-default-enterprise commitment survives", () => {
+  it("Raising-the-cap framing pinned: 'Upgrade to a higher tier via /pricing — the new cap applies immediately on tier change. For Enterprise overrides above the Enterprise default of 32, email sales@driftstack.dev; we can lift the cap without a tier change for short-term campaign bursts.' — pinned so the immediate-on-tier-change + sales@-channel-for-campaign-bursts + 32-Enterprise-default commitment survives", () => {
     expect(body).toMatch(
-      /Upgrade to a higher tier via\s*\n?\s*<a href="\/pricing">\/pricing<\/a> — the new cap applies\s*\n?\s*immediately on tier change\. For Enterprise overrides above\s*\n?\s*the default 500, email\s*\n?\s*<a href="mailto:sales@driftstack\.dev">sales@driftstack\.dev<\/a>;\s*\n?\s*we can lift the cap without a tier change for short-term\s*\n?\s*campaign bursts\./,
+      /Upgrade to a higher tier via\s*\n?\s*<a href="\/pricing">\/pricing<\/a> — the new cap applies\s*\n?\s*immediately on tier change\. For Enterprise overrides above\s*\n?\s*the Enterprise default of 32, email\s*\n?\s*<a href="mailto:sales@driftstack\.dev">sales@driftstack\.dev<\/a>;\s*\n?\s*we can lift the cap without a tier change for short-term\s*\n?\s*campaign bursts\./,
     );
+    // Anti-drift: the previous copy quoted a 500-default Enterprise cap.
+    // The Enterprise default is 32 (matches TIER_CONCURRENT_SESSION_LIMITS);
+    // ban the old 500 framing so it cannot creep back.
+    expect(body).not.toMatch(/the default 500/);
   });
 
   it("Observability framing pinned: 'Track your own concurrency from the dashboard or via GET /v1/account/me (the response includes concurrent_session_active alongside concurrent_session_cap).' + audit-log session.created + session.destroyed entries cross-link + /docs/audit-log — pinned so the 2-account-me-field (concurrent_session_active + concurrent_session_cap) + 2-audit-log-events (session.created + session.destroyed) + /docs/audit-log cross-ref survives", () => {
