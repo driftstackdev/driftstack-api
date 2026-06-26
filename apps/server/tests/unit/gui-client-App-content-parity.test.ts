@@ -13,9 +13,9 @@
 //     model is state-based, not URL-based — no need for react-router
 //     in a single-window desktop app, and Tauri's window doesn't
 //     have a real history stack to integrate with.'
-//   • View 10-variant union (sessions / live-session{sessionId} /
-//     sessions-history / profiles / recordings / recording-player
-//     {recordingId} / proxies / connectivity / fleet / settings).
+//   • View union (sessions / sessions-history / profiles /
+//     recordings / recording-player{recordingId} / proxies /
+//     connectivity / fleet / settings).
 //   • SettingsProvider → RecordingsProvider → Shell nesting.
 //   • V-263 hook-order framing pinned + Cmd+, handler.
 //   • V-244 first-run gate: apiKey === null && !wizardDismissed.
@@ -48,13 +48,18 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     );
   });
 
-  it("View 15-variant union: home / ai / recipes / sessions / live-session{sessionId} / sessions-history / profiles / recordings / recording-player{recordingId} / proxies / connectivity / fleet / team / billing / settings — pinned so the kind-tag taxonomy doesn't drift (e.g. a removed variant + a switch fall-through silently routes to the wrong view). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice; 'team' by the Teams-management slice (2026-06-16); 'logs' removed when the client-buffer nav surface was retired (2026-06-19); 'billing' added when the customer billing/crypto-checkout cluster was wired into nav (revenue path, 2026-06-19).", () => {
+  it("View 14-variant union: home / ai / recipes / sessions / sessions-history / profiles / recordings / recording-player{recordingId} / proxies / connectivity / fleet / team / billing / settings — pinned so the kind-tag taxonomy doesn't drift (e.g. a removed variant + a switch fall-through silently routes to the wrong view). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice; 'team' by the Teams-management slice (2026-06-16); 'logs' removed when the client-buffer nav surface was retired (2026-06-19); 'billing' added when the customer billing/crypto-checkout cluster was wired into nav (revenue path, 2026-06-19); 'live-session' removed when the legacy in-app polling session viewer was retired — the floating Simulator window is the only live-session UI now (2026-06-26).", () => {
     expect(body).toMatch(
-      /type View =\s*\n?\s*\| \{ kind: 'home' \}\s*\n?\s*\| \{ kind: 'ai'; profileId\?: string \}\s*\n?\s*\| \{ kind: 'recipes' \}\s*\n?\s*\| \{ kind: 'sessions' \}\s*\n?\s*\| \{ kind: 'live-session'; sessionId: string \}\s*\n?\s*\| \{ kind: 'sessions-history' \}\s*\n?\s*\| \{ kind: 'profiles'; profileId\?: string \}\s*\n?\s*\| \{ kind: 'recordings' \}\s*\n?\s*\| \{ kind: 'recording-player'; recordingId: string \}\s*\n?\s*\| \{ kind: 'proxies' \}\s*\n?\s*\| \{ kind: 'connectivity' \}\s*\n?\s*\| \{ kind: 'fleet' \}\s*\n?\s*\| \{ kind: 'team' \}\s*\n?\s*\| \{ kind: 'billing' \}\s*\n?\s*\| \{ kind: 'settings' \};/,
+      /type View =\s*\n?\s*\| \{ kind: 'home' \}\s*\n?\s*\| \{ kind: 'ai'; profileId\?: string \}\s*\n?\s*\| \{ kind: 'recipes' \}\s*\n?\s*\| \{ kind: 'sessions' \}\s*\n?\s*\| \{ kind: 'sessions-history' \}\s*\n?\s*\| \{ kind: 'profiles'; profileId\?: string \}\s*\n?\s*\| \{ kind: 'recordings' \}\s*\n?\s*\| \{ kind: 'recording-player'; recordingId: string \}\s*\n?\s*\| \{ kind: 'proxies' \}\s*\n?\s*\| \{ kind: 'connectivity' \}\s*\n?\s*\| \{ kind: 'fleet' \}\s*\n?\s*\| \{ kind: 'team' \}\s*\n?\s*\| \{ kind: 'billing' \}\s*\n?\s*\| \{ kind: 'settings' \};/,
     );
     expect(body).not.toMatch(/\| \{ kind: 'logs' \}/);
     expect(body).not.toMatch(/case 'logs':/);
     expect(body).not.toMatch(/LogsView/);
+    // The legacy in-app session viewer is fully removed — no view variant,
+    // no render case, no import, no sidebar fold-in.
+    expect(body).not.toMatch(/\| \{ kind: 'live-session'; sessionId: string \}/);
+    expect(body).not.toMatch(/case 'live-session':/);
+    expect(body).not.toMatch(/LiveSessionView/);
   });
 
   it('Provider nesting: SettingsProvider → RecordingsProvider → Shell — pinned so RecordingsProvider stays inside SettingsProvider (RecordingsProvider depends on the client from SettingsContext; flipping the order breaks recording persistence)', () => {
@@ -101,15 +106,16 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     expect(body).not.toMatch(/redactBaseUrl/);
   });
 
-  it("Sidebar mount pinned: imports { Sidebar, type SidebarViewKind } and renders <Sidebar current={sidebarSectionFor(view)} /> in the shell — the 4-section taxonomy itself moved to apps/gui-client/src/components/Sidebar.tsx (covered by W486.S parity), so App.tsx now only proves the mount wires up correctly + the sidebarSectionFor() helper folds DRILLED-IN sub-views ('live-session'→'sessions', 'recording-player'→'recordings') onto their parent section so the nav stays lit (replacing the old `view.kind as SidebarViewKind` cast that matched nothing for drill-in views)", () => {
+  it("Sidebar mount pinned: imports { Sidebar, type SidebarViewKind } and renders <Sidebar current={sidebarSectionFor(view)} /> in the shell — the 4-section taxonomy itself moved to apps/gui-client/src/components/Sidebar.tsx (covered by W486.S parity), so App.tsx now only proves the mount wires up correctly + the sidebarSectionFor() helper folds the DRILLED-IN sub-view ('recording-player'→'recordings') onto its parent section so the nav stays lit (replacing the old `view.kind as SidebarViewKind` cast that matched nothing for drill-in views); the 'live-session'→'sessions' fold was dropped with the in-app session viewer (2026-06-26)", () => {
     expect(body).toMatch(
       /import \{ Sidebar, type SidebarViewKind \} from '\.\/components\/Sidebar';/,
     );
     expect(body).toMatch(/<Sidebar\s*\n?\s*current=\{sidebarSectionFor\(view\)\}/);
     expect(body).toMatch(
-      /export function sidebarSectionFor\(view: View\): SidebarViewKind \{\s*\n?\s*switch \(view\.kind\) \{\s*\n?\s*case 'live-session':\s*\n?\s*return 'sessions';\s*\n?\s*case 'recording-player':\s*\n?\s*return 'recordings';\s*\n?\s*default:\s*\n?\s*return view\.kind;\s*\n?\s*\}\s*\n?\s*\}/,
+      /export function sidebarSectionFor\(view: View\): SidebarViewKind \{\s*\n?\s*switch \(view\.kind\) \{\s*\n?\s*case 'recording-player':\s*\n?\s*return 'recordings';\s*\n?\s*default:\s*\n?\s*return view\.kind;\s*\n?\s*\}\s*\n?\s*\}/,
     );
     expect(body).not.toMatch(/<Sidebar\s*\n?\s*current=\{view\.kind as SidebarViewKind\}/);
+    expect(body).not.toMatch(/case 'live-session':\s*\n?\s*return 'sessions';/);
   });
 
   it("loading branch: while settings load, render nothing rather than flashing the wizard — pinned so customers don't see a flash-of-wizard before settings hydrate (which would happen if apiKey===null is evaluated against the pre-hydration default state); Loading… section-label rendered in a centered surface-base wrapper", () => {
@@ -119,9 +125,9 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     expect(body).toMatch(/<span className="section-label text-ink-muted">Loading…<\/span>/);
   });
 
-  it("CurrentView switch covers all 15 View variants — pinned so a removed View variant + a missing case doesn't fall through to an exhaustiveness error (and so adding a new variant to the View union forces matching the new case here)", () => {
+  it("CurrentView switch covers all 14 View variants — pinned so a removed View variant + a missing case doesn't fall through to an exhaustiveness error (and so adding a new variant to the View union forces matching the new case here); 'live-session' removed with the in-app session viewer (2026-06-26)", () => {
     expect(body).toMatch(/case 'sessions':/);
-    expect(body).toMatch(/case 'live-session':/);
+    expect(body).not.toMatch(/case 'live-session':/);
     expect(body).toMatch(/case 'sessions-history':/);
     expect(body).toMatch(/case 'profiles':/);
     expect(body).toMatch(/case 'recordings':/);

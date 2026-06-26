@@ -18,7 +18,6 @@ import { SettingsProvider, useSettings } from './lib/SettingsContext';
 import { useConnectionStatus } from './lib/use-connection-status';
 import { ConnectivityView } from './views/ConnectivityView';
 import { FirstRunWizard } from './views/FirstRunWizard';
-import { LiveSessionView } from './views/LiveSessionView';
 import { CommandPalette, type PaletteAction } from './components/CommandPalette';
 import { ToastProvider } from './lib/toasts';
 import { AgentChatView } from './views/AgentChatView';
@@ -43,7 +42,6 @@ export type View =
   | { kind: 'ai'; profileId?: string }
   | { kind: 'recipes' }
   | { kind: 'sessions' }
-  | { kind: 'live-session'; sessionId: string }
   | { kind: 'sessions-history' }
   | { kind: 'profiles'; profileId?: string }
   | { kind: 'recordings' }
@@ -415,24 +413,7 @@ function CurrentView({
     case 'recipes':
       return <RecipesView />;
     case 'sessions':
-      return (
-        <SessionsView
-          onView={(sessionId) => onNavigate({ kind: 'live-session', sessionId })}
-          onGoToSettings={() => onNavigate({ kind: 'settings' })}
-        />
-      );
-    case 'live-session':
-      return (
-        // W609 — key by sessionId so a tab switch fully remounts the view
-        // (fresh frame poll, URL bar, fps window — no stale-session bleed).
-        <LiveSessionView
-          key={view.sessionId}
-          sessionId={view.sessionId}
-          onBack={() => onNavigate({ kind: 'sessions' })}
-          onSwitchSession={(sessionId) => onNavigate({ kind: 'live-session', sessionId })}
-          onNewTab={() => onNavigate({ kind: 'profiles' })}
-        />
-      );
+      return <SessionsView onGoToSettings={() => onNavigate({ kind: 'settings' })} />;
     case 'settings':
       return <SettingsView />;
     case 'proxies':
@@ -463,7 +444,6 @@ function CurrentView({
         <ProfilesView
           initialProfileId={view.profileId}
           onGoToSettings={() => onNavigate({ kind: 'settings' })}
-          onOpenSession={(sessionId) => onNavigate({ kind: 'live-session', sessionId })}
           onAssist={(profileId) => onNavigate({ kind: 'ai', profileId })}
         />
       );
@@ -481,15 +461,13 @@ function CurrentView({
 // ─── chrome ───────────────────────────────────────────────────────
 
 // Map the active view to the sidebar section that should read as "you are here".
-// Most views are 1:1 with a sidebar item, but the DRILLED-IN sub-views
-// ('live-session', 'recording-player') aren't sidebar entries — without this
-// they fell through the old `view.kind as SidebarViewKind` cast and matched
-// nothing, so the nav lost its active highlight. Fold them onto their parent
-// section so drilling in keeps the section lit.
+// Most views are 1:1 with a sidebar item, but the DRILLED-IN sub-view
+// ('recording-player') isn't a sidebar entry — without this it fell through the
+// old `view.kind as SidebarViewKind` cast and matched nothing, so the nav lost
+// its active highlight. Fold it onto its parent section so drilling in keeps the
+// section lit.
 export function sidebarSectionFor(view: View): SidebarViewKind {
   switch (view.kind) {
-    case 'live-session':
-      return 'sessions';
     case 'recording-player':
       return 'recordings';
     default:
