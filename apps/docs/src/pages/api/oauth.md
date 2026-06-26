@@ -120,14 +120,27 @@ the customer's behalf once they approve.
 Body:
 
 ```json
-{ "authorization_id": "<from-step-1>", "account_id": "<customer's-uuid>" }
+{ "authorization_id": "<from-step-1>" }
 ```
+
+The approving account is derived from the authenticated dashboard
+session — `account_id` is intentionally **not** accepted from the
+body (a body-supplied `account_id` is rejected to prevent
+cross-account takeover).
 
 Response:
 
 ```json
-{ "redirect_to": "https://your-app/callback?code=<opaque>&state=<from-step-1>" }
+{
+  "code": "<opaque>",
+  "redirect_uri": "https://your-app/callback",
+  "state": "<from-step-1>"
+}
 ```
+
+The dashboard assembles the final
+`<redirect_uri>?code=<opaque>&state=<state>` URL and redirects the
+browser there.
 
 You shouldn't call this endpoint directly — the customer-dashboard
 does. Your job is to receive the redirect at step 3.
@@ -253,9 +266,12 @@ to your `client_id` for that account.
 |    401 | `invalid_client`      | `client_id` + `client_secret` mismatch OR client revoked      |
 |    401 | `unauthorized_client` | the client isn't allowed to use this grant type               |
 
-All responses use `application/problem+json` per RFC 7807 (status,
-type, title, detail). The `type` field is the value in the table
-above prefixed with `urn:driftstack:oauth:`.
+All responses use `application/problem+json` per RFC 9457 (status,
+type, title, detail). The `type` field is a real RFC 9457 type URI:
+`https://errors.driftstack.dev/bad-request` for the 400 cases and
+`https://errors.driftstack.dev/unauthorized` for the 401 cases. The
+OAuth code from the table above (`invalid_grant`, `invalid_client`,
+…) appears in the `title`/`detail`.
 
 ## Implementation notes
 
