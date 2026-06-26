@@ -69,7 +69,7 @@ Query parameters:
 | Parameter | Required | Notes                                    |
 | --------- | -------- | ---------------------------------------- |
 | `since`   | optional | ISO-8601 cutoff; defaults to 30 days ago |
-| `limit`   | optional | 1–200; defaults to 50                    |
+| `limit`   | optional | 1–100; defaults to 50                    |
 
 Response (`200`):
 
@@ -186,8 +186,8 @@ rounded to three decimal places.
 ## Email subscriptions — `POST /v1/status/subscribe`
 
 Visitors can subscribe to email notifications for every public
-incident. Double-opt-in (RFC 6233 compliant) — a confirmation email is
-sent before the address is recorded as subscribed.
+incident. Double-opt-in — a confirmation email is sent before the
+address is recorded as subscribed.
 
 IP rate-limit: 3 requests per minute per IP on all three subscription
 routes (subscribe / confirm / unsubscribe).
