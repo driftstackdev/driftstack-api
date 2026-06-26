@@ -33,7 +33,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'What happens when I hit my concurrent cap?',
-        a: 'Session-creation requests fail with HTTP 429 + a structured RFC 7807 problem-detail pointing at the cap-reached state and (where applicable) the next-tier upgrade path. Existing in-flight sessions are not interrupted. The cap is enforced at session-creation time, not mid-session. To increase concurrent capacity, upgrade to a higher-cap tier or contact sales for Enterprise custom limits.',
+        a: 'Session-creation requests fail with HTTP 429 + a structured RFC 9457 problem-detail pointing at the cap-reached state and (where applicable) the next-tier upgrade path. Existing in-flight sessions are not interrupted. The cap is enforced at session-creation time, not mid-session. To increase concurrent capacity, upgrade to a higher-cap tier or contact sales for Enterprise custom limits.',
       },
       {
         q: 'Are there setup fees on any tier?',
@@ -232,7 +232,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'What if a session fails?',
-        a: 'Session lifecycle is observable end-to-end via the SDK and the dashboard. Failed sessions return structured error responses (RFC 7807 problem-types); recordings + state captures up to the failure point stay available. Sessions that fail in the orchestration layer (driver crashes, fleet unavailability, etc.) do not consume your concurrent slot — the slot frees immediately on failure detection.',
+        a: 'Session lifecycle is observable end-to-end via the SDK and the dashboard. Failed sessions return structured error responses (RFC 9457 problem-types); recordings + state captures up to the failure point stay available. Sessions that fail in the orchestration layer (driver crashes, fleet unavailability, etc.) do not consume your concurrent slot — the slot frees immediately on failure detection.',
       },
       {
         q: 'What\'s the uptime target?',

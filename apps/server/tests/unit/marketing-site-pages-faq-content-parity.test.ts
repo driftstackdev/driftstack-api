@@ -119,9 +119,9 @@ describe('W500.A apps/marketing-site/src/pages/faq.astro content parity', () => 
     );
   });
 
-  it("Cap-reached HTTP 429 + RFC 7807 framing: 'Session-creation requests fail with HTTP 429 + a structured RFC 7807 problem-detail pointing at the cap-reached state and (where applicable) the next-tier upgrade path. Existing in-flight sessions are not interrupted.' — pinned so the 429 status + RFC 7807 + non-interruption contract stay explicit (drift to dropping non-interruption would let customers think hitting cap mid-fleet would kill in-flight sessions)", () => {
+  it("Cap-reached HTTP 429 + RFC 9457 framing: 'Session-creation requests fail with HTTP 429 + a structured RFC 9457 problem-detail pointing at the cap-reached state and (where applicable) the next-tier upgrade path. Existing in-flight sessions are not interrupted.' — pinned so the 429 status + RFC 9457 + non-interruption contract stay explicit (drift to dropping non-interruption would let customers think hitting cap mid-fleet would kill in-flight sessions)", () => {
     expect(body).toMatch(
-      /Session-creation requests fail with HTTP 429 \+ a structured RFC 7807 problem-detail/,
+      /Session-creation requests fail with HTTP 429 \+ a structured RFC 9457 problem-detail/,
     );
     expect(body).toMatch(/Existing in-flight sessions are not interrupted\./);
   });

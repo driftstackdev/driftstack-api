@@ -14,7 +14,7 @@
 //   • Concurrent-cap ladder (Personal = 1 / Team = 3
 //     / Agency = 8 / API Starter = 2 / Builder = 8 /
 //     Scale = 24 / Enterprise = custom).
-//   • 429 + RFC 7807 problem-detail on cap reached.
+//   • 429 + RFC 9457 problem-detail on cap reached.
 //   • Annual billing 20% off / 30-day cancel-before-renewal.
 //   • Cancel → "suspended" + 30-day grace-period + DPA
 //     retention schedule.
@@ -86,8 +86,8 @@ describe('W368.A marketing-site /faq page content parity', () => {
     );
   });
 
-  it('cap-reached behavior: 429 + RFC 7807 problem-detail + in-flight not interrupted', () => {
-    expect(body).toMatch(/HTTP 429 \+ a structured RFC 7807 problem-detail/);
+  it('cap-reached behavior: 429 + RFC 9457 problem-detail + in-flight not interrupted', () => {
+    expect(body).toMatch(/HTTP 429 \+ a structured RFC 9457 problem-detail/);
     expect(body).toMatch(/Existing in-flight sessions are not interrupted/);
   });
 

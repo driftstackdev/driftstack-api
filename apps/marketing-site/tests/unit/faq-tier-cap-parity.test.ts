@@ -41,7 +41,7 @@ describe('W261.C /faq ↔ TIER_CONCURRENT_SESSION_LIMITS parity', () => {
 
   it('429 cap-reached behavior is described per the live policy', () => {
     expect(page).toMatch(/HTTP 429/);
-    expect(page).toMatch(/RFC 7807 problem-detail/i);
+    expect(page).toMatch(/RFC 9457 problem-detail/i);
   });
 
   it('free-tier framing pinned: $0-forever / one concurrent / manual-only (no API) / no metering', () => {

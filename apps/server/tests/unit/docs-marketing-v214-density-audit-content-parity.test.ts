@@ -138,7 +138,7 @@ describe('W572.C /docs/marketing/v214-density-audit.md content parity', () => {
     );
     expect(body).toMatch(/Per founder direction\./);
     expect(body).toMatch(/\| Pricing model\s+\| "What happens when I hit my concurrent cap\?"/);
-    expect(body).toMatch(/"fail with HTTP 429 \+ a structured RFC 7807 problem-detail"/);
+    expect(body).toMatch(/"fail with HTTP 429 \+ a structured RFC 9457 problem-detail"/);
     expect(body).toMatch(
       /\*\*Leave dense\*\* — answer is for the developer audience; HTTP status \+ RFC names are signal of correctness, not bug/,
     );
