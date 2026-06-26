@@ -26,6 +26,7 @@ import {
   type SessionPurpose,
   type WaitRequest,
 } from '@driftstack/api-types';
+import { randomUUID } from 'node:crypto';
 import type { AccountContext } from './auth.js';
 import type { Driver } from '../drivers/types.js';
 import type { GUIInputRequest } from '../schemas/gui-input.js';
@@ -154,6 +155,12 @@ export interface SessionRepo {
    * the lock.
    */
   insertSessionIfUnderLimit(input: NewSessionInput, limit: number): Promise<SessionRecord | null>;
+  /**
+   * DoS hardening — bind the real driver session id onto a session row that
+   * was inserted with a placeholder id to RESERVE its concurrency slot before
+   * the (slow) worker dispatch. Called once the worker is live.
+   */
+  setSessionDriverSessionId(id: string, driverSessionId: string): Promise<void>;
   /** Find a session by id, scoped to the supplied account. */
   findSession(id: string, accountId: string): Promise<SessionRecord | null>;
   /** Find a session by id WITHOUT account scoping (admin force-actions only). */
@@ -315,17 +322,6 @@ export class SessionsService {
     const tier = opts.effectiveTier ?? ctx.account.tier;
 
     const limit = concurrentSessionLimitFor(tier);
-    // Fast-fail BEFORE spinning a real browser when already clearly at the cap
-    // (the common case). This is an optimisation, NOT the enforcement — the
-    // count-then-create-then-insert sequence is a TOCTOU (the driver.createSession
-    // below is slow, so N concurrent creates could all pass this check). The
-    // ACTUAL cap is enforced atomically by insertSessionIfUnderLimit (a locked
-    // count+insert) further down; the loser of a concurrent race is rejected
-    // there even if it slips past this pre-check.
-    const active = await this.deps.repo.countActiveSessions(accountId);
-    if (active >= limit) {
-      throw new ConcurrencyLimitError(active, limit);
-    }
 
     const archetype = body.archetype ?? LOCKED_ARCHETYPE_ID;
     const purpose: SessionPurpose = body.purpose ?? DEFAULT_SESSION_PURPOSE;
@@ -333,50 +329,64 @@ export class SessionsService {
     // (the harness always gets a persona). Passed to the driver create-input;
     // not persisted (a create-time harness config, not a queryable column).
     const behavioralProfile = body.behavioral_profile ?? DEFAULT_BEHAVIORAL_PROFILE;
-    const driverResult = await this.deps.driver.createSession({
-      archetype,
-      purpose,
-      behavioralProfile,
-      ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
-    });
 
-    let inserted: SessionRecord | null;
-    try {
-      inserted = await this.deps.repo.insertSessionIfUnderLimit(
-        {
-          accountId,
-          // apiKey stays the member's — that's the actor; the owner's
-          // audit log shows which member's key created the session.
-          apiKeyId: ctx.apiKey.id,
-          driverSessionId: driverResult.driverSessionId,
-          archetype,
-          purpose,
-          label: body.label ?? null,
-          metadata: body.metadata ?? null,
-        },
-        limit,
-      );
-    } catch (err) {
-      // Orphan guard: the driver session is already live, but the DB
-      // insert failed — so nothing tracks it. countActiveSessions and the
-      // duration-sweep auto-destroy are both DB-row-based, and the Driver
-      // contract has no idle self-expiry, so without this the real browser
-      // session would leak indefinitely (cost-to-serve, with no reaper).
-      // Best-effort tear it down, then re-throw the ORIGINAL error — a
-      // failure of the rollback destroy must not mask the insert error.
-      await this.deps.driver.destroy(driverResult.driverSessionId).catch(() => {});
-      throw err;
-    }
-    if (inserted === null) {
-      // The atomic cap guard rejected this insert: a concurrent create won the
-      // last slot between our fast-fail pre-check and the locked count+insert.
-      // The driver session we just spun is now orphaned (no DB row) — tear it
-      // down with the same reasoning as the catch above, then surface the cap
-      // error (active == limit at this point).
-      await this.deps.driver.destroy(driverResult.driverSessionId).catch(() => {});
+    // DoS hardening — RESERVE the cap slot atomically BEFORE spinning a real
+    // browser worker. Previously driver.createSession (the costly op) ran
+    // first and the atomic cap check came after, so N concurrent over-cap
+    // creates each spun a worker and the losers were torn down only via a
+    // best-effort destroy whose failure leaked a live worker (no reaper for
+    // a DB-rowless worker). Now we insert the session row first — with a
+    // placeholder driverSessionId, under the same per-account advisory lock
+    // (insertSessionIfUnderLimit) — so an over-cap create is rejected with
+    // ZERO worker spun. The real driver id is filled in after dispatch; on
+    // dispatch failure the reservation row is marked destroyed so it stops
+    // counting against the cap (and a DB-tracked row means even a missed
+    // teardown is reapable, unlike the old orphan).
+    const reservationDriverId = `reserving:${randomUUID()}`;
+    const reserved = await this.deps.repo.insertSessionIfUnderLimit(
+      {
+        accountId,
+        // apiKey stays the member's — that's the actor; the owner's
+        // audit log shows which member's key created the session.
+        apiKeyId: ctx.apiKey.id,
+        driverSessionId: reservationDriverId,
+        archetype,
+        purpose,
+        label: body.label ?? null,
+        metadata: body.metadata ?? null,
+      },
+      limit,
+    );
+    if (reserved === null) {
+      // At/over the cap — no worker was spun. The count at this point is the
+      // limit (the locked count rejected the insert).
       throw new ConcurrencyLimitError(limit, limit);
     }
-    const record: SessionRecord = inserted;
+
+    let driverResult: { driverSessionId: string };
+    try {
+      driverResult = await this.deps.driver.createSession({
+        archetype,
+        purpose,
+        behavioralProfile,
+        ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
+      });
+    } catch (err) {
+      // Worker dispatch failed AFTER the slot was reserved. Release the
+      // reservation row so it stops counting against the cap (mark destroyed,
+      // not delete — keeps an auditable trail + matches the duration-sweep /
+      // countActiveSessions destroyedAt semantics). Best-effort; a failure to
+      // release must not mask the original dispatch error.
+      await this.deps.repo
+        .updateSessionStatus(reserved.id, 'errored', { destroyedAt: new Date() })
+        .catch(() => {});
+      throw err;
+    }
+
+    // Bind the real driver session id onto the reserved row now that the
+    // worker is live.
+    await this.deps.repo.setSessionDriverSessionId(reserved.id, driverResult.driverSessionId);
+    const record: SessionRecord = { ...reserved, driverSessionId: driverResult.driverSessionId };
 
     await this.deps.repo.updateSessionStatus(record.id, 'ready');
     await this.deps.repo.recordEvent({

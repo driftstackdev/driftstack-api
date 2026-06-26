@@ -80,6 +80,17 @@ export class DrizzleSessionRepo implements SessionRepo {
     });
   }
 
+  // DoS hardening — bind the real driver session id onto a row inserted with
+  // a placeholder id to reserve its concurrency slot before the slow worker
+  // dispatch. Touches only the driver_session_id (+ updatedAt); status is
+  // advanced separately by the create flow.
+  async setSessionDriverSessionId(id: string, driverSessionId: string): Promise<void> {
+    await this.database.db
+      .update(sessions)
+      .set({ driverSessionId, updatedAt: new Date() })
+      .where(eq(sessions.id, id));
+  }
+
   async findSession(id: string, accountId: string): Promise<SessionRecord | null> {
     const [row] = await this.database.db
       .select()

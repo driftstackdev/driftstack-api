@@ -112,6 +112,11 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toMatch(
       /insertSessionIfUnderLimit\(\s*input: NewSessionInput,\s*limit: number,?\s*\): Promise<SessionRecord \| null>;/,
     );
+    // DoS hardening — bind the real driver id onto a reservation row (the
+    // create flow reserves the cap slot BEFORE the slow worker dispatch).
+    expect(body).toMatch(
+      /setSessionDriverSessionId\(id: string, driverSessionId: string\): Promise<void>;/,
+    );
     expect(body).toMatch(
       /\/\*\* Find a session by id, scoped to the supplied account\. \*\/\s*\n?\s*findSession\(id: string, accountId: string\): Promise<SessionRecord \| null>;/,
     );
@@ -166,31 +171,36 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     );
   });
 
-  it('V-326e1 create: ConcurrencyLimitError when active >= limit; cap on OWNER account via effectiveAccountId opt', () => {
+  it('V-326e1 create: cap on OWNER account via effectiveAccountId opt', () => {
     expect(body).toMatch(
       /\/\/ V-326e1 — when effectiveAccountId is set \(route layer resolved\s*\n?\s*\/\/ X-Driftstack-Account \+ verified the caller has 'admin' role on\s*\n?\s*\/\/ the owner's team\), the new session is OWNED by the team owner\s*\n?\s*\/\/ and counts against the OWNER's concurrent cap\./,
     );
     expect(body).toMatch(/const accountId = opts\.effectiveAccountId \?\? ctx\.account\.id;/);
     expect(body).toMatch(/const limit = concurrentSessionLimitFor\(tier\);/);
-    expect(body).toMatch(
-      /const active = await this\.deps\.repo\.countActiveSessions\(accountId\);/,
-    );
-    expect(body).toMatch(
-      /if \(active >= limit\) \{\s*\n?\s*throw new ConcurrencyLimitError\(active, limit\);\s*\n?\s*\}/,
-    );
   });
 
-  it('create: the cap is ENFORCED atomically via insertSessionIfUnderLimit (TOCTOU fix) — the countActiveSessions pre-check is fast-fail only; a null result tears down the orphaned driver session + throws ConcurrencyLimitError (NOT a bare racy insertSession)', () => {
-    // Drift back to a bare `repo.insertSession` in create() would reopen the
-    // concurrent-cap bypass (N parallel creates all pass a stale pre-check),
-    // so pin the atomic call + the null→orphan-rollback→limit-error path.
-    expect(body).toMatch(/inserted = await this\.deps\.repo\.insertSessionIfUnderLimit\(/);
-    expect(body).toMatch(/^\s*limit,\s*$/m);
+  it('create (DoS hardening): the cap slot is RESERVED atomically via insertSessionIfUnderLimit BEFORE driver.createSession — an over-cap create (null result) throws ConcurrencyLimitError with ZERO worker spun; a dispatch failure releases the reservation row; the real driver id is bound after dispatch', () => {
+    // The whole fix: reserve-first so an over-cap / failed create never spins
+    // a worker (no orphan to best-effort-teardown). Pin the ordering + the
+    // reservation placeholder + the dispatch-failure release + the bind.
+    expect(body).toMatch(/const reservationDriverId = `reserving:\$\{randomUUID\(\)\}`;/);
+    expect(body).toMatch(/const reserved = await this\.deps\.repo\.insertSessionIfUnderLimit\(/);
+    // The reservation insert precedes the worker dispatch in source order.
+    const reserveIdx = body.indexOf('insertSessionIfUnderLimit(');
+    const dispatchIdx = body.indexOf('await this.deps.driver.createSession({');
+    expect(reserveIdx).toBeGreaterThan(0);
+    expect(dispatchIdx).toBeGreaterThan(reserveIdx);
     expect(body).toMatch(
-      /if \(inserted === null\) \{[\s\S]*?driver\.destroy\(driverResult\.driverSessionId\)[\s\S]*?throw new ConcurrencyLimitError\(limit, limit\);/,
+      /if \(reserved === null\) \{[\s\S]*?throw new ConcurrencyLimitError\(limit, limit\);/,
     );
-    // The racy bare insert must NOT be the create-path enforcement.
-    expect(body).not.toMatch(/record = await this\.deps\.repo\.insertSession\(/);
+    // Dispatch failure releases the reservation row (errored + destroyedAt).
+    expect(body).toMatch(
+      /\.updateSessionStatus\(reserved\.id, 'errored', \{ destroyedAt: new Date\(\) \}\)/,
+    );
+    // Real driver id bound onto the reserved row after dispatch.
+    expect(body).toMatch(
+      /await this\.deps\.repo\.setSessionDriverSessionId\(reserved\.id, driverResult\.driverSessionId\);/,
+    );
   });
 
   it('create: archetype = body.archetype ?? LOCKED_ARCHETYPE_ID; purpose = body.purpose ?? DEFAULT_SESSION_PURPOSE; emits session.created audit', () => {

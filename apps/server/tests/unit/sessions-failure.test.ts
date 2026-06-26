@@ -105,6 +105,11 @@ class StubRepo implements SessionRepo {
     if (active >= limit) return Promise.resolve(null);
     return this.insertSession(input);
   }
+  setSessionDriverSessionId(id: string, driverSessionId: string): Promise<void> {
+    const r = this.sessions.get(id);
+    if (r) this.sessions.set(id, { ...r, driverSessionId, updatedAt: new Date() });
+    return Promise.resolve();
+  }
   findSession(id: string, accountId: string): Promise<SessionRecord | null> {
     const r = this.sessions.get(id);
     if (!r || r.accountId !== accountId) return Promise.resolve(null);
@@ -177,8 +182,16 @@ class ThrowingDriver implements Driver {
    *  create-rollback test assert the orphaned driver session was reaped. */
   readonly destroyedIds: string[] = [];
 
+  /** Opt-in: when set, the NEXT createSession() rejects (simulates a worker-
+   *  dispatch failure AFTER the reservation slot was taken). */
+  private throwOnCreate: Error | null = null;
+
   primeNextThrow(args: { name: string; message: string }): void {
     this.throwOnNext = args;
+  }
+
+  primeCreateThrow(err: Error): void {
+    this.throwOnCreate = err;
   }
 
   private throwIfArmed(): void {
@@ -191,6 +204,11 @@ class ThrowingDriver implements Driver {
   }
 
   createSession(): Promise<{ driverSessionId: string }> {
+    if (this.throwOnCreate !== null) {
+      const err = this.throwOnCreate;
+      this.throwOnCreate = null;
+      return Promise.reject(err);
+    }
     this.nextId += 1;
     return Promise.resolve({ driverSessionId: `mock-${this.nextId.toString()}` });
   }
@@ -397,11 +415,10 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     }
   });
 
-  it('create: a DB insertSession failure rolls back the live driver session (no orphan)', async () => {
-    // The orphan: driver.createSession already spun up a real browser
-    // session, but the DB insert failed — countActiveSessions + the
-    // duration-sweep auto-destroy are both DB-row-based, so without the
-    // rollback the driver session would leak with no reaper.
+  it('create: a DB reservation-insert failure spins NO worker (the slot is reserved before dispatch)', async () => {
+    // DoS hardening — the reservation insert now runs BEFORE driver.createSession.
+    // When it throws, no worker was ever spun, so there is nothing to orphan or
+    // tear down. The ORIGINAL insert error still propagates.
     const { service, driver, repo } = buildService();
     const ctx = buildCtx();
     const insertErr = new Error('DB insertSession failed');
@@ -413,19 +430,16 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     } catch (e) {
       caught = e;
     }
-    // The ORIGINAL insert error propagates (the best-effort rollback
-    // destroy must never mask it).
     expect(caught).toBe(insertErr);
-    // The driver session minted by createSession (mock-1) was torn down.
-    expect(driver.destroyedIds).toEqual(['mock-1']);
+    // No driver session was spun — createSession never ran (reserve-first).
+    expect(driver.destroyedIds).toEqual([]);
   });
 
-  it('create: the atomic cap guard returning null (concurrent-race loser) rolls back the driver session + throws ConcurrencyLimitError', async () => {
-    // The fast-fail pre-check passes (countActiveSessions=0), but the locked
-    // insertSessionIfUnderLimit returns null — a concurrent create took the
-    // last slot between the pre-check and the locked insert. The driver
-    // session already spun (mock-1) must be torn down (same orphan reasoning
-    // as the insert-failure case) and the cap error surfaced (not a 500).
+  it('create: the atomic cap guard returning null (over cap) spins NO worker + throws ConcurrencyLimitError', async () => {
+    // DoS hardening — the atomic cap check is the FIRST step now. Over the cap
+    // it returns null BEFORE driver.createSession, so an over-cap create never
+    // spins a worker (the whole point of the fix: no worker to orphan, no
+    // best-effort teardown to fail). The cap error surfaces, not a 500.
     const { service, driver, repo } = buildService();
     const ctx = buildCtx();
     repo.overCapOnInsert = true;
@@ -437,14 +451,38 @@ describe('SessionsService — V-090 driver-failure capture', () => {
       caught = e;
     }
     expect(caught).toBeInstanceOf(ConcurrencyLimitError);
-    expect(driver.destroyedIds).toEqual(['mock-1']);
+    // No worker spun for an over-cap create.
+    expect(driver.destroyedIds).toEqual([]);
   });
 
-  it('create: a SUCCESSFUL insert does NOT roll back the driver session', async () => {
+  it('create: a worker-DISPATCH failure (after the slot is reserved) releases the reservation row so it stops counting against the cap', async () => {
+    // The slot is reserved, then driver.createSession throws. The reservation
+    // row must be released (status errored + destroyedAt) so it stops counting
+    // against the cap; the dispatch error propagates.
+    const { service, repo, driver } = buildService();
+    const ctx = buildCtx();
+    const driverThrow = new Error('worker dispatch failed');
+    driver.primeCreateThrow(driverThrow);
+
+    let caught: unknown;
+    try {
+      await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBe(driverThrow);
+    // The reservation row (sess-0000) was released (errored + destroyedAt) so
+    // it no longer counts against the cap — no leaked slot.
+    const reserved = repo.read('sess-0000');
+    expect(reserved?.status).toBe('errored');
+    expect(reserved?.destroyedAt).toBeInstanceOf(Date);
+  });
+
+  it('create: a SUCCESSFUL reservation + dispatch spins exactly one worker, no teardown', async () => {
     const { service, driver } = buildService();
     const ctx = buildCtx();
     await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
-    // No rollback on the happy path — the session is live + tracked.
+    // No teardown on the happy path — the session is live + tracked.
     expect(driver.destroyedIds).toEqual([]);
   });
 

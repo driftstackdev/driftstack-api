@@ -63,6 +63,15 @@ export class InMemorySessionsRepo implements SessionRepo {
     return this.insertSession(input);
   }
 
+  // DoS hardening — bind the real driver session id onto a reservation row.
+  setSessionDriverSessionId(id: string, driverSessionId: string): Promise<void> {
+    const s = this.sessions.get(id);
+    if (s) {
+      this.sessions.set(id, { ...s, driverSessionId, updatedAt: new Date() });
+    }
+    return Promise.resolve();
+  }
+
   findSession(id: string, accountId: string): Promise<SessionRecord | null> {
     const s = this.sessions.get(id);
     if (!s || s.accountId !== accountId) return Promise.resolve(null);
