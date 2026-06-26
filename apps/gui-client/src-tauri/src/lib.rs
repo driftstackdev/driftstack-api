@@ -176,6 +176,17 @@ pub fn run() {
                     // Multi-window: quit only when the LAST simulator window closes (not
                     // on `main`'s close), so closing one iPhone doesn't kill the others.
                     attach_quit_when_last_window_closes(app.handle().clone(), &win);
+                    // When `main` is closed, drop its session claim so re-opening that
+                    // SAME first session opens a fresh window instead of focusing a
+                    // window that no longer exists (which silently did nothing).
+                    let main_session_handle = app.handle().clone();
+                    win.on_window_event(move |event| {
+                        if matches!(event, tauri::WindowEvent::Destroyed) {
+                            if let Ok(mut g) = main_session_handle.state::<MainSession>().0.lock() {
+                                *g = None;
+                            }
+                        }
+                    });
                 }
             }
             Ok(())
@@ -246,8 +257,17 @@ fn open_or_focus_sim_window(app: &tauri::AppHandle, label: &str, b64: &str) {
         if let Some(win) = app.get_webview_window("main") {
             let _ = win.unminimize();
             let _ = win.set_focus();
+            return;
         }
-        return;
+        // `main` claims this session but its window is GONE (the user closed
+        // it). Without this fall-through we'd silently return → re-opening the
+        // first session did nothing. Clear the stale claim and build a fresh
+        // `sim-<label>` window below (the Destroyed handler on `main` normally
+        // clears MainSession; this is a belt-and-suspenders guard in case the
+        // close raced this re-open).
+        if let Ok(mut g) = app.state::<MainSession>().0.lock() {
+            *g = None;
+        }
     }
     let win_label = format!("sim-{label}");
     if let Some(win) = app.get_webview_window(&win_label) {
