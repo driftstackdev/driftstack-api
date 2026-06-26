@@ -181,6 +181,24 @@ describe('AgentChatView Save-as-recipe', () => {
   });
 });
 
+describe('AgentChatView live-view toggle (narrow widths)', () => {
+  it('a "Live view" toggle reveals the live pane as an overlay (it is not silently dropped below lg)', () => {
+    chatState = baseChat({ session: SESSION, turns: [] });
+    const { container } = render(<AgentChatView />);
+    const pane = container.querySelector('[data-component="ai-automation-live-pane"]');
+    // Closed initially → the pane carries the `hidden` class (no overlay).
+    expect(pane?.className).toContain('hidden');
+    // Toggle it open.
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle live view' }));
+    // Now it's a fixed slide-over (not hidden) with a Close affordance.
+    expect(pane?.className).toContain('fixed');
+    expect(pane?.className).not.toContain('hidden');
+    expect(screen.getByRole('button', { name: 'Close live view' })).toBeTruthy();
+    // The toggle label flips to Hide.
+    expect(screen.getByRole('button', { name: 'Toggle live view' })).toHaveTextContent('Hide live');
+  });
+});
+
 describe('AgentChatView Model/Profile select locking', () => {
   it('disables Model + Profile during the FIRST send (sending:true, turns empty) so they cannot desync the session', () => {
     // started is false (turns.length===0) during the first send; without the

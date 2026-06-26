@@ -59,6 +59,10 @@ export function AgentChatView({
   const [draft, setDraft] = useState('');
   const chat = useAgentChat({ model, ...(profileId !== '' ? { profileId } : {}) });
   const started = chat.turns.length > 0;
+  // Below the lg breakpoint the live-view pane is hidden inline; this toggles it
+  // as a slide-over so a narrow window can still open it (it used to vanish with
+  // no affordance). Ignored at lg+ where the pane is a permanent column.
+  const [liveOpen, setLiveOpen] = useState(false);
 
   // Save-as-recipe — snapshot this chat's executed steps into a replayable
   // recipe. The SDK recipes.create has had zero GUI callers until now; this
@@ -271,6 +275,16 @@ export function AgentChatView({
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {/* Below lg the live-view pane is hidden; this button reveals it as a
+                slide-over (hidden at lg+, where the pane is always inline). */}
+            <button
+              type="button"
+              aria-label="Toggle live view"
+              onClick={() => setLiveOpen((v) => !v)}
+              className="rounded border border-surface-divider px-2 py-1 text-2xs font-medium text-ink-secondary hover:text-ink-primary lg:hidden"
+            >
+              {liveOpen ? 'Hide live' : 'Live view'}
+            </button>
             {chat.session !== null && (
               <BudgetMeter
                 remaining={chat.session.token_budget_remaining}
@@ -477,7 +491,11 @@ export function AgentChatView({
           READ-ONLY: interactive is left false (the default) so NO tap/scroll/key
           input is captured here — the agent drives the phone, the user only
           watches; clicking the view can never interfere with the automation. */}
-      <LiveAutomationPanel sessionId={chat.session?.id ?? null} />
+      <LiveAutomationPanel
+        sessionId={chat.session?.id ?? null}
+        open={liveOpen}
+        onClose={() => setLiveOpen(false)}
+      />
 
       {/* Save-as-recipe dialog */}
       {saveOpen && (
@@ -577,7 +595,18 @@ type WatchState =
  * / keystrokes on this video never reach the device. The agent is the sole
  * driver; the user only watches and cannot interfere by clicking the view.
  */
-function LiveAutomationPanel({ sessionId }: { sessionId: string | null }): JSX.Element {
+function LiveAutomationPanel({
+  sessionId,
+  open,
+  onClose,
+}: {
+  sessionId: string | null;
+  /** Below the lg breakpoint the pane is hidden inline; `open` reveals it as a
+   *  slide-over overlay so a narrower window doesn't silently drop the headline
+   *  'watch the agent' feature. At lg+ the pane is always inline (open ignored). */
+  open: boolean;
+  onClose: () => void;
+}): JSX.Element {
   const { client } = useSettings();
   const [watch, setWatch] = useState<WatchState>({ kind: 'idle' });
 
@@ -616,11 +645,28 @@ function LiveAutomationPanel({ sessionId }: { sessionId: string | null }): JSX.E
   return (
     <aside
       data-component="ai-automation-live-pane"
-      className="hidden w-[300px] shrink-0 flex-col border-l border-surface-divider bg-surface-raised/60 lg:flex"
+      // lg+: always an inline right column (flex). Below lg: hidden UNLESS
+      // toggled open, then a fixed full-height slide-over on the right edge so
+      // the feature stays reachable on a narrow window. (audit)
+      className={`w-[300px] shrink-0 flex-col border-l border-surface-divider bg-surface-raised/60 lg:flex ${
+        open
+          ? 'fixed inset-y-0 right-0 z-40 flex shadow-2xl lg:static lg:z-auto lg:shadow-none'
+          : 'hidden'
+      }`}
     >
       <div className="flex items-center gap-2 border-b border-surface-divider px-3 py-2.5">
         <span className="text-xs font-medium text-ink-primary">Live view</span>
         <span className="text-2xs text-ink-muted">read-only — the agent is driving</span>
+        {/* Close affordance for the below-lg overlay (no-op visual at lg+ where
+            the pane is a permanent column). */}
+        <button
+          type="button"
+          aria-label="Close live view"
+          onClick={onClose}
+          className="ml-auto rounded px-1 text-sm leading-none text-ink-muted hover:text-ink-primary lg:hidden"
+        >
+          ×
+        </button>
       </div>
       <div className="flex flex-1 items-center justify-center overflow-hidden p-3">
         {watch.kind === 'idle' && (
