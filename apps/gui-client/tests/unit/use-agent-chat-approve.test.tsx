@@ -151,6 +151,43 @@ describe('useAgentChat restore()', () => {
     // A fresh live session now backs the chat → the restored-history marker clears.
     expect(result.current.restoredHistoryCount).toBe(0);
   });
+
+  it('does NOT re-show the Approve/Deny gate for a restored chat that ended on a halt', () => {
+    // The dead-prompt bug: reopening a chat whose last agent turn was a
+    // consequential-action halt re-rendered a live-looking Approve/Deny bar where
+    // Approve was permanently dead (restore cleared lastUserMessage). The gate must
+    // stay suppressed for restored history while there's no live session.
+    const { result } = renderHook(() => useAgentChat());
+    act(() => {
+      result.current.restore([
+        { id: 1, role: 'user', text: 'place my order' },
+        { id: 2, role: 'agent', response: HALT },
+      ]);
+    });
+    expect(result.current.session).toBeNull();
+    expect(result.current.restoredHistoryCount).toBe(2);
+    // No live-looking confirmation on the read-only restored chat.
+    expect(result.current.pendingConfirmation).toBeNull();
+  });
+
+  it('a NEW halt after continuing a restored chat still gates normally', async () => {
+    message.mockResolvedValueOnce(HALT);
+    const { result } = renderHook(() => useAgentChat());
+    act(() => {
+      result.current.restore([
+        { id: 1, role: 'user', text: 'old' },
+        { id: 2, role: 'agent', response: DONE },
+      ]);
+    });
+    // Restored, no gate.
+    expect(result.current.pendingConfirmation).toBeNull();
+    // Continue → a fresh session + a NEW halt → the gate is live again.
+    await act(async () => {
+      await result.current.send('place my order');
+    });
+    expect(result.current.session).not.toBeNull();
+    expect(result.current.pendingConfirmation).not.toBeNull();
+  });
 });
 
 describe('useAgentChat session-leak close', () => {

@@ -290,6 +290,14 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     for (let i = turns.length - 1; i >= 0; i -= 1) {
       const turn = turns[i];
       if (turn === undefined || turn.role !== 'agent' || turn.response === undefined) continue;
+      // Suppress the gate for RESTORED history turns when there's no live session.
+      // A reopened chat whose last agent turn was a consequential-action halt
+      // would otherwise re-render a live-looking Approve/Deny bar where Approve is
+      // permanently dead (restore() cleared lastUserMessage, so approve() no-ops).
+      // The restored turns are the first `restoredHistoryCount`; once the customer
+      // continues (a fresh session is created, session!==null), new turns gate
+      // normally again. (audit: dead safety prompt on a read-only restored chat)
+      if (session === null && i < restoredHistoryCount) return null;
       if (turn.id === resolvedTurnId) return null;
       const pc = extractPendingConfirmation(turn.response);
       return pc === null
@@ -297,7 +305,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         : { turnId: turn.id, category: pc.category, matchedText: pc.matchedText };
     }
     return null;
-  }, [turns, resolvedTurnId]);
+  }, [turns, resolvedTurnId, session, restoredHistoryCount]);
 
   const approve = useCallback(async (): Promise<void> => {
     if (pendingConfirmation === null || lastUserMessage === null) return;
