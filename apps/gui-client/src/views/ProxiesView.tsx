@@ -36,11 +36,14 @@ import { parseProxyString } from '../lib/parse-proxy';
 import { parseWireGuardConfig } from '../lib/parse-wireguard';
 import { validateOpenVpnConfig } from '../lib/parse-openvpn';
 import { buildWireGuardProxyInput, buildOpenVpnProxyInput } from '../lib/account-proxies';
+import { clearBindingsForProxy } from '../lib/profile-bindings';
 
 interface ListState {
   proxies: ProxyConfig[];
   loading: boolean;
   error: string | null;
+  /** Transient confirmation, e.g. "N profiles were unbound from the deleted proxy". */
+  notice: string | null;
 }
 
 const EMPTY_DRAFT: ProxyDraft = {
@@ -53,7 +56,12 @@ const EMPTY_DRAFT: ProxyDraft = {
 };
 
 export function ProxiesView(): JSX.Element {
-  const [state, setState] = useState<ListState>({ proxies: [], loading: true, error: null });
+  const [state, setState] = useState<ListState>({
+    proxies: [],
+    loading: true,
+    error: null,
+    notice: null,
+  });
   const [editor, setEditor] = useState<
     { kind: 'idle' } | { kind: 'add' } | { kind: 'edit'; id: string }
   >({ kind: 'idle' });
@@ -74,7 +82,7 @@ export function ProxiesView(): JSX.Element {
     setState((s) => ({ ...s, loading: true }));
     try {
       const proxies = await listProxies();
-      setState({ proxies, loading: false, error: null });
+      setState((s) => ({ ...s, proxies, loading: false, error: null }));
       // Hydrate the LAST persisted probe result per proxy so a tested proxy
       // keeps showing its reachability / UDP / exit-geo across visits instead
       // of reverting to "untested" + needing a re-test every time (the cache
@@ -149,7 +157,28 @@ export function ProxiesView(): JSX.Element {
       void invalidateProbe(id).catch(() => undefined);
       setTestResults((r) => dropKey(r, id));
       setExitResults((r) => dropKey(r, id));
+      // Clear any profile default-proxy bindings that referenced this proxy, so a
+      // profile bound to it doesn't keep a DANGLING defaultProxyId. Without this,
+      // Launch would silently reroute that profile's egress to a different proxy
+      // (or, post-fix, refuse to launch) with no trace of why — a privacy hazard
+      // for an anti-detect tool. Surface which profiles were unbound so the
+      // operator knows to re-bind a proxy on purpose.
+      let unbound: string[] = [];
+      try {
+        unbound = await clearBindingsForProxy(id);
+      } catch (err) {
+        console.warn('[proxies] failed to clear dangling bindings for deleted proxy', err);
+      }
       await refresh();
+      if (unbound.length > 0) {
+        const n = unbound.length;
+        setState((s) => ({
+          ...s,
+          notice: `${String(n)} profile${n === 1 ? '' : 's'} ${
+            n === 1 ? 'was' : 'were'
+          } using this proxy as a default — they now have no default proxy. Re-bind one before launching.`,
+        }));
+      }
     } catch (err) {
       setState((s) => ({ ...s, error: friendlyError(err) }));
     } finally {
@@ -351,6 +380,24 @@ export function ProxiesView(): JSX.Element {
           message={state.error}
           onDismiss={() => setState((s) => ({ ...s, error: null }))}
         />
+      )}
+
+      {state.notice !== null && (
+        <div
+          role="status"
+          data-component="proxy-notice"
+          className="flex items-start justify-between gap-3 rounded-lg border border-accent/40 bg-accent/10 px-4 py-2 text-xs text-ink-primary"
+        >
+          <span>{state.notice}</span>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            className="px-1 leading-none text-ink-muted hover:text-ink-primary"
+            onClick={() => setState((s) => ({ ...s, notice: null }))}
+          >
+            ×
+          </button>
+        </div>
       )}
 
       {state.proxies.length === 0 ? (

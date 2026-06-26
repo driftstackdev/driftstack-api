@@ -113,3 +113,25 @@ export async function deleteBinding(profileId: string): Promise<void> {
     await getStore().save();
   });
 }
+
+/**
+ * Clear every binding's default-proxy reference that points at `proxyId`,
+ * leaving the binding itself (session/launch history) intact. Called when a
+ * proxy is DELETED so a profile bound to it doesn't keep a dangling
+ * defaultProxyId that would silently reroute its egress to a different proxy
+ * (an anti-detect privacy hazard). Returns the profile ids that were unbound
+ * so the caller can surface "these profiles no longer have a default proxy".
+ */
+export async function clearBindingsForProxy(proxyId: string): Promise<string[]> {
+  return writeLock(async () => {
+    const all = await listBindings();
+    const affected = all.filter((b) => b.defaultProxyId === proxyId).map((b) => b.profileId);
+    if (affected.length === 0) return [];
+    const next = all.map((b) =>
+      b.defaultProxyId === proxyId ? { ...b, defaultProxyId: null } : b,
+    );
+    await getStore().set(KEY, next);
+    await getStore().save();
+    return affected;
+  });
+}

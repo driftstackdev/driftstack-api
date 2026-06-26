@@ -1425,9 +1425,24 @@ export function ProfilesView({
     const binding = bindings.find((b) => b.profileId === profileId);
     if (binding?.defaultProxyId !== undefined && binding?.defaultProxyId !== null) {
       const explicit = proxies.find((p) => p.id === binding.defaultProxyId);
-      if (explicit !== undefined) return explicit;
+      // EXPLICIT binding to a now-missing proxy (the bound proxy was deleted):
+      // do NOT silently fall back to proxies[0] — that would route this profile's
+      // egress through a DIFFERENT IP/country than configured with no warning, a
+      // real privacy hazard for an anti-detect tool. Return null so the launch
+      // path surfaces "the configured proxy was deleted" instead.
+      return explicit ?? null;
     }
+    // No explicit default binding → use the first saved proxy (account default).
     return proxies[0] ?? null;
+  }
+
+  /** True when the profile has an EXPLICIT default-proxy binding that points at
+   *  a proxy that no longer exists (it was deleted). Lets the launch path tell
+   *  the "deleted proxy" case apart from the "no proxies saved at all" case. */
+  function bindingProxyMissing(profileId: string): boolean {
+    const binding = bindings.find((b) => b.profileId === profileId);
+    if (binding?.defaultProxyId === undefined || binding.defaultProxyId === null) return false;
+    return !proxies.some((p) => p.id === binding.defaultProxyId);
   }
 
   // ARC A — ensure the picked local proxy has a server-side account_proxies row
@@ -1486,8 +1501,12 @@ export function ProfilesView({
       if (proxy === null) {
         setState((s) => ({
           ...s,
-          error:
-            'No saved proxies. Open the Proxies tab, add a SOCKS5 server, then launch this profile. (Sessions require a proxy on this deployment.)',
+          error: bindingProxyMissing(profile.id)
+            ? // The profile was bound to a specific proxy that has since been
+              // deleted. Refuse to silently reroute through a different exit —
+              // tell the operator so they can re-bind a proxy on purpose.
+              `This profile's configured proxy was deleted. Open Edit and choose a new default proxy before launching, so its egress isn't rerouted to a different IP/country.`
+            : 'No saved proxies. Open the Proxies tab, add a SOCKS5 server, then launch this profile. (Sessions require a proxy on this deployment.)',
         }));
         return;
       }

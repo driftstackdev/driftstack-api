@@ -75,7 +75,8 @@ function renderingDb(capture: (sql: string) => void): {
   const proxied = new Proxy(realDb, {
     get(target, prop, receiver) {
       if (prop === 'select') {
-        return (...selArgs: unknown[]) => wrapStage(target.select(...selArgs));
+        // The repo calls `.select()` with no projection arg.
+        return () => wrapStage(target.select());
       }
       const value = Reflect.get(target, prop, receiver);
       return typeof value === 'function' ? value.bind(target) : value;

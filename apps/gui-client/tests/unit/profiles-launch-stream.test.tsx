@@ -311,6 +311,40 @@ describe('ProfilesView launch → stream', () => {
     expect(await screen.findByRole('button', { name: 'Open session' })).toBeTruthy();
   });
 
+  // Proxy-reroute privacy hazard (deep-audit HIGH): a profile EXPLICITLY bound to
+  // a proxy that has since been DELETED must NOT silently reroute its egress to a
+  // different proxy. Launch refuses with a "configured proxy was deleted" message
+  // (distinct from the "no proxies saved at all" message) and never creates a
+  // session through the wrong exit.
+  it('refuses to launch a profile whose explicitly-bound proxy was deleted (no silent reroute)', async () => {
+    // Bound to px_deleted, which is NOT in the proxies list (only p1 exists).
+    // Persistent (not Once) — the refresh loop reads bindings repeatedly, and the
+    // dangling binding must still be in effect when Launch is clicked.
+    listBindingsMock.mockResolvedValue([
+      {
+        profileId: 'prof_1',
+        defaultProxyId: 'px_deleted',
+        currentSessionId: null,
+        lastLaunchedAt: null,
+      },
+    ]);
+    // agentCreate isn't reset between tests in this file; snapshot the count so
+    // we can assert THIS launch added no call (rather than a global zero).
+    const createCallsBefore = agentCreate.mock.calls.length;
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
+    // The deleted-proxy message renders…
+    await waitFor(() => expect(screen.getByText(/configured proxy was deleted/i)).toBeTruthy());
+    // …and it's NOT the generic "no saved proxies" copy (a proxy DOES exist; the
+    // bound one was just deleted).
+    expect(screen.queryByText(/No saved proxies/i)).toBeNull();
+    // Critically: no session was created through proxies[0]'s exit.
+    expect(agentCreate.mock.calls.length).toBe(createCallsBefore);
+    // Restore the default (no bindings) so this persistent mock doesn't bleed
+    // into later tests (no shared beforeEach reset in this file).
+    listBindingsMock.mockImplementation(() => Promise.resolve([]));
+  });
+
   // Stop (founder Track A) — a running grid card exposes a Stop affordance in the
   // ⋯ menu that closes the bound agent session (the SAME end path window-close
   // uses: agentSessions.close(agt_)), then the card flips back to Launch.
