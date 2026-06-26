@@ -180,3 +180,23 @@ describe('AgentChatView Save-as-recipe', () => {
     expect(pushToast).not.toHaveBeenCalled();
   });
 });
+
+describe('AgentChatView Model/Profile select locking', () => {
+  it('disables Model + Profile during the FIRST send (sending:true, turns empty) so they cannot desync the session', () => {
+    // started is false (turns.length===0) during the first send; without the
+    // `|| chat.sending` guard the selects stayed enabled and a post-Send change
+    // created the session with the OLD model/profile while the header showed the
+    // new one.
+    chatState = baseChat({ session: null, sending: true, turns: [] });
+    render(<AgentChatView />);
+    expect(screen.getByLabelText<HTMLSelectElement>('Model').disabled).toBe(true);
+    expect(screen.getByLabelText<HTMLSelectElement>('Profile').disabled).toBe(true);
+  });
+
+  it('leaves Model + Profile enabled before any send (idle, nothing in flight)', () => {
+    chatState = baseChat({ session: null, sending: false, turns: [] });
+    render(<AgentChatView />);
+    expect(screen.getByLabelText<HTMLSelectElement>('Model').disabled).toBe(false);
+    expect(screen.getByLabelText<HTMLSelectElement>('Profile').disabled).toBe(false);
+  });
+});

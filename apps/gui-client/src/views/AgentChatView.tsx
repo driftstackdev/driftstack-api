@@ -280,11 +280,17 @@ export function AgentChatView({
             <select
               aria-label="Profile"
               value={profileId}
-              disabled={started}
+              // Lock once started OR while the FIRST send is in flight: during the
+              // first send `started` is still false (turns.length===0 until the
+              // reply lands), so without `|| chat.sending` the customer could change
+              // the profile after Send — the session is created with the OLD value
+              // while the header shows the new one and the persist writes the new
+              // one, desyncing saved chat metadata from the actual session (audit).
+              disabled={started || chat.sending}
               onChange={(e) => setProfileId(e.target.value)}
               className="max-w-[10rem] truncate rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary disabled:opacity-60"
               title={
-                started
+                started || chat.sending
                   ? 'Profile is locked for this chat — start a new chat to change it'
                   : 'Which profile the agent works on. Temporary = a throwaway session that saves nothing.'
               }
@@ -299,11 +305,14 @@ export function AgentChatView({
             <select
               aria-label="Model"
               value={model}
-              disabled={started}
+              // Same first-send race as the Profile select above — lock on
+              // `started || chat.sending` so the model can't change after Send
+              // creates the session with the prior value.
+              disabled={started || chat.sending}
               onChange={(e) => setModel(e.target.value as ChatModel)}
               className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary disabled:opacity-60"
               title={
-                started
+                started || chat.sending
                   ? 'Model is locked for the current chat — start a new chat to change it'
                   : 'Model'
               }
