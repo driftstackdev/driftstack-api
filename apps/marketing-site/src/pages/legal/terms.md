@@ -208,10 +208,13 @@ character.
 ## 8. Fees + payment
 
 8.1 **Fees.** Customer pays the Fees for the Subscription tier
-selected at signup (Free, $39/mo, $99/mo, $299/mo, $999/mo, or
-Enterprise — currently $3,000/mo and up). Fees are exclusive of VAT
-unless explicitly stated; VAT is added at the rate applicable to
-Customer's location at invoice issuance.
+selected at signup. Driftstack offers a perpetual Free tier, a
+Manual ladder (Personal, Team, Agency), and an API ladder (API
+Starter, API Builder, API Scale), with a custom-priced Enterprise
+tier. The current tiers and prices are published at
+<https://driftstack.dev/pricing>. Fees are exclusive of VAT unless
+explicitly stated; VAT is added at the rate applicable to Customer's
+location at invoice issuance.
 
 8.2 **Billing cycles.** Subscriptions bill monthly in advance unless
 the Customer's tier or contract explicitly states otherwise.
@@ -280,17 +283,19 @@ at the end of the current billing cycle.
 
 ## 9. Service levels
 
-9.1 **No guaranteed SLA at launch tiers.** The Free, $39, $99, and
-$299 tiers are provided **without** a contractually-binding service
-level agreement. Driftstack uses commercially reasonable efforts to
+9.1 **No guaranteed SLA at lower tiers.** The Free, Manual-ladder
+(Personal, Team, Agency), API Starter, and API Builder tiers are
+provided **without** a contractually-binding service level
+agreement. Driftstack uses commercially reasonable efforts to
 maintain availability, but does not commit to a specific uptime
 percentage at these tiers. Customer should plan its use accordingly.
 
-9.2 **Commercial SLA at higher tiers.** The $999 (Scale) and
-Enterprise tiers carry a contractual SLA published separately
-(currently: 99.9% monthly availability; 8-hour first-response SLA on
-Severity-1 incidents). The contractual SLA, when in effect, governs
-in case of conflict with this Section 9.
+9.2 **Commercial SLA at higher tiers.** The API Scale and Enterprise
+tiers carry a contractual SLA published separately (currently: 99.9%
+monthly availability; first-response SLA on Severity-1 incidents of
+four (4) hours on API Scale and one (1) hour on Enterprise). The
+contractual SLA, when in effect, governs in case of conflict with
+this Section 9.
 
 9.3 **Maintenance.** Driftstack performs scheduled maintenance during
 windows announced at least 48 hours in advance through the Service's
@@ -341,8 +346,9 @@ Organisational Measures) sets out the protective measures.
    does not warrant that any specific target site will be reachable,
    will not change in ways that break Customer Workflows, or will not
    detect or block Customer's automation. The Service's fingerprint
-   parity is a moving target; the [CAPABILITIES.md](../CAPABILITIES.md)
-   parity ledger documents the current state of known residuals.
+   parity is a moving target; the
+   [cumulative fingerprint rig](/trust/cumulative-rig) parity ledger
+   documents the current state of known residuals.
 
 ## 12. Indemnification
 
