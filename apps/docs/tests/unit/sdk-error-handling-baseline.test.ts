@@ -1,5 +1,5 @@
 // W330.A — drift guard for /sdk/error-handling page. Pins:
-//   • mention of RFC 7807 (problem+json) and PROBLEM_TYPES export
+//   • mention of RFC 9457 (problem+json; obsoletes 7807) and PROBLEM_TYPES export
 //   • dispatch-on-slug guidance (not HTTP status)
 //   • DriftstackError base class across TS/Python/Go
 //   • rate-limited + transport are flagged retryable
@@ -37,8 +37,9 @@ function read(p: string): string {
 describe('W330.A /sdk/error-handling baseline', () => {
   const body = read(PAGE);
 
-  it('cites RFC 7807 (application/problem+json)', () => {
-    expect(body).toMatch(/RFC\s*7807/);
+  it('cites RFC 9457 (application/problem+json)', () => {
+    // RFC 9457 obsoletes RFC 7807; the docs standardized on 9457 (commit f4ffc62c).
+    expect(body).toMatch(/RFC\s*9457/);
     expect(body).toMatch(/application\/problem\+json/i);
   });
 
