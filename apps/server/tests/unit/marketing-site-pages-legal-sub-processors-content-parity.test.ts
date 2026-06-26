@@ -5,14 +5,15 @@
 // Article 28(2)) or changes the 30-day-notice-and-objection mechanics
 // (would breach the DPA commitment customers signed on).
 //
-//   • Version 1.0 + effective 2026-05-11 + DPA section 4 anchor.
-//   • 9-vendor sub-processor table: AWS / Cloudflare / Stripe / NowPayments
-//     / Postmark (Wildbit) / Sentry (Functional Software) / Hetzner /
-//     LiveKit / GitHub.
+//   • Version 1.0 + effective 2026-05-10 + DPA section 4 anchor.
+//   • 12-vendor sub-processor table matching the live register: Hetzner /
+//     Neon / Upstash / Cloudflare R2 / Postmark / Sentry / Stripe /
+//     Anthropic / Moneybird / MacStadium / NowPayments / LiveKit —
+//     NO AWS, NO GitHub.
 //   • Scope exclusions: own-business-data vendors + customer-integrated
-//     vendors + self-hosted OSS.
-//   • Changelog summary: NowPayments added + LiveKit added (V-531) +
-//     Hetzner narrowed.
+//     vendors (2 exclusions; the self-hosted-OSS exclusion was dropped
+//     because Neon/Upstash are managed sub-processors, not self-hosted).
+//   • Changelog summary: NowPayments added + LiveKit added.
 //   • 30-day notice + objection process + pro-rated refund termination.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -31,8 +32,8 @@ function read(p: string): string {
 describe('W505.A apps/marketing-site/src/pages/legal/sub-processors.md content parity', () => {
   const body = read(LIB);
 
-  it('Version 1.0 + effective 2026-05-11 + DPA section 4 anchor — pinned so the version-tracked register + the DPA-section-4 cross-reference both survive (drift to dropping section 4 anchor would orphan the customer contractual register from the marketing version; drift to a different DPA section would create cross-doc divergence)', () => {
-    expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-11/);
+  it('Version 1.0 + effective 2026-05-10 + DPA section 4 anchor — pinned so the version-tracked register + the DPA-section-4 cross-reference both survive (drift to dropping section 4 anchor would orphan the customer contractual register from the marketing version; drift to a different DPA section would create cross-doc divergence)', () => {
+    expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-10/);
     expect(body).toMatch(
       /referenced from the\s*\n?\s*\[Data Processing Addendum\]\(dpa\.md\) \(section 4 — "Sub-processors"\)/,
     );
@@ -44,46 +45,45 @@ describe('W505.A apps/marketing-site/src/pages/legal/sub-processors.md content p
     );
   });
 
-  it("3-scope-exclusion framing: own-business-data vendors + customer-integrated vendors + self-hosted OSS — pinned so the 3 exclusions stay explicit (drift to dropping 'open-source software we self-host' would leave Postgres/Redis ambiguity; drift to dropping 'customer-integrated' would create scope creep for customer-owned Slack/webhook destinations)", () => {
+  it("2-scope-exclusion framing: own-business-data vendors + customer-integrated vendors — pinned so the 2 exclusions stay explicit (drift to dropping 'customer-integrated' would create scope creep for customer-owned Slack/webhook destinations). The old self-hosted-OSS exclusion was dropped: Neon/Upstash are managed sub-processors, not self-hosted, so that exclusion must not reappear", () => {
     expect(body).toMatch(
-      /Vendors that only receive Driftstack's own business data \(e\.g\. our\s*\n?\s*accounting platform, our HR provider\)/,
+      /Vendors that only receive Driftstack's own business data with no\s*\n?\s*customer workload exposure \(e\.g\. our HR provider\)/,
     );
     expect(body).toMatch(
       /Vendors a customer chooses to integrate with directly \(e\.g\. their\s*\n?\s*own Slack workspace receiving Driftstack webhooks\)/,
     );
-    expect(body).toMatch(
-      /Open-source software we self-host \(Postgres, Redis, etc\.\)\. Self-\s*\n?\s*hosted infrastructure runs inside our managed cloud accounts and is\s*\n?\s*not a separate processor\./,
-    );
+    expect(body).not.toMatch(/self-host \(Postgres, Redis/);
   });
 
-  it("9-vendor sub-processor table: AWS + Cloudflare + Stripe + NowPayments (OÜ Estonia) + Postmark/ActiveCampaign (Wildbit) + Sentry (Functional Software) + Hetzner + LiveKit + GitHub (Microsoft) — pinned so the 9-vendor scope stays consistent with the DPA Annex 3 contractual register (drift to dropping any vendor would create marketing↔DPA divergence; drift to dropping the legal-entity names — 'OÜ' / 'Wildbit, LLC' / 'Functional Software, Inc.' — would weaken the contractual specificity)", () => {
-    expect(body).toMatch(/\*\*Amazon Web Services, Inc\.\*\* \(AWS\)/);
-    expect(body).toMatch(/\*\*Cloudflare, Inc\.\*\*/);
-    expect(body).toMatch(/\*\*Stripe, Inc\.\*\*/);
+  it('12-vendor sub-processor table matching the live register: Hetzner + Neon + Upstash + Cloudflare R2 + Postmark + Sentry + Stripe + Anthropic + Moneybird + MacStadium + NowPayments (OÜ) + LiveKit — pinned so the vendor scope stays consistent with the DPA Annex contractual register (drift to dropping any vendor would create marketing↔DPA divergence). AWS and GitHub are NOT Driftstack sub-processors and must not appear', () => {
+    expect(body).toMatch(/\*\*Hetzner Cloud\*\*/);
+    expect(body).toMatch(/\*\*Neon, Inc\.\*\*/);
+    expect(body).toMatch(/\*\*Upstash, Inc\.\*\*/);
+    expect(body).toMatch(/\*\*Cloudflare R2\*\*/);
+    expect(body).toMatch(/\*\*Postmark\*\*/);
+    expect(body).toMatch(/\*\*Sentry\*\*/);
+    expect(body).toMatch(/\*\*Stripe\*\*/);
+    expect(body).toMatch(/\*\*Anthropic\*\*/);
+    expect(body).toMatch(/\*\*Moneybird\*\*/);
+    expect(body).toMatch(/\*\*MacStadium\*\*/);
     expect(body).toMatch(/\*\*NowPayments OÜ\*\*/);
-    expect(body).toMatch(/\*\*Postmark \/ ActiveCampaign\*\* \(Wildbit, LLC\)/);
-    expect(body).toMatch(/\*\*Functional Software, Inc\.\*\* \(Sentry\)/);
-    expect(body).toMatch(/\*\*Hetzner Online GmbH\*\*/);
     expect(body).toMatch(/\*\*LiveKit, Inc\.\*\*/);
-    expect(body).toMatch(/\*\*GitHub, Inc\.\*\* \(Microsoft\)/);
+    expect(body).not.toMatch(/Amazon Web Services|\bAWS\b/);
+    expect(body).not.toMatch(/GitHub/);
   });
 
-  it('EU SCC (Regulation 2021/914) transfer mechanism stays consistent on US-hosted vendors — pinned so the GDPR-compliant transfer basis stays anchored to the current EU Standard Contractual Clauses regulation (drift to a different version would create GDPR-compliance divergence; drift to dropping the regulation citation would weaken the legal-anchoring)', () => {
-    expect(body).toMatch(/EU SCCs \(2021\/914\) for transfers outside the EEA\./);
-    expect(body).toMatch(/EU SCCs \(2021\/914\)/);
-    expect(body).toMatch(/Intra-EEA transfer; no extra-EEA SCCs required\./);
+  it('SCC + EU-US DPF transfer mechanism stays consistent on US-hosted vendors — pinned so the GDPR-compliant transfer basis stays anchored (drift to dropping the SCC/DPF citation would weaken the legal-anchoring)', () => {
+    expect(body).toMatch(/2021 Standard Contractual Clauses \+ EU-US Data Privacy Framework\./);
+    expect(body).toMatch(/EEA-internal — no transfer mechanism required\./);
   });
 
-  it("Changelog summary pinned: 'NowPayments added' for crypto-tier + 'LiveKit added' for Browser Theatre + 'Hetzner narrowed' to dev/staging — pinned so the 3-substantive-change record + Hetzner-narrowed-from-production audit-trail all survive (drift to dropping 'Hetzner narrowed' would let customers think Hetzner still processes production data). Re-enabled by slice 303 after the R4 V-NNN session-log scrub (b46b8d4124b) intentionally removed the (V-531) anchor from customer-facing copy — the test regex had been pinning the pre-scrub form", () => {
+  it("Changelog summary pinned: 'NowPayments added' for crypto-tier + 'LiveKit added' for the live-session feature — pinned so the 2-substantive-change record survives. The old 'Hetzner narrowed / consolidated onto AWS' claim is removed: production runs on Hetzner", () => {
     expect(body).toMatch(
       /\*\*NowPayments added\*\* for crypto-tier processing\. Previously\s*\n?\s*crypto-payment customers used a manual invoice flow/,
     );
-    expect(body).toMatch(
-      /\*\*LiveKit added\*\* for the Browser Theatre live-session feature\s*\n?\s*\. Live sessions are off by default/,
-    );
-    expect(body).toMatch(
-      /\*\*Hetzner narrowed\*\* to dev\/staging only\. Previously listed as a\s*\n?\s*production secondary; production has been consolidated onto AWS\./,
-    );
+    expect(body).toMatch(/\*\*LiveKit added\*\* for the optional live-session feature/);
+    expect(body).not.toMatch(/Hetzner narrowed/);
+    expect(body).not.toMatch(/consolidated onto AWS/);
   });
 
   it('30-day notice delivery 3-channel pinned: page-update + announcements@driftstack.dev email + in-dashboard changelog — pinned so the 3-channel notice mechanism survives (drift to dropping the email channel would leave customers reliant on polling the page; drift to dropping the in-dashboard changelog would orphan the customer-facing surface from the notice)', () => {

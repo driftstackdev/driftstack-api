@@ -26,24 +26,24 @@ describe('sub-processor list cross-source invariant (DPA + sub-processors.md)', 
   it('Stripe appears in both DPA + sub-processors.md', () => {
     expect(dpa).toMatch(/Stripe Payments Europe Ltd/);
     expect(dpa).toMatch(/Stripe, Inc\./);
-    expect(subp).toMatch(/\*\*Stripe, Inc\.\*\*/);
+    expect(subp).toMatch(/\*\*Stripe\*\*/);
   });
 
-  it('Hetzner appears in both DPA + sub-processors.md (or via the dev/staging-narrowed disclaimer)', () => {
+  it('Hetzner appears in both DPA + sub-processors.md (production compute, EU-resident)', () => {
     expect(dpa).toMatch(/Hetzner Online GmbH/);
-    // sub-processors.md narrowed Hetzner to dev/staging only (per
-    // the R4 changelog post-2026-05-12)
-    expect(subp).toMatch(/\*\*Hetzner narrowed\*\*/);
+    // Production runs on Hetzner; sub-processors.md lists it as the
+    // production control-plane compute host (no AWS-narrowing claim).
+    expect(subp).toMatch(/\*\*Hetzner Cloud\*\*/);
   });
 
   it('Cloudflare appears in both DPA + sub-processors.md', () => {
     expect(dpa).toMatch(/Cloudflare, Inc\./);
-    expect(subp).toMatch(/\*\*Cloudflare, Inc\.\*\*/);
+    expect(subp).toMatch(/\*\*Cloudflare R2\*\*/);
   });
 
   it('Postmark appears in both DPA + sub-processors.md', () => {
     expect(dpa).toMatch(/Postmark \(ActiveCampaign LLC\)/);
-    expect(subp).toMatch(/Postmark/);
+    expect(subp).toMatch(/\*\*Postmark\*\*/);
   });
 
   it('NowPayments appears in both DPA + sub-processors.md (conditional opt-in via crypto-tier)', () => {
@@ -51,11 +51,28 @@ describe('sub-processor list cross-source invariant (DPA + sub-processors.md)', 
     expect(subp).toMatch(/\*\*NowPayments OÜ\*\*/);
   });
 
-  it('AWS appears in sub-processors.md (primary compute) — pinned so the canonical-list reflects production-state (AWS is the post-Hetzner-narrowing primary)', () => {
-    expect(subp).toMatch(/\*\*Amazon Web Services, Inc\.\*\* \(AWS\)/);
+  it('AWS does NOT appear — production runs on Hetzner/Neon/Upstash/R2/MacStadium, not AWS', () => {
+    expect(subp).not.toMatch(/Amazon Web Services|\bAWS\b/);
+    expect(dpa).not.toMatch(/Amazon Web Services|\bAWS\b/);
   });
 
-  it("LiveKit appears in sub-processors.md (Browser Theatre opt-in feature) — pinned so the LK.1/LK.2 fleet-side-LiveKit addition isn't orphaned from the legal disclosure surface", () => {
+  it('Neon + Upstash + MacStadium + Anthropic + Moneybird + Sentry appear in both DPA + sub-processors.md', () => {
+    expect(dpa).toMatch(/Neon, Inc\./);
+    expect(subp).toMatch(/\*\*Neon, Inc\.\*\*/);
+    expect(dpa).toMatch(/Upstash, Inc\./);
+    expect(subp).toMatch(/\*\*Upstash, Inc\.\*\*/);
+    expect(dpa).toMatch(/MacStadium, Inc\./);
+    expect(subp).toMatch(/\*\*MacStadium\*\*/);
+    expect(dpa).toMatch(/Anthropic, PBC/);
+    expect(subp).toMatch(/\*\*Anthropic\*\*/);
+    expect(dpa).toMatch(/Moneybird B\.V\./);
+    expect(subp).toMatch(/\*\*Moneybird\*\*/);
+    expect(dpa).toMatch(/Sentry \(Functional Software, Inc\.\)/);
+    expect(subp).toMatch(/\*\*Sentry\*\*/);
+  });
+
+  it("LiveKit appears in both DPA + sub-processors.md (opt-in live-session feature) — pinned so the LK.1/LK.2 fleet-side-LiveKit addition isn't orphaned from the legal disclosure surface", () => {
+    expect(dpa).toMatch(/LiveKit \(conditional, opt-in only\)/);
     expect(subp).toMatch(/\*\*LiveKit, Inc\.\*\*/);
   });
 });
