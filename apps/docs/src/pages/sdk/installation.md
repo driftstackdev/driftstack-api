@@ -187,9 +187,9 @@ asyncio.run(main())
 
 | Accessor                   | Methods                                                                                                                                       |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `client.sessions`          | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `destroy`                                                    |
+| `client.sessions`          | `create`, `list`, `iterate`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `extract`, `search`, `login`, `destroy`           |
 | `client.agent_sessions`    | `create`, `get`, `message`, `close`, `takeover`, `handback`, `livekit_token` (sync + async)                                                   |
-| `client.recipes`           | `create` (write-only at v1.0; read/list/execute/delete at v1.1)                                                                               |
+| `client.recipes`           | `create`, `list`, `iterate`, `get`, `delete` (only `execute`/replay lands at v1.1)                                                            |
 | `client.profiles`          | `create`, `list`, `get`, `delete`                                                                                                             |
 | `client.api_keys`          | `create`, `list`, `rotate` , `revoke`                                                                                                         |
 | `client.usage`             | `current_period`                                                                                                                              |
@@ -251,23 +251,23 @@ The HTTP API and the SDKs version independently. SDKs at any version stay compat
 
 ## What ships
 
-| Capability        | TS  | Python | Go  | Notes                                                             |
-| ----------------- | --- | ------ | --- | ----------------------------------------------------------------- |
-| Sessions          | ✅  | ✅     | ✅  | Full CRUD + navigate/interact/wait/capture/getState               |
-| Agent sessions    | ✅  | ✅     | ✅  | create/get/message/close/takeover/handback/livekitToken           |
-| Recipes           | ✅  | ✅     | ✅  | Write-only at v1.0; read/list/execute/delete land at v1.1         |
-| Profiles          | ✅  | ✅     | ✅  | Create, list, get, delete                                         |
-| Profile snapshots | ✅  | ✅     | ✅  | capture/list/restore/delete                                       |
-| API keys          | ✅  | ✅     | ✅  | Includes `rotate` with 24h grace                                  |
-| Webhooks          | ✅  | ✅     | ✅  | CRUD + delivery introspection + `replayDelivery` + `rotateSecret` |
-| Team RBAC         | ✅  | ✅     | ✅  | Invite/accept/list/remove                                         |
-| Usage             | ✅  | ✅     | ✅  | Current-period read + 30-day daily series                         |
-| Audit log         | ✅  | ✅     | ✅  | Paginated read + GDPR-Article-20 CSV/JSON export                  |
-| MFA               | ✅  | ✅     | ✅  | TOTP enroll/verify/disable + recovery-code regen                  |
-| Billing           | ✅  | ✅     | ✅  | State read + Stripe checkout/portal                               |
-| Email preferences | ✅  | ✅     | ✅  | List + set + opt-in/out (non-critical templates only)             |
-| Legal             | ✅  | ✅     | ✅  | Catalog + required + accept (content-hash-bound)                  |
-| Account self      | ✅  | ✅     | ✅  | `me` returns tier + concurrent + profile counts + teams[]         |
+| Capability        | TS  | Python | Go  | Notes                                                                    |
+| ----------------- | --- | ------ | --- | ------------------------------------------------------------------------ |
+| Sessions          | ✅  | ✅     | ✅  | Full CRUD + navigate/interact/wait/capture/getState/extract/search/login |
+| Agent sessions    | ✅  | ✅     | ✅  | create/get/message/close/takeover/handback/livekitToken                  |
+| Recipes           | ✅  | ✅     | ✅  | create/list/get/delete ship at v1.0; only execute (replay) lands at v1.1 |
+| Profiles          | ✅  | ✅     | ✅  | Create, list, get, delete                                                |
+| Profile snapshots | ✅  | ✅     | ✅  | capture/list/restore/delete                                              |
+| API keys          | ✅  | ✅     | ✅  | Includes `rotate` with 24h grace                                         |
+| Webhooks          | ✅  | ✅     | ✅  | CRUD + delivery introspection + `replayDelivery` + `rotateSecret`        |
+| Team RBAC         | ✅  | ✅     | ✅  | Invite/accept/list/remove                                                |
+| Usage             | ✅  | ✅     | ✅  | Current-period read + 30-day daily series                                |
+| Audit log         | ✅  | ✅     | ✅  | Paginated read + GDPR-Article-20 CSV/JSON export                         |
+| MFA               | ✅  | ✅     | ✅  | TOTP enroll/verify/disable + recovery-code regen                         |
+| Billing           | ✅  | ✅     | ✅  | State read + Stripe checkout/portal                                      |
+| Email preferences | ✅  | ✅     | ✅  | List + set + opt-in/out (non-critical templates only)                    |
+| Legal             | ✅  | ✅     | ✅  | Catalog + required + accept (content-hash-bound)                         |
+| Account self      | ✅  | ✅     | ✅  | `me` returns tier + concurrent + profile counts + teams[]                |
 
 ## Next steps
 

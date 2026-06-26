@@ -37,8 +37,8 @@ import DocLayout from '../../layouts/DocLayout.astro';
     </li>
     <li>
       <a href="/api/recipes/">Recipes</a> — snapshot a finished agent-session's intent_log +
-      transcript as a replayable recipe. Write-only at v1.0; read / list / execute / delete are
-      v1.1.
+      transcript as a replayable recipe. Create / list / read / delete ship at v1.0; only execute
+      (replay) lands at v1.1.
     </li>
     <li>
       <a href="/api/bundled-llm/">Bundled LLM</a> — opt-in consent, monthly soft cap, used /
@@ -50,7 +50,7 @@ import DocLayout from '../../layouts/DocLayout.astro';
     </li>
     <li>
       <a href="/api/profiles/">Profiles</a> — persistent identity slots; create, list, get, patch,
- clone , delete. Snapshots — capture / list / restore / delete.
+      clone, delete. Snapshots — capture / list / restore / delete.
     </li>
     <li>
       <a href="/api/proxies/">Account proxies</a> — register your own SOCKS5 proxies; route a
@@ -73,8 +73,8 @@ import DocLayout from '../../layouts/DocLayout.astro';
       Portal redirect, billing-state read.
     </li>
     <li>
-      <a href="/api/team/">Team RBAC</a> — invite + accept + list + remove for multi-user teams
- (shipped; auth path integration is.
+      <a href="/api/team/">Team RBAC</a> — invite + accept + list + remove for multi-user teams.
+      Shipped at v1.0.
     </li>
     <li>
       <a href="/api/status/">Status page API</a> — public snapshot, incident feed (REST + SSE),
