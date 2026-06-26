@@ -343,5 +343,22 @@ describe('ProfilesView organization management', () => {
       // prof_1 carried 'aged' → recomputed to [] and PATCHed.
       await waitFor(() => expect(profilesUpdate).toHaveBeenCalledWith('prof_1', { tags: [] }));
     });
+
+    it('bulk Set icon CLEARS the selection afterwards (consistent with the other bulk actions)', async () => {
+      await selectBoth();
+      // Apply an icon via the "Set icon" select.
+      fireEvent.change(screen.getByLabelText('Set icon'), { target: { value: '🛒' } });
+      await waitFor(() =>
+        expect(saveProfilesMetaBulk).toHaveBeenCalledWith(
+          expect.arrayContaining(['prof_1', 'prof_2']),
+          { icon: '🛒' },
+          'merge',
+          expect.anything(),
+        ),
+      );
+      // The selection is dismissed — the bulk bar's "N selected" chip is gone,
+      // matching Apply / Clear folder / Remove tag (it used to stay up).
+      await waitFor(() => expect(screen.queryByText(/selected/)).toBeNull());
+    });
   });
 });

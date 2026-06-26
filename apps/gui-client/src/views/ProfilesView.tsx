@@ -1836,6 +1836,9 @@ export function ProfilesView({
           .catch(() => undefined);
       }
     }
+    // Dismiss the selection like every other bulk action (Apply folder/tag, Clear
+    // folder, Remove tag) — leaving it active here was inconsistent + surprising.
+    setSelectedIds(new Set());
   }
 
   // Bulk export — snapshot each selected profile via profiles.export (the v1
