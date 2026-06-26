@@ -33,6 +33,37 @@ export function redactErrSerializer(err: unknown): Record<string, unknown> {
   return redactErrValue(base, 0) as Record<string, unknown>;
 }
 
+/**
+ * V-494 follow-up — pino `req` serializer. Fastify's built-in request log
+ * records `req.url`, which for the SSE/EventSource path includes the bearer
+ * token as `?ds_token=` (and the OAuth callback's single-use `?code=`).
+ * Header + cookie redaction can't reach values embedded in the URL string,
+ * so this sanitizes the logged URL. Exported so the wiring is directly
+ * testable (a refactor that drops the serializer is caught by the test).
+ * Mirrors Fastify 5's default req serializer shape.
+ */
+export function redactReqSerializer(req: {
+  method?: string;
+  url?: string;
+  host?: string;
+  ip?: string;
+  socket?: { remotePort?: number };
+}): {
+  method?: string;
+  url?: string;
+  host?: string;
+  remoteAddress?: string;
+  remotePort?: number;
+} {
+  return {
+    method: req.method,
+    url: typeof req.url === 'string' ? redactUrlQueryTokens(req.url) : req.url,
+    host: req.host,
+    remoteAddress: req.ip,
+    remotePort: req.socket?.remotePort,
+  };
+}
+
 // We re-export pino's Logger as our `Logger` type. Fastify's FastifyBaseLogger
 // is structurally a subset of pino's Logger, so passing a pino instance to
 // Fastify's `loggerInstance` works; we cast at the boundary in app.ts to
@@ -137,29 +168,11 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
     },
     // V-494 follow-up — Fastify's built-in request log records `req.url`,
     // which for the SSE/EventSource path includes the bearer token as
-    // `?ds_token=` (and the OAuth callback's single-use `?code=`). Header +
-    // cookie redaction above doesn't reach values embedded in the URL
-    // string, so sanitize the logged URL here. Mirrors Fastify 5's default
-    // req serializer shape (method/url/host/remoteAddress/remotePort);
-    // verified that Fastify uses the loggerInstance's `req` serializer for
-    // its auto request logging. The Sentry side is handled in
-    // lib/sentry.ts (event.request.url / query_string).
+    // `?ds_token=` (and the OAuth callback's single-use `?code=`). The
+    // redactReqSerializer (above) sanitizes the logged URL; the Sentry side
+    // is handled in lib/sentry.ts (event.request.url / query_string).
     serializers: {
-      req(req: {
-        method?: string;
-        url?: string;
-        host?: string;
-        ip?: string;
-        socket?: { remotePort?: number };
-      }) {
-        return {
-          method: req.method,
-          url: typeof req.url === 'string' ? redactUrlQueryTokens(req.url) : req.url,
-          host: req.host,
-          remoteAddress: req.ip,
-          remotePort: req.socket?.remotePort,
-        };
-      },
+      req: redactReqSerializer,
       // V-494 follow-up — scrub credential tokens embedded in a caught error's
       // message/stack before they reach the logs (free-text vector redact.paths
       // can't cover). See redactErrSerializer.
