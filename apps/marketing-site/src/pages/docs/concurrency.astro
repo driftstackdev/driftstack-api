@@ -4,7 +4,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // V-702 — concurrency + backpressure developer docs.
 ---
 
-<BaseLayout title="Concurrency & backpressure — Driftstack developer docs" description="Tier concurrency caps, the concurrency_limit_reached signal, and the canonical client backoff pattern.">
+<BaseLayout title="Concurrency & backpressure — Driftstack developer docs" description="Tier concurrency caps, the concurrency_limit_exceeded signal, and the canonical client backoff pattern.">
   <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
     <h1>Concurrency &amp; backpressure</h1>
 
@@ -58,9 +58,9 @@ Content-Type: application/problem+json
   "type": "https://errors.driftstack.dev/concurrency-limit",
   "title": "Concurrent session limit reached",
   "status": 429,
-  "detail": "Account already has 20 active sessions; tier permits 20.",
-  "current_sessions": 20,
-  "limit": 20
+  "detail": "Account already has 24 active sessions; tier permits 24.",
+  "current_sessions": 24,
+  "limit": 24
 }`}</code></pre>
     <p>
       The <code>Retry-After</code> header is a hint, not a contract —
@@ -140,7 +140,7 @@ Content-Type: application/problem+json
       Upgrade to a higher tier via
       <a href="/pricing">/pricing</a> — the new cap applies
       immediately on tier change. For Enterprise overrides above
-      the default 500, email
+      the Enterprise default of 32, email
       <a href="mailto:sales@driftstack.dev">sales@driftstack.dev</a>;
       we can lift the cap without a tier change for short-term
       campaign bursts.
