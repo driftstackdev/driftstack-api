@@ -96,7 +96,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <tr>
           <td>Test parallelism via shards</td>
           <td>Concurrent-session cap per tier. The
-            <code>concurrency_limit_reached</code> 429 is your back-
+            <code>concurrency_limit_exceeded</code> 429 is your back-
             pressure signal — back off + retry.</td>
         </tr>
       </tbody>
@@ -116,21 +116,21 @@ await browser.close();`}</code></pre>
 
     <p><strong>Driftstack (curl):</strong></p>
     <pre><code>{`POST /v1/sessions
-  { "archetype": "default", "label": "qa-login" }
+  { "label": "qa-login" }   # omit archetype to inherit the locked default
   → 201 Created   { "id": "ses_…", "status": "creating", … }
 
 POST /v1/sessions/ses_…/navigate
   { "url": "https://app.example.com/login" }
 
 POST /v1/sessions/ses_…/interact
-  { "action": "type", "selector": "#email", "value": "user@example.com" }
+  { "action": { "kind": "type", "selector": "#email", "text": "user@example.com" } }
 POST /v1/sessions/ses_…/interact
-  { "action": "type", "selector": "#password", "value": "{{SECRET}}" }
+  { "action": { "kind": "type", "selector": "#password", "text": "{{SECRET}}" } }
 POST /v1/sessions/ses_…/interact
-  { "action": "click", "selector": "button[type=submit]" }
+  { "action": { "kind": "tap", "selector": "button[type=submit]" } }
 
 POST /v1/sessions/ses_…/wait
-  { "kind": "selector", "selector": "#dashboard", "timeout_ms": 10000 }
+  { "condition": { "kind": "selector", "selector": "#dashboard" }, "timeout_ms": 10000 }
 
 GET /v1/sessions/ses_…/state
   → { "html": "…", "url": "…", "cookies": [...] }
