@@ -25,7 +25,7 @@
 // Anonymity (V-211 mirror): "Driftstack" voice everywhere; no
 // founder name; no AI / Anthropic references in any visible string.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Driftstack,
   DriftstackError,
@@ -61,9 +61,17 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
   const [validating, setValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Keep baseUrl in sync with the mode selection.
+  // Remember the last self-hosted URL the user typed so a cloud round-trip
+  // doesn't lose it. Previously the mode effect reset baseUrl unconditionally, so
+  // a self-hosted user who typed a custom URL, toggled to cloud, then back to
+  // self-hosted got http://localhost:3000 instead of their URL (audit).
+  const lastSelfHostedUrlRef = useRef(SELF_HOSTED_DEFAULT_URL);
+
+  // Keep baseUrl in sync with the mode selection without clobbering a custom
+  // self-hosted URL. Switching INTO cloud pins the (non-customizable) cloud URL;
+  // switching INTO self-hosted restores the last self-hosted URL the user had.
   useEffect(() => {
-    setBaseUrl(mode === 'cloud' ? CLOUD_DEFAULT_URL : SELF_HOSTED_DEFAULT_URL);
+    setBaseUrl(mode === 'cloud' ? CLOUD_DEFAULT_URL : lastSelfHostedUrlRef.current);
   }, [mode]);
 
   // 2026-05-20 — accept an explicit key override so the browser-sign-in
@@ -108,7 +116,12 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
               mode={mode}
               baseUrl={baseUrl}
               onModeChange={setMode}
-              onBaseUrlChange={setBaseUrl}
+              onBaseUrlChange={(next) => {
+                setBaseUrl(next);
+                // Stash the user's self-hosted URL so a cloud round-trip restores
+                // it (the URL field is only editable in self-hosted mode).
+                if (mode === 'self-hosted') lastSelfHostedUrlRef.current = next;
+              }}
               onBack={() => setStep('welcome')}
               onNext={() => setStep('apikey')}
             />
