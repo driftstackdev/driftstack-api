@@ -111,8 +111,13 @@ describe('W412.A apps/server/src/routes/webhooks-nowpayments.ts content parity',
     );
     expect(body).toMatch(/let orderState: string \| null = null;/);
     expect(body).toMatch(
-      /if \(deps\.ordersService !== undefined && typeof payload\.order_id === 'string'\) \{\s*\n?\s*const updated = await deps\.ordersService\.applyIpnStatus\(\{\s*\n?\s*order_id: payload\.order_id,\s*\n?\s*payment_id: String\(payload\.payment_id\),\s*\n?\s*provider_status: payload\.payment_status,\s*\n?\s*\}\);\s*\n?\s*orderState = updated\?\.status \?\? null;/,
+      /if \(deps\.ordersService !== undefined && typeof payload\.order_id === 'string'\) \{\s*\n?\s*const updated = await deps\.ordersService\.applyIpnStatus\(\{\s*\n?\s*order_id: payload\.order_id,\s*\n?\s*payment_id: String\(payload\.payment_id\),\s*\n?\s*provider_status: payload\.payment_status,/,
     );
+    expect(body).toContain('orderState = updated?.status ?? null;');
+    // Billing-integrity (#8) — the amount fields are forwarded for reconciliation.
+    expect(body).toContain('? { actually_paid: payload.actually_paid }');
+    expect(body).toContain('? { price_amount: payload.price_amount }');
+    expect(body).toContain('? { pay_currency: payload.pay_currency }');
   });
 
   it('Info-log + 200 reply { received: true, order_state }', () => {

@@ -297,6 +297,26 @@ export function registerCryptoCheckoutRoutes(
           paymentAddress = payment.payAddress;
           payCurrency = payment.payCurrency;
           payAmount = payment.payAmount;
+          // Billing-integrity (#9 payment_id binding) — persist the minted
+          // NowPayments payment_id on the order so applyIpnStatus can reject an
+          // IPN whose payment_id doesn't match. Best-effort: a failure here
+          // leaves payment_id null (the first IPN binds it), so it must not
+          // fail the checkout response.
+          try {
+            await deps.service.recordPaymentId({
+              order_id: order.order_id,
+              payment_id: payment.paymentId,
+            });
+          } catch (bindErr) {
+            req.log.warn(
+              {
+                event: 'nowpayments_record_payment_id_failed',
+                order_id: order.order_id,
+                err: bindErr instanceof Error ? bindErr.message : String(bindErr),
+              },
+              'failed to bind NowPayments payment_id to order (will bind on first IPN)',
+            );
+          }
         } catch (err) {
           // Soft-fail: the local order persists, the customer sees
           // the stub posture, support can mint the payment manually.

@@ -1201,6 +1201,8 @@ export async function createProductionDeps(
         enqueueEvent: (accountId, eventType, data) =>
           webhooksService.enqueueEvent(accountId, eventType, data),
       },
+      // Billing-integrity — surface the payment_id-mismatch alarm to the logs.
+      logger,
     });
     logger.info(
       { component: 'crypto-orders' },
