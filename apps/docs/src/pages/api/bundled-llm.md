@@ -17,9 +17,12 @@ session route's resolution chain prefers [BYOK](/api/byok-anthropic/)
 (per-request header or stored) over bundled-LLM — bundled-LLM is
 the no-BYOK fallback.
 
-Activation: routes return `503 FeatureUnavailable` when the
-deployment hasn't wired a `BundledLlmService` (typical pre-launch
-state). When wired, all customer accounts can opt in.
+Activation: the settings + status routes are always registered (the
+bootstrap wires a `BundledLlmService` by default), so they don't
+return a `503` stub. Consent and budget enforcement surface as `402`
+at agent-session turn time (see below); any `503` you encounter is
+likewise returned on the agent-session turn route, not on these
+settings/status reads.
 
 ## Resource shape
 
@@ -162,13 +165,16 @@ extension fields).
 
 ## Errors
 
-| Status | Type                         | When                                                                   |
-| -----: | ---------------------------- | ---------------------------------------------------------------------- |
-|    400 | validation                   | body fails schema (negative cap, > 1_000_000 cap)                      |
-|    401 | unauthorized                 | missing or invalid bearer token                                        |
-|    402 | bundled-llm-budget-exhausted | spend reached the cap; recover via PATCH / BYOK / next month           |
-|    402 | bundled-llm-consent-required | deployment has bundled-LLM but the customer hasn't opted in            |
-|    503 | feature-unavailable          | deployment hasn't wired BundledLlmService (typical pre-launch posture) |
+| Status | Type                         | When                                                         |
+| -----: | ---------------------------- | ------------------------------------------------------------ |
+|    400 | validation                   | body fails schema (negative cap, > 1_000_000 cap)            |
+|    401 | unauthorized                 | missing or invalid bearer token                              |
+|    402 | bundled-llm-budget-exhausted | spend reached the cap; recover via PATCH / BYOK / next month |
+|    402 | bundled-llm-consent-required | deployment has bundled-LLM but the customer hasn't opted in  |
+
+The settings + status routes above do not return a `503`. A `503`
+for an unwired bundled-LLM service is returned on the **agent-session
+turn** route, not on these reads.
 
 ## Privacy + billing
 
