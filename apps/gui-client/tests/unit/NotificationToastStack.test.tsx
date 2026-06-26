@@ -100,6 +100,13 @@ describe('NotificationToastStack', () => {
     expect(container.firstChild).toBeNull();
   });
 
+  it('renders an empty footer (not "Invalid Date") when the event timestamp is malformed', () => {
+    setHookState([{ ...baseEvent, at: 'not-a-date' }]);
+    render(<NotificationToastStack />);
+    const card = screen.getByTestId('notification-toast');
+    expect(card.textContent).not.toContain('Invalid Date');
+  });
+
   it('each card carries a data-notification-kind discriminator attribute for downstream styling', () => {
     setHookState([
       {

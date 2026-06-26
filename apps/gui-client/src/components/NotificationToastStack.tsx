@@ -26,6 +26,13 @@ function formatTotalCents(cents: number): string {
   });
 }
 
+/** Format the toast timestamp, guarding a malformed `at` so the footer shows ''
+ *  instead of a literal "Invalid Date". (audit) */
+function formatToastTime(at: string): string {
+  const d = new Date(at);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString();
+}
+
 function describe(event: NotificationEvent): { title: string; body: string } {
   switch (event.kind) {
     case 'cost.threshold_alert': {
@@ -119,7 +126,7 @@ export function NotificationToastStack(): JSX.Element | null {
             </header>
             <p className="mt-1 text-xs text-ink-secondary">{body}</p>
             <footer className="mt-1 font-mono text-[10px] text-ink-muted">
-              {new Date(event.at).toLocaleTimeString()}
+              {formatToastTime(event.at)}
             </footer>
           </article>
         );
