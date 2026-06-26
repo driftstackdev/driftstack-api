@@ -39,14 +39,10 @@ import (
 )
 
 func main() {
-    client, err := driftstack.NewClient(driftstack.Config{
-        APIKey: os.Getenv("DRIFTSTACK_API_KEY"),
-        // BaseURL defaults to https://api.driftstack.dev; override
-        // for staging or self-hosted deployments.
-    })
-    if err != nil {
-        panic(err)
-    }
+    // BaseURL defaults to https://api.driftstack.dev; pass
+    // driftstack.WithBaseURL(...) to override for staging or
+    // self-hosted deployments. New does not return an error.
+    client := driftstack.New(os.Getenv("DRIFTSTACK_API_KEY"))
     _ = client
 }`}</code></pre>
 
@@ -59,8 +55,10 @@ func main() {
 
     <h2>3. Start a session</h2>
     <pre><code>{`session, err := client.Sessions.Create(ctx, &driftstack.CreateSessionRequest{
-    Archetype: "default",
-    Purpose:   driftstack.PurposeProductionCustomer,
+    // Omit Archetype to inherit the locked launch default
+    // (iphone17_ios18_7_safari26_4); pass a real registry slug
+    // to pin a specific device profile.
+    Purpose: driftstack.PurposeProductionCustomer,
 })
 if err != nil {
     return err
@@ -122,8 +120,9 @@ for _, s := range page.Data {
         log.Println(s.ID)
     }
 }
-// page.NextCursor is "" when there are no more pages; refeed it as
-// query.Cursor on subsequent calls to walk the full history.`}</code></pre>
+// page.NextCursor is nil when there are no more pages; otherwise
+// pass *page.NextCursor as query.Cursor on the next call to walk
+// the full history.`}</code></pre>
 
     <h2>Error handling</h2>
     <p>
