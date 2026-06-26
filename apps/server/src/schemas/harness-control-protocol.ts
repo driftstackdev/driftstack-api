@@ -624,7 +624,15 @@ export const ProfileSaveFailedSchema = z.object({
   type: z.literal('profileSaveFailed'),
   sessionId: z.string().min(1),
   profile_id: z.string().min(1),
-  reason: z.enum(['serialize_failed', 'seal_failed', 'too_large', 'upload_failed']),
+  // `degenerate_dump` (A3 W2977/W2979, harness 2def1d39b2): the data-loss guard
+  // DELIBERATELY skipped the save-back because a torn/empty fork dump would have
+  // overwritten a known-good prior blob — the prior is PRESERVED (reassuring, NOT
+  // data loss). Accept it so the strict enum doesn't reject the whole webhook.
+  // `.catch` keeps an unrecognised FUTURE reason from rejecting the frame too
+  // (forward-compat; falls back to the generic 'upload_failed' bucket).
+  reason: z
+    .enum(['serialize_failed', 'seal_failed', 'too_large', 'upload_failed', 'degenerate_dump'])
+    .catch('upload_failed'),
   detail: z.string().optional(),
 });
 export type ProfileSaveFailed = z.infer<typeof ProfileSaveFailedSchema>;
