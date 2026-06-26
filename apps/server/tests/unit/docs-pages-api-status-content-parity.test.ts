@@ -64,11 +64,11 @@ describe('docs/pages/api/status content parity', () => {
     );
   });
 
-  it("Incident feed query parameters pinned: since (ISO-8601 cutoff; defaults to 30 days ago) + limit (1-200; defaults to 50). + 'Lists public incidents from the last 30 days (default), most-recent first.' — pinned so the since/limit defaults + most-recent-first ordering contract all stay documented", () => {
+  it("Incident feed query parameters pinned: since (ISO-8601 cutoff; defaults to 30 days ago) + limit (1-100; defaults to 50). + 'Lists public incidents from the last 30 days (default), most-recent first.' — pinned so the since/limit defaults + most-recent-first ordering contract all stay documented", () => {
     expect(body).toMatch(
       /\|\s*`since`\s+\|\s+optional \|\s+ISO-8601 cutoff; defaults to 30 days ago\s*\|/,
     );
-    expect(body).toMatch(/\|\s*`limit`\s+\|\s+optional \|\s+1–200; defaults to 50/);
+    expect(body).toMatch(/\|\s*`limit`\s+\|\s+optional \|\s+1–100; defaults to 50/);
     expect(body).toMatch(
       /Lists public incidents from the last 30 days \(default\), most-recent\s*\n?\s*first\./,
     );

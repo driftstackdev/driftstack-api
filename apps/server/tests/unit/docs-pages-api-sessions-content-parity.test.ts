@@ -80,13 +80,13 @@ describe('W761 docs /api/sessions content parity', () => {
     );
   });
 
-  it('CRITICAL LOCKED_ARCHETYPE_ID default + 3-purpose enum pinned. archetype defaults to iphone16pro_ios18_7_safari26_4; purpose defaults to production_customer with cumulative_rig_validation + test_domain_probe reserved internal.', () => {
+  it('CRITICAL LOCKED_ARCHETYPE_ID default + 3-purpose enum pinned. archetype defaults to iphone17_ios18_7_safari26_4; purpose defaults to production_customer with cumulative_rig_validation + test_domain_probe reserved internal.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`archetype` defaults to the locked iPhone-16\s*\n?Pro \/ iOS \/ Safari archetype when omitted \(LOCKED_ARCHETYPE_ID\)\./,
+      /`archetype` defaults to the locked iPhone 17 \/\s*\n?iOS 18\.7 \/ Safari 26\.4 archetype when omitted \(`LOCKED_ARCHETYPE_ID`\s*\n?= `iphone17_ios18_7_safari26_4`\)\./,
     );
-    expect(p).toMatch(/`purpose` defaults to `production_customer`\./);
+    expect(p).toMatch(/`purpose` defaults to\s*\n?`production_customer`\./);
     expect(p).toMatch(
       /the other values\s*\n?\(`cumulative_rig_validation`, `test_domain_probe`\) are reserved\s*\n?for Driftstack-internal ops\./,
     );

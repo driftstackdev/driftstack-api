@@ -121,11 +121,11 @@ describe('W770 docs /api/account content parity', () => {
     expect(p).toMatch(/Per-tier profile ceiling; null on enterprise \(custom\)\./);
   });
 
-  it('CRITICAL teams array shape pinned — owner_account_id + role + membership_id + empty-array-when-no-team framing. Matches W766 /api/team .teams[] embedding.', () => {
+  it('CRITICAL teams array shape pinned — owner_account_id + owner_email + owner_name + role + membership_id + empty-array-when-no-team framing. Matches W766 /api/team .teams[] embedding.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /owner accounts the caller is a member of\. Each entry: `owner_account_id`, `role`, `membership_id`\. Empty array when not on any team\./,
+      /owner accounts the caller is a member of\. Each entry: `owner_account_id`, `owner_email` \(falls back to `acc_<id>` when unknown\), `owner_name` \(nullable\), `role`, `membership_id`\. Empty array when not on any team\./,
     );
   });
 

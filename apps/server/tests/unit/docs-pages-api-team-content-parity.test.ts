@@ -107,11 +107,11 @@ describe('W766 docs /api/team content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`GET \/v1\/team\/owners` — returns `\{ data: TeamOwner\[\] \}` where each\s*\n?entry has `owner_account_id`, `role`, and `membership_id`\./,
+      /`GET \/v1\/team\/owners` — returns `\{ data: TeamOwner\[\] \}` where each\s*\n?entry has `owner_account_id`, `owner_email` \(falls back to\s*\n?`acc_<id>` when unknown\), `owner_name` \(nullable\), `role`, and\s*\n?`membership_id`\./,
     );
-    expect(p).toMatch(/Useful\s*\n?for populating an "act as" picker in custom dashboards\./);
+    expect(p).toMatch(/Useful for populating an "act as" picker in custom\s*\n?dashboards\./);
     expect(p).toMatch(
-      /The same\s*\n?data is also embedded in `GET \/v1\/account\/me` under `teams\[\]`\./,
+      /The same data is also embedded in `GET \/v1\/account\/me`\s*\n?under `teams\[\]`\./,
     );
   });
 

@@ -101,12 +101,15 @@ describe('W769 docs /api/usage content parity', () => {
     );
   });
 
-  it("CRITICAL series-empty-days-return-zeros framing pinned. The 'Empty days return zeros for every counter (not omitted from the response) so the dashboard can render an empty-state without client-side date-fill logic' wording matches W754 dashboard /usage sparkline rendering.", () => {
+  it("CRITICAL series-empty-days-included-with-empty-totals framing pinned. The 'Empty days are included in the series (not omitted from the response) so the dashboard can render an empty-state without client-side date-fill logic, but their totals is an empty object {} — treat a missing counter key as 0. (The current-period summary, by contrast, zero-fills every counter.)' wording matches W754 dashboard /usage sparkline rendering.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Empty days return zeros for every counter \(not omitted from the\s*\n?response\) so the dashboard can render an empty-state without\s*\n?client-side date-fill logic\./,
+      /Empty days are included in the series \(not omitted from the\s*\n?response\) so the dashboard can render an empty-state without\s*\n?client-side date-fill logic, but their `totals` is an empty object\s*\n?`\{\}` — treat a missing counter key as `0`\. \(The current-period\s*\n?summary, by contrast, zero-fills every counter\.\)/,
     );
+    // Ban the superseded "return zeros for every counter" framing — empty days now
+    // carry an empty {} totals object, not zero-filled counters.
+    expect(p).not.toMatch(/Empty days return zeros for every counter/);
   });
 
   it('CRITICAL series `days` parameter range pinned — 1-90, default 30. Drift to a different bound would let SDK consumers pass invalid windows; the 30-default matches W754 dashboard /usage sparkline width.', () => {

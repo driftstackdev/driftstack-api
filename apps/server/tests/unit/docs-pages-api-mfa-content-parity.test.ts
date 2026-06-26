@@ -195,12 +195,21 @@ describe('W767 docs /api/mfa content parity', () => {
     expect(p).toMatch(/Re-enabling requires the full enrollment dance from scratch\./);
   });
 
-  it("CRITICAL recovery-codes regenerate NOT-step-up-gated framing pinned. The 'Per the Q3 verdict, this endpoint is NOT step-up gated — regenerating recovery codes is recoverable (the customer can rotate again if compromised); only disabling + account-delete are gated.' wording is the load-bearing security policy.", () => {
+  it("CRITICAL recovery-codes regenerate IS-step-up-gated framing pinned. The 'This endpoint is step-up gated, the same as MFA disable and account-delete … Without the gate a stolen web session could mint fresh recovery codes, then redeem one to satisfy step-up on disable — a full MFA bypass' wording is the load-bearing security policy.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Per the Q3 verdict, this endpoint is NOT step-up gated —\s*\n?regenerating recovery codes is recoverable \(the customer can rotate\s*\n?again if compromised\); only disabling \+ account-delete are gated\./,
+      /This endpoint \*\*is\*\* step-up gated, the same as MFA disable and\s*\n?account-delete: a stale web session returns the `403` step-up\s*\n?envelope above \(`requires_mfa_step_up: true`\)\./,
     );
+    expect(p).toMatch(
+      /Without the gate a\s*\n?stolen web session could mint fresh recovery codes, then redeem one\s*\n?to satisfy step-up on disable — a full MFA bypass\./,
+    );
+    expect(p).toMatch(
+      /The legitimate\s*\n?lost-device-but-logged-in flow still works: an existing recovery\s*\n?code satisfies `POST \/v1\/auth\/mfa\/step-up` before regenerating\./,
+    );
+    // Ban the superseded "NOT step-up gated" policy — the corrected doc reversed it
+    // (regenerate IS gated, to close the mint-then-redeem MFA-bypass).
+    expect(p).not.toMatch(/this endpoint is NOT step-up gated/i);
   });
 
   it('CRITICAL Algorithm details table pinned with 10 rows — Algorithm/Period/Digits/Drift tolerance/Issuer/At-rest encryption/Recovery code shape+count+hash + Challenge TTL + Step-up freshness. Drift to dropping any row would silently break SDK consumers.', () => {

@@ -118,9 +118,13 @@ describe('Arc 6 docs.oauth — apps/docs/src/pages/api/oauth.md parity', () => {
     expect(body).toMatch(/"exp"/);
   });
 
-  it('documents the RFC 7807 problem+json envelope', () => {
+  it('documents the RFC 9457 problem+json envelope with real https://errors.driftstack.dev/ type URIs', () => {
     expect(body).toMatch(/problem\+json/);
-    expect(body).toMatch(/urn:driftstack:oauth:/);
+    expect(body).toMatch(/RFC 9457/);
+    expect(body).toMatch(/`https:\/\/errors\.driftstack\.dev\/bad-request`/);
+    expect(body).toMatch(/`https:\/\/errors\.driftstack\.dev\/unauthorized`/);
+    // Ban the superseded urn:driftstack:oauth: type-prefix framing.
+    expect(body).not.toMatch(/urn:driftstack:oauth:/);
   });
 
   it('linked from apps/docs/src/pages/api/index.astro', () => {

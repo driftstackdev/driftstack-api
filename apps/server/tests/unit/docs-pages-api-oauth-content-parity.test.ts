@@ -60,7 +60,7 @@ describe('docs/pages/api/oauth content parity', () => {
     );
   });
 
-  it('Errors-at-a-glance 6-row roster pinned: 400 invalid_request + 400 invalid_grant (code unknown/expired/already-used; PKCE mismatch) + 400 invalid_scope + 400 access_denied + 401 invalid_client + 401 unauthorized_client. All RFC 7807 problem+json + urn:driftstack:oauth: type prefix — pinned so the 6-error-code roster + RFC 7807 + urn:driftstack:oauth: prefix contract all stay documented', () => {
+  it('Errors-at-a-glance 6-row roster pinned: 400 invalid_request + 400 invalid_grant (code unknown/expired/already-used; PKCE mismatch) + 400 invalid_scope + 400 access_denied + 401 invalid_client + 401 unauthorized_client. All RFC 9457 problem+json + real https://errors.driftstack.dev/ type URIs — pinned so the 6-error-code roster + RFC 9457 + errors.driftstack.dev type-URI contract all stay documented', () => {
     expect(body).toMatch(/\|\s*400 \| `invalid_request`/);
     expect(body).toMatch(/\|\s*400 \| `invalid_grant`/);
     expect(body).toMatch(/\|\s*400 \| `invalid_scope`/);
@@ -68,8 +68,14 @@ describe('docs/pages/api/oauth content parity', () => {
     expect(body).toMatch(/\|\s*401 \| `invalid_client`/);
     expect(body).toMatch(/\|\s*401 \| `unauthorized_client`/);
     expect(body).toMatch(
-      /All responses use `application\/problem\+json` per RFC 7807\s*\n?\s*\(status,\s*\n?\s*type, title, detail\)\. The `type` field is the value in the table\s*\n?\s*above prefixed with `urn:driftstack:oauth:`\./,
+      /All responses use `application\/problem\+json` per RFC 9457 \(status,\s*\n?\s*type, title, detail\)\. The `type` field is a real RFC 9457 type URI:\s*\n?\s*`https:\/\/errors\.driftstack\.dev\/bad-request` for the 400 cases and\s*\n?\s*`https:\/\/errors\.driftstack\.dev\/unauthorized` for the 401 cases\./,
     );
+    expect(body).toMatch(
+      /The\s*\n?\s*OAuth code from the table above \(`invalid_grant`, `invalid_client`,\s*\n?\s*…\) appears in the `title`\/`detail`\./,
+    );
+    // Ban the superseded RFC 7807 / urn:driftstack:oauth: type-prefix framing —
+    // the corrected doc moved to RFC 9457 + real https://errors.driftstack.dev/ type URIs.
+    expect(body).not.toMatch(/urn:driftstack:oauth:/);
   });
 
   it("Revoke RFC 7009 anti-enumeration framing pinned: 'POST /v1/oauth/revoke (RFC 7009)' + 'Returns 200 {} always — even if the token never existed, to prevent probe-style enumeration per the RFC.' + 'Customers can ALSO revoke your integration from the customer dashboard at any time, which invalidates all access tokens issued to your client_id for that account.' — pinned so the RFC 7009 + always-200 anti-enumeration + customer-side dashboard-revoke + client_id-scoped-invalidation contract all stay documented", () => {
