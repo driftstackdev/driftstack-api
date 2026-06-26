@@ -163,9 +163,13 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
     expect(matches.length, 'expected encodeURIComponent(orderId) 4 times').toBe(4);
   });
 
-  it('8-verb inventory + verb-mix invariants — exactly 8 method declarations (quote + createCheckout + list + listAll + get + updateNote + cancel + receipt). Verb mix: 3 POSTs (quote + createCheckout + cancel) + 3 GETs (list + get + receipt) + 1 PATCH (updateNote) + ZERO DELETE/PUT. listAll is async generator (no method-level wire call — delegates to list).', () => {
+  it('9-verb inventory + verb-mix invariants — exactly 9 method declarations (quote + createCheckout + list + listAll + iterate + get + updateNote + cancel + receipt). `iterate` is the cross-SDK naming alias for `listAll` (Python/Go name the walker `iterate`); both delegate to the shared paginator so neither emits its own wire call. Verb mix: 3 POSTs (quote + createCheckout + cancel) + 3 GETs (list + get + receipt) + 1 PATCH (updateNote) + ZERO DELETE/PUT.', () => {
     const methods = body.match(/^ {2}(?!constructor)(?:async \*)?[a-zA-Z]+\(/gm) ?? [];
-    expect(methods.length, 'expected 8 verb declarations').toBe(8);
+    expect(methods.length, 'expected 9 verb declarations').toBe(9);
+    // `iterate` is the cross-SDK naming alias delegating to `listAll`.
+    expect(body).toMatch(
+      /iterate\(\s*\n?\s*opts: Omit<ListCryptoOrdersOptions, 'cursor'> = \{\},\s*\n?\s*\): AsyncGenerator<CryptoOrderEnvelope, void, void> \{\s*\n?\s*return this\.listAll\(opts\);\s*\n?\s*\}/,
+    );
     const posts = (body.match(/method: 'POST'/g) ?? []).length;
     expect(posts, 'expected 3 POSTs (quote + createCheckout + cancel)').toBe(3);
     const gets = (body.match(/method: 'GET'/g) ?? []).length;

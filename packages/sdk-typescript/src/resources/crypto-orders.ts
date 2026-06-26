@@ -104,6 +104,20 @@ export class CryptoOrdersResource {
     );
   }
 
+  /**
+   * V-666.BU — cross-SDK naming alias for {@link listAll}. The Python
+   * (`iterate`) + Go (`Iterate`) SDKs name the crypto-order cursor walker
+   * `iterate`, matching every other paginated resource; TS keeps the
+   * historical `listAll` name and exposes `iterate` as a thin synonym so the
+   * three SDKs share a vocabulary. Identical semantics + signature — pick
+   * either.
+   */
+  iterate(
+    opts: Omit<ListCryptoOrdersOptions, 'cursor'> = {},
+  ): AsyncGenerator<CryptoOrderEnvelope, void, void> {
+    return this.listAll(opts);
+  }
+
   /** V-666.G — read a single order envelope. */
   get(orderId: string): Promise<CryptoOrderEnvelope> {
     return this.http.request<CryptoOrderEnvelope>({

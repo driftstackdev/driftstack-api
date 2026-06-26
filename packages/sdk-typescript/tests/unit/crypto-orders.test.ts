@@ -147,6 +147,25 @@ describe('CryptoOrdersResource', () => {
     expect(calls).toBe(1);
   });
 
+  it('V-666.BU iterate alias walks pages identically to listAll (cross-SDK naming parity)', async () => {
+    const calls: unknown[] = [];
+    const requestFn = vi.fn((opts: RequestOpts) => {
+      calls.push(opts);
+      if (opts.query?.cursor === undefined) {
+        return Promise.resolve({
+          orders: [{ order_id: 'ord_1' }, { order_id: 'ord_2' }],
+          next_cursor: 'cur_x',
+        });
+      }
+      return Promise.resolve({ orders: [{ order_id: 'ord_3' }], next_cursor: null });
+    });
+    const r = new CryptoOrdersResource({ request: requestFn } as unknown as HttpClient);
+    const collected: string[] = [];
+    for await (const o of r.iterate({ status: 'paid' })) collected.push(o.order_id);
+    expect(collected).toEqual(['ord_1', 'ord_2', 'ord_3']);
+    expect(calls.length).toBe(2);
+  });
+
   it('list passes status + limit as query params', async () => {
     const h = harness();
     h.setResponse({ orders: [] });
