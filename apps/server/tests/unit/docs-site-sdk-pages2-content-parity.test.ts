@@ -62,7 +62,7 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
     expect(body).toMatch(/The HTTP API and the SDKs version independently\./);
     expect(body).toMatch(/^## What ships$/m);
     expect(body).toMatch(
-      /\| Sessions\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Full CRUD \+ navigate\/interact\/wait\/capture\/getState\s+\|/,
+      /\| Sessions\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Full CRUD \+ navigate\/interact\/wait\/capture\/getState\/extract\/search\/login\s+\|/,
     );
     expect(body).toMatch(
       /\| API keys\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Includes `rotate` with 24h grace\s+\|/,
@@ -73,13 +73,15 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
     expect(existsSync(INSTALL)).toBe(true);
   });
 
-  it('error-handling.md: RFC 7807 problem+json mapping + single source PROBLEM_TYPE_TO_ERROR per lang from server OpenAPI + stable URI host errors.driftstack.dev + dispatch-on-slug-not-status + 15-row class-catalogue (3-language matrix + retryable column) + default retry policy (3 retries + exp backoff full jitter + Retry-After honoured) pinned', () => {
+  it('error-handling.md: RFC 9457 problem+json mapping + single source PROBLEM_TYPE_TO_ERROR per lang from server OpenAPI + stable URI host errors.driftstack.dev + dispatch-on-slug-not-status + 15-row class-catalogue (3-language matrix + retryable column) + default retry policy (3 retries + exp backoff full jitter + Retry-After honoured) pinned', () => {
     const body = read(ERR);
     expect(body).toMatch(/^title: SDK error handling$/m);
     expect(body).toMatch(/^# SDK error handling$/m);
     expect(body).toMatch(/Every Driftstack SDK ships a typed error hierarchy mapping/);
-    expect(body).toMatch(/`application\/problem\+json` responses \(RFC 7807\) to language-native/);
+    expect(body).toMatch(/`application\/problem\+json` responses \(RFC 9457\) to language-native/);
     expect(body).toMatch(/exceptions\./);
+    // Ban the superseded RFC 7807 reference — the corrected doc moved to RFC 9457.
+    expect(body).not.toMatch(/\(RFC 7807\)/);
     expect(body).toMatch(/The hierarchy is consistent across TypeScript \/ Python \/ Go — the/);
     expect(body).toMatch(/type names \+ URI mapping are kept in sync via a single source of/);
     expect(body).toMatch(/truth \(`PROBLEM_TYPE_TO_ERROR` per language, generated against the/);

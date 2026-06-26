@@ -49,8 +49,12 @@ describe('docs homepage reference list content parity', () => {
     expect(body).toContain(anchor);
   });
 
-  it('Recipes card carries the v1.0-write-only scope qualifier (matches slice 121 roadmap.astro promotion + slice 143 about.astro framing — drift to dropping the v1.1 read/list/execute/delete clause would re-open the marketing-vs-reality gap closed across the 3 surfaces)', () => {
+  it('Recipes card carries the v1.0/v1.1 scope qualifier (matches slice 121 roadmap.astro promotion + slice 143 about.astro framing — drift to dropping the create/list/read/delete-at-v1.0 + execute-only-at-v1.1 clause would re-open the marketing-vs-reality gap closed across the 3 surfaces)', () => {
     expect(body).toMatch(/label: 'Recipes',/);
-    expect(body).toMatch(/Write-only at v1\.0; read \/ list \/ execute \/ delete land at v1\.1/);
+    expect(body).toMatch(
+      /Create \/ list \/ read \/ delete ship at v1\.0; only execute \(replay\) lands at v1\.1\./,
+    );
+    // Ban the superseded "Write-only at v1.0" framing — v1.0 ships create/list/read/delete.
+    expect(body).not.toMatch(/Write-only at v1\.0/);
   });
 });

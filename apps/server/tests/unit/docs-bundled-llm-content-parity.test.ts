@@ -63,12 +63,17 @@ describe('Arc 6 docs.bundled-llm content parity', () => {
     expect(body).toMatch(/BundledLlmConsentRequiredError/);
   });
 
-  it('error table covers 400 / 401 / 402 (both) / 503', () => {
+  it('error table covers 400 / 401 / 402 (both); 503 is documented as agent-session-turn-only (not on these read routes)', () => {
     expect(body).toMatch(/\|\s*400\s*\| validation/);
     expect(body).toMatch(/\|\s*401\s*\| unauthorized/);
     expect(body).toMatch(/\|\s*402\s*\| bundled-llm-budget-exhausted/);
     expect(body).toMatch(/\|\s*402\s*\| bundled-llm-consent-required/);
-    expect(body).toMatch(/\|\s*503\s*\| feature-unavailable/);
+    // 503 was moved OUT of the settings/status error table — it surfaces on the
+    // agent-session turn route only. Pin the corrected prose, ban the old table row.
+    expect(body).toMatch(
+      /The settings \+ status routes above do not return a `503`\. A `503`\s*\n?for an unwired bundled-LLM service is returned on the \*\*agent-session\s*\n?turn\*\* route, not on these reads\./,
+    );
+    expect(body).not.toMatch(/\|\s*503\s*\| feature-unavailable/);
   });
 
   it('privacy section documents the no-training claim against the current bundled-LLM provider (Anthropic Claude)', () => {

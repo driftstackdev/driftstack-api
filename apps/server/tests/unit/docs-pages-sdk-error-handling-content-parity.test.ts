@@ -38,14 +38,16 @@ describe('W776 docs /sdk/error-handling content parity', () => {
     );
   });
 
-  it("CRITICAL RFC 7807 + categorical-catch framing pinned. The 'Every Driftstack SDK ships a typed error hierarchy mapping application/problem+json responses (RFC 7807) to language-native exceptions. Catch by category for control-flow logic; catch the base type for blanket logging' wording is the load-bearing error-protocol contract.", () => {
+  it("CRITICAL RFC 9457 + categorical-catch framing pinned. The 'Every Driftstack SDK ships a typed error hierarchy mapping application/problem+json responses (RFC 9457) to language-native exceptions. Catch by category for control-flow logic; catch the base type for blanket logging' wording is the load-bearing error-protocol contract.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Every Driftstack SDK ships a typed error hierarchy mapping\s*\n?`application\/problem\+json` responses \(RFC 7807\) to language-native\s*\n?exceptions\./,
+      /Every Driftstack SDK ships a typed error hierarchy mapping\s*\n?`application\/problem\+json` responses \(RFC 9457\) to language-native\s*\n?exceptions\./,
     );
     expect(p).toMatch(/Catch by category for control-flow logic; catch the/);
     expect(p).toMatch(/base type for blanket logging\./);
+    // Ban the superseded RFC 7807 reference — the corrected doc moved to RFC 9457.
+    expect(p).not.toMatch(/\(RFC 7807\)/);
   });
 
   it("CRITICAL PROBLEM_TYPE_TO_ERROR cross-SDK source-of-truth framing pinned. The 'type names + URI mapping are kept in sync via a single source of truth (PROBLEM_TYPE_TO_ERROR per language, generated against the server\\'s OpenAPI 3.1 spec)' wording explains the cross-SDK consistency mechanism.", () => {
