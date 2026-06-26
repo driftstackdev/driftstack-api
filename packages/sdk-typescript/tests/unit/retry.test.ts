@@ -123,6 +123,34 @@ describe('withRetry', () => {
     expect(sleeps[0]).toBeLessThan(2200);
   });
 
+  it('caps RateLimitError.retryAfterSeconds at maxDelayMs (parity with Go/Python — no 24h sleep)', async () => {
+    // Server (or a buggy proxy) asks for a 1-hour wait; the SDK must clamp
+    // it to maxDelay so it never sleeps pathologically long.
+    const e = errorFromProblem(
+      {
+        type: PROBLEM_TYPES.RateLimited,
+        title: 'x',
+        status: 429,
+        retry_after_seconds: 3600,
+      },
+      null,
+    );
+    const fn = vi.fn().mockRejectedValueOnce(e).mockResolvedValueOnce('ok');
+    const sleeps: number[] = [];
+    const got = await withRetry(fn, {
+      maxAttempts: 1,
+      maxDelayMs: 10_000,
+      sleep: (ms) => {
+        sleeps.push(ms);
+        return Promise.resolve();
+      },
+      rng: () => 0,
+    });
+    expect(got).toBe('ok');
+    // Clamped to maxDelay (10s) + 0 jitter (rng=0), NOT 3_600_000ms.
+    expect(sleeps[0]).toBe(10_000);
+  });
+
   it('does not retry on non-retryable errors', async () => {
     const e = new DriftstackError({
       kind: 'not_found',

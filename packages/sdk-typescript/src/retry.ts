@@ -91,8 +91,13 @@ function computeDelay(
   rng: () => number,
 ): number {
   if (err instanceof RateLimitError && err.retryAfterSeconds > 0) {
-    // Honour the server's hint with a small jitter on top.
-    return err.retryAfterSeconds * 1000 + Math.floor(rng() * 100);
+    // Honour the server's hint, but cap it at maxDelay so a buggy / hostile
+    // server can't pin the SDK in a pathologically long sleep (e.g.
+    // `Retry-After: 86400` → a 24h wait). Matches the Go (nextDelay) +
+    // Python (_backoff_delay_ms) SDKs, which clamp `min(retryAfter,
+    // maxDelay)`. The small jitter on top stays so multiple clients hammering
+    // the same rate-limited endpoint don't all wake at the exact same ms.
+    return Math.min(err.retryAfterSeconds * 1000, maxDelay) + Math.floor(rng() * 100);
   }
   const exp = Math.min(maxDelay, initialDelay * 2 ** attemptIndex);
   return Math.floor(rng() * exp);

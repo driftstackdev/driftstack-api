@@ -124,9 +124,9 @@ describe('W422.B packages/sdk-typescript/src/retry.ts content parity', () => {
     );
   });
 
-  it('CRITICAL computeDelay path 1 — RateLimitError with retryAfterSeconds>0 → `err.retryAfterSeconds * 1000 + Math.floor(rng() * 100)`. The "small jitter on top" framing pinned. Drift to dropping the ≤100ms jitter would let multiple clients hammering the same rate-limited endpoint all wake up at the EXACT same millisecond (thundering herd). Drift to scaling the jitter to retryAfterSeconds*1000 would over-shoot the server\'s hint.', () => {
+  it('CRITICAL computeDelay path 1 — RateLimitError with retryAfterSeconds>0 → `Math.min(err.retryAfterSeconds * 1000, maxDelay) + Math.floor(rng() * 100)`. The server hint is CAPPED at maxDelay (cross-SDK parity with Go nextDelay + Python _backoff_delay_ms: `min(retryAfter, maxDelay)`) so a buggy / hostile `Retry-After: 86400` can\'t pin the SDK in a 24h sleep. The "small jitter on top" stays — dropping the ≤100ms jitter would let multiple clients hammering the same rate-limited endpoint all wake up at the EXACT same millisecond (thundering herd). Drift to scaling the jitter to retryAfterSeconds*1000 would over-shoot the server\'s hint.', () => {
     expect(body).toMatch(
-      /if \(err instanceof RateLimitError && err\.retryAfterSeconds > 0\) \{\s*\n?\s*\/\/ Honour the server's hint with a small jitter on top\.\s*\n?\s*return err\.retryAfterSeconds \* 1000 \+ Math\.floor\(rng\(\) \* 100\);\s*\n?\s*\}/,
+      /if \(err instanceof RateLimitError && err\.retryAfterSeconds > 0\) \{[\s\S]*?return Math\.min\(err\.retryAfterSeconds \* 1000, maxDelay\) \+ Math\.floor\(rng\(\) \* 100\);\s*\n?\s*\}/,
     );
   });
 
