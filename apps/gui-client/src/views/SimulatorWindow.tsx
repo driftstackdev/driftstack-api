@@ -3938,10 +3938,16 @@ export function SimulatorWindow(): JSX.Element {
       setSwitchingTabId(id);
       emitTabList(tabs, id);
       if (room !== null) {
+        // A blank/seed tab stores url='' (or about:blank); the box's navigate
+        // allowlist REJECTS an empty url → "Could not switch tab". Send the
+        // branded new-tab url instead so the box accepts the activate and the
+        // tab still reads as blank (isBlankTabUrl normalizes NEW_TAB_URL back to
+        // "New Tab" in the bar). Non-blank tabs send their real url unchanged.
+        const activateUrl = isBlankTabUrl(target.url) ? NEW_TAB_URL : target.url;
         sendActivateAttempt({
           tabId: id,
           prevTabId: prevActive,
-          url: target.url,
+          url: activateUrl,
           scrollY: target.scrollY,
         });
         // One-shot reconcile: pull the box's current page-state immediately so the

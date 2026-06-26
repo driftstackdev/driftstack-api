@@ -180,6 +180,42 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(lastTabListCall().activeTabId).toBe(tab1Id);
   });
 
+  it('switching to a tab with an empty/seed url sends the branded NEW_TAB_URL (not "") so the box allowlist accepts it', () => {
+    const { container } = renderSim();
+    // The seed (first) tab stores url='' — switch AWAY (open a "+" tab, which is
+    // active) then back to the seed tab and inspect the activate payload.
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+    const seedTabId = (lastTabListCall().tabs[0] as { id: string; url: string }).id;
+    // Sanity: the seed tab really does carry an empty stored url.
+    expect((lastTabListCall().tabs[0] as { url: string }).url).toBe('');
+    sendActivateTab.mockClear();
+    // Switch back to the empty-url seed tab.
+    fireEvent.click(tabEls(container)[0]);
+    expect(sendActivateTab).toHaveBeenCalledTimes(1);
+    const arg = sendActivateTab.mock.calls[0][1] as { tabId: string; url: string };
+    expect(arg.tabId).toBe(seedTabId);
+    // Empty '' would be rejected by the box's navigate allowlist → "Could not
+    // switch tab"; instead we send the branded new-tab url (which reads as blank).
+    expect(arg.url).toBe('https://driftstack.dev/newtab/');
+  });
+
+  it('switching to a tab with a real url sends that url unchanged', () => {
+    const { container } = renderSim();
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active (newtab)
+    // Navigate the active (2nd) tab to a real url.
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: 'example.com' } });
+    fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
+    // Open a 3rd tab so we can switch BACK to the real-url 2nd tab.
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab3 active
+    sendActivateTab.mockClear();
+    // tab order: [seed, real(example.com), newtab3]; index 1 is the real-url tab.
+    fireEvent.click(tabEls(container)[1]);
+    expect(sendActivateTab).toHaveBeenCalledTimes(1);
+    const arg = sendActivateTab.mock.calls[0][1] as { url: string };
+    expect(arg.url).toBe('https://example.com/');
+  });
+
   it('closing a non-active tab removes it; never drops below one (no close ✕ on the last)', () => {
     const { container } = renderSim();
     fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // 2 tabs, tab2 active
