@@ -36,7 +36,7 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
   WebviewWindow: WebviewWindowCtor,
 }));
 
-const { openSimulatorWindow } = await import('../../src/lib/open-simulator');
+const { openSimulatorWindow, openSessionById } = await import('../../src/lib/open-simulator');
 
 const info = { ws_url: 'wss://lk.example', token: 'tok', room_name: 'room-1' } as LiveKitInfo;
 
@@ -157,5 +157,75 @@ describe('openSimulatorWindow — session handoff payload', () => {
     expect(res.reason).toMatch(/browser preview/);
     expect(invoke).not.toHaveBeenCalledWith('launch_simulator', expect.anything());
     expect(WebviewWindowCtor).not.toHaveBeenCalled();
+  });
+});
+
+// openSessionById — the dashboard "Open in desktop client" deep-link
+// (driftstack://session/open?session_id=…) routes here. It mints a fresh LiveKit
+// token + a per-session control key, then opens the floating Simulator window.
+describe('openSessionById — session-open deep-link reopen', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    invoke.mockResolvedValue(undefined);
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+  });
+
+  function fakeClient(
+    livekitToken: () => Promise<LiveKitInfo>,
+  ): Parameters<typeof openSessionById>[0]['client'] {
+    return {
+      agentSessions: { livekitToken },
+    } as unknown as Parameters<typeof openSessionById>[0]['client'];
+  }
+
+  it('returns opened:false (not signed in) when there is no client', async () => {
+    const res = await openSessionById({
+      client: null,
+      baseUrl: 'https://api.driftstack.dev',
+      apiKey: 'ds_x',
+      sessionId: 'agt_1',
+    });
+    expect(res.opened).toBe(false);
+    expect(res.reason).toMatch(/not signed in/);
+    expect(invoke).not.toHaveBeenCalledWith('launch_simulator', expect.anything());
+  });
+
+  it('mints a token + opens the simulator for a live session', async () => {
+    // mintGuiControlKey raw-fetches GET …/gui-control-key — stub it to return a key.
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ gui_control_key: 'gck_dl' }), { status: 200 }),
+      );
+    const res = await openSessionById({
+      client: fakeClient(() => Promise.resolve(info)),
+      baseUrl: 'https://api.driftstack.dev',
+      apiKey: 'ds_key',
+      sessionId: 'agt_live',
+    });
+    expect(res.opened).toBe(true);
+    const q = launchedQuery();
+    expect(q.get('session')).toBe('agt_live');
+    expect(q.get('ws')).toBe('wss://lk.example');
+    expect(q.get('token')).toBe('tok');
+    // The minted control key rode the handoff so the separate app can drive control.
+    expect(q.get('ck')).toBe('gck_dl');
+    // The API host was handed off so control calls hit the real server.
+    expect(q.get('base')).toBe('https://api.driftstack.dev');
+    fetchSpy.mockRestore();
+  });
+
+  it('returns opened:false with a reason when the session is closed/missing (token mint throws)', async () => {
+    const res = await openSessionById({
+      client: fakeClient(() =>
+        Promise.reject(new Error('Cannot mint LiveKit token for closed session')),
+      ),
+      baseUrl: 'https://api.driftstack.dev',
+      apiKey: 'ds_key',
+      sessionId: 'agt_closed',
+    });
+    expect(res.opened).toBe(false);
+    expect(res.reason).toMatch(/closed/);
+    expect(invoke).not.toHaveBeenCalledWith('launch_simulator', expect.anything());
   });
 });

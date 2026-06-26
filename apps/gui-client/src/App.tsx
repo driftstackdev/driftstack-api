@@ -36,6 +36,9 @@ import { BillingView } from './views/BillingView';
 import { UpdateBanner } from './components/UpdateBanner';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { checkForUpdate, type AvailableUpdate } from './lib/updater';
+import { buildClient } from './lib/client';
+import { dispatchDeepLink } from './lib/deep-link';
+import { openSessionById } from './lib/open-simulator';
 
 export type View =
   | { kind: 'home' }
@@ -64,7 +67,7 @@ export function App(): JSX.Element {
 }
 
 function Shell(): JSX.Element {
-  const { settings, loading, authExpired, dismissAuthExpired } = useSettings();
+  const { settings, activeWorkspace, loading, authExpired, dismissAuthExpired } = useSettings();
   // 2026-06-14 — Command Center ('home') is the default landing (5→10 G4):
   // it leads with Automate (Ask AI / recipes) + an account/session overview,
   // making automation the primary surface; Profiles/Sessions are one click away.
@@ -260,6 +263,62 @@ function Shell(): JSX.Element {
   useEffect(() => {
     void checkForUpdate().then(setUpdate);
   }, []);
+
+  // Global always-on deep-link listener (the dashboard's "Open in desktop
+  // client" emits `driftstack://session/open?session_id=…`). The browser-
+  // sign-in hook registers its OWN short-lived onOpenUrl listener while a CLI
+  // authorize flow is in flight, but that one drops every non-cli-authorize
+  // payload — so a session-open deep-link arriving any other time went nowhere
+  // (it pointed at the now-removed in-app session viewer). This app-boot
+  // listener routes session-open to REOPEN the floating Simulator window for
+  // that session via openSessionById. MUST stay above the early returns below
+  // (hooks-order rule). Re-registered when the api key / base url / workspace
+  // change so it always opens against the current client. The
+  // @tauri-apps/plugin-deep-link import is dynamic so a browser preview (no
+  // plugin) doesn't throw — it just no-ops.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    const client = buildClient(settings.apiKey, settings.baseUrl, activeWorkspace);
+    void (async () => {
+      try {
+        const { onOpenUrl } = await import('@tauri-apps/plugin-deep-link');
+        const stop = await onOpenUrl((urls) => {
+          for (const url of urls) {
+            dispatchDeepLink(url, {
+              onSessionOpen: (sessionId) => {
+                void openSessionById({
+                  client,
+                  baseUrl: settings.baseUrl,
+                  apiKey: settings.apiKey,
+                  sessionId,
+                }).then((res) => {
+                  if (!res.opened) {
+                    console.warn(
+                      '[app] session-open deep-link could not open the simulator:',
+                      res.reason ?? 'unknown',
+                    );
+                  }
+                });
+              },
+            });
+          }
+        });
+        if (cancelled) {
+          stop();
+          return;
+        }
+        unlisten = stop;
+      } catch {
+        // Plugin unavailable (browser preview / Tauri version mismatch) →
+        // no deep-link handling; not an error worth surfacing.
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (unlisten !== undefined) unlisten();
+    };
+  }, [settings.apiKey, settings.baseUrl, activeWorkspace]);
 
   // While settings load, render nothing rather than flashing the wizard.
   if (loading) {
@@ -470,6 +529,12 @@ export function sidebarSectionFor(view: View): SidebarViewKind {
   switch (view.kind) {
     case 'recording-player':
       return 'recordings';
+    // The live-Sessions view ('sessions') has no sidebar item of its own (the
+    // in-app session viewer was removed); fold it onto the Session-log item
+    // ('sessions-history') so the nav keeps an active highlight instead of going
+    // dark when that view is open.
+    case 'sessions':
+      return 'sessions-history';
     default:
       return view.kind;
   }

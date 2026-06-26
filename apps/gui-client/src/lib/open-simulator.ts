@@ -11,6 +11,8 @@
 // caller surfaces a user-facing error instead of silently degrading.
 
 import type { LiveKitInfo } from '@driftstack/sdk';
+import type { DriftstackClient } from './client';
+import { mintGuiControlKey } from './agent-session-control';
 
 export interface OpenSimulatorArgs {
   sessionId: string;
@@ -149,6 +151,46 @@ export async function openSimulatorWindow({
     // window" saga).
     const reason = err instanceof Error ? err.message : String(err);
     console.warn('[simulator] launch_simulator failed; no in-app fallback:', reason);
+    return { opened: false, reason };
+  }
+}
+
+/** Reopen the floating-iPhone window for an already-running agent session given
+ *  only its id — the shape the dashboard's "Open in desktop client" deep-link
+ *  (`driftstack://session/open?session_id=…`) carries. Mints a fresh LiveKit
+ *  join token + a per-session gui_control_key (so the SEPARATE simulator app,
+ *  which can't read this app's keychain, can drive the control endpoints), then
+ *  opens the window. The deep-link doesn't carry the profile/device label, so
+ *  the toolbar shows the device-only default ("iPhone"). Returns the same
+ *  `{ opened, reason }` shape as openSimulatorWindow; `opened:false` with a
+ *  reason on any failure (no client / closed-or-missing session / launch fail)
+ *  so the caller can surface it. */
+export async function openSessionById(args: {
+  client: DriftstackClient | null;
+  baseUrl: string;
+  apiKey: string | null;
+  sessionId: string;
+}): Promise<OpenSimulatorResult> {
+  const { client, baseUrl, apiKey, sessionId } = args;
+  if (client === null) {
+    return { opened: false, reason: 'not signed in' };
+  }
+  try {
+    const info = await client.agentSessions.livekitToken(sessionId);
+    const controlKey =
+      apiKey !== null && apiKey.length > 0
+        ? ((await mintGuiControlKey(baseUrl, apiKey, sessionId)) ?? undefined)
+        : undefined;
+    return await openSimulatorWindow({
+      sessionId,
+      info,
+      baseUrl,
+      ...(controlKey !== undefined ? { controlKey } : {}),
+    });
+  } catch (err) {
+    // A closed/missing session 403s/404s on the token mint; any other failure
+    // also lands here. Surface a reason — the caller decides whether to toast.
+    const reason = err instanceof Error ? err.message : String(err);
     return { opened: false, reason };
   }
 }

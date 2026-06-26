@@ -47,11 +47,17 @@ describe('sidebarSectionFor — drilled-in sub-views keep their parent section l
     );
   });
 
+  it('folds the live-Sessions view onto the Session-log item (it has no sidebar item of its own)', () => {
+    // 'sessions' (the live SessionsView) is not a rendered sidebar item — without
+    // this fold the nav lost its active highlight when that view was open.
+    expect(sidebarSectionFor({ kind: 'sessions' })).toBe('sessions-history');
+  });
+
   it('passes top-level views through unchanged', () => {
     expect(sidebarSectionFor({ kind: 'home' })).toBe('home');
     expect(sidebarSectionFor({ kind: 'profiles' })).toBe('profiles');
     expect(sidebarSectionFor({ kind: 'settings' })).toBe('settings');
-    expect(sidebarSectionFor({ kind: 'sessions' })).toBe('sessions');
+    expect(sidebarSectionFor({ kind: 'sessions-history' })).toBe('sessions-history');
     expect(sidebarSectionFor({ kind: 'recordings' })).toBe('recordings');
   });
 });

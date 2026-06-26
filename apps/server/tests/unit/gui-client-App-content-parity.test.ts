@@ -106,14 +106,17 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     expect(body).not.toMatch(/redactBaseUrl/);
   });
 
-  it("Sidebar mount pinned: imports { Sidebar, type SidebarViewKind } and renders <Sidebar current={sidebarSectionFor(view)} /> in the shell — the 4-section taxonomy itself moved to apps/gui-client/src/components/Sidebar.tsx (covered by W486.S parity), so App.tsx now only proves the mount wires up correctly + the sidebarSectionFor() helper folds the DRILLED-IN sub-view ('recording-player'→'recordings') onto its parent section so the nav stays lit (replacing the old `view.kind as SidebarViewKind` cast that matched nothing for drill-in views); the 'live-session'→'sessions' fold was dropped with the in-app session viewer (2026-06-26)", () => {
+  it("Sidebar mount pinned: imports { Sidebar, type SidebarViewKind } and renders <Sidebar current={sidebarSectionFor(view)} /> in the shell — the 4-section taxonomy itself moved to apps/gui-client/src/components/Sidebar.tsx (covered by W486.S parity), so App.tsx now only proves the mount wires up correctly + the sidebarSectionFor() helper folds the DRILLED-IN sub-view ('recording-player'→'recordings') AND the item-less live-Sessions view ('sessions'→'sessions-history') onto their parent section so the nav stays lit (replacing the old `view.kind as SidebarViewKind` cast that matched nothing for those views); the 'live-session'→'sessions' fold was dropped with the in-app session viewer (2026-06-26)", () => {
     expect(body).toMatch(
       /import \{ Sidebar, type SidebarViewKind \} from '\.\/components\/Sidebar';/,
     );
     expect(body).toMatch(/<Sidebar\s*\n?\s*current=\{sidebarSectionFor\(view\)\}/);
     expect(body).toMatch(
-      /export function sidebarSectionFor\(view: View\): SidebarViewKind \{\s*\n?\s*switch \(view\.kind\) \{\s*\n?\s*case 'recording-player':\s*\n?\s*return 'recordings';\s*\n?\s*default:\s*\n?\s*return view\.kind;\s*\n?\s*\}\s*\n?\s*\}/,
+      /export function sidebarSectionFor\(view: View\): SidebarViewKind \{\s*\n?\s*switch \(view\.kind\) \{\s*\n?\s*case 'recording-player':\s*\n?\s*return 'recordings';/,
     );
+    // 'sessions' (the live SessionsView, which has no sidebar item of its own)
+    // folds onto the Session-log item so the nav keeps an active highlight.
+    expect(body).toMatch(/case 'sessions':\s*\n?\s*return 'sessions-history';/);
     expect(body).not.toMatch(/<Sidebar\s*\n?\s*current=\{view\.kind as SidebarViewKind\}/);
     expect(body).not.toMatch(/case 'live-session':\s*\n?\s*return 'sessions';/);
   });
