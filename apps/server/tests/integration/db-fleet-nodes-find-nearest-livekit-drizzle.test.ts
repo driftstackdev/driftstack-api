@@ -199,5 +199,56 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(urls).not.toContain('ws://eu-revoked');
       expect(candidates.every((c) => c.livekit !== null)).toBe(true);
     });
+
+    it('listWithLivekitNearest(null): region-blind executes against Postgres (no `ORDER BY false` rejection)', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleFleetNodesRepo({ client, db, close: async () => {} });
+
+      // The region-blind dispatch path (the DEFAULT for accounts with no region).
+      // The prior `desc(... : sql`false`)` rendered `ORDER BY false DESC, …`
+      // which PostgreSQL REJECTS at execution → every region-blind dispatch
+      // threw → sessionAssign never reached the box → the browser never opened.
+      // Two livekit boxes so the result is a non-empty recency-ordered list.
+      const a = await repo.register({
+        publicKeyBase64Url: pk(),
+        displayName: `blind-a-${randomUUID().slice(0, 8)}`,
+        region: `blind-${randomUUID().slice(0, 8)}`,
+        hardwareClass: 'm2pro',
+        nodeId: `test-node-${randomUUID()}`,
+      });
+      seededIds.push(a.id);
+      await repo.setLivekitCredentials({
+        nodeId: a.id,
+        apiKey: 'key-blind-a',
+        apiSecretCiphertextBase64: 'ct',
+        wsUrl: 'ws://blind-a',
+      });
+      const b = await repo.register({
+        publicKeyBase64Url: pk(),
+        displayName: `blind-b-${randomUUID().slice(0, 8)}`,
+        region: `blind-${randomUUID().slice(0, 8)}`,
+        hardwareClass: 'm2pro',
+        nodeId: `test-node-${randomUUID()}`,
+      });
+      seededIds.push(b.id);
+      await repo.setLivekitCredentials({
+        nodeId: b.id,
+        apiKey: 'key-blind-b',
+        apiSecretCiphertextBase64: 'ct',
+        wsUrl: 'ws://blind-b',
+      });
+
+      // Must NOT throw (the bug); returns every livekit box, recency-ordered.
+      const candidates = await repo.listWithLivekitNearest(null);
+      const urls = candidates.map((c) => c.livekit?.wsUrl);
+      expect(urls).toContain('ws://blind-a');
+      expect(urls).toContain('ws://blind-b');
+      expect(candidates.every((c) => c.livekit !== null)).toBe(true);
+
+      // Empty string is treated as region-blind too — also must not throw.
+      const emptyRegion = await repo.listWithLivekitNearest('');
+      expect(emptyRegion.length).toBeGreaterThanOrEqual(2);
+    });
   },
 );

@@ -283,17 +283,19 @@ export class DrizzleFleetNodesRepo implements FleetNodesRepo {
     region: string | null | undefined,
   ): Promise<ReadonlyArray<FleetNodeDetail>> {
     const hasRegion = region != null && region !== '';
+    // Home-region rows first (boolean DESC → true before false), then
+    // most-recently-LiveKit-registered. A NULL/empty region degrades to PURE
+    // recency: the region term is OMITTED entirely (not rendered as a constant),
+    // because PostgreSQL rejects `ORDER BY <boolean-literal>` (e.g. `ORDER BY
+    // false DESC`) at execution — a region-blind dispatch must NOT throw.
+    const orderTerms = hasRegion
+      ? [desc(eq(fleetNodes.region, region)), desc(fleetNodes.livekitRegisteredAt)]
+      : [desc(fleetNodes.livekitRegisteredAt)];
     const rows = await this.database.db
       .select()
       .from(fleetNodes)
       .where(and(isNull(fleetNodes.revokedAt), sql`${fleetNodes.livekitApiKey} IS NOT NULL`))
-      // Home-region rows first (boolean DESC → true before false), then
-      // most-recently-LiveKit-registered. A NULL/empty region degrades to pure
-      // recency (the region predicate is a constant-false expression).
-      .orderBy(
-        desc(hasRegion ? eq(fleetNodes.region, region) : sql`false`),
-        desc(fleetNodes.livekitRegisteredAt),
-      );
+      .orderBy(...orderTerms);
     return rows.map(rowToDetail);
   }
 
