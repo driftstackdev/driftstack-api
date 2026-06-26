@@ -130,9 +130,8 @@ When `/v2/*` does ship, expect:
   don't trigger external deprecation cycle; staff updates the
   panel + the docs in lock-step.
 - **`/v1/account/*`** — customer self-serve account data
-  (audit-log, email-preferences, rate-limits per the /
-  . Same external-facing breaking-change discipline as
-  `/v1/sessions/*`.
+  (audit-log, email-preferences, rate-limits). Same external-facing
+  breaking-change discipline as `/v1/sessions/*`.
 
 ## What customers should do
 

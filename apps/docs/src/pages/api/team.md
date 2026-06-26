@@ -11,7 +11,7 @@ more member-accounts joined to it via the `/v1/team/*` endpoints.
 Each member uses their own login + their own dashboard sessions. API
 keys remain account-scoped (shared across the team) and admin-gated.
 
-> **Status (— May 2026):** end-to-end. Members can read the
+> **Status (shipped — May 2026):** end-to-end. Members can read the
 > owner's resources via `X-Driftstack-Account: acc_<owner-uuid>` on
 > any `/v1/*` request; members with the `admin` role can also write.
 > See "Acting on behalf of an owner" below.
@@ -79,9 +79,11 @@ own account regardless):
 Members can list the owners they're a member of:
 
 `GET /v1/team/owners` — returns `{ data: TeamOwner[] }` where each
-entry has `owner_account_id`, `role`, and `membership_id`. Useful
-for populating an "act as" picker in custom dashboards. The same
-data is also embedded in `GET /v1/account/me` under `teams[]`.
+entry has `owner_account_id`, `owner_email` (falls back to
+`acc_<id>` when unknown), `owner_name` (nullable), `role`, and
+`membership_id`. Useful for populating an "act as" picker in custom
+dashboards. The same data is also embedded in `GET /v1/account/me`
+under `teams[]`.
 
 ## Invite a team member
 

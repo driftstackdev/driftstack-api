@@ -80,9 +80,9 @@ calls and `key_<key-uuid>` for API-key calls. Both are `null` for
 
 `ip_address` and `user_agent` (top-level fields on the entry) are
 surfaced in the schema but deliberately null in production
-customer-facing responses for privacy (per the): the dashboard
-rendering doesn't display them, and the admin tooling reads them
-out of a separate internal store.
+customer-facing responses for privacy: the dashboard rendering
+doesn't display them, and the admin tooling reads them out of a
+separate internal store.
 
 **Caveat:** the auth-flow audit events
 (`account.email_verified`, `account.login`, `account.logout`,
@@ -263,7 +263,7 @@ ceiling and older entries weren't included. Customers needing the
 full history should narrow the date window or paginate via the
 read endpoint above.
 
-### SDK examples (; JSON branch only)
+### SDK examples (JSON branch only)
 
 The SDKs expose the JSON branch only — CSV download is browser-driven
 and not useful through a typed SDK call. Customers wanting CSV hit
