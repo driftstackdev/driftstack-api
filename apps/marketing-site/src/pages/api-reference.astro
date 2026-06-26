@@ -316,15 +316,13 @@ console.log(session.id);
             class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
 from driftstack import Driftstack
 client = Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"])
-session = client.sessions.create(archetype="iphone17_ios18_7_safari26_4")
+session = client.sessions.create({"archetype": "iphone17_ios18_7_safari26_4"})
 print(session.id)
 `}</code></pre>
           <pre
             class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
-client := driftstack.NewClient(driftstack.Config{
-    APIKey: os.Getenv("DRIFTSTACK_API_KEY"),
-})
-session, err := client.Sessions.Create(ctx, &driftstack.SessionCreateParams{
+client := driftstack.New(os.Getenv("DRIFTSTACK_API_KEY"))
+session, err := client.Sessions.Create(ctx, &driftstack.CreateSessionRequest{
     Archetype: "iphone17_ios18_7_safari26_4",
 })
 if err != nil { return err }
@@ -364,21 +362,22 @@ await client.sessions.wait(session.id, {
 `}</code></pre>
           <pre
             class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
-client.sessions.navigate(session.id, url="https://example.com")
-client.sessions.interact(session.id, action={
-    "kind": "tap", "selector": "button.cta",
+client.sessions.navigate(session.id, {"url": "https://example.com"})
+client.sessions.interact(session.id, {
+    "action": {"kind": "tap", "selector": "button.cta"},
 })
-client.sessions.wait(session.id, condition={
-    "kind": "selector", "selector": "main",
-}, timeout_ms=5000)
+client.sessions.wait(session.id, {
+    "condition": {"kind": "selector", "selector": "main"},
+    "timeout_ms": 5000,
+})
 `}</code></pre>
           <pre
             class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
-_, err = client.Sessions.Navigate(ctx, session.ID, &driftstack.NavigateParams{
+_, err = client.Sessions.Navigate(ctx, session.ID, &driftstack.NavigateRequest{
     URL: "https://example.com",
 })
-_, err = client.Sessions.Interact(ctx, session.ID, &driftstack.InteractParams{
-    Action: driftstack.Tap{Selector: "button.cta"},
+_, err = client.Sessions.Interact(ctx, session.ID, &driftstack.InteractRequest{
+    Action: driftstack.NewTapAction("button.cta"),
 })
 `}</code></pre>
         </div>
@@ -411,13 +410,13 @@ fs.writeFileSync("out.png", Buffer.from(shot.data, "base64"));
 `}</code></pre>
           <pre
             class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
-shot = client.sessions.capture(session.id, kind="screenshot")
+shot = client.sessions.capture(session.id, {"kind": "screenshot"})
 Path("out.png").write_bytes(base64.b64decode(shot.data))
 `}</code></pre>
           <pre
             class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
-shot, _ := client.Sessions.Capture(ctx, session.ID, &driftstack.CaptureParams{
-    Kind: "screenshot",
+shot, _ := client.Sessions.Capture(ctx, session.ID, &driftstack.CaptureRequest{
+    Kind: driftstack.CaptureScreenshot,
 })
 data, _ := base64.StdEncoding.DecodeString(shot.Data)
 os.WriteFile("out.png", data, 0644)
@@ -436,7 +435,7 @@ os.WriteFile("out.png", data, 0644)
       <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Error reference</p>
       <h2 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink">What can go wrong, and what to do about it.</h2>
       <p class="mt-3 max-w-prose text-tk-ink-2">
-        Every error is RFC 7807
+        Every error is RFC 9457
         <code class="font-mono">application/problem+json</code> with a
         stable <code class="font-mono">type</code> URI. SDK clients
         translate these into typed error classes; the cURL caller
@@ -538,7 +537,7 @@ os.WriteFile("out.png", data, 0644)
         </li>
         <li class="flex gap-3">
           <span class="text-tk-accent">→</span>
-          <span>Every error case maps to an RFC 7807 <code class="font-mono">application/problem+json</code> response with a stable <code class="font-mono">type</code> URI.</span>
+          <span>Every error case maps to an RFC 9457 <code class="font-mono">application/problem+json</code> response with a stable <code class="font-mono">type</code> URI.</span>
         </li>
         <li class="flex gap-3">
           <span class="text-tk-accent">→</span>

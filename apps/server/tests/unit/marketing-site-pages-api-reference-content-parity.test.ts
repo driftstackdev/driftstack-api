@@ -141,7 +141,7 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     expect(body).toMatch(/Three flows, four languages\./);
   });
 
-  it('V-662 Error reference 10-row taxonomy: 400 validation-failed + 401 unauthorized + 404 not-found + 409 conflict + 410 session-destroyed + 429 tier-limit + 429 rate-limited + 429 concurrency-limit + 500 internal + 503 feature-unavailable — pinned so the canonical 10-row RFC 7807 type URI table stays consistent (drift to dropping any would orphan SDK retry-logic implementers; drift to changing the type URI would break customer code that matches on type)', () => {
+  it('V-662 Error reference 10-row taxonomy: 400 validation-failed + 401 unauthorized + 404 not-found + 409 conflict + 410 session-destroyed + 429 tier-limit + 429 rate-limited + 429 concurrency-limit + 500 internal + 503 feature-unavailable — pinned so the canonical 10-row RFC 9457 type URI table stays consistent (drift to dropping any would orphan SDK retry-logic implementers; drift to changing the type URI would break customer code that matches on type)', () => {
     expect(body).toMatch(/errors\.driftstack\.dev\/validation-failed/);
     expect(body).toMatch(/errors\.driftstack\.dev\/unauthorized/);
     expect(body).toMatch(/errors\.driftstack\.dev\/not-found/);
@@ -179,12 +179,12 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     );
   });
 
-  it("Spec-posture 3-rule framing pinned: 'Every endpoint has Zod schemas for request + response. The OpenAPI 3.1 spec is generated from the schemas — there is no second source of truth.' + 'Every error case maps to an RFC 7807 application/problem+json response with a stable type URI.' + 'Breaking changes ship under a new path version. /v1 stays stable; /v2 would be a new prefix, not a silent shape change.' — pinned so the 3-rule API contract (Zod single-source + RFC 7807 + new-version-not-silent-change) all survives (drift to dropping any rule would weaken the API-stability contract)", () => {
+  it("Spec-posture 3-rule framing pinned: 'Every endpoint has Zod schemas for request + response. The OpenAPI 3.1 spec is generated from the schemas — there is no second source of truth.' + 'Every error case maps to an RFC 9457 application/problem+json response with a stable type URI.' + 'Breaking changes ship under a new path version. /v1 stays stable; /v2 would be a new prefix, not a silent shape change.' — pinned so the 3-rule API contract (Zod single-source + RFC 7807 + new-version-not-silent-change) all survives (drift to dropping any rule would weaken the API-stability contract)", () => {
     expect(body).toMatch(
       /Every endpoint has Zod schemas for request \+ response\. The OpenAPI 3\.1 spec is generated from the schemas — there is no second source of truth\./,
     );
     expect(body).toMatch(
-      /Every error case maps to an RFC 7807 <code class="font-mono">application\/problem\+json<\/code> response with a stable <code class="font-mono">type<\/code> URI\./,
+      /Every error case maps to an RFC 9457 <code class="font-mono">application\/problem\+json<\/code> response with a stable <code class="font-mono">type<\/code> URI\./,
     );
     expect(body).toMatch(
       /Breaking changes ship under a new path version\. <code class="font-mono">\/v1<\/code> stays stable; <code class="font-mono">\/v2<\/code> would be a new prefix, not a silent shape change\./,
