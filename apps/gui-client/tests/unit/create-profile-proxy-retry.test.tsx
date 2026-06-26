@@ -1,0 +1,153 @@
+// Deep-audit LOW: in the create-profile modal's inline "Add new proxy" flow, a
+// FAILED profile create (after the proxy was already minted) used to let the
+// user retry — and re-run addProxy, minting a SECOND identical proxy. Now the
+// minted proxy id is cached for the modal session so a retry REUSES it. This
+// drives the real modal: a create that rejects once then succeeds must call
+// addProxy exactly once across both attempts.
+
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+
+const addProxy = vi.fn<(d: unknown) => Promise<{ id: string }>>(() =>
+  Promise.resolve({ id: 'p_minted' }),
+);
+const profilesCreate = vi.fn<(b: unknown) => Promise<{ id: string }>>();
+const setDefaultProxy = vi.fn(() => Promise.resolve());
+
+// STABLE context object (referential identity preserved across renders) — a
+// fresh literal each call re-fires every client/accountMe effect → render loop.
+const stableContext = {
+  client: {
+    profiles: {
+      list: () => Promise.resolve({ data: [] }),
+      iterate: function* () {
+        /* empty */
+      },
+      create: (b: unknown) => profilesCreate(b),
+    },
+    sessions: { list: () => Promise.resolve({ data: [] }) },
+    agentSessions: { list: () => Promise.resolve({ data: [] }) },
+  },
+  settings: { apiKey: 'ds_test_x', baseUrl: 'http://localhost:3000' },
+  accountMe: {
+    tier: 'solo_manual',
+    concurrent_session_cap: 5,
+    concurrent_session_active: 0,
+    profile_cap: 10,
+    profile_count: 0,
+  },
+  refreshAccountMe: vi.fn(() => Promise.resolve()),
+  loading: false,
+  activeWorkspace: null,
+  setActiveWorkspace: vi.fn(),
+};
+vi.mock('../../src/lib/SettingsContext', () => ({
+  useSettings: () => stableContext,
+}));
+
+vi.mock('../../src/lib/profiles-meta', () => ({
+  loadProfilesMeta: () => Promise.resolve({}),
+  persistProfilesMeta: vi.fn(() => Promise.resolve()),
+  saveProfileMeta: vi.fn(() => Promise.resolve({})),
+  saveProfilesMetaBulk: vi.fn(() => Promise.resolve({})),
+  seedMetaFromServer: (local: unknown) => ({ map: local, changed: false }),
+  folderList: () => [],
+  aggregateTags: () => [],
+}));
+vi.mock('../../src/lib/folders-store', () => ({
+  loadFolders: () => Promise.resolve([]),
+  addFolder: vi.fn(() => Promise.resolve([])),
+  removeFolder: vi.fn(() => Promise.resolve([])),
+  renameFolder: vi.fn(() => Promise.resolve([])),
+  setFolderIcon: vi.fn(() => Promise.resolve({})),
+  loadFolderIcons: () => Promise.resolve({}),
+  replaceAllFolders: vi.fn(() => Promise.resolve()),
+}));
+vi.mock('../../src/lib/tags-store', () => ({
+  loadTags: () => Promise.resolve([]),
+  addTag: vi.fn(() => Promise.resolve([])),
+  removeTag: vi.fn(() => Promise.resolve([])),
+  renameTag: vi.fn(() => Promise.resolve([])),
+  replaceAllTags: vi.fn(() => Promise.resolve()),
+}));
+vi.mock('../../src/lib/account-organization', () => ({
+  fetchOrganization: () => Promise.reject(new Error('offline')),
+  saveOrganization: vi.fn(() => Promise.resolve()),
+}));
+vi.mock('../../src/lib/proxy-probe-cache', () => ({
+  loadProbeCache: () => Promise.resolve({}),
+  saveProbeResult: vi.fn(() => Promise.resolve({})),
+  saveExitResult: vi.fn(() => Promise.resolve({})),
+}));
+vi.mock('../../src/lib/profile-bindings', () => ({
+  listBindings: () => Promise.resolve([]),
+  getBinding: () => Promise.resolve(null),
+  setDefaultProxy: (...a: unknown[]) => setDefaultProxy(...(a as [])),
+  markLaunched: vi.fn(() => Promise.resolve()),
+  clearSession: vi.fn(() => Promise.resolve()),
+  deleteBinding: vi.fn(() => Promise.resolve()),
+}));
+vi.mock('../../src/lib/proxies', () => ({
+  listProxies: () => Promise.resolve([]),
+  addProxy: (d: unknown) => addProxy(d),
+  removeProxy: vi.fn(() => Promise.resolve()),
+  updateProxy: vi.fn(() => Promise.resolve({})),
+  setProxyServerId: vi.fn(() => Promise.resolve()),
+  validateDraft: () => ({ ok: true, errors: {} }),
+  testProxy: vi.fn(() => Promise.resolve({ reachable: true })),
+  probeProxyExit: vi.fn(() => Promise.resolve({})),
+}));
+vi.mock('../../src/lib/agent-session-control', () => ({
+  mintGuiControlKey: vi.fn(() => Promise.resolve(null)),
+}));
+
+const { ProfilesView } = await import('../../src/views/ProfilesView');
+
+async function openModalAndFill(): Promise<void> {
+  render(<ProfilesView onGoToSettings={vi.fn()} />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Create your first profile' }));
+  // Name (Identity tab is default).
+  const nameInput = await screen.findByPlaceholderText('my-recurring-workflow');
+  fireEvent.change(nameInput, { target: { value: 'Retry Profile' } });
+  // Proxy tab → inline create-new SOCKS5 (the default when no saved proxies).
+  fireEvent.click(await screen.findByRole('tab', { name: '🌍 Proxy' }));
+  fireEvent.change(await screen.findByPlaceholderText(/Label \(e\.g\./i), {
+    target: { value: 'inline-eu' },
+  });
+  fireEvent.change(await screen.findByPlaceholderText(/Host \(e\.g\. proxy\.example\.com\)/), {
+    target: { value: 'proxy.example.com' },
+  });
+}
+
+describe('create-profile modal — inline proxy is not duplicated on a failed-then-retried create', () => {
+  beforeEach(() => {
+    addProxy.mockClear();
+    addProxy.mockResolvedValue({ id: 'p_minted' });
+    profilesCreate.mockReset();
+    setDefaultProxy.mockClear();
+  });
+
+  it('mints the proxy ONCE across a failed attempt and a successful retry', async () => {
+    // First create fails (e.g. dup name); second succeeds.
+    profilesCreate
+      .mockRejectedValueOnce(new Error('name already exists'))
+      .mockResolvedValueOnce({ id: 'prof_ok' });
+
+    await openModalAndFill();
+
+    // Attempt 1 — the create rejects; the error surfaces and the modal stays open.
+    fireEvent.click(screen.getByRole('button', { name: /^Create profile$/ }));
+    await waitFor(() => expect(profilesCreate).toHaveBeenCalledTimes(1));
+    // The proxy was minted on this first attempt.
+    await waitFor(() => expect(addProxy).toHaveBeenCalledTimes(1));
+
+    // Attempt 2 — retry; the create succeeds this time.
+    fireEvent.click(screen.getByRole('button', { name: /^Create profile$/ }));
+    await waitFor(() => expect(profilesCreate).toHaveBeenCalledTimes(2));
+
+    // The proxy must NOT have been minted a second time (no duplicate).
+    expect(addProxy).toHaveBeenCalledTimes(1);
+    // And the profile was bound to the SAME minted proxy id.
+    await waitFor(() => expect(setDefaultProxy).toHaveBeenCalledWith('prof_ok', 'p_minted'));
+  });
+});

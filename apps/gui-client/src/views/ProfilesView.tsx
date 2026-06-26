@@ -3201,6 +3201,13 @@ function CreateProfileModal({
   const [icon, setIcon] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Inline "Add new proxy" mints a proxy BEFORE creating the profile. If the
+  // create then fails (tier cap / dup name / network), the proxy was already
+  // saved — and the catch lets the user retry, which would run addProxy AGAIN,
+  // minting a SECOND identical proxy (the Proxies tab accumulates duplicates).
+  // Cache the minted proxy id for THIS modal session so a retry REUSES it
+  // instead of re-creating. Cleared when the proxy choice/draft changes. (audit)
+  const mintedProxyIdRef = useRef<string | null>(null);
   // Configurator port (founder-approved profile-create demo, 2026-06-12):
   // tabbed layout + live identity-preview rail. Storage/Behavior tabs are
   // informational (their facts are real, their controls are future).
@@ -3238,6 +3245,12 @@ function CreateProfileModal({
   });
   // VPN paste-parse feedback (✓ endpoint host:port, or the parse error).
   const [newProxyVpnHint, setNewProxyVpnHint] = useState<string | null>(null);
+  // If the customer edits the proxy choice or the new-proxy draft, invalidate the
+  // cached minted-proxy id so the NEXT attempt mints a fresh proxy for the new
+  // inputs (rather than reusing the one minted for the old inputs).
+  useEffect(() => {
+    mintedProxyIdRef.current = null;
+  }, [proxyChoice, newProxy]);
   const newProxyIsVpn = newProxy.scheme === 'openvpn' || newProxy.scheme === 'wireguard';
   // Native proxy probe (SOCKS5 reachability + UDP-associate detection).
   // Runs against the inline create-new draft so the customer can confirm
@@ -3331,7 +3344,10 @@ function CreateProfileModal({
       //    fields; OpenVPN/WireGuard take the pasted .ovpn / wg0.conf and parse
       //    the endpoint out of it (host/port are the display endpoint).
       let resolvedProxyId: string | null = null;
-      if (proxyChoice === 'create-new') {
+      if (proxyChoice === 'create-new' && mintedProxyIdRef.current !== null) {
+        // A prior attempt already minted this proxy; reuse it (don't re-create).
+        resolvedProxyId = mintedProxyIdRef.current;
+      } else if (proxyChoice === 'create-new') {
         const label = newProxy.label.trim();
         if (label.length === 0) {
           setError('Proxy label is required.');
@@ -3403,6 +3419,8 @@ function CreateProfileModal({
         }
         const created = await addProxy(draft);
         resolvedProxyId = created.id;
+        // Remember it so a retry after a later failure reuses it, not re-mints.
+        mintedProxyIdRef.current = created.id;
       } else if (proxyChoice !== 'first-available') {
         resolvedProxyId = proxyChoice;
       }
