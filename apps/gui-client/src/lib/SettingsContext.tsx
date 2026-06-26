@@ -9,7 +9,15 @@
 // is exposed so views (Sessions, Profiles) can refresh after a
 // create/destroy that mutates the count.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { ReactNode } from 'react';
 import type { AccountSelfProfile } from '@driftstack/sdk';
 import { buildClient, type DriftstackClient } from './client';
@@ -116,6 +124,38 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
       /* session-only persistence */
     }
   }, []);
+
+  // Cross-account scope safety — a persisted team workspace must NOT leak into
+  // a different session/account. Reset the active workspace to personal scope
+  // when the key or deployment changes underneath it:
+  //   • sign-out (apiKey → null): drop the workspace so the next sign-in starts
+  //     personal, not scoped to the previous account's team owner id.
+  //   • baseUrl change: a cloud workspace id is meaningless against a different
+  //     deployment (self-hosted), so don't send a stale X-Driftstack-Account.
+  // Both are gated on `!loading`: while settings load, `settings` are the
+  // DEFAULTS (apiKey=null, default baseUrl) — that transient state is NOT a real
+  // sign-out / deployment switch and must not wipe a freshly restored workspace.
+  // (The "workspace isn't in the new account's teams" reconciliation lives in
+  // refreshAccountMe below, where accountMe.teams is known.)
+  useEffect(() => {
+    if (!loading && settings.apiKey === null && activeWorkspace !== null) {
+      setActiveWorkspace(null);
+    }
+  }, [loading, settings.apiKey, activeWorkspace, setActiveWorkspace]);
+
+  // Reset on deployment change. Keyed only on baseUrl (not activeWorkspace) so a
+  // legitimate same-deployment workspace switch isn't clobbered. The previous
+  // baseUrl is seeded only once settings have loaded, so the DEFAULT→loaded
+  // baseUrl transition during boot doesn't count as a deployment change and
+  // doesn't wipe the restored workspace.
+  const prevBaseUrlRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    if (prevBaseUrlRef.current !== null && prevBaseUrlRef.current !== settings.baseUrl) {
+      setActiveWorkspace(null);
+    }
+    prevBaseUrlRef.current = settings.baseUrl;
+  }, [loading, settings.baseUrl, setActiveWorkspace]);
   // Central 401 handling — an expired/revoked key makes every call 401; the
   // client's fetch observer flips this once so App shows ONE re-auth banner
   // instead of each view rendering its own 401 copy.
@@ -145,6 +185,17 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
     try {
       const me = await client.account.me();
       setAccountMe(me);
+      // Reconcile a persisted/active team workspace against the CURRENT account's
+      // teams. If the active workspace owner id isn't one of this key's teams
+      // (stale localStorage value, account swap, membership removed), drop to
+      // personal scope so we don't keep sending a workspace header the account
+      // can't satisfy (403 / empty results) instead of degrading cleanly.
+      if (
+        activeWorkspace !== null &&
+        !me.teams.some((t) => t.owner_account_id === activeWorkspace)
+      ) {
+        setActiveWorkspace(null);
+      }
     } catch {
       // Soft-fail, but FAIL CLOSED: KEEP the last-known accountMe rather than
       // nulling it. Views treat null as "cap unknown; don't gate", so nulling on a
@@ -155,7 +206,7 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
       // next successful fetch (and a missing client nulls it above). The underlying
       // error still surfaces when the user takes an action the server rejects.
     }
-  }, [client]);
+  }, [client, activeWorkspace, setActiveWorkspace]);
 
   useEffect(() => {
     void refreshAccountMe();
