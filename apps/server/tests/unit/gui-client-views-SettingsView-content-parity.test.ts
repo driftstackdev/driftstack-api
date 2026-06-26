@@ -118,9 +118,13 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     );
   });
 
-  it("Connected card: 'Pointing at <mono>{baseUrl}</mono> with key <mono>{apiKey.slice(0,12) ?? ''}…{apiKey.slice(-4) ?? ''}</mono>' (12+4 slice mask with '' fallback for null apiKey edge); first-run instruction 'Sign in with your browser to mint a fresh API key bound to your account, or paste an existing key from app.driftstack.dev/api-keys below.'", () => {
+  it("Connected card: 'Pointing at <mono>{baseUrl}</mono> with key <mono>{maskApiKey(settings.apiKey)}</mono>' — the inline slice(0,12)+slice(-4) mask was replaced by the shared, prefix-aware maskApiKey helper (imported from ../components/ApiKeyMaskedSpan; strips the known ds_live_ prefix + shows only 4+4 of the body) because the old inline slice leaked 16 contiguous real chars (audit); first-run instruction 'Sign in with your browser to mint a fresh API key bound to your account, or paste an existing key from app.driftstack.dev/api-keys below.'", () => {
+    expect(body).toMatch(/import \{ maskApiKey \} from '\.\.\/components\/ApiKeyMaskedSpan';/);
     expect(body).toMatch(
-      /Pointing at <span className="mono">\{settings\.baseUrl\}<\/span> with key\{' '\}\s*\n?\s*<span className="mono">\s*\n?\s*\{settings\.apiKey\?\.slice\(0, 12\) \?\? ''\}…\{settings\.apiKey\?\.slice\(-4\) \?\? ''\}\s*\n?\s*<\/span>/,
+      /Pointing at <span className="mono">\{settings\.baseUrl\}<\/span> with key\{' '\}[\s\S]{0,400}?<span className="mono">\{maskApiKey\(settings\.apiKey\)\}<\/span>\./,
+    );
+    expect(body).not.toMatch(
+      /\{settings\.apiKey\?\.slice\(0, 12\) \?\? ''\}…\{settings\.apiKey\?\.slice\(-4\) \?\? ''\}/,
     );
     // W577 — the first-run hint is now mode-aware: cloud keeps the
     // app.driftstack.dev/api-keys pointer; self-hosted explains the key

@@ -57,10 +57,15 @@ describe('W486.B apps/gui-client/src/components/ProfilesActionBar.tsx content pa
     expect(body).toMatch(/e\.key === 'Escape' && document\.activeElement === searchRef\.current/);
   });
 
-  it("count-display rule: '{n} of {total}' when a filter is active (search OR status !== 'all'), '{n} profile(s)' otherwise (singular at total===1) — pinned so the chrome stays honest about whether the customer is looking at a filtered slice or the whole list", () => {
+  it("count-display rule: '{visibleCount} of {total}' when the visible set is narrowed (isFiltered = visibleCount !== totalCount OR a search query OR status !== 'all' — the visibleCount check now also covers folder-/tag-only filters the search/status check missed, audit), '{n} profile(s)' otherwise (singular at total===1) — pinned so the chrome stays honest about whether the customer is looking at a filtered slice or the whole list", () => {
     expect(body).toMatch(
+      /const isFiltered =\s*\n?\s*visibleCount !== totalCount \|\| searchQuery\.trim\(\)\.length > 0 \|\| statusFilter !== 'all';/,
+    );
+    expect(body).not.toMatch(
       /const hasFilter = searchQuery\.trim\(\)\.length > 0 \|\| statusFilter !== 'all';/,
     );
+    expect(body).toMatch(/\{isFiltered \?/);
+    expect(body).toMatch(/\{visibleCount\} of \{totalCount\}/);
     expect(body).toMatch(/\{totalCount === 1 \? 'profile' : 'profiles'\}/);
   });
 

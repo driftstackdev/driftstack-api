@@ -99,8 +99,13 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     expect(body).toMatch(/await update\(\{ apiKey: trimmedKey, baseUrl: trimmedUrl \}\);/);
   });
 
-  it("baseUrl-mode sync useEffect: mode === 'cloud' → CLOUD_DEFAULT_URL else SELF_HOSTED_DEFAULT_URL — pinned so the URL field updates when the radio flips (otherwise a customer who picks cloud then switches to self-hosted sees the cloud URL stuck)", () => {
+  it("baseUrl-mode sync useEffect: mode === 'cloud' → CLOUD_DEFAULT_URL else lastSelfHostedUrlRef.current — pinned so the URL field updates when the radio flips, and a cloud round-trip no longer clobbers the customer's custom self-hosted URL back to the default (audit): the last self-hosted URL the user typed is stashed in a ref (seeded from SELF_HOSTED_DEFAULT_URL) and restored when switching back to self-hosted", () => {
+    expect(body).toMatch(/const lastSelfHostedUrlRef = useRef\(SELF_HOSTED_DEFAULT_URL\);/);
     expect(body).toMatch(
+      /setBaseUrl\(mode === 'cloud' \? CLOUD_DEFAULT_URL : lastSelfHostedUrlRef\.current\);/,
+    );
+    expect(body).toMatch(/if \(mode === 'self-hosted'\) lastSelfHostedUrlRef\.current = next;/);
+    expect(body).not.toMatch(
       /setBaseUrl\(mode === 'cloud' \? CLOUD_DEFAULT_URL : SELF_HOSTED_DEFAULT_URL\);/,
     );
   });

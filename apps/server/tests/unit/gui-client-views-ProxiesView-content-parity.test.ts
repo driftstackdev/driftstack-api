@@ -51,9 +51,9 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     );
   });
 
-  it("ListState 3-field (proxies + loading + error nullable); EMPTY_DRAFT 5-field with label:'' + host:'' + port:1080 (SOCKS5 default) + username:null + password:null — pinned so the SOCKS5 default port doesn't drift, customer can submit without typing a port", () => {
+  it("ListState 4-field (proxies + loading + error nullable + notice nullable — the transient unbind confirmation, e.g. 'N profiles were unbound from the deleted proxy'); EMPTY_DRAFT 6-field with label:'' + scheme:'socks5' + host:'' + port:1080 (SOCKS5 default) + username:null + password:null — pinned so the SOCKS5 default port doesn't drift, customer can submit without typing a port", () => {
     expect(body).toMatch(
-      /interface ListState \{\s*\n?\s*proxies: ProxyConfig\[\];\s*\n?\s*loading: boolean;\s*\n?\s*error: string \| null;\s*\n?\s*\}/,
+      /interface ListState \{\s*\n?\s*proxies: ProxyConfig\[\];\s*\n?\s*loading: boolean;\s*\n?\s*error: string \| null;\s*\n?\s*\/\*\* Transient confirmation, e\.g\. "N profiles were unbound from the deleted proxy"\. \*\/\s*\n?\s*notice: string \| null;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
       /const EMPTY_DRAFT: ProxyDraft = \{\s*\n?\s*label: '',\s*\n?\s*scheme: 'socks5',\s*\n?\s*host: '',\s*\n?\s*port: 1080,\s*\n?\s*username: null,\s*\n?\s*password: null,\s*\n?\s*\};/,

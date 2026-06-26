@@ -60,7 +60,12 @@ describe('W608.B apps/gui-client/src/lib/recordings.tsx content parity', () => {
     expect(body).toMatch(/startRecording: \(sessionId: string, label\?: string\) => string;/);
     expect(body).toMatch(/stopRecording: \(id: string\) => Promise<Recording \| null>;/);
     expect(body).toMatch(/addFrame: \(id: string, frame: RecordingFrame\) => void;/);
-    expect(body).toMatch(/deleteRecording: \(id: string\) => Promise<void>;/);
+    // deleteRecording now resolves a boolean — true on success, false when the
+    // on-disk delete failed (the row is restored so the UI matches reality).
+    expect(body).toMatch(
+      /\/\*\* Delete a recording from memory \+ disk\. Resolves true on success; false if\s*\n\s*\*\s*the on-disk delete failed \(the row is restored so the UI matches reality\)\. \*\/\s*\n\s*deleteRecording: \(id: string\) => Promise<boolean>;/,
+    );
+    expect(body).not.toMatch(/deleteRecording: \(id: string\) => Promise<void>;/);
     expect(body).toMatch(/hydrateFrames: \(id: string\) => Promise<Recording \| null>;/);
     expect(body).toMatch(/activeRecordingFor: \(sessionId: string\) => string \| null;/);
   });

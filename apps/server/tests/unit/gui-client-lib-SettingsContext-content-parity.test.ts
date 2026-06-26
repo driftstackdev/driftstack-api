@@ -126,15 +126,19 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
     );
   });
 
-  it('V-239 refreshAccountMe — useCallback on [client]; null-client short-circuit sets accountMe=null; the soft-fail catch now FAILS CLOSED: it KEEPS the last-known accountMe (does NOT null it) so a transient /account/me blip cannot evaporate the at-cap session-cap gate (audit wja3dfl5t). Drift back to nulling on transient error would re-open the at-cap New-session button.', () => {
+  it("V-239 refreshAccountMe — useCallback on [client, activeWorkspace, setActiveWorkspace]; null-client short-circuit sets accountMe=null; the soft-fail catch FAILS CLOSED: it KEEPS the last-known accountMe (does NOT null it) so a transient /account/me blip cannot evaporate the at-cap session-cap gate (audit wja3dfl5t). It also now reconciles a stale active workspace against the CURRENT account teams, dropping to personal scope (setActiveWorkspace(null)) when the active workspace owner is no longer one of this key's teams — so the deps gained activeWorkspace + setActiveWorkspace. Drift back to nulling on transient error would re-open the at-cap New-session button.", () => {
     expect(body).toMatch(
       /const refreshAccountMe = useCallback\(async \(\): Promise<void> => \{\s*\n\s*if \(!client\) \{\s*\n\s*setAccountMe\(null\);\s*\n\s*return;\s*\n\s*\}/,
     );
     expect(body).toMatch(/const me = await client\.account\.me\(\);/);
     expect(body).toMatch(/setAccountMe\(me\);/);
+    expect(body).toMatch(
+      /if \(\s*\n\s*activeWorkspace !== null &&\s*\n\s*!me\.teams\.some\(\(t\) => t\.owner_account_id === activeWorkspace\)\s*\n\s*\) \{\s*\n\s*setActiveWorkspace\(null\);\s*\n\s*\}/,
+    );
     expect(body).toMatch(/Soft-fail, but FAIL CLOSED: KEEP the last-known accountMe/);
     expect(body).toMatch(/evaporated the at-cap New-session gate/);
-    expect(body).toMatch(/\}, \[client\]\);/);
+    expect(body).toMatch(/\}, \[client, activeWorkspace, setActiveWorkspace\]\);/);
+    expect(body).not.toMatch(/\}, \[client\]\);/);
     expect(body).toMatch(
       /useEffect\(\(\) => \{\s*\n\s*void refreshAccountMe\(\);\s*\n\s*\}, \[refreshAccountMe\]\);/,
     );

@@ -101,11 +101,15 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     expect(body).not.toMatch(/redactBaseUrl/);
   });
 
-  it('Sidebar mount pinned: imports { Sidebar, type SidebarViewKind } and renders <Sidebar current=… /> in the shell — the 4-section taxonomy itself moved to apps/gui-client/src/components/Sidebar.tsx (covered by W486.S parity), so App.tsx now only proves the mount wires up correctly + the kind cast bridges the View discriminated union', () => {
+  it("Sidebar mount pinned: imports { Sidebar, type SidebarViewKind } and renders <Sidebar current={sidebarSectionFor(view)} /> in the shell — the 4-section taxonomy itself moved to apps/gui-client/src/components/Sidebar.tsx (covered by W486.S parity), so App.tsx now only proves the mount wires up correctly + the sidebarSectionFor() helper folds DRILLED-IN sub-views ('live-session'→'sessions', 'recording-player'→'recordings') onto their parent section so the nav stays lit (replacing the old `view.kind as SidebarViewKind` cast that matched nothing for drill-in views)", () => {
     expect(body).toMatch(
       /import \{ Sidebar, type SidebarViewKind \} from '\.\/components\/Sidebar';/,
     );
-    expect(body).toMatch(/<Sidebar\s*\n?\s*current=\{view\.kind as SidebarViewKind\}/);
+    expect(body).toMatch(/<Sidebar\s*\n?\s*current=\{sidebarSectionFor\(view\)\}/);
+    expect(body).toMatch(
+      /export function sidebarSectionFor\(view: View\): SidebarViewKind \{\s*\n?\s*switch \(view\.kind\) \{\s*\n?\s*case 'live-session':\s*\n?\s*return 'sessions';\s*\n?\s*case 'recording-player':\s*\n?\s*return 'recordings';\s*\n?\s*default:\s*\n?\s*return view\.kind;\s*\n?\s*\}\s*\n?\s*\}/,
+    );
+    expect(body).not.toMatch(/<Sidebar\s*\n?\s*current=\{view\.kind as SidebarViewKind\}/);
   });
 
   it("loading branch: while settings load, render nothing rather than flashing the wizard — pinned so customers don't see a flash-of-wizard before settings hydrate (which would happen if apiKey===null is evaluated against the pre-hydration default state); Loading… section-label rendered in a centered surface-base wrapper", () => {
