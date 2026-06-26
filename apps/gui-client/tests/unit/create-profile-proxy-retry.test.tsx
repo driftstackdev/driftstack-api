@@ -150,4 +150,47 @@ describe('create-profile modal — inline proxy is not duplicated on a failed-th
     // And the profile was bound to the SAME minted proxy id.
     await waitFor(() => expect(setDefaultProxy).toHaveBeenCalledWith('prof_ok', 'p_minted'));
   });
+
+  it('a follow-up-step failure is best-effort — the create still completes (no retry loop → no re-bill)', async () => {
+    // Profile create SUCCEEDS; the follow-up bind (setDefaultProxy) throws. The
+    // follow-ups are best-effort, so the submit still completes (onCreated →
+    // modal closes) instead of surfacing an error and stranding the user in a
+    // retry that would re-run profiles.create and mint a SECOND billed profile.
+    profilesCreate.mockResolvedValue({ id: 'prof_once' });
+    setDefaultProxy.mockRejectedValueOnce(new Error('binding store offline'));
+
+    await openModalAndFill();
+    fireEvent.click(screen.getByRole('button', { name: /^Create profile$/ }));
+    await waitFor(() => expect(profilesCreate).toHaveBeenCalledTimes(1));
+
+    // The modal closed on success (the Create-profile button is gone) — the
+    // follow-up failure did NOT keep it open for a re-bill retry.
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /^Create profile$/ })).toBeNull(),
+    );
+    // And the profile was created exactly once.
+    expect(profilesCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('create-profile modal — client-side name validation (specific message, not opaque 422)', () => {
+  beforeEach(() => {
+    addProxy.mockClear();
+    profilesCreate.mockReset();
+    setDefaultProxy.mockClear();
+  });
+
+  it('blocks an invalid name client-side (server create is never called) and shows a specific message', async () => {
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create your first profile' }));
+    const nameInput = await screen.findByPlaceholderText('my-recurring-workflow');
+    // A name that violates ProfileNameSchema (trailing punctuation).
+    fireEvent.change(nameInput, { target: { value: 'bad-name.' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Create profile$/ }));
+
+    // Specific, actionable message — NOT the opaque server "Validation Failed".
+    expect(await screen.findByText(/start and end with a letter or digit/i)).toBeInTheDocument();
+    // The server create was never attempted (pure client-side pre-flight).
+    expect(profilesCreate).not.toHaveBeenCalled();
+  });
 });

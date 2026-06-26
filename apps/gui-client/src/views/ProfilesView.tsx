@@ -69,6 +69,7 @@ import {
 } from '@driftstack/sdk';
 import { openSimulatorWindow } from '../lib/open-simulator';
 import { mintGuiControlKey } from '../lib/agent-session-control';
+import { validateProfileName } from '../lib/profile-name';
 import { useSettings } from '../lib/SettingsContext';
 import { normalizeNavigateUrl } from '../lib/address-bar';
 import { DriftstackError, type Session } from '../lib/client';
@@ -3131,6 +3132,13 @@ function CreateProfileModal({
   // Cache the minted proxy id for THIS modal session so a retry REUSES it
   // instead of re-creating. Cleared when the proxy choice/draft changes. (audit)
   const mintedProxyIdRef = useRef<string | null>(null);
+  // Same duplicate-on-retry hazard as the proxy mint above, one step later: if
+  // client.profiles.create() SUCCEEDS but a follow-up step (saveProfileMeta /
+  // setDefaultProxy) throws, the catch lets the user retry — which re-ran
+  // profiles.create() and minted a SECOND (billed) profile. Cache the created
+  // profile id for THIS modal session so a retry REUSES it instead of
+  // re-creating; the follow-up steps are best-effort (see handleSubmit). (audit)
+  const createdProfileIdRef = useRef<string | null>(null);
   // Configurator port (founder-approved profile-create demo, 2026-06-12):
   // tabbed layout + live identity-preview rail. Storage/Behavior tabs are
   // informational (their facts are real, their controls are future).
@@ -3174,7 +3182,19 @@ function CreateProfileModal({
   useEffect(() => {
     mintedProxyIdRef.current = null;
   }, [proxyChoice, newProxy]);
+  // Invalidate the cached created-profile id when the identity-defining inputs
+  // change — a different name/archetype is a genuinely different profile, so the
+  // next submit should create it (not reuse the one already created for the old
+  // inputs). A retry of the SAME inputs keeps the ref so it doesn't double-create.
+  useEffect(() => {
+    createdProfileIdRef.current = null;
+  }, [name, archetype]);
   const newProxyIsVpn = newProxy.scheme === 'openvpn' || newProxy.scheme === 'wireguard';
+  // The native "Test proxy" probe runs a SOCKS5 handshake, so it is only
+  // meaningful for socks5 proxies. For an HTTP proxy it would always fail the
+  // handshake → a valid HTTP proxy showed "Not reachable". Gate the Test button
+  // to socks5 (VPN schemes already hide it via newProxyIsVpn).
+  const newProxyCanTest = newProxy.scheme === 'socks5';
   // Native proxy probe (SOCKS5 reachability + UDP-associate detection).
   // Runs against the inline create-new draft so the customer can confirm
   // the proxy works — and whether UDP/QUIC/WebRTC will tunnel — before
@@ -3251,6 +3271,14 @@ function CreateProfileModal({
     const trimmed = name.trim();
     if (trimmed.length === 0) {
       setError('Name is required.');
+      return;
+    }
+    // Pre-validate the name against the server's ProfileNameSchema so a bad name
+    // (e.g. leading/trailing punctuation, an emoji) shows a SPECIFIC message
+    // here instead of the opaque "Validation Failed" the server's 422 maps to.
+    const nameProblem = validateProfileName(trimmed);
+    if (nameProblem !== null) {
+      setError(nameProblem);
       return;
     }
     setSubmitting(true);
@@ -3352,23 +3380,42 @@ function CreateProfileModal({
         .map((t) => t.trim().slice(0, 24))
         .filter((t) => t.length > 0)
         .slice(0, 12);
-      const profile = await client.profiles.create({
-        name: trimmed,
-        archetype,
-        ...(description.trim().length > 0 ? { description: description.trim() } : {}),
-        ...(folder.trim().length > 0 ? { folder: folder.trim().slice(0, 32) } : {}),
-        ...(tagList.length > 0 ? { tags: [...new Set(tagList)] } : {}),
-        // Per-account sync — send the chosen icon so it follows the account.
-        ...(icon.length > 0 ? { icon } : {}),
-      });
+      // Create the profile ONCE per modal session: if a prior attempt already
+      // created it (and only a follow-up step failed), reuse that id on retry so
+      // we don't mint a SECOND billed profile. createdProfileIdRef is cleared
+      // when name/archetype change (a genuinely different profile).
+      let profileId = createdProfileIdRef.current;
+      if (profileId === null) {
+        const profile = await client.profiles.create({
+          name: trimmed,
+          archetype,
+          ...(description.trim().length > 0 ? { description: description.trim() } : {}),
+          ...(folder.trim().length > 0 ? { folder: folder.trim().slice(0, 32) } : {}),
+          ...(tagList.length > 0 ? { tags: [...new Set(tagList)] } : {}),
+          // Per-account sync — send the chosen icon so it follows the account.
+          ...(icon.length > 0 ? { icon } : {}),
+        });
+        profileId = profile.id;
+        createdProfileIdRef.current = profile.id;
+      }
+      // 2b/3. Follow-up steps are BEST-EFFORT: a failure here must NOT force a
+      // re-create of the (already-billed) profile on retry. The profile exists;
+      // these only enrich it (local org-cache mirror) or set its default proxy,
+      // both of which the customer can fix from the profile row afterward.
       // Mirror into the local organization cache so the hub shows the
       // folder/tags immediately (and offline).
       if (folder.trim().length > 0 || tagList.length > 0 || icon.length > 0) {
-        await saveProfileMeta(profile.id, { folder: folder.trim(), tags: tagList, icon });
+        await saveProfileMeta(profileId, { folder: folder.trim(), tags: tagList, icon }).catch(
+          (err: unknown) => {
+            console.warn('[profiles] saveProfileMeta failed (profile created):', err);
+          },
+        );
       }
-      // 3. Bind the chosen proxy to the new profile. null = use the
-      //    first-available proxy at Launch time.
-      await setDefaultProxy(profile.id, resolvedProxyId);
+      // Bind the chosen proxy to the new profile. null = use the first-available
+      // proxy at Launch time.
+      await setDefaultProxy(profileId, resolvedProxyId).catch((err: unknown) => {
+        console.warn('[profiles] setDefaultProxy failed (profile created):', err);
+      });
       onCreated();
     } catch (err) {
       setError(friendlyError(err, settings.baseUrl));
@@ -3716,7 +3763,7 @@ function CreateProfileModal({
                         )}
                       </div>
                     )}
-                    {!newProxyIsVpn && (
+                    {newProxyCanTest && (
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
@@ -3732,7 +3779,7 @@ function CreateProfileModal({
                         </span>
                       </div>
                     )}
-                    {!newProxyIsVpn && testResult !== null && (
+                    {newProxyCanTest && testResult !== null && (
                       <div
                         role="status"
                         className={`flex flex-col gap-1 rounded-sm border px-2 py-1.5 text-2xs ${
