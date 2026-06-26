@@ -114,10 +114,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <ul>
       <li>Database content (Postgres, Neon EU).</li>
       <li>Cache content (Redis, Upstash EU).</li>
-      <li>Profile state blobs on the driver host (EU).</li>
-      <li>Session-execution traffic between the API server, the
-        browser driver, and the customer's target URL.</li>
+      <li>Profile state at rest in the database + object storage
+        (Neon EU, Upstash EU, EU-region R2 where configured).</li>
     </ul>
+    <p>
+      Profile state blobs are loaded onto the driver host and
+      session-execution traffic (API server ↔ browser driver ↔ the
+      customer's target URL) flows through the MacStadium fleet in the
+      US — see <a href="#what-does-leave-the-eu">What does leave the
+      EU</a> below.
+    </p>
 
     <h2 id="what-does-leave-the-eu">What does leave the EU</h2>
     <ul>
@@ -137,8 +143,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         BYOK accounts bypass this entirely.</li>
       <li><strong>MacStadium (session execution):</strong> the
         iPhone Safari driver fleet runs on MacStadium hardware
-        (US). Session-execution traffic between the API server and
-        the driver fleet uses Driftstack-managed VPN tunnels;
+        (US). Profile state is loaded onto the driver host for the
+        life of a session, and session-execution traffic between the
+        API server, the driver fleet, and the customer's target URL
+        traverses the US fleet via Driftstack-managed VPN tunnels;
         contractual transfer is via SCCs + EU-US DPF.</li>
     </ul>
 

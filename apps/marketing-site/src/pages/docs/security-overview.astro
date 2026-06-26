@@ -50,9 +50,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <li>
         <strong>Profile state:</strong> Per-profile browser state
         (cookies, localStorage, IndexedDB) lives in the WebKit driver
-        layer as per-profile encrypted files on disk (EU host). The
-        Postgres profile row holds metadata only — name, archetype,
-        description.
+        layer as per-profile encrypted files on disk on the driver
+        host (the MacStadium fleet, US). The Postgres profile row
+        (EU) holds metadata only — name, archetype, description.
       </li>
     </ul>
 
@@ -128,7 +128,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         ephemeral context; cross-session state never bleeds.
         Persistence between sessions only happens via the
         customer-managed <strong>profile</strong> mechanism
-        (encrypted browser state on the driver host, EU).
+        (encrypted browser state on the driver host — the MacStadium
+        fleet, US).
       </li>
       <li>
         Concurrent-session caps per tier act as the primary
