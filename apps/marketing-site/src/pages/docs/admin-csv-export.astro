@@ -100,11 +100,12 @@ Accept: text/csv</code></pre>
     <h2>Limits</h2>
     <p>
       The CSV endpoint exports up to <strong>1000 rows</strong> per
-      request. If the filtered scan would return more than 1000
-      rows, the export is truncated to the most-recently-updated
-      1000 and a warning header is set:
+      request. If the filtered scan would return more than 1000 rows,
+      the export is capped at the most-recently-updated 1000. The CSV
+      endpoint does not set a truncation header, so detect a capped
+      result by checking whether you received a full 1000-row page —
+      if you did, there may be more.
     </p>
-    <pre><code>X-Driftstack-Export-Truncated: 1</code></pre>
     <p>
       For full-history exports beyond 1000 rows, walk the
       <a href="/docs/admin-api-pagination">cursor-paginated JSON
