@@ -63,30 +63,53 @@ export interface UseInputCaptureOpts {
    *  effectively dead, so control isn't reaching the device. The parent wires
    *  this to a small non-fatal badge. Fired at most once per effect run. */
   onPublishError?: () => void;
+  /** The live captured-frame logical device-CSS-px dims the Mac touch injector
+   *  addresses (per-archetype, A3 84de32ad4d). The parent computes this from the
+   *  <video> element's FIRST full-res natural size ÷ dpr (= screen_width ×
+   *  inner_height per archetype) and threads it here so the coordinate mapping +
+   *  the scroll/glide clamps adapt to the dispatched device. Undefined until the
+   *  first frame reports → the 402×874 fallback default is used (a harmless
+   *  pre-stream value; capture is a no-op until a track arrives anyway). NOT a
+   *  live read of video.videoWidth/Height — that downscales (A3 W2811). */
+  logical?: { width: number; height: number };
 }
 
-/** The archetype's FIXED logical device-CSS-px screen (iPhone 17 = 402×874).
- *  A3 W2811: the Mac touch injector addresses the CSS content viewport in this
- *  fixed space, NOT the streamed track's pixel size. The SFU REMB-downscales the
- *  published track under bandwidth pressure (e.g. to ~200×436), so any coordinate
- *  derived from video.videoWidth/Height halves on a throttle. Map against this
- *  constant instead so the touch space is invariant to the track resolution.
- *  v1 constant for iphone17 (the only shipped archetype); thread a per-archetype
- *  size through `logical` below when a second device profile ships. */
+/** The launch archetype's logical device-CSS-px frame, used as the FALLBACK when
+ *  no live frame has reported its size yet (iphone16pro content-only = 402×714 web
+ *  viewport; the historical 402×874 screen is the safe default before metadata).
+ *
+ *  Per-archetype dispatch (A3 84de32ad4d, fork content-only window sizing on box
+ *  mac-macstadium-us-001) sizes the captured video PER archetype — the captured
+ *  frame == the web content edge-to-edge (NO chrome bands), so the touch injector
+ *  addresses that captured-frame logical space (= screen_width × inner_height per
+ *  archetype: 16pro 402×714, 14promax 430×739, 13pro 390×699). The live logical
+ *  dims are threaded through `logical` (on UseInputCaptureOpts + pointerToViewport)
+ *  from the <video> element's first-reported natural size ÷ dpr.
+ *
+ *  A3 W2811 (downscale invariance) still holds: the source of `logical` is the
+ *  FIRST full-res metadata (captured once parent-side), NOT a live read of
+ *  video.videoWidth/Height — the SFU REMB-downscales the track under bandwidth
+ *  pressure (e.g. to ~200×436), so reading it per-event would halve every
+ *  coordinate on a throttle. Mapping against the stable per-archetype `logical`
+ *  keeps the touch space invariant to the track resolution. */
 const DEVICE_LOGICAL_WIDTH = 402;
 const DEVICE_LOGICAL_HEIGHT = 874;
 
-/** Map a browser pointer event to the FIXED logical device-CSS-px frame
- *  (402×874 — the space the Mac touch injector expects, A3 W2811), object-
- *  contain-aware. Returns null when the element isn't sized yet (race on first
- *  mount) or the pointer is in a letterbox/pillarbox bar (off-surface).
+/** Map a browser pointer event to the logical device-CSS-px frame the Mac touch
+ *  injector expects (per-archetype captured-frame space — A3 84de32ad4d; defaults
+ *  to 402×874 until the live frame size is known), object-contain-aware. Returns
+ *  null when the element isn't sized yet (race on first mount) or the pointer is in
+ *  a letterbox/pillarbox bar (off-surface).
  *
- *  The `logical` size is a parameter (default 402×874) so a future archetype can
- *  pass its own screen size and the pure unit tests can pin the object-contain
- *  math at any size. Crucially it does NOT read video.videoWidth/Height for the
- *  scale: the SFU downscales the track, and pre-2026-06-23 that made a tap land
- *  high-and-left ("above where I tap") whenever the track was throttled, snapping
- *  back when it recovered (founder 2026-06-23; root-caused A3 W2811).
+ *  The `logical` size is a parameter (default 402×874) so each archetype passes its
+ *  own captured-frame logical size (= screen_width × inner_height ÷ dpr — the
+ *  content-only fork makes the captured video the web content edge-to-edge) and the
+ *  pure unit tests can pin the object-contain math at any size. Crucially it does
+ *  NOT read video.videoWidth/Height for the scale: the SFU downscales the track, and
+ *  pre-2026-06-23 that made a tap land high-and-left ("above where I tap") whenever
+ *  the track was throttled, snapping back when it recovered (founder 2026-06-23;
+ *  root-caused A3 W2811). The caller threads `logical` from the FIRST full-res
+ *  metadata, which is stable across SFU downscale.
  *
  *  Exported (alongside `modifiersFromEvent` and `mouseButton`) so pure-function
  *  unit tests can pin the coordinate math without jsdom + a fake LiveKit Room. */
@@ -327,8 +350,20 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
   // livekit-latency-ping.ts) re-runs only on a real change, and keying on the
   // actual `videoElement` re-runs the effect when the element mounts.
   const { room, videoElement: video, enabled } = opts;
+  // The per-archetype captured-frame logical dims (default 402×874 until the first
+  // frame reports). Destructured to primitives so the effect re-keys on the actual
+  // width/height VALUES — a parent passing an inline `{ width, height }` literal
+  // makes `opts.logical` a fresh ref every render; depending on the object would
+  // re-attach the listeners (and its cleanup nulls active.current, dropping an
+  // in-flight gesture). The DEFAULTS land here so the in-effect closures below read
+  // a single resolved pair.
+  const logicalW = opts.logical?.width ?? DEVICE_LOGICAL_WIDTH;
+  const logicalH = opts.logical?.height ?? DEVICE_LOGICAL_HEIGHT;
   useEffect(() => {
     if (!enabled || room === null || video === null) return;
+    // The captured-frame logical frame the injector addresses (per-archetype). Used
+    // for the pointer mapping AND the scroll/glide clamps so both adapt together.
+    const logical = { width: logicalW, height: logicalH };
 
     let warnedPublishFailure = false;
     const send = (event: InputEvent, reliable: boolean): void => {
@@ -348,15 +383,14 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       });
     };
 
-    // Clamp a glide point inside the video — a flick path extends past where the
-    // finger lifted, so this keeps us from sending a wild off-surface touch (read
-    // live: the video's intrinsic size may not be known at effect-setup time).
-    // Clamp a glide/scroll point inside the FIXED logical device frame (402×874),
-    // NOT video.videoWidth/Height — the SFU downscales the track, so clamping to
-    // the track px would shrink the usable surface on a throttle (same root cause
-    // as the pointerToViewport fix, A3 W2811).
-    const clampX = (v: number): number => Math.max(0, Math.min(DEVICE_LOGICAL_WIDTH, v));
-    const clampY = (v: number): number => Math.max(0, Math.min(DEVICE_LOGICAL_HEIGHT, v));
+    // Clamp a glide/scroll point inside the per-archetype captured-frame logical
+    // device frame (the live `logical` dims, default 402×874), NOT
+    // video.videoWidth/Height — the SFU downscales the track, so clamping to the
+    // track px would shrink the usable surface on a throttle (same root cause as
+    // the pointerToViewport fix, A3 W2811). A flick path extends past where the
+    // finger lifted, so this keeps us from sending a wild off-surface touch.
+    const clampX = (v: number): number => Math.max(0, Math.min(logical.width, v));
+    const clampY = (v: number): number => Math.max(0, Math.min(logical.height, v));
     // Halt an in-flight inertial glide. endTouch=true lifts the gliding finger (a
     // new press mid-glide, like tapping to stop iOS momentum); teardown passes
     // false (just clear the timer — the room is going away).
@@ -418,7 +452,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // wire — a residual wheel touch + a fresh press = a spurious multi-touch/pinch.
       window.clearTimeout(wheelTimer);
       endWheelDrag();
-      const p = pointerToViewport(e, video);
+      const p = pointerToViewport(e, video, logical);
       if (p === null) return;
       try {
         if ('setPointerCapture' in video && 'pointerId' in e) {
@@ -444,7 +478,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     const onMouseMove = (e: MouseEvent): void => {
       const g = active.current;
       if (g === null) return;
-      let p = pointerToViewport(e, video);
+      let p = pointerToViewport(e, video, logical);
       if (p === null) {
         // Off the video. An uncommitted gesture stays buffered (ignore). A COMMITTED
         // drag keeps scrolling: clamp the cursor to the video edge so wandering off
@@ -455,7 +489,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         if (r.width === 0 || r.height === 0) return;
         const cx = Math.max(r.left, Math.min(r.right, e.clientX));
         const cy = Math.max(r.top, Math.min(r.bottom, e.clientY));
-        p = pointerToViewport({ clientX: cx, clientY: cy } as MouseEvent, video);
+        p = pointerToViewport({ clientX: cx, clientY: cy } as MouseEvent, video, logical);
         if (p === null) {
           // The clamped EDGE point can land in a sub-pixel object-contain bar (W2820 #3:
           // the element's on-screen aspect can drift a hair from the logical 402×874 when
@@ -464,10 +498,8 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
           // committed drag the clamp exists to keep alive (audit S1). Fall back to a direct
           // rect-fraction map clamped to the logical frame so the scroll never freezes.
           p = {
-            x: Math.round(Math.max(0, Math.min(1, (cx - r.left) / r.width)) * DEVICE_LOGICAL_WIDTH),
-            y: Math.round(
-              Math.max(0, Math.min(1, (cy - r.top) / r.height)) * DEVICE_LOGICAL_HEIGHT,
-            ),
+            x: Math.round(Math.max(0, Math.min(1, (cx - r.left) / r.width)) * logical.width),
+            y: Math.round(Math.max(0, Math.min(1, (cy - r.top) / r.height)) * logical.height),
           };
         }
       }
@@ -524,7 +556,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         send({ type: 'touchEnd', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
         return;
       }
-      const p = pointerToViewport(e, video);
+      const p = pointerToViewport(e, video, logical);
       if (p === null) {
         // Committed drag released OFF the surface → lift at the last in-bounds point
         // (NOT 0,0 — the Mac injector honors the end coord, so 0,0 reads as a flick).
@@ -705,9 +737,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         }
         return;
       }
-      // Fixed logical device frame (NOT the SFU-downscaled track px — A3 W2811).
-      const vw = DEVICE_LOGICAL_WIDTH;
-      const vh = DEVICE_LOGICAL_HEIGHT;
+      // Per-archetype captured-frame logical device frame (NOT the SFU-downscaled
+      // track px — A3 W2811).
+      const vw = logical.width;
+      const vh = logical.height;
       const margin = 48;
       const cap = (d: number): number =>
         Math.max(-WHEEL_MAX_FRAME_DELTA, Math.min(WHEEL_MAX_FRAME_DELTA, d));
@@ -809,15 +842,16 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // it releases, so a click-drag + trackpad scroll can't put a SECOND concurrent
       // touch on the wire (the device reads two touchIds as a pinch/multi-touch).
       if (active.current !== null) return;
-      const p = pointerToViewport(e, video);
+      const p = pointerToViewport(e, video, logical);
       if (p === null) return;
       wheelCursorX = clampX(p.x);
       // Normalize deltaMode (line/page → px), mirroring LiveSessionView's wheel path. A
       // classic mouse wheel (or any input) that reports LINE (1) or PAGE (2) mode emits a
       // tiny raw count per notch (e.g. ±1/±3) instead of pixels; without this the cumulative
       // intent barely clears WHEEL_DIR_LOCK_PX and the page crawls (scrolling feels dead).
-      // Page mode = one device viewport-height of scroll in the fixed logical wire space.
-      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? DEVICE_LOGICAL_HEIGHT : 1;
+      // Page mode = one device viewport-height of scroll in the per-archetype logical
+      // wire space.
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? logical.height : 1;
       wheelPendingDx += e.deltaX * unit;
       wheelPendingDy += e.deltaY * unit;
       if (wheelRaf === 0) wheelRaf = requestAnimationFrame(flushWheel);
@@ -931,5 +965,5 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       endWheelDrag();
       active.current = null;
     };
-  }, [room, video, enabled]);
+  }, [room, video, enabled, logicalW, logicalH]);
 }

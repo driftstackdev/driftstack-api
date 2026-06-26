@@ -5,15 +5,18 @@
 //
 //   pointerToViewport
 //     - null when the <video> has zero width/height (race on mount)
-//     - converts client coords into the FIXED logical device frame (402×874 by
-//       default; a `logical` arg lets the tests pin the math at any size),
-//       object-contain-aware: maps against the contained sub-rect (logicalWidth /
-//       displayedWidth ratio), so aspect-mismatched (letterboxed / pillarboxed)
-//       streams map correctly
+//     - converts client coords into the per-archetype captured-frame logical device
+//       frame (the `logical` arg = videoW/dpr × videoH/dpr per device; 402×874 only
+//       as the pre-stream fallback default), object-contain-aware: maps against the
+//       contained sub-rect (logicalWidth / displayedWidth ratio), so aspect-mismatched
+//       (letterboxed / pillarboxed) streams map correctly
 //     - null for clicks in the letterbox / pillarbox bars (off-surface)
 //     - DOWNSCALE-INVARIANT: the sent coords do NOT depend on video.videoWidth/
 //       Height, so an SFU-throttled (downscaled) track maps identically to a
 //       full-res one (the founder tap-offset fix, A3 W2811)
+//     - PER-ARCHETYPE: passing a device's `logical` dims maps to that device's space
+//       (content-only fork A3 84de32ad4d — the captured video is the web content
+//       edge-to-edge, sized per archetype)
 //     - rounds to nearest integer (Mac-side decoder expects ints)
 //
 //   modifiersFromEvent
@@ -287,6 +290,86 @@ describe('LK.6.d pure-function tests', () => {
       ]) {
         expect(pointerToViewport(edge, iphoneEl(w, h))).toEqual({ x: 402, y: 874 });
       }
+    });
+  });
+
+  // Per-archetype content-only mapping (A3 84de32ad4d, box mac-macstadium-us-001):
+  // the captured video is the web content edge-to-edge, sized PER archetype, so the
+  // touch injector addresses each device's captured-frame logical space (= screen_width
+  // × inner_height ÷ dpr). The simulator threads those dims via the `logical` arg
+  // (videoW/dpr × videoH/dpr from the first full-res frame). These pins lock that a
+  // per-archetype `logical` maps correctly AND stays SFU-downscale-invariant for each
+  // device — the founder's "coords went off after the per-archetype size change" class.
+  describe('per-archetype content-only mapping (A3 84de32ad4d)', () => {
+    // Each archetype's captured-frame LOGICAL dims (= screen_width × inner_height),
+    // per A3's dims (16pro 402×714, 14promax 430×739, 13pro 390×699) — the content-only
+    // web viewport the injector now targets. The <video> element fills its (logical-
+    // aspect) container; intrinsic px = logical × dpr but the SFU may downscale it.
+    const cases = [
+      { name: 'iphone16pro', w: 402, h: 714 },
+      { name: 'iphone14promax', w: 430, h: 739 },
+      { name: 'iphone13pro', w: 390, h: 699 },
+    ];
+
+    for (const { name, w, h } of cases) {
+      it(`${name}: dead-centre maps to the per-archetype logical centre`, () => {
+        // Element sized to the logical aspect (the simulator window matches the
+        // capture-profile aspect → no letterbox). Centre click → centre coords.
+        const video = fakeVideo({
+          rect: { left: 0, top: 0, width: w, height: h },
+          videoWidth: w * 3, // full-res capture px (dpr 3)
+          videoHeight: h * 3,
+        });
+        const centre = fakeMouseEvent(w / 2, h / 2);
+        expect(pointerToViewport(centre, video, { width: w, height: h })).toEqual({
+          x: Math.round(w / 2),
+          y: Math.round(h / 2),
+        });
+      });
+
+      it(`${name}: bottom-right edge maps to the per-archetype max coords (no 402×874 hardcode)`, () => {
+        const video = fakeVideo({
+          rect: { left: 0, top: 0, width: w, height: h },
+          videoWidth: w * 3,
+          videoHeight: h * 3,
+        });
+        const edge = fakeMouseEvent(w, h);
+        expect(pointerToViewport(edge, video, { width: w, height: h })).toEqual({ x: w, y: h });
+      });
+
+      it(`${name}: is SFU-downscale-invariant (same coords as the track is throttled)`, () => {
+        // The element keeps its logical-aspect size; only the intrinsic track px shrink.
+        // Coords must NOT depend on videoWidth/videoHeight (A3 W2811) — passing the same
+        // per-archetype `logical` at every downscale level yields identical coords.
+        const edge = fakeMouseEvent(w, h);
+        for (const k of [1, 0.8, 0.5, 0.3]) {
+          const video = fakeVideo({
+            rect: { left: 0, top: 0, width: w, height: h },
+            videoWidth: Math.round(w * 3 * k),
+            videoHeight: Math.round(h * 3 * k),
+          });
+          expect(pointerToViewport(edge, video, { width: w, height: h })).toEqual({ x: w, y: h });
+        }
+      });
+    }
+
+    it('the same element + pixel maps DIFFERENTLY per `logical` (proves the per-archetype dims drive the map, not the old hardcode)', () => {
+      // Use a SQUARE element so neither logical aspect bar-boxes the same edge out of
+      // range: a click on the displayed sub-rect maps to each logical frame's own max.
+      // A square 600×600 element: the 390×699 frame pillarboxes (taller), the 402×874
+      // frame pillarboxes more — but the dead-centre always lands on-surface for both,
+      // and the centre coord is each frame's own (w/2, h/2), which differ per archetype.
+      const video = fakeVideo({
+        rect: { left: 0, top: 0, width: 600, height: 600 },
+        videoWidth: 1170,
+        videoHeight: 2097,
+      });
+      const centre = fakeMouseEvent(300, 300);
+      const thirteenPro = pointerToViewport(centre, video, { width: 390, height: 699 });
+      const oldDefault = pointerToViewport(centre, video); // 402×874 default
+      expect(thirteenPro).toEqual({ x: 195, y: 350 }); // (390/2, round(699/2))
+      expect(oldDefault).toEqual({ x: 201, y: 437 }); // (402/2, 874/2)
+      expect(thirteenPro).not.toEqual(oldDefault);
     });
   });
 

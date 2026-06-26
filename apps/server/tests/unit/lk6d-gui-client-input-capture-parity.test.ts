@@ -67,17 +67,24 @@ describe('LK.6.d — useInputCapture hook', () => {
     expect(inline + multiline).toBeGreaterThanOrEqual(5);
   });
 
-  it('coordinate translation maps browser px → the FIXED 402×874 logical device frame, NOT the SFU-downscaled track px (founder tap-offset fix / A3 W2811)', () => {
+  it('coordinate translation maps browser px → the per-archetype captured-frame logical device frame (threaded `logical`, default 402×874), NOT the SFU-downscaled track px (founder tap-offset fix / A3 W2811 + per-archetype content-only fork A3 84de32ad4d)', () => {
     // The element-offset math stays.
     expect(body).toMatch(/event\.clientX - rect\.left/);
-    // Scale against the fixed logical device frame (402×874), NEVER
-    // video.videoWidth/Height: the SFU REMB-downscales the published track under
-    // bandwidth pressure, which (pre-fix) halved every coord on a throttle so a
-    // tap landed high-and-left ("above where I tap"), snapping back on recovery.
+    // Scale against the per-archetype captured-frame logical device frame (the live
+    // `logical` dims = videoW/dpr × videoH/dpr; 402×874 only as the pre-stream
+    // fallback), NEVER video.videoWidth/Height: the SFU REMB-downscales the published
+    // track under bandwidth pressure, which (pre-fix) halved every coord on a throttle
+    // so a tap landed high-and-left ("above where I tap"), snapping back on recovery.
+    // The content-only fork (84de32ad4d) makes the captured frame the web content
+    // edge-to-edge, sized per archetype, so the touch space is per-device now.
     expect(body).toMatch(/const DEVICE_LOGICAL_WIDTH = 402/);
     expect(body).toMatch(/const DEVICE_LOGICAL_HEIGHT = 874/);
     expect(body).toMatch(/const nw = logical\.width/);
     expect(body).toMatch(/const nh = logical\.height/);
+    // The per-archetype live dims are an opt on the hook + a param on pointerToViewport,
+    // threaded from the <video>'s first full-res natural size ÷ dpr (parent-side).
+    expect(body).toMatch(/logical\?: \{ width: number; height: number \}/);
+    expect(body).toMatch(/\}, \[room, video, enabled, logicalW, logicalH\]\);/);
   });
 
   it('mouseButton() restricts to 0|1|2 (left/middle/right) matching Quartz', () => {
