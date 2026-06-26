@@ -43,6 +43,7 @@ import { PROFILE_ICONS } from '../lib/profile-icons';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
+import { SkeletonRows } from '../components/Skeleton';
 import {
   ProfilesActionBar,
   type ProfileSortBy,
@@ -2589,7 +2590,17 @@ export function ProfilesView({
         </div>
       )}
 
-      {state.profiles.length === 0 ? (
+      {state.profiles.length === 0 && state.loading && state.refreshedAt === null ? (
+        // Initial load in flight — show a skeleton, NOT the "No profiles yet"
+        // empty state. The mount effect runs refresh(true) with profiles still [],
+        // so the full empty state used to flash on every open (reads as data loss
+        // for a beat) even for an account with many profiles. The empty state
+        // below renders once the initial load RESOLVES (loading:false) — on
+        // success with genuinely zero profiles, or on error (the error banner
+        // above explains it; we don't strand the user on a spinner). Subsequent
+        // refreshes keep refreshedAt set, so they never re-show the skeleton. (audit)
+        <SkeletonRows rows={6} label="Loading profiles" />
+      ) : state.profiles.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded border border-dashed border-surface-divider px-8 py-16 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-md bg-accent-subtle text-accent">
             <svg

@@ -103,6 +103,16 @@ describe('V-275 ProfilesView empty state', () => {
     // Footnote about ephemeral sessions.
     expect(screen.getByText(/ephemeral/i)).toBeInTheDocument();
   });
+
+  it('shows a loading skeleton on mount, NOT the "No profiles yet" empty state (no flash)', () => {
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    // Synchronously after mount — the initial refresh is still in flight (its
+    // async resolution hasn't run). The skeleton is shown and the empty state
+    // must NOT flash (it used to render for a beat on every open, reading as
+    // data loss). No await here: we assert the FIRST paint.
+    expect(screen.getByLabelText('Loading profiles')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /no profiles yet/i })).toBeNull();
+  });
 });
 
 describe('V-276 RecordingsView empty state', () => {
