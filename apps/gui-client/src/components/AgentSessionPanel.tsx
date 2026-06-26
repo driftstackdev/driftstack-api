@@ -72,13 +72,21 @@ export interface AgentSessionPanelProps {
    *  control data channel is effectively dead, so taps/keys aren't reaching the
    *  device. The simulator surfaces this as a small non-fatal badge. */
   onPublishError?: () => void;
-  /** Mask the freed iOS-Safari URL-bar band at the bottom of the capture. A3 hid
-   *  the URL bar box-side (DRIFTSTACK_SAFARI_CHROME_HIDDEN, founder "remove the
-   *  url bar") but the web-view stays 714px, leaving a ~110px empty band at the
-   *  bottom (y 764-874 of the 402x874 capture — A3 W2784). The simulator sets this
-   *  to cover that band with bezel-black so the removal reads clean. Overlay only
-   *  (pointer-events-none) — never touches the video element or the tap mapping. */
+  /** Legacy no-op (kept for prop-plumbing compatibility). It USED to mask the freed
+   *  iOS-Safari chrome bands (a ~110px bottom + ~50px top band the old fork baked
+   *  into the capture when it hid the URL bar but kept the 714px web-view inside an
+   *  838px window). The content-only per-archetype fork (A3 84de32ad4d, box
+   *  mac-macstadium-us-001) drops those bands entirely — the captured video == the
+   *  web content edge-to-edge — so masking now covers REAL content (founder's "black
+   *  space at the bottom + content cut off at the top"). The masks are removed; this
+   *  prop is retained as an inert flag so existing callers don't break. */
   coverChromeBand?: boolean;
+  /** The live captured-frame logical device-CSS-px dims the Mac touch injector
+   *  addresses (per-archetype, A3 84de32ad4d). Forwarded to the input-capture hook
+   *  so the coordinate mapping adapts to the dispatched device. The simulator
+   *  computes it from the <video>'s first full-res natural size ÷ dpr; undefined
+   *  falls back to the launch archetype (402×874) inside the hook. */
+  inputLogical?: { width: number; height: number };
 }
 
 /** W617 / #59 — how long a connected-but-videoless room waits before the panel
@@ -138,7 +146,11 @@ export function AgentSessionPanel({
   onRoom,
   onVideoEl,
   onPublishError,
-  coverChromeBand = false,
+  // Legacy no-op — the content-only fork (A3 84de32ad4d) emits NO chrome bands, so
+  // the old bezel-black masks are gone (they covered real content otherwise). The
+  // prop is destructured (default off) only to keep the call-site shape stable.
+  coverChromeBand: _coverChromeBand = false,
+  inputLogical,
 }: AgentSessionPanelProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // The video element as STATE (not just the ref) so useInputCapture re-runs
@@ -163,7 +175,15 @@ export function AgentSessionPanel({
   // device, so window-focus naturally scopes the keyboard and there's no other
   // UI to hijack. Non-interactive embeds stay subscriber-only.
   const [room, setRoom] = useState<Room | null>(null);
-  useInputCapture({ room, videoElement: videoEl, enabled: interactive, onPublishError });
+  useInputCapture({
+    room,
+    videoElement: videoEl,
+    enabled: interactive,
+    onPublishError,
+    // Per-archetype captured-frame logical dims so the tap/scroll mapping matches the
+    // dispatched device's content-only frame (A3 84de32ad4d); undefined → 402×874.
+    logical: inputLogical,
+  });
   // W617 — track whether a video track ever arrived; 'waiting' →
   // 'publishing' on TrackSubscribed, 'waiting' → 'none' on timeout after
   // connect. 'none' renders the honest no-worker overlay.
@@ -335,35 +355,14 @@ export function AgentSessionPanel({
           }
         }}
       />
-      {/* URL-bar band cover (founder "remove the url bar" + A3 W2784): the box hides
-          the iOS-Safari URL bar but the web-view stays 714px → a ~110px empty band at
-          the capture bottom (y 764-874 of 402x874). Mask it bezel-black so it reads as
-          the device's bottom edge, not a gap. pointer-events-none → taps pass through
-          to the screen-host handlers unchanged (the band has no content anyway). */}
-      {coverChromeBand && (
-        <div
-          aria-hidden="true"
-          data-component="chrome-band-cover"
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-10 rounded-b-lg bg-black"
-          style={{ height: `${(110 / 874) * 100}%` }}
-        />
-      )}
-      {/* TOP band cover (founder "white space above the output, still not fixed"; A3 W2813
-          root-cause via box gold-truth log). The fork window is 402x838 captured at 1×;
-          SCStream scalesToFit composites it into the 402x874 profile → an 18px letterbox
-          top + the 32px iOS titleInset = a 50px non-web WHITE band at y 0-50 (the SCStream
-          bg-fill crashed the daemon in W2766, so it can't be painted box-side). Mask it
-          bezel-black, symmetric with the 110px bottom (50+110 = 160 = 874 − 714 web). The
-          top 50px carries NO web pixels (web starts at y=50) so this is content-safe;
-          pointer-events-none → taps pass through to the screen-host unchanged. */}
-      {coverChromeBand && (
-        <div
-          aria-hidden="true"
-          data-component="chrome-band-cover-top"
-          className="pointer-events-none absolute inset-x-0 top-0 z-10 rounded-t-lg bg-black"
-          style={{ height: `${(50 / 874) * 100}%` }}
-        />
-      )}
+      {/* Chrome-band masks REMOVED (A3 84de32ad4d content-only per-archetype fork on
+          box mac-macstadium-us-001): the old fork baked a ~110px bottom + ~50px top
+          bezel-black band into the capture (it hid the iOS-Safari URL bar but kept the
+          714px web-view inside an 838px window → scalesToFit letterbox + freed-chrome
+          reserve). The new fork sizes the captured window PER archetype so the web
+          content fills the frame edge-to-edge with NO bands — masking it now covers
+          REAL content (founder's "black space at the bottom + content cut off at the
+          top"). `coverChromeBand` is kept as an inert prop for call-site compatibility. */}
       {/* W617 — connected but nothing publishing: waiting spinner first,
           then the honest no-worker overlay with the parent's fallback. */}
       {state.kind === 'connected' && publisher !== 'publishing' && (

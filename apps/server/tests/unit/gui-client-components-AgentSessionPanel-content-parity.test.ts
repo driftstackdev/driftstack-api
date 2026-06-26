@@ -101,12 +101,15 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     // wired so `interactive` embeds (the floating-iPhone window) drive the device.
     expect(body).toMatch(/import \{ useInputCapture \} from '\.\.\/lib\/livekit-input-capture';/);
     // The hook now receives the <video> element via STATE (videoEl, lifted from
-    // the ref callback so the effect re-runs when it mounts) and an onPublishError
-    // forwarded up to surface a dead-control-channel badge — still wired through
-    // the ../lib/livekit-input-capture helper, not inlined SDK calls.
-    expect(body).toMatch(
-      /useInputCapture\(\{ room, videoElement: videoEl, enabled: interactive, onPublishError \}\);/,
-    );
+    // the ref callback so the effect re-runs when it mounts), an onPublishError
+    // forwarded up to surface a dead-control-channel badge, and the per-archetype
+    // captured-frame `logical` dims (A3 84de32ad4d content-only fork) so the tap/
+    // scroll mapping adapts to the dispatched device — still wired through the
+    // ../lib/livekit-input-capture helper, not inlined SDK calls.
+    expect(body).toMatch(/useInputCapture\(\{/);
+    expect(body).toMatch(/room,\s*\n?\s*videoElement: videoEl,\s*\n?\s*enabled: interactive,/);
+    expect(body).toMatch(/onPublishError,/);
+    expect(body).toMatch(/logical: inputLogical,/);
   });
 
   it('Connect effect reconnects ONLY on the connection identity (deps [info.ws_url, info.token]) and routes onStateChange through a ref — pinned so a consumer passing an inline onStateChange (the LK.6.c badge usage) cannot make the effect re-run every render and disconnect+reconnect the LiveKit room (streaming reconnect-thrash). A regression to [info, onStateChange] re-introduces that.', () => {
