@@ -77,6 +77,10 @@ export function ProxiesView(): JSX.Element {
   // unavailable — native command or server endpoint not live yet).
   const [exitResults, setExitResults] = useState<Record<string, ProxyExitProbeResult | null>>({});
   const [testResults, setTestResults] = useState<Record<string, ProxyTestResult>>({});
+  // Epoch-ms timestamp of each proxy's last probe (from the cache `at` field), so
+  // the card can show "tested <relative>" — a green 'healthy' pill is meaningless
+  // without knowing whether the test ran 30s or 30 days ago (audit).
+  const [testedAt, setTestedAt] = useState<Record<string, number>>({});
 
   const refresh = useCallback(async (): Promise<void> => {
     setState((s) => ({ ...s, loading: true }));
@@ -90,8 +94,10 @@ export function ProxiesView(): JSX.Element {
       const cache = await loadProbeCache();
       const tr: Record<string, ProxyTestResult> = {};
       const er: Record<string, ProxyExitProbeResult | null> = {};
+      const ta: Record<string, number> = {};
       for (const [id, c] of Object.entries(cache)) {
         tr[id] = c.result;
+        if (typeof c.at === 'number') ta[id] = c.at;
         if (c.exitIp !== undefined) {
           er[id] = {
             ip: c.exitIp,
@@ -105,6 +111,7 @@ export function ProxiesView(): JSX.Element {
       }
       setTestResults(tr);
       setExitResults(er);
+      setTestedAt(ta);
     } catch (err) {
       setState((s) => ({ ...s, loading: false, error: friendlyError(err) }));
     }
@@ -198,10 +205,12 @@ export function ProxiesView(): JSX.Element {
         password: p.password,
       });
       if (stale()) return; // proxy endpoint changed/removed mid-probe → discard
+      const probedAt = Date.now();
       setTestResults((r) => ({ ...r, [p.id]: result }));
+      setTestedAt((t) => ({ ...t, [p.id]: probedAt }));
       // Night-arc B: persist so profile cards can render egress
       // capability (UDP badge) without re-probing. Best-effort.
-      void saveProbeResult(p.id, result, Date.now()).catch(() => undefined);
+      void saveProbeResult(p.id, result, probedAt).catch(() => undefined);
       // E-2: exit-geo through the proxy (graceful null pre-deploy /
       // pre-native-command — renders 'geo unavailable').
       if (result.reachable && result.auth_ok) {
@@ -410,6 +419,7 @@ export function ProxiesView(): JSX.Element {
           testingAll={testingAll}
           testResults={testResults}
           exitResults={exitResults}
+          testedAt={testedAt}
           onEdit={(id) => setEditor({ kind: 'edit', id })}
           onRemove={(id) => void handleRemove(id)}
           onTest={(p) => void handleTest(p)}
@@ -460,6 +470,7 @@ function ProxyList({
   testingAll,
   testResults,
   exitResults,
+  testedAt,
   onEdit,
   onRemove,
   onTest,
@@ -470,6 +481,7 @@ function ProxyList({
   testingAll: boolean;
   testResults: Record<string, ProxyTestResult>;
   exitResults: Record<string, ProxyExitProbeResult | null>;
+  testedAt: Record<string, number>;
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
   onTest: (p: ProxyConfig) => void;
@@ -487,6 +499,7 @@ function ProxyList({
           testingAll={testingAll}
           result={testResults[p.id]}
           exit={p.id in exitResults ? exitResults[p.id] : undefined}
+          testedAt={testedAt[p.id]}
           onEdit={() => onEdit(p.id)}
           onRemove={() => onRemove(p.id)}
           onTest={() => onTest(p)}
@@ -507,6 +520,7 @@ function ProxyCard({
   testingAll,
   result,
   exit,
+  testedAt,
   onEdit,
   onRemove,
   onTest,
@@ -519,6 +533,9 @@ function ProxyCard({
   // undefined = exit-geo never recorded for this proxy; null = probed but
   // unavailable (server endpoint / native command not live yet).
   exit: ProxyExitProbeResult | null | undefined;
+  /** Epoch-ms of the last probe (undefined = never tested). Drives the
+   *  "tested <relative>" staleness line so a green pill isn't read as fresh. */
+  testedAt: number | undefined;
   onEdit: () => void;
   onRemove: () => void;
   onTest: () => void;
@@ -606,7 +623,14 @@ function ProxyCard({
             {p.host}:{p.port}
           </span>
           <span className="ml-auto shrink-0 text-[9.5px] text-ink-muted">
-            <RelativeTime iso={p.createdAt} tooltipPrefix="Added" />
+            {/* Show when the probe last ran (not when the proxy was ADDED) once
+                tested — a green pill is meaningless without it. Falls back to the
+                Added time only when never tested. */}
+            {result !== undefined && testedAt !== undefined ? (
+              <RelativeTime iso={new Date(testedAt).toISOString()} tooltipPrefix="Tested" />
+            ) : (
+              <RelativeTime iso={p.createdAt} tooltipPrefix="Added" />
+            )}
           </span>
         </div>
         {/* Protocol capabilities — honest "Has WebRTC / QUIC / HTTP-2"

@@ -193,6 +193,26 @@ describe('capability board (approved proxy-health port)', () => {
     expect(screen.getByText('WebRTC + QUIC')).toBeInTheDocument();
   });
 
+  it('after a Test, the card shows a "Tested <relative>" timestamp (staleness), not just "Added"', async () => {
+    testProxy.mockResolvedValue({
+      reachable: true,
+      auth_ok: true,
+      udp_associate: true,
+      latency_ms: 42,
+      message: 'ok',
+    });
+    const { container } = render(<ProxiesView />);
+    await clickTestAndSettle();
+    // The capability chips confirm the probe landed.
+    await screen.findByText('WebRTC');
+    // A <time> with a "Tested:" tooltip now drives the card's last-checked line —
+    // so a green pill is dated, not assumed fresh. (The pool-stat label "Tested"
+    // is a <span>, so scope to <time> to avoid matching it.)
+    const times = Array.from(container.querySelectorAll('time'));
+    const testedTime = times.find((t) => t.getAttribute('title')?.startsWith('Tested:'));
+    expect(testedTime).toBeDefined();
+  });
+
   it('no-UDP result shows WebRTC + QUIC as fell-back (data-ok="false"), HTTP/2 ok', async () => {
     testProxy.mockResolvedValue({
       reachable: true,
