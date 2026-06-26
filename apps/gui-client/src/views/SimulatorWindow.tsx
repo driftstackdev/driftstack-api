@@ -167,10 +167,19 @@ const PAGE_STATE_GRACE_MS = 2500;
 const BACK_FORWARD_ENABLED = true; // A3 navigateHistory handler deployed (bus W2872; A3 01a5d48f1)
 const BEZEL_PAD = 20; // p-[10px] × 2
 const STATUS_STRIP_H = 40;
-// The iPhone CSS-logical width of the launch archetype (iphone17). Used by the
-// "actual size" reset (Cmd+0) so the device renders at true iPhone-logical px,
-// not whatever width the window happens to have been dragged to.
+// The iPhone CSS-logical width of the launch archetype (iphone17). Fallback for the
+// "actual size" reset (Cmd+0) before the live stream reports its per-archetype dims,
+// so the device renders at true iPhone-logical px, not whatever width the window
+// happens to have been dragged to. Once the stream reports, the reset uses the live
+// per-archetype logical width (deviceLogicalRef) instead.
 const DEVICE_LOGICAL_WIDTH = 402;
+// The device-pixel-ratio of the captured iPhone stream (dpr 3 fleet-wide). The
+// content-only fork (A3 84de32ad4d) publishes the per-archetype web content at this
+// scale, so the captured-frame LOGICAL CSS-px dims the Mac touch injector addresses
+// = videoWidth/DPR × videoHeight/DPR (e.g. iphone16pro 1206×2142 px → 402×714
+// logical). dpr is uniform across the shipped archetypes; if a future device ships a
+// different ratio, thread it from the dispatched archetype config.
+const STREAM_DPR = 3;
 // Activity-bar drawer (founder 2026-06-24) — a slim icon RAIL is ALWAYS docked
 // next to the phone; clicking a section icon EXPANDS its content PANE to the
 // right of the rail (VS Code's activity-bar + side-panel idiom). The window
@@ -2369,6 +2378,19 @@ export function SimulatorWindow(): JSX.Element {
   // Device aspect (videoW / videoH) from the live stream — drives window sizing so
   // the frame fits ANY archetype. Seeded to iphone17 until the stream reports.
   const deviceAspectRef = useRef(402 / 874);
+  // The live per-archetype captured-frame LOGICAL CSS-px dims (videoW/DPR ×
+  // videoH/DPR) the Mac touch injector addresses (A3 84de32ad4d content-only fork).
+  // STATE (not just a ref) so it flows into AgentSessionPanel → useInputCapture and
+  // re-keys the capture effect when the per-archetype frame arrives. Seeded to the
+  // launch archetype's screen (402×874) until the first full-res frame reports; set
+  // ONCE from the first-reported (full-res) dims so the SFU downscale can't shrink
+  // the touch space (A3 W2811 invariance). A mirror ref feeds the Cmd+0 reset.
+  const [inputLogical, setInputLogical] = useState<{ width: number; height: number }>({
+    width: 402,
+    height: 874,
+  });
+  const deviceLogicalRef = useRef(inputLogical);
+  deviceLogicalRef.current = inputLogical;
   // Landscape ref kept current every render so the window-sizing closures (fitWindow
   // + the onResized listener) use the ROTATED aspect — else rotate snaps back to a
   // portrait sliver (audit B2/B3). Declared here (before fitWindow) so those
@@ -2436,13 +2458,16 @@ export function SimulatorWindow(): JSX.Element {
       const aspect = sizingAspect();
       const chrome =
         TOOLBAR_H + (browserMode ? BROWSER_BAR_H + TAB_STRIP_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
-      // Target device-content width = the iPhone CSS-logical width (its long edge
-      // when rotated to landscape), then the window adds the bezel padding + (if
-      // open) the right drawer's fixed width.
+      // Target device-content width = the per-archetype iPhone CSS-logical width (its
+      // long edge when rotated to landscape), then the window adds the bezel padding +
+      // (if open) the right drawer's fixed width. Live per-archetype width from the
+      // dispatched stream (deviceLogicalRef, seeded to the launch 402 until the frame
+      // reports) so Cmd+0 resets a 390/430 device to ITS true width, not 402.
       const drawerExtra = drawerExtraRef.current;
+      const logicalW = deviceLogicalRef.current.width || DEVICE_LOGICAL_WIDTH;
       const targetContentW = landscapeRef.current
-        ? Math.round(DEVICE_LOGICAL_WIDTH / deviceAspectRef.current)
-        : DEVICE_LOGICAL_WIDTH;
+        ? Math.round(logicalW / deviceAspectRef.current)
+        : logicalW;
       const phoneW = targetContentW + BEZEL_PAD;
       let width = phoneW + drawerExtra;
       let height = Math.round(chrome + (phoneW - BEZEL_PAD) / aspect);
@@ -3328,7 +3353,10 @@ export function SimulatorWindow(): JSX.Element {
     if (video === null) return false;
     const vr = video.getBoundingClientRect();
     if (vr.width === 0 || vr.height === 0) return false; // not sized yet → don't suppress
-    return pointerToViewport(e.nativeEvent, video) === null;
+    // Use the SAME per-archetype logical frame the wire uses (deviceLogicalRef →
+    // useInputCapture), so the ripple/dot off-surface test matches what the device
+    // actually receives on the dispatched archetype.
+    return pointerToViewport(e.nativeEvent, video, deviceLogicalRef.current) === null;
   };
   const showTap = (e: ReactPointerEvent<HTMLDivElement>): void => {
     const host = screenHostRef.current;
@@ -4090,6 +4118,9 @@ export function SimulatorWindow(): JSX.Element {
   // different-aspect archetype keeps the prior window shape + letterboxes (audit S5).
   useEffect(() => {
     sizedToStreamRef.current = false;
+    // Re-seed the touch logical frame to the launch archetype until the NEW session's
+    // first full-res frame reports its per-archetype dims (mirrors sizedToStreamRef).
+    setInputLogical({ width: 402, height: 874 });
   }, [info?.ws_url, info?.token]);
 
   // The stream reported its REAL pixel dimensions (the archetype's screen
@@ -4101,6 +4132,16 @@ export function SimulatorWindow(): JSX.Element {
     if (sizedToStreamRef.current || w <= 0 || h <= 0) return;
     sizedToStreamRef.current = true;
     deviceAspectRef.current = w / h;
+    // Adopt the per-archetype captured-frame LOGICAL dims (= the FIRST full-res
+    // metadata ÷ dpr) for the touch-coordinate mapping. Set ONCE (gated by
+    // sizedToStreamRef, cleared only on a new session) so a later SFU-downscaled
+    // metadata event can't shrink the touch space (A3 W2811). The captured frame is
+    // the content-only web viewport the injector targets, so these logical dims are
+    // exactly the space tap/scroll coords must be in.
+    setInputLogical({
+      width: Math.round(w / STREAM_DPR),
+      height: Math.round(h / STREAM_DPR),
+    });
     // Fit ONCE to the real device aspect + the current chrome, in EITHER orientation —
     // fitWindow's sizingAspect inverts for landscape. The old early-return on landscape
     // dropped the aspect entirely → the window stayed at the seeded 402/874 and letterboxed
@@ -4323,10 +4364,15 @@ export function SimulatorWindow(): JSX.Element {
                 >
                   <AgentSessionPanel
                     info={info}
-                    // The box hides the iOS-Safari URL bar fleet-wide
-                    // (DRIFTSTACK_SAFARI_CHROME_HIDDEN, founder "remove the url bar");
-                    // mask the ~110px freed band at the capture bottom (A3 W2784).
-                    coverChromeBand
+                    // Chrome-band masks dropped: the content-only per-archetype fork
+                    // (A3 84de32ad4d, box mac-macstadium-us-001) publishes the web
+                    // content edge-to-edge with NO bands, so the old bottom/top masks
+                    // covered REAL content (founder's black-bottom + top-cutoff). The
+                    // captured video IS the device's content frame now.
+                    // Per-archetype captured-frame logical dims (videoW/dpr × videoH/dpr)
+                    // drive the tap/scroll coordinate mapping so coords land right on
+                    // whatever device the box dispatched (no 402×874 hardcode).
+                    inputLogical={inputLogical}
                     // Forward mouse/keyboard to the device only in manual/pair
                     // mode; in AI mode the agent is driving, so local input would
                     // fight it.
