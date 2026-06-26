@@ -18,8 +18,8 @@ interface RoadmapItem {
 
 const NOW: RoadmapItem[] = [
   {
-    title: 'iPhone family fingerprint parity (15 Pro · 16 Pro · 17 lineup)',
-    body: 'Bit-identical fingerprint parity against the iPhone families your users are actually on — iPhone 15 Pro, iPhone 16 Pro, and the current iPhone 17 lineup, across iOS 18.7 / Safari 26.4 and Safari 26.5 as it rolls out. Every measured signal matches the real phone or the build is blocked. This is the platform foundation; everything else builds on top.',
+    title: 'iPhone family fingerprint parity (81 profiles, iPhone 13 → 17 Pro Max)',
+    body: 'Bit-identical fingerprint parity across 81 device profiles spanning the iPhone 13 through 17 Pro Max families, on iOS 18.6 / 18.7 and Safari 18.6 through 26.5. Every measured signal matches the real phone or the build is blocked. This is the platform foundation; everything else builds on top.',
   },
   {
     title: 'TypeScript · Python · Go SDKs',
@@ -76,8 +76,8 @@ const NEXT: RoadmapItem[] = [
 
 const LATER: RoadmapItem[] = [
   {
-    title: 'Older iOS archetypes (iPhone 14 + earlier iOS)',
-    body: 'iPhone 14 and older iOS releases. Same source-level fidelity as the launch archetypes; pick which device-and-OS combination matches your target population. The current iPhone 15 Pro / 16 Pro / 17 lineup ships at launch (see NOW above).',
+    title: 'Older iOS archetypes (iPhone 12 + earlier)',
+    body: 'iPhone 12 and earlier device-and-OS combinations, extending the catalog below the current iPhone 13 floor. Same source-level fidelity as the launch archetypes; pick which combination matches your target population. The 81-profile iPhone 13 → 17 Pro Max catalog (iOS 18.6 / 18.7, Safari 18.6–26.5) already ships at launch (see NOW above).',
   },
   {
     title: 'Android Chrome archetypes',
@@ -139,7 +139,7 @@ const LATER: RoadmapItem[] = [
       <ul class="grid gap-6 md:grid-cols-2">
         {
           NOW.map((item) => (
-            <li class="rounded-lg border border-emerald-400/30 bg-emerald-400/10/40 p-6">
+            <li class="rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-6">
               <h3 class="text-lg font-medium text-tk-ink">{item.title}</h3>
               <p class="mt-3 text-sm text-tk-ink-2">{item.body}</p>
             </li>
