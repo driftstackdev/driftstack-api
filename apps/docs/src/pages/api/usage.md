@@ -121,9 +121,11 @@ fully-closed UTC day); today's partial bucket is intentionally
 not surfaced — the dashboard's sparkline renders cleaner without
 a half-empty trailing bucket.
 
-Empty days return zeros for every counter (not omitted from the
+Empty days are included in the series (not omitted from the
 response) so the dashboard can render an empty-state without
-client-side date-fill logic.
+client-side date-fill logic, but their `totals` is an empty object
+`{}` — treat a missing counter key as `0`. (The current-period
+summary, by contrast, zero-fills every counter.)
 
 **SDK usage:**
 
