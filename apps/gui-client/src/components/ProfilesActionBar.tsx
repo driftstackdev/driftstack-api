@@ -44,7 +44,13 @@ export function ProfilesActionBar({
   visibleCount,
   totalCount,
 }: ProfilesActionBarProps): JSX.Element {
-  const hasFilter = searchQuery.trim().length > 0 || statusFilter !== 'all';
+  // Show the "N of M" ratio whenever the visible set is narrowed from the total —
+  // not only on search/status. visibleCount already reflects folder + tag filters
+  // (the parent computes it over the fully-filtered list), so keying off the
+  // count covers a folder- or tag-only filter that the search/status check missed
+  // (it used to read the full total, e.g. "20 profiles" while showing 3). (audit)
+  const isFiltered =
+    visibleCount !== totalCount || searchQuery.trim().length > 0 || statusFilter !== 'all';
   const searchRef = useRef<HTMLInputElement>(null);
 
   // ⌘F / Ctrl-F focuses the search input — the macOS / browser "find"
@@ -155,7 +161,7 @@ export function ProfilesActionBar({
       </label>
 
       <span className="ml-auto text-2xs text-ink-muted">
-        {hasFilter ? (
+        {isFiltered ? (
           <>
             {visibleCount} of {totalCount}
           </>

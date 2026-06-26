@@ -112,6 +112,15 @@ describe('ProfilesActionBar', () => {
     expect(screen.getByText(/1 of 5/)).toBeInTheDocument();
   });
 
+  it('shows "N of M" for a folder/tag-only filter (no search, status=All) — the narrowed count', () => {
+    // The bug: a folder/tag filter narrows visibleCount but search='' + status='all'
+    // made hasFilter false, so it printed the full total ("5 profiles") while the
+    // grid showed 3. Keying off visibleCount!==totalCount fixes it.
+    renderBar({ visibleCount: 3, totalCount: 5, statusFilter: 'all', searchQuery: '' });
+    expect(screen.getByText(/3 of 5/)).toBeInTheDocument();
+    expect(screen.queryByText(/5 profiles/)).not.toBeInTheDocument();
+  });
+
   it('uses singular "profile" for totalCount === 1', () => {
     renderBar({ visibleCount: 1, totalCount: 1 });
     expect(screen.getByText(/1 profile/)).toBeInTheDocument();
