@@ -64,7 +64,8 @@ describe('W895 Session lifecycle schemas cross-source invariant', () => {
   it('CRITICAL Session.label + metadata + last_state_at + destroyed_at are nullable. label/metadata are optional decoration; last_state_at is null until first state capture; destroyed_at is null until destroyed.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts'));
     expect(p).toMatch(/label: z\.string\(\)\.nullable\(\)/);
-    expect(p).toMatch(/metadata: z\.record\(z\.unknown\(\)\)\.nullable\(\)/);
+    // Bounded-blob fix — metadata is the size-capped SessionMetadataSchema.
+    expect(p).toMatch(/metadata: SessionMetadataSchema\.nullable\(\)/);
     expect(p).toMatch(/last_state_at: Iso8601Schema\.nullable\(\)/);
     expect(p).toMatch(/destroyed_at: Iso8601Schema\.nullable\(\)/);
   });
@@ -78,7 +79,8 @@ describe('W895 Session lifecycle schemas cross-source invariant', () => {
     );
     expect(p).toMatch(/purpose: SessionPurposeSchema\.optional\(\)/);
     expect(p).toMatch(/label: z\.string\(\)\.max\(120\)\.optional\(\)/);
-    expect(p).toMatch(/metadata: z\.record\(z\.unknown\(\)\)\.optional\(\)/);
+    // Bounded-blob fix — metadata is the size-capped SessionMetadataSchema.
+    expect(p).toMatch(/metadata: SessionMetadataSchema\.optional\(\)/);
   });
 
   // ─── CreateSessionResponse = SessionSchema ───────────────────

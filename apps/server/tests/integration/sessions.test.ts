@@ -95,6 +95,31 @@ describe('POST /v1/sessions', () => {
     expect(body.type).toBe(PROBLEM_TYPES.ValidationFailed);
   });
 
+  it('201 accepts a bounded metadata blob (under the 8 KiB cap)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      payload: { metadata: { tag: 'a'.repeat(1000) } },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('400 rejects an over-cap metadata blob (> 8 KiB serialized)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      // ~9 KiB serialized — past SESSION_METADATA_MAX_BYTES.
+      payload: { metadata: { blob: 'x'.repeat(9000) } },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.type).toBe(PROBLEM_TYPES.ValidationFailed);
+  });
+
   it('403 when the key lacks write:sessions scope (read-only key)', async () => {
     fx = await buildTestApp({ scopes: ['read'] });
     const res = await fx.app.inject({

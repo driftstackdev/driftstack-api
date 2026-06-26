@@ -67,6 +67,21 @@ export const BehavioralProfileSchema = z.enum(['casual', 'regular', 'power_user'
 export type BehavioralProfile = z.infer<typeof BehavioralProfileSchema>;
 export const DEFAULT_BEHAVIORAL_PROFILE: BehavioralProfile = 'regular';
 
+/**
+ * Caller-supplied session metadata. Bounded at the API layer: the
+ * serialized JSON must not exceed 8 KiB so a single create can't persist
+ * an arbitrarily large blob (it is stored verbatim + echoed on every
+ * read). The `.refine` makes the bound a schema-level contract — the
+ * previous comment claimed a bound that no body-limit or schema actually
+ * enforced. Free-form key/value object otherwise (opaque to the server).
+ */
+export const SESSION_METADATA_MAX_BYTES = 8192;
+export const SessionMetadataSchema = z
+  .record(z.unknown())
+  .refine((v) => JSON.stringify(v).length <= SESSION_METADATA_MAX_BYTES, {
+    message: `metadata too large (max ${SESSION_METADATA_MAX_BYTES.toString()} bytes serialized)`,
+  });
+
 export const SessionSchema = z.object({
   id: SessionIdSchema,
   account_id: AccountIdSchema,
@@ -76,7 +91,7 @@ export const SessionSchema = z.object({
   /** V-169 — harness purpose; defaults to `production_customer`. */
   purpose: SessionPurposeSchema,
   label: z.string().nullable(),
-  metadata: z.record(z.unknown()).nullable(),
+  metadata: SessionMetadataSchema.nullable(),
   /**
    * Harness-reported SOCKS5 egress capabilities (migration 0045 +
    * cross-agent contract 7d5992d9). Null until the harness emits the
@@ -110,7 +125,7 @@ export const CreateSessionRequestSchema = z.object({
   /** V-169 — harness purpose; defaults to `production_customer`. */
   purpose: SessionPurposeSchema.optional(),
   label: z.string().max(120).optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: SessionMetadataSchema.optional(),
   /**
    * 2026-05-20 — profile binding. When supplied, the server records
    * the session as belonging to this profile (cookies, localStorage,
