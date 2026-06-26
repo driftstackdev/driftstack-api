@@ -71,7 +71,6 @@ import { openSimulatorWindow } from '../lib/open-simulator';
 import { mintGuiControlKey } from '../lib/agent-session-control';
 import { useSettings } from '../lib/SettingsContext';
 import { normalizeNavigateUrl } from '../lib/address-bar';
-import { useConnectionStatus } from '../lib/use-connection-status';
 import { DriftstackError, type Session } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import {
@@ -219,8 +218,6 @@ function defaultSortDir(by: ProfileSortBy): ProfileSortDir {
 
 export interface ProfilesViewProps {
   onGoToSettings: () => void;
-  /** Open the live-session view for a specific session id. */
-  onOpenSession: (sessionId: string) => void;
   /** F1c — open the AI assistant scoped to a profile (from a card's "Assist"). */
   onAssist?: (profileId: string) => void;
   /** Deep-link target (CommandCenter "Jump back in" card → App nav payload):
@@ -232,22 +229,11 @@ export interface ProfilesViewProps {
 
 export function ProfilesView({
   onGoToSettings,
-  onOpenSession,
   onAssist,
   initialProfileId,
 }: ProfilesViewProps): JSX.Element {
   const { client, settings, accountMe, refreshAccountMe, activeWorkspace, setActiveWorkspace } =
     useSettings();
-  // W625 — surface the connected server's session driver so we can warn up
-  // front that a mock-driver deployment won't open a real browser on launch
-  // (the recurring "I launched but nothing opened" confusion). Reuses the
-  // 30s /version poll the title-bar pill already runs; null until first probe.
-  const serverDriver = useConnectionStatus(settings.baseUrl).driver;
-  // The /version `driver` is hard-'mock' in prod even when launches stream
-  // live via LiveKit, so it can't gate the placeholder-viewer banner on its
-  // own. Track whether a launch ACTUALLY fell back to the polling/placeholder
-  // viewer (openPollingFallback) — the banner only makes sense then.
-  const [usedPollingFallback, setUsedPollingFallback] = useState(false);
   // 2026-05-20 — antidetect-browser-style hub: profiles are first-class,
   // sessions are an implementation detail of "this profile is running".
   // Track live sessions + GUI-local bindings so we can show per-profile
@@ -328,12 +314,10 @@ export function ProfilesView({
   // mirror the "what did I touch last" mental model that dominates
   // operator usage (show all, sort by recent use).
   const [searchQuery, setSearchQuery] = useState('');
-  // Fleet hub (2026-06-12, demo-concepts greenlight): grid/list toggle +
-  // one-click ephemeral Quick Session. List stays the default render.
+  // Fleet hub (2026-06-12, demo-concepts greenlight): grid/list toggle.
   // Grid is the DEFAULT (founder directive 2026-06-12 night arc) — the
   // visual workspace is the product; list remains a toggle for dense ops.
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
-  const [quickBusy, setQuickBusy] = useState(false);
   // Increment 2 — client-persisted organization (folders/tags/notes).
   const [profilesMeta, setProfilesMeta] = useState<ProfilesMetaMap>({});
   // Night-arc B: last probe result per proxy id (written by the Proxies
@@ -1661,17 +1645,20 @@ export function ProfilesView({
             ...s,
             error: `Couldn't open the simulator window: ${sim.reason ?? 'unknown'}. The session was stopped — try launching again.`,
           }));
-        } else {
-          // A live LiveKit launch succeeded → clear any stale polling/mock-driver
-          // banner from an earlier fallback launch (it would otherwise stick for
-          // the rest of the app session even though we're now streaming live).
-          setUsedPollingFallback(false);
         }
       } else {
-        // W611/W613 — no livekit block (deployment without LiveKit, e.g. a
-        // self-hosted/mock-driver server): fall back to the polling live
-        // view instead of dead-ending with an error.
-        await openPollingFallback(profile.id, created.id);
+        // No livekit block — the session didn't get a video channel, so there's
+        // nothing to stream into the Simulator window (the only live-session UI).
+        // The legacy in-app polling viewer is gone, so this is a hard failure:
+        // close the session + clear the binding so a channel-less create never
+        // strands a billed browser session, then surface a retry-able error.
+        await client.agentSessions.close(created.id).catch(() => undefined);
+        await clearProfileSession(profile.id).catch(() => undefined);
+        setState((s) => ({
+          ...s,
+          error:
+            "Couldn't start the live view — the session didn't get a video channel. Try again.",
+        }));
       }
       await refresh(false);
       await refreshAccountMe();
@@ -1679,68 +1666,6 @@ export function ProfilesView({
       setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
     } finally {
       setBusyId(null);
-    }
-  }
-
-  // W613/W617 — shared LiveKit-less fallback. The polling viewer speaks the
-  // DRIVER-session routes (/v1/sessions/:id, ses_<uuid>), and a fresh agent
-  // session has no driftstack_session_id yet (created lazily on the first
-  // agent turn) — so opening the agt_ id there 400s (founder-hit, W613).
-  // Close the unused agent session (frees the concurrency slot + token
-  // budget) and launch a plain driver session with the same profile.
-  async function openPollingFallback(profileId: string, agentSessionId: string): Promise<void> {
-    if (!client) return;
-    await client.agentSessions.close(agentSessionId).catch(() => undefined);
-    let driverSession: { id: string };
-    try {
-      driverSession = await client.sessions.create({ profile_id: profileId });
-    } catch (err) {
-      // The driver (polling-viewer) route requires a `proxy` envelope when the
-      // deployment wires egress — but the driver CreateSessionRequest schema has
-      // NO proxy_id field, so this fallback CANNOT thread the customer proxy the
-      // founder picked (the SDK strips any proxy). Rather than dead-end on the raw
-      // "A proxy configuration is required…" 400, surface a specific, honest line
-      // so the founder understands the direct-viewer fallback (not their proxy
-      // choice) is the limitation here (audit). The primary LiveKit path honors
-      // the proxy; this fallback only runs on a non-LiveKit deployment.
-      if (isProxyRequiredError(err)) {
-        throw new Error(
-          'The direct-viewer fallback needs a proxy on this deployment, but it ' +
-            "can't carry the proxy you picked. Live streaming (which does use your " +
-            'proxy) is unavailable here — contact support to enable it for this account.',
-        );
-      }
-      throw err;
-    }
-    await markLaunched(profileId, driverSession.id);
-    // This launch genuinely used the placeholder polling viewer (no LiveKit) —
-    // surface the heads-up banner. A LiveKit launch never reaches here.
-    setUsedPollingFallback(true);
-    onOpenSession(driverSession.id);
-  }
-
-  async function handleQuickSession(): Promise<void> {
-    if (!client || quickBusy) return;
-    setQuickBusy(true);
-    try {
-      // Ephemeral by design: no profile_id — fresh state every run (the
-      // same contract the empty-state copy documents).
-      const driverSession = await client.sessions.create({ label: 'quick-session' });
-      onOpenSession(driverSession.id);
-    } catch (err) {
-      // Quick Session creates an ephemeral driver session with NO proxy. On a
-      // deployment that requires egress the driver route 400s with the raw "A
-      // proxy configuration is required…" — map it to a clear line (Quick Session
-      // has no proxy by design; the founder should launch a profile with a proxy
-      // instead). Otherwise surface the failure in the banner rather than letting
-      // the rejection blank the app via the global fatal overlay.
-      const message = isProxyRequiredError(err)
-        ? 'Quick Session runs without a proxy, but this deployment requires one. ' +
-          'Launch a profile with a proxy selected instead.'
-        : friendlyError(err, settings.baseUrl);
-      setState((s) => ({ ...s, error: message }));
-    } finally {
-      setQuickBusy(false);
     }
   }
 
@@ -2125,26 +2050,6 @@ export function ProfilesView({
           </button>
         </div>
       )}
-      {/* W625/W640 — heads-up about the real-browser path. The mock driver
-          only affects the DIRECT (polling) viewer — it shows placeholder
-          frames. A live browser comes from a connected WebKit worker (the
-          harness on a Mac), which self-hosted fully supports. So this is
-          framed as "connect a worker to go live", NOT "self-hosted can't do
-          real browsers". Gated on driver==='mock' AND usedPollingFallback so
-          it only appears after a launch genuinely fell back to the placeholder
-          viewer — never when LiveKit streamed (the /version driver is hard-
-          'mock' in prod even on the live path, so it can't gate alone). */}
-      {serverDriver === 'mock' && usedPollingFallback && (
-        <div
-          data-banner="mock-driver"
-          className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-2xs text-ink-secondary"
-        >
-          The <span className="mono">mock</span> driver is handling the direct viewer, so launches
-          show placeholder frames here. To run a real iPhone session, connect a WebKit browser
-          worker (the harness on a Mac) — then launches stream live video. Sessions, the viewer and
-          controls work now for testing the flow.
-        </div>
-      )}
       {!privacyDismissed && (
         <div
           data-component="privacy-banner"
@@ -2365,16 +2270,6 @@ export function ProfilesView({
         </div>
         <div className="ml-auto flex flex-col items-end gap-2">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="btn-secondary flex items-center gap-1.5"
-              onClick={() => void handleQuickSession()}
-              disabled={state.loading || quickBusy || !client}
-              title="Launch an ephemeral session with fresh state — no profile, no setup"
-            >
-              <span aria-hidden="true">⚡</span>
-              <span>{quickBusy ? 'Starting…' : 'Quick Session'}</span>
-            </button>
             {IMPORT_EXPORT_ENABLED && (
               <button
                 type="button"
@@ -2966,17 +2861,18 @@ export function ProfilesView({
                           launchDisabledReason={teamLaunchBlockedReason}
                           onToggleSelect={() => toggleSelected(profile.id)}
                           onPrimary={() => {
+                            // A running profile re-opens its live stream in the
+                            // floating Simulator window (the only live-session UI).
+                            // Only agent sessions stream; a driver binding has no
+                            // live UI (driver sessions are no longer created), so
+                            // it has nothing to open. An idle profile launches.
                             if (running && bound !== null) {
-                              // agt_ ids 400 in the driver session viewer — re-open
-                              // the agent stream instead (mirror onWatch).
                               if (bound.kind === 'agent') void reopenStream(bound.id, profile.id);
-                              else onOpenSession(bound.id);
                             } else void handleLaunch(profile);
                           }}
                           onWatch={() => {
                             if (running && bound !== null) {
                               if (bound.kind === 'agent') void reopenStream(bound.id, profile.id);
-                              else onOpenSession(bound.id);
                             } else void handleLaunch(profile);
                           }}
                           onTest={() => {
@@ -3087,10 +2983,11 @@ export function ProfilesView({
                         if (profile === null) return;
                         const bound = boundSession(id);
                         if (bound !== null) {
-                          // agt_ ids 400 in the driver session viewer — re-open
-                          // the agent stream instead (mirror onWatch).
+                          // A running profile re-opens its live stream in the
+                          // floating Simulator window (the only live-session UI).
+                          // Only agent sessions stream; a driver binding has no
+                          // live UI (driver sessions are no longer created).
                           if (bound.kind === 'agent') void reopenStream(bound.id, id);
-                          else onOpenSession(bound.id);
                         } else void handleLaunch(profile);
                       }}
                       onWatch={(id) => {
@@ -3099,7 +2996,6 @@ export function ProfilesView({
                         const bound = boundSession(id);
                         if (bound !== null) {
                           if (bound.kind === 'agent') void reopenStream(bound.id, id);
-                          else onOpenSession(bound.id);
                         } else void handleLaunch(profile);
                       }}
                       onStop={(id) => {
@@ -4916,21 +4812,6 @@ function regionName(cc: string): string {
   } catch {
     return cc;
   }
-}
-
-/** True for the driver-session "egress required" 400 (BadRequestError with the
- *  "A proxy configuration is required…" detail). The driver CreateSessionRequest
- *  schema has no proxy_id field, so the polling-viewer fallback / Quick Session
- *  cannot satisfy it — callers map this to a specific, honest message instead of
- *  the raw API detail (audit). Matches on the stable detail substring (the server
- *  surfaces it as a generic bad_request, so the kind alone isn't specific). */
-function isProxyRequiredError(err: unknown): boolean {
-  return (
-    err instanceof DriftstackError &&
-    err.status === 400 &&
-    typeof err.detail === 'string' &&
-    /proxy configuration is required/i.test(err.detail)
-  );
 }
 
 function friendlyError(err: unknown, baseUrl?: string): string {

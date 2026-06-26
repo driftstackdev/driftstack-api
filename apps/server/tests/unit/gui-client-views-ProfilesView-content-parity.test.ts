@@ -224,35 +224,38 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     // agt_ session counts as running via the by-kind resolution above.
     expect(body).toMatch(/const running = bound !== null;/);
     expect(body).toMatch(/const running = boundSession\(p\.id\) !== null;/);
-    // onPrimary branches on the resolved kind: an agent session re-opens the live
-    // stream (reopenStream), any other (driver) opens the session — so the row's
-    // primary action targets the right thing for the bound kind.
+    // onPrimary on a running profile re-opens the live stream in the floating
+    // Simulator window (reopenStream) — the ONLY live-session UI. Only agent
+    // sessions stream; a driver binding has no live UI (driver sessions are no
+    // longer created), so there's no `else onOpenSession` branch and no in-app
+    // viewer is ever opened (the legacy LiveSessionView was removed).
     expect(body).toMatch(
-      /if \(bound\.kind === 'agent'\) void reopenStream\(bound\.id, profile\.id\);\s*\n?\s*else onOpenSession\(bound\.id\);/,
+      /if \(bound\.kind === 'agent'\) void reopenStream\(bound\.id, profile\.id\);/,
     );
+    expect(body).not.toMatch(/onOpenSession/);
     // Live view re-opens the stream for an agent session (livekitToken).
     expect(body).toMatch(/await client\.agentSessions\.livekitToken\(agentSessionId\);/);
   });
 
-  it("W625 mock-driver heads-up: ProfilesView reads useConnectionStatus(settings.baseUrl).driver and renders a data-banner=\"mock-driver\" notice only when driver==='mock' AND a launch actually used the placeholder polling viewer (usedPollingFallback) — the /version driver is hard-'mock' in prod even on the LiveKit live path, so it can't gate alone; the hook parses driver from /version (mock|webkit|playwright, else null) — pinned so a mock deployment sets launch expectations up front without falsely warning when LiveKit streamed", () => {
+  it('the legacy LiveKit-less polling fallback is fully removed (2026-06-26): no openPollingFallback / handleQuickSession / usedPollingFallback state / mock-driver banner / Quick Session button — the floating Simulator window is the only live-session UI, so a livekit-less create is a hard error, not an in-app placeholder viewer', () => {
+    // No polling-fallback machinery.
+    expect(body).not.toMatch(/openPollingFallback/);
+    expect(body).not.toMatch(/usedPollingFallback/);
+    expect(body).not.toMatch(/setUsedPollingFallback/);
+    expect(body).not.toMatch(/data-banner="mock-driver"/);
+    expect(body).not.toMatch(/serverDriver/);
+    // No Quick Session (it created a driver session → the deleted viewer).
+    expect(body).not.toMatch(/handleQuickSession/);
+    expect(body).not.toMatch(/Quick Session/);
+    // No onOpenSession prop threading (it pointed at the deleted in-app viewer).
+    expect(body).not.toMatch(/onOpenSession/);
+    // A livekit-less create closes the channel-less session, clears the binding,
+    // and surfaces a retry-able error — never opens an in-app page.
     expect(body).toMatch(
-      /import \{ useConnectionStatus \} from '\.\.\/lib\/use-connection-status';/,
+      /Couldn't start the live view — the session didn't get a video channel\. Try again\./,
     );
-    expect(body).toMatch(/const serverDriver = useConnectionStatus\(settings\.baseUrl\)\.driver;/);
-    // BUG 8 — the banner only appears after openPollingFallback genuinely fell
-    // back to the placeholder viewer (usedPollingFallback), never on the LiveKit
-    // live path (the /version driver name is hard-'mock' in prod regardless).
     expect(body).toMatch(
-      /const \[usedPollingFallback, setUsedPollingFallback\] = useState\(false\);/,
-    );
-    expect(body).toMatch(/setUsedPollingFallback\(true\);/);
-    expect(body).toMatch(/\{serverDriver === 'mock' && usedPollingFallback && \(/);
-    expect(body).toMatch(/data-banner="mock-driver"/);
-    // The hook actually surfaces driver from /version.
-    const hook = read(resolve(REPO_ROOT, 'apps/gui-client/src/lib/use-connection-status.ts'));
-    expect(hook).toMatch(/driver: ServerDriver \| null;/);
-    expect(hook).toMatch(
-      /body\.driver === 'mock' \|\|\s*\n?\s*body\.driver === 'webkit' \|\|\s*\n?\s*body\.driver === 'playwright'/,
+      /await client\.agentSessions\.close\(created\.id\)\.catch\(\(\) => undefined\);/,
     );
   });
 

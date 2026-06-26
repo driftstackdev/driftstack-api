@@ -1,35 +1,19 @@
 // Behavior coverage for ProfilesView.handleLaunch — the "Launch" button must
 // create a STREAMING agent session (client.agentSessions.create) and, when the
-// response carries a `livekit` block, render the live-watch overlay. When no
-// livekit block comes back (e.g. LiveKit unconfigured on the deployment) it must
-// surface a clear error instead of a black screen. Pins the demo's
-// create-profile → launch → watch path + its prod-safe fallback.
+// response carries a `livekit` block, hand the session to the floating Simulator
+// window (the only live-session UI). When no livekit block comes back (e.g.
+// LiveKit unconfigured on the deployment) there's no video channel to stream, so
+// it must close the just-created session + clear the binding + surface a clear
+// retry-able error — never open an in-app page (the legacy polling viewer was
+// removed). Pins the create-profile → launch → simulator path + its failure mode.
 
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { openSimulatorWindow } from '../../src/lib/open-simulator';
-import { DriftstackError } from '@driftstack/sdk';
-
-/** The server's egress-required 400 (driver CreateSessionRequest has no proxy
- *  field, so the polling fallback / Quick Session can't satisfy it). */
-function proxyRequiredError(): DriftstackError {
-  return new DriftstackError({
-    kind: 'bad_request',
-    status: 400,
-    type: 'https://driftstack.dev/problems/bad-request',
-    title: 'Bad Request',
-    detail:
-      'A proxy configuration is required to create a session on this deployment. ' +
-      'Supply `proxy` in the create-session body.',
-  });
-}
 
 const agentCreate = vi.fn<(b: unknown, opts?: unknown) => Promise<unknown>>();
 const agentClose = vi.fn<(id: string) => Promise<unknown>>(() => Promise.resolve({}));
 const clearSession = vi.fn<(profileId: string) => Promise<void>>(() => Promise.resolve());
-const sessionCreate = vi.fn<(b: unknown) => Promise<unknown>>(() =>
-  Promise.resolve({ id: 'ses_fallback' }),
-);
 // Configurable per-test (default = empty) so the session-tracking self-heal can be
 // exercised: a profile bound to an agt_ session reads "running" only if that session
 // is in the live agentSessions list AND not closed.
@@ -62,7 +46,6 @@ vi.mock('../../src/lib/SettingsContext', () => {
       },
       sessions: {
         list: () => Promise.resolve({ data: [] }),
-        create: (b: unknown) => sessionCreate(b),
       },
       agentSessions: {
         create: (b: unknown, opts?: unknown) => agentCreate(b, opts),
@@ -178,18 +161,24 @@ describe('ProfilesView launch → stream', () => {
     expect(screen.queryByText('agt_demo_room')).toBeNull();
   });
 
-  it('W611/W613: no livekit block → closes the unused agent session, creates a PLAIN driver session with the same profile, and opens THAT in the polling viewer (agt_ ids 400 on /v1/sessions routes — founder-hit)', async () => {
+  it('no livekit block → closes the unused agent session, clears the binding, and surfaces a retry-able error WITHOUT opening any in-app view (the polling viewer was removed)', async () => {
     agentCreate.mockResolvedValueOnce({ id: 'agt_2' });
-    const onOpenSession = vi.fn();
-    render(<ProfilesView onGoToSettings={vi.fn()} onOpenSession={onOpenSession} />);
+    // The opener mock isn't reset between tests in this file (no shared
+    // beforeEach), so snapshot its call count to assert THIS launch opened
+    // nothing rather than against a global zero.
+    const openCallsBefore = vi.mocked(openSimulatorWindow).mock.calls.length;
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
-    await waitFor(() => expect(onOpenSession).toHaveBeenCalledWith('ses_fallback'));
-    // The agent session is closed (concurrency slot + token budget freed)
-    // and the driver session carries the profile binding.
-    expect(agentClose).toHaveBeenCalledWith('agt_2');
-    expect(sessionCreate).toHaveBeenCalledWith({ profile_id: 'prof_1' });
-    // The old dead-end message is gone — the launch opens a working viewer.
-    expect(screen.queryByText(/no live stream was returned/i)).toBeNull();
+    // No video channel → the channel-less session is closed (slot + token budget
+    // freed) and its binding cleared so it never strands a billed session.
+    await waitFor(() => expect(agentClose).toHaveBeenCalledWith('agt_2'));
+    await waitFor(() => expect(clearSession).toHaveBeenCalledWith('prof_1'));
+    // The user-facing error is shown — and the floating Simulator window is NEVER
+    // opened for a channel-less session.
+    await waitFor(() =>
+      expect(screen.getByText(/didn't get a video channel\. Try again/i)).toBeTruthy(),
+    );
+    expect(vi.mocked(openSimulatorWindow).mock.calls.length).toBe(openCallsBefore);
   });
 
   it('a FAILED simulator-window open closes the just-created session (no leaked billed session) and clears the binding', async () => {
@@ -206,23 +195,6 @@ describe('ProfilesView launch → stream', () => {
     await waitFor(() =>
       expect(screen.getByText(/The session was stopped — try launching again/i)).toBeTruthy(),
     );
-  });
-
-  it('polling fallback on an egress-required deployment surfaces a SPECIFIC message (not the raw "proxy configuration is required" 400)', async () => {
-    // No livekit → polling fallback; the driver sessions.create 400s because
-    // egress is required but the driver schema can't carry the picked proxy.
-    agentCreate.mockResolvedValueOnce({ id: 'agt_3' });
-    sessionCreate.mockRejectedValueOnce(proxyRequiredError());
-    const onOpenSession = vi.fn();
-    render(<ProfilesView onGoToSettings={vi.fn()} onOpenSession={onOpenSession} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
-    // The specific direct-viewer message renders — NOT the raw API detail.
-    await waitFor(() =>
-      expect(screen.getByText(/direct-viewer fallback needs a proxy/i)).toBeTruthy(),
-    );
-    expect(screen.queryByText(/Supply `proxy` in the create-session body/i)).toBeNull();
-    // The fallback never opens a (broken) viewer session.
-    expect(onOpenSession).not.toHaveBeenCalled();
   });
 
   // Session-tracking self-heal (founder 2026-06-18: "always says open session even

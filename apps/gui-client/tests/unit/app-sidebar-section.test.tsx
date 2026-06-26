@@ -1,8 +1,9 @@
-// Deep-audit LOW: drilling into a live session ('live-session') or the recording
-// player ('recording-player') left no sidebar item highlighted — those kinds
-// aren't sidebar entries, so the old `view.kind as SidebarViewKind` cast matched
-// nothing. sidebarSectionFor() folds the drilled-in sub-views onto their parent
-// section so the nav keeps its "you are here" state.
+// Deep-audit LOW: drilling into the recording player ('recording-player') left
+// no sidebar item highlighted — that kind isn't a sidebar entry, so the old
+// `view.kind as SidebarViewKind` cast matched nothing. sidebarSectionFor() folds
+// the drilled-in sub-view onto its parent section so the nav keeps its "you are
+// here" state. (The 'live-session' fold-in was dropped with the in-app session
+// viewer — the floating Simulator window is the only live-session UI now.)
 
 import { describe, it, expect, vi } from 'vitest';
 
@@ -40,10 +41,6 @@ vi.mock('@sentry/browser', () => ({
 const { sidebarSectionFor } = await import('../../src/App');
 
 describe('sidebarSectionFor — drilled-in sub-views keep their parent section lit', () => {
-  it('maps live-session → sessions', () => {
-    expect(sidebarSectionFor({ kind: 'live-session', sessionId: 'ses_1' })).toBe('sessions');
-  });
-
   it('maps recording-player → recordings', () => {
     expect(sidebarSectionFor({ kind: 'recording-player', recordingId: 'rec_1' })).toBe(
       'recordings',

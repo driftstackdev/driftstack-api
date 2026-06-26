@@ -30,11 +30,10 @@ interface SessionsState {
 }
 
 export interface SessionsViewProps {
-  onView: (sessionId: string) => void;
   onGoToSettings: () => void;
 }
 
-export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX.Element {
+export function SessionsView({ onGoToSettings }: SessionsViewProps): JSX.Element {
   const { client, settings, accountMe, refreshAccountMe } = useSettings();
   const { push: pushToast } = useToasts();
   const [state, setState] = useState<SessionsState>({
@@ -61,7 +60,6 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
           title: 'Session errored',
           body: `${session.label ?? session.id} stopped unexpectedly.`,
           tone: 'warn',
-          action: { label: 'Open', run: () => onView(session.id) },
         });
       }
       prev.set(session.id, session.status);
@@ -71,7 +69,7 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
     for (const id of prev.keys()) {
       if (!seen.has(id)) prev.delete(id);
     }
-  }, [state.sessions, pushToast, onView]);
+  }, [state.sessions, pushToast]);
 
   // V-239 — gate the New session button when the customer is at the
   // concurrent cap. Server enforces (V-073 returns 402); the GUI's job
@@ -406,7 +404,6 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
               key={s.id}
               session={s}
               busy={busyId === s.id}
-              onView={() => onView(s.id)}
               onDestroy={() => void handleDestroy(s.id)}
             />
           ))}
@@ -516,12 +513,10 @@ function SessionsEmptyState({
 function SessionCard({
   session,
   busy,
-  onView,
   onDestroy,
 }: {
   session: Session;
   busy: boolean;
-  onView: () => void;
   onDestroy: () => void;
 }): JSX.Element {
   const live = session.status === 'ready' || session.status === 'busy';
@@ -613,24 +608,10 @@ function SessionCard({
         )}
       </div>
 
-      {/* Quiet row actions: View + Stop. */}
+      {/* Quiet row action: Stop. (Live viewing moved entirely to the floating
+          Simulator window launched from Profiles — the in-app session viewer
+          was removed, so a session card no longer has a "View" affordance.) */}
       <div className="mt-auto flex gap-2 pt-0.5">
-        <button
-          type="button"
-          className="btn-secondary flex-1 text-xs disabled:opacity-40"
-          onClick={onView}
-          // Don't offer View for a terminated session — the list keeps destroyed/
-          // errored rows until the next poll, and their live viewer can't stream
-          // (it just shows "Session ended"). (audit wja3dfl5t)
-          disabled={session.status === 'destroyed' || session.status === 'errored'}
-          title={
-            session.status === 'destroyed' || session.status === 'errored'
-              ? 'This session has ended'
-              : undefined
-          }
-        >
-          View
-        </button>
         <button
           type="button"
           className="btn-danger flex-1 text-xs"

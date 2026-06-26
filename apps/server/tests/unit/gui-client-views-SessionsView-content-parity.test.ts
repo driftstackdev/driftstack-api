@@ -126,7 +126,7 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
     );
   });
 
-  it("StatusPill 4-tone: ready → status-ready / busy → status-busy / errored → status-error / else status-idle fallback (creating/destroyed map to idle dot) — pinned so the live-status colour vocabulary stays consistent across the cards; SessionCard has View + Stop buttons (Stop disabled while that card is busy with a 'Stopping…' label) — Console restyle renamed the row 'Destroy' action to a card 'Stop' button driven by the SessionCard `busy` prop (same per-session destroy gating, new copy)", () => {
+  it("StatusPill 4-tone: ready → status-ready / busy → status-busy / errored → status-error / else status-idle fallback (creating/destroyed map to idle dot) — pinned so the live-status colour vocabulary stays consistent across the cards; SessionCard has a single Stop button (disabled while that card is busy with a 'Stopping…' label) driven by the SessionCard `busy` prop — the in-app 'View' affordance was removed with the legacy live-session viewer (2026-06-26): live viewing is the floating Simulator window launched from Profiles, and the card no longer takes an onView prop", () => {
     expect(body).toMatch(
       /const dotColor =\s*\n?\s*status === 'ready'\s*\n?\s*\? 'bg-status-ready'\s*\n?\s*: status === 'busy'\s*\n?\s*\? 'bg-status-busy'\s*\n?\s*: status === 'errored'\s*\n?\s*\? 'bg-status-error'\s*\n?\s*: 'bg-status-idle';/,
     );
@@ -136,6 +136,10 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
     expect(body).toMatch(
       /onClick=\{onDestroy\}\s*\n?\s*disabled=\{busy\}\s*\n?\s*>\s*\n?\s*\{busy \? 'Stopping…' : 'Stop'\}/,
     );
+    // The in-app View affordance + its onView prop are fully removed — no path
+    // to the deleted live-session viewer remains.
+    expect(body).not.toMatch(/onView/);
+    expect(body).not.toMatch(/>\s*\n?\s*View\s*\n?\s*<\/button>/);
   });
 
   it("friendlyError: DriftstackError instanceof → .message / Error instanceof → .message / fallback 'unknown error' — pinned so client-thrown DriftstackErrors surface their server-friendly message and unrecognized throws don't render as '[object Object]'; 2026-05-20 — signature widened to (err, baseUrl?) for Couldn't-reach-<url> network-error hint", () => {
