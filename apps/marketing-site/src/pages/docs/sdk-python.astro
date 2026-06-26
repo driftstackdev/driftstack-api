@@ -47,7 +47,8 @@ client = Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"])
 
     <h2>3. Start a session</h2>
     <pre><code>{`session = client.sessions.create({
-    "archetype": "default",
+    # Omit "archetype" to inherit the locked launch default
+    # (iphone17_ios18_7_safari26_4); pass a real registry slug to pin one.
     "purpose": "production_customer",
     "label": "demo",
 })
