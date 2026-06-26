@@ -13,9 +13,11 @@ posts an IPN to Driftstack when the payment is confirmed on-chain;
 Driftstack activates the subscription tier.
 
 Crypto checkout is enabled for paid tiers ($79/mo and above).
-NowPayments enforces a USD-equivalent floor (~$19.16) below which
-payments are rejected as `amount_too_low`; every current tier is
-well above it.
+NowPayments enforces an empirical USD-equivalent floor (~$19.16)
+below which payments are rejected as `amount_too_low`, and Driftstack
+short-circuits any order under $20 (`NOWPAYMENTS_MIN_USD_CENTS = 2000`)
+before it reaches NowPayments. Every current tier ($79+) clears both
+thresholds.
 
 ## Create a checkout order
 
@@ -139,7 +141,9 @@ When an order transitions to `paid`, Driftstack fires a
 
 ```json
 {
-  "event_type": "crypto.order.paid",
+  "id": "<uuid>",
+  "type": "crypto.order.paid",
+  "created_at": "2026-05-22T10:30:00.000Z",
   "data": {
     "order_id": "ord_a1b2c3d4e5f6",
     "product": "solo_manual",
@@ -151,11 +155,12 @@ When an order transitions to `paid`, Driftstack fires a
 }
 ```
 
-Same HMAC-SHA256 signature scheme as every other Driftstack
-webhook ([webhook signing](../webhooks/events)). Idempotent: the
-same `event_id` may be redelivered up to 5 times if your endpoint
-returns non-2xx; verify by checking the `paid_at` timestamp or
-storing seen `event_id`s.
+Same canonical envelope (`id` / `type` / `created_at` / `data`) and
+HMAC-SHA256 signature scheme as every other Driftstack webhook
+([webhook signing](../webhooks/events)). Idempotent: delivery is
+retried up to 5 times after the initial attempt (6 attempts total) if
+your endpoint returns non-2xx, each carrying the same top-level `id` —
+dedup on that `id` (also surfaced as `X-Driftstack-Event-Id`).
 
 The companion `crypto.order.failed` event fires on the
 `pending|confirming|partial → failed` transition (whether driven
