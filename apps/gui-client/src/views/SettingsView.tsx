@@ -172,6 +172,10 @@ export function SettingsView(): JSX.Element {
   }
 
   async function handleSave(): Promise<void> {
+    // Guard a non-empty-but-invalid Start URL: don't run the save (which would
+    // silently keep the old value while showing 'Saved.'). The button is also
+    // disabled on this, but a programmatic call still bails for safety.
+    if (startUrlInvalid) return;
     setSaving(true);
     const url = draftUrl.trim().replace(/\/+$/, '') || 'http://localhost:3000';
     try {
@@ -179,8 +183,10 @@ export function SettingsView(): JSX.Element {
         apiKey: draftKey.length > 0 ? draftKey : null,
         baseUrl: url,
         telemetryOptIn: draftTelemetry,
-        // Normalize on save (prepends https://, rejects non-http(s) → null); fall
-        // back to the existing value so a bad entry never wipes the setting.
+        // A blank field clears to the default; a non-empty field is guaranteed
+        // valid here (the startUrlInvalid guard blocked an invalid one above), so
+        // normalizeNavigateUrl can't return null for a non-empty value. The ??
+        // only covers the empty-field case.
         startUrl: normalizeNavigateUrl(draftStartUrl) ?? settings.startUrl,
       });
       setSavedAt(Date.now());
@@ -248,6 +254,14 @@ export function SettingsView(): JSX.Element {
     draftUrl !== settings.baseUrl ||
     draftTelemetry !== settings.telemetryOptIn ||
     draftStartUrl !== settings.startUrl;
+
+  // The Start URL is normalized on save (prepends https://, rejects non-http(s)
+  // → null). A non-empty value that normalizes to null (file://, about:blank,
+  // javascript:, …) was previously SAVED SILENTLY as the OLD value while the
+  // field kept showing the rejected text + 'Saved.' fired — the customer
+  // believed it stuck when it didn't. Surface it inline and block the save.
+  const startUrlInvalid =
+    (draftStartUrl ?? '').trim().length > 0 && normalizeNavigateUrl(draftStartUrl ?? '') === null;
 
   // V-242 — surface the platform default to the customer so they
   // understand what the "use default" choice means in their context.
@@ -317,7 +331,8 @@ export function SettingsView(): JSX.Element {
                 type="button"
                 className="btn-primary"
                 onClick={() => void handleSave()}
-                disabled={saving || !dirty}
+                disabled={saving || !dirty || startUrlInvalid}
+                title={startUrlInvalid ? 'Fix the Start URL before saving' : undefined}
               >
                 {saving ? 'Saving…' : 'Save'}
               </button>
@@ -671,14 +686,22 @@ export function SettingsView(): JSX.Element {
               value={draftStartUrl}
               onChange={(e) => setDraftStartUrl(e.target.value)}
               placeholder="https://driftstack.dev"
-              className="form-input mono"
+              className={`form-input mono ${startUrlInvalid ? 'border-status-error' : ''}`}
               spellCheck={false}
               autoComplete="off"
+              aria-invalid={startUrlInvalid}
             />
-            <span className="mt-2 block text-2xs text-ink-muted">
-              The page the remote browser opens when a session launches. http(s) only — saved as a
-              full URL (https:// is added if you omit it).
-            </span>
+            {startUrlInvalid ? (
+              <span role="alert" className="mt-2 block text-2xs text-status-error">
+                That isn’t a valid http(s) URL. Use something like https://example.com — file://,
+                about:, and javascript: aren’t allowed.
+              </span>
+            ) : (
+              <span className="mt-2 block text-2xs text-ink-muted">
+                The page the remote browser opens when a session launches. http(s) only — saved as a
+                full URL (https:// is added if you omit it).
+              </span>
+            )}
           </Field>
         </div>
       </Panel>

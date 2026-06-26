@@ -20,7 +20,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 interface MockSettings {
-  settings: { apiKey: string | null; baseUrl: string; telemetryOptIn: boolean | null };
+  settings: {
+    apiKey: string | null;
+    baseUrl: string;
+    telemetryOptIn: boolean | null;
+    startUrl?: string;
+  };
   loading: boolean;
   client: null;
   accountMe: null;
@@ -105,6 +110,44 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(realKey));
     expect(await screen.findByText('Copied')).toBeInTheDocument();
+  });
+
+  it('a non-http(s) Start URL shows an inline error, blocks Save, and never silently keeps the old value', () => {
+    const update = vi.fn(() => Promise.resolve());
+    useSettingsMock.mockReturnValue({
+      settings: {
+        apiKey: 'ds_live_x',
+        baseUrl: 'https://api.driftstack.dev',
+        telemetryOptIn: null,
+        startUrl: 'https://driftstack.dev',
+      },
+      loading: false,
+      client: null,
+      accountMe: null,
+      refreshAccountMe: vi.fn(() => Promise.resolve()),
+      update,
+    });
+    renderWithToasts();
+
+    const startInput = screen.getByPlaceholderText<HTMLInputElement>('https://driftstack.dev');
+    // Type a rejected scheme.
+    fireEvent.change(startInput, { target: { value: 'javascript:alert(1)' } });
+
+    // Inline error surfaces…
+    expect(screen.getByRole('alert')).toHaveTextContent(/isn.t a valid http\(s\) URL/i);
+    // …the field is flagged invalid…
+    expect(startInput.getAttribute('aria-invalid')).toBe('true');
+    // …and Save is disabled (so the silent old-value fallback can't fire).
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+
+    // Clicking the (disabled) Save is a no-op — no persist with the bad value.
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(update).not.toHaveBeenCalled();
+
+    // Correcting it clears the error + re-enables Save.
+    fireEvent.change(startInput, { target: { value: 'https://example.com' } });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
   });
 
   it('Reset to default resets the self-hosted base URL draft to the default constant', () => {
