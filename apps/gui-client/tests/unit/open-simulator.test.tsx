@@ -1,6 +1,7 @@
-// openSimulatorWindow (lib/open-simulator) — pins the session HANDOFF payload.
+// openSimulatorWindow (lib/open-simulator) — pins the session HANDOFF payload
+// + the no-fallback failure contract.
 //
-// The opener prefers the SEPARATE "Driftstack Simulator" app: it base64-encodes
+// The opener launches the SEPARATE "Driftstack Simulator" app: it base64-encodes
 // the simulator query string and hands it to the Rust `launch_simulator`
 // command. This test pins exactly which fields land in that payload — including
 // the proxy exit `cc` (country code) that drives the separate app's macOS Dock
@@ -10,6 +11,12 @@
 // already uses) so the separate app authorizes on mount without racing the
 // temp-file read; sim_key_write stays as the secondary fallback (founder
 // 2026-06-18 — this fixed the permanent "Connecting…" stall).
+//
+// There is NO in-app webview fallback: when `launch_simulator` rejects the
+// opener returns `opened:false` with a reason for the caller to surface (the
+// inline window read as embedded in the main GUI + a silent fallback caused the
+// founder's multi-hour "still the same window" saga). This file pins that
+// failure contract so the fallback can't be reintroduced.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { LiveKitInfo } from '@driftstack/sdk';
@@ -18,15 +25,15 @@ const invoke = vi.fn<(cmd: string, args: unknown) => Promise<unknown>>();
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: (cmd: string, args: unknown): Promise<unknown> => invoke(cmd, args),
 }));
-// getByLabel is consulted up-front (focus an existing window). Return null so
-// the opener proceeds to the launch_simulator handoff path under test.
+// The opener no longer touches @tauri-apps/api/webviewWindow at all (the
+// in-process WebviewWindow fallback was removed). The constructor is mocked to
+// THROW so any accidental reintroduction of `new WebviewWindow(...)` fails this
+// suite loudly instead of silently opening an embedded window.
+const WebviewWindowCtor = vi.fn(() => {
+  throw new Error('open-simulator must not construct an in-app WebviewWindow');
+});
 vi.mock('@tauri-apps/api/webviewWindow', () => ({
-  WebviewWindow: { getByLabel: () => Promise.resolve(null) },
-  getCurrentWebviewWindow: () => ({
-    outerPosition: () => Promise.resolve({ x: 0, y: 0 }),
-    outerSize: () => Promise.resolve({ width: 0, height: 0 }),
-    scaleFactor: () => Promise.resolve(1),
-  }),
+  WebviewWindow: WebviewWindowCtor,
 }));
 
 const { openSimulatorWindow } = await import('../../src/lib/open-simulator');
@@ -123,5 +130,32 @@ describe('openSimulatorWindow — session handoff payload', () => {
     return openSimulatorWindow({ sessionId: 'agt_nb', info, countryCode: 'US' }).then(() => {
       expect(launchedQuery().get('base')).toBe('');
     });
+  });
+
+  it('surfaces a failure (opened:false + reason) WITHOUT opening an in-app window when launch_simulator rejects', async () => {
+    // launch_simulator rejects (separate app not installed / spawn failed). The
+    // opener must NOT fall back to an in-process WebviewWindow — it returns a
+    // clean reason so the caller shows a user-facing "couldn't open" error.
+    invoke.mockImplementation((cmd: string) =>
+      cmd === 'launch_simulator'
+        ? Promise.reject(new Error('app not installed'))
+        : Promise.resolve(undefined),
+    );
+    const res = await openSimulatorWindow({ sessionId: 'agt_fail', info, countryCode: 'US' });
+    expect(res.opened).toBe(false);
+    expect(res.reason).toBe('app not installed');
+    // No in-app fallback window was ever constructed.
+    expect(WebviewWindowCtor).not.toHaveBeenCalled();
+  });
+
+  it('returns opened:false (browser preview) when not running under Tauri', async () => {
+    // Drop the Tauri marker so the early guard fires (a browser/dev preview must
+    // not attempt any launch + must not construct a window).
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+    const res = await openSimulatorWindow({ sessionId: 'agt_browser', info });
+    expect(res.opened).toBe(false);
+    expect(res.reason).toMatch(/browser preview/);
+    expect(invoke).not.toHaveBeenCalledWith('launch_simulator', expect.anything());
+    expect(WebviewWindowCtor).not.toHaveBeenCalled();
   });
 });
