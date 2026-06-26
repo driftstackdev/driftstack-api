@@ -178,6 +178,7 @@ import { DrizzleBillingRepo } from '../db/billing-repo.js';
 import { buildLegalCatalog } from '../services/legal-catalog.js';
 import { RedisAuthCache } from '../services/auth-cache.js';
 import { AuthCoalescer } from '../services/auth-coalescer.js';
+import { InProcessNegativeAuthCache } from '../services/negative-auth-cache.js';
 import { RedisRateLimitStore } from '../lib/redis-rate-limit-store.js';
 import { createDriver } from '../drivers/index.js';
 import { createR2Client, createR2PublicClient, r2ReadinessCheck, type R2 } from './r2.js';
@@ -324,6 +325,10 @@ export async function createProductionDeps(
   // Auth cache + coalescer.
   const authCache = new RedisAuthCache(redis, logger);
   const authCoalescer = new AuthCoalescer();
+  // DoS hardening — per-instance short-TTL negative auth cache so a flood
+  // of the SAME bogus bearer token skips the prefix-lookup + scrypt verify
+  // after the first rejection.
+  const negativeAuthCache = new InProcessNegativeAuthCache();
 
   // 2026-05-19 — staff-emails allowlist. Web-session auth bumps
   // these accounts with `driftstack_internal_admin` scope so the
@@ -1589,9 +1594,24 @@ export async function createProductionDeps(
     authRepo,
     authCache,
     authCoalescer,
+    negativeAuthCache,
     ...(effectiveStaffEmails.size > 0 ? { staffEmails: effectiveStaffEmails } : {}),
     ...(ownerEmail !== null ? { ownerEmail } : {}),
     rateLimitStore,
+    // DoS hardening — global IP gate (app-wide, before auth). Configurable
+    // via GLOBAL_IP_RATE_LIMIT_PER_MIN; 0 disables. undefined → app.ts
+    // default (600/min/IP).
+    ...(config.globalIpRateLimitPerMin !== undefined
+      ? {
+          globalIpRateLimit:
+            config.globalIpRateLimitPerMin <= 0
+              ? null
+              : {
+                  capacity: config.globalIpRateLimitPerMin,
+                  refillPerSecond: config.globalIpRateLimitPerMin / 60,
+                },
+        }
+      : {}),
     sessionsService,
     apiKeysService,
     usageService,

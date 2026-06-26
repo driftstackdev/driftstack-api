@@ -93,9 +93,9 @@ describe('W394.B apps/server/src/middleware/auth.ts content parity', () => {
     expect(body).toMatch(/app\.decorateRequest\('account', null\);/);
   });
 
-  it('requireAuth: extractBearerToken → authenticate(repo, token, cache, now, coalescer, staffEmails) → assigns request.account (6-arg call; 2026-05-19 staff-emails admin-scope bump added the 6th arg).', () => {
+  it('requireAuth: extractBearerToken → authenticate(repo, token, cache, now, coalescer, staffEmails, negativeAuthCache) → assigns request.account (7-arg call; the 7th arg = the DoS-hardening negative cache that skips prefix-lookup + scrypt on a repeated bogus token).', () => {
     expect(body).toMatch(
-      /const requireAuth = async \(request: FastifyRequest, _reply: FastifyReply\): Promise<void> => \{\s*\n?\s*try \{\s*\n?\s*const token = extractBearerToken\(request\.headers\.authorization\);\s*\n?\s*const ctx = await authenticate\(\s*\n?\s*opts\.authRepo,\s*\n?\s*token,\s*\n?\s*opts\.authCache,\s*\n?\s*new Date\(\),\s*\n?\s*opts\.authCoalescer,\s*\n?\s*opts\.staffEmails \?\? new Set\(\),\s*\n?\s*\);\s*\n?\s*request\.account = ctx;/,
+      /const requireAuth = async \(request: FastifyRequest, _reply: FastifyReply\): Promise<void> => \{\s*\n?\s*try \{\s*\n?\s*const token = extractBearerToken\(request\.headers\.authorization\);\s*\n?\s*const ctx = await authenticate\(\s*\n?\s*opts\.authRepo,\s*\n?\s*token,\s*\n?\s*opts\.authCache,\s*\n?\s*new Date\(\),\s*\n?\s*opts\.authCoalescer,\s*\n?\s*opts\.staffEmails \?\? new Set\(\),\s*\n?\s*opts\.negativeAuthCache \?\? null,\s*\n?\s*\);\s*\n?\s*request\.account = ctx;/,
     );
   });
 

@@ -12,6 +12,7 @@ import type { Logger } from './logger.js';
 import type { AccountAuthRepo } from '../services/auth.js';
 import type { AuthCache } from '../services/auth-cache.js';
 import type { AuthCoalescer } from '../services/auth-coalescer.js';
+import type { NegativeAuthCache } from '../services/negative-auth-cache.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
 import type { SessionsService } from '../services/sessions.js';
 import type { ApiKeysService } from '../services/api-keys.js';
@@ -90,6 +91,7 @@ import { corsOriginMatchers } from './cors-allow.js';
 import type { PairModeTakeoverLock } from '../services/agent-pair-mode-lock.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
+import { ipRateLimit } from '../middleware/ip-rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
 import { registerErrorHandler } from '../middleware/error-handler.js';
 import { registerSessionRoutes } from '../routes/sessions.js';
@@ -183,12 +185,42 @@ async function runWithTimeout<T>(p: Promise<T>, timeoutMs: number): Promise<T> {
   }
 }
 
+/**
+ * DoS hardening — default global IP-keyed rate limit applied app-wide
+ * BEFORE auth. 600/min/IP is generous for any single legitimate client
+ * (the SDK + dashboard make far fewer than 10 req/s sustained) while
+ * capping an unauthenticated bogus-token / bogus-control-key flood from
+ * one source IP long before it saturates the scrypt threadpool / DB
+ * pool. Tune in prod via GLOBAL_IP_RATE_LIMIT_PER_MIN; set to 0 to
+ * disable (maps to a null gate).
+ */
+export const GLOBAL_IP_RATE_LIMIT_DEFAULT = {
+  capacity: 600,
+  refillPerSecond: 600 / 60,
+} as const;
+
 export interface AppDeps {
   logger: Logger;
   authRepo: AccountAuthRepo;
   authCache: AuthCache | null;
   authCoalescer: AuthCoalescer | null;
+  /**
+   * DoS hardening — short-TTL negative auth cache. When provided, a flood
+   * of the SAME bogus bearer token skips the prefix-lookup + scrypt
+   * verify after the first rejection. Omitted → no negative caching.
+   */
+  negativeAuthCache?: NegativeAuthCache | null;
   rateLimitStore: RateLimitStore;
+  /**
+   * DoS hardening — global IP-keyed rate limit applied app-wide via an
+   * onRequest hook that runs BEFORE the per-route auth preHandler, so an
+   * unauthenticated bogus-bearer / bogus-control-key flood is throttled
+   * before it reaches findApiKeyByPrefix + scrypt + AES-GCM. Reuses the
+   * shared `rateLimitStore`. `null` disables the gate (default when
+   * omitted is 600/min/IP — see GLOBAL_IP_RATE_LIMIT_DEFAULT). Tests
+   * pass `null` to keep the pre-existing inject-based suites unaffected.
+   */
+  globalIpRateLimit?: { capacity: number; refillPerSecond: number } | null;
   sessionsService: SessionsService;
   apiKeysService: ApiKeysService;
   usageService: UsageService;
@@ -827,10 +859,34 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     wireSentryErrorHandler(app, deps.sentry);
   }
 
+  // DoS hardening — GLOBAL IP-keyed rate limit, app-wide, in an onRequest
+  // hook so it runs BEFORE any route's auth preHandler. The account-keyed
+  // limiter (app.rateLimit) only fires AFTER auth succeeds — it never
+  // gates a request that 401s, so an unauthenticated flood of bogus
+  // bearer / control-key headers reaches findApiKeyByPrefix + scrypt +
+  // AES-GCM ungated. This gate caps each source IP regardless of route or
+  // auth outcome. It reuses the shared rate-limit store + the proven
+  // ipRateLimit primitive (fails OPEN on a store error so a Redis blip
+  // can't 500 the whole API). Defaults to 600/min/IP; pass null to
+  // disable (tests do, to keep their high-volume inject loops unaffected).
+  const globalIpGateCfg =
+    deps.globalIpRateLimit === undefined ? GLOBAL_IP_RATE_LIMIT_DEFAULT : deps.globalIpRateLimit;
+  if (globalIpGateCfg !== null) {
+    const globalIpGate = ipRateLimit(deps.rateLimitStore, {
+      bucketPrefix: 'global_ip',
+      capacity: globalIpGateCfg.capacity,
+      refillPerSecond: globalIpGateCfg.refillPerSecond,
+    });
+    app.addHook('onRequest', globalIpGate);
+  }
+
   await app.register(authPlugin, {
     authRepo: deps.authRepo,
     authCache: deps.authCache,
     authCoalescer: deps.authCoalescer,
+    // DoS hardening — negative auth cache: a repeated bogus token skips
+    // the prefix-lookup + scrypt verify after the first rejection.
+    negativeAuthCache: deps.negativeAuthCache ?? null,
     // V-353e — step-up gate consults MFA enrollment state; null when
     // MFA is disabled in this deploy (gate becomes a no-op).
     mfaService: deps.mfaService ?? null,

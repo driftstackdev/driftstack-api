@@ -408,6 +408,12 @@ export interface TestAppOptions {
    * into AppDeps as `agentUploadMaxAccountInFlightCount`.
    */
   uploadMaxAccountInFlightCount?: number;
+  /**
+   * DoS hardening — opt INTO the app-wide global IP rate limit (default is
+   * disabled in tests, see the buildApp call). A dedicated suite passes a
+   * tiny capacity to trip the gate with a handful of requests from one IP.
+   */
+  globalIpRateLimit?: { capacity: number; refillPerSecond: number } | null;
 }
 
 export interface SeedAdditionalOpts {
@@ -1331,6 +1337,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     authCache,
     authCoalescer,
     rateLimitStore,
+    // DoS hardening — the global IP gate (default 600/min/IP) is disabled
+    // for integration tests so the many high-volume inject() loops (which
+    // all share remoteAddress 127.0.0.1) aren't throttled. Dedicated
+    // suites that assert the gate pass opts.globalIpRateLimit to enable it.
+    globalIpRateLimit: opts.globalIpRateLimit ?? null,
     sessionsService,
     apiKeysService,
     usageService,

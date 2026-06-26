@@ -72,11 +72,11 @@ describe('W712 server-side auth middleware parity', () => {
     expect(src).toMatch(/extractBearerToken\(request\.headers\.authorization\)/);
   });
 
-  it('CRITICAL authenticate() called with 5 args: (authRepo, token, authCache, new Date(), authCoalescer). The 5-arg signature is the canonical auth-pipeline shape — drift to dropping authCache or authCoalescer would let every request hit the DB (cache stampede + scale degradation).', () => {
+  it('CRITICAL authenticate() called with 7 args: (authRepo, token, authCache, new Date(), authCoalescer, staffEmails, negativeAuthCache). The canonical auth-pipeline shape — drift to dropping authCache or authCoalescer would let every request hit the DB (cache stampede + scale degradation); the 7th arg (negativeAuthCache) skips the prefix-lookup + scrypt verify on a repeated bogus token (DoS hardening).', () => {
     const src = read(AUTH_MIDDLEWARE);
 
     expect(src).toMatch(
-      /await authenticate\(\s*\n?\s*opts\.authRepo,\s*\n?\s*token,\s*\n?\s*opts\.authCache,\s*\n?\s*new Date\(\),\s*\n?\s*opts\.authCoalescer,\s*\n?\s*opts\.staffEmails \?\? new Set\(\),\s*\n?\s*\)/,
+      /await authenticate\(\s*\n?\s*opts\.authRepo,\s*\n?\s*token,\s*\n?\s*opts\.authCache,\s*\n?\s*new Date\(\),\s*\n?\s*opts\.authCoalescer,\s*\n?\s*opts\.staffEmails \?\? new Set\(\),\s*\n?\s*opts\.negativeAuthCache \?\? null,\s*\n?\s*\)/,
     );
   });
 

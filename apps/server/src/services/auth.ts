@@ -15,6 +15,7 @@ import { keyPrefixFromPlaintext, verifyApiKey } from '../lib/api-keys.js';
 import type { AuthCache } from './auth-cache.js';
 import { sha256Hex } from './auth-cache.js';
 import type { AuthCoalescer } from './auth-coalescer.js';
+import type { NegativeAuthCache } from './negative-auth-cache.js';
 import type { ApiKeyScope } from '@driftstack/api-types';
 import type { AccountTier } from '@driftstack/api-types';
 import type { AccountOrganization } from '@driftstack/api-types';
@@ -247,6 +248,16 @@ export async function authenticate(
    * NEVER reads the plaintext — only the resolved account email.
    */
   staffEmails: ReadonlySet<string> = new Set(),
+  /**
+   * DoS hardening — short-TTL negative cache keyed by sha256(plaintext).
+   * On a hit we know this exact token was JUST rejected as invalid, so we
+   * 401 immediately and skip the prefix lookup + scrypt verify (the
+   * expensive ungated work an unauthenticated bogus-token flood drives).
+   * null/undefined → no negative caching (tests / fixtures without it).
+   * Only the unambiguous InvalidKeyError outcome is cached; never
+   * revoked/expired/suspended/forbidden (state that can flip back).
+   */
+  negativeCache: NegativeAuthCache | null = null,
 ): Promise<AccountContext> {
   if (plaintext.length < 24) throw new InvalidKeyError();
 
@@ -256,6 +267,14 @@ export async function authenticate(
   // belt-and-suspenders: the cache impl swallows internally AND we wrap
   // here in case a future impl forgets.
   const sha = sha256Hex(plaintext);
+
+  // Negative fast path: a token we just rejected as invalid cannot have
+  // become valid (a real new key has a fresh random body → a different
+  // sha). Short-circuit before any DB/scrypt work so a bogus-token flood
+  // can't keep paying the prefix-lookup + scrypt cost on repeats.
+  if (negativeCache?.has(sha)) {
+    throw new InvalidKeyError();
+  }
   if (cache) {
     let cached: AccountContext | null = null;
     try {
@@ -282,10 +301,27 @@ export async function authenticate(
   //   - everything else → V-168 web session path (sha256 lookup against
   //     `web_sessions` row).
   // Both paths converge on the same AccountContext + cache write.
-  const slowPath = async (): Promise<AccountContext> =>
+  const innerSlowPath = async (): Promise<AccountContext> =>
     isApiKeyShape(plaintext)
       ? slowPathApiKey(repo, plaintext, sha, cache, now)
       : slowPathWebSession(repo, plaintext, sha, cache, now, staffEmails);
+
+  // Record the unambiguous "invalid credential" outcome in the negative
+  // cache so repeats of the SAME bogus token skip the prefix lookup +
+  // scrypt verify. Only InvalidKeyError (unknown prefix / scrypt mismatch
+  // / unknown web-session) is cached — never revoked/expired/suspended/
+  // forbidden, whose state can flip back and is owned by the positive
+  // cache + version counters.
+  const slowPath = negativeCache
+    ? async (): Promise<AccountContext> => {
+        try {
+          return await innerSlowPath();
+        } catch (err) {
+          if (err instanceof InvalidKeyError) negativeCache.markInvalid(sha);
+          throw err;
+        }
+      }
+    : innerSlowPath;
 
   if (coalescer) return coalescer.coalesce(sha, slowPath);
   return slowPath();

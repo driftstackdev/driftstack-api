@@ -8,6 +8,7 @@ import type { AccountAuthRepo, AccountContext } from '../services/auth.js';
 import { authenticate, extractBearerToken, requireScope } from '../services/auth.js';
 import type { AuthCache } from '../services/auth-cache.js';
 import type { AuthCoalescer } from '../services/auth-coalescer.js';
+import type { NegativeAuthCache } from '../services/negative-auth-cache.js';
 import type { MfaService } from '../services/mfa.js';
 import {
   ExpiredKeyError,
@@ -67,6 +68,13 @@ export interface AuthPluginOptions {
   authRepo: AccountAuthRepo;
   authCache: AuthCache | null;
   authCoalescer: AuthCoalescer | null;
+  /**
+   * DoS hardening — short-TTL negative cache so a flood of the SAME
+   * bogus bearer token skips the prefix-lookup + scrypt verify after the
+   * first rejection. null → disabled (auth works, just unamortised on
+   * negatives).
+   */
+  negativeAuthCache?: NegativeAuthCache | null;
   /** V-353e — when set, step-up gate consults this for enrollment
    *  state. When omitted the gate becomes a no-op (MFA off in this
    *  deploy / test fixture without it). */
@@ -124,6 +132,7 @@ function authPlugin(
         new Date(),
         opts.authCoalescer,
         opts.staffEmails ?? new Set(),
+        opts.negativeAuthCache ?? null,
       );
       request.account = ctx;
       try {
@@ -172,6 +181,7 @@ function authPlugin(
         new Date(),
         opts.authCoalescer,
         opts.staffEmails ?? new Set(),
+        opts.negativeAuthCache ?? null,
       );
       request.account = ctx;
       try {

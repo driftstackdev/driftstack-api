@@ -60,6 +60,23 @@ describe('loadConfig', () => {
     ).toBe(1);
   });
 
+  it('globalIpRateLimitPerMin — prod default 600/min/IP; tunable via GLOBAL_IP_RATE_LIMIT_PER_MIN; 0 disables (DoS hardening)', () => {
+    const base = {
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+    };
+    // Default posture when the env var is unset.
+    expect(loadConfig(base).globalIpRateLimitPerMin).toBe(600);
+    // Operator override coerced from the env string to a number.
+    expect(
+      loadConfig({ ...base, GLOBAL_IP_RATE_LIMIT_PER_MIN: '1200' }).globalIpRateLimitPerMin,
+    ).toBe(1200);
+    // 0 is a valid (disable) value — nonnegative, not positive.
+    expect(loadConfig({ ...base, GLOBAL_IP_RATE_LIMIT_PER_MIN: '0' }).globalIpRateLimitPerMin).toBe(
+      0,
+    );
+  });
+
   it('boolean env vars use strict === \'true\' parsing (NOT z.coerce.boolean which makes "false" → true)', () => {
     const base = {
       DATABASE_URL: 'postgres://u:p@localhost:5432/db',

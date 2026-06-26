@@ -17,6 +17,14 @@ const ConfigSchema = z.object({
     .union([z.boolean(), z.number().int().nonnegative(), z.string().min(1)])
     .default(false),
   logLevel: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  // DoS hardening — global IP-keyed rate limit applied app-wide BEFORE
+  // auth (caps an unauthenticated bogus-bearer / bogus-control-key flood
+  // before it reaches the prefix-lookup + scrypt verify + AES-GCM). Per
+  // minute, per source IP. Default 600/min/IP (see
+  // GLOBAL_IP_RATE_LIMIT_DEFAULT in app.ts). Set
+  // GLOBAL_IP_RATE_LIMIT_PER_MIN=0 to disable the gate entirely. coerce so
+  // the env string parses to a number.
+  globalIpRateLimitPerMin: z.coerce.number().int().nonnegative().default(600),
   databaseUrl: z.string().url(),
   redisUrl: z.string().url(),
   driver: z.enum(['mock', 'webkit', 'playwright']).default('mock'),
@@ -619,6 +627,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     host: env.HOST,
     trustProxy: coerceTrustProxy(env.TRUST_PROXY),
     logLevel: env.LOG_LEVEL,
+    globalIpRateLimitPerMin: env.GLOBAL_IP_RATE_LIMIT_PER_MIN,
     databaseUrl: env.DATABASE_URL ?? 'postgres://driftstack:driftstack@localhost:5432/driftstack',
     redisUrl: env.REDIS_URL ?? 'redis://localhost:6379',
     driver: env.DRIVER,
