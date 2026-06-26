@@ -267,9 +267,15 @@ Response (200):
 }
 ```
 
-Per the Q3 verdict, this endpoint is NOT step-up gated —
-regenerating recovery codes is recoverable (the customer can rotate
-again if compromised); only disabling + account-delete are gated.
+This endpoint **is** step-up gated, the same as MFA disable and
+account-delete: a stale web session returns the `403` step-up
+envelope above (`requires_mfa_step_up: true`). Without the gate a
+stolen web session could mint fresh recovery codes, then redeem one
+to satisfy step-up on disable — a full MFA bypass. The legitimate
+lost-device-but-logged-in flow still works: an existing recovery
+code satisfies `POST /v1/auth/mfa/step-up` before regenerating.
+API-key (machine-to-machine) callers bypass the step-up gate as
+elsewhere.
 
 Returns `404 Not Found` when the calling account isn't enrolled.
 
