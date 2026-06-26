@@ -150,6 +150,27 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
     expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
   });
 
+  it('the Connected banner masks the key with the shared prefix-aware mask (not 16 contiguous chars)', () => {
+    const realKey = 'ds_live_abcdef0123456789zzzz';
+    useSettingsMock.mockReturnValue({
+      settings: { apiKey: realKey, baseUrl: 'https://api.driftstack.dev', telemetryOptIn: null },
+      loading: false,
+      client: null,
+      accountMe: null,
+      refreshAccountMe: vi.fn(() => Promise.resolve()),
+      update: vi.fn(() => Promise.resolve()),
+    });
+    renderWithToasts();
+
+    // The shared maskApiKey strips the ds_live_ prefix + shows only 4 body chars:
+    // ds_live_abcd…zzzz. The old inline mask leaked 16 contiguous real chars
+    // (ds_live_abcdef01…zzzz).
+    expect(screen.getByText(/ds_live_abcd…zzzz/)).toBeInTheDocument();
+    // The over-exposing 12-from-start body must NOT appear anywhere.
+    expect(screen.queryByText(/abcdef0123/)).toBeNull();
+    expect(screen.queryByText(realKey)).toBeNull();
+  });
+
   it('Reset to default resets the self-hosted base URL draft to the default constant', () => {
     useSettingsMock.mockReturnValue({
       settings: { apiKey: 'ds_live_x', baseUrl: 'http://10.0.0.5:9000', telemetryOptIn: null },

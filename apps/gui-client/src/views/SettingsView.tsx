@@ -21,6 +21,7 @@ import { isCloudBaseUrl } from '../lib/telemetry';
 import { rememberedKeyFor } from '../lib/settings';
 import { normalizeNavigateUrl } from '../lib/address-bar';
 import { useConfirm } from '../components/ConfirmProvider';
+import { maskApiKey } from '../components/ApiKeyMaskedSpan';
 import { useToasts } from '../lib/toasts';
 
 const CLOUD_URL = 'https://api.driftstack.dev';
@@ -487,10 +488,11 @@ export function SettingsView(): JSX.Element {
               </span>
               <p className="mt-2 text-sm text-ink-secondary">
                 Pointing at <span className="mono">{settings.baseUrl}</span> with key{' '}
-                <span className="mono">
-                  {settings.apiKey?.slice(0, 12) ?? ''}…{settings.apiKey?.slice(-4) ?? ''}
-                </span>
-                .
+                {/* Use the shared, prefix-aware maskApiKey (strips the known
+                    ds_live_ prefix + shows only 4+4 of the body) so on-screen
+                    exposure matches the project's masking standard — the inline
+                    slice(0,12)+slice(-4) leaked 16 contiguous real chars. (audit) */}
+                <span className="mono">{maskApiKey(settings.apiKey)}</span>.
               </p>
               {settings.apiKey !== null && (
                 <button
