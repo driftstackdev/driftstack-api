@@ -34,7 +34,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       Pick the narrowest scope that fits your need:
     </p>
     <ul>
-      <li><code>read</code> — list sessions, fetch session metadata.</li>
+      <li><code>read</code> — read sessions and profiles (covers
+        <code>read:sessions</code> + <code>read:profiles</code>).</li>
       <li><code>write</code> — start sessions, modify profiles.</li>
       <li><code>account_owner</code> — full account control.</li>
     </ul>
@@ -135,8 +136,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <p>
       Captures return inline base64 bytes — there is no presigned
       URL. Decode <code>data</code> on the client according to
-      <code>encoding</code>. For long-running session recordings
-      (a separate artifact), see
+      <code>encoding</code>. Long-running session recordings are a
+      separate, planned artifact (not yet exposed via the API) — see
       <a href="/docs/recordings">/docs/recordings</a>.
     </p>
 
