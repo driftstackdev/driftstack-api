@@ -79,7 +79,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'What if I cancel?',
-        a: 'Service continues through the end of your current billing period. After that, API keys 401 with a message pointing at billing-renewal. No data is deleted at cancellation; your account stays in a "suspended" state with recordings and audit logs intact for 90 days, then archived per the DPA retention schedule.',
+        a: 'Service continues through the end of your current billing period. After that, API keys 401 with a message pointing at billing-renewal. No data is deleted at cancellation; your account stays in a "suspended" state with a 30-day grace-period for recovery, then your account data (profiles, sessions, captures) is deleted per the DPA retention schedule. Operational session metadata is kept up to 90 days; invoice history is retained for the legally-required period.',
       },
       {
         q: 'How does Enterprise pricing work?',
