@@ -2719,6 +2719,38 @@ export function SimulatorWindow(): JSX.Element {
   // page unresponsive" badge over the (still-visible) last frame, cleared when
   // the box reports any non-stalled state again.
   const [pageStalled, setPageStalled] = useState(false);
+  // #4 — TTL the latched 'stalled' badge. The server-side page-state store has NO
+  // TTL: once the box reports 'stalled', every page-state POLL re-reads that same
+  // record and re-applies `pageStalled=true`, so a ONE-TIME stall (a brief hang the
+  // renderer recovered from without emitting a fresh non-stalled frame) would keep
+  // the badge lit FOREVER. We stamp the wall-clock of the most-recent 'stalled'
+  // frame and auto-clear the badge if none has arrived within STALLED_BADGE_TTL_MS.
+  // A genuinely still-stalled page keeps re-reporting 'stalled' (data channel +
+  // poll), refreshing the stamp, so the badge stays lit for a real ongoing freeze;
+  // only a stale latch self-clears. applyStalledState centralises both paths so the
+  // stamp + state stay consistent (data channel ~3043, poll ~3127).
+  const STALLED_BADGE_TTL_MS = 12_000;
+  const lastStalledAtRef = useRef(0);
+  const applyStalledState = useCallback((isStalled: boolean): void => {
+    if (isStalled) lastStalledAtRef.current = Date.now();
+    else lastStalledAtRef.current = 0;
+    setPageStalled(isStalled);
+  }, []);
+  // The auto-clear sweep: while the badge is lit, drop it once the last 'stalled'
+  // frame is older than the TTL (a real ongoing stall refreshes lastStalledAtRef
+  // faster than this fires). Runs only while lit so an idle window does no work.
+  useEffect(() => {
+    if (!pageStalled) return;
+    const tick = (): void => {
+      if (lastStalledAtRef.current === 0) return;
+      if (Date.now() - lastStalledAtRef.current >= STALLED_BADGE_TTL_MS) {
+        lastStalledAtRef.current = 0;
+        setPageStalled(false);
+      }
+    };
+    const handle = window.setInterval(tick, 1000);
+    return () => window.clearInterval(handle);
+  }, [pageStalled]);
   // Page-NAVIGATION error (W616 — DNS/TLS/HTTP/timeout/net). The harness emits a
   // page_state{state:'errored', error:{kind,...}} on a failed load over BOTH the
   // LiveKit data channel AND the control-plane page-state poll. Without surfacing
@@ -3039,8 +3071,10 @@ export function SimulatorWindow(): JSX.Element {
           writeTabPageState({ tabId: msg.tabId, url: msg.url, title: msg.title }, true);
         }
         // A3 W2845 — a 'stalled' frame surfaces the frozen-renderer badge; any
-        // other harness state clears it (the page is responsive again).
-        if (isHarnessState) setPageStalled(msg.state === 'stalled');
+        // other harness state clears it (the page is responsive again). #4 —
+        // applyStalledState stamps the frame time so the TTL sweep can self-clear a
+        // stale latch (the store re-applies a one-time stall forever otherwise).
+        if (isHarnessState) applyStalledState(msg.state === 'stalled');
         // W616 — a page-NAVIGATION error: surface the per-kind error overlay (the
         // failure must not read as a blank successful load). Any other harness
         // state means the page is loading/loaded/responsive → clear it.
@@ -3079,7 +3113,7 @@ export function SimulatorWindow(): JSX.Element {
         /* ignore */
       }
     };
-  }, [room, writeTabPageState]);
+  }, [room, writeTabPageState, applyStalledState]);
 
   // Live URL via the page-state API (A3 W2730): the box reports pageState over the
   // CONTROL PLANE (→ server sessionPageStateStore), NOT the LiveKit data channel —
@@ -3124,7 +3158,10 @@ export function SimulatorWindow(): JSX.Element {
           );
           // A3 W2845 — surface/clear the frozen-renderer badge from the poll too
           // (independent of the loading grace window; a stall is real regardless).
-          setPageStalled(ps.state === 'stalled');
+          // #4 — through applyStalledState so each 'stalled' poll refreshes the TTL
+          // stamp: a real ongoing stall keeps re-stamping (badge stays lit), while a
+          // one-time stall the store keeps re-reading self-clears after the TTL.
+          applyStalledState(ps.state === 'stalled');
           // W616 — surface/clear the page-navigation error from the poll too (same
           // payload as the data-channel path); 'errored' shows the overlay, any
           // other state clears it. A blank new-tab whose branded page couldn't load
@@ -3150,7 +3187,7 @@ export function SimulatorWindow(): JSX.Element {
       cancelled = true;
       window.clearInterval(handle);
     };
-  }, [sessionId, controlAuth, room, browserMode, writeTabPageState]);
+  }, [sessionId, controlAuth, room, browserMode, writeTabPageState, applyStalledState]);
 
   // Founder #48 — live cookie-jar view. Polls GET /v1/agent-sessions/:id/cookies
   // ONLY while the session-info / diagnostics panel is open (no background load on

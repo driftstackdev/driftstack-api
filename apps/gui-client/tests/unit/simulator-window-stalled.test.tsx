@@ -7,7 +7,7 @@
 // mock (which surfaces a fake connected Room) doesn't leak into the base suite.
 
 import { useEffect } from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, waitFor, act } from '@testing-library/react';
 
 vi.mock('../../src/lib/livekit', () => ({
@@ -120,6 +120,62 @@ describe('SimulatorWindow — stalled (frozen-renderer) badge (A3 W2845)', () =>
       fireDataFrame({ state: 'loaded', url: 'https://app.example' });
     });
     expect(container.querySelector('[data-component="page-stalled-badge"]')).toBeNull();
+  });
+
+  // #4 — TTL the latched 'stalled' badge. The server page-state store has NO TTL, so
+  // a ONE-TIME stall (the renderer recovered without emitting a fresh non-stalled
+  // frame) would re-apply on every poll and keep the badge lit FOREVER. The badge
+  // must auto-clear once no fresh 'stalled' frame has arrived within the TTL. Fake
+  // timers are installed BEFORE render so the 1s TTL-sweep interval is itself a fake
+  // timer that advanceTimersByTime can drive.
+  describe('#4 — stalled badge TTL', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('auto-clears the latched stalled badge after the TTL when no fresh stalled frame arrives', () => {
+      vi.useFakeTimers();
+      const { container } = renderSim();
+      // The panel mock fires onRoom in an effect (runs during render's act); flush so
+      // the data-channel consumer subscribes.
+      act(() => {
+        vi.advanceTimersByTime(0);
+      });
+      expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
+      // A single stalled frame lights the badge…
+      act(() => {
+        fireDataFrame({ state: 'stalled', url: 'https://app.example' });
+      });
+      expect(container.querySelector('[data-component="page-stalled-badge"]')).not.toBeNull();
+      // …and with NO further stalled frame the TTL sweep self-clears it (the store
+      // re-applying a one-time stall would otherwise keep it lit forever).
+      act(() => {
+        // STALLED_BADGE_TTL_MS is 12s; advance well past it.
+        vi.advanceTimersByTime(15_000);
+      });
+      expect(container.querySelector('[data-component="page-stalled-badge"]')).toBeNull();
+    });
+
+    it('keeps the badge lit while fresh stalled frames keep arriving (a real ongoing stall re-stamps the TTL)', () => {
+      vi.useFakeTimers();
+      const { container } = renderSim();
+      act(() => {
+        vi.advanceTimersByTime(0);
+      });
+      expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
+      act(() => {
+        fireDataFrame({ state: 'stalled', url: 'https://app.example' });
+      });
+      // Advance in sub-TTL steps, re-reporting 'stalled' each time — a genuinely
+      // still-frozen page keeps re-sending, so the badge must stay lit throughout.
+      for (let i = 0; i < 5; i++) {
+        act(() => {
+          vi.advanceTimersByTime(5_000);
+          fireDataFrame({ state: 'stalled', url: 'https://app.example' });
+        });
+        expect(container.querySelector('[data-component="page-stalled-badge"]')).not.toBeNull();
+      }
+    });
   });
 });
 
