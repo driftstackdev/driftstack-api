@@ -63,6 +63,10 @@ client.agentSessions.handback(id);
 client.agentSessions.livekitToken(id); // LK.3 re-mint after 24h TTL
 
 client.recipes.create(body); // snapshot an agent-session intent_log
+client.recipes.list(query?);
+client.recipes.iterate(opts?);
+client.recipes.get(id);
+client.recipes.delete(id);
 
 client.profiles.create(body);
 client.profiles.list(query?);
