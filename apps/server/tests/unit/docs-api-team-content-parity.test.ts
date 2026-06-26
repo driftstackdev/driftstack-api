@@ -101,10 +101,10 @@ describe('docs/api/team content parity', () => {
 
   it('/v1/team/owners + GET /v1/account/me/teams[] embedding framing pinned: \'GET /v1/team/owners — returns { data: TeamOwner[] } where each entry has owner_account_id, role, and membership_id. Useful for populating an "act as" picker in custom dashboards. The same data is also embedded in GET /v1/account/me under teams[].\' — pinned so the inverse-view + account-me-embed + act-as-picker UX contract all stay documented', () => {
     expect(body).toMatch(
-      /`GET \/v1\/team\/owners` — returns `\{ data: TeamOwner\[\] \}` where each\s*\n?\s*entry has `owner_account_id`, `role`, and `membership_id`\./,
+      /`GET \/v1\/team\/owners` — returns `\{ data: TeamOwner\[\] \}` where each\s*\n?\s*entry has `owner_account_id`, `owner_email` \(falls back to\s*\n?\s*`acc_<id>` when unknown\), `owner_name` \(nullable\), `role`, and\s*\n?\s*`membership_id`\./,
     );
     expect(body).toMatch(
-      /The same\s*\n?\s*data is also embedded in `GET \/v1\/account\/me` under `teams\[\]`\./,
+      /The same data is also embedded in `GET \/v1\/account\/me`\s*\n?\s*under `teams\[\]`\./,
     );
   });
 });

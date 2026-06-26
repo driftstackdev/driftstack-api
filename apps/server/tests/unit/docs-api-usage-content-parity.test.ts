@@ -61,7 +61,7 @@ describe('docs/api/usage content parity', () => {
       /`days` parameter: 1-90, default 30\.\s*\n?\s*The series is right-aligned on "yesterday" \(the most-recent\s*\n?\s*fully-closed UTC day\); today's partial bucket is intentionally\s*\n?\s*not surfaced/,
     );
     expect(body).toMatch(
-      /Empty days return zeros for every counter \(not omitted from the\s*\n?\s*response\) so the dashboard can render an empty-state without\s*\n?\s*client-side date-fill logic\./,
+      /Empty days are included in the series \(not omitted from the\s*\n?\s*response\) so the dashboard can render an empty-state without\s*\n?\s*client-side date-fill logic, but their `totals` is an empty object\s*\n?\s*`\{\}` — treat a missing counter key as `0`\. \(The current-period\s*\n?\s*summary, by contrast, zero-fills every counter\.\)/,
     );
   });
 

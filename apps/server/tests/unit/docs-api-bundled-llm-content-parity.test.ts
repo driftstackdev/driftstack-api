@@ -87,12 +87,16 @@ describe('docs/api/bundled-llm content parity', () => {
     );
   });
 
-  it("Errors table 5-row roster pinned: 400 validation + 401 unauthorized + 402 bundled-llm-budget-exhausted + 402 bundled-llm-consent-required + 503 feature-unavailable — pinned so the 2-different-402 distinction stays explicit (drift to merging them would lose the customer SDK's typed-error discrimination)", () => {
+  it("Errors table 4-row roster pinned: 400 validation + 401 unauthorized + 402 bundled-llm-budget-exhausted + 402 bundled-llm-consent-required — pinned so the 2-different-402 distinction stays explicit (drift to merging them would lose the customer SDK's typed-error discrimination). The 503 (unwired bundled-LLM) is NOT returned on these settings/status reads — it surfaces on the agent-session turn route — so the table must NOT carry a 503 row.", () => {
     expect(body).toMatch(/\|\s*400 \| validation\s*\|/);
     expect(body).toMatch(/\|\s*401 \| unauthorized\s*\|/);
     expect(body).toMatch(/\|\s*402 \| bundled-llm-budget-exhausted/);
     expect(body).toMatch(/\|\s*402 \| bundled-llm-consent-required/);
-    expect(body).toMatch(/\|\s*503 \| feature-unavailable/);
+    // 503 belongs to the agent-session turn route, not these reads.
+    expect(body).not.toMatch(/\|\s*503 \| /);
+    expect(body).toMatch(
+      /The settings \+ status routes above do not return a `503`\. A `503`\s*\n?\s*for an unwired bundled-LLM service is returned on the \*\*agent-session\s*\n?\s*turn\*\* route, not on these reads\./,
+    );
   });
 
   it("Anthropic-no-training privacy commitment framing pinned: 'Bundled-LLM consent does NOT grant Driftstack any rights to train models on customer prompts. The current bundled-LLM provider is Anthropic Claude; per their API terms, customer data is not used for training.' + 'No prompt content is logged on Driftstack's side beyond what customers can read in their own session transcripts.' — pinned so the no-training-rights + Anthropic-API-terms + transcript-only-logging privacy contract all stay documented", () => {

@@ -57,7 +57,7 @@ describe('docs/api/byok-anthropic content parity', () => {
       /Required scope: `account_owner`\s*\n?\s*\(team members would otherwise burn the owner's quota\)\./,
     );
     expect(body).toMatch(
-      /Auth: account_holder scope is sufficient \(any account member can\s*\n?\s*check whether the account has a BYOK key set; the plaintext stays\s*\n?\s*inaccessible regardless\)\./,
+      /Auth: any authenticated bearer \(the `read` scope is sufficient — the\s*\n?\s*GET metadata route requires only authentication, not a write scope\)\.\s*\n?\s*Any account member can check whether the account has a BYOK key set;\s*\n?\s*the plaintext stays inaccessible regardless\./,
     );
   });
 
