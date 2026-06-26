@@ -114,13 +114,13 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <p>
       Your tier upgrade is applied the moment the order transitions
       to <code>paid</code>. A receipt email is sent to the account
-      address. A server-side <code>crypto.order.paid</code> event is
-      emitted but is not yet on the subscribable webhook event list —
-      see
-      <a href="/docs/webhooks-crypto-events">/docs/webhooks-crypto-events</a>
-      and poll
-      <code>GET /v1/billing/crypto-orders/&lt;order_id&gt;</code> in
-      the meantime.
+      address. A <code>crypto.order.paid</code> event is emitted and
+      is subscribable — register an endpoint via
+      <code>POST /v1/webhooks</code> (see
+      <a href="/docs/webhooks-crypto-events">/docs/webhooks-crypto-events</a>),
+      or poll
+      <code>GET /v1/billing/crypto-orders/&lt;order_id&gt;</code> if
+      you prefer.
     </p>
 
     <h3>5. Download a receipt</h3>
