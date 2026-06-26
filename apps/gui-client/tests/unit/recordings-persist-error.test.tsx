@@ -75,6 +75,65 @@ describe('RecordingsProvider — persist-failure surfacing', () => {
     window.removeEventListener(RECORDING_PERSIST_FAILED_EVENT, onEvt);
   });
 
+  it('deleteRecording returns false and RESTORES the row when the disk delete fails', async () => {
+    // Seed one persisted recording the index hydrates on mount.
+    loadIndex.mockResolvedValue([
+      {
+        id: 'rec_1',
+        sessionId: 'ses_1',
+        label: null,
+        startedAt: 1,
+        endedAt: 2,
+        totalCaptured: 1,
+        frameCount: 1,
+        totalBytes: 10,
+      },
+    ]);
+    deletePersisted.mockRejectedValue(new Error('file locked'));
+
+    const { result } = renderHook(() => useRecordings(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.recordings.has('rec_1')).toBe(true);
+
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await result.current.deleteRecording('rec_1');
+    });
+
+    // Reports the failure…
+    expect(ok).toBe(false);
+    // …and the row is back (it's still on disk; the UI must not lie).
+    expect(result.current.recordings.has('rec_1')).toBe(true);
+  });
+
+  it('deleteRecording returns true and removes the row on a successful disk delete', async () => {
+    loadIndex.mockResolvedValue([
+      {
+        id: 'rec_2',
+        sessionId: 'ses_2',
+        label: null,
+        startedAt: 1,
+        endedAt: 2,
+        totalCaptured: 1,
+        frameCount: 1,
+        totalBytes: 10,
+      },
+    ]);
+    deletePersisted.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useRecordings(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.recordings.has('rec_2')).toBe(true);
+
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await result.current.deleteRecording('rec_2');
+    });
+
+    expect(ok).toBe(true);
+    expect(result.current.recordings.has('rec_2')).toBe(false);
+  });
+
   it('leaves persistError null on a successful Stop write', async () => {
     persistRecording.mockResolvedValue({});
     const { result } = renderHook(() => useRecordings(), { wrapper });

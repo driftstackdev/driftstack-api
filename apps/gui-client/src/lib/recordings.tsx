@@ -82,7 +82,9 @@ interface RecordingsContextValue {
   startRecording: (sessionId: string, label?: string) => string;
   stopRecording: (id: string) => Promise<Recording | null>;
   addFrame: (id: string, frame: RecordingFrame) => void;
-  deleteRecording: (id: string) => Promise<void>;
+  /** Delete a recording from memory + disk. Resolves true on success; false if
+   *  the on-disk delete failed (the row is restored so the UI matches reality). */
+  deleteRecording: (id: string) => Promise<boolean>;
   /** Lazy-load frames for a persisted recording. Resolves with the populated Recording. */
   hydrateFrames: (id: string) => Promise<Recording | null>;
   /** Convenience: the recording id that is currently active for a given session, if any. */
@@ -243,7 +245,13 @@ export function RecordingsProvider({ children }: { children: ReactNode }): JSX.E
     });
   }, []);
 
-  const deleteRecording = useCallback(async (id: string): Promise<void> => {
+  // Returns true when the on-disk delete succeeded, false when it failed (the
+  // row is RE-INSERTED so the UI matches reality — the recording is still on
+  // disk and would otherwise reappear after a restart, looking like data
+  // resurrection). Callers can surface the false to the user.
+  const deleteRecording = useCallback(async (id: string): Promise<boolean> => {
+    // Capture the row so we can restore it if the disk delete fails.
+    const removed = recordingsRef.current.get(id);
     setRecordings((prev) => {
       if (!prev.has(id)) return prev;
       const next = new Map(prev);
@@ -252,10 +260,22 @@ export function RecordingsProvider({ children }: { children: ReactNode }): JSX.E
     });
     try {
       await deletePersisted(id);
-    } catch {
-      // Disk-delete failure is mostly harmless: the recording is gone
-      // from the UI; on restart the index would still show it, but
-      // the user can re-delete then.
+      return true;
+    } catch (err) {
+      // The disk delete failed (file locked by the other window, perms, fs-scope).
+      // Optimistically removing the row would lie: on restart loadIndex re-hydrates
+      // the still-on-disk recording and it returns from the dead. Re-insert it so
+      // the UI reflects what's actually on disk, and report the failure.
+      console.warn('[recordings] disk delete failed; restoring row:', err);
+      if (removed !== undefined) {
+        setRecordings((prev) => {
+          if (prev.has(id)) return prev; // a concurrent re-add already restored it
+          const next = new Map(prev);
+          next.set(id, removed);
+          return next;
+        });
+      }
+      return false;
     }
   }, []);
 

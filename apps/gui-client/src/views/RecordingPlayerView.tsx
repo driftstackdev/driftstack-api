@@ -169,14 +169,20 @@ export function RecordingPlayerView({
   function handleExport(): void {
     if (recording === null || recording.frames.length === 0) return;
     const now = new Date();
+    const stillLive = recording.endedAt === null;
     void downloadJson(
       recordingExportFilename(recording, now),
       buildRecordingExport(recording, now),
     );
+    // A still-recording session exports a partial envelope (endedAt:null + only
+    // the frames captured so far). Be honest about that in the toast rather than
+    // claiming a 'complete' export — the user might think they have the whole run.
     pushToast({
-      title: 'Exported',
-      body: `${recording.frames.length} frames saved as JSON.`,
-      tone: 'success',
+      title: stillLive ? 'Exported (still recording)' : 'Exported',
+      body: stillLive
+        ? `${recording.frames.length} frames captured so far — this recording is still live, so the export is a partial snapshot.`
+        : `${recording.frames.length} frames saved as JSON.`,
+      tone: stillLive ? 'warn' : 'success',
     });
   }
 

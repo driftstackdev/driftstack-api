@@ -20,10 +20,14 @@ const recording: Recording = {
   totalBytes: 4,
 };
 
+const deleteRecording = vi.fn(() => Promise.resolve(true));
+// Configurable per-test so we can render a still-LIVE (endedAt:null) recording.
+let mockRecordings = new Map<string, Recording>([[recording.id, recording]]);
+
 vi.mock('../../src/lib/recordings', () => ({
   useRecordings: () => ({
-    recordings: new Map<string, Recording>([[recording.id, recording]]),
-    deleteRecording: vi.fn(() => Promise.resolve()),
+    recordings: mockRecordings,
+    deleteRecording,
     loading: false,
   }),
   formatDuration: () => '0:10',
@@ -37,23 +41,66 @@ const { ToastProvider } = await import('../../src/lib/toasts');
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+  deleteRecording.mockReset();
+  deleteRecording.mockResolvedValue(true);
+  mockRecordings = new Map<string, Recording>([[recording.id, recording]]);
 });
+
+function renderView() {
+  const { container } = render(
+    <ToastProvider>
+      <RecordingsView onOpen={vi.fn()} />
+    </ToastProvider>,
+  );
+  return within(container);
+}
 
 describe('RecordingsView — copy session id', () => {
   it('Copy writes the selected session id to the clipboard + shows a "Copied" toast', async () => {
     const writeText = vi.fn(() => Promise.resolve());
     vi.stubGlobal('navigator', { clipboard: { writeText } });
 
-    const { container } = render(
-      <ToastProvider>
-        <RecordingsView onOpen={vi.fn()} />
-      </ToastProvider>,
-    );
-    const view = within(container);
+    const view = renderView();
 
     fireEvent.click(view.getByRole('button', { name: /copy session id/i }));
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('ses_copy_me'));
     expect(await view.findByText('Copied')).toBeInTheDocument();
+  });
+});
+
+describe('RecordingsView — delete confirmation (permanent, no recycle bin)', () => {
+  it('the first Delete click only ARMS the confirm; a second click actually deletes', () => {
+    const view = renderView();
+
+    const del = view.getByRole('button', { name: /^Delete$/ });
+    fireEvent.click(del);
+    // Armed — not deleted yet.
+    expect(deleteRecording).not.toHaveBeenCalled();
+    expect(view.getByRole('button', { name: 'Confirm delete?' })).toBeTruthy();
+
+    // Second click confirms.
+    fireEvent.click(view.getByRole('button', { name: 'Confirm delete?' }));
+    expect(deleteRecording).toHaveBeenCalledWith('rec_1');
+  });
+
+  it('Cancel disarms the confirm without deleting', () => {
+    const view = renderView();
+    fireEvent.click(view.getByRole('button', { name: /^Delete$/ }));
+    fireEvent.click(view.getByRole('button', { name: 'Cancel' }));
+    expect(deleteRecording).not.toHaveBeenCalled();
+    // Back to the plain Delete label.
+    expect(view.getByRole('button', { name: /^Delete$/ })).toBeTruthy();
+  });
+});
+
+describe('RecordingsView — export safety', () => {
+  it('Export is disabled while the recording is still live (endedAt === null)', () => {
+    const live: Recording = { ...recording, id: 'rec_live', endedAt: null };
+    mockRecordings = new Map<string, Recording>([[live.id, live]]);
+    const view = renderView();
+    const exportBtn = view.getByRole('button', { name: 'Export' });
+    expect((exportBtn as HTMLButtonElement).disabled).toBe(true);
+    expect(exportBtn.getAttribute('title')).toMatch(/Stop recording before exporting/i);
   });
 });

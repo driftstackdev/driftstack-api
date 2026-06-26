@@ -90,13 +90,36 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
   // newest — a fast double-click would then delete a SECOND, unintended recording.
   // Capture the id + disable Delete while one is in flight (audit wiq542bfj P1).
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Two-step confirm — recording delete is PERMANENT (no recycle bin), so a
+  // single misplaced click must not destroy it. The first Delete click arms the
+  // confirmation (button flips to "Confirm delete?" + a Cancel appears); the
+  // second click actually deletes. Selecting a different recording clears the arm.
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const handleDelete = (id: string): void => {
     if (deletingId !== null) return;
+    // First click on an un-armed recording → arm the confirmation, don't delete.
+    if (confirmingDeleteId !== id) {
+      setConfirmingDeleteId(id);
+      return;
+    }
+    setConfirmingDeleteId(null);
     setDeletingId(id);
-    void deleteRecording(id).finally(() => {
-      setDeletingId(null);
-      setSelectedId(null);
-    });
+    void deleteRecording(id)
+      .then((ok) => {
+        if (!ok) {
+          // The on-disk delete failed (file locked / perms); the row was restored.
+          // Tell the user instead of pretending it's gone (it'd reappear anyway).
+          pushToast({
+            title: 'Could not delete recording',
+            body: 'The recording file couldn’t be removed from disk — it may reappear after a restart. Try again, or close any other window using it.',
+            tone: 'error',
+          });
+        }
+      })
+      .finally(() => {
+        setDeletingId(null);
+        setSelectedId(null);
+      });
   };
 
   return (
@@ -165,7 +188,10 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
                   key={r.id}
                   recording={r}
                   selected={selected?.id === r.id}
-                  onSelect={() => setSelectedId(r.id)}
+                  onSelect={() => {
+                    setSelectedId(r.id);
+                    setConfirmingDeleteId(null); // selecting elsewhere disarms a pending delete
+                  }}
                   onOpen={() => onOpen(r.id)}
                 />
               ))}
@@ -265,11 +291,22 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
                   className="btn-secondary"
                   onClick={() => void handleExport(selected)}
                   // Same openable predicate as Open — an empty recording has
-                  // nothing to write.
+                  // nothing to write. ALSO gated on a still-LIVE recording
+                  // (endedAt===null): exporting mid-capture wrote a
+                  // 'complete'-looking JSON (endedAt:null + only the frames so
+                  // far) while the success toast said "N frames saved" with no
+                  // hint capture was ongoing — the user believed they had the
+                  // whole recording. Stop it first, then export.
                   disabled={
-                    selected.frames.length === 0 && !(selected.hydrated && selected.frameCount > 0)
+                    selected.endedAt === null ||
+                    (selected.frames.length === 0 &&
+                      !(selected.hydrated && selected.frameCount > 0))
                   }
-                  title="Download this recording as a JSON file"
+                  title={
+                    selected.endedAt === null
+                      ? 'Stop recording before exporting (it’s still capturing)'
+                      : 'Download this recording as a JSON file'
+                  }
                 >
                   Export
                 </button>
@@ -278,10 +315,29 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
                   className="btn-danger"
                   onClick={() => handleDelete(selected.id)}
                   disabled={selected.endedAt === null || deletingId !== null}
-                  title={selected.endedAt === null ? 'Stop recording before deleting' : undefined}
+                  title={
+                    selected.endedAt === null
+                      ? 'Stop recording before deleting'
+                      : confirmingDeleteId === selected.id
+                        ? 'This permanently deletes the recording — click again to confirm'
+                        : undefined
+                  }
                 >
-                  {deletingId !== null ? 'Deleting…' : 'Delete'}
+                  {deletingId !== null
+                    ? 'Deleting…'
+                    : confirmingDeleteId === selected.id
+                      ? 'Confirm delete?'
+                      : 'Delete'}
                 </button>
+                {confirmingDeleteId === selected.id && deletingId === null ? (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setConfirmingDeleteId(null)}
+                  >
+                    Cancel
+                  </button>
+                ) : null}
               </div>
             </aside>
           )}
