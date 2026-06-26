@@ -202,8 +202,11 @@ client := driftstack.New(apiKey, driftstack.WithEffectiveAccount("acc_owner_…"
     <h2>Audit trail</h2>
     <p>
       Team mutations (invite sent, invite accepted, member removed)
-      write entries on the owner's audit log. Read via
-      <code>GET /v1/account/audit-log?action=team.*</code> — see
+      write entries on the owner's audit log. The <code>action</code>
+      filter is exact-match (one action per request, no wildcards),
+      e.g. <code>GET /v1/account/audit-log?action=team.member_invited</code>
+      (also <code>team.invite_accepted</code> /
+      <code>team.member_removed</code>) — see
       <a href="/docs/audit-log">/docs/audit-log</a>.
     </p>
 
