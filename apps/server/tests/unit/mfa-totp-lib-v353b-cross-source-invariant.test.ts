@@ -156,15 +156,19 @@ describe('W964 V-353b mfa-totp lib cross-source invariant', () => {
 
   // ─── verifyTotpCode ±1 drift + constant-time ─────────────────
 
-  it("CRITICAL verifyTotpCode JSDoc — 'V-353b — verify a 6-digit code against the raw secret with the ±1-window drift tolerance. Constant-time per-window compare'. The ±1-drift + timingSafeEqual is the verification contract.", () => {
+  it("CRITICAL verifyTotpCodeWithCounter JSDoc — 'verify a 6-digit code against the raw secret with the ±1-window drift tolerance'. The replay-defence refactor returns the matched timestep counter; verifyTotpCode is the boolean wrapper. The ±1-drift + timingSafeEqual is the verification contract.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/mfa-totp.ts'));
-    expect(p).toMatch(/V-353b — verify a 6-digit code against the raw secret with the/);
-    expect(p).toMatch(/±1-window drift tolerance\. Constant-time per-window compare\./);
+    expect(p).toMatch(/verify a 6-digit code against the raw secret with the ±1-window/);
+    expect(p).toMatch(/Constant-time per-window compare/);
+    // The boolean wrapper delegates to the counter-returning variant.
+    expect(p).toMatch(
+      /export function verifyTotpCode\([\s\S]*?\): boolean \{\s*\n?\s*return verifyTotpCodeWithCounter\(secretBytes, code, nowSeconds\) !== null;/,
+    );
   });
 
-  it('CRITICAL verifyTotpCode rejects non-6-digit inputs early — /^\\d{6}$/ regex. The shape-check-first design avoids HMAC computation on obviously-malformed inputs.', () => {
+  it('CRITICAL verifyTotpCodeWithCounter rejects non-6-digit inputs early — /^\\d{6}$/ regex → return null. The shape-check-first design avoids HMAC computation on obviously-malformed inputs.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/mfa-totp.ts'));
-    expect(p).toMatch(/if \(!\/\^\\d\{6\}\$\/\.test\(code\)\) return false;/);
+    expect(p).toMatch(/if \(!\/\^\\d\{6\}\$\/\.test\(code\)\) return null;/);
   });
 
   it('CRITICAL verifyTotpCode iterates ±1 drift windows — `for (let drift = -TOTP_DRIFT_WINDOWS; drift <= TOTP_DRIFT_WINDOWS; drift++)`. The 3-window scan (drift -1, 0, +1) is the 90s verify-range.', () => {

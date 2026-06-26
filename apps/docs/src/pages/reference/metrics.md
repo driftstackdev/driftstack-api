@@ -57,11 +57,12 @@ The current counter catalogue (all `driftstack_*` namespaced):
 
 ### Auth + rate limiting
 
-| Metric                         | Labels              | What it tracks                                                                                        |
-| ------------------------------ | ------------------- | ----------------------------------------------------------------------------------------------------- |
-| `driftstack_auth_total`        | `outcome`           | requireAuth resolution outcomes (ok / unauthorized / invalid / revoked / expired / forbidden / error) |
-| `driftstack_rate_limit_total`  | `bucket`, `outcome` | rate-limit consumes per bucket × allowed/exceeded                                                     |
-| `driftstack_oauth_token_total` | `outcome`           | OAuth /token exchange outcomes (ok + the OAuthError code set + error)                                 |
+| Metric                                       | Labels              | What it tracks                                                                                                                                                                      |
+| -------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `driftstack_auth_total`                      | `outcome`           | requireAuth resolution outcomes (ok / unauthorized / invalid / revoked / expired / forbidden / error)                                                                               |
+| `driftstack_rate_limit_total`                | `bucket`, `outcome` | rate-limit consumes per bucket × allowed/exceeded                                                                                                                                   |
+| `driftstack_rate_limit_store_fallback_total` | `limiter`           | rate-limit primary-store (Redis) failures that degraded to the bounded in-process memory fallback — any non-zero value means the cluster is on coarse per-instance limiting (alert) |
+| `driftstack_oauth_token_total`               | `outcome`           | OAuth /token exchange outcomes (ok + the OAuthError code set + error)                                                                                                               |
 
 ### Agent + LLM rails
 

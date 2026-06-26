@@ -124,6 +124,26 @@ groups:
             whether the deployment Anthropic fallback key got
             unwired or expired.
 
+      - alert: RateLimitStoreFallbackActive
+        # DoS hardening — any increase in this counter means a rate-limiter's
+        # primary store (Redis) threw and it degraded to the bounded in-process
+        # memory fallback. The cluster is then on COARSE per-instance limiting,
+        # not the shared Redis buckets — page so ops restores Redis before an
+        # abuse window opens.
+        expr: |
+          increase(driftstack_rate_limit_store_fallback_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          team: driftstack-runtime
+        annotations:
+          summary: 'Rate-limiter degraded to the in-process fallback (Redis store failing)'
+          description: |
+            driftstack_rate_limit_store_fallback_total{limiter} is advancing —
+            a rate-limiter's primary (Redis) store is throwing and limiting has
+            degraded to the bounded per-instance memory fallback. Investigate
+            Redis health; shared rate limiting resumes when it recovers.
+
 # ────────────────────────────────────────────────────────────────────
 # Metric inventory — drift-guard satisfaction
 #
@@ -138,6 +158,7 @@ groups:
 #   - driftstack_pair_mode_transition_total
 #   - driftstack_bundled_llm_request_total
 #   - driftstack_bundled_llm_error_total
+#   - driftstack_rate_limit_store_fallback_total
 #
 # Dashboard-only (drift-guard reference; no paging rule yet):
 #   - driftstack_agent_decompose_total

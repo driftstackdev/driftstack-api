@@ -68,12 +68,17 @@ describe('W713 server-side rate-limit middleware parity', () => {
   it('CRITICAL rateLimitConsume 5-arg call shape pinned — accountId + tier + bucketKey + cost + overrides. The 5-field input is what threads the account-context + per-account override into the token-bucket consumer. Drift to dropping `overrides` would let admin-issued rate-limit overrides silently stop applying. On the gui_control_key control-auth path (ctx absent) the owner account is charged at the conservative free-tier floor with no overrides.', () => {
     const src = read(RATE_LIMIT_MIDDLEWARE);
 
-    expect(src).toContain('await rateLimitConsume(opts.store, {');
+    // DoS hardening hoisted the consume input into a shared `consumeInput` so
+    // the SAME args feed the bounded fallback store on a primary-store error.
+    expect(src).toContain('const consumeInput = {');
+    expect(src).toContain('result = await rateLimitConsume(opts.store, consumeInput);');
     expect(src).toContain('accountId: ctx ? ctx.account.id : controlKeyAccountId!,');
-    expect(src).toContain("tier: ctx ? ctx.account.tier : 'free',");
+    expect(src).toContain("tier: ctx ? ctx.account.tier : ('free' as const),");
     expect(src).toContain('bucketKey,');
     expect(src).toContain('cost,');
     expect(src).toContain('overrides: ctx ? ctx.rateLimitOverrides : {},');
+    // The fallback path reuses the same consumeInput.
+    expect(src).toContain('result = await rateLimitConsume(fallbackStore, consumeInput);');
   });
 
   it('CRITICAL W199 4-header response set pinned — x-ratelimit-bucket / -limit / -remaining / -reset. The 4-header contract is what dashboards + clients render against. Drift to dropping any header would silently change customer dashboard behavior.', () => {

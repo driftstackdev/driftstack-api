@@ -114,14 +114,16 @@ describe('W981 rate-limit middleware W199 + V-092 cross-source invariant', () =>
 
   // ─── rateLimitConsume call ───────────────────────────────────
 
-  it('CRITICAL rateLimitConsume invocation — passes 5 fields: accountId + tier + bucketKey + cost + overrides. The 5-field input is the V-216 rate-limit-service contract. The account-path values come from ctx; the gui_control_key control-auth path (ctx absent) charges the session-owner account at the conservative free-tier floor with no overrides.', () => {
+  it('CRITICAL rateLimitConsume invocation — passes 5 fields: accountId + tier + bucketKey + cost + overrides. The 5-field input is the V-216 rate-limit-service contract. The account-path values come from ctx; the gui_control_key control-auth path (ctx absent) charges the session-owner account at the conservative free-tier floor with no overrides. DoS hardening hoisted the fields into a shared `consumeInput` so the same args feed the bounded fallback store on a primary-store error.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/middleware/rate-limit.ts'));
-    expect(p).toMatch(/result = await rateLimitConsume\(opts\.store, \{/);
+    expect(p).toMatch(/const consumeInput = \{/);
+    expect(p).toMatch(/result = await rateLimitConsume\(opts\.store, consumeInput\);/);
     expect(p).toMatch(/accountId: ctx \? ctx\.account\.id : controlKeyAccountId!,/);
-    expect(p).toMatch(/tier: ctx \? ctx\.account\.tier : 'free',/);
+    expect(p).toMatch(/tier: ctx \? ctx\.account\.tier : \('free' as const\),/);
     expect(p).toMatch(/bucketKey,/);
     expect(p).toMatch(/cost,/);
     expect(p).toMatch(/overrides: ctx \? ctx\.rateLimitOverrides : \{\},/);
+    expect(p).toMatch(/result = await rateLimitConsume\(fallbackStore, consumeInput\);/);
   });
 
   // ─── W199 4-header set framing ───────────────────────────────
