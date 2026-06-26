@@ -271,15 +271,18 @@ describe('EG-API-1.1 packages/api-types/src/egress.ts content parity', () => {
     ).toBe(false);
   });
 
-  it('SocksProxyConfig: EG-WK-1.9 require_remote_dns boolean (default false) — when true the harness routes DNS via SOCKS5 ATYP DOMAINNAME and reports actual mode in EgressCapabilities.dns_remote_resolve', () => {
+  it('SocksProxyConfig: EG-WK-1.9 require_remote_dns boolean (default TRUE — security: omitting it must not leak DNS via the local resolver) — when true the harness routes DNS via SOCKS5 ATYP DOMAINNAME and reports actual mode in EgressCapabilities.dns_remote_resolve', () => {
+    // Security hardening — the default is `true` so a customer who omits the
+    // flag gets remote (proxy-side) DNS resolution, not a DNS leak from the
+    // fleet node's real IP. Opting OUT requires an explicit `false`.
     const defaulted = SocksProxyConfigSchema.parse({ host: 'proxy.example.com', port: 1080 });
-    expect(defaulted.require_remote_dns).toBe(false);
-    const optedIn = SocksProxyConfigSchema.parse({
+    expect(defaulted.require_remote_dns).toBe(true);
+    const optedOut = SocksProxyConfigSchema.parse({
       host: 'proxy.example.com',
       port: 1080,
-      require_remote_dns: true,
+      require_remote_dns: false,
     });
-    expect(optedIn.require_remote_dns).toBe(true);
+    expect(optedOut.require_remote_dns).toBe(false);
   });
 
   it("imports z from 'zod' only (no cross-package leakage)", () => {

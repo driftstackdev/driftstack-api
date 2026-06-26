@@ -63,14 +63,23 @@ export const SocksProxyConfigSchema = z.object({
    * EG-WK-1.9 (founder verdict 2026-05-17 ~20:15 UTC) — when `true`,
    * the harness uses SOCKS5 ATYP DOMAINNAME (0x03) so DNS lookups
    * resolve through the proxy's resolver instead of the local host's.
-   * Defaults to `false` (local resolution) for backwards compatibility
-   * with the pre-EG-WK-1.9 behavior. If `true` but the proxy doesn't
-   * support DOMAINNAME, the harness emits the warning code
-   * `dns_remote_resolve_unsupported_by_proxy` and falls back per
-   * safeguard policy. The actual mode used is reported back in
+   *
+   * Security hardening — DEFAULTS TO `true` (remote resolution). A SOCKS5
+   * session whose DNS resolves on the fleet node's LOCAL resolver leaks a
+   * lookup from the node's real IP on every navigation, deanonymizing the
+   * session even though all TCP/UDP rides the customer's proxy (a classic
+   * DNS leak that defeats the proxy's IP-hiding purpose). The customer must
+   * not be able to opt into that by omitting the flag, so the secure mode
+   * is the default; the saved-proxy path (account-proxies) already forces
+   * it on. Set explicitly to `false` ONLY for a local/loopback proxy where
+   * there is no real egress to leak (e.g. the fleet-demo gost at 127.0.0.1).
+   *
+   * If `true` but the proxy doesn't support DOMAINNAME, the harness emits
+   * the warning code `dns_remote_resolve_unsupported_by_proxy` and falls
+   * back per safeguard policy. The actual mode used is reported back in
    * `egress_capabilities.dns_remote_resolve`.
    */
-  require_remote_dns: z.boolean().default(false),
+  require_remote_dns: z.boolean().default(true),
 });
 export type SocksProxyConfig = z.infer<typeof SocksProxyConfigSchema>;
 

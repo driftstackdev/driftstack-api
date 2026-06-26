@@ -15605,7 +15605,7 @@
                               },
                               "require_remote_dns": {
                                 "type": "boolean",
-                                "default": false
+                                "default": true
                               }
                             },
                             "required": ["host", "port"]
