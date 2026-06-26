@@ -137,4 +137,32 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).toMatch(/the proxy or connection may be down/);
     expect(body).toMatch(/data-action="retry-launch"/);
   });
+
+  it("#1 publisher-lost debounce pinned: a track drop (TrackUnsubscribed / ParticipantDisconnected) does NOT flip publisher→'none' instantly — A3's idle frame-pump down-clock + brief SFU re-negotiations drop+re-add the track within ~1-2s, and an instant flip slammed the scary launch-failed alarm over the last good frame ('reconnecting, happens too often'). Within PUBLISHER_LOST_GRACE_MS a CALM 'reconnecting…' pill shows over the last frame (data-overlay=publisher-reconnecting); only if no TrackSubscribed re-arrives does it escalate to 'none'. Regression-guard: do NOT re-introduce the instant `setPublisher((p) => (p === 'publishing' ? 'none' : p))` flip.", () => {
+    expect(body).toMatch(/export const PUBLISHER_LOST_GRACE_MS = 2_000;/);
+    // The calm pill renders during the grace (not the full-screen alarm).
+    expect(body).toMatch(/data-overlay="publisher-reconnecting"/);
+    expect(body).toMatch(
+      /const \[publisherReconnecting, setPublisherReconnecting\] = useState\(false\);/,
+    );
+    // TrackSubscribed cancels the grace + clears the pill.
+    expect(body).toMatch(/clearPublisherLostTimer\(\);/);
+    expect(body).toMatch(/setPublisherReconnecting\(false\);/);
+    // The grace timer escalates to 'none' only after PUBLISHER_LOST_GRACE_MS.
+    expect(body).toMatch(/setPublisher\('none'\);/);
+    expect(body).toMatch(/PUBLISHER_LOST_GRACE_MS\);/);
+    // Guard the regression: NO instant publisher→'none' flip on a track drop.
+    expect(body).not.toMatch(/setPublisher\(\(p\) => \(p === 'publishing' \? 'none' : p\)\);/);
+  });
+
+  it('#8 bounded auto-reconnect pinned: an UNEXPECTED transport Disconnected (not a deliberate teardown — cleanup sets `cancelled` BEFORE disconnect()) auto-retries with exponential backoff (AUTO_RECONNECT_BACKOFF_MS = [1000,3000,9000], cap 3) via retryNonce before falling back to the manual Reconnect button. A brief network blip recovers itself. Regression-guard: a Disconnected must not jump straight to the manual disconnected overlay while retries remain.', () => {
+    expect(body).toMatch(
+      /export const AUTO_RECONNECT_BACKOFF_MS = \[1_000, 3_000, 9_000\] as const;/,
+    );
+    // The Disconnected handler schedules a backoff bump of retryNonce.
+    expect(body).toMatch(/autoReconnectAttempt < AUTO_RECONNECT_BACKOFF_MS\.length/);
+    expect(body).toMatch(/setRetryNonce\(\(n\) => n \+ 1\);/);
+    // Both timers are cleared on teardown so a torn-down panel can't fire stale work.
+    expect(body).toMatch(/if \(autoReconnectTimer !== null\) clearTimeout\(autoReconnectTimer\);/);
+  });
 });

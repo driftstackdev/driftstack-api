@@ -10,6 +10,8 @@ import {
   friendlyConnectError,
   isAuthConnectError,
   NO_PUBLISHER_TIMEOUT_MS,
+  PUBLISHER_LOST_GRACE_MS,
+  AUTO_RECONNECT_BACKOFF_MS,
 } from '../../src/components/AgentSessionPanel';
 
 const connectMock = vi.fn();
@@ -195,6 +197,124 @@ describe('AgentSessionPanel overlay UX', () => {
       expect(container.querySelector('[data-overlay="publisher-state"]')).toBeNull();
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  // #1 — a transient track drop that RE-SUBSCRIBES within the grace window must show
+  // only the calm "reconnecting…" pill (over the last frame) and NEVER the scary
+  // launch-failed overlay. This is the founder's "reconnecting, happens too often"
+  // (A3 idle frame-pump down-clock / brief SFU re-negotiation).
+  it('#1: a transient track unsubscribe → re-subscribe shows a calm pill, NOT the launch-failed alarm', async () => {
+    vi.useFakeTimers();
+    try {
+      connectMock.mockReset();
+      const handlers: Record<string, (arg: unknown) => void> = {};
+      const roomOn = vi.fn((evt: string, cb: (arg: unknown) => void) => {
+        handlers[evt] = cb;
+      });
+      createRoomMock.mockReturnValueOnce({ on: roomOn, disconnect: vi.fn() });
+      connectMock.mockResolvedValue(undefined);
+      const { container } = render(<AgentSessionPanel info={INFO} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      // Track arrives → publishing, no overlays.
+      act(() => {
+        handlers['trackSubscribed']?.({ kind: 'video', attach: vi.fn() });
+      });
+      expect(container.querySelector('[data-overlay="publisher-state"]')).toBeNull();
+      // The SFU drops the video track.
+      act(() => {
+        handlers['trackUnsubscribed']?.({ kind: 'video' });
+      });
+      // Within the grace: the calm pill shows, NOT the scary launch-failed overlay.
+      expect(container.querySelector('[data-overlay="publisher-reconnecting"]')).not.toBeNull();
+      expect(container.querySelector('[data-overlay="publisher-state"]')).toBeNull();
+      // The track re-arrives BEFORE the grace expires.
+      act(() => {
+        vi.advanceTimersByTime(PUBLISHER_LOST_GRACE_MS - 500);
+        handlers['trackSubscribed']?.({ kind: 'video', attach: vi.fn() });
+      });
+      // Everything cleared — no pill, no alarm, ever.
+      act(() => {
+        vi.advanceTimersByTime(PUBLISHER_LOST_GRACE_MS + 1_000);
+      });
+      expect(container.querySelector('[data-overlay="publisher-reconnecting"]')).toBeNull();
+      expect(container.querySelector('[data-overlay="publisher-state"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #1 escalation — a track drop that does NOT recover within the grace must escalate
+  // to the honest launch-failed overlay (the publisher really is gone).
+  it('#1: a track drop with NO re-subscribe escalates to the launch-failed overlay after the grace', async () => {
+    vi.useFakeTimers();
+    try {
+      connectMock.mockReset();
+      const handlers: Record<string, (arg: unknown) => void> = {};
+      const roomOn = vi.fn((evt: string, cb: (arg: unknown) => void) => {
+        handlers[evt] = cb;
+      });
+      createRoomMock.mockReturnValueOnce({ on: roomOn, disconnect: vi.fn() });
+      connectMock.mockResolvedValue(undefined);
+      const { container } = render(<AgentSessionPanel info={INFO} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      act(() => {
+        handlers['trackSubscribed']?.({ kind: 'video', attach: vi.fn() });
+        handlers['trackUnsubscribed']?.({ kind: 'video' });
+      });
+      // Grace expires with no re-subscribe → 'none' overlay surfaces.
+      act(() => {
+        vi.advanceTimersByTime(PUBLISHER_LOST_GRACE_MS + 100);
+      });
+      expect(container.querySelector('[data-overlay="publisher-reconnecting"]')).toBeNull();
+      const overlay = container.querySelector('[data-overlay="publisher-state"]');
+      expect(overlay?.getAttribute('data-state')).toBe('none');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #8 — an UNEXPECTED transport Disconnected auto-retries with backoff (it bumps the
+  // connect effect via retryNonce → a fresh connect call) before falling back to the
+  // manual Reconnect button. A brief network blip recovers itself.
+  it('#8: an unexpected Disconnected auto-reconnects with backoff before the manual button', async () => {
+    vi.useFakeTimers();
+    try {
+      connectMock.mockReset();
+      const handlers: Record<string, (arg: unknown) => void> = {};
+      const roomOn = vi.fn((evt: string, cb: (arg: unknown) => void) => {
+        handlers[evt] = cb;
+      });
+      // Every render returns a room whose `on` re-captures into the same handlers map,
+      // so the latest Disconnected handler is always the live one.
+      createRoomMock.mockReturnValue({ on: roomOn, disconnect: vi.fn() });
+      connectMock.mockResolvedValue(undefined);
+      const { container } = render(<AgentSessionPanel info={INFO} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const callsBeforeDrop = connectMock.mock.calls.length;
+      // Transport drops unexpectedly.
+      act(() => {
+        handlers['disconnected']?.(undefined);
+      });
+      // It shows reconnecting (auto), NOT the manual disconnected overlay yet.
+      const overlay = container.querySelector('[data-overlay="connection-state"]');
+      expect(overlay?.getAttribute('data-state')).toBe('reconnecting');
+      expect(container.querySelector('[data-action="reconnect-stream"]')).toBeNull();
+      // After the first backoff the effect re-runs → another connect attempt.
+      await act(async () => {
+        vi.advanceTimersByTime(AUTO_RECONNECT_BACKOFF_MS[0] + 50);
+        await Promise.resolve();
+      });
+      expect(connectMock.mock.calls.length).toBeGreaterThan(callsBeforeDrop);
+    } finally {
+      vi.useRealTimers();
+      createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
     }
   });
 });

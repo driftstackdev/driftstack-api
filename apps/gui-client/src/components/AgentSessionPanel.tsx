@@ -89,6 +89,26 @@ export interface AgentSessionPanelProps {
   inputLogical?: { width: number; height: number };
 }
 
+/** #1 — grace window after the SFU drops the video track (TrackUnsubscribed /
+ *  ParticipantDisconnected) before the panel declares the publisher gone and shows
+ *  the scary launch-failed overlay. A3's idle frame-pump down-clock (W2952) +
+ *  routine encoder restarts / brief SFU re-negotiations momentarily drop and
+ *  re-add the track; flipping to 'none' instantly slammed the full-screen
+ *  "Couldn't start the session…" alarm over the last good frame for a stream that
+ *  recovers within a second or two (founder's "reconnecting, happens too often").
+ *  During the window a calm "reconnecting…" pill shows over the last frame; if a
+ *  TrackSubscribed re-arrives the grace is cancelled and nothing scary ever shows.
+ *  2s comfortably covers a normal re-publish while still bounding a true loss. */
+export const PUBLISHER_LOST_GRACE_MS = 2_000;
+
+/** #8 — bounded auto-reconnect schedule for an UNEXPECTED transport Disconnected
+ *  (the signal socket dropped without a deliberate teardown). Exponential backoff
+ *  ~1s/3s/9s, capped at 3 attempts, before falling back to the manual Reconnect
+ *  button — so a brief network blip recovers itself instead of stranding the
+ *  founder on the disconnected overlay. A deliberate teardown (unmount / window
+ *  close) sets the cancelled flag and never schedules a retry. */
+export const AUTO_RECONNECT_BACKOFF_MS = [1_000, 3_000, 9_000] as const;
+
 /** W617 / #59 — how long a connected-but-videoless room waits before the panel
  *  declares the launch failed (no publisher). A WARM worker publishes in ~2-5s,
  *  but a COLD session spawn (the worker launches a fresh browser fork → loads the
@@ -188,6 +208,12 @@ export function AgentSessionPanel({
   // 'publishing' on TrackSubscribed, 'waiting' → 'none' on timeout after
   // connect. 'none' renders the honest no-worker overlay.
   const [publisher, setPublisher] = useState<'waiting' | 'publishing' | 'none'>('waiting');
+  // #1 — during the post-track-drop grace window (before we know whether the
+  // publisher is truly gone or just re-negotiating), show a CALM "reconnecting…"
+  // pill over the last good frame instead of the scary launch-failed overlay. True
+  // only between a track drop and either its re-subscribe (cleared) or the grace
+  // expiring (→ publisher 'none', the honest overlay).
+  const [publisherReconnecting, setPublisherReconnecting] = useState(false);
   // Manual reconnect: bumping this re-runs the connect effect (new Room +
   // reconnect). Lets the customer recover from an error/disconnect without
   // reloading the whole app. Only bumped on the Reconnect button — not a
@@ -227,6 +253,20 @@ export function AgentSessionPanel({
       setState(next);
       onStateChangeRef.current?.(next);
     };
+    // #1 — pending grace timer after a track drop. Held in the effect closure
+    // (not a render ref) so it's naturally cleared when the effect re-runs/tears
+    // down. Cancelled by a TrackSubscribed re-arrival so a re-publish never flips
+    // to the scary overlay.
+    let publisherLostTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearPublisherLostTimer = (): void => {
+      if (publisherLostTimer !== null) {
+        clearTimeout(publisherLostTimer);
+        publisherLostTimer = null;
+      }
+    };
+    // #8 — bounded auto-reconnect schedule for an UNEXPECTED Disconnected.
+    let autoReconnectAttempt = 0;
+    let autoReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     // RoomEvent wire-up. `as any` casts are scoped to the
     // livekit-client surface where exact typing isn't worth the
@@ -247,24 +287,67 @@ export function AgentSessionPanel({
       } catch {
         /* setPlayoutDelay unsupported — ignore */
       }
+      // #1 — the track is back: cancel any pending grace + the calm pill, restore
+      // 'publishing'. A brief SFU re-negotiation / encoder restart never surfaces
+      // the launch-failed overlay now.
+      clearPublisherLostTimer();
+      setPublisherReconnecting(false);
       setPublisher('publishing');
     });
     // Reverse of TrackSubscribed: the publishing worker (the Mac browser fork) crashes or
     // restarts → the SFU drops its video track while OUR signal connection stays UP, so
     // RoomEvent.Disconnected never fires. Without this the last frame freezes with no overlay
-    // and no recovery path (founder-hit class). Flip back to 'none' so the W617 "no live
-    // video" overlay + the recovery affordance surface; TrackSubscribed restores 'publishing'
-    // if it comes back. (#145)
+    // and no recovery path (founder-hit class). (#145)
+    //
+    // #1 DEBOUNCE: do NOT flip to 'none' instantly — A3's idle frame-pump down-clock
+    // (W2952) + routine encoder restarts / short SFU re-negotiations drop and re-add
+    // the track within ~1-2s, and an instant flip slammed the scary "Couldn't start
+    // the session…" alarm over the last good frame ("reconnecting, happens too often").
+    // Show a calm "reconnecting…" pill over the last frame and only escalate to 'none'
+    // (the honest overlay) if no TrackSubscribed re-arrives within the grace window.
     const onPublisherLost = (): void => {
       if (cancelled) return;
-      setPublisher((p) => (p === 'publishing' ? 'none' : p));
+      setPublisher((p) => {
+        if (p !== 'publishing') return p;
+        setPublisherReconnecting(true);
+        clearPublisherLostTimer();
+        publisherLostTimer = setTimeout(() => {
+          if (cancelled) return;
+          publisherLostTimer = null;
+          setPublisherReconnecting(false);
+          // The grace expired with no TrackSubscribed (which would have CLEARED this
+          // timer on re-arrival) → the publisher really is gone. Surface the honest
+          // launch-failed overlay.
+          setPublisher('none');
+        }, PUBLISHER_LOST_GRACE_MS);
+        // Stay 'publishing' (keep the last frame + the calm pill) for now.
+        return p;
+      });
     };
     (room as any).on(RoomEvent.TrackUnsubscribed, (track: any) => {
       if (track?.kind === 'video') onPublisherLost();
     });
     (room as any).on(RoomEvent.ParticipantDisconnected, onPublisherLost);
     (room as any).on(RoomEvent.Disconnected, () => {
-      if (!cancelled) setS({ kind: 'disconnected' });
+      if (cancelled) return;
+      // #8 — an UNEXPECTED transport drop (not a deliberate teardown — cleanup sets
+      // `cancelled` BEFORE disconnect()) auto-retries with exponential backoff before
+      // falling back to the manual Reconnect button. A reconnect re-runs this whole
+      // effect via retryNonce (fresh Room + connect), so we only schedule the bump.
+      if (autoReconnectAttempt < AUTO_RECONNECT_BACKOFF_MS.length) {
+        const delay = AUTO_RECONNECT_BACKOFF_MS[autoReconnectAttempt];
+        autoReconnectAttempt += 1;
+        setS({ kind: 'reconnecting' });
+        if (autoReconnectTimer !== null) clearTimeout(autoReconnectTimer);
+        autoReconnectTimer = setTimeout(() => {
+          if (cancelled) return;
+          autoReconnectTimer = null;
+          setRetryNonce((n) => n + 1);
+        }, delay);
+        return;
+      }
+      // Attempts exhausted — surface the manual Reconnect overlay.
+      setS({ kind: 'disconnected' });
     });
     (room as any).on(RoomEvent.Reconnecting, () => {
       if (!cancelled) setS({ kind: 'reconnecting' });
@@ -275,6 +358,7 @@ export function AgentSessionPanel({
 
     setS({ kind: 'connecting' });
     setPublisher('waiting');
+    setPublisherReconnecting(false);
     // W617 / #59 — empty-room detector: connected but no video track within the
     // timeout means the launch never produced a stream (no worker publishing /
     // proxy down so the box never started → an indefinite "connecting…"). Flips
@@ -297,6 +381,10 @@ export function AgentSessionPanel({
     return () => {
       cancelled = true;
       if (noPublisherTimer !== null) clearTimeout(noPublisherTimer);
+      // #1/#8 — drop any pending grace + auto-reconnect timer so a torn-down panel
+      // can't flip publisher state or schedule a stray reconnect after unmount.
+      clearPublisherLostTimer();
+      if (autoReconnectTimer !== null) clearTimeout(autoReconnectTimer);
       setRoom(null);
       onRoom?.(null);
       // .catch the teardown: disconnect() can reject on a teardown race with a
@@ -363,6 +451,23 @@ export function AgentSessionPanel({
           content fills the frame edge-to-edge with NO bands — masking it now covers
           REAL content (founder's "black space at the bottom + content cut off at the
           top"). `coverChromeBand` is kept as an inert prop for call-site compatibility. */}
+      {/* #1 — CALM reconnecting pill during the post-track-drop grace window. The
+          track briefly dropped (A3 idle frame-pump down-clock / encoder restart /
+          short SFU re-negotiation); the last good frame is still visible underneath,
+          so we show a small unobtrusive pill — NOT the full-screen launch-failed
+          alarm — until either the track re-arrives (cleared) or the grace expires
+          (→ the honest overlay below). Mirrors the simulator's frozen/stalled badge
+          treatment. */}
+      {state.kind === 'connected' && publisherReconnecting && publisher === 'publishing' && (
+        <div
+          role="status"
+          data-overlay="publisher-reconnecting"
+          className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-black/75 px-4 py-2 text-[11px] font-medium text-white shadow-lg backdrop-blur"
+        >
+          <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+          Reconnecting…
+        </div>
+      )}
       {/* W617 — connected but nothing publishing: waiting spinner first,
           then the honest no-worker overlay with the parent's fallback. */}
       {state.kind === 'connected' && publisher !== 'publishing' && (
