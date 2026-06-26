@@ -36,7 +36,21 @@ export interface ParsedWireGuard {
 
 // Mirror the egress.ts validation so a parsed result is API-valid (or null).
 const WG_KEY_RE = /^[A-Za-z0-9+/]{43}=$/; // 44-char base64 curve25519 key
-const WG_ENDPOINT_RE = /^[A-Za-z0-9.\-:_]+:[0-9]{1,5}$/; // host:port
+// host:port — `host` accepts a hostname/IPv4 (incl. the dots/hyphens/underscores
+// they use) OR a bracketed IPv6 literal `[2001:db8::1]:51820` (standard wg-quick
+// syntax). splitEndpoint() downstream already survives a bracketed host; this
+// gate just has to allow the brackets through.
+const WG_ENDPOINT_RE = /^(\[[0-9A-Fa-f:]+\]|[A-Za-z0-9.\-:_]+):[0-9]{1,5}$/;
+
+/** Strip a trailing `# …` / `; …` inline comment from a value and trim, mirroring
+ *  parse-openvpn's stripComment. wg-quick exports commonly carry these (e.g.
+ *  `Endpoint = vpn.example.com:51820 # primary`); none of the WG values we read
+ *  (base64 keys, host:port, CIDRs, IPs) legitimately contain `#` or `;`, so this
+ *  is safe. */
+function stripInlineComment(value: string): string {
+  const at = value.search(/[#;]/);
+  return (at === -1 ? value : value.slice(0, at)).trim();
+}
 
 export function parseWireGuardConfig(input: string): ParsedWireGuard | null {
   if (input.trim() === '') return null;
@@ -55,7 +69,7 @@ export function parseWireGuardConfig(input: string): ParsedWireGuard | null {
     const eq = line.indexOf('=');
     if (eq === -1) continue;
     const key = line.slice(0, eq).trim().toLowerCase();
-    const value = line.slice(eq + 1).trim();
+    const value = stripInlineComment(line.slice(eq + 1));
     if (key !== '' && value !== '' && !values.has(key)) values.set(key, value);
   }
 

@@ -67,6 +67,49 @@ describe('parseWireGuardConfig', () => {
     });
   });
 
+  it('strips an INLINE comment on a value line (common in provider exports)', () => {
+    const conf = [
+      '[Interface]',
+      `PrivateKey = ${PRIV}`,
+      'Address = 10.0.0.2/32',
+      '[Peer]',
+      `PublicKey = ${PUB}`,
+      'Endpoint = vpn.example.com:51820 # primary',
+      'AllowedIPs = 0.0.0.0/0 ; full tunnel',
+    ].join('\n');
+    expect(parseWireGuardConfig(conf)).toEqual({
+      private_key: PRIV,
+      peer_public_key: PUB,
+      endpoint: 'vpn.example.com:51820',
+      allowed_ips: '0.0.0.0/0',
+      address: '10.0.0.2/32',
+    });
+  });
+
+  it('accepts a bracketed IPv6 endpoint (standard wg-quick syntax)', () => {
+    const conf = [
+      '[Interface]',
+      `PrivateKey = ${PRIV}`,
+      'Address = 10.0.0.2/32',
+      '[Peer]',
+      `PublicKey = ${PUB}`,
+      'Endpoint = [2001:db8::1]:51820',
+    ].join('\n');
+    expect(parseWireGuardConfig(conf)?.endpoint).toBe('[2001:db8::1]:51820');
+  });
+
+  it('accepts a bracketed IPv6 endpoint with an inline comment', () => {
+    const conf = [
+      '[Interface]',
+      `PrivateKey = ${PRIV}`,
+      'Address = 10.0.0.2/32',
+      '[Peer]',
+      `PublicKey = ${PUB}`,
+      'Endpoint = [2001:db8::1]:51820 # ipv6 only',
+    ].join('\n');
+    expect(parseWireGuardConfig(conf)?.endpoint).toBe('[2001:db8::1]:51820');
+  });
+
   it('returns null when a required field is missing (no Endpoint)', () => {
     const conf = [
       '[Interface]',
