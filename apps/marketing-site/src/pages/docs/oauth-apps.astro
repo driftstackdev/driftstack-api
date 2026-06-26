@@ -110,12 +110,22 @@ const SCOPES = [
       <code>redirect_uri</code> with <code>?code=…&amp;state=…</code>.
       Verify <code>state</code> matches what you sent (CSRF guard).
     </p>
+    <p class="text-sm text-tk-ink-3">
+      Status note: the hosted login + consent + redirect-back UX is
+      the target flow. As built today, <code>GET /v1/oauth/authorize</code>
+      stages the request and returns an
+      <code>authorization_id</code>; the customer-dashboard renders the
+      consent screen and approves via
+      <code>POST /v1/oauth/authorize/complete</code>, which yields the
+      <code>code</code> for your callback.
+    </p>
 
     <h3>3. Exchange the code for an access token</h3>
     <pre><code>{`POST /v1/oauth/token
 Content-Type: application/json
 
 {
+  "grant_type": "authorization_code",
   "code": "...",
   "code_verifier": "<your pkce verifier>",
   "client_id": "oac_…",

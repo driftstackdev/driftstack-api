@@ -116,7 +116,7 @@ try:
 except DriftstackError as err:
     # 409: order has moved past pending; cancellation is no longer self-service.
     # 404: order doesn't exist or belongs to another account.
-    print(err.status, err.title)`}</code></pre>
+    print(err.status, err.message)`}</code></pre>
     <p>
       Crypto payments are non-refundable. Cancelling a pending order
       halts its pay window; cancelling a paid order is not supported
