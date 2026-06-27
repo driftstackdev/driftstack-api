@@ -65,10 +65,10 @@ describe('W869 RateLimitBucket cross-source invariant', () => {
 
   // ─── api-types accounts.ts RateLimitBucketSchema enum field ──
 
-  it("CRITICAL packages/api-types/src/accounts.ts RateLimitBucketSchema declares bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message']). The customer-read response surface — what /v1/account/rate-limits returns to dashboard consumers. (Schema-side excludes agent_sessions:input_event because that bucket is internal-only — driven by the LK.6 stream-rate gate, not customer-visible.)", () => {
+  it("CRITICAL packages/api-types/src/accounts.ts RateLimitBucketSchema declares bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message', 'agent_sessions:input_event']). The customer-read response surface — GET /v1/account/rate-limits returns ALL FOUR enforced buckets (routes/account-rate-limits.ts BUCKET_KEYS mirrors TIER_RATE_LIMIT_DEFAULTS so the customer view never hides a limit that's actually applied), and the docs (api/account-rate-limits.md) list four. The schema MUST include agent_sessions:input_event or it rejects the real response. (The admin WRITE surface below stays the 3 override-able keys — input_event has no admin-override path.)", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
     expect(p).toMatch(
-      /bucket_key: z\.enum\(\['global', 'sessions:create', 'agent_sessions:message'\]\)/,
+      /bucket_key: z\.enum\(\[\s*\n?\s*'global',\s*\n?\s*'sessions:create',\s*\n?\s*'agent_sessions:message',\s*\n?\s*'agent_sessions:input_event',\s*\n?\s*\]\)/,
     );
   });
 

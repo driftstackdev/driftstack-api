@@ -85,9 +85,9 @@ describe('W436.C packages/api-types/src/crypto-orders.ts content parity', () => 
     );
   });
 
-  it('CreateCryptoCheckoutResponse: order_id + product + price_cents + price_currency + status + provider stub|nowpayments + payment_address nullable + pay_currency nullable + created_at; provider rationale "stub until NowPayments merchant lands"', () => {
+  it('CreateCryptoCheckoutResponse: order_id + product + price_cents + price_currency + status + provider stub|nowpayments + payment_address nullable + pay_currency nullable + pay_amount nullable (the crypto amount to send; returned by the route + documented in api/billing-crypto) + created_at; provider rationale "stub until NowPayments merchant lands"', () => {
     expect(body).toMatch(
-      /export const CreateCryptoCheckoutResponseSchema = z\.object\(\{\s*\n?\s*order_id: z\.string\(\),\s*\n?\s*product: z\.string\(\),\s*\n?\s*price_cents: z\.number\(\)\.int\(\),\s*\n?\s*price_currency: z\.string\(\),\s*\n?\s*status: CryptoOrderStatusSchema,\s*\n?\s*\/\*\* 'stub' until the NowPayments merchant account lands; 'nowpayments' thereafter\. \*\/\s*\n?\s*provider: z\.enum\(\['stub', 'nowpayments'\]\),\s*\n?\s*payment_address: z\.string\(\)\.nullable\(\),\s*\n?\s*pay_currency: z\.string\(\)\.nullable\(\),\s*\n?\s*created_at: z\.string\(\),\s*\n?\s*\}\);/,
+      /export const CreateCryptoCheckoutResponseSchema = z\.object\(\{\s*\n?\s*order_id: z\.string\(\),\s*\n?\s*product: z\.string\(\),\s*\n?\s*price_cents: z\.number\(\)\.int\(\),\s*\n?\s*price_currency: z\.string\(\),\s*\n?\s*status: CryptoOrderStatusSchema,\s*\n?\s*\/\*\* 'stub' until the NowPayments merchant account lands; 'nowpayments' thereafter\. \*\/\s*\n?\s*provider: z\.enum\(\['stub', 'nowpayments'\]\),\s*\n?\s*payment_address: z\.string\(\)\.nullable\(\),\s*\n?\s*pay_currency: z\.string\(\)\.nullable\(\),[\s\S]*?pay_amount: z\.number\(\)\.nullable\(\),\s*\n?\s*created_at: z\.string\(\),\s*\n?\s*\}\);/,
     );
   });
 

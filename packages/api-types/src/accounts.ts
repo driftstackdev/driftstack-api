@@ -419,7 +419,18 @@ export type ExportAccountAuditLogResponse = z.infer<typeof ExportAccountAuditLog
 // ───────────────────────────────────────────────────────────────────────────
 
 export const RateLimitBucketSchema = z.object({
-  bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message']),
+  // The customer-read response surface — GET /v1/account/rate-limits
+  // returns ALL four enforced buckets (routes/account-rate-limits.ts
+  // mirrors TIER_RATE_LIMIT_DEFAULTS so the customer view never hides a
+  // limit that's actually applied), including agent_sessions:input_event.
+  // NB: the admin write surface (admin.ts SetQuotaOverride/ClearQuotaOverride)
+  // stays the 3 override-able keys — input_event has no admin-override path.
+  bucket_key: z.enum([
+    'global',
+    'sessions:create',
+    'agent_sessions:message',
+    'agent_sessions:input_event',
+  ]),
   capacity: z.number().int().positive(),
   refill_per_second: z.number().positive(),
   /**

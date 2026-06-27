@@ -63,6 +63,13 @@ export const CreateCryptoCheckoutResponseSchema = z.object({
   provider: z.enum(['stub', 'nowpayments']),
   payment_address: z.string().nullable(),
   pay_currency: z.string().nullable(),
+  /**
+   * The crypto amount to send, denominated in `pay_currency`. Null
+   * until the NowPayments merchant account lands (provider 'stub').
+   * Returned by POST /v1/billing/crypto-checkout (billing-crypto.ts)
+   * and documented in /docs/api/billing-crypto.
+   */
+  pay_amount: z.number().nullable(),
   created_at: z.string(),
 });
 export type CreateCryptoCheckoutResponse = z.infer<typeof CreateCryptoCheckoutResponseSchema>;

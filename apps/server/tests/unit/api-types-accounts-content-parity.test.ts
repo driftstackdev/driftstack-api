@@ -222,10 +222,10 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
     );
   });
 
-  it('V-219 RateLimitBucket: bucket_key enum (global|sessions:create|agent_sessions:message) + capacity positive int + refill_per_second positive + source enum (tier_default|override) + override_expires_at nullable; GetAccountRateLimitsResponse: tier + buckets', () => {
+  it('V-219 RateLimitBucket: bucket_key enum (global|sessions:create|agent_sessions:message|agent_sessions:input_event — the customer-read GET /v1/account/rate-limits returns all four) + capacity positive int + refill_per_second positive + source enum (tier_default|override) + override_expires_at nullable; GetAccountRateLimitsResponse: tier + buckets', () => {
     expect(body).toMatch(/\/\/ V-219 — customer-facing rate-limit view/);
     expect(body).toMatch(
-      /export const RateLimitBucketSchema = z\.object\(\{\s*\n?\s*bucket_key: z\.enum\(\['global', 'sessions:create', 'agent_sessions:message'\]\),\s*\n?\s*capacity: z\.number\(\)\.int\(\)\.positive\(\),\s*\n?\s*refill_per_second: z\.number\(\)\.positive\(\),/,
+      /export const RateLimitBucketSchema = z\.object\(\{[\s\S]*?bucket_key: z\.enum\(\[\s*\n?\s*'global',\s*\n?\s*'sessions:create',\s*\n?\s*'agent_sessions:message',\s*\n?\s*'agent_sessions:input_event',\s*\n?\s*\]\),\s*\n?\s*capacity: z\.number\(\)\.int\(\)\.positive\(\),\s*\n?\s*refill_per_second: z\.number\(\)\.positive\(\),/,
     );
     expect(body).toMatch(
       /\*\s*`'tier_default'` when the value comes from the locked tier table;\s*\n?\s*\*\s*`'override'` when an admin-set override is currently in effect\./,
