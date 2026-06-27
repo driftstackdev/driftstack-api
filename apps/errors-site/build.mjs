@@ -116,6 +116,13 @@ export const ERROR_PAGES = {
       'The proxy attached to this launch failed a LIVE pre-launch connectivity test — the server connected THROUGH your proxy and ran a real egress round-trip, which did not succeed. The launch was blocked before any session or worker started. The body carries a `reason`: `unreachable` (host/port wrong or offline), `auth_failed` (bad credentials), `timeout` (proxy too slow), or `egress_blocked` (proxy connects but its upstream can’t reach the internet).',
     fix: 'Fix the proxy per the `reason` — verify host/port and that it is online, re-enter credentials, or check the proxy’s own upstream egress — then launch again.',
   },
+  'profile-in-use': {
+    status: 409,
+    title: 'Profile already in use',
+    meaning:
+      'A session-create carried a profile_id that already has a live (non-terminal) session. A profile can run only one session at a time — two sessions on the same profile would both restore and then overwrite the same saved cookies and logins, losing your data. The body carries active_session_id, the live session you already have running. Sessions without a profile_id are never affected.',
+    fix: 'End the session named in active_session_id (or wait for it to finish), then launch again. If you need parallel runs, use separate profiles.',
+  },
   'session-destroyed': {
     status: 410,
     title: 'Session destroyed',
@@ -240,6 +247,7 @@ export const RELATED = {
   'concurrency-limit': ['rate-limited', 'tier-limit'],
   'tier-limit': ['concurrency-limit', 'rate-limited', 'storage-quota-exceeded'],
   'storage-quota-exceeded': ['tier-limit', 'conflict'],
+  'profile-in-use': ['conflict', 'concurrency-limit', 'storage-quota-exceeded'],
   unauthorized: ['invalid-key', 'invalid-credentials', 'forbidden'],
   forbidden: ['unauthorized', 'mfa-step-up-required'],
   'mfa-step-up-required': ['forbidden', 'unauthorized'],
