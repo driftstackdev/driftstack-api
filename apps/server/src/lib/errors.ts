@@ -232,6 +232,35 @@ export class StorageQuotaExceededError extends ApiError {
   }
 }
 
+// A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard. A
+// session-create carrying a `profile_id` that already has a NON-TERMINAL session
+// for the account is REFUSED with this 409: two concurrent sessions on the SAME
+// profile would both restore the same sealed cookie/state blob, diverge, and BOTH
+// save back at teardown → a last-writer-wins clobber that loses the customer's
+// logins. The guard is enforced atomically under a per-profile advisory lock so
+// two concurrent creates can't both pass. The `active_session_id` extension carries
+// the id of the live session (ses_<uuid> / agt_<uuid>) so the GUI/SDK can prompt
+// the customer to end the other session before launching another. Reconnecting to
+// the SAME existing session is not a new bind and never reaches this; a profile
+// whose only sessions are terminal binds freely; a create with no profile_id is
+// never gated.
+export class ProfileInUseError extends ApiError {
+  constructor(activeSessionId: string, detail?: string) {
+    super({
+      type: PROBLEM_TYPES.ProfileInUse,
+      title: 'Profile already in use',
+      status: 409,
+      detail:
+        detail ??
+        `This profile already has a live session (${activeSessionId}). ` +
+          `End it before launching another — two sessions on the same profile would ` +
+          `overwrite each other's saved cookies and logins.`,
+      extensions: { active_session_id: activeSessionId, resource: 'profile' },
+    });
+    this.name = 'ProfileInUseError';
+  }
+}
+
 /**
  * Founder directive #63 — the CP-side live proxy connectivity probe rejected the
  * proxy at launch time, so the launch is BLOCKED (zero session row, zero worker

@@ -105,6 +105,19 @@ export const PROBLEM_TYPES = {
   // carries a human one-liner. Forward-compatible with A3's W2931 post-dispatch
   // box-reported egress failure (same problem-type, surfaced post-launch).
   ProxyValidationFailed: 'https://errors.driftstack.dev/proxy-validation-failed',
+  // A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard. Fires
+  // at session-create (both the agent-session create and the driver /v1/sessions
+  // create) when the request carries a `profile_id` that already has a NON-
+  // TERMINAL session for the account: two concurrent sessions on the SAME profile
+  // would both restore the same sealed cookie/state blob, diverge, and BOTH save
+  // back at teardown → last-writer-wins CLOBBER (the customer loses logins). The
+  // CP REFUSES the new bind with this 409 (enforced atomically under a per-profile
+  // advisory lock so two concurrent creates can't both pass). The `active_session_id`
+  // extension carries the id of the live session so the GUI/SDK can prompt "end
+  // the other session before launching another". Reconnecting to the SAME existing
+  // session is NOT a new bind and is never blocked; a profile with only TERMINAL
+  // sessions is free to bind again; a create without a profile_id is never gated.
+  ProfileInUse: 'https://errors.driftstack.dev/profile-in-use',
 } as const;
 
 export type ProblemType = (typeof PROBLEM_TYPES)[keyof typeof PROBLEM_TYPES];

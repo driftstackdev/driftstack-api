@@ -2,8 +2,21 @@
 // SessionsService expectations exactly; tests use an in-memory impl from
 // `tests/integration/_helpers/in-memory-sessions-repo.ts`.
 
-import { type SQL, and, asc, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import {
+  type SQL,
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  lt,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { SessionStatusSchema, type AccountTier } from '@driftstack/api-types';
+import { ProfileInUseError } from '../lib/errors.js';
 import type {
   NewSessionInput,
   SessionEventInput,
@@ -53,11 +66,47 @@ export class DrizzleSessionRepo implements SessionRepo {
   async insertSessionIfUnderLimit(
     input: NewSessionInput,
     limit: number,
+    opts: { profileId?: string } = {},
   ): Promise<SessionRecord | null> {
     return this.database.db.transaction(async (tx) => {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtext(${`session-create:${input.accountId}`}))`,
       );
+      // A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard.
+      // When a profile_id rode the create, take a per-profile advisory lock + check
+      // for an existing NON-TERMINAL session bound to it (profile_id lives in the
+      // session `metadata` jsonb on the driver-sessions table — there is no
+      // dedicated column here, unlike agent_sessions). Throw ProfileInUseError when
+      // one exists so two sessions never restore + clobber the same sealed blob.
+      // Locked AFTER the account lock (stable accountId-then-profileId acquisition
+      // order — no opposite-order deadlock between two concurrent creates). NULL/
+      // absent profileId → no lock, no check (fail-safe). This atomic reserve runs
+      // BEFORE driver.createSession (the DoS-hardening reserve-then-dispatch order),
+      // so a ProfileInUseError throw here blocks the launch with ZERO worker spun —
+      // nothing to tear down (the row was never inserted).
+      if (opts.profileId !== undefined) {
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtext(${`session-create-profile:${opts.profileId}`}))`,
+        );
+        const [live] = await tx
+          .select({ id: sessions.id })
+          .from(sessions)
+          .where(
+            and(
+              eq(sessions.accountId, input.accountId),
+              sql`${sessions.metadata}->>'profile_id' = ${opts.profileId}`,
+              // Non-terminal = not destroyed/errored AND destroyed_at unset. The
+              // legacy table has no NULL-status rows; both clauses guard belt-and-
+              // suspenders (an errored row stamps destroyedAt, but check status too).
+              notInArray(sessions.status, ['destroyed', 'errored']),
+              isNull(sessions.destroyedAt),
+            ),
+          )
+          .limit(1);
+        if (live) {
+          throw new ProfileInUseError(`ses_${live.id}`);
+        }
+      }
       const [countRow] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(sessions)

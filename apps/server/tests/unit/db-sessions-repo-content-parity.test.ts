@@ -45,15 +45,20 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     );
   });
 
-  it('imports: asc/and/desc/eq/inArray/isNull/lt/or/sql from drizzle-orm; SessionStatusSchema + AccountTier; 5 service types; Database; accounts + sessionEvents + sessions schemas', () => {
+  it('imports: asc/and/desc/eq/inArray/isNull/lt/notInArray/or/sql from drizzle-orm; SessionStatusSchema + AccountTier; ProfileInUseError; 5 service types; Database; accounts + sessionEvents + sessions schemas', () => {
+    // Reflow-robust: prettier wraps this multi-member import across lines, so
+    // match the members with \s* separators rather than a single-line literal.
     expect(body).toMatch(
-      /import \{ type SQL, and, asc, desc, eq, inArray, isNull, lt, or, sql \} from 'drizzle-orm';/,
+      /import \{\s*type SQL,\s*and,\s*asc,\s*desc,\s*eq,\s*inArray,\s*isNull,\s*lt,\s*notInArray,\s*or,\s*sql,?\s*\} from 'drizzle-orm';/,
     );
     // 6.g — AccountTier for listExpiredForAutoDestroy tierCutoffs; SessionStatusSchema
     // for the countAllByStatus zero-fill.
     expect(body).toMatch(
       /import \{ SessionStatusSchema, type AccountTier \} from '@driftstack\/api-types';/,
     );
+    // A3 finding #7 (W2979/W2980) — ProfileInUseError thrown by the single-active-
+    // session-per-profile guard inside insertSessionIfUnderLimit.
+    expect(body).toMatch(/import \{ ProfileInUseError \} from '\.\.\/lib\/errors\.js';/);
     expect(body).toMatch(
       /import type \{\s*\n?\s*NewSessionInput,\s*\n?\s*SessionEventInput,\s*\n?\s*SessionListPage,\s*\n?\s*SessionRecord,\s*\n?\s*SessionRepo,\s*\n?\s*\} from '\.\.\/services\/sessions\.js';/,
     );
@@ -69,7 +74,7 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
 
   it('insertSessionIfUnderLimit: atomic count+insert in a transaction, serialised by a per-account pg_advisory_xact_lock; returns null when count >= limit (the concurrent-cap TOCTOU fix). Drift to dropping the advisory lock or the tx reopens the create-path race.', () => {
     expect(body).toMatch(
-      /async insertSessionIfUnderLimit\(\s*\n?\s*input: NewSessionInput,\s*\n?\s*limit: number,\s*\n?\s*\): Promise<SessionRecord \| null> \{/,
+      /async insertSessionIfUnderLimit\(\s*\n?\s*input: NewSessionInput,\s*\n?\s*limit: number,\s*\n?\s*opts: \{ profileId\?: string \} = \{\},\s*\n?\s*\): Promise<SessionRecord \| null> \{/,
     );
     expect(body).toMatch(/return this\.database\.db\.transaction\(async \(tx\) => \{/);
     expect(body).toMatch(
@@ -79,6 +84,15 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     expect(body).toMatch(
       /\.where\(and\(eq\(sessions\.accountId, input\.accountId\), isNull\(sessions\.destroyedAt\)\)\);\s*\n?\s*if \(\(countRow\?\.count \?\? 0\) >= limit\) return null;/,
     );
+  });
+
+  it('A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard inside insertSessionIfUnderLimit: per-profile advisory lock + metadata.profile_id non-terminal lookup → throws ProfileInUseError. Drift to dropping the lock or the check reopens the cross-node sealed-blob clobber.', () => {
+    expect(body).toMatch(
+      /SELECT pg_advisory_xact_lock\(hashtext\(\$\{`session-create-profile:\$\{opts\.profileId\}`\}\)\)/,
+    );
+    expect(body).toMatch(/\$\{sessions\.metadata\}->>'profile_id' = \$\{opts\.profileId\}/);
+    expect(body).toMatch(/notInArray\(sessions\.status, \['destroyed', 'errored'\]\)/);
+    expect(body).toMatch(/throw new ProfileInUseError\(`ses_\$\{live\.id\}`\)/);
   });
 
   it('findSession: account-scoped via and(eq(id), eq(accountId)) + limit 1; findSessionUnscoped: id-only no account scope (admin force-actions path)', () => {

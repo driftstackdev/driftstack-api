@@ -68,7 +68,7 @@ describe('W998 db/sessions-repo cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
     expect(p).toMatch(/async insertSession\(input: NewSessionInput\): Promise<SessionRecord> \{/);
     expect(p).toMatch(
-      /async insertSessionIfUnderLimit\(\s*\n?\s*input: NewSessionInput,\s*\n?\s*limit: number,\s*\n?\s*\): Promise<SessionRecord \| null> \{/,
+      /async insertSessionIfUnderLimit\(\s*\n?\s*input: NewSessionInput,\s*\n?\s*limit: number,\s*\n?\s*opts: \{ profileId\?: string \} = \{\},\s*\n?\s*\): Promise<SessionRecord \| null> \{/,
     );
     expect(p).toMatch(
       /async findSession\(id: string, accountId: string\): Promise<SessionRecord \| null> \{/,

@@ -153,8 +153,23 @@ export interface SessionRepo {
    * can't all pass a stale count and exceed the tier cap (the create-path
    * TOCTOU). The slow driver.createSession runs BEFORE this call, never under
    * the lock.
+   *
+   * A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard. When
+   * `opts.profileId` is supplied, the same atomic transaction ALSO takes a per-
+   * profile advisory lock + refuses a second bind against a NON-TERMINAL
+   * (status NOT IN destroyed/errored AND destroyed_at IS NULL) session whose
+   * `metadata->>'profile_id'` matches, for the same account — throwing
+   * ProfileInUseError(activeSessionId) (the route maps it to a 409 with
+   * `active_session_id`). Two concurrent profile-bound creates serialise on the
+   * profile lock so exactly one binds, preventing the cross-node sealed-blob
+   * clobber (both sessions restore the same blob → diverge → both save back). A
+   * create with no profileId is never gated (fail-safe).
    */
-  insertSessionIfUnderLimit(input: NewSessionInput, limit: number): Promise<SessionRecord | null>;
+  insertSessionIfUnderLimit(
+    input: NewSessionInput,
+    limit: number,
+    opts?: { profileId?: string },
+  ): Promise<SessionRecord | null>;
   /**
    * DoS hardening — bind the real driver session id onto a session row that
    * was inserted with a placeholder id to RESERVE its concurrency slot before
@@ -352,6 +367,12 @@ export class SessionsService {
     // dispatch failure the reservation row is marked destroyed so it stops
     // counting against the cap (and a DB-tracked row means even a missed
     // teardown is reapable, unlike the old orphan).
+    // A3 finding #7 (W2979/W2980) — the route stamps the resolved profile binding
+    // into metadata.profile_id (a bare uuid). Lift it out so the atomic reserve
+    // can ALSO enforce the single-active-session-per-profile guard under the same
+    // per-profile advisory lock. Absent (no profile-backed create) → no guard.
+    const profileIdMeta = body.metadata?.['profile_id'];
+    const profileId = typeof profileIdMeta === 'string' ? profileIdMeta : undefined;
     const reservationDriverId = `reserving:${randomUUID()}`;
     const reserved = await this.deps.repo.insertSessionIfUnderLimit(
       {
@@ -366,6 +387,7 @@ export class SessionsService {
         metadata: body.metadata ?? null,
       },
       limit,
+      profileId !== undefined ? { profileId } : {},
     );
     if (reserved === null) {
       // At/over the cap — no worker was spun. The count at this point is the

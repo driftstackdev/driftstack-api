@@ -109,8 +109,10 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     // The atomic insert-if-under-cap (TOCTOU fix) is part of the contract.
     // Reflow-robust: prettier collapses this signature to one line (no
     // trailing comma), so match space-or-newline + an optional trailing comma.
+    // A3 finding #7 (W2979/W2980) — gained the optional `opts.profileId` arg for
+    // the single-active-session-per-profile guard.
     expect(body).toMatch(
-      /insertSessionIfUnderLimit\(\s*input: NewSessionInput,\s*limit: number,?\s*\): Promise<SessionRecord \| null>;/,
+      /insertSessionIfUnderLimit\(\s*input: NewSessionInput,\s*limit: number,\s*opts\?: \{ profileId\?: string \},?\s*\): Promise<SessionRecord \| null>;/,
     );
     // DoS hardening — bind the real driver id onto a reservation row (the
     // create flow reserves the cap slot BEFORE the slow worker dispatch).

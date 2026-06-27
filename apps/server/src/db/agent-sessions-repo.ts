@@ -31,6 +31,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, count, desc, eq, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
+import { ProfileInUseError } from '../lib/errors.js';
 import type { Database } from './client.js';
 import { agentSessions } from './schema.js';
 import type { TranscriptEntry } from '../services/agent-decomposer.js';
@@ -140,12 +141,45 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     // different keys so there is no cross-account contention. Mirrors
     // SessionsRepo.insertSessionIfUnderLimit (the proven pattern for the legacy
     // sessions table). Returns null when already at/over the cap.
+    //
+    // A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard. When
+    // `args.profileId` is set, this ALSO takes a per-profile advisory lock + checks
+    // for an existing NON-TERMINAL (status != 'closed') session bound to that
+    // profile for this account, throwing ProfileInUseError(activeSessionId) when one
+    // exists. Two concurrent creates for the same profile serialise on the profile
+    // lock; the second sees the first's row → exactly one binds. This prevents a
+    // cross-node sealed-blob clobber (two sessions restore the same blob, diverge,
+    // both save back). A create WITHOUT a profile_id never takes the profile lock or
+    // runs the check (fail-safe: no guard). The cap lock is taken first, then the
+    // profile lock (a stable acquisition order — accountId before profileId — so two
+    // creates can never deadlock by locking in opposite orders).
     const id = `agt_${randomUUID()}`;
     const now = this.clock();
     return this.database.db.transaction(async (tx) => {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtext(${`agent-session-create:${args.accountId}`}))`,
       );
+      if (args.profileId !== undefined) {
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtext(${`agent-session-profile:${args.profileId}`}))`,
+        );
+        const [live] = await tx
+          .select({ id: agentSessions.id })
+          .from(agentSessions)
+          .where(
+            and(
+              eq(agentSessions.accountId, args.accountId),
+              eq(agentSessions.profileId, args.profileId),
+              // Non-terminal = anything but 'closed' (the only terminal agent-
+              // session status; 'active'/'paused' are live binds).
+              notInArray(agentSessions.status, ['closed']),
+            ),
+          )
+          .limit(1);
+        if (live) {
+          throw new ProfileInUseError(live.id);
+        }
+      }
       const [countRow] = await tx
         .select({ n: count() })
         .from(agentSessions)

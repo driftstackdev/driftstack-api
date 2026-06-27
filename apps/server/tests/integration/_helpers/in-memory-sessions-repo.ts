@@ -2,6 +2,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { SessionStatusSchema, type AccountTier } from '@driftstack/api-types';
+import { ProfileInUseError } from '../../../src/lib/errors.js';
 import type {
   NewSessionInput,
   SessionEventInput,
@@ -54,7 +55,31 @@ export class InMemorySessionsRepo implements SessionRepo {
   // count+insert has no await gap, so it's naturally atomic (the real race the
   // advisory lock guards lives only in the multi-connection Postgres path,
   // covered by db-sessions-concurrency-drizzle).
-  insertSessionIfUnderLimit(input: NewSessionInput, limit: number): Promise<SessionRecord | null> {
+  //
+  // A3 finding #7 (W2979/W2980) — mirrors the Drizzle single-active-session-per-
+  // profile guard: when opts.profileId is set, refuse a second bind against a
+  // NON-TERMINAL (status not destroyed/errored AND destroyed_at null) session
+  // whose metadata.profile_id matches for the same account, by throwing
+  // ProfileInUseError(ses_<id>). No profileId → no guard (fail-safe).
+  insertSessionIfUnderLimit(
+    input: NewSessionInput,
+    limit: number,
+    opts: { profileId?: string } = {},
+  ): Promise<SessionRecord | null> {
+    if (opts.profileId !== undefined) {
+      for (const s of this.sessions.values()) {
+        if (
+          s.accountId === input.accountId &&
+          s.destroyedAt === null &&
+          s.status !== 'destroyed' &&
+          s.status !== 'errored' &&
+          typeof s.metadata?.['profile_id'] === 'string' &&
+          s.metadata['profile_id'] === opts.profileId
+        ) {
+          return Promise.reject(new ProfileInUseError(`ses_${s.id}`));
+        }
+      }
+    }
     let active = 0;
     for (const s of this.sessions.values()) {
       if (s.accountId === input.accountId && s.destroyedAt === null) active += 1;

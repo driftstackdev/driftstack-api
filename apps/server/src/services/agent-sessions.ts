@@ -22,6 +22,7 @@
 //   - Cross-account ACL on shared-team agent-sessions (V-326e* style).
 
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
+import { ProfileInUseError } from '../lib/errors.js';
 import type { TranscriptEntry } from './agent-decomposer.js';
 
 export type AgentSessionStatus = 'active' | 'paused' | 'closed';
@@ -195,6 +196,15 @@ export interface AgentSessionsRepo {
    * keys so there's no cross-account contention). Returns `null` when already
    * at/over `cap` — the caller surfaces the standard 429 ConcurrencyLimitError.
    * Mirrors SessionsRepo.insertSessionIfUnderLimit.
+   *
+   * A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard. When
+   * `args.profileId` is set, the same atomic transaction ALSO takes a per-profile
+   * advisory lock + refuses a second bind against a NON-TERMINAL (status !=
+   * 'closed') session for the same profile + account, throwing ProfileInUseError
+   * (the route maps it to a 409 with `active_session_id`). Two concurrent
+   * profile-bound creates serialise on the profile lock so exactly one binds —
+   * preventing the cross-node sealed-blob clobber. A create with no profile_id is
+   * never gated (fail-safe).
    */
   createIfUnderActiveCap(
     args: CreateAgentSessionArgs,
@@ -391,6 +401,23 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
   ): Promise<AgentSessionRecord | null> {
     // Single-threaded JS: the count + create below run without interleaving, so
     // this is naturally atomic (the Drizzle impl does the real serialisation).
+    //
+    // A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard,
+    // mirroring the Drizzle impl: when args.profileId is set, refuse a second
+    // bind against a NON-TERMINAL (status != 'closed') session for the same
+    // profile + account by throwing ProfileInUseError(activeSessionId). A create
+    // with no profile_id is never gated (fail-safe).
+    if (args.profileId !== undefined) {
+      for (const rec of this.records.values()) {
+        if (
+          rec.accountId === args.accountId &&
+          rec.profileId === args.profileId &&
+          rec.status !== 'closed'
+        ) {
+          return Promise.reject(new ProfileInUseError(rec.id));
+        }
+      }
+    }
     let active = 0;
     for (const rec of this.records.values()) {
       if (rec.accountId === args.accountId && rec.status === 'active') active += 1;
