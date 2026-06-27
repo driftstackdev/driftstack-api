@@ -193,12 +193,20 @@ class ThrowingDriver implements Driver {
    *  dispatch failure AFTER the reservation slot was taken). */
   private throwOnCreate: Error | null = null;
 
+  /** Opt-in: when set, the NEXT destroy() rejects (simulates a driver/network
+   *  fault on teardown — exercises the destroy() slot-release backstop, #4). */
+  private throwOnDestroy: Error | null = null;
+
   primeNextThrow(args: { name: string; message: string }): void {
     this.throwOnNext = args;
   }
 
   primeCreateThrow(err: Error): void {
     this.throwOnCreate = err;
+  }
+
+  primeDestroyThrow(err: Error): void {
+    this.throwOnDestroy = err;
   }
 
   private throwIfArmed(): void {
@@ -288,6 +296,11 @@ class ThrowingDriver implements Driver {
   }
   destroy(driverSessionId: string): Promise<void> {
     this.destroyedIds.push(driverSessionId);
+    if (this.throwOnDestroy !== null) {
+      const err = this.throwOnDestroy;
+      this.throwOnDestroy = null;
+      return Promise.reject(err);
+    }
     return Promise.resolve();
   }
 }
@@ -535,6 +548,32 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
     // No teardown on the happy path — the session is live + tracked.
     expect(driver.destroyedIds).toEqual([]);
+  });
+
+  it('destroy: a driver.destroy() throw STILL releases the slot (row marked destroyed) + re-throws (#4)', async () => {
+    // Legacy /v1/sessions destroy had no backstop: if driver.destroy() threw,
+    // updateSessionStatus('destroyed') never ran, so the row stayed non-terminal
+    // (counts as active) forever — and the paid-tier surface has no backstop
+    // reaper (null minute-cap → autoDestroyExpired never sweeps it). The slot
+    // must be released even when the driver faults.
+    const { service, repo, driver } = buildService();
+    const ctx = buildCtx();
+    const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+    const destroyErr = new Error('driver teardown faulted');
+    driver.primeDestroyThrow(destroyErr);
+
+    let caught: unknown;
+    try {
+      await service.destroy(ctx, session.id);
+    } catch (e) {
+      caught = e;
+    }
+    // The driver error propagates (the caller learns the teardown faulted)…
+    expect(caught).toBe(destroyErr);
+    // …but the row was marked terminal so the concurrency slot is RELEASED.
+    const after = repo.read(session.id);
+    expect(after?.status).toBe('destroyed');
+    expect(after?.destroyedAt).toBeInstanceOf(Date);
   });
 
   it('successful ops do NOT emit session.failed', async () => {

@@ -737,7 +737,25 @@ export class SessionsService {
     // useful left to destroy).
     if (session.status === 'destroyed' || session.status === 'errored') return;
     const destroyedAt = new Date();
-    await this.deps.driver.destroy(session.driverSessionId);
+    // Backstop: if driver.destroy() throws (driver/network fault), STILL release
+    // the concurrency slot by marking the row terminal — otherwise the row stays
+    // in a non-terminal status (counts as active) forever, and the legacy
+    // /v1/sessions surface has no backstop reaper for paid tiers (null minute-cap
+    // → autoDestroyExpired never sweeps it), so the slot is permanently consumed.
+    // Mirror the create() dispatch-failure release. We mark 'destroyed' (not
+    // 'errored') so this stays idempotent with a later successful destroy + the
+    // session.completed fan-out below still reflects an intended teardown; the
+    // original driver error is re-thrown so the caller sees the failure.
+    try {
+      await this.deps.driver.destroy(session.driverSessionId);
+    } catch (err) {
+      await this.deps.repo
+        .updateSessionStatus(session.id, 'destroyed', { destroyedAt })
+        .catch(() => {
+          /* release is best-effort; don't mask the driver error */
+        });
+      throw err;
+    }
     await this.deps.repo.updateSessionStatus(session.id, 'destroyed', { destroyedAt });
     await this.deps.repo.recordEvent({
       sessionId: session.id,
