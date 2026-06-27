@@ -1,10 +1,13 @@
-// Billing-integrity — crypto IPN amount reconciliation (#8) + payment_id
+// Billing-integrity — crypto IPN amount reconciliation (#1) + payment_id
 // binding (#9).
 //
-// #8: an order is only flipped to 'paid' when the IPN's actually_paid is
-// >= price_amount (within a small tolerance). An under-payment ('finished'
-// but short) routes to 'partial', never 'paid', so support never sees a
-// short-pay as a fully-paid record.
+// #1: an order is only flipped to 'paid' when the IPN's CRYPTO-denominated
+// actually_paid is >= the CRYPTO-denominated amount owed (pay_amount, within a
+// small tolerance) — BOTH in pay_currency (e.g. BTC). A full crypto payment of
+// the quoted pay_amount unlocks; an under-payment ('finished' but short) routes
+// to 'partial', never 'paid'. We never compare against the FIAT price_amount
+// (incomparable units — that left every full crypto payment stuck 'partial').
+// price_amount is persisted on the audit event for support reference only.
 //
 // #9: the NowPayments payment_id is bound to the order at createPayment
 // (recordPaymentId). applyIpnStatus rejects + alarms when an IPN's
@@ -14,9 +17,18 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CryptoOrdersService, InMemoryCryptoOrdersRepo } from '../../src/services/crypto-orders.js';
 
+// A realistic $99 order quoted as 0.0015 BTC. price_amount in the IPN is FIAT
+// (99.0 USD); pay_amount + actually_paid are CRYPTO (BTC) — incomparable units.
+const ORDER_PRICE_AMOUNT_FIAT = 99.0;
+const ORDER_PAY_AMOUNT_BTC = 0.0015;
+
 async function seed(opts?: {
   paidNotifier?: { notifyOrderPaid: ReturnType<typeof vi.fn> };
   logger?: { error: ReturnType<typeof vi.fn> };
+  /** Bind the crypto-denominated quote (payment_id + pay_amount + pay_currency)
+   *  on the order, mirroring the billing-crypto createPayment recordPaymentId
+   *  call. Default false (the #9 tests bind their own payment_id). */
+  bindQuote?: boolean;
 }): Promise<{ svc: CryptoOrdersService; repo: InMemoryCryptoOrdersRepo }> {
   const repo = new InMemoryCryptoOrdersRepo();
   let now = 1_000;
@@ -30,37 +42,50 @@ async function seed(opts?: {
     order_id: 'ord_t',
     account_id: 'acc_a',
     product: 'api_starter_monthly',
-    // price_amount in the IPN is fiat units (e.g. 99.0 USD); the order's
-    // price_cents is 9900.
+    // price_cents is the fiat price (9900 = $99.00); the IPN's price_amount
+    // mirrors it in major units (99.0 USD).
     price_cents: 9900,
     price_currency: 'USD',
   });
+  if (opts?.bindQuote === true) {
+    // recordPaymentId binds payment_id + the crypto-denominated quote at
+    // createPayment time, exactly as the billing-crypto route does.
+    await svc.recordPaymentId({
+      order_id: 'ord_t',
+      payment_id: 'np_p',
+      pay_amount: ORDER_PAY_AMOUNT_BTC,
+      pay_currency: 'btc',
+    });
+  }
   return { svc, repo };
 }
 
-describe('crypto IPN amount reconciliation (#8)', () => {
-  it('flips to PAID when actually_paid >= price_amount', async () => {
+describe('crypto IPN amount reconciliation (#1, crypto-denominated)', () => {
+  it('flips to PAID when the full crypto pay_amount is received (0.0015 BTC paid for a $99 order)', async () => {
     const { svc } = await seed();
     const updated = await svc.applyIpnStatus({
       order_id: 'ord_t',
       payment_id: 'np_p',
       provider_status: 'finished',
-      actually_paid: 99.0,
-      price_amount: 99.0,
+      // actually_paid is in BTC (pay_currency), matching pay_amount.
+      actually_paid: ORDER_PAY_AMOUNT_BTC,
+      pay_amount: ORDER_PAY_AMOUNT_BTC,
+      price_amount: ORDER_PRICE_AMOUNT_FIAT,
       pay_currency: 'btc',
     });
     expect(updated?.status).toBe('paid');
   });
 
-  it('routes a SHORT-PAY (finished but actually_paid < price_amount) to PARTIAL, never paid', async () => {
+  it('routes a HALF-PAY (finished but actually_paid < pay_amount) to PARTIAL, never paid', async () => {
     const paidNotifier = { notifyOrderPaid: vi.fn(() => Promise.resolve()) };
     const { svc } = await seed({ paidNotifier });
     const updated = await svc.applyIpnStatus({
       order_id: 'ord_t',
       payment_id: 'np_p',
       provider_status: 'finished',
-      actually_paid: 50.0, // well under 99.0
-      price_amount: 99.0,
+      actually_paid: ORDER_PAY_AMOUNT_BTC / 2, // half the owed BTC
+      pay_amount: ORDER_PAY_AMOUNT_BTC,
+      price_amount: ORDER_PRICE_AMOUNT_FIAT,
       pay_currency: 'btc',
     });
     expect(updated?.status).toBe('partial');
@@ -68,37 +93,91 @@ describe('crypto IPN amount reconciliation (#8)', () => {
     expect(paidNotifier.notifyOrderPaid).not.toHaveBeenCalled();
   });
 
-  it('tolerates a tiny under-payment within the rounding tolerance (still paid)', async () => {
-    const { svc } = await seed();
-    // 99.0 * (1 - 0.005) = 98.505 — within the 1% tolerance.
+  it('reconciles against the order-bound pay_amount when the IPN omits it', async () => {
+    const { svc } = await seed({ bindQuote: true });
+    // No pay_amount on the IPN — falls back to the quote bound at createPayment.
     const updated = await svc.applyIpnStatus({
       order_id: 'ord_t',
       payment_id: 'np_p',
       provider_status: 'finished',
-      actually_paid: 98.51,
-      price_amount: 99.0,
+      actually_paid: ORDER_PAY_AMOUNT_BTC,
+      price_amount: ORDER_PRICE_AMOUNT_FIAT,
+      pay_currency: 'btc',
     });
     expect(updated?.status).toBe('paid');
   });
 
-  it('persists the reconciliation amounts on the transition event for support', async () => {
+  it('tolerates a tiny under-payment within the rounding tolerance (still paid)', async () => {
+    const { svc } = await seed();
+    // 0.0015 * (1 - 0.005) = 0.0014925 — within the 1% tolerance.
+    const updated = await svc.applyIpnStatus({
+      order_id: 'ord_t',
+      payment_id: 'np_p',
+      provider_status: 'finished',
+      actually_paid: ORDER_PAY_AMOUNT_BTC * 0.995,
+      pay_amount: ORDER_PAY_AMOUNT_BTC,
+      pay_currency: 'btc',
+    });
+    expect(updated?.status).toBe('paid');
+  });
+
+  it('does NOT compare crypto actually_paid against the fiat price_amount (the unit bug)', async () => {
+    // The regression: actually_paid=0.0015 BTC vs price_amount=99.0 USD would
+    // (under the old code) look like a massive short-pay → 'partial'. With the
+    // fix it reconciles BTC-vs-BTC and unlocks.
+    const { svc } = await seed();
+    const updated = await svc.applyIpnStatus({
+      order_id: 'ord_t',
+      payment_id: 'np_p',
+      provider_status: 'finished',
+      actually_paid: ORDER_PAY_AMOUNT_BTC,
+      pay_amount: ORDER_PAY_AMOUNT_BTC,
+      price_amount: ORDER_PRICE_AMOUNT_FIAT, // fiat — must be ignored for reconciliation
+      pay_currency: 'btc',
+    });
+    expect(updated?.status).toBe('paid');
+  });
+
+  it('routes a pay_currency MISMATCH to partial + raises an integrity alarm (never unlocks)', async () => {
+    const logger = { error: vi.fn() };
+    const paidNotifier = { notifyOrderPaid: vi.fn(() => Promise.resolve()) };
+    const { svc } = await seed({ logger, paidNotifier, bindQuote: true });
+    const updated = await svc.applyIpnStatus({
+      order_id: 'ord_t',
+      payment_id: 'np_p',
+      provider_status: 'finished',
+      // Enough ETH to look "paid" by magnitude, but the order is quoted in BTC.
+      actually_paid: ORDER_PAY_AMOUNT_BTC,
+      pay_amount: ORDER_PAY_AMOUNT_BTC,
+      pay_currency: 'eth', // ≠ the order's bound 'btc'
+    });
+    expect(updated?.status).toBe('partial');
+    expect(paidNotifier.notifyOrderPaid).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error.mock.calls[0]?.[1]).toMatch(/pay_currency does not match/);
+  });
+
+  it('persists the reconciliation amounts (crypto + fiat audit ref) on the transition event for support', async () => {
     const { svc } = await seed();
     const updated = await svc.applyIpnStatus({
       order_id: 'ord_t',
       payment_id: 'np_p',
       provider_status: 'partially_paid',
-      actually_paid: 40.0,
-      price_amount: 99.0,
+      actually_paid: ORDER_PAY_AMOUNT_BTC / 3,
+      pay_amount: ORDER_PAY_AMOUNT_BTC,
+      price_amount: ORDER_PRICE_AMOUNT_FIAT,
       pay_currency: 'btc',
     });
     const partialEvent = updated?.events.find((e) => e.status === 'partial');
-    expect(partialEvent?.actually_paid).toBe(40.0);
-    expect(partialEvent?.price_amount).toBe(99.0);
+    expect(partialEvent?.actually_paid).toBe(ORDER_PAY_AMOUNT_BTC / 3);
+    expect(partialEvent?.pay_amount).toBe(ORDER_PAY_AMOUNT_BTC);
+    // price_amount is kept on the event as a FIAT audit reference only.
+    expect(partialEvent?.price_amount).toBe(ORDER_PRICE_AMOUNT_FIAT);
     expect(partialEvent?.pay_currency).toBe('btc');
   });
 
   it('preserves the prior status-only behaviour when amounts are omitted (admin replay / legacy)', async () => {
-    const { svc } = await seed();
+    const { svc } = await seed({ bindQuote: false });
     const updated = await svc.applyIpnStatus({
       order_id: 'ord_t',
       payment_id: 'np_p',

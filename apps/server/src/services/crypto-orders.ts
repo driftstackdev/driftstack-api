@@ -49,8 +49,11 @@ export interface CryptoOrderEvent {
    * amounts on an 'ipn'-sourced transition, persisted so support can
    * reconcile what was actually paid against the order price. Optional:
    * present only on IPN transitions that carried the amount fields.
+   * `actually_paid` + `pay_amount` are CRYPTO-denominated (in `pay_currency`);
+   * `price_amount` is FIAT (audit reference only — incomparable to actually_paid).
    */
   actually_paid?: number;
+  pay_amount?: number;
   price_amount?: number;
   pay_currency?: string;
 }
@@ -68,6 +71,17 @@ export interface CryptoOrder {
   price_currency: string;
   /** NowPayments payment_id once the order is matched to an IPN. */
   payment_id: string | null;
+  /**
+   * Billing-integrity (#1 crypto-denominated reconciliation) — the
+   * crypto-denominated quote NowPayments mints at createPayment.
+   * `pay_amount` is the amount owed in `pay_currency` (e.g. 0.0015 BTC); the
+   * IPN's `actually_paid` is ALSO in `pay_currency`, so the paid-vs-short
+   * reconciliation compares against THIS, never the FIAT price_amount
+   * (incomparable units). Null for stub-provider / legacy orders that have no
+   * minted quote (then applyIpnStatus preserves the prior status-only path).
+   */
+  pay_amount: number | null;
+  pay_currency: string | null;
   status: CryptoOrderStatus;
   /**
    * V-666.Q — customer-supplied free-text note for their own
@@ -390,6 +404,8 @@ export class CryptoOrdersService {
       price_cents: args.price_cents,
       price_currency: args.price_currency,
       payment_id: null,
+      pay_amount: null,
+      pay_currency: null,
       status: 'pending',
       customer_note: null,
       internal_note: null,
@@ -402,16 +418,23 @@ export class CryptoOrdersService {
   }
 
   /**
-   * Billing-integrity (#9 payment_id binding) — persist the NowPayments
-   * payment_id minted for THIS order at createPayment time. applyIpnStatus
-   * then rejects/alarms when an IPN's payment_id doesn't match the stored one.
-   * Only sets it when currently null (the mint is a one-time event per order);
+   * Billing-integrity (#9 payment_id binding + #1 crypto-denominated quote) —
+   * persist the NowPayments payment_id AND the crypto-denominated quote
+   * (pay_amount + pay_currency) minted for THIS order at createPayment time.
+   * applyIpnStatus then rejects/alarms when an IPN's payment_id doesn't match
+   * the stored one, and reconciles the IPN's `actually_paid` against the stored
+   * pay_amount (same pay_currency unit), never the FIAT price_amount.
+   * Only sets when currently unbound (the mint is a one-time event per order);
    * a later differing IPN payment_id is an integrity alarm, not an overwrite.
    * Returns the updated order, or null if the order doesn't exist.
    */
   async recordPaymentId(args: {
     order_id: string;
     payment_id: string;
+    /** Crypto-denominated amount owed (in pay_currency) from the NowPayments quote. */
+    pay_amount?: number;
+    /** Pay currency (chain/asset) the quote + IPN actually_paid are denominated in. */
+    pay_currency?: string;
   }): Promise<CryptoOrder | null> {
     const now = this.nowFn();
     return this.opts.repo.withOrderLock(args.order_id, (order) => {
@@ -419,7 +442,14 @@ export class CryptoOrdersService {
         // Already bound — don't overwrite (idempotent re-call / retry).
         return { updated: null, result: order };
       }
-      const updated: CryptoOrder = { ...order, payment_id: args.payment_id, updated_at: now };
+      const updated: CryptoOrder = {
+        ...order,
+        payment_id: args.payment_id,
+        // Bind the crypto-denominated quote alongside the payment_id (same mint).
+        ...(args.pay_amount !== undefined ? { pay_amount: args.pay_amount } : {}),
+        ...(args.pay_currency !== undefined ? { pay_currency: args.pay_currency } : {}),
+        updated_at: now,
+      };
       return { updated, result: updated };
     });
   }
@@ -494,6 +524,8 @@ export class CryptoOrdersService {
         price_cents: args.price_cents,
         price_currency: args.price_currency,
         payment_id: null,
+        pay_amount: null,
+        pay_currency: null,
         status: 'pending',
         customer_note: null,
         internal_note: null,
@@ -1192,33 +1224,26 @@ export class CryptoOrdersService {
     payment_id: string;
     provider_status: string;
     /**
-     * Billing-integrity (amount reconciliation) — the IPN-reported amounts.
-     * When the provider status maps to 'paid', a paid transition is only
-     * allowed if actually_paid >= price_amount (matching pay/price currency,
-     * within a small tolerance); an under-payment routes to 'partial' instead.
+     * Billing-integrity (#1 crypto-denominated amount reconciliation) — the
+     * IPN-reported amounts. `actually_paid` + `pay_amount` are CRYPTO-denominated
+     * (in `pay_currency`, e.g. 0.0015 BTC); `price_amount` is FIAT (audit-only).
+     * When the provider status maps to 'paid', a paid transition is only allowed
+     * if `actually_paid >= pay_amount * (1 - tolerance)` (both in pay_currency);
+     * an under-payment routes to 'partial' instead. The IPN's `pay_amount` is the
+     * quote NowPayments echoes back; the order also stores its own pay_amount at
+     * createPayment, used as the fallback / the cross-check unit.
      * Optional so callers (admin replay / legacy) that don't supply amounts
      * preserve the prior status-only behaviour.
      */
     actually_paid?: number;
+    /** Crypto-denominated amount owed (pay_currency); reconciled against actually_paid. */
+    pay_amount?: number;
+    /** FIAT expected amount — persisted on the audit event ONLY (incomparable to actually_paid). */
     price_amount?: number;
     pay_currency?: string;
   }): Promise<CryptoOrder | null> {
     const now = this.nowFn();
-    let mapped = mapNowpaymentsStatus(args.provider_status);
-
-    // Billing-integrity (#8 amount reconciliation). When the IPN reports a
-    // terminal 'paid' BUT carries amount fields showing an under-payment, do
-    // NOT flip the order to paid — route to 'partial'. NowPayments' own
-    // 'finished' is confirmation-based, not amount-based, so a short on-chain
-    // payment that later "finishes" must not unlock the paid tier. We compare
-    // actually_paid against the IPN's price_amount (the expected fiat amount,
-    // matching the order's price_currency); a tiny tolerance absorbs rounding.
-    if (mapped === 'paid' && args.actually_paid !== undefined && args.price_amount !== undefined) {
-      const tolerance = args.price_amount * AMOUNT_RECONCILE_TOLERANCE_FRACTION;
-      if (args.actually_paid + tolerance < args.price_amount) {
-        mapped = 'partial';
-      }
-    }
+    const mapped0 = mapNowpaymentsStatus(args.provider_status);
 
     // #3 — lock the order row and decide the transition against the LOCKED committed
     // snapshot, so concurrent / re-delivered IPNs serialize and only the WINNING
@@ -1237,24 +1262,82 @@ export class CryptoOrdersService {
       if (order.payment_id !== null && order.payment_id !== args.payment_id) {
         return {
           updated: null,
-          result: { order, firePaid: false, fireFailed: false, paymentIdMismatch: true },
+          result: {
+            order,
+            firePaid: false,
+            fireFailed: false,
+            paymentIdMismatch: true,
+            payCurrencyMismatch: false,
+          },
         };
       }
-      if (mapped === null) {
+      if (mapped0 === null) {
         // Unknown provider status: leave state alone (no write).
         return {
           updated: null,
-          result: { order, firePaid: false, fireFailed: false, paymentIdMismatch: false },
+          result: {
+            order,
+            firePaid: false,
+            fireFailed: false,
+            paymentIdMismatch: false,
+            payCurrencyMismatch: false,
+          },
         };
       }
+
+      // Billing-integrity (#1 crypto-denominated amount reconciliation). When the
+      // IPN reports a terminal 'paid' BUT the CRYPTO-denominated actually_paid is
+      // short of the CRYPTO-denominated amount owed, do NOT flip to paid — route
+      // to 'partial'. NowPayments' 'finished' is confirmation-based, not
+      // amount-based, so a short on-chain payment that later "finishes" must not
+      // unlock the paid tier. actually_paid + the owed quote are BOTH in
+      // pay_currency (e.g. BTC) — we never compare against the FIAT price_amount
+      // (incomparable units; that left every full payment stuck 'partial'). The
+      // owed amount is the IPN's pay_amount when present, else the order's
+      // pay_amount bound at createPayment. A tiny tolerance absorbs exchange-rate
+      // slippage + on-chain fee rounding. With no crypto amount on either side
+      // (admin replay / legacy / stub), reconciliation is skipped (status-only).
+      let mapped = mapped0;
+      let payCurrencyMismatch = false;
+      if (mapped === 'paid' && args.actually_paid !== undefined) {
+        // Currency-mismatch guard: if the IPN's pay_currency disagrees with the
+        // pay_currency bound to the order, the amounts aren't in the same unit —
+        // do NOT unlock; route to 'partial' + flag for the alarm below.
+        if (
+          args.pay_currency !== undefined &&
+          order.pay_currency !== null &&
+          args.pay_currency.toLowerCase() !== order.pay_currency.toLowerCase()
+        ) {
+          mapped = 'partial';
+          payCurrencyMismatch = true;
+        } else {
+          const owed = args.pay_amount ?? order.pay_amount ?? undefined;
+          if (owed !== undefined) {
+            const minAccepted = owed * (1 - AMOUNT_RECONCILE_TOLERANCE_FRACTION);
+            if (args.actually_paid < minAccepted) {
+              mapped = 'partial';
+            }
+          }
+        }
+      }
+
+      // Bind the crypto-denominated quote onto the order if the IPN carries it and
+      // the order didn't have one yet (createPayment binds it normally, but a
+      // first IPN can backfill it so a later re-delivery still reconciles).
+      const boundPayAmount = order.pay_amount ?? args.pay_amount ?? null;
+      const boundPayCurrency = order.pay_currency ?? args.pay_currency ?? null;
+
       if (isTerminalForward(order.status, mapped)) {
         // V-666.AT — append an event only on an actual status change; a same-state
         // refresh just bumps updated_at. The event carries the reconciliation
         // amounts (when supplied) so support can audit what was actually paid.
         const reconcileFields =
-          args.actually_paid !== undefined || args.price_amount !== undefined
+          args.actually_paid !== undefined ||
+          args.pay_amount !== undefined ||
+          args.price_amount !== undefined
             ? {
                 ...(args.actually_paid !== undefined ? { actually_paid: args.actually_paid } : {}),
+                ...(args.pay_amount !== undefined ? { pay_amount: args.pay_amount } : {}),
                 ...(args.price_amount !== undefined ? { price_amount: args.price_amount } : {}),
                 ...(args.pay_currency !== undefined ? { pay_currency: args.pay_currency } : {}),
               }
@@ -1269,6 +1352,8 @@ export class CryptoOrdersService {
         const updated: CryptoOrder = {
           ...order,
           payment_id: order.payment_id ?? args.payment_id,
+          pay_amount: boundPayAmount,
+          pay_currency: boundPayCurrency,
           status: mapped,
           events,
           updated_at: now,
@@ -1282,20 +1367,43 @@ export class CryptoOrdersService {
             fireFailed: order.status !== 'failed' && mapped === 'failed',
             firePaid: order.status !== 'paid' && mapped === 'paid' && updated.account_id !== null,
             paymentIdMismatch: false,
+            payCurrencyMismatch,
           },
         };
       }
-      // No-op transition: record the payment_id if we didn't have it yet.
-      if (order.payment_id === null) {
-        const updated: CryptoOrder = { ...order, payment_id: args.payment_id, updated_at: now };
+      // No-op transition: record the payment_id + crypto quote if we didn't have them yet.
+      if (
+        order.payment_id === null ||
+        order.pay_amount !== boundPayAmount ||
+        order.pay_currency !== boundPayCurrency
+      ) {
+        const updated: CryptoOrder = {
+          ...order,
+          payment_id: order.payment_id ?? args.payment_id,
+          pay_amount: boundPayAmount,
+          pay_currency: boundPayCurrency,
+          updated_at: now,
+        };
         return {
           updated,
-          result: { order: updated, firePaid: false, fireFailed: false, paymentIdMismatch: false },
+          result: {
+            order: updated,
+            firePaid: false,
+            fireFailed: false,
+            paymentIdMismatch: false,
+            payCurrencyMismatch,
+          },
         };
       }
       return {
         updated: null,
-        result: { order, firePaid: false, fireFailed: false, paymentIdMismatch: false },
+        result: {
+          order,
+          firePaid: false,
+          fireFailed: false,
+          paymentIdMismatch: false,
+          payCurrencyMismatch,
+        },
       };
     });
     if (outcome === null) return null; // order not found
@@ -1315,6 +1423,23 @@ export class CryptoOrdersService {
         'crypto IPN payment_id does not match the order — REJECTED (integrity alarm)',
       );
       return outcome.order;
+    }
+
+    // Billing-integrity (#1) — a pay_currency mismatch is an integrity alarm: the
+    // IPN's actually_paid is denominated in a DIFFERENT crypto than the order's
+    // bound quote, so it can't be reconciled. We already routed the transition to
+    // 'partial' (never unlocked the paid tier); surface the mismatch loudly.
+    if (outcome.payCurrencyMismatch) {
+      this.opts.logger?.error(
+        {
+          component: 'crypto-orders',
+          event: 'ipn_pay_currency_mismatch',
+          order_id: args.order_id,
+          stored_pay_currency: outcome.order.pay_currency,
+          ipn_pay_currency: args.pay_currency,
+        },
+        'crypto IPN pay_currency does not match the order — routed to partial (integrity alarm)',
+      );
     }
 
     // Side-effects fire OUTSIDE the lock, gated on the atomic transition decision.

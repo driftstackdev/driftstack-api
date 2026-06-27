@@ -6,6 +6,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -2240,6 +2241,16 @@ export const cryptoOrders = pgTable(
     priceCents: integer('price_cents').notNull(),
     priceCurrency: text('price_currency').notNull(),
     paymentId: text('payment_id'),
+    // Billing-integrity (#1 crypto-denominated amount reconciliation) — the
+    // crypto-denominated quote NowPayments returns at createPayment: pay_amount
+    // is the amount owed in pay_currency (e.g. 0.0015 BTC), pay_currency the
+    // chain/asset. The IPN's `actually_paid` is ALSO in pay_currency, so the
+    // paid-vs-short reconciliation must compare against THIS pay_amount, never
+    // the FIAT price_amount (incomparable units). Nullable: the stub provider +
+    // legacy rows have no minted quote. Both persisted at createPayment so the
+    // first IPN can reconcile against them.
+    payAmount: numeric('pay_amount', { precision: 38, scale: 18, mode: 'number' }),
+    payCurrency: text('pay_currency'),
     // Billing-integrity (#7 cross-instance idempotency) — the scoped
     // idempotency key (`<account_id|_anon>:<Idempotency-Key>`) that minted this
     // order. A UNIQUE index on it makes duplicate same-key checkouts a DB-level

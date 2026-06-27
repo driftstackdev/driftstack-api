@@ -297,15 +297,24 @@ export function registerCryptoCheckoutRoutes(
           paymentAddress = payment.payAddress;
           payCurrency = payment.payCurrency;
           payAmount = payment.payAmount;
-          // Billing-integrity (#9 payment_id binding) — persist the minted
-          // NowPayments payment_id on the order so applyIpnStatus can reject an
-          // IPN whose payment_id doesn't match. Best-effort: a failure here
-          // leaves payment_id null (the first IPN binds it), so it must not
-          // fail the checkout response.
+          // Billing-integrity (#9 payment_id binding + #1 crypto-denominated
+          // quote) — persist the minted NowPayments payment_id AND the
+          // crypto-denominated quote (pay_amount + pay_currency) on the order so
+          // applyIpnStatus can (a) reject an IPN whose payment_id doesn't match
+          // and (b) reconcile the IPN's actually_paid against the SAME-unit
+          // pay_amount (not the fiat price). Best-effort: a failure here leaves
+          // these null (the first IPN backfills them), so it must not fail the
+          // checkout response.
           try {
             await deps.service.recordPaymentId({
               order_id: order.order_id,
               payment_id: payment.paymentId,
+              ...(payment.payAmount !== null && payment.payAmount !== undefined
+                ? { pay_amount: payment.payAmount }
+                : {}),
+              ...(payment.payCurrency !== null && payment.payCurrency !== undefined
+                ? { pay_currency: payment.payCurrency }
+                : {}),
             });
           } catch (bindErr) {
             req.log.warn(

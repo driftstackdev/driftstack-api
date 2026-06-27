@@ -203,18 +203,24 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
       /\/\/ V-666\.AT — append an event only on an actual status change; a same-state\s*\n?\s*\/\/ refresh just bumps updated_at\./,
     );
     // The event append now carries the optional reconciliation amounts
-    // (...reconcileFields) on an IPN transition (billing-integrity #8).
+    // (...reconcileFields) on an IPN transition (billing-integrity #1).
     expect(body).toMatch(
       /const events =\s*\n?\s*order\.status === mapped\s*\n?\s*\?\s*order\.events\s*\n?\s*:\s*\[\s*\n?\s*\.\.\.order\.events,\s*\n?\s*\{ status: mapped, at: now, source: 'ipn' as const, \.\.\.reconcileFields \},\s*\n?\s*\];/,
     );
-    expect(body).toMatch(/\/\/ No-op transition: record the payment_id if we didn't have it yet\./);
+    expect(body).toMatch(
+      /\/\/ No-op transition: record the payment_id \+ crypto quote if we didn't have them yet\./,
+    );
     // #3 — the read-modify-write is row-locked (SELECT … FOR UPDATE via withOrderLock)
     // so concurrent / re-delivered IPNs serialize + decide against the committed row.
     expect(body).toMatch(/await this\.opts\.repo\.withOrderLock\(args\.order_id,/);
-    // Billing-integrity (#8 amount reconciliation) — short-pay routes to partial.
+    // Billing-integrity (#1 crypto-denominated reconciliation) — a short-pay
+    // routes to partial; actually_paid + the owed quote are BOTH in pay_currency
+    // (never compared against the FIAT price_amount).
     expect(body).toMatch(
-      /if \(args\.actually_paid \+ tolerance < args\.price_amount\) \{\s*\n?\s*mapped = 'partial';/,
+      /const minAccepted = owed \* \(1 - AMOUNT_RECONCILE_TOLERANCE_FRACTION\);\s*\n?\s*if \(args\.actually_paid < minAccepted\) \{\s*\n?\s*mapped = 'partial';/,
     );
+    // Billing-integrity (#1) — pay_currency-mismatch guard never unlocks the tier.
+    expect(body).toContain("event: 'ipn_pay_currency_mismatch',");
     // Billing-integrity (#9 payment_id binding) — mismatch is rejected + alarmed.
     expect(body).toMatch(
       /if \(order\.payment_id !== null && order\.payment_id !== args\.payment_id\) \{/,
@@ -222,9 +228,9 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
     expect(body).toContain("event: 'ipn_payment_id_mismatch',");
   });
 
-  it('recordPaymentId: binds the minted NowPayments payment_id at createPayment (#9), one-time (no overwrite)', () => {
+  it('recordPaymentId: binds the minted NowPayments payment_id + crypto quote at createPayment (#9/#1), one-time (no overwrite)', () => {
     expect(body).toMatch(
-      /async recordPaymentId\(args: \{\s*\n?\s*order_id: string;\s*\n?\s*payment_id: string;\s*\n?\s*\}\): Promise<CryptoOrder \| null> \{/,
+      /async recordPaymentId\(args: \{\s*\n?\s*order_id: string;\s*\n?\s*payment_id: string;[\s\S]*?pay_amount\?: number;[\s\S]*?pay_currency\?: string;\s*\n?\s*\}\): Promise<CryptoOrder \| null> \{/,
     );
     expect(body).toMatch(
       /if \(order\.payment_id !== null\) \{\s*\n?\s*\/\/[\s\S]*?return \{ updated: null, result: order \};/,

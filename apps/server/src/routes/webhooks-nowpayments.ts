@@ -112,12 +112,17 @@ export function registerNowpaymentsWebhookRoutes(
         order_id: payload.order_id,
         payment_id: String(payload.payment_id),
         provider_status: payload.payment_status,
-        // Billing-integrity (#8 amount reconciliation) — forward the IPN's
-        // amount fields so a paid transition requires actually_paid >=
-        // price_amount; an under-payment routes to 'partial', never 'paid'.
+        // Billing-integrity (#1 crypto-denominated reconciliation) — forward the
+        // IPN's amount fields so a paid transition requires
+        // actually_paid >= pay_amount (BOTH in pay_currency); an under-payment
+        // routes to 'partial', never 'paid'. `actually_paid` + `pay_amount` are
+        // crypto-denominated; `price_amount` is FIAT (persisted on the audit
+        // event only — comparing it to actually_paid is a unit error and left
+        // every full crypto payment stuck 'partial').
         ...(typeof payload.actually_paid === 'number'
           ? { actually_paid: payload.actually_paid }
           : {}),
+        ...(typeof payload.pay_amount === 'number' ? { pay_amount: payload.pay_amount } : {}),
         ...(typeof payload.price_amount === 'number' ? { price_amount: payload.price_amount } : {}),
         ...(typeof payload.pay_currency === 'string' ? { pay_currency: payload.pay_currency } : {}),
       });

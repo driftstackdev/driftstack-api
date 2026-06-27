@@ -645,6 +645,13 @@
       "when": 1780332000000,
       "tag": "0091_crypto_orders_idempotency_key",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1780335600000,
+      "tag": "0092_crypto_orders_pay_amount_currency",
+      "breakpoints": true
     }
   ]
 }

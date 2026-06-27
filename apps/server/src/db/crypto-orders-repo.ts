@@ -29,6 +29,10 @@ function rowToEnvelope(row: Row): CryptoOrder {
     price_cents: row.priceCents,
     price_currency: row.priceCurrency,
     payment_id: row.paymentId,
+    // Billing-integrity (#1) — crypto-denominated quote (mode:'number' on the
+    // numeric column reads back as number|null).
+    pay_amount: row.payAmount,
+    pay_currency: row.payCurrency,
     status: row.status,
     customer_note: row.customerNote,
     internal_note: row.internalNote,
@@ -52,6 +56,8 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
       priceCents: order.price_cents,
       priceCurrency: order.price_currency,
       paymentId: order.payment_id,
+      payAmount: order.pay_amount,
+      payCurrency: order.pay_currency,
       status: order.status,
       customerNote: order.customer_note,
       internalNote: order.internal_note,
@@ -67,6 +73,8 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
         set: {
           accountId: values.accountId,
           paymentId: values.paymentId,
+          payAmount: values.payAmount,
+          payCurrency: values.payCurrency,
           status: values.status,
           customerNote: values.customerNote,
           internalNote: values.internalNote,
@@ -103,6 +111,8 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
         priceCents: order.price_cents,
         priceCurrency: order.price_currency,
         paymentId: order.payment_id,
+        payAmount: order.pay_amount,
+        payCurrency: order.pay_currency,
         idempotencyKey: scopedIdempotencyKey,
         status: order.status,
         customerNote: order.customer_note,
@@ -157,6 +167,8 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
           .set({
             accountId: updated.account_id,
             paymentId: updated.payment_id,
+            payAmount: updated.pay_amount,
+            payCurrency: updated.pay_currency,
             status: updated.status,
             customerNote: updated.customer_note,
             internalNote: updated.internal_note,
