@@ -92,12 +92,15 @@ export class InMemoryMfaRepo implements MfaRepo {
     return Promise.resolve(out);
   }
 
-  markRecoveryCodeUsed(id: string, now: Date): Promise<void> {
+  markRecoveryCodeUsed(id: string, now: Date): Promise<boolean> {
+    // Atomic single-use (mirrors the Drizzle conditional UPDATE): only flip if
+    // STILL unused, and report whether THIS call consumed it (#5 double-spend gate).
     const row = this.recoveryCodes.get(id);
     if (row && row.usedAt === null) {
       this.recoveryCodes.set(id, { ...row, usedAt: now });
+      return Promise.resolve(true);
     }
-    return Promise.resolve();
+    return Promise.resolve(false);
   }
 
   markAllRecoveryCodesUsed(accountId: string, now: Date): Promise<void> {
