@@ -30,6 +30,7 @@ const RESOURCE_FILE: Record<string, string> = {
   webhooks: 'webhooks.ts',
   team: 'team.ts',
   account: 'account.ts',
+  egress: 'egress.ts',
   emailPreferences: 'email-preferences.ts',
   cryptoOrders: 'crypto-orders.ts',
   agentSessions: 'agent-sessions.ts',
