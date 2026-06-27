@@ -197,10 +197,14 @@ Response (200) is a discriminated union by `kind`:
 }
 ```
 
-Closed sessions return `409 Conflict`. Sessions whose
-`token_budget_remaining` is below the per-turn floor return
-`402 Payment Required` (BundledLlmBudgetExhausted) when the
-customer is on the bundled-LLM rail.
+Closed sessions return `409 Conflict`. When the caller is on the
+bundled-LLM rail and the account has reached its monthly bundled-LLM
+spend cap (`bundled_llm_monthly_cap_usd_cents`), the turn returns
+`402 Payment Required` (BundledLlmBudgetExhausted) with `spent_cents`
+and `cap_cents` extensions. (The separate per-session `token_budget`
+is not a 402: when a session exhausts its token budget the turn is
+refused and the session is auto-closed with
+`closed_reason='budget-exhausted'`.)
 
 ## Close
 

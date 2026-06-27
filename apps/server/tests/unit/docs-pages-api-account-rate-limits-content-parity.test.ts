@@ -159,12 +159,17 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     );
   });
 
-  it('CRITICAL 429 response shape pinned with bucket-field. The \'"bucket": "global"\' field on the response body is what tells SDK consumers WHICH cap was hit. Matches W776 + W786 reference/errors rate-limited contract.', () => {
+  it('CRITICAL 429 response shape pinned matching the live RateLimitedError (errors.ts): title "Too Many Requests" + body fields type/title/status/detail/retry_after_seconds ONLY. The bucket is NOT a body field — it is the `x-ratelimit-bucket` response header (rate-limit.ts) — so the doc must NOT show "bucket" in the JSON body. Matches reference/errors.md + reference/rate-limits.md rate-limited contract.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/"type": "https:\/\/errors\.driftstack\.dev\/rate-limited"/);
-    expect(p).toMatch(/"bucket": "global"/);
+    expect(p).toMatch(/"title": "Too Many Requests"/);
     expect(p).toMatch(/"retry_after_seconds": 12/);
+    // Drift sentinel — the body has no `bucket` field (it is a header).
+    // The previous doc wrongly listed "bucket" in the JSON body; MUST NOT
+    // come back. The header is documented in prose instead.
+    expect(p).not.toMatch(/"bucket": "global"/);
+    expect(p).toMatch(/x-ratelimit-bucket/);
   });
 
   it('CRITICAL Retry-After + exponential-backoff-capped-30s framing pinned. Matches W786 reference/rate-limits + W776 SDK default retry policy.', () => {

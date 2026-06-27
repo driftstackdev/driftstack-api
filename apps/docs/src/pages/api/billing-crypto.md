@@ -34,7 +34,12 @@ const order = await client.cryptoOrders.createCheckout({
 });
 ```
 
-Authenticated. Idempotent — pass an `Idempotency-Key` header to
+Requires the `admin:billing` scope — starting a crypto checkout is a
+billing operation. (The same applies to the other mutating crypto
+endpoints: `PATCH /v1/billing/crypto-orders/:id` and
+`POST /v1/billing/crypto-orders/:id/cancel`. Read endpoints — listing
+orders, fetching a single order, and receipts — only require
+authentication.) Idempotent — pass an `Idempotency-Key` header to
 make retries safe; the same key within 24h returns the original
 order verbatim with an `Idempotent-Replayed: 1` response header.
 

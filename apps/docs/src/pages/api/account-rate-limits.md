@@ -178,13 +178,17 @@ The API returns HTTP 429 with an RFC 9457 problem-details body:
 ```json
 {
   "type": "https://errors.driftstack.dev/rate-limited",
-  "title": "Rate limit exceeded",
+  "title": "Too Many Requests",
   "status": 429,
   "detail": "Rate limit for \"global\" exceeded for tier \"api_starter\".",
-  "bucket": "global",
   "retry_after_seconds": 12
 }
 ```
+
+The `detail` names which bucket and tier were hit. To branch on the
+exact bucket programmatically, read the `x-ratelimit-bucket` response
+header (e.g. `global`) — it is a header, not a body field, and is
+emitted on every response, not just 429s.
 
 The `Retry-After` HTTP header carries the same value as
 `retry_after_seconds`. SDK clients honour it automatically with
