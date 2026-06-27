@@ -123,9 +123,9 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
     );
   });
 
-  it('RFC 7807 application/problem+json mapping pinned (stable type URI)', () => {
+  it('RFC 9457 application/problem+json mapping pinned (stable type URI)', () => {
     expect(body).toMatch(
-      /RFC 7807\s+<code class="font-mono">application\/problem\+json<\/code> with a\s+stable <code class="font-mono">type<\/code> URI/,
+      /RFC 9457\s+<code class="font-mono">application\/problem\+json<\/code> with a\s+stable <code class="font-mono">type<\/code> URI/,
     );
   });
 
