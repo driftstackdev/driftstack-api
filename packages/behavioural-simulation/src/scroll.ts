@@ -262,6 +262,31 @@ export function generateScrollVelocityProfile(
     tMs += tickIntervalMs;
   }
 
+  // Guarantee a settling phase: a real finger flick always coasts to a
+  // stop, so the profile MUST end at rest. The `tMs <= MAX_DURATION_MS`
+  // cap above can truncate the loop while velocity is still high (a high
+  // v0 with a low/floored decayRate decays slowly — e.g. v0=8000,
+  // decayRate=0.1 is still ~4800 px/s at 5 s), which would otherwise read
+  // as an unnatural abrupt mid-flight stop — a behavioural tell. When the
+  // last sampled tick is still above the rest threshold, append a final
+  // tick AT rest (velocity 0) carrying the remaining coast distance:
+  //   ∫ v(τ)dτ from t_cut to ∞ = v(t_cut) / decayRate
+  // (the exact tail of the exponential), so the cumulative distance stays
+  // physically consistent and the profile always terminates at rest.
+  const lastTick = ticks[ticks.length - 1];
+  if (lastTick !== undefined && lastTick.velocityPxPerSec >= REST_VELOCITY_THRESHOLD_PX_PER_SEC) {
+    // decayRate is floored to >= 0.1 above, so this division is always safe.
+    const tailDistanceAbs = lastTick.velocityPxPerSec / decayRate;
+    const tailDelta = sign * tailDistanceAbs;
+    cumulativePx += tailDelta;
+    ticks.push({
+      tMs: lastTick.tMs + tickIntervalMs,
+      velocityPxPerSec: 0,
+      deltaPx: tailDelta,
+      cumulativePx,
+    });
+  }
+
   return {
     direction: opts.direction,
     initialVelocityPxPerSec: v0,

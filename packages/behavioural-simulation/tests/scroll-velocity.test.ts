@@ -311,6 +311,51 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
     expect(profile.totalDistancePx).toBeGreaterThan(900);
     expect(profile.totalDistancePx).toBeLessThan(1000);
   });
+
+  it('settles to rest even when the MAX_DURATION cap truncates the decay (high v0, low decayRate)', () => {
+    // A high v0 with a low/floored decayRate decays slowly enough that the
+    // 5s MAX_DURATION cap would otherwise cut the profile while velocity is
+    // still high (e.g. v0=8000, decayRate=0.1 is ~4800 px/s at 5s) — an
+    // unnatural abrupt stop a detector can read. The settling phase MUST
+    // bring the final tick to rest regardless of v0/decayRate.
+    const profile = generateScrollVelocityProfile({
+      direction: 'down',
+      elementClass: 'scroll-container',
+      initialVelocityPxPerSec: 8000,
+      decayRate: 0.1,
+    });
+    const last = profile.ticks[profile.ticks.length - 1];
+    // The final tick is at rest (velocity below the 5 px/s rest threshold).
+    expect(last.velocityPxPerSec).toBeLessThan(5);
+    // Monotonic non-increasing velocity is preserved through the settling tick.
+    for (let i = 1; i < profile.ticks.length; i += 1) {
+      expect(profile.ticks[i].velocityPxPerSec).toBeLessThanOrEqual(
+        profile.ticks[i - 1].velocityPxPerSec,
+      );
+    }
+    // cumulativePx still equals the running sum of deltaPx (tail integral
+    // folded into the settling tick keeps distance physically consistent).
+    let runningSum = 0;
+    for (const tick of profile.ticks) {
+      runningSum += tick.deltaPx;
+      expect(tick.cumulativePx).toBeCloseTo(runningSum, 9);
+    }
+    expect(profile.totalDistancePx).toBeCloseTo(Math.abs(last.cumulativePx), 9);
+  });
+
+  it('a high-v0 profile across element classes always ends at rest', () => {
+    for (const klass of ALL_CLASSES) {
+      const profile = generateScrollVelocityProfile({
+        direction: 'up',
+        elementClass: klass,
+        initialVelocityPxPerSec: 12000,
+        decayRate: 0.1,
+        seed: `settle-${klass}`,
+      });
+      const last = profile.ticks[profile.ticks.length - 1];
+      expect(last.velocityPxPerSec).toBeLessThan(5);
+    }
+  });
 });
 
 describe('MockBehaviouralSimulator — scroll velocity surface', () => {
