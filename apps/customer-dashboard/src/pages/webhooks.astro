@@ -540,6 +540,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (revealDismiss) {
         revealDismiss.addEventListener('click', () => {
           if (createReveal) createReveal.classList.add('hidden');
+          // Refresh the endpoint list now that the user has saved the secret.
+          window.location.reload();
         });
       }
       if (createForm) {
@@ -594,8 +596,10 @@ const apiBaseUrl = resolveApiBaseUrl();
                 revealSecret.textContent = body.secret || '(no secret returned)';
                 createReveal.classList.remove('hidden');
               }
-              // Reload to refresh the endpoint list.
-              window.setTimeout(() => window.location.reload(), 8000);
+              // The endpoint list refreshes when the user dismisses the reveal
+              // ("I've copied it") — NOT on a timer. The server returns the signing
+              // secret exactly once; a timed reload would wipe it before a slow
+              // copy (password manager / interruption) → permanent loss.
             })
             .catch((err) => {
               showCreateError(err && err.message ? err.message : 'Failed to create endpoint.');

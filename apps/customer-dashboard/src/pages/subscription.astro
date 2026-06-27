@@ -215,7 +215,11 @@ const apiBaseUrl = resolveApiBaseUrl();
               r
                 .json()
                 .catch(() => ({}))
-                .then((body) => Promise.reject(new Error(body.detail || 'HTTP ' + r.status))),
+                .then((body) => {
+                  const e = new Error(body.detail || 'HTTP ' + r.status);
+                  e.status = r.status;
+                  return Promise.reject(e);
+                }),
         )
         .then((body) => {
           if (body.subscription) {
@@ -231,8 +235,17 @@ const apiBaseUrl = resolveApiBaseUrl();
             setText('sub-summary', 'Upgrade to a paid tier to unlock concurrent caps.');
           }
         })
-        .catch(() => {
-          /* leave MOCK as fallback */
+        .catch((err) => {
+          // Don't leave the SSG MOCK subscription on screen — a real customer
+          // reads the fabricated api_builder/active card as their actual plan.
+          // 503 = billing not configured (current prod posture) → pending-setup.
+          if (err && err.status === 503) {
+            setText('sub-tier', 'Billing setup pending');
+            setText('sub-summary', 'Billing isn’t fully configured yet — check back soon.');
+          } else {
+            setText('sub-tier', 'No subscription');
+            setText('sub-summary', 'Couldn’t load your live subscription — reload to try again.');
+          }
         })
         .finally(() => {
           if (typeof window.dashboardHydrated === 'function') {
