@@ -98,7 +98,8 @@ try {
 } catch (err) {
   if (err instanceof DriftstackError) {
     if (err.status === 429 && err.type.endsWith('/tier-limit')) {
-      // Concurrent-session cap exceeded. Wait + retry, or upgrade tier.
+      // Tier usage quota reached (not the concurrency cap — that is
+      // /concurrency-limit). Wait + retry, or upgrade tier.
       console.error('cap reached:', err.detail);
     } else if (err.status === 401) {
       console.error('bad API key');

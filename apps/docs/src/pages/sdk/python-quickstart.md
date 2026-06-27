@@ -116,7 +116,8 @@ try:
     client.sessions.create({"label": "demo"})
 except DriftstackError as err:
     if err.status == 429 and (err.problem_type or "").endswith("/tier-limit"):
-        # Concurrent-session cap reached. Wait + retry, or upgrade.
+        # Tier usage quota reached (not the concurrency cap — that is
+        # /concurrency-limit). Wait + retry, or upgrade.
         print("cap reached:", err.problem.get("detail"))
     elif err.status == 401:
         print("bad API key")
