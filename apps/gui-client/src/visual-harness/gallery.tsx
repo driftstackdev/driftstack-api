@@ -219,6 +219,8 @@ export function Gallery(): JSX.Element {
             recording={false}
             onToggleRecord={noop}
             running={false}
+            keyboardVisible={false}
+            onToggleKeyboard={noop}
           />
         </div>
         <div className="w-72 pb-48">
@@ -231,6 +233,8 @@ export function Gallery(): JSX.Element {
             recording={false}
             onToggleRecord={noop}
             running
+            keyboardVisible={false}
+            onToggleKeyboard={noop}
           />
         </div>
         <div className="w-72">
@@ -243,6 +247,8 @@ export function Gallery(): JSX.Element {
             recording
             onToggleRecord={noop}
             running
+            keyboardVisible
+            onToggleKeyboard={noop}
           />
         </div>
       </div>

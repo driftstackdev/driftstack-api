@@ -37,6 +37,7 @@ import {
 } from '../lib/recordings';
 import { buildRecordingExport, recordingExportFilename } from '../lib/recordings-export';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
+import { IOSKeyboard } from '../components/IOSKeyboard';
 import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
 import { pointerToViewport } from '../lib/livekit-input-capture';
 import { pageErrorCopy, type PageErrorInfo } from '../lib/page-error-copy';
@@ -495,6 +496,8 @@ export function DeviceToolbar({
   recording,
   onToggleRecord,
   running,
+  keyboardVisible,
+  onToggleKeyboard,
 }: {
   deviceName: string;
   profileName: string;
@@ -503,6 +506,9 @@ export function DeviceToolbar({
   /** True when a live agent session is bound to this window — drives the running
    *  indicator. */
   running: boolean;
+  /** On-screen iOS keyboard visibility + its toggle (founder 2026-06-25). */
+  keyboardVisible: boolean;
+  onToggleKeyboard: () => void;
 }): JSX.Element {
   // The activity-bar rail is always docked beside the phone (it lives in the main
   // layout, not this thin toolbar); panes expand on a rail-icon click. There is no
@@ -580,6 +586,24 @@ export function DeviceToolbar({
               Live
             </span>
           )}
+          {/* On-screen iOS keyboard toggle (founder 2026-06-25 "behave exactly
+              like a real iPhone"). Manual v1 — auto-show-on-focus is deferred to
+              A3's box-side focus signal (W2992). */}
+          <button
+            type="button"
+            aria-label={keyboardVisible ? 'Hide keyboard' : 'Show keyboard'}
+            title={keyboardVisible ? 'Hide the on-screen keyboard' : 'Show the on-screen keyboard'}
+            aria-pressed={keyboardVisible}
+            data-component="simulator-keyboard-toggle"
+            className={
+              keyboardVisible
+                ? 'rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-accent transition hover:bg-white/15'
+                : 'rounded px-1.5 py-0.5 text-[13px] transition hover:bg-white/10 hover:text-ink-primary'
+            }
+            onClick={onToggleKeyboard}
+          >
+            ⌨
+          </button>
           <button
             type="button"
             aria-label={recording ? 'Stop recording' : 'Start recording'}
@@ -2430,6 +2454,13 @@ export function SimulatorWindow(): JSX.Element {
     );
   };
   const [landscape, setLandscape] = useState(false);
+  // On-screen iOS keyboard (founder 2026-06-25 "behave exactly like a real
+  // iPhone"). v1 is MANUAL — toggled from the toolbar; auto-show-on-focus + the
+  // keyboard viewport-resize are deferred to A3's box-side signals (W2992). The
+  // keyboard is GUI chrome mounted BELOW the video, so it never moves the
+  // <video> on-screen rect the tap/scroll coord mapping reads. Forwarded only in
+  // manual/pair mode (in AI mode the agent drives — local input would fight it).
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   // Pin = always-on-top (the floating-iPhone default). Unpinned the window
   // behaves like a normal sibling window (Cmd+` cycling, Mission Control,
   // doesn't hover over other apps) — the strongest separate-window identity
@@ -4456,6 +4487,8 @@ export function SimulatorWindow(): JSX.Element {
             recording={recordingId !== null}
             onToggleRecord={toggleRecord}
             running={sessionId !== ''}
+            keyboardVisible={keyboardVisible}
+            onToggleKeyboard={() => setKeyboardVisible((v) => !v)}
           />
           {/* Browser-style page TAB strip (doc-150 item 4) — full-width row between
               the toolbar and the address bar, gated on browserMode exactly like the
@@ -4687,6 +4720,25 @@ export function SimulatorWindow(): JSX.Element {
                     />
                   ))}
                 </div>
+                {/* On-screen iOS keyboard (founder 2026-06-25 "behave exactly like
+                    a real iPhone"). GUI chrome BELOW the video, inside the screen
+                    (overlays the bottom of the phone view); it's a flex sibling of
+                    the screen-host (which is flex-1), so it shrinks the video area
+                    without moving the <video>'s own on-screen rect that
+                    pointerToViewport maps against — taps/scroll stay aligned. Only
+                    in manual/pair mode (AI mode = the agent drives; local input
+                    would fight it). Emits the SAME keyDown/keyUp the host keyboard
+                    does — pure chrome, no fingerprint change (the viewport-resize
+                    that WOULD change the page's view is deferred to A3, W2992). */}
+                {keyboardVisible && controlMode !== 'ai' && (
+                  <div data-tauri-drag-region="false" className="shrink-0">
+                    <IOSKeyboard
+                      room={room}
+                      width={inputLogical.width}
+                      onDismiss={() => setKeyboardVisible(false)}
+                    />
+                  </div>
+                )}
               </div>
             </div>
             {/* Activity-bar drawer (founder 2026-06-24) — the icon RAIL is ALWAYS
