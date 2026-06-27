@@ -21,6 +21,7 @@ function read(p: string): string {
 // Map README field name (`client.Sessions`) → resource source file.
 const RESOURCE_FILE: Record<string, string> = {
   Sessions: 'sessions.go',
+  Egress: 'egress.go',
   Profiles: 'profiles.go',
   ProfileSnapshots: 'profile_snapshots.go',
   Recipes: 'recipes.go',
@@ -32,6 +33,10 @@ const RESOURCE_FILE: Record<string, string> = {
   Auth: 'auth.go',
   Account: 'account.go',
   CryptoOrders: 'crypto_orders.go',
+  Mfa: 'mfa.go',
+  Legal: 'legal.go',
+  AuditLog: 'audit_log.go',
+  EmailPreferences: 'email_preferences.go',
 };
 
 describe('W289.B SDK Go README ↔ resource methods parity', () => {

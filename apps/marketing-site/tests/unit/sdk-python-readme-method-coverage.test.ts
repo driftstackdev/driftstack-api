@@ -21,6 +21,7 @@ function read(p: string): string {
 // Map client.<resource> → resource module filename.
 const RESOURCE_FILE: Record<string, string> = {
   sessions: 'sessions.py',
+  egress: 'egress.py',
   profiles: 'profiles.py',
   profile_snapshots: 'profile_snapshots.py',
   recipes: 'recipes.py',
@@ -32,6 +33,10 @@ const RESOURCE_FILE: Record<string, string> = {
   auth: 'auth.py',
   account: 'account.py',
   crypto_orders: 'crypto_orders.py',
+  mfa: 'mfa.py',
+  legal: 'legal.py',
+  audit_log: 'audit_log.py',
+  email_preferences: 'email_preferences.py',
 };
 
 describe('W289.A SDK Python README ↔ resource methods parity', () => {

@@ -51,20 +51,26 @@ func main() {
 
 Every public API endpoint is a typed method on a resource accessor. All take `context.Context` first.
 
-| Accessor                  | Methods                                                                                                                                            |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `client.Sessions`         | `Create`, `List`, `Get`, `Navigate`, `Interact`, `Wait`, `GetState`, `Capture`, `Extract`, `Search`, `Login`, `Destroy`                            |
-| `client.AgentSessions`    | `Create`, `Get`, `Message`, `Close`, `SetMode`, `SendInputEvent`, `Takeover`, `Handback`, `LivekitToken`, `Resume` (AI chat — decompose + execute) |
-| `client.Profiles`         | `Create`, `List`, `Iterate`, `Get`, `Update`, `Delete`, `Clone` (V-313)                                                                            |
-| `client.ProfileSnapshots` | `Capture`, `ListForProfile`, `List`, `Iterate`, `Get`, `Restore`, `Delete` (V-312)                                                                 |
-| `client.Recipes`          | `Create`, `List`, `Iterate`, `Get`, `Delete` (AI-B4 — snapshot an agent-session's intent_log; execution stays v1.1)                                |
-| `client.APIKeys`          | `Create`, `List`, `Rotate` (V-296), `Revoke`                                                                                                       |
-| `client.Usage`            | `CurrentPeriod`                                                                                                                                    |
-| `client.Webhooks`         | `Create`, `List`, `Get`, `Delete`, `ListDeliveries`, `ReplayDelivery` (V-307)                                                                      |
-| `client.Team`             | `Invite`, `ListMembers`, `ListInvites`, `AcceptInvite`, `RemoveMember` (V-298)                                                                     |
-| `client.Billing`          | `GetState`, `CreateCheckoutSession`, `CreatePortalSession`                                                                                         |
-| `client.Auth`             | `Signup`, `VerifyEmail`, `Login`, `Refresh`, `Logout`, `RequestMagicLink`, `ConsumeMagicLink`, `RequestPasswordReset`, `ConfirmPasswordReset`      |
-| `client.Account`          | `Me` (V-385 — full /v1/account/me with slug / region / avatar / mfa / teams)                                                                       |
+| Accessor                  | Methods                                                                                                                                             |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `client.Sessions`         | `Create`, `List`, `Get`, `Navigate`, `Interact`, `Wait`, `GetState`, `Capture`, `Extract`, `Search`, `Login`, `Destroy`                             |
+| `client.AgentSessions`    | `Create`, `Get`, `Message`, `Close`, `SetMode`, `SendInputEvent`, `Takeover`, `Handback`, `LivekitToken`, `Resume` (AI chat — decompose + execute)  |
+| `client.Egress`           | `AttachToSession`, `GetSessionProxy`, `ListProxies`, `CreateProxy`, `UpdateProxy`, `DeleteProxy`, `TestProxy` (per-session + reusable proxy egress) |
+| `client.Profiles`         | `Create`, `List`, `Iterate`, `Get`, `Update`, `Delete`, `Clone` (V-313)                                                                             |
+| `client.ProfileSnapshots` | `Capture`, `ListForProfile`, `List`, `Iterate`, `Get`, `Restore`, `Delete` (V-312)                                                                  |
+| `client.Recipes`          | `Create`, `List`, `Iterate`, `Get`, `Delete` (AI-B4 — snapshot an agent-session's intent_log; execution stays v1.1)                                 |
+| `client.APIKeys`          | `Create`, `List`, `Rotate` (V-296), `Revoke`                                                                                                        |
+| `client.Usage`            | `CurrentPeriod`                                                                                                                                     |
+| `client.Webhooks`         | `Create`, `List`, `Get`, `Delete`, `ListDeliveries`, `ReplayDelivery` (V-307)                                                                       |
+| `client.Team`             | `Invite`, `ListMembers`, `ListInvites`, `AcceptInvite`, `RemoveMember` (V-298)                                                                      |
+| `client.Billing`          | `GetState`, `CreateCheckoutSession`, `CreatePortalSession`                                                                                          |
+| `client.CryptoOrders`     | `Quote`, `CreateCheckout`, `List`, `Iterate`, `Get`, `UpdateNote`, `Cancel`, `Receipt` (V-666 — crypto checkout orders)                             |
+| `client.Auth`             | `Signup`, `VerifyEmail`, `Login`, `Refresh`, `Logout`, `RequestMagicLink`, `ConsumeMagicLink`, `RequestPasswordReset`, `ConfirmPasswordReset`       |
+| `client.Mfa`              | `Status`, `Enroll`, `Verify`, `Disable`, `RegenerateRecoveryCodes` (V-353b — TOTP MFA enrollment)                                                   |
+| `client.Account`          | `Me` (V-385 — full /v1/account/me with slug / region / avatar / mfa / teams)                                                                        |
+| `client.Legal`            | `Documents`, `Required`, `Accept` (V-049 — legal-document catalog + acceptance)                                                                     |
+| `client.AuditLog`         | `List`, `Iterate`, `Export` (V-216 — append-only account event ledger; V-462 export)                                                                |
+| `client.EmailPreferences` | `List`, `Set`, `OptOut`, `OptIn` (V-204 — non-critical email opt-out toggles)                                                                       |
 
 Discriminated-union builders (`NewTapAction`, `NewSelectorCondition`, etc.) live in `types.go` for `Interact` and `Wait` requests.
 
