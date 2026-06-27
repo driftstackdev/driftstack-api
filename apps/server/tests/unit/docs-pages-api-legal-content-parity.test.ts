@@ -91,22 +91,23 @@ describe('W773 docs /api/legal content parity', () => {
     );
   });
 
-  it('CRITICAL 3-reason enum pinned — never_accepted / subprocessor_amendment / version_bumped. Drift to dropping subprocessor_amendment would erode Art. 28(2) tracking.', () => {
+  it('CRITICAL 3-reason enum pinned — never_accepted / version_outdated / content_hash_changed. These are the literal RequiredAcceptance.reason values in services/legal.ts (:37, :172, :182, :196); drift to a fabricated value would mislead dashboard re-acceptance routing.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/`never_accepted` — first-time acceptance\./);
-    expect(p).toMatch(/`subprocessor_amendment` — the DPA Annex 3 sub-processor list/);
-    expect(p).toMatch(/changed \(Art\. 28\(2\) trigger\)\./);
-    expect(p).toMatch(/`version_bumped` — the document text changed for any reason/);
+    expect(p).toMatch(/`never_accepted` — the account has never accepted this document/);
+    expect(p).toMatch(/`version_outdated` — the account accepted an earlier version/);
+    expect(p).toMatch(/`content_hash_changed` — the account accepted the current version/);
   });
 
-  it("CRITICAL 30-day-window subprocessor_amendment framing pinned. The 'When reason: subprocessor_amendment is returned, the customer has a 30-day window per the DPA' wording matches the canonical Art. 28(2) timing.", () => {
+  it('Art. 28(2) sub-processor-change framing pinned: it surfaces via version_outdated / content_hash_changed (NOT a dedicated reason) + the dashboard banner is shown whenever re-acceptance is required.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /When `reason: subprocessor_amendment` is returned, the customer\s*\n?has a 30-day window per the DPA\./,
+      /For a DPA sub-processor change \(Art\. 28\(2\) trigger\), the new version\s*\n?surfaces as `version_outdated`/,
     );
-    expect(p).toMatch(/The dashboard surfaces an\s*\n?in-app banner during that window\./);
+    expect(p).toMatch(
+      /The dashboard surfaces an in-app banner whenever a\s*\n?re-acceptance is required\./,
+    );
   });
 
   it('CRITICAL POST /v1/legal/accept body shape pinned — { document_key, version, content_hash } triple. The 3-field body is the load-bearing acceptance-record contract.', () => {

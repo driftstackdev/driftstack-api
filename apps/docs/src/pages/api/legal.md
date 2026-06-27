@@ -96,7 +96,7 @@ Response (200):
       "document_key": "dpa",
       "current_version": "2026.05",
       "content_hash": "…",
-      "reason": "subprocessor_amendment",
+      "reason": "version_outdated",
       "last_accepted_version": "2026.04"
     }
   ]
@@ -105,17 +105,18 @@ Response (200):
 
 `reason` values:
 
-- `never_accepted` — first-time acceptance.
-- `subprocessor_amendment` — the DPA Annex 3 sub-processor list
-  changed (Art. 28(2) trigger). Acceptance is the customer's
-  right of objection / continuation choice.
-- `version_bumped` — the document text changed for any reason
-  (policy update, typo fix, formatting change). Re-acceptance
-  is required because the content hash changed.
+- `never_accepted` — the account has never accepted this document
+  (first-time acceptance).
+- `version_outdated` — the account accepted an earlier version; the
+  current document version string is newer.
+- `content_hash_changed` — the account accepted the current version
+  string, but the document text changed (a patch-level edit landed
+  without a version bump), so the content hash differs.
 
-When `reason: subprocessor_amendment` is returned, the customer
-has a 30-day window per the DPA. The dashboard surfaces an
-in-app banner during that window.
+For a DPA sub-processor change (Art. 28(2) trigger), the new version
+surfaces as `version_outdated` (or `content_hash_changed` for an
+in-place edit). The dashboard surfaces an in-app banner whenever a
+re-acceptance is required.
 
 Required scope: `read` or `account_owner`.
 
