@@ -77,9 +77,10 @@ export const CliAuthorizeExchangeRequestSchema = z.object({
 export type CliAuthorizeExchangeRequest = z.infer<typeof CliAuthorizeExchangeRequestSchema>;
 
 /**
- * `pending` → keep polling. `bound` → key delivered (one-shot;
- * subsequent calls 404). `expired` → user took too long; restart the
- * flow.
+ * `pending` → keep polling. `bound` → key delivered (one-shot; the
+ * server deletes the code on delivery, so a subsequent poll returns
+ * `{ status: 'expired' }` with HTTP 200). `expired` → user took too
+ * long (or already collected the key); restart the flow.
  */
 export const CliAuthorizeExchangeStatusSchema = z.enum(['pending', 'bound', 'expired']);
 export type CliAuthorizeExchangeStatus = z.infer<typeof CliAuthorizeExchangeStatusSchema>;

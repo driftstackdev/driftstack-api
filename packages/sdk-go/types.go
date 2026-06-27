@@ -1008,8 +1008,10 @@ type CliAuthorizeExchangeRequest struct {
 // CliAuthorizeExchangeResponse — discriminated on Status:
 //   - "pending" — keep polling.
 //   - "bound"   — one-shot delivery; APIKey + AccountID populated.
-//     Subsequent calls return 404.
-//   - "expired" — user took too long; restart the flow.
+//     The server deletes the code on delivery, so a subsequent poll
+//     returns Status "expired" with HTTP 200.
+//   - "expired" — user took too long (or already collected the key);
+//     restart the flow.
 type CliAuthorizeExchangeResponse struct {
 	Status    string `json:"status"`
 	APIKey    string `json:"api_key,omitempty"`

@@ -249,10 +249,11 @@ key without asking the user to copy/paste from the dashboard.
 3. **Exchange** — the CLI/GUI polls
    `POST /v1/auth/cli-authorize/exchange` until the response
    transitions from `{ status: "pending" }` to
-   `{ status: "bound", api_key, account_id }`. Bound is one-shot;
-   subsequent calls 404. If the user takes too long the response
-   flips to `{ status: "expired" }` and the CLI/GUI restarts the
-   flow.
+   `{ status: "bound", api_key, account_id }`. Bound is one-shot: the
+   server deletes the code as it hands back the key, so a subsequent
+   poll returns `{ status: "expired" }` (HTTP `200`). The same
+   `{ status: "expired" }` is returned if the user takes too long;
+   either way the CLI/GUI restarts the flow.
 
 ### CSRF state
 

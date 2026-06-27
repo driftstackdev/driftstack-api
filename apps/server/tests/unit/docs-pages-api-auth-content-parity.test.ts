@@ -203,7 +203,9 @@ describe('W764 docs /api/auth content parity', () => {
       /`\{ status: "pending" \}` to\s*\n?\s+`\{ status: "bound", api_key, account_id \}`/,
     );
     expect(p).toMatch(/`\{ status: "expired" \}`/);
-    expect(p).toMatch(/Bound is one-shot;\s*\n?\s+subsequent calls 404\./);
+    // The code is deleted on delivery, so a re-poll returns expired
+    // (HTTP 200) — NOT a 404 (cli-authorize.ts exchange() :226).
+    expect(p).toMatch(/Bound is one-shot:[\s\S]*?`\{ status: "expired" \}` \(HTTP `200`\)/);
   });
 
   it("CRITICAL CSRF state 16-128 char nonce + dashboard-echo framing pinned. The 'The state parameter is a client-supplied 16-128 character random nonce. The dashboard echoes it back; the server verifies it matches on bind' wording is the load-bearing CSRF defense.", () => {

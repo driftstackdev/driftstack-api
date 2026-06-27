@@ -5,7 +5,8 @@
 //
 //   1. pending — keep polling.
 //   2. bound   — one-shot delivery; api_key + account_id present.
-//                Subsequent calls 404.
+//                Code deleted on delivery → a re-poll returns expired
+//                (HTTP 200).
 //   3. expired — user took too long; restart the flow.
 //
 // stays in lockstep across:
@@ -74,13 +75,13 @@ describe('W881 CliAuthorizeExchange cross-source invariant', () => {
     expect(p).toMatch(/V-266 — Browser-based CLI \/ GUI authorization flow/);
   });
 
-  it("CRITICAL CliAuthorizeExchangeStatusSchema JSDoc pins the 3 status semantics — 'pending → keep polling. bound → key delivered (one-shot; subsequent calls 404). expired → user took too long; restart the flow.' The doc teaches consumers what each branch means.", () => {
+  it("CRITICAL CliAuthorizeExchangeStatusSchema JSDoc pins the 3 status semantics — 'pending → keep polling. bound → key delivered (one-shot; code deleted on delivery → re-poll returns expired, HTTP 200). expired → user took too long; restart the flow.' The doc teaches consumers what each branch means.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/cli-authorize.ts'));
     expect(p).toMatch(/`pending` → keep polling/);
     // JSDoc wraps across lines; check the key phrases separately.
     expect(p).toMatch(/`bound` → key delivered \(one-shot;/);
-    expect(p).toMatch(/subsequent calls 404\)/);
-    expect(p).toMatch(/`expired` → user took too long; restart the/);
+    expect(p).toMatch(/`\{ status: 'expired' \}` with HTTP 200/);
+    expect(p).toMatch(/`expired` → user took too\s*\n?\s*\*?\s*long/);
   });
 
   // ─── 4-step flow framing ────────────────────────────────────
@@ -96,14 +97,14 @@ describe('W881 CliAuthorizeExchange cross-source invariant', () => {
 
   // ─── Go SDK: 'discriminated on Status' framing ────────────────
 
-  it("CRITICAL packages/sdk-go/types.go CliAuthorizeExchangeResponse pins the 'discriminated on Status' inline doc + 3 status meanings + 'one-shot delivery; APIKey + AccountID populated. Subsequent calls return 404' framing.", () => {
+  it("CRITICAL packages/sdk-go/types.go CliAuthorizeExchangeResponse pins the 'discriminated on Status' inline doc + 3 status meanings + 'one-shot delivery; APIKey + AccountID populated. Code deleted on delivery → a re-poll returns Status expired (HTTP 200)' framing.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/sdk-go/types.go'));
     expect(p).toMatch(/CliAuthorizeExchangeResponse — discriminated on Status/);
     expect(p).toMatch(/"pending" — keep polling/);
     expect(p).toMatch(
-      /"bound"\s+— one-shot delivery; APIKey \+ AccountID populated\.\s*\n\/\/\s+Subsequent calls return 404\./,
+      /"bound"\s+— one-shot delivery; APIKey \+ AccountID populated\.\s*\n\/\/\s+The server deletes the code on delivery, so a subsequent poll\s*\n\/\/\s+returns Status "expired" with HTTP 200\./,
     );
-    expect(p).toMatch(/"expired" — user took too long; restart the flow/);
+    expect(p).toMatch(/"expired" — user took too long/);
   });
 
   it("CRITICAL Go SDK CliAuthorizeExchangeResponse struct has 3 fields — Status (required) + APIKey (omitempty) + AccountID (omitempty). The omitempty on api_key + account_id is what makes Go's parsing match the api-types discriminated-union semantics (fields ONLY appear on bound).", () => {
