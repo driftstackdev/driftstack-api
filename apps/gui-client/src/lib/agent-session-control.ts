@@ -38,6 +38,23 @@ export interface AgentSessionControlState {
   mode: SessionMode;
   /** pair_mode_state.kind (e.g. 'ai-driving' / 'human-driving'), or null. */
   pairKind: string | null;
+  /** Lifecycle liveness (P1a — terminal-end detection). The server's
+   *  `status` lifecycle column ('creating' | 'active' | 'closed') stays
+   *  'active' until DELETE/sweep, so we treat the session as TERMINALLY
+   *  ended when status is 'closed' OR a `closed_at`/`closed_reason` is set
+   *  (the worker browser closed, the session was destroyed/errored, the
+   *  orphan sweeper reaped it). `terminal` collapses those signals to one
+   *  boolean the simulator uses to STOP all reconnect/resubscribe/rebuild
+   *  attempts and show a clear "Session ended" terminal state instead of
+   *  an endless "reconnecting" against a session that's gone. A transient
+   *  transport drop leaves status='active' (terminal=false) so the existing
+   *  bounded reconnect still runs. */
+  terminal: boolean;
+  /** The raw lifecycle status ('creating' | 'active' | 'closed' | …) and the
+   *  close reason, surfaced so the terminal overlay can show WHY it ended
+   *  (e.g. 'idle_timeout', 'browser-closed'). null when the field is absent. */
+  status: string | null;
+  closedReason: string | null;
 }
 
 export class AgentSessionControlError extends Error {
@@ -56,6 +73,10 @@ export class AgentSessionControlError extends Error {
 interface ApiSession {
   mode?: string;
   pair_mode_state?: { kind?: string } | null;
+  // P1a — lifecycle liveness fields from PublicAgentSession.
+  status?: string;
+  closed_reason?: string | null;
+  closed_at?: string | null;
 }
 
 function isMode(v: unknown): v is SessionMode {
@@ -64,6 +85,22 @@ function isMode(v: unknown): v is SessionMode {
 
 function pairKindOf(body: ApiSession): string | null {
   return body.pair_mode_state?.kind ?? null;
+}
+
+/** P1a — collapse the server's lifecycle fields into a single "terminally
+ *  ended" boolean. The session is TERMINAL when its lifecycle status is
+ *  'closed' (DELETE / orphan-sweep / terminal-close) OR a close timestamp /
+ *  reason is set. 'creating' and 'active' are NON-terminal (a transient
+ *  transport drop while the box is still live keeps status='active'), so the
+ *  existing bounded reconnect path still runs for those. Defensive on absent
+ *  fields: an OLD server / a body with no status returns false (unknown →
+ *  trust the binding, NEVER a false "ended"), exactly like the liveness store
+ *  contract on the list endpoint. */
+function isTerminalSession(body: ApiSession): boolean {
+  if (body.status === 'closed') return true;
+  if (typeof body.closed_at === 'string' && body.closed_at.length > 0) return true;
+  if (typeof body.closed_reason === 'string' && body.closed_reason.length > 0) return true;
+  return false;
 }
 
 async function authedFetch(path: string, init: RequestInit, auth: ControlAuth): Promise<unknown> {
@@ -158,7 +195,16 @@ export async function getAgentSession(
     { method: 'GET' },
     auth,
   )) as ApiSession;
-  return { mode: isMode(body.mode) ? body.mode : 'ai', pairKind: pairKindOf(body) };
+  return {
+    mode: isMode(body.mode) ? body.mode : 'ai',
+    pairKind: pairKindOf(body),
+    terminal: isTerminalSession(body),
+    status: typeof body.status === 'string' ? body.status : null,
+    closedReason:
+      typeof body.closed_reason === 'string' && body.closed_reason.length > 0
+        ? body.closed_reason
+        : null,
+  };
 }
 
 /** The device's latest page-state (live URL + load state) for the browser-mode
@@ -427,7 +473,16 @@ export async function setSessionMode(
     { method: 'POST', body: JSON.stringify({ mode }) },
     auth,
   )) as ApiSession;
-  return { mode: isMode(body.mode) ? body.mode : mode, pairKind: pairKindOf(body) };
+  return {
+    mode: isMode(body.mode) ? body.mode : mode,
+    pairKind: pairKindOf(body),
+    terminal: isTerminalSession(body),
+    status: typeof body.status === 'string' ? body.status : null,
+    closedReason:
+      typeof body.closed_reason === 'string' && body.closed_reason.length > 0
+        ? body.closed_reason
+        : null,
+  };
 }
 
 /** Human grabs control in pair mode. Returns the new pair_mode_state.kind.

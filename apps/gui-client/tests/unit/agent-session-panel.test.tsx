@@ -414,4 +414,143 @@ describe('AgentSessionPanel overlay UX', () => {
       createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
     }
   });
+
+  // P1a — when the parent reports the session terminally ended, the panel shows a
+  // clear "Session ended" overlay (with a Close action) and suppresses every
+  // reconnecting/launch-failed/disconnected overlay. This is the founder's bug:
+  // the GUI must NOT show "reconnecting" against a session that's gone.
+  it('P1a: a terminally-ended session shows the "Session ended" overlay + Close, not reconnecting', async () => {
+    connectMock.mockReset();
+    connectMock.mockResolvedValue(undefined);
+    createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+    const onClose = vi.fn();
+    const { container } = render(
+      <AgentSessionPanel info={INFO} sessionEnded={{ reason: null }} onClose={onClose} />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const ended = container.querySelector('[data-overlay="session-ended"]');
+    expect(ended).not.toBeNull();
+    expect(ended?.textContent).toMatch(/session ended/i);
+    // No competing overlays.
+    expect(container.querySelector('[data-overlay="connection-state"]')).toBeNull();
+    expect(container.querySelector('[data-overlay="publisher-state"]')).toBeNull();
+    expect(container.querySelector('[data-overlay="publisher-reconnecting"]')).toBeNull();
+    // Close fires the parent callback (closes the window).
+    fireEvent.click(
+      container.querySelector('[data-action="close-ended-session"]') as HTMLButtonElement,
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // P1a — a Disconnected AFTER the session ended must NOT schedule the bounded
+  // auto-reconnect (the founder-reported "reconnecting forever"). It shows the
+  // terminal overlay and stays there — no fresh connect attempts on the backoff.
+  it('P1a: a terminal-ended Disconnected does NOT auto-reconnect (no fresh connect on backoff)', async () => {
+    vi.useFakeTimers();
+    try {
+      connectMock.mockReset();
+      const handlers: Record<string, (arg: unknown) => void> = {};
+      const roomOn = vi.fn((evt: string, cb: (arg: unknown) => void) => {
+        handlers[evt] = cb;
+      });
+      createRoomMock.mockReturnValue({ on: roomOn, disconnect: vi.fn() });
+      connectMock.mockResolvedValue(undefined);
+      const { container } = render(
+        <AgentSessionPanel info={INFO} sessionEnded={{ reason: 'idle_timeout' }} />,
+      );
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const callsBeforeDrop = connectMock.mock.calls.length;
+      // The transport drops (expected — the session ended).
+      act(() => {
+        handlers['disconnected']?.(undefined);
+      });
+      // Advance well past every backoff window: NO new connect attempt is scheduled.
+      await act(async () => {
+        vi.advanceTimersByTime(AUTO_RECONNECT_BACKOFF_MS.reduce((a, b) => a + b, 0) + 1_000);
+        await Promise.resolve();
+      });
+      expect(connectMock.mock.calls.length).toBe(callsBeforeDrop);
+      // The terminal overlay is shown — never the looping reconnecting/Reconnect UI.
+      expect(container.querySelector('[data-overlay="session-ended"]')).not.toBeNull();
+      expect(container.querySelector('[data-action="reconnect-stream"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+      createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+    }
+  });
+
+  // P1a — a track drop after the session ended must NOT show the calm "reconnecting"
+  // pill (the publisher is gone for good); the terminal overlay is the only thing.
+  it('P1a: a track drop after the session ended shows the terminal overlay, not the reconnecting pill', async () => {
+    vi.useFakeTimers();
+    try {
+      connectMock.mockReset();
+      const handlers: Record<string, (arg: unknown) => void> = {};
+      const roomOn = vi.fn((evt: string, cb: (arg: unknown) => void) => {
+        handlers[evt] = cb;
+      });
+      createRoomMock.mockReturnValueOnce({ on: roomOn, disconnect: vi.fn() });
+      connectMock.mockResolvedValue(undefined);
+      const { container, rerender } = render(<AgentSessionPanel info={INFO} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      // Track was up, then the session ends (parent latches sessionEnded).
+      act(() => {
+        handlers['trackSubscribed']?.({ kind: 'video', attach: vi.fn() });
+      });
+      act(() => {
+        rerender(<AgentSessionPanel info={INFO} sessionEnded={{ reason: null }} />);
+      });
+      // The SFU drops the video track AFTER the end.
+      act(() => {
+        handlers['trackUnsubscribed']?.({ kind: 'video' });
+      });
+      // No calm pill; the terminal overlay covers it.
+      expect(container.querySelector('[data-overlay="publisher-reconnecting"]')).toBeNull();
+      expect(container.querySelector('[data-overlay="session-ended"]')).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+      createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+    }
+  });
+
+  // P1a transient guard — a Disconnected while the session is STILL LIVE (sessionEnded
+  // null) keeps the existing bounded auto-reconnect (the gate must not break the
+  // transient-drop path).
+  it('P1a guard: a transient Disconnected (session still live) STILL auto-reconnects', async () => {
+    vi.useFakeTimers();
+    try {
+      connectMock.mockReset();
+      const handlers: Record<string, (arg: unknown) => void> = {};
+      const roomOn = vi.fn((evt: string, cb: (arg: unknown) => void) => {
+        handlers[evt] = cb;
+      });
+      createRoomMock.mockReturnValue({ on: roomOn, disconnect: vi.fn() });
+      connectMock.mockResolvedValue(undefined);
+      const { container } = render(<AgentSessionPanel info={INFO} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const callsBeforeDrop = connectMock.mock.calls.length;
+      act(() => {
+        handlers['disconnected']?.(undefined);
+      });
+      expect(
+        container.querySelector('[data-overlay="connection-state"]')?.getAttribute('data-state'),
+      ).toBe('reconnecting');
+      await act(async () => {
+        vi.advanceTimersByTime(AUTO_RECONNECT_BACKOFF_MS[0] + 50);
+        await Promise.resolve();
+      });
+      expect(connectMock.mock.calls.length).toBeGreaterThan(callsBeforeDrop);
+    } finally {
+      vi.useRealTimers();
+      createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+    }
+  });
 });

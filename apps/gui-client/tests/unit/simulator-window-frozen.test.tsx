@@ -95,6 +95,8 @@ const panelCbs: {
   // #5/#9 — every distinct recoverAction the simulator pushes down (the panel reacts
   // to each .nonce bump; the test asserts the resubscribe→rebuild sequence).
   recoverActions: Array<{ nonce: number; mode: string }>;
+  // P1a — the latest sessionEnded prop the simulator passes (terminal-end signal).
+  sessionEnded?: { reason: string | null } | null;
 } = { recoverActions: [] };
 vi.mock('../../src/components/AgentSessionPanel', () => ({
   AgentSessionPanel: (props: {
@@ -103,9 +105,11 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
     onPublisher?: (p: string) => void;
     onVideoEl?: (el: HTMLVideoElement | null) => void;
     recoverAction?: { nonce: number; mode: string };
+    sessionEnded?: { reason: string | null } | null;
   }) => {
     panelCbs.onStateChange = props.onStateChange;
     panelCbs.onPublisher = props.onPublisher;
+    panelCbs.sessionEnded = props.sessionEnded ?? null;
     // Record each distinct recoverAction nonce the simulator drives (skip the inert
     // initial nonce 0 / repeats — mirrors the real panel's single-fire-per-nonce).
     const a = props.recoverAction;
@@ -129,11 +133,23 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
   },
 }));
 
+// P1a — getAgentSession is the lifecycle/liveness source. Mutable so a test can flip
+// it to a TERMINAL status (the worker browser closed / session destroyed) and assert
+// the freeze recovery machinery short-circuits + the terminal overlay shows.
+const sessionState = {
+  current: {
+    mode: 'manual' as const,
+    pairKind: null as string | null,
+    terminal: false,
+    status: 'active' as string | null,
+    closedReason: null as string | null,
+  },
+};
 vi.mock('../../src/lib/agent-session-control', () => ({
   uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
   listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
   fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),
-  getAgentSession: () => Promise.resolve({ mode: 'manual', pairKind: null }),
+  getAgentSession: () => Promise.resolve({ ...sessionState.current }),
   getAgentSessionPageState: () => Promise.resolve(null),
   getAgentSessionCookies: () => Promise.resolve({ status: 'unavailable', cookies: null }),
   setSessionMode: vi.fn(),
@@ -175,6 +191,14 @@ describe('SimulatorWindow — client video-freeze detector', () => {
   beforeEach(() => {
     conn.decodeFps = null;
     panelCbs.recoverActions = [];
+    panelCbs.sessionEnded = null;
+    sessionState.current = {
+      mode: 'manual',
+      pairKind: null,
+      terminal: false,
+      status: 'active',
+      closedReason: null,
+    };
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -307,5 +331,68 @@ describe('SimulatorWindow — client video-freeze detector', () => {
     // Keep advancing — the escalation must never fire now.
     advance(6);
     expect(panelCbs.recoverActions.map((r) => r.mode)).toEqual(['resubscribe']);
+  });
+
+  // P1a — terminal-status-stops-reconnect-and-shows-ended. When the CP reports the
+  // session terminally ended (the worker browser closed), the ~5s status poll latches
+  // sessionEnded → it's passed to the panel AND the freeze recovery machine
+  // short-circuits (a frozen "last frame" of an ended session must NOT trigger
+  // resubscribe→rebuild against a session that's gone).
+  it('P1a: a terminal session status stops freeze recovery and surfaces sessionEnded to the panel', async () => {
+    vi.useFakeTimers();
+    conn.decodeFps = 30;
+    const { container } = renderSim();
+    expect(container).toBeTruthy();
+    // Arm the detector with real frames first.
+    let t = 1;
+    advance(2, () => {
+      panelCbs.video?.__fireFrame();
+      panelCbs.video?.__setCurrentTime(t);
+      t += 1;
+    });
+    expect(panelCbs.sessionEnded).toBeNull();
+    // The session ends on the worker (browser closed). The ~5s poll picks it up.
+    sessionState.current = {
+      mode: 'manual',
+      pairKind: null,
+      terminal: true,
+      status: 'closed',
+      closedReason: 'idle_timeout',
+    };
+    // Advance the 5s status poll, then flush the async getAgentSession().then().
+    await act(async () => {
+      vi.advanceTimersByTime(5_100);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // The terminal-end signal reached the panel (it shows "Session ended", not reconnecting).
+    expect(panelCbs.sessionEnded).toEqual({ reason: 'idle_timeout' });
+    // Now the frame stream freezes (the ended session's last frame is pinned). Even
+    // across the full sustained-freeze + escalation window, NO recovery is driven.
+    advance(20);
+    expect(panelCbs.recoverActions).toHaveLength(0);
+  });
+
+  // P1a guard — a transient freeze on a LIVE session (status stays 'active') STILL
+  // recovers; the terminal gate must not break the existing recovery path.
+  it('P1a guard: a freeze on a still-LIVE session still drives recovery (terminal gate is precise)', () => {
+    vi.useFakeTimers();
+    conn.decodeFps = 30;
+    const { container } = renderSim();
+    let t = 1;
+    advance(2, () => {
+      panelCbs.video?.__fireFrame();
+      panelCbs.video?.__setCurrentTime(t);
+      t += 1;
+    });
+    // Status poll runs, session stays live (terminal=false).
+    act(() => {
+      vi.advanceTimersByTime(5_100);
+    });
+    expect(panelCbs.sessionEnded).toBeNull();
+    expect(container).toBeTruthy();
+    // A sustained freeze still escalates resubscribe→rebuild (existing behavior intact).
+    advance(20);
+    expect(panelCbs.recoverActions.map((r) => r.mode)).toEqual(['resubscribe', 'rebuild']);
   });
 });

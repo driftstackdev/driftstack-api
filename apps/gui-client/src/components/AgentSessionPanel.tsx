@@ -96,6 +96,19 @@ export interface AgentSessionPanelProps {
    *  pushes a fresh keyframe), and `'rebuild'` tears down + reconnects the whole
    *  Room (bumps retryNonce). nonce 0 is the inert initial value (no recovery). */
   recoverAction?: { nonce: number; mode: 'resubscribe' | 'rebuild' };
+  /** P1a — the box session TERMINALLY ended (the worker browser closed, the
+   *  session was destroyed/errored, or the orphan sweeper reaped it — the parent's
+   *  ~5s status poll detected status='closed' / closed_at / closed_reason). When
+   *  set, the panel STOPS all reconnect/resubscribe/rebuild/publisher-grace
+   *  machinery (those would loop "reconnecting" against a session that's gone) and
+   *  shows a clear "Session ended" terminal overlay with a Close action instead.
+   *  `reason` is the server close-reason for honest copy (null when unknown). A
+   *  transient transport drop leaves this undefined so the bounded auto-reconnect
+   *  still runs. */
+  sessionEnded?: { reason: string | null } | null;
+  /** P1a — invoked by the terminal "Session ended" overlay's Close button. The
+   *  simulator wires this to closing the floating-iPhone window. */
+  onClose?: () => void;
 }
 
 /** #1 — grace window after the SFU drops the video track (TrackUnsubscribed /
@@ -181,6 +194,8 @@ export function AgentSessionPanel({
   coverChromeBand: _coverChromeBand = false,
   inputLogical,
   recoverAction,
+  sessionEnded = null,
+  onClose,
 }: AgentSessionPanelProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // The video element as STATE (not just the ref) so useInputCapture re-runs
@@ -259,6 +274,28 @@ export function AgentSessionPanel({
   useEffect(() => {
     onPublisherRef.current?.(publisher);
   }, [publisher]);
+  // P1a — the latest terminal-end flag in a ref so the connect effect's event
+  // handlers (Disconnected / publisher-lost / no-publisher timer) can short-circuit
+  // WITHOUT re-running the connect effect (which depends only on ws_url/token/
+  // retryNonce — re-running it would thrash the Room). When the session has
+  // TERMINALLY ended, those handlers must NOT schedule a reconnect or flip to the
+  // scary launch-failed overlay; the terminal "Session ended" overlay is the single
+  // source of truth then. A transient drop (sessionEnded null) keeps the bounded
+  // auto-reconnect.
+  const sessionEndedRef = useRef(sessionEnded);
+  useEffect(() => {
+    sessionEndedRef.current = sessionEnded;
+  }, [sessionEnded]);
+  // P1a — when the session ends terminally, proactively tear down any in-flight
+  // recovery: stop the calm "reconnecting" pill + drop the panel out of a
+  // 'reconnecting' connection state so the terminal overlay (rendered below) wins
+  // immediately instead of waiting for the next event. We DON'T disconnect the Room
+  // here (the connect effect's cleanup owns that on unmount); we only stop claiming
+  // we're recovering.
+  useEffect(() => {
+    if (sessionEnded === null) return;
+    setPublisherReconnecting(false);
+  }, [sessionEnded]);
 
   useEffect(() => {
     let cancelled = false;
@@ -328,6 +365,12 @@ export function AgentSessionPanel({
     // (the honest overlay) if no TrackSubscribed re-arrives within the grace window.
     const onPublisherLost = (): void => {
       if (cancelled) return;
+      // P1a — the session terminally ended: the publisher is gone for GOOD (the
+      // worker browser closed). Don't run the grace→reconnecting pill dance; the
+      // terminal "Session ended" overlay covers it. (Flipping to 'none' here is
+      // harmless — the terminal overlay renders on top regardless — but skipping the
+      // calm-pill path avoids a misleading "reconnecting…" flash.)
+      if (sessionEndedRef.current !== null) return;
       setPublisher((p) => {
         if (p !== 'publishing') return p;
         setPublisherReconnecting(true);
@@ -356,6 +399,16 @@ export function AgentSessionPanel({
     (room as any).on(RoomEvent.ParticipantDisconnected, onPublisherLost);
     (room as any).on(RoomEvent.Disconnected, () => {
       if (cancelled) return;
+      // P1a — the session TERMINALLY ended (worker browser closed / destroyed /
+      // reaped): a Disconnected here is EXPECTED, not a transient blip. Do NOT
+      // schedule the bounded auto-reconnect (it would loop "reconnecting" against a
+      // session that's gone — the founder-reported bug). The terminal "Session
+      // ended" overlay (rendered below on the sessionEnded prop) is the single
+      // source of truth; we just stop claiming we're connecting.
+      if (sessionEndedRef.current !== null) {
+        setS({ kind: 'disconnected' });
+        return;
+      }
       // #8 — an UNEXPECTED transport drop (not a deliberate teardown — cleanup sets
       // `cancelled` BEFORE disconnect()) auto-retries with exponential backoff before
       // falling back to the manual Reconnect button. A reconnect re-runs this whole
@@ -445,6 +498,11 @@ export function AgentSessionPanel({
     if (action === undefined || action.nonce === 0) return;
     if (action.nonce === lastRecoverNonceRef.current) return;
     lastRecoverNonceRef.current = action.nonce;
+    // P1a — never perform a recovery (resubscribe / Room rebuild) once the session
+    // has terminally ended; a rebuild would reconnect a fresh Room against a gone
+    // session. The parent's freeze driver is already gated on the same flag, so this
+    // is a defensive belt against a stale nonce racing the terminal latch.
+    if (sessionEndedRef.current !== null) return;
     if (action.mode === 'rebuild') {
       setRetryNonce((n) => n + 1);
       return;
@@ -519,26 +577,77 @@ export function AgentSessionPanel({
           content fills the frame edge-to-edge with NO bands — masking it now covers
           REAL content (founder's "black space at the bottom + content cut off at the
           top"). `coverChromeBand` is kept as an inert prop for call-site compatibility. */}
+      {/* P1a — TERMINAL "Session ended" overlay. The box session actually ended (the
+          worker browser closed, the session was destroyed/errored, the orphan sweeper
+          reaped it). This is the SINGLE source of truth when terminal: it renders on
+          top of (and suppresses, via the `sessionEnded === null` guards below) every
+          reconnecting/launch-failed/disconnected overlay so the founder sees a clear
+          ended state with a Close action — NOT an endless "reconnecting" against a
+          session that's gone. */}
+      {sessionEnded !== null && (
+        <div
+          data-overlay="session-ended"
+          {...(sessionEnded.reason !== null ? { 'data-reason': sessionEnded.reason } : {})}
+          className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/75 px-6 text-center text-sm text-ink-primary"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="28"
+            height="28"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-ink-secondary"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M9 9l6 6M15 9l-6 6" />
+          </svg>
+          <span className="font-medium">Session ended</span>
+          <span className="max-w-xs text-xs text-ink-secondary">
+            {sessionEnded.reason === 'idle_timeout'
+              ? 'This session was closed after a period of inactivity. Relaunch the profile to start a new one.'
+              : 'This session has stopped — the browser on the worker closed. Relaunch the profile to start a new one.'}
+          </span>
+          {onClose !== undefined && (
+            <button
+              type="button"
+              data-action="close-ended-session"
+              onClick={onClose}
+              className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-ink-primary transition hover:bg-white/20"
+            >
+              Close
+            </button>
+          )}
+        </div>
+      )}
       {/* #1 — CALM reconnecting pill during the post-track-drop grace window. The
           track briefly dropped (A3 idle frame-pump down-clock / encoder restart /
           short SFU re-negotiation); the last good frame is still visible underneath,
           so we show a small unobtrusive pill — NOT the full-screen launch-failed
           alarm — until either the track re-arrives (cleared) or the grace expires
           (→ the honest overlay below). Mirrors the simulator's frozen/stalled badge
-          treatment. */}
-      {state.kind === 'connected' && publisherReconnecting && publisher === 'publishing' && (
-        <div
-          role="status"
-          data-overlay="publisher-reconnecting"
-          className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-black/75 px-4 py-2 text-[11px] font-medium text-white shadow-lg backdrop-blur"
-        >
-          <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
-          Reconnecting…
-        </div>
-      )}
+          treatment. P1a: suppressed when the session has terminally ended (the
+          terminal overlay above is the single source of truth). */}
+      {sessionEnded === null &&
+        state.kind === 'connected' &&
+        publisherReconnecting &&
+        publisher === 'publishing' && (
+          <div
+            role="status"
+            data-overlay="publisher-reconnecting"
+            className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-black/75 px-4 py-2 text-[11px] font-medium text-white shadow-lg backdrop-blur"
+          >
+            <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+            Reconnecting…
+          </div>
+        )}
       {/* W617 — connected but nothing publishing: waiting spinner first,
-          then the honest no-worker overlay with the parent's fallback. */}
-      {state.kind === 'connected' && publisher !== 'publishing' && (
+          then the honest no-worker overlay with the parent's fallback. P1a:
+          suppressed when terminally ended (the "Session ended" overlay wins). */}
+      {sessionEnded === null && state.kind === 'connected' && publisher !== 'publishing' && (
         <div
           data-overlay="publisher-state"
           data-state={publisher}
@@ -588,7 +697,10 @@ export function AgentSessionPanel({
           )}
         </div>
       )}
-      {state.kind !== 'connected' && (
+      {/* P1a — suppressed when terminally ended so a Disconnected/error never shows
+          the looping "reconnecting…" / Reconnect overlay over a session that's gone;
+          the "Session ended" overlay above is the single source of truth. */}
+      {sessionEnded === null && state.kind !== 'connected' && (
         <div
           data-overlay="connection-state"
           data-state={state.kind}

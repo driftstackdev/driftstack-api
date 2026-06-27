@@ -40,9 +40,15 @@ afterEach(() => {
 
 describe('agent-session-control transport', () => {
   it('setSessionMode POSTs /mode {mode} with the bearer + returns the new state', async () => {
-    mockFetch.mockResolvedValue(ok({ mode: 'manual', pair_mode_state: null }));
+    mockFetch.mockResolvedValue(ok({ mode: 'manual', pair_mode_state: null, status: 'active' }));
     const s = await setSessionMode('agt_1', 'manual');
-    expect(s).toEqual({ mode: 'manual', pairKind: null });
+    expect(s).toEqual({
+      mode: 'manual',
+      pairKind: null,
+      terminal: false,
+      status: 'active',
+      closedReason: null,
+    });
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://api.test/v1/agent-sessions/agt_1/mode');
     expect(init.method).toBe('POST');
@@ -87,9 +93,62 @@ describe('agent-session-control transport', () => {
   });
 
   it('getAgentSession GETs /:id + parses mode + pair kind', async () => {
-    mockFetch.mockResolvedValue(ok({ mode: 'pair', pair_mode_state: { kind: 'ai-driving' } }));
-    expect(await getAgentSession('agt_1')).toEqual({ mode: 'pair', pairKind: 'ai-driving' });
+    mockFetch.mockResolvedValue(
+      ok({ mode: 'pair', pair_mode_state: { kind: 'ai-driving' }, status: 'active' }),
+    );
+    expect(await getAgentSession('agt_1')).toEqual({
+      mode: 'pair',
+      pairKind: 'ai-driving',
+      terminal: false,
+      status: 'active',
+      closedReason: null,
+    });
     expect((mockFetch.mock.calls[0] as [string, RequestInit])[1].method).toBe('GET');
+  });
+
+  // P1a — terminal-end detection: the session lifecycle status going 'closed' (or a
+  // closed_at / closed_reason being set) reads as terminal so the simulator stops
+  // reconnecting against a session that's gone.
+  it('getAgentSession reports terminal=true when status is closed (+ surfaces the close reason)', async () => {
+    mockFetch.mockResolvedValue(
+      ok({
+        mode: 'manual',
+        pair_mode_state: null,
+        status: 'closed',
+        closed_reason: 'idle_timeout',
+        closed_at: '2026-06-25T00:00:00.000Z',
+      }),
+    );
+    expect(await getAgentSession('agt_1')).toEqual({
+      mode: 'manual',
+      pairKind: null,
+      terminal: true,
+      status: 'closed',
+      closedReason: 'idle_timeout',
+    });
+  });
+
+  it('getAgentSession reports terminal=true on closed_at/closed_reason even if status is still active (stale lifecycle row)', async () => {
+    mockFetch.mockResolvedValue(
+      ok({
+        mode: 'manual',
+        pair_mode_state: null,
+        status: 'active',
+        closed_at: '2026-06-25T00:00:00.000Z',
+      }),
+    );
+    const s = await getAgentSession('agt_1');
+    expect(s.terminal).toBe(true);
+  });
+
+  it('getAgentSession reports terminal=false for a live session AND for an OLD server with NO status field (unknown → trust the binding, never a false ended)', async () => {
+    mockFetch.mockResolvedValue(ok({ mode: 'manual', pair_mode_state: null, status: 'active' }));
+    expect((await getAgentSession('agt_1')).terminal).toBe(false);
+    // Old server / minimal body with no lifecycle fields → NOT terminal.
+    mockFetch.mockResolvedValue(ok({ mode: 'manual', pair_mode_state: null }));
+    const s = await getAgentSession('agt_1');
+    expect(s.terminal).toBe(false);
+    expect(s.status).toBe(null);
   });
 
   it('maps 403 → forbidden and 409 → conflict via AgentSessionControlError', async () => {
@@ -152,9 +211,17 @@ describe('agent-session-control transport', () => {
       apiKey: null,
       baseUrl: 'https://api.test',
     });
-    mockFetch.mockResolvedValue(ok({ mode: 'pair', pair_mode_state: { kind: 'ai-driving' } }));
+    mockFetch.mockResolvedValue(
+      ok({ mode: 'pair', pair_mode_state: { kind: 'ai-driving' }, status: 'active' }),
+    );
     const s = await getAgentSession('agt_1', { controlKey: 'gck_xyz' });
-    expect(s).toEqual({ mode: 'pair', pairKind: 'ai-driving' });
+    expect(s).toEqual({
+      mode: 'pair',
+      pairKind: 'ai-driving',
+      terminal: false,
+      status: 'active',
+      closedReason: null,
+    });
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect((init.headers as Record<string, string>)['x-driftstack-gui-control-key']).toBe(
       'gck_xyz',

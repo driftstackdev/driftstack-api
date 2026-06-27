@@ -2164,6 +2164,18 @@ export function SimulatorWindow(): JSX.Element {
   const [publisherState, setPublisherState] = useState<'waiting' | 'publishing' | 'none'>(
     'waiting',
   );
+  // P1a — TERMINAL session-end signal. The box session actually ended (the worker
+  // browser closed / the session was destroyed/errored / the orphan sweeper reaped
+  // it): the control plane reports status='closed' (or a closed_at/closed_reason).
+  // When set, ALL reconnect/resubscribe/rebuild/freeze machinery short-circuits and
+  // the panel shows a clear "Session ended" terminal state with a Close action —
+  // NOT an endless "reconnecting" against a session that's gone. A TRANSIENT
+  // transport drop (session still live per the status poll) leaves this null, so the
+  // existing bounded reconnect keeps running. `reason` is the close_reason for honest
+  // copy ('idle_timeout', 'orphaned-lifetime', a worker-close, …). Reset on every
+  // session swap (a fresh session starts non-terminal). Declared up here (before the
+  // freeze-recovery effect that reads it) to avoid a TDZ on the effect's dep array.
+  const [sessionEnded, setSessionEnded] = useState<{ reason: string | null } | null>(null);
   const videoElRef = useRef<HTMLVideoElement | null>(null);
   // fps: rolling 1s counter via requestVideoFrameCallback (browser-native;
   // no LiveKit internals). null until the first full window.
@@ -2313,6 +2325,16 @@ export function SimulatorWindow(): JSX.Element {
   // 'rebuilt' (lever 2 fired, terminal until frames resume or the freeze clears).
   const recoverPhaseRef = useRef<'idle' | 'resubscribed' | 'rebuilt'>('idle');
   useEffect(() => {
+    // P1a — the session terminally ended (worker browser closed / destroyed /
+    // reaped): NEVER run the resubscribe→rebuild freeze recovery. The frozen "last
+    // frame" is the ended session, and a rebuild would reconnect a fresh Room
+    // against a session that's gone (the "reconnecting forever" bug). Short-circuit
+    // to idle and let the panel show the terminal "Session ended" overlay.
+    if (sessionEnded !== null) {
+      recoverPhaseRef.current = 'idle';
+      setRecovering(false);
+      return;
+    }
     // Frames are flowing (or we're not connected): reset the machine so a future
     // freeze gets a clean two-stage attempt. The connected-only gate matches the
     // detector — a transport drop is the panel's overlay + its own auto-reconnect.
@@ -2343,7 +2365,7 @@ export function SimulatorWindow(): JSX.Element {
       window.clearTimeout(stage1Handle);
       if (stage2Handle !== null) window.clearTimeout(stage2Handle);
     };
-  }, [videoFrozen, connState]);
+  }, [videoFrozen, connState, sessionEnded]);
   // #48 item 2 — "Copy diagnostics": a paste-ready snapshot of the session-info
   // overlay (the founder keeps reporting streaming/latency issues and needs the
   // exact figures for a bug report). formatSessionDiagnostics is pure + tested;
@@ -3247,6 +3269,44 @@ export function SimulatorWindow(): JSX.Element {
     };
   }, [sessionId, controlAuth, room, browserMode, writeTabPageState, applyStalledState]);
 
+  // P1a — TERMINAL session-end poll. The freeze cluster's auto-reconnect/resubscribe/
+  // rebuild machinery treated a session that ACTUALLY ENDED (the worker browser
+  // closed, the session was destroyed/errored, the orphan sweeper reaped it) the same
+  // as a transient transport drop → the GUI showed "reconnecting" and retried forever
+  // against a session that's gone. This ~5s poll of GET /v1/agent-sessions/:id reads
+  // the lifecycle status (status='closed' / closed_at / closed_reason) and latches the
+  // terminal "Session ended" state the moment the CP reports it. Once latched it STAYS
+  // (terminal is one-way — a closed session never re-opens), and the panel + the freeze
+  // driver short-circuit all recovery. Distinct from the page-state poll (that reports
+  // the PAGE's load state, which has its own 'errored'/'stalled' overlays; this is the
+  // SESSION lifecycle). Runs whenever there's a session id; best-effort + guarded — a
+  // transient control-API error is non-fatal (a transport blip must NOT read as ended).
+  useEffect(() => {
+    if (sessionId === '') return;
+    let cancelled = false;
+    const reqSessionId = sessionId;
+    const tick = (): void => {
+      void getAgentSession(reqSessionId, controlAuth)
+        .then((s) => {
+          // Drop a result that resolved after an in-place session swap.
+          if (cancelled || reqSessionId !== sessionIdRef.current) return;
+          // One-way: only LATCH terminal — never clear it (a non-terminal read after a
+          // real end can't happen for the same id, and we must not let a stale/racing
+          // poll un-end a closed session). A fresh session swap resets sessionEnded.
+          if (s.terminal) setSessionEnded({ reason: s.closedReason });
+        })
+        .catch(() => {
+          /* best-effort poll — a transient control-API error is NOT a terminal end */
+        });
+    };
+    tick();
+    const handle = window.setInterval(tick, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(handle);
+    };
+  }, [sessionId, controlAuth]);
+
   // Founder #48 — live cookie-jar view. Polls GET /v1/agent-sessions/:id/cookies
   // ONLY while the session-info / diagnostics panel is open (no background load on
   // a panel nobody's looking at). `cookies` = the live jar (ok); `cookiesNote` = a
@@ -3591,6 +3651,11 @@ export function SimulatorWindow(): JSX.Element {
     setControlMode(null);
     setControlModeConfirmed(false);
     setPairKind(null);
+    // P1a — a fresh/relaunched session starts NON-terminal; clear any prior
+    // "Session ended" state so the new session's first frame isn't covered by the
+    // old session's terminal overlay (in-place relaunch swaps sessionId without
+    // remount, so this state would otherwise carry over).
+    setSessionEnded(null);
     setLiveUrl('');
     setPageLoading(false);
     setLoadProgress(null);
@@ -3688,6 +3753,12 @@ export function SimulatorWindow(): JSX.Element {
         // handler); a defaulted-to-manual (control unreachable) must not.
         setControlModeConfirmed(true);
         setPairKind(s.pairKind);
+        // P1a — the SAME round-trip carries lifecycle liveness. A terminal status
+        // (the worker browser closed / the session was destroyed/errored/reaped)
+        // latches the "Session ended" state so the reconnect/freeze machinery
+        // short-circuits. A non-terminal result is the normal case (don't touch
+        // sessionEnded so a transient blip never clears a real terminal end).
+        if (s.terminal) setSessionEnded({ reason: s.closedReason });
         // A successful control round-trip proves the session is reachable —
         // clear any stale "control may not be reaching the device" badge.
         setControlUnreachable(false);
@@ -4533,6 +4604,11 @@ export function SimulatorWindow(): JSX.Element {
                     // (full Room reconnect) — the panel holds the publication + the
                     // retryNonce in scope, so it actually performs the recovery.
                     recoverAction={recoverAction}
+                    // P1a — terminal session-end: when the box session actually ended
+                    // (worker browser closed / destroyed / reaped), the panel stops all
+                    // reconnect/resubscribe/rebuild machinery and shows "Session ended".
+                    sessionEnded={sessionEnded}
+                    onClose={() => void withCurrentWindow((w) => w.close())}
                   />
                   {/* iOS touch-point cursor — a soft fingertip dot that tracks the
                     pointer over the screen (the PC arrow is hidden via cursor-none
