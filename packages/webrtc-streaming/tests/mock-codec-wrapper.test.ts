@@ -102,4 +102,47 @@ describe('V-531.B-mock createMockEncodedStream', () => {
     await stream.stop();
     await stream.stop(); // should not throw
   });
+
+  it('start() after stop() restarts the stream (resubscribe / restart)', async () => {
+    // Regression: start() latched on runPromise !== null and never reset it,
+    // so a 2nd start() after stop() silently no-op'd — restart/resubscribe was
+    // impossible. The latch must reset so a fresh run produces chunks again.
+    const stream = createMockEncodedStream({ durationFrames: 3 });
+    const seqs: number[] = [];
+    stream.onChunk((c) => seqs.push(c.sequence));
+    await stream.start();
+    await new Promise<void>((r) => setTimeout(r, 5));
+    await stream.stop();
+    const afterFirst = seqs.length;
+    expect(afterFirst).toBe(3);
+
+    await stream.start(); // restart
+    await new Promise<void>((r) => setTimeout(r, 5));
+    await stream.stop();
+    // The restart produced a second full run of chunks.
+    expect(seqs.length).toBe(6);
+    expect(seqs).toEqual([1, 2, 3, 1, 2, 3]);
+  });
+
+  it('start() after a natural end-of-stream drain restarts the stream', async () => {
+    // Restart must also work after the source drains naturally (the run
+    // promise settles on its own), without an explicit stop() between runs.
+    const stream = createMockEncodedStream({ durationFrames: 2 });
+    const seqs: number[] = [];
+    let ends = 0;
+    stream.onChunk((c) => seqs.push(c.sequence));
+    stream.onEnd(() => {
+      ends += 1;
+    });
+    await stream.start();
+    await new Promise<void>((r) => setTimeout(r, 10)); // drain naturally
+    expect(seqs.length).toBe(2);
+    expect(ends).toBe(1);
+
+    await stream.start(); // restart after a natural end, no stop() called
+    await new Promise<void>((r) => setTimeout(r, 10));
+    await stream.stop();
+    expect(seqs.length).toBe(4);
+    expect(ends).toBe(2);
+  });
 });

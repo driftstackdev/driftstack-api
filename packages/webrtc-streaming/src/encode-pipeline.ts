@@ -92,26 +92,54 @@ export class EncodePipeline {
   /**
    * Start the pipeline. Runs an internal pull loop until the source returns
    * null or `stop()` is called.
+   *
+   * Teardown is guaranteed on EVERY exit path — normal end-of-stream, an
+   * external `stop()`, OR a throw from the chunk consumer: the loop body's
+   * consumer call is wrapped so one throwing subscriber can't abort the loop
+   * while leaking the FrameSource and skipping `onEnd`. On any exit the source
+   * is released (`source.stop()`, idempotent) and the end handler fires exactly
+   * once. A consumer throw is still propagated to the caller AFTER cleanup, so
+   * the failure is observable (the mock-codec wrapper's `runPromise.catch`
+   * surfaces it) rather than silently dropped.
    */
   async start(): Promise<void> {
     if (this.state !== 'idle') {
       throw new Error(`EncodePipeline.start: invalid state ${this.state}`);
     }
     this.state = 'running';
-    while (this.state === 'running') {
-      const frame = await this.source.pullNextFrame();
-      if (frame === null) {
-        this.stats.framesDropped += 1;
-        this.state = 'stopped';
-        break;
+    try {
+      while (this.state === 'running') {
+        const frame = await this.source.pullNextFrame();
+        if (frame === null) {
+          this.stats.framesDropped += 1;
+          this.state = 'stopped';
+          break;
+        }
+        this.stats.framesIn += 1;
+        const chunk = this.encode(frame);
+        this.stats.chunksOut += 1;
+        this.stats.bytesOut += chunk.payload.byteLength;
+        // A throwing consumer must NOT abort the loop without cleanup. Mark
+        // the pipeline stopped and re-throw so `finally` runs teardown
+        // (release source + fire onEnd) before the error propagates.
+        try {
+          this.chunkHandler?.(chunk);
+        } catch (err) {
+          this.state = 'stopped';
+          throw err;
+        }
       }
-      this.stats.framesIn += 1;
-      const chunk = this.encode(frame);
-      this.stats.chunksOut += 1;
-      this.stats.bytesOut += chunk.payload.byteLength;
-      this.chunkHandler?.(chunk);
+    } finally {
+      // Release the FrameSource on every exit path (idempotent stop()), then
+      // fire the end handler exactly once. Guard the source release so a
+      // failing stop() can't itself suppress onEnd.
+      this.state = 'stopped';
+      try {
+        await this.source.stop();
+      } finally {
+        this.endHandler?.();
+      }
     }
-    this.endHandler?.();
   }
 
   stop(): void {

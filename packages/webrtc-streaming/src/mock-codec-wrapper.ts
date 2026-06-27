@@ -65,24 +65,33 @@ export function createMockEncodedStream(opts: MockEncodedStreamOpts = {}): MockE
     targetHeight: opts.targetHeight ?? 844,
     preferredPixelFormat: opts.pixelFormat ?? 'I420',
   };
-  const source = new MockFrameSource({
-    fillByte: opts.fillByte,
-    maxFrames: opts.durationFrames === undefined ? undefined : opts.durationFrames,
-  });
-  const pipeline = new EncodePipeline({
-    source,
-    keyframeIntervalFrames: opts.keyframeIntervalFrames,
-  });
-
+  // Handler sets persist across restarts — subscribers stay subscribed when a
+  // stream is stopped + started again (resubscribe/restart). The source +
+  // pipeline are single-use (MockFrameSource/EncodePipeline reject a second
+  // start() once drained/stopped), so each run gets a FRESH pair, built by
+  // `build()` and wired to forward into the persistent handler sets.
   const chunkHandlers = new Set<(chunk: EncodedChunk) => void>();
   const endHandlers = new Set<() => void>();
-  pipeline.onChunk((chunk) => {
-    for (const h of chunkHandlers) h(chunk);
-  });
-  pipeline.onEnd(() => {
-    for (const h of endHandlers) h();
-  });
 
+  function build(): { source: MockFrameSource; pipeline: EncodePipeline } {
+    const source = new MockFrameSource({
+      fillByte: opts.fillByte,
+      maxFrames: opts.durationFrames === undefined ? undefined : opts.durationFrames,
+    });
+    const pipeline = new EncodePipeline({
+      source,
+      keyframeIntervalFrames: opts.keyframeIntervalFrames,
+    });
+    pipeline.onChunk((chunk) => {
+      for (const h of chunkHandlers) h(chunk);
+    });
+    pipeline.onEnd(() => {
+      for (const h of endHandlers) h();
+    });
+    return { source, pipeline };
+  }
+
+  let current = build();
   let runPromise: Promise<void> | null = null;
   let stopped = false;
 
@@ -97,23 +106,43 @@ export function createMockEncodedStream(opts: MockEncodedStreamOpts = {}): MockE
     },
     async start() {
       if (runPromise !== null) return;
-      await source.start(config);
-      runPromise = pipeline.start();
+      // A prior run leaves the source + pipeline single-use-spent; rebuild a
+      // fresh pair so start() after stop/end actually restarts (resubscribe).
+      if (stopped) {
+        current = build();
+        stopped = false;
+      }
+      await current.source.start(config);
+      const run = current.pipeline.start();
+      runPromise = run;
       // Don't await — caller polls onChunk/onEnd. Catch unhandled rejections.
-      runPromise.catch(() => {});
+      // When THIS run settles (natural end-of-stream OR a consumer throw),
+      // clear the latch + mark the stream spent so a later start() rebuilds —
+      // restart works after a natural drain, not just after an explicit stop().
+      run
+        .catch(() => {})
+        .finally(() => {
+          if (runPromise === run) {
+            runPromise = null;
+            stopped = true;
+          }
+        });
     },
     async stop() {
       if (stopped) return;
       stopped = true;
-      pipeline.stop();
-      await source.stop();
+      current.pipeline.stop();
+      await current.source.stop();
       // Give the pipeline loop a chance to observe the stopped state.
       if (runPromise !== null) {
         await Promise.race([runPromise, new Promise<void>((resolve) => setTimeout(resolve, 50))]);
       }
+      // Clear the run latch so a subsequent start() restarts (the `stopped`
+      // flag drives the rebuild above).
+      runPromise = null;
     },
     getStats() {
-      const s = pipeline.getStats();
+      const s = current.pipeline.getStats();
       return { framesIn: s.framesIn, chunksOut: s.chunksOut, bytesOut: s.bytesOut };
     },
   };

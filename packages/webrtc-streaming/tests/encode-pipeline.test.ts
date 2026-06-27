@@ -3,8 +3,30 @@ import {
   EncodePipeline,
   MockFrameSource,
   type EncodedChunk,
+  type FrameSource,
   type FrameSourceConfig,
+  type VideoFrame,
 } from '../src/index.js';
+
+/** A FrameSource that records whether stop() was called — to assert the
+ *  pipeline releases the source on every teardown path. */
+class StopTrackingFrameSource implements FrameSource {
+  stopCalls = 0;
+  constructor(private readonly inner: MockFrameSource) {}
+  start(config: FrameSourceConfig): Promise<void> {
+    return this.inner.start(config);
+  }
+  pullNextFrame(): Promise<VideoFrame | null> {
+    return this.inner.pullNextFrame();
+  }
+  stop(): Promise<void> {
+    this.stopCalls += 1;
+    return this.inner.stop();
+  }
+  getState(): 'idle' | 'starting' | 'running' | 'stopped' | 'failed' {
+    return this.inner.getState();
+  }
+}
 
 const STD_CONFIG: FrameSourceConfig = {
   targetFps: 30,
@@ -156,6 +178,34 @@ describe('V-531.A EncodePipeline', () => {
     });
     await pipeline.start();
     expect(endCalled).toBe(true);
+    expect(pipeline.getState()).toBe('stopped');
+  });
+
+  it('releases the FrameSource on normal end-of-stream', async () => {
+    const source = new StopTrackingFrameSource(new MockFrameSource({ maxFrames: 3 }));
+    await source.start(STD_CONFIG);
+    const pipeline = new EncodePipeline({ source });
+    await pipeline.start();
+    expect(source.stopCalls).toBeGreaterThanOrEqual(1);
+  });
+
+  it('a throwing chunk consumer releases the source + fires onEnd, then surfaces the error', async () => {
+    // Regression: a throw from the consumer must NOT abort the pull loop while
+    // leaking the FrameSource and skipping onEnd. Teardown (release + onEnd)
+    // must run, and the error must still propagate so it is observable.
+    const source = new StopTrackingFrameSource(new MockFrameSource({ maxFrames: 10 }));
+    await source.start(STD_CONFIG);
+    const pipeline = new EncodePipeline({ source });
+    let endCalled = false;
+    pipeline.onEnd(() => {
+      endCalled = true;
+    });
+    pipeline.onChunk(() => {
+      throw new Error('consumer boom');
+    });
+    await expect(pipeline.start()).rejects.toThrow(/consumer boom/);
+    expect(endCalled).toBe(true); // onEnd fired despite the throw
+    expect(source.stopCalls).toBeGreaterThanOrEqual(1); // FrameSource released
     expect(pipeline.getState()).toBe('stopped');
   });
 

@@ -139,21 +139,38 @@ describe('W458.B packages/webrtc-streaming/src/mock-codec-wrapper.ts content par
     );
   });
 
-  it('start: idempotent via runPromise !== null guard; awaits source.start(config); pipeline.start() NOT awaited + catch unhandled rejections framing pinned', () => {
+  it('start: idempotent via runPromise !== null guard; rebuilds a spent source+pipeline on restart; awaits source.start(config); pipeline.start() NOT awaited + catch unhandled rejections; clears the latch on run settle (restart after natural drain)', () => {
+    // restart support: source + pipeline are single-use, so a fresh pair is
+    // built per run + start() after stop/end actually restarts.
     expect(body).toMatch(
-      /async start\(\) \{\s*\n?\s*if \(runPromise !== null\) return;\s*\n?\s*await source\.start\(config\);\s*\n?\s*runPromise = pipeline\.start\(\);[\s\S]*?\/\/ Don't await — caller polls onChunk\/onEnd\. Catch unhandled rejections\.\s*\n?\s*runPromise\.catch\(\(\) => \{\}\);/,
+      /async start\(\) \{\s*\n?\s*if \(runPromise !== null\) return;[\s\S]*?if \(stopped\) \{\s*\n?\s*current = build\(\);\s*\n?\s*stopped = false;\s*\n?\s*\}\s*\n?\s*await current\.source\.start\(config\);\s*\n?\s*const run = current\.pipeline\.start\(\);\s*\n?\s*runPromise = run;/,
+    );
+    // The run latch clears when THIS run settles, so restart works after a
+    // natural drain (not just an explicit stop()).
+    expect(body).toMatch(
+      /run\s*\n?\s*\.catch\(\(\) => \{\}\)\s*\n?\s*\.finally\(\(\) => \{\s*\n?\s*if \(runPromise === run\) \{\s*\n?\s*runPromise = null;\s*\n?\s*stopped = true;/,
     );
   });
 
-  it("stop: idempotent via stopped flag; pipeline.stop + await source.stop; framing pinned 'Give the pipeline loop a chance to observe the stopped state.' + 50ms setTimeout race", () => {
+  it('build(): each run gets a FRESH MockFrameSource + EncodePipeline wired to forward into the persistent handler sets (restart/resubscribe support)', () => {
     expect(body).toMatch(
-      /async stop\(\) \{\s*\n?\s*if \(stopped\) return;\s*\n?\s*stopped = true;\s*\n?\s*pipeline\.stop\(\);\s*\n?\s*await source\.stop\(\);[\s\S]*?\/\/ Give the pipeline loop a chance to observe the stopped state\.\s*\n?\s*if \(runPromise !== null\) \{\s*\n?\s*await Promise\.race\(\[runPromise, new Promise<void>\(\(resolve\) => setTimeout\(resolve, 50\)\)\]\);/,
+      /function build\(\): \{ source: MockFrameSource; pipeline: EncodePipeline \} \{/,
+    );
+    expect(body).toMatch(
+      /pipeline\.onChunk\(\(chunk\) => \{\s*\n?\s*for \(const h of chunkHandlers\) h\(chunk\);\s*\n?\s*\}\);/,
+    );
+    expect(body).toMatch(/let current = build\(\);/);
+  });
+
+  it("stop: idempotent via stopped flag; current.pipeline.stop + await current.source.stop; framing pinned 'Give the pipeline loop a chance to observe the stopped state.' + 50ms setTimeout race; clears the run latch so a subsequent start() restarts", () => {
+    expect(body).toMatch(
+      /async stop\(\) \{\s*\n?\s*if \(stopped\) return;\s*\n?\s*stopped = true;\s*\n?\s*current\.pipeline\.stop\(\);\s*\n?\s*await current\.source\.stop\(\);[\s\S]*?\/\/ Give the pipeline loop a chance to observe the stopped state\.\s*\n?\s*if \(runPromise !== null\) \{\s*\n?\s*await Promise\.race\(\[runPromise, new Promise<void>\(\(resolve\) => setTimeout\(resolve, 50\)\)\]\);\s*\n?\s*\}\s*\n?\s*[\s\S]*?runPromise = null;/,
     );
   });
 
   it('getStats: passes through pipeline counters {framesIn + chunksOut + bytesOut}', () => {
     expect(body).toMatch(
-      /getStats\(\) \{\s*\n?\s*const s = pipeline\.getStats\(\);\s*\n?\s*return \{ framesIn: s\.framesIn, chunksOut: s\.chunksOut, bytesOut: s\.bytesOut \};\s*\n?\s*\},/,
+      /getStats\(\) \{\s*\n?\s*const s = current\.pipeline\.getStats\(\);\s*\n?\s*return \{ framesIn: s\.framesIn, chunksOut: s\.chunksOut, bytesOut: s\.bytesOut \};\s*\n?\s*\},/,
     );
   });
 

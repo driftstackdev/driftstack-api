@@ -118,13 +118,26 @@ describe('W458.C packages/webrtc-streaming/src/encode-pipeline.ts content parity
     expect(body).toMatch(/this\.endHandler\?\.\(\);/);
   });
 
-  it("Frame processing: framesIn+=1 + encode + chunksOut+=1 + bytesOut+=payload.byteLength + chunkHandler emit; stop() sets state='stopped'; getStats returns spread copy (defensive)", () => {
+  it("Frame processing: framesIn+=1 + encode + chunksOut+=1 + bytesOut+=payload.byteLength + chunkHandler emit (guarded by try/catch so a throwing consumer doesn't leak); stop() sets state='stopped'; getStats returns spread copy (defensive)", () => {
     expect(body).toMatch(
-      /this\.stats\.framesIn \+= 1;\s*\n?\s*const chunk = this\.encode\(frame\);\s*\n?\s*this\.stats\.chunksOut \+= 1;\s*\n?\s*this\.stats\.bytesOut \+= chunk\.payload\.byteLength;\s*\n?\s*this\.chunkHandler\?\.\(chunk\);/,
+      /this\.stats\.framesIn \+= 1;\s*\n?\s*const chunk = this\.encode\(frame\);\s*\n?\s*this\.stats\.chunksOut \+= 1;\s*\n?\s*this\.stats\.bytesOut \+= chunk\.payload\.byteLength;/,
+    );
+    // The chunk consumer call is wrapped so a throwing subscriber can't abort
+    // the loop without teardown — it re-throws to the `finally` that runs
+    // cleanup (release source + fire onEnd).
+    expect(body).toMatch(
+      /try \{\s*\n?\s*this\.chunkHandler\?\.\(chunk\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*this\.state = 'stopped';\s*\n?\s*throw err;\s*\n?\s*\}/,
     );
     expect(body).toMatch(/stop\(\): void \{\s*\n?\s*this\.state = 'stopped';\s*\n?\s*\}/);
     expect(body).toMatch(
       /getStats\(\): EncodePipelineStats \{\s*\n?\s*return \{ \.\.\.this\.stats \};\s*\n?\s*\}/,
+    );
+  });
+
+  it('Teardown is guaranteed on every exit path: a `finally` releases the source (await source.stop()) then fires endHandler exactly once', () => {
+    // Guard the source release so a failing stop() can't suppress onEnd.
+    expect(body).toMatch(
+      /\} finally \{[\s\S]*?this\.state = 'stopped';\s*\n?\s*try \{\s*\n?\s*await this\.source\.stop\(\);\s*\n?\s*\} finally \{\s*\n?\s*this\.endHandler\?\.\(\);\s*\n?\s*\}\s*\n?\s*\}/,
     );
   });
 
