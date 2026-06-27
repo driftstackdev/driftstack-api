@@ -90,12 +90,13 @@ describe('W814 cross-SDK README structure parity', () => {
 
   // ─── Go-specific minimum-version note ─────────────────────────
 
-  it("CRITICAL Go README pins the minimum-version requirement + version-rationale. 'Requires Go 1.21+ (any version supporting errors.As and context.Cancel* patterns; we develop on 1.22+)' is the load-bearing 'which Go versions work' anchor.", () => {
+  it("CRITICAL Go README pins the minimum-version requirement. The module's go.mod declares `go 1.22`, so the floor is Go 1.22+ (the previous 'Requires Go 1.21+' was stale — a 1.21 toolchain can't build a `go 1.22` module; the docs/quickstarts already migrated to 1.22+ on 2026-06-24). This is the load-bearing 'which Go versions work' anchor.", () => {
     const p = read(GO);
     expect(p).toMatch(
-      /Requires Go 1\.21\+ \(any version supporting `errors\.As` and `context\.Cancel\*` patterns/,
+      /Requires Go 1\.22\+ \(the module's `go\.mod` declares `go 1\.22`; uses `errors\.As`, `context\.Cancel\*`, and the `slices` package\)\./,
     );
-    expect(p).toMatch(/we develop on 1\.22\+\)\./);
+    // Drift sentinel — the stale 1.21 floor must NOT return.
+    expect(p).not.toMatch(/Requires Go 1\.21\+/);
   });
 
   // ─── Python sync + async dual framing ─────────────────────────

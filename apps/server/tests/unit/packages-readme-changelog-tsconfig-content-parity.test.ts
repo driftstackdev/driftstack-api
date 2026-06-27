@@ -88,7 +88,7 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(existsSync(P('sdk-typescript/README.md'))).toBe(true);
   });
 
-  it('sdk-go/README.md: alpha + zero-non-stdlib runtime deps + context-aware throughout + go get url + Go 1.21+ + driftstack.New(apiKey)+Close+ctx-first Quickstart + 11-row Resources accessor table (Sessions/Profiles/ProfileSnapshots V-312/APIKeys V-296/Usage etc) pinned', () => {
+  it('sdk-go/README.md: alpha + zero-non-stdlib runtime deps + context-aware throughout + go get url + Go 1.22+ (go.mod declares go 1.22) + driftstack.New(apiKey)+Close+ctx-first Quickstart + 11-row Resources accessor table (Sessions/Profiles/ProfileSnapshots V-312/APIKeys V-296/Usage etc) pinned', () => {
     const body = read(P('sdk-go/README.md'));
     expect(body).toMatch(/^# Driftstack Go SDK$/m);
     expect(body).toMatch(
@@ -96,7 +96,7 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     );
     expect(body).toMatch(/\*\*Status:\*\* alpha\. Not yet tagged\./);
     expect(body).toMatch(/^go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go$/m);
-    expect(body).toMatch(/Requires Go 1\.21\+/);
+    expect(body).toMatch(/Requires Go 1\.22\+/);
     expect(body).toMatch(/^## Quickstart$/m);
     expect(body).toMatch(
       /driftstack "github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go"/,

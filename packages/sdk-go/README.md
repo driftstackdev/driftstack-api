@@ -10,7 +10,7 @@ Stealth iPhone Safari automation, called from Go. Single-package, zero non-stdli
 go get github.com/driftstackdev/driftstack-api/packages/sdk-go
 ```
 
-Requires Go 1.21+ (any version supporting `errors.As` and `context.Cancel*` patterns; we develop on 1.22+).
+Requires Go 1.22+ (the module's `go.mod` declares `go 1.22`; uses `errors.As`, `context.Cancel*`, and the `slices` package).
 
 ## Quickstart
 
