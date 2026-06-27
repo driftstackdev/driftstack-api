@@ -60,6 +60,14 @@ client.sessions.search(id, body)
 client.sessions.login(id, body)
 client.sessions.destroy(id)
 
+client.egress.attachToSession(sessionId, config)  // EG-API-1.2 — route THIS session through a proxy
+client.egress.getSessionProxy(sessionId)          // current session proxy summary (404 = unproxied)
+client.egress.listProxies()             // EG-API-1.3 — saved reusable proxy library (metadata only)
+client.egress.createProxy(body)         // secret fields are write-only (never echoed back)
+client.egress.updateProxy(id, body)
+client.egress.deleteProxy(id)
+client.egress.testProxy(id)             // server-side reachability probe (SSRF-guarded)
+
 client.agentSessions.create(body?)      // AI chat: decompose a task → plan → execute
 client.agentSessions.get(id)
 client.agentSessions.message(id, userMessage, opts?)  // send a turn (userMessage: string); returns the executed plan
@@ -114,9 +122,32 @@ client.team.removeMember(membershipId)
 
 client.account.me()                     // calling account's full state
 
+client.legal.documents()                // V-049 — legal-document catalog (ToS/Privacy/DPA/AUP)
+client.legal.required()                 // documents the account must accept (or re-accept)
+client.legal.accept(body)               // record acceptance of a (key, version, content_hash) tuple
+
+client.auditLog.list(query?)            // V-216 — append-only account event ledger, newest first
+client.auditLog.iterate(opts?)          // walk every page (compliance bulk-pull)
+client.auditLog.export()                // V-462 — JSON bulk export (GDPR Art. 20, ≤10k rows)
+
+client.emailPreferences.list()          // V-204 — non-critical email opt-out toggles
+client.emailPreferences.set(body)
+client.emailPreferences.optOut(eventType)   // convenience: opt out of a single event type
+client.emailPreferences.optIn(eventType)    // convenience: opt back in
+
 client.billing.getState()
 client.billing.createCheckoutSession(body)
 client.billing.createPortalSession()
+
+client.cryptoOrders.quote(body)         // V-666 — preview price + crypto pay-range (no order)
+client.cryptoOrders.createCheckout(body, opts?)  // mint an order; pass { idempotencyKey } to dedupe
+client.cryptoOrders.list(opts?)         // V-666.BR — filter by status; V-666.BU — cursor-paged
+client.cryptoOrders.listAll(opts?)      // async-iterate every page (alias: iterate)
+client.cryptoOrders.iterate(opts?)      // cross-SDK synonym for listAll
+client.cryptoOrders.get(orderId)
+client.cryptoOrders.updateNote(orderId, body)
+client.cryptoOrders.cancel(orderId)     // abandon a pending order (self-service)
+client.cryptoOrders.receipt(orderId)    // JSON receipt
 
 client.auth.signup(body)
 client.auth.verifyEmail(body)
@@ -127,6 +158,12 @@ client.auth.requestMagicLink(body)
 client.auth.consumeMagicLink(body)
 client.auth.requestPasswordReset(body)
 client.auth.confirmPasswordReset(body)
+
+client.mfa.status()                     // V-353b — MFA enrollment state
+client.mfa.enroll()                     // start TOTP enrollment (returns otpauth_uri + secret)
+client.mfa.verify(body)                 // confirm with first code; returns 10 recovery codes
+client.mfa.disable(body)                // requires fresh step-up proof (see auth.mfaStepUp)
+client.mfa.regenerateRecoveryCodes()    // mint 10 fresh recovery codes (shown once)
 
 client.usage.current()
 ```
