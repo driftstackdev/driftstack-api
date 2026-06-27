@@ -171,6 +171,54 @@ describe('makeProfileSavedPersister — cross-account ownership guard', () => {
     expect(putObject).not.toHaveBeenCalled();
     expect(recordSave).not.toHaveBeenCalled();
   });
+
+  // #2 — a DB blip on the FIRST ownership await (agentSessions.get) must be
+  // logged + the frame dropped, NEVER thrown out of the fire-and-forget handler
+  // (an unhandled rejection would crash the control-plane process under Node 22).
+  it('a rejecting agentSessions.get (DB blip) is logged, not thrown', async () => {
+    const putObject = vi.fn().mockResolvedValue(undefined);
+    const logger = fakeLogger();
+    const get = vi.fn().mockRejectedValue(new Error('neon compute quota exceeded'));
+    const recordSave = vi.fn().mockResolvedValue(undefined);
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const persist = makeProfileSavedPersister(fakeR2(putObject), logger, {
+        agentSessions: { get },
+        profiles: { findById: vi.fn(), recordSave },
+      });
+      expect(() => persist(frame)).not.toThrow();
+      const errSpy = (logger as unknown as { error: ReturnType<typeof vi.fn> }).error;
+      await vi.waitFor(() => expect(errSpy).toHaveBeenCalledTimes(1));
+      expect(errSpy.mock.calls[0]![1]).toMatch(/ownership resolution/);
+      expect(putObject).not.toHaveBeenCalled();
+      expect(recordSave).not.toHaveBeenCalled();
+      // No unhandled rejection escaped the persister.
+      await new Promise((r) => setImmediate(r));
+      expect(unhandled).toHaveLength(0);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+
+  // #2 — same for the SECOND ownership await (profiles.findById).
+  it('a rejecting profiles.findById (DB blip) is logged, not thrown', async () => {
+    const putObject = vi.fn().mockResolvedValue(undefined);
+    const logger = fakeLogger();
+    const findById = vi.fn().mockRejectedValue(new Error('db connection reset'));
+    const persist = makeProfileSavedPersister(fakeR2(putObject), logger, {
+      agentSessions: { get: vi.fn().mockResolvedValue({ accountId: 'acc_owner' }) },
+      profiles: { findById, recordSave: vi.fn().mockResolvedValue(undefined) },
+    });
+    expect(() => persist(frame)).not.toThrow();
+    const errSpy = (logger as unknown as { error: ReturnType<typeof vi.fn> }).error;
+    await vi.waitFor(() => expect(errSpy).toHaveBeenCalledTimes(1));
+    expect(errSpy.mock.calls[0]![1]).toMatch(/ownership resolution/);
+    expect(putObject).not.toHaveBeenCalled();
+  });
 });
 
 // doc-150 item 5 — the save-back metadata (size_bytes + last_saved_at) rides

@@ -68,87 +68,134 @@ export function makeProfileSavedPersister(
     // path has bytes for the server to write to R2. So we no longer early-return
     // on the large path: it still resolves ownership + records the save
     // metadata; it just skips the R2 write (the harness already PUT the blob).
+    // The whole body is wrapped in a try/catch so that a rejection from the
+    // ownership-resolution awaits below (agentSessions.get / profiles.findById)
+    // — which run a DB query that can reject on a Neon compute-quota block /
+    // blip — is LOGGED + the frame dropped, NOT thrown. A profileSaved frame
+    // fires on every profile-backed teardown; an unhandled rejection here under
+    // Node 22 (--unhandled-rejections=throw) would terminate the Fastify process
+    // during exactly that window. The R2 put + recordSave below have their own
+    // inner try/catch; this outer guard backstops the bare awaits + anything
+    // else. The trailing `.catch()` is a second backstop in case the async
+    // function ever throws synchronously before entering this try.
     void (async () => {
-      let ownerAccountId: string | undefined;
-      if (ownership !== undefined) {
-        const session = await ownership.agentSessions.get(frame.sessionId);
-        if (session === null) {
-          logger.warn(
-            { component: 'profile-store', sessionId: frame.sessionId, profileId: frame.profile_id },
-            'profileSaved refused: unknown session for profile-blob write',
-          );
-          return;
-        }
-        const owned = await ownership.profiles.findById({
-          id: frame.profile_id,
-          accountId: session.accountId,
-        });
-        if (owned === null) {
-          logger.warn(
-            {
-              component: 'profile-store',
-              sessionId: frame.sessionId,
-              profileId: frame.profile_id,
-              accountId: session.accountId,
-            },
-            'profileSaved refused: profile not owned by the session account (cross-account write blocked)',
-          );
-          return;
-        }
-        ownerAccountId = session.accountId;
-      }
-
-      // Inline path: persist the sealed bytes to R2 (the large path already PUT).
-      if (sealedBlob !== undefined) {
-        const key = profileSealedBlobKey(frame.profile_id);
-        try {
-          await r2.putObject({
-            key,
-            body: Buffer.from(sealedBlob, 'base64'),
-            contentType: 'application/octet-stream',
-          });
-          logger.info(
-            { component: 'profile-store', profileId: frame.profile_id, sessionId: frame.sessionId },
-            'persisted profile sealed-blob to R2',
-          );
-        } catch (err) {
-          logger.error(
-            {
-              component: 'profile-store',
-              profileId: frame.profile_id,
-              sessionId: frame.sessionId,
-              err,
-            },
-            'failed to persist profile sealed-blob to R2',
-          );
-        }
-      }
-
-      // doc-150 item 5 — best-effort record of the save-back (last_saved_at +
-      // size_bytes) on the profile row. Only when ownership deps are wired (the
-      // resolved session-owner account scopes the write). A missing size_bytes
-      // leaves the column untouched; a failure is logged, never thrown.
-      if (ownership !== undefined && ownerAccountId !== undefined) {
-        try {
-          await ownership.profiles.recordSave({
+      try {
+        let ownerAccountId: string | undefined;
+        if (ownership !== undefined) {
+          const session = await ownership.agentSessions.get(frame.sessionId);
+          if (session === null) {
+            logger.warn(
+              {
+                component: 'profile-store',
+                sessionId: frame.sessionId,
+                profileId: frame.profile_id,
+              },
+              'profileSaved refused: unknown session for profile-blob write',
+            );
+            return;
+          }
+          const owned = await ownership.profiles.findById({
             id: frame.profile_id,
-            accountId: ownerAccountId,
-            at: new Date(),
-            ...(frame.size_bytes !== undefined ? { sizeBytes: frame.size_bytes } : {}),
+            accountId: session.accountId,
           });
-        } catch (err) {
-          logger.error(
-            {
-              component: 'profile-store',
-              profileId: frame.profile_id,
-              sessionId: frame.sessionId,
-              err,
-            },
-            'failed to record profile save metadata (size_bytes / last_saved_at)',
-          );
+          if (owned === null) {
+            logger.warn(
+              {
+                component: 'profile-store',
+                sessionId: frame.sessionId,
+                profileId: frame.profile_id,
+                accountId: session.accountId,
+              },
+              'profileSaved refused: profile not owned by the session account (cross-account write blocked)',
+            );
+            return;
+          }
+          ownerAccountId = session.accountId;
         }
+
+        // Inline path: persist the sealed bytes to R2 (the large path already PUT).
+        if (sealedBlob !== undefined) {
+          const key = profileSealedBlobKey(frame.profile_id);
+          try {
+            await r2.putObject({
+              key,
+              body: Buffer.from(sealedBlob, 'base64'),
+              contentType: 'application/octet-stream',
+            });
+            logger.info(
+              {
+                component: 'profile-store',
+                profileId: frame.profile_id,
+                sessionId: frame.sessionId,
+              },
+              'persisted profile sealed-blob to R2',
+            );
+          } catch (err) {
+            logger.error(
+              {
+                component: 'profile-store',
+                profileId: frame.profile_id,
+                sessionId: frame.sessionId,
+                err,
+              },
+              'failed to persist profile sealed-blob to R2',
+            );
+          }
+        }
+
+        // doc-150 item 5 — best-effort record of the save-back (last_saved_at +
+        // size_bytes) on the profile row. Only when ownership deps are wired (the
+        // resolved session-owner account scopes the write). A missing size_bytes
+        // leaves the column untouched; a failure is logged, never thrown.
+        if (ownership !== undefined && ownerAccountId !== undefined) {
+          try {
+            await ownership.profiles.recordSave({
+              id: frame.profile_id,
+              accountId: ownerAccountId,
+              at: new Date(),
+              ...(frame.size_bytes !== undefined ? { sizeBytes: frame.size_bytes } : {}),
+            });
+          } catch (err) {
+            logger.error(
+              {
+                component: 'profile-store',
+                profileId: frame.profile_id,
+                sessionId: frame.sessionId,
+                err,
+              },
+              'failed to record profile save metadata (size_bytes / last_saved_at)',
+            );
+          }
+        }
+      } catch (err) {
+        // Backstop: a rejection from the ownership-resolution awaits (DB blip /
+        // Neon quota block) lands here — log + drop the frame; NEVER throw out of
+        // the fire-and-forget handler (an unhandled rejection would crash the
+        // control-plane process).
+        logger.error(
+          {
+            component: 'profile-store',
+            profileId: frame.profile_id,
+            sessionId: frame.sessionId,
+            err,
+          },
+          'profileSaved persist failed during ownership resolution; dropping frame',
+        );
       }
-    })();
+    })().catch((err: unknown) => {
+      // Second backstop — the IIFE is fully try/caught above, but guard against
+      // any synchronous throw before the try (or a future refactor) so the
+      // process can never die on a profileSaved frame.
+      logger.error(
+        {
+          component: 'profile-store',
+          profileId: frame.profile_id,
+          sessionId: frame.sessionId,
+          err,
+        },
+        'profileSaved persist promise rejected (outer backstop)',
+      );
+    });
   };
 }
 

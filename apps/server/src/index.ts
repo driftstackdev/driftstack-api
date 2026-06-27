@@ -11,10 +11,14 @@ import { loadConfig } from './lib/config.js';
 import { createLogger } from './lib/logger.js';
 import { createProductionDeps } from './lib/bootstrap.js';
 import { buildApp } from './lib/app.js';
+import { installUnhandledRejectionBackstop } from './lib/unhandled-rejection-backstop.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
   const logger = createLogger(config);
+  // Install the unhandled-rejection backstop FIRST, before any async wiring, so
+  // a rejection during bootstrap/runtime is logged rather than crashing us.
+  installUnhandledRejectionBackstop(logger);
 
   let bootstrap;
   try {
