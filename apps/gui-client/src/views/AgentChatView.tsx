@@ -91,6 +91,20 @@ export function AgentChatView({
   useEffect(() => {
     void loadChats().then(setChats);
   }, []);
+  // P2 #6 — sync profileId when a re-deep-link changes initialProfileId. profileId
+  // is seeded from initialProfileId via useState (mount-only), so opening the agent
+  // chat again for a DIFFERENT profile (the deep-link arrives while the component
+  // stays mounted) left the previous profile selected. Update on a REAL change only
+  // (a defined, different value) so a user's manual in-session selection isn't
+  // clobbered by an unchanged/absent prop on every render. Skips undefined (no
+  // deep-link context → keep the current selection).
+  const prevInitialProfileIdRef = useRef(initialProfileId);
+  useEffect(() => {
+    if (initialProfileId !== undefined && initialProfileId !== prevInitialProfileIdRef.current) {
+      setProfileId(initialProfileId);
+    }
+    prevInitialProfileIdRef.current = initialProfileId;
+  }, [initialProfileId]);
   // Persist the active chat whenever its transcript changes (skip the empty
   // pre-first-message state). createdAt is sticky per chat id.
   useEffect(() => {

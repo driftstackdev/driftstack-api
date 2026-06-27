@@ -25,7 +25,11 @@ vi.mock('../../src/lib/telemetry', () => ({ initTelemetry: vi.fn() }));
 
 // buildClient returns a stub whose account.me() resolves whatever teams the
 // test set. null apiKey → null client (matches the real buildClient contract).
+// account.me() echoes the apiKey into the email so a test can assert WHICH
+// account's profile is surfaced (P2 #4 stale-across-switch); meReject makes the
+// fetch throw to exercise the fail-closed + cleared-on-switch path.
 let meTeams: Array<{ owner_account_id: string }> = [];
+let meReject = false;
 vi.mock('../../src/lib/client', () => ({
   buildClient: (apiKey: string | null) =>
     apiKey === null
@@ -33,14 +37,17 @@ vi.mock('../../src/lib/client', () => ({
       : {
           account: {
             me: () =>
-              Promise.resolve({
-                tier: 'solo_manual',
-                concurrent_session_cap: 5,
-                concurrent_session_active: 0,
-                profile_cap: 10,
-                profile_count: 0,
-                teams: meTeams,
-              }),
+              meReject
+                ? Promise.reject(new Error('unauthorized'))
+                : Promise.resolve({
+                    email: `${apiKey}@example.com`,
+                    tier: 'solo_manual',
+                    concurrent_session_cap: 5,
+                    concurrent_session_active: 0,
+                    profile_cap: 10,
+                    profile_count: 0,
+                    teams: meTeams,
+                  }),
           },
         },
 }));
@@ -48,10 +55,11 @@ vi.mock('../../src/lib/client', () => ({
 // A consumer that surfaces the live activeWorkspace + lets the test drive
 // update() and setActiveWorkspace().
 function Probe(): JSX.Element {
-  const { activeWorkspace, setActiveWorkspace, update } = useSettings();
+  const { activeWorkspace, setActiveWorkspace, update, accountMe } = useSettings();
   return (
     <div>
       <span data-testid="ws">{activeWorkspace ?? 'personal'}</span>
+      <span data-testid="me-email">{accountMe?.email ?? 'none'}</span>
       <button type="button" onClick={() => setActiveWorkspace('acct_team')}>
         pick-team
       </button>
@@ -62,6 +70,14 @@ function Probe(): JSX.Element {
         }}
       >
         sign-out
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void update({ apiKey: 'ds_live_b' });
+        }}
+      >
+        switch-account
       </button>
       <button
         type="button"
@@ -112,6 +128,38 @@ beforeEach(() => {
     telemetryOptIn: null,
   };
   meTeams = [];
+  meReject = false;
+});
+
+// P2 #4 — accountMe must NOT show the previous account's email/tier/caps after an
+// account or deployment switch. The fail-closed catch keeps the last-known me on a
+// transient blip for the SAME account, but a real identity change must clear it.
+describe('SettingsContext — accountMe freshness across account/deployment switch', () => {
+  it('clears + re-fetches accountMe when the apiKey (account) changes', async () => {
+    renderProvider();
+    // Initial account A's email is surfaced.
+    await waitFor(() =>
+      expect(screen.getByTestId('me-email')).toHaveTextContent('ds_live_a@example.com'),
+    );
+    // Switch to account B.
+    screen.getByRole('button', { name: 'switch-account' }).click();
+    // It must NOT keep showing A; it ends on B's email (cleared then re-fetched).
+    await waitFor(() =>
+      expect(screen.getByTestId('me-email')).toHaveTextContent('ds_live_b@example.com'),
+    );
+  });
+
+  it('does NOT pin the previous account when the new fetch FAILS (no stale leak)', async () => {
+    renderProvider();
+    await waitFor(() =>
+      expect(screen.getByTestId('me-email')).toHaveTextContent('ds_live_a@example.com'),
+    );
+    // The next account's me() fails (e.g. a bad key on the switched deployment).
+    meReject = true;
+    screen.getByRole('button', { name: 'switch-account' }).click();
+    // The prior account's email must be CLEARED (shown as 'none'), not pinned.
+    await waitFor(() => expect(screen.getByTestId('me-email')).toHaveTextContent('none'));
+  });
 });
 
 describe('SettingsContext — workspace scope safety', () => {

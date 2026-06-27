@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  formatBytes,
   formatDuration,
   recordingDurationMs,
   recordingTotalBytes,
@@ -166,14 +167,21 @@ export function RecordingPlayerView({
 
   // Export the open recording as a portable JSON envelope. Frames are already
   // hydrated by the time the player is interactive, so no async hydrate here.
-  function handleExport(): void {
+  async function handleExport(): Promise<void> {
     if (recording === null || recording.frames.length === 0) return;
     const now = new Date();
     const stillLive = recording.endedAt === null;
-    void downloadJson(
+    // AWAIT + gate on the CONFIRMED-write boolean: in the Tauri WKWebView the anchor
+    // fallback writes NOTHING but returns true, so the unconditional (un-awaited)
+    // "Exported" toast was a lie. Only claim success when the file actually landed.
+    const saved = await downloadJson(
       recordingExportFilename(recording, now),
       buildRecordingExport(recording, now),
     );
+    if (!saved) {
+      pushToast({ title: 'Export failed', body: 'Could not save the file.', tone: 'error' });
+      return;
+    }
     // A still-recording session exports a partial envelope (endedAt:null + only
     // the frames captured so far). Be honest about that in the toast rather than
     // claiming a 'complete' export — the user might think they have the whole run.
@@ -216,16 +224,14 @@ export function RecordingPlayerView({
           <div className="flex items-center gap-3 text-2xs text-ink-muted">
             <span className="mono">{recording.frames.length} frames</span>
             <span>·</span>
-            <span className="mono">
-              {(recordingTotalBytes(recording) / 1024 / 1024).toFixed(1)} MB
-            </span>
+            <span className="mono">{formatBytes(recordingTotalBytes(recording))}</span>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             className="btn-secondary"
-            onClick={handleExport}
+            onClick={() => void handleExport()}
             disabled={recording.frames.length === 0}
             title="Download this recording as a JSON file"
           >

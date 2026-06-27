@@ -13,6 +13,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import {
+  formatBytes,
   formatDuration,
   recordingDurationMs,
   recordingTotalBytes,
@@ -39,6 +40,22 @@ function makeRecording(over: Partial<Recording> = {}): Recording {
 function makeFrame(bytes: number, at: number = 1700000000000): RecordingFrame {
   return { at, dataUrl: 'data:image/png;base64,fake', bytes };
 }
+
+// P2 #10 — adaptive byte size: a sub-100KB recording must NOT read "0.0 MB".
+describe('formatBytes', () => {
+  it('uses B / KB / MB adaptively so small sizes are readable', () => {
+    expect(formatBytes(0)).toBe('0 B');
+    expect(formatBytes(512)).toBe('512 B');
+    // A 50KB recording used to show "0.0 MB"; now an honest KB value.
+    expect(formatBytes(50 * 1024)).toBe('50 KB');
+    expect(formatBytes(5 * 1024)).toBe('5.0 KB'); // <10KB keeps a decimal
+    expect(formatBytes(3.5 * 1024 * 1024)).toBe('3.5 MB');
+  });
+  it('never returns "0.0 MB" for a non-trivial sub-MB size', () => {
+    expect(formatBytes(90_000)).not.toMatch(/MB/);
+    expect(formatBytes(90_000)).toMatch(/KB/);
+  });
+});
 
 describe('formatDuration', () => {
   it('renders "0:00" for 0ms', () => {

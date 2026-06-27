@@ -121,4 +121,14 @@ describe('folders-store', () => {
     stores.set('folders.json', new Map([['names', 'not-an-array']]));
     expect(await loadFolders()).toEqual([]);
   });
+
+  // P2 #8 — the folder-name cap must match the server/per-profile binding cap (32).
+  // A longer rail name could never be assigned to a profile (server rejects + the
+  // per-profile meta truncated it), so the profile vanished from its own folder
+  // filter. The taxonomy store now caps at the SAME 32 chars.
+  it('caps a folder name at 32 chars (matches the server/per-profile binding cap)', () => {
+    expect(normalizeFolderName('a'.repeat(32))).toBe('a'.repeat(32));
+    expect(normalizeFolderName('a'.repeat(40))).toBe('a'.repeat(32));
+    expect(normalizeFolderName('a'.repeat(33))?.length).toBe(32);
+  });
 });

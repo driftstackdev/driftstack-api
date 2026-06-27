@@ -31,6 +31,13 @@ export type ProfilesMetaMap = Record<string, ProfileMeta>;
 const STORE_FILE = 'profiles-meta.json';
 const META_KEY = 'profiles';
 const MAX_TAGS = 12;
+// P2 #8 — these match the SERVER's binding caps (api-types ProfileFolderSchema
+// max 32, ProfileTagSchema max 24), which are the source of truth for what a
+// profile's folder/tag can actually be. The TAXONOMY stores (folders-store /
+// tags-store) are reconciled DOWN to the same caps so a name a user creates in the
+// rail can actually be applied to a profile — a longer name was truncated here +
+// rejected server-side, so the profile's folder/tag stopped string-equalling the
+// canonical name and vanished from its own filter.
 const MAX_TAG_CHARS = 24;
 const MAX_FOLDER_CHARS = 32;
 const MAX_NOTE_CHARS = 280;

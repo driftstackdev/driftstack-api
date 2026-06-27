@@ -21,7 +21,12 @@ const KEY = 'names';
 // folders.json still loads) and an icon can attach to ANY folder name (custom
 // or one derived from profiles).
 const ICONS_KEY = 'icons';
-const MAX_FOLDER_CHARS = 60;
+// P2 #8 — match the server/per-profile binding cap (api-types ProfileFolderSchema
+// max 32, profiles-meta MAX_FOLDER_CHARS 32). Was 60: a 33–60-char rail folder
+// could never be assigned to a profile (server rejects + per-profile meta truncated
+// it), so a profile under that folder vanished from its own filter. The whole stack
+// (rail input, taxonomy store, per-profile meta, server) is now one cap.
+const MAX_FOLDER_CHARS = 32;
 const MAX_FOLDERS = 200;
 const MAX_ICON_CHARS = 8;
 

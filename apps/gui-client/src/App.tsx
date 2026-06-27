@@ -16,6 +16,8 @@ import { NotificationToastStack } from './components/NotificationToastStack';
 import { RecordingsProvider } from './lib/recordings';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
 import { useConnectionStatus } from './lib/use-connection-status';
+import { isCloudBaseUrl } from './lib/telemetry';
+import { useAppVersion } from './lib/app-version';
 import { ConnectivityView } from './views/ConnectivityView';
 import { FirstRunWizard } from './views/FirstRunWizard';
 import { CommandPalette, type PaletteAction } from './components/CommandPalette';
@@ -56,56 +58,28 @@ export type View =
   | { kind: 'billing' }
   | { kind: 'settings' };
 
-export function App(): JSX.Element {
-  return (
-    <SettingsProvider>
-      <RecordingsProvider>
-        <Shell />
-      </RecordingsProvider>
-    </SettingsProvider>
-  );
+/** P2 #7 — whether the Team destination is offered, matching the Sidebar gate:
+ *  a team MEMBER (teamCount>0) OR a team-capable tier (so an owner can manage
+ *  their team before adding members). */
+export function paletteShowTeam(tier: string | null, teamCount: number): boolean {
+  const teamCapableTier =
+    tier === 'team_manual' || tier === 'agency_manual' || tier === 'enterprise';
+  return teamCount > 0 || teamCapableTier;
 }
 
-function Shell(): JSX.Element {
-  const { settings, activeWorkspace, loading, authExpired, dismissAuthExpired } = useSettings();
-  // 2026-06-14 — Command Center ('home') is the default landing (5→10 G4):
-  // it leads with Automate (Ask AI / recipes) + an account/session overview,
-  // making automation the primary surface; Profiles/Sessions are one click away.
-  const [view, setView] = useState<View>({ kind: 'home' });
-  // ⌘K command palette (demo-concepts arc) — global hotkey, view navigation.
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  // Keyboard-shortcuts cheatsheet (5→10 polish) — `?` or ⌘/. `?` is suppressed
-  // while typing in a field so it doesn't hijack a literal question mark.
-  const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
-  useEffect(() => {
-    function onKey(e: KeyboardEvent): void {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setPaletteOpen((v) => !v);
-        return;
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
-        e.preventDefault();
-        setCheatsheetOpen((v) => !v);
-        return;
-      }
-      if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        const t = e.target as HTMLElement | null;
-        const typing =
-          t !== null &&
-          (t.tagName === 'INPUT' ||
-            t.tagName === 'TEXTAREA' ||
-            t.tagName === 'SELECT' ||
-            t.isContentEditable);
-        if (typing) return;
-        e.preventDefault();
-        setCheatsheetOpen((v) => !v);
-      }
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-  const paletteActions: PaletteAction[] = [
+/** P2 #7 — build the ⌘K palette's action list. Extracted (pure, given the nav
+ *  callback + the two sidebar gates) so the destination set is testable and stays
+ *  in lockstep with the Sidebar rail (Session log / Mac mini fleet / Team were
+ *  missing). `showFleet`/`showTeam` mirror the Sidebar's exact gates so the palette
+ *  never routes to a destination the rail wouldn't show. */
+export function buildPaletteActions(opts: {
+  setView: (v: View) => void;
+  onShowShortcuts: () => void;
+  showFleet: boolean;
+  showTeam: boolean;
+}): PaletteAction[] {
+  const { setView, onShowShortcuts, showFleet, showTeam } = opts;
+  return [
     {
       id: 'nav-home',
       label: 'Go to Home',
@@ -155,6 +129,38 @@ function Shell(): JSX.Element {
       run: () => setView({ kind: 'recordings' }),
     },
     {
+      id: 'nav-sessions-history',
+      label: 'Go to Session log',
+      kind: 'view',
+      glyph: '☰',
+      keywords: ['nav', 'session log', 'history', 'past', 'closed', 'audit'],
+      run: () => setView({ kind: 'sessions-history' }),
+    },
+    ...(showFleet
+      ? [
+          {
+            id: 'nav-fleet',
+            label: 'Go to Mac mini fleet',
+            kind: 'view' as const,
+            glyph: '▤',
+            keywords: ['nav', 'fleet', 'mac', 'mini', 'cluster', 'nodes', 'workers'],
+            run: () => setView({ kind: 'fleet' }),
+          },
+        ]
+      : []),
+    ...(showTeam
+      ? [
+          {
+            id: 'nav-team',
+            label: 'Go to Team',
+            kind: 'view' as const,
+            glyph: '◑',
+            keywords: ['nav', 'team', 'members', 'workspace', 'rbac', 'invite'],
+            run: () => setView({ kind: 'team' }),
+          },
+        ]
+      : []),
+    {
       id: 'nav-proxies',
       label: 'Go to Proxies',
       kind: 'view',
@@ -194,9 +200,74 @@ function Shell(): JSX.Element {
       kind: 'help',
       glyph: '⌨',
       keywords: ['keyboard', 'shortcuts', 'keys', 'cheatsheet', 'help'],
-      run: () => setCheatsheetOpen(true),
+      run: onShowShortcuts,
     },
   ];
+}
+
+export function App(): JSX.Element {
+  return (
+    <SettingsProvider>
+      <RecordingsProvider>
+        <Shell />
+      </RecordingsProvider>
+    </SettingsProvider>
+  );
+}
+
+function Shell(): JSX.Element {
+  const { settings, activeWorkspace, accountMe, loading, authExpired, dismissAuthExpired } =
+    useSettings();
+  // P2 #11 — the real app version (Tauri runtime / build-time), not a hardcoded
+  // literal that silently lies after a version bump.
+  const appVersion = useAppVersion();
+  // 2026-06-14 — Command Center ('home') is the default landing (5→10 G4):
+  // it leads with Automate (Ask AI / recipes) + an account/session overview,
+  // making automation the primary surface; Profiles/Sessions are one click away.
+  const [view, setView] = useState<View>({ kind: 'home' });
+  // ⌘K command palette (demo-concepts arc) — global hotkey, view navigation.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  // Keyboard-shortcuts cheatsheet (5→10 polish) — `?` or ⌘/. `?` is suppressed
+  // while typing in a field so it doesn't hijack a literal question mark.
+  const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+        e.preventDefault();
+        setCheatsheetOpen((v) => !v);
+        return;
+      }
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const t = e.target as HTMLElement | null;
+        const typing =
+          t !== null &&
+          (t.tagName === 'INPUT' ||
+            t.tagName === 'TEXTAREA' ||
+            t.tagName === 'SELECT' ||
+            t.isContentEditable);
+        if (typing) return;
+        e.preventDefault();
+        setCheatsheetOpen((v) => !v);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  // P2 #7 — the palette must offer the same primary sidebar destinations as the rail.
+  // Session log is always present; Mac mini fleet + Team are gated EXACTLY like the
+  // Sidebar (fleet on a self-hosted deployment; Team for a member or a team-capable
+  // tier) so the palette never routes to a destination the rail wouldn't show.
+  const paletteActions: PaletteAction[] = buildPaletteActions({
+    setView,
+    onShowShortcuts: () => setCheatsheetOpen(true),
+    showFleet: !isCloudBaseUrl(settings.baseUrl),
+    showTeam: paletteShowTeam(accountMe?.tier ?? null, accountMe?.teams.length ?? 0),
+  });
   // V-244 — track wizard state. Customer with no apiKey on boot
   // sees the wizard; once apiKey is set (via wizard or any other
   // path) the regular shell takes over. `wizardDismissed` lets the
@@ -354,7 +425,7 @@ function Shell(): JSX.Element {
                 baseUrl={settings.baseUrl}
                 onClick={() => setView({ kind: 'settings' })}
               />
-              <span className="section-label">v0.0.1</span>
+              <span className="section-label">v{appVersion}</span>
             </>
           }
         />

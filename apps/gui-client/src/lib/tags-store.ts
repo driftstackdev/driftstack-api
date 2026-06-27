@@ -17,7 +17,11 @@ import { makeWriteLock } from './store-write-lock';
 
 const STORE_FILE = 'tags.json';
 const KEY = 'names';
-const MAX_TAG_CHARS = 40;
+// P2 #8 — match the server/per-profile binding cap (api-types ProfileTagSchema
+// max 24, profiles-meta MAX_TAG_CHARS 24). Was 40: a 25–40-char rail tag could
+// never be applied to a profile (server rejects + per-profile meta truncated it),
+// so a profile with that tag vanished from its own filter.
+const MAX_TAG_CHARS = 24;
 const MAX_TAGS = 300;
 
 let store: LazyStore | null = null;

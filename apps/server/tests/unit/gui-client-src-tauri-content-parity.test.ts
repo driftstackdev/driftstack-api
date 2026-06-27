@@ -150,7 +150,7 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(existsSync(T('src/lib.rs'))).toBe(true);
   });
 
-  it('capabilities/default.json: identifier=default + windows=[main] + 9 core/store permissions (incl. core:window:allow-start-dragging for the custom title-bar drag region) + fs:scope $APPDATA/recordings/** + 6 fs allow-* + updater:default + shell:allow-open 3-URL allow-list (localhost:5173 + app + app-staging) pinned', () => {
+  it('capabilities/default.json: identifier=default + windows=[main] + 9 core/store permissions (incl. core:window:allow-start-dragging for the custom title-bar drag region) + fs:scope $APPDATA/recordings/** + $DOWNLOAD/** + 7 fs allow-* + updater:default + shell:allow-open 3-URL allow-list (localhost:5173 + app + app-staging) pinned', () => {
     const body = read(T('capabilities/default.json'));
     expect(body).toMatch(/"\$schema": "\.\.\/gen\/schemas\/desktop-schema\.json"/);
     expect(body).toMatch(/"identifier": "default"/);
@@ -172,9 +172,14 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/"core:tray:default"/);
     expect(body).toMatch(/"store:default"/);
     expect(body).toMatch(/"identifier": "fs:scope"/);
-    expect(body).toMatch(/"allow": \[\{ "path": "\$APPDATA\/recordings\/\*\*" \}\]/);
+    // $DOWNLOAD/** added so the recordings/profile Export can actually write to
+    // Downloads from the main window (the boolean from downloadJson is now truthful).
+    expect(body).toMatch(
+      /"allow": \[\{ "path": "\$APPDATA\/recordings\/\*\*" \}, \{ "path": "\$DOWNLOAD\/\*\*" \}\]/,
+    );
     expect(body).toMatch(/"fs:allow-read-text-file"/);
     expect(body).toMatch(/"fs:allow-write-text-file"/);
+    expect(body).toMatch(/"fs:allow-write-file"/);
     expect(body).toMatch(/"fs:allow-remove"/);
     expect(body).toMatch(/"fs:allow-mkdir"/);
     expect(body).toMatch(/"fs:allow-exists"/);

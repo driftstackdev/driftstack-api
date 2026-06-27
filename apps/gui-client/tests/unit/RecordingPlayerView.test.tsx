@@ -7,10 +7,23 @@
 // without the Tauri persistence runtime.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, within } from '@testing-library/react';
+import { fireEvent, render, waitFor, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { ToastProvider } from '../../src/lib/toasts';
 import type { Recording } from '../../src/lib/recordings';
+
+// downloadJson is mocked so the export toast can be tested against a CONFIRMED
+// vs FAILED write (the success toast is now gated on the returned boolean — in
+// the real Tauri WKWebView the anchor fallback writes nothing but used to read
+// as success).
+const mockDownloadJson = vi.fn(() => Promise.resolve(true));
+vi.mock('../../src/lib/download', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    downloadJson: (...args: unknown[]) => mockDownloadJson(...args),
+  };
+});
 
 const recording: Recording = {
   id: 'rec_1',
@@ -36,6 +49,7 @@ vi.mock('../../src/lib/recordings', () => ({
   formatDuration: () => '0:00',
   recordingDurationMs: () => 10_000,
   recordingTotalBytes: () => 8,
+  formatBytes: (n: number) => n + ' B',
 }));
 
 const { RecordingPlayerView } = await import('../../src/views/RecordingPlayerView');
@@ -95,7 +109,8 @@ describe('RecordingPlayerView — Space play/pause keyboard control', () => {
     expect(within(container).getByLabelText('Playback progress')).toHaveAttribute('type', 'range');
   });
 
-  it('offers an Export button that confirms via a toast (recordings export is founder-approved)', () => {
+  it('offers an Export button that confirms via a toast ONLY on a confirmed write', async () => {
+    mockDownloadJson.mockResolvedValueOnce(true);
     const { container } = renderPlayer(
       <RecordingPlayerView recordingId="rec_1" onBack={vi.fn()} />,
     );
@@ -103,9 +118,21 @@ describe('RecordingPlayerView — Space play/pause keyboard control', () => {
     const exportBtn = view.getByText('Export');
     expect(exportBtn).toBeInTheDocument();
     expect(exportBtn).not.toBeDisabled();
-    // downloadJson no-ops in jsdom (no URL.createObjectURL); the success toast
-    // still fires, so a click confirms the wiring without a real download.
     fireEvent.click(exportBtn);
-    expect(view.getByText('Exported')).toBeInTheDocument();
+    // Export is async + gated on the confirmed-write boolean → the success toast.
+    await waitFor(() => expect(view.getByText('Exported')).toBeInTheDocument());
+  });
+
+  it('shows an Export FAILED toast (not a lying success) when the write does NOT land', async () => {
+    // The Tauri WKWebView anchor fallback writes nothing → downloadJson resolves false.
+    mockDownloadJson.mockResolvedValueOnce(false);
+    const { container } = renderPlayer(
+      <RecordingPlayerView recordingId="rec_1" onBack={vi.fn()} />,
+    );
+    const view = within(container);
+    fireEvent.click(view.getByText('Export'));
+    await waitFor(() => expect(view.getByText('Export failed')).toBeInTheDocument());
+    // The success toast must NOT appear.
+    expect(view.queryByText('Exported')).not.toBeInTheDocument();
   });
 });

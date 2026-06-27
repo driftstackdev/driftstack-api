@@ -19,6 +19,7 @@ import { RelativeTime } from '../components/RelativeTime';
 import { Skeleton } from '../components/Skeleton';
 import { useToasts } from '../lib/toasts';
 import {
+  formatBytes,
   formatDuration,
   recordingDurationMs,
   recordingTotalBytes,
@@ -69,12 +70,22 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
         return;
       }
       const now = new Date();
-      await downloadJson(recordingExportFilename(full, now), buildRecordingExport(full, now));
-      pushToast({
-        title: 'Exported',
-        body: `${full.frames.length} frames saved as JSON.`,
-        tone: 'success',
-      });
+      // Gate the success toast on a CONFIRMED write (downloadJson returns whether the
+      // file actually landed): in the Tauri WKWebView the anchor fallback writes
+      // NOTHING but used to read as success → a lying "Exported" toast.
+      const saved = await downloadJson(
+        recordingExportFilename(full, now),
+        buildRecordingExport(full, now),
+      );
+      if (saved) {
+        pushToast({
+          title: 'Exported',
+          body: `${full.frames.length} frames saved as JSON.`,
+          tone: 'success',
+        });
+      } else {
+        pushToast({ title: 'Export failed', body: 'Could not save the file.', tone: 'error' });
+      }
     } catch {
       pushToast({ title: 'Export failed', tone: 'error' });
     }
@@ -266,7 +277,7 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
                 </FactRow>
                 <FactRow k="Size">
                   <span className="mono text-ink-muted">
-                    {(recordingTotalBytes(selected) / 1024 / 1024).toFixed(1)} MB
+                    {formatBytes(recordingTotalBytes(selected))}
                   </span>
                 </FactRow>
               </dl>

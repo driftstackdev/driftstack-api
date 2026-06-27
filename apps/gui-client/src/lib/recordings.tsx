@@ -379,6 +379,17 @@ export function recordingDurationMs(r: Recording): number {
   return Math.max(0, end - r.startedAt);
 }
 
+/** P2 #10 — adaptive byte size for the recordings UI. The cards/player hardcoded
+ *  `(bytes / 1024 / 1024).toFixed(1) MB`, so a sub-100KB recording read "0.0 MB".
+ *  Pick the unit that keeps the number readable: bytes < 1 KiB → "B", < 1 MiB →
+ *  "KB", else "MB" with one decimal. */
+export function formatBytes(bytes: number): string {
+  const b = Math.max(0, bytes);
+  if (b < 1024) return `${Math.round(b)} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(b < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(b / 1024 / 1024).toFixed(1)} MB`;
+}
+
 export function recordingTotalBytes(r: Recording): number {
   // Hydrated entries (loaded from disk index but frames not yet read)
   // expose the cached totalBytes from the persisted header. Live + frame-

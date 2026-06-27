@@ -47,6 +47,15 @@ describe('tags-store', () => {
     expect(normalizeTagName('')).toBeNull();
   });
 
+  // P2 #8 — the tag-name cap must match the server/per-profile binding cap (24).
+  // A longer rail tag could never be applied to a profile (server rejects + the
+  // per-profile meta truncated it), so the profile vanished from its own tag filter.
+  it('caps a tag name at 24 chars (matches the server/per-profile binding cap)', () => {
+    expect(normalizeTagName('a'.repeat(24))).toBe('a'.repeat(24));
+    expect(normalizeTagName('a'.repeat(40))).toBe('a'.repeat(24));
+    expect(normalizeTagName('a'.repeat(25))?.length).toBe(24);
+  });
+
   it('addTag persists, sorts, and round-trips through load', async () => {
     await addTag('shopping');
     const list = await addTag('aged');

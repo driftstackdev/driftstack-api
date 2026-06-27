@@ -117,6 +117,42 @@ describe('ProxiesView — editing a VPN proxy preserves scheme + config', () => 
     expect(patch.wireguard).toBeUndefined();
   });
 
+  // P2 #3 — the saved-proxy card used to hardcode "🔒 SOCKS5" and always offer a
+  // SOCKS5 probe Test, so a VPN/HTTP proxy was mislabeled AND its Test always read
+  // "unreachable". The card now labels by the actual scheme and gates the SOCKS5 Test.
+  it('labels a VPN proxy by its scheme (not SOCKS5) + replaces the SOCKS5 Test with a launch note', async () => {
+    stored = [WIREGUARD_PROXY];
+    render(<ProxiesView />);
+    await screen.findByText('wg-london');
+    // Labeled WireGuard, NOT SOCKS5.
+    expect(screen.getByText('WireGuard')).toBeInTheDocument();
+    expect(screen.queryByText('SOCKS5')).toBeNull();
+    // No SOCKS5 Test/Re-test button — the tunnel verifies at launch.
+    expect(screen.queryByRole('button', { name: /^(Test|Re-test)$/ })).toBeNull();
+    expect(screen.getByText('Verified at launch')).toBeInTheDocument();
+  });
+
+  it('keeps the SOCKS5 label + Test button for a SOCKS5 proxy', async () => {
+    stored = [
+      {
+        id: 's1',
+        label: 'socks-ams',
+        host: '1.2.3.4',
+        port: 1080,
+        username: null,
+        password: null,
+        createdAt: '2026-05-20T00:00:00.000Z',
+        scheme: 'socks5',
+      },
+    ];
+    render(<ProxiesView />);
+    await screen.findByText('socks-ams');
+    expect(screen.getByText('SOCKS5')).toBeInTheDocument();
+    // The SOCKS5 probe Test IS offered for a socks5 proxy.
+    expect(screen.getByRole('button', { name: 'Test' })).toBeInTheDocument();
+    expect(screen.queryByText('Verified at launch')).toBeNull();
+  });
+
   it('renders the VPN scheme fields (not the SOCKS5 host/port) when editing a VPN proxy', async () => {
     stored = [WIREGUARD_PROXY];
     render(<ProxiesView />);

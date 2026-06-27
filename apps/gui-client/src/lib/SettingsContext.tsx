@@ -177,6 +177,26 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
   // rather than blocking the customer entirely.
   const [accountMe, setAccountMe] = useState<AccountSelfProfile | null>(null);
 
+  // P2 #4 — clear accountMe the instant the account/deployment IDENTITY changes
+  // (apiKey or baseUrl), BEFORE the new fetch resolves. Without this the Sidebar
+  // showed the PREVIOUS account's email/tier/caps until (and if) the new fetch
+  // landed — and the fail-closed catch in refreshAccountMe (audit wja3dfl5t) KEEPS
+  // the last-known accountMe, so a failed new fetch (e.g. a bad key on the switched
+  // deployment) pinned the old account's data indefinitely. Clearing on the identity
+  // tuple makes it show "—"/ungated until the NEW account's fetch lands, while the
+  // fail-closed catch still protects against a TRANSIENT blip for the SAME account
+  // (this effect only fires when the tuple actually changes). Skips the initial
+  // settings-load transition (prev ref null) so boot doesn't null a just-fetched me.
+  const prevIdentityRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    const identity = `${settings.apiKey ?? ''} ${settings.baseUrl}`;
+    if (prevIdentityRef.current !== null && prevIdentityRef.current !== identity) {
+      setAccountMe(null);
+    }
+    prevIdentityRef.current = identity;
+  }, [loading, settings.apiKey, settings.baseUrl]);
+
   const refreshAccountMe = useCallback(async (): Promise<void> => {
     if (!client) {
       setAccountMe(null);

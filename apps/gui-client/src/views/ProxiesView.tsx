@@ -35,7 +35,11 @@ import { probeProxyExit, type ProxyExitProbeResult } from '../lib/proxies';
 import { parseProxyString } from '../lib/parse-proxy';
 import { parseWireGuardConfig } from '../lib/parse-wireguard';
 import { validateOpenVpnConfig } from '../lib/parse-openvpn';
-import { buildWireGuardProxyInput, buildOpenVpnProxyInput } from '../lib/account-proxies';
+import {
+  buildWireGuardProxyInput,
+  buildOpenVpnProxyInput,
+  type AccountProxyScheme,
+} from '../lib/account-proxies';
 import { clearBindingsForProxy } from '../lib/profile-bindings';
 
 interface ListState {
@@ -44,6 +48,31 @@ interface ListState {
   error: string | null;
   /** Transient confirmation, e.g. "N profiles were unbound from the deleted proxy". */
   notice: string | null;
+}
+
+/** Per-scheme display label + icon for a saved-proxy card (P2 #3 — the card used to
+ *  hardcode "🔒 SOCKS5" so a VPN/HTTP proxy was MISLABELED). `undefined` scheme is the
+ *  legacy SOCKS5 default. */
+function schemeLabel(scheme: AccountProxyScheme | undefined): { icon: string; text: string } {
+  switch (scheme) {
+    case 'openvpn':
+      return { icon: '🛡️', text: 'OpenVPN' };
+    case 'wireguard':
+      return { icon: '🛡️', text: 'WireGuard' };
+    case 'http':
+      return { icon: '🌐', text: 'HTTP' };
+    case 'socks5':
+    default:
+      return { icon: '🔒', text: 'SOCKS5' };
+  }
+}
+
+/** Whether the saved-proxy card's Test button can honestly run the native SOCKS5
+ *  probe. Only a SOCKS5 (or legacy-undefined) proxy is socks5-probeable; a VPN/HTTP
+ *  endpoint has no honest SOCKS5 reachability/auth check (the create flow already
+ *  gates Test the same way — VPN does an endpoint DNS resolve, not a SOCKS5 probe). */
+function isSocks5Probeable(scheme: AccountProxyScheme | undefined): boolean {
+  return scheme === undefined || scheme === 'socks5';
 }
 
 const EMPTY_DRAFT: ProxyDraft = {
@@ -568,8 +597,10 @@ function ProxyCard({
             {p.label}
           </p>
           <p className="mt-0.5 flex items-center gap-1 text-[10.5px] text-ink-muted">
-            <span aria-hidden="true">🔒</span>
-            SOCKS5
+            {/* P2 #3 — label by the proxy's ACTUAL scheme (was hardcoded SOCKS5 →
+                a VPN/HTTP proxy read as SOCKS5). */}
+            <span aria-hidden="true">{schemeLabel(p.scheme).icon}</span>
+            {schemeLabel(p.scheme).text}
             {p.username !== null && p.username.length > 0 && (
               <>
                 <span className="text-surface-divider">·</span>
@@ -680,14 +711,27 @@ function ProxyCard({
 
       {/* ACTIONS — Test is the primary affordance; Edit / Remove are quiet. */}
       <div className="mt-auto flex items-center gap-2 pt-1">
-        <button
-          type="button"
-          className="btn-primary flex-1 text-xs"
-          onClick={onTest}
-          disabled={testing || testingAll}
-        >
-          {testing ? 'Testing…' : result !== undefined ? 'Re-test' : 'Test'}
-        </button>
+        {/* P2 #3 — the card Test runs a SOCKS5 probe, which is meaningless for a
+            VPN/HTTP endpoint (it always read "unreachable"). Only offer it for a
+            SOCKS5 proxy; otherwise show a clear note (the tunnel verifies at launch),
+            mirroring the create flow which gates the SOCKS5 probe to socks5. */}
+        {isSocks5Probeable(p.scheme) ? (
+          <button
+            type="button"
+            className="btn-primary flex-1 text-xs"
+            onClick={onTest}
+            disabled={testing || testingAll}
+          >
+            {testing ? 'Testing…' : result !== undefined ? 'Re-test' : 'Test'}
+          </button>
+        ) : (
+          <span
+            className="flex-1 text-[10px] italic text-ink-muted"
+            title="A VPN/HTTP endpoint has no SOCKS5 reachability probe — the tunnel verifies when a session launches."
+          >
+            Verified at launch
+          </span>
+        )}
         <button
           type="button"
           className="text-xs text-ink-muted transition-colors hover:text-ink-primary"
@@ -822,8 +866,11 @@ export function ProxyForm({
     const v = validateOpenVpnConfig(text);
     if (!v.ok) {
       setVpnHint(v.reason);
-      // Keep the blob so the user can fix it, but don't mark it valid.
-      setDraft((d) => ({ ...d, openvpn: { config_blob: text, ...(d.openvpn ?? {}) } }));
+      // Keep the blob so the user can fix it, but don't mark it valid. The spread
+      // must come FIRST so the NEW text wins — `{ config_blob: text, ...(d.openvpn) }`
+      // let the stale `config_blob` inside d.openvpn override every keystroke (the
+      // textarea reverted on each edit when invalid).
+      setDraft((d) => ({ ...d, openvpn: { ...(d.openvpn ?? {}), config_blob: text } }));
       return;
     }
     const built = buildOpenVpnProxyInput(

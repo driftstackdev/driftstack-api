@@ -88,7 +88,7 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     );
   });
 
-  it("Frames fact: hydrated short-circuit (frameCount when frames haven't loaded) + '/totalCaptured' suffix; rail Open disabled when frames.length === 0; Size bytes/1024/1024 .toFixed(1) MB", () => {
+  it("Frames fact: hydrated short-circuit (frameCount when frames haven't loaded) + '/totalCaptured' suffix; rail Open disabled when frames.length === 0; Size via formatBytes(recordingTotalBytes)", () => {
     expect(body).toContain('selected.hydrated && selected.frames.length === 0');
     expect(body).toContain('? selected.frameCount');
     expect(body).toContain('Math.max(selected.frames.length, selected.frameCount)');
@@ -98,7 +98,9 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     // unplayable after an app restart.
     expect(body).toContain('selected.frames.length === 0 &&');
     expect(body).toContain('!(selected.hydrated && selected.frameCount > 0)');
-    expect(body).toContain('(recordingTotalBytes(selected) / 1024 / 1024).toFixed(1)} MB');
+    // Size now renders via the adaptive formatBytes helper (KB/MB) so sub-100KB
+    // recordings no longer all show "0.0 MB".
+    expect(body).toContain('formatBytes(recordingTotalBytes(selected))');
   });
 
   it("Thumb: first-frame poster (decorative alt='') vs hydrated 'frames on disk' / 'no frames' placeholder + duration chip; card double-click opens only when frames are loaded", () => {
@@ -136,9 +138,13 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     // Persisted recordings must be hydrated before the envelope is built.
     expect(body).toContain('if (rec.hydrated && rec.frames.length === 0) {');
     expect(body).toContain('const hydrated = await hydrateFrames(rec.id);');
-    expect(body).toContain(
-      'downloadJson(recordingExportFilename(full, now), buildRecordingExport(full, now));',
-    );
+    // BUG FIX pinned: the success toast is GATED on a CONFIRMED write —
+    // downloadJson returns whether the file actually landed (the Tauri WKWebView
+    // anchor fallback writes nothing but used to read as success → a lying toast).
+    expect(body).toContain('const saved = await downloadJson(');
+    expect(body).toContain('recordingExportFilename(full, now)');
+    expect(body).toContain('buildRecordingExport(full, now)');
+    expect(body).toContain('if (saved) {');
     expect(body).toContain('onClick={() => void handleExport(selected)}');
   });
 

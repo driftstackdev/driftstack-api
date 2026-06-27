@@ -163,6 +163,13 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     idRef.current += 1;
     return idRef.current;
   }, []);
+  // P2 #9 — the id of the optimistic user bubble for the IN-FLIGHT send. The
+  // post() rollback only fires when the request RESOLVES; for a truly HUNG AI turn
+  // (the message call never resolves) that never happens, so Stop must remove the
+  // dangling user bubble itself — otherwise the orphan stays on screen AND gets
+  // persisted to chat history by the view's turns-change effect. Set when a user
+  // bubble is appended, cleared when the turn completes/rolls back.
+  const inFlightUserTurnIdRef = useRef<number | null>(null);
   // Soft cancel — Stop bumps this; an in-flight post that captured an older
   // generation discards its result on resolve. (UI stop; the server turn may
   // still complete — a true network/turn abort is a follow-up.)
@@ -170,6 +177,15 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   const cancel = useCallback(() => {
     cancelGenRef.current += 1;
     setSending(false);
+    // P2 #9 — finalize the dangling user bubble NOW (don't wait for a possibly-
+    // never-resolving post): remove the orphan so it isn't left on screen and isn't
+    // persisted as an unanswered "complete" turn. A post that DOES later resolve
+    // sees the bumped generation and no-ops its own rollback.
+    const orphan = inFlightUserTurnIdRef.current;
+    if (orphan !== null) {
+      inFlightUserTurnIdRef.current = null;
+      setTurns((t) => t.filter((x) => x.id !== orphan));
+    }
   }, []);
   // Invalidate the in-flight generation on unmount so a reply that resolves after
   // the view is gone (App.tsx remounts CurrentView per view.kind, unmounting this
@@ -216,6 +232,9 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         appendedUserTurnId = nextId();
         const uid = appendedUserTurnId;
         setTurns((t) => [...t, { id: uid, role: 'user', text: userMessage }]);
+        // P2 #9 — record it so Stop can remove this exact dangling bubble even if
+        // the request hangs forever (the rollback below only fires on resolve).
+        inFlightUserTurnIdRef.current = uid;
       }
       setLastUserMessage(userMessage);
       // Drop the optimistic user bubble on any NON-success outcome (Stop / error)
@@ -227,6 +246,9 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       const rollbackUserTurn = (): void => {
         if (appendedUserTurnId === null) return;
         const uid = appendedUserTurnId;
+        // P2 #9 — clear the in-flight marker (Stop already handled it if it fired
+        // first; this no-ops then).
+        if (inFlightUserTurnIdRef.current === uid) inFlightUserTurnIdRef.current = null;
         setTurns((t) => t.filter((x) => x.id !== uid));
       };
       try {
@@ -271,6 +293,9 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
           return false;
         }
         setSession(response.session);
+        // P2 #9 — the turn completed (an agent reply now backs the user bubble), so
+        // the bubble is no longer "dangling" — clear the in-flight marker.
+        inFlightUserTurnIdRef.current = null;
         setTurns((t) => [...t, { id: nextId(), role: 'agent', response }]);
         return true;
       } catch (err) {

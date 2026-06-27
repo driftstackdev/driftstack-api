@@ -114,6 +114,59 @@ describe('useAgentChat approve()', () => {
   });
 });
 
+// P2 #9 — Stop on a HUNG AI turn (the message call never resolves) must remove the
+// dangling user bubble NOW (the post() rollback only fires on resolve, which never
+// happens for a hung turn), so it isn't left on screen AND isn't persisted to chat
+// history as an unanswered "complete" turn.
+describe('useAgentChat cancel() on a hung turn', () => {
+  beforeEach(() => {
+    create.mockReset();
+    message.mockReset();
+    create.mockResolvedValue(SESSION);
+  });
+
+  it('removes the dangling user bubble when Stop is pressed on a never-resolving turn', async () => {
+    // The message call hangs forever — the rollback in post() can never fire.
+    message.mockReturnValue(new Promise(() => {}));
+    const { result } = renderHook(() => useAgentChat());
+    await act(async () => {
+      void result.current.send('do something');
+      await Promise.resolve();
+    });
+    // The optimistic user bubble is on screen, still sending.
+    expect(result.current.turns.filter((t) => t.role === 'user')).toHaveLength(1);
+    expect(result.current.sending).toBe(true);
+    // The user hits Stop.
+    act(() => result.current.cancel());
+    // The orphan bubble is gone (not waiting for the never-resolving request), and
+    // the composer is un-blocked.
+    expect(result.current.turns.filter((t) => t.role === 'user')).toHaveLength(0);
+    expect(result.current.turns).toHaveLength(0);
+    expect(result.current.sending).toBe(false);
+  });
+
+  it('keeps earlier completed turns intact when Stop hits a hung FOLLOW-UP turn', async () => {
+    // First turn completes; second turn hangs, then Stop.
+    message.mockResolvedValueOnce(DONE).mockReturnValueOnce(new Promise(() => {}));
+    const { result } = renderHook(() => useAgentChat());
+    await act(async () => {
+      await result.current.send('first');
+    });
+    expect(result.current.turns).toHaveLength(2); // user + agent
+    await act(async () => {
+      void result.current.send('second (hangs)');
+      await Promise.resolve();
+    });
+    expect(result.current.turns.filter((t) => t.role === 'user')).toHaveLength(2);
+    act(() => result.current.cancel());
+    // The hung second user bubble is removed; the first completed pair survives.
+    const userTurns = result.current.turns.filter((t) => t.role === 'user');
+    expect(userTurns).toHaveLength(1);
+    expect(userTurns[0]?.text).toBe('first');
+    expect(result.current.turns).toHaveLength(2);
+  });
+});
+
 describe('useAgentChat restore()', () => {
   beforeEach(() => {
     create.mockReset();

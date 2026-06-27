@@ -33,6 +33,7 @@ vi.mock('../../src/lib/recordings', () => ({
   formatDuration: () => '0:10',
   recordingDurationMs: () => 10_000,
   recordingTotalBytes: () => 4,
+  formatBytes: (n: number) => n + ' B',
 }));
 
 const { RecordingsView } = await import('../../src/views/RecordingsView');

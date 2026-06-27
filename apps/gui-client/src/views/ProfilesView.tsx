@@ -105,6 +105,13 @@ import { validateOpenVpnConfig } from '../lib/parse-openvpn';
 // visible loading flicker on tick refreshes so the panel doesn't
 // constantly re-flash.
 const REFRESH_MS = 15_000;
+// P2 #8 — folder/tag name caps, unified to the SERVER binding caps (api-types
+// ProfileFolderSchema max 32, ProfileTagSchema max 24) so every rail input,
+// create/edit slice, the taxonomy stores, and the per-profile meta agree. A name
+// longer than these could never be applied to a profile (server rejects + meta
+// truncates), so a profile under it vanished from its own folder/tag filter.
+const MAX_FOLDER_NAME_CHARS = 32;
+const MAX_TAG_NAME_CHARS = 24;
 
 // W637 — the selectable archetype catalog is now derived from the shared
 // ARCHETYPE_REGISTRY (single source of truth), filtered to the verified
@@ -1115,7 +1122,7 @@ export function ProfilesView({
   // (now under its new name) if it was active.
   const handleRenameFolder = useCallback(
     async (oldName: string, rawNew: string) => {
-      const newName = rawNew.trim().slice(0, 60);
+      const newName = rawNew.trim().slice(0, MAX_FOLDER_NAME_CHARS);
       if (newName.length === 0 || newName === oldName) return;
       const nextNames = await renameFolder(oldName, newName);
       setCustomFolders(nextNames);
@@ -1175,7 +1182,7 @@ export function ProfilesView({
   // then push. Keeps the filter on the tag (now renamed) if it was active.
   const handleRenameTag = useCallback(
     async (oldName: string, rawNew: string) => {
-      const newName = rawNew.trim().replace(/^#+/, '').trim().slice(0, 40);
+      const newName = rawNew.trim().replace(/^#+/, '').trim().slice(0, MAX_TAG_NAME_CHARS);
       if (newName.length === 0 || newName === oldName) return;
       const nextNames = await renameTag(oldName, newName);
       setCustomTags(nextNames);
@@ -1800,10 +1807,16 @@ export function ProfilesView({
         }
       }
       if (envelopes.length > 0) {
-        await downloadJson(
+        // Gate on the CONFIRMED-write boolean: in the Tauri WKWebView the anchor
+        // fallback writes NOTHING but returns true, so a successful-looking export
+        // could have saved no file. Surface a real error when the write didn't land.
+        const saved = await downloadJson(
           timestampedFilename('driftstack-profiles', 'json', new Date()),
           envelopes,
         );
+        if (!saved) {
+          setState((s) => ({ ...s, error: 'Could not save the exported profiles.' }));
+        }
       } else {
         setState((s) => ({ ...s, error: 'Could not export the selected profiles.' }));
       }
@@ -1818,11 +1831,19 @@ export function ProfilesView({
     if (!client) return;
     try {
       const envelope = await client.profiles.export(id);
-      await downloadJson(timestampedFilename('driftstack-profile', 'json', new Date()), envelope);
-      // Confirm the download fired — like every other handler, give feedback
-      // instead of silently completing.
+      // Gate the success notice on the CONFIRMED-write boolean (the Tauri WKWebView
+      // anchor fallback writes NOTHING but returns true) — don't claim a save that
+      // didn't happen.
+      const saved = await downloadJson(
+        timestampedFilename('driftstack-profile', 'json', new Date()),
+        envelope,
+      );
       const name = state.profiles.find((p) => p.id === id)?.name ?? 'profile';
-      setState((s) => ({ ...s, notice: `Exported "${name}" as a JSON file.` }));
+      if (saved) {
+        setState((s) => ({ ...s, notice: `Exported "${name}" as a JSON file.` }));
+      } else {
+        setState((s) => ({ ...s, error: `Could not save the export for "${name}".` }));
+      }
     } catch (err) {
       // Route through the same diagnostic-error path as the other handlers so a
       // Tauri-WebKit "Load failed" surfaces the baseUrl-aware diagnostic.
@@ -2598,6 +2619,7 @@ export function ProfilesView({
                 />
                 <RailRowMenu
                   label={`folder ${f}`}
+                  maxChars={MAX_FOLDER_NAME_CHARS}
                   onRename={(next) => void handleRenameFolder(f, next)}
                   onReicon={(emoji) => void handleReiconFolder(f, emoji)}
                   onDelete={() => void handleDeleteFolder(f)}
@@ -2623,7 +2645,7 @@ export function ProfilesView({
                   aria-label="New folder name"
                   placeholder="Folder name…"
                   value={newFolderName}
-                  maxLength={60}
+                  maxLength={MAX_FOLDER_NAME_CHARS}
                   onChange={(e) => setNewFolderName(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') void handleCreateFolder();
@@ -2716,6 +2738,7 @@ export function ProfilesView({
                   </button>
                   <RailRowMenu
                     label={`tag ${tag}`}
+                    maxChars={MAX_TAG_NAME_CHARS}
                     onRename={(next) => void handleRenameTag(tag, next)}
                     onDelete={() => void handleDeleteTag(tag)}
                   />
@@ -2728,7 +2751,7 @@ export function ProfilesView({
                 aria-label="New tag name"
                 placeholder="Tag name…"
                 value={newTagName}
-                maxLength={40}
+                maxLength={MAX_TAG_NAME_CHARS}
                 onChange={(e) => setNewTagName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') void handleCreateTag();
@@ -3377,7 +3400,7 @@ function CreateProfileModal({
       // whole create).
       const tagList = tags
         .split(',')
-        .map((t) => t.trim().slice(0, 24))
+        .map((t) => t.trim().slice(0, MAX_TAG_NAME_CHARS))
         .filter((t) => t.length > 0)
         .slice(0, 12);
       // Create the profile ONCE per modal session: if a prior attempt already
@@ -3390,7 +3413,9 @@ function CreateProfileModal({
           name: trimmed,
           archetype,
           ...(description.trim().length > 0 ? { description: description.trim() } : {}),
-          ...(folder.trim().length > 0 ? { folder: folder.trim().slice(0, 32) } : {}),
+          ...(folder.trim().length > 0
+            ? { folder: folder.trim().slice(0, MAX_FOLDER_NAME_CHARS) }
+            : {}),
           ...(tagList.length > 0 ? { tags: [...new Set(tagList)] } : {}),
           // Per-account sync — send the chosen icon so it follows the account.
           ...(icon.length > 0 ? { icon } : {}),
@@ -4032,7 +4057,7 @@ function FolderPicker({
             aria-label={`${ariaLabel} (new)`}
             placeholder="New folder name"
             autoFocus
-            maxLength={32}
+            maxLength={MAX_FOLDER_NAME_CHARS}
             className="w-32 rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-primary"
             value={value}
             onChange={(e) => onChange(e.target.value)}
@@ -4114,12 +4139,12 @@ function EditProfileModal({
       ...new Set(
         tags
           .split(',')
-          .map((t) => t.trim().slice(0, 24))
+          .map((t) => t.trim().slice(0, MAX_TAG_NAME_CHARS))
           .filter((t) => t.length > 0)
           .slice(0, 12),
       ),
     ];
-    const nextFolder = folder.trim().slice(0, 32);
+    const nextFolder = folder.trim().slice(0, MAX_FOLDER_NAME_CHARS);
     const nextNote = note.trim().slice(0, 280);
     const nextDescription = description.trim();
     const diff: UpdateProfileRequest = {};
@@ -4576,12 +4601,16 @@ function RailRowMenu({
   onRename,
   onReicon,
   onDelete,
+  maxChars,
 }: {
   /** Accessible disambiguator, e.g. "folder Work" / "tag aged". */
   label: string;
   onRename: (next: string) => void;
   onReicon?: (emoji: string) => void;
   onDelete: () => void;
+  /** P2 #8 — the name cap for THIS row's kind (folder 32 / tag 24) so the rename
+   *  input can't type past what the rename handler + server will accept. */
+  maxChars: number;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -4634,7 +4663,7 @@ function RailRowMenu({
               autoFocus
               aria-label={`Rename ${label}`}
               value={draft}
-              maxLength={60}
+              maxLength={maxChars}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') commitRename();
