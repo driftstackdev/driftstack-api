@@ -48,7 +48,8 @@ Response (200):
 }
 ```
 
-Required scope: `read` or `account_owner`.
+Required scope: `account_owner` (the service gates this read on
+`account_owner` — a bare `read` key is not sufficient).
 
 ### Team RBAC
 

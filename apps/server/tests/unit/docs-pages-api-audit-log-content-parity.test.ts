@@ -276,12 +276,18 @@ describe('W768 docs /api/audit-log content parity', () => {
     expect(p).toMatch(/client\.AuditLog\.Export\(ctx\)/);
   });
 
-  it("CRITICAL X-Driftstack-Account team-RBAC honored framing pinned. The 'X-Driftstack-Account header is honored for team scopes: a member with read access on the team owner sees the OWNER\\'s audit log when the header is set' wording matches W766 /api/team header-honoring endpoint list.", () => {
+  it("CRITICAL account_owner-scope + X-Driftstack-Account team-RBAC honored framing pinned. The audit read service (account-audit.ts) gates list() on the account_owner scope — a bare read key is NOT sufficient, so the doc must say account_owner (not the previous overstated 'with read scope'). The 'X-Driftstack-Account header is honored for team scopes: a member with read access on the team owner sees the OWNER's audit log' wording matches W766 /api/team header-honoring endpoint list.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The X-Driftstack-Account header is honored for\s*\n?team scopes : a member with read access on the team owner\s*\n?sees the OWNER's audit log when the header is set\./,
+      /Both endpoints require a customer bearer \(API key OR web session\)\s*\n?with the `account_owner` scope/,
     );
+    expect(p).toMatch(
+      /The\s*\n?X-Driftstack-Account header is honored for team scopes: a member with\s*\n?read access on the team owner sees the OWNER's audit log when the\s*\n?header is set\./,
+    );
+    // Drift sentinel — the overstated "with read scope" API-key claim
+    // MUST NOT come back (the service requires account_owner).
+    expect(p).not.toMatch(/with `read` scope\b/);
   });
 
   it("CRITICAL 3-error-row table pinned — 401/403/400. The 403 'X-Driftstack-Account points at an account the caller isn't a member of' is the load-bearing team-RBAC error framing.", () => {

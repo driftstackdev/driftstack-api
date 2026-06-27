@@ -191,10 +191,14 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     expect(p).toMatch(/Admin route: `apps\/server\/src\/routes\/admin-rate-limit-overrides\.ts`\./);
   });
 
-  it('CRITICAL read|account_owner scope required pinned.', () => {
+  it('CRITICAL auth-only (no specific scope) pinned. The handler (account-rate-limits.ts) uses requireAuth only — no requireScope — so the doc must NOT overstate a read/account_owner scope requirement.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Required scope: `read` or `account_owner`\./);
+    expect(p).toMatch(
+      /Requires authentication; no specific API-key scope is needed beyond a\s*\n?valid key\./,
+    );
+    // Drift sentinel — the overstated scope claim MUST NOT come back.
+    expect(p).not.toMatch(/Required scope: `read` or `account_owner`\./);
   });
 
   it('CRITICAL GET /v1/account/rate-limits canonical endpoint pinned.', () => {

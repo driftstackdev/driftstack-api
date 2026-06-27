@@ -47,7 +47,10 @@ describe('docs api/account-rate-limits content parity', () => {
     expect(body).toMatch(/\[\/reference\/rate-limits\]\(\/reference\/rate-limits\)/);
   });
 
-  it("required-scope pinning: 'read' OR 'account_owner' (drift to admin-only or no-scope would silently broaden / narrow the customer surface)", () => {
-    expect(body).toMatch(/Required scope: `read` or `account_owner`\./);
+  it('auth-only pinning: the GET /v1/account/rate-limits handler uses requireAuth only (no requireScope), so the doc states authentication is required with no specific API-key scope. Drift to claiming a read/account_owner scope would overstate the requirement.', () => {
+    expect(body).toMatch(
+      /Requires authentication; no specific API-key scope is needed beyond a\s*\n?valid key\./,
+    );
+    expect(body).not.toMatch(/Required scope: `read` or `account_owner`\./);
   });
 });

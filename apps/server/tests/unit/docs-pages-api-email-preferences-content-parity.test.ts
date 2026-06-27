@@ -127,11 +127,14 @@ describe('W771 docs /api/email-preferences content parity', () => {
     );
   });
 
-  it('CRITICAL read=read-or-account_owner scope; write=write-or-account_owner scope framing pinned. Drift would let SDK consumers send wrong-scoped requests.', () => {
+  it('CRITICAL GET=account_owner scope; write=write-or-account_owner scope framing pinned. The GET (list) service gates on account_owner — a bare read key is NOT sufficient (email-preferences.ts service) — so the doc must say account_owner, not the previous overstated "read or account_owner". Drift would let SDK consumers send wrong-scoped requests.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Required scope: `read` or `account_owner`\./);
+    expect(p).toMatch(/Required scope: `account_owner` \(the service gates this read on/);
     expect(p).toMatch(/Required scope: `write` or `account_owner`\./);
+    // Drift sentinel — the GET must not re-acquire the overstated
+    // "read or account_owner" claim (read is insufficient).
+    expect(p).not.toMatch(/Required scope: `read` or `account_owner`\./);
   });
 
   it('CRITICAL default-opt-in framing pinned. The "Categories not yet explicitly set return their default state (opt-in for everything, except where a specific email\'s footer already provided a one-click unsubscribe)" wording matches V-204 server-side default-state contract.', () => {

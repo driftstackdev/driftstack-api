@@ -88,7 +88,8 @@ tier-default row again. The override doesn't disappear from the
 admin's audit trail — only from the calling account's effective
 config.
 
-Required scope: `read` or `account_owner`.
+Requires authentication; no specific API-key scope is needed beyond a
+valid key.
 
 ## Bucket reference
 

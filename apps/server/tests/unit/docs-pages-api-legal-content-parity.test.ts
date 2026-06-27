@@ -162,12 +162,19 @@ describe('W773 docs /api/legal content parity', () => {
     );
   });
 
-  it('CRITICAL scope-required per-endpoint pinned. Read=read|account_owner, Write=write|account_owner. Drift would let SDK consumers send wrong-scoped requests.', () => {
+  it('CRITICAL scope-required per-endpoint pinned. The two GET endpoints (GET /v1/legal/documents + GET /v1/legal/required) are auth-only — their handlers use requireAuth with no requireScope (legal.ts) — so the doc must NOT overstate a read/account_owner scope. POST /v1/legal/accept requires write|account_owner. Drift would let SDK consumers send wrong-scoped requests.', () => {
     const p = read(PAGE);
 
-    const readScopeMatches = (p.match(/Required scope: `read` or `account_owner`\./g) ?? []).length;
-    expect(readScopeMatches).toBeGreaterThanOrEqual(2);
+    const authOnlyMatches = (
+      p.match(
+        /Requires authentication; no specific API-key scope is needed beyond a\s*\n?valid key\./g,
+      ) ?? []
+    ).length;
+    expect(authOnlyMatches).toBeGreaterThanOrEqual(2);
     expect(p).toMatch(/Required scope: `write` or `account_owner`\./);
+    // Drift sentinel — the GET endpoints must not re-acquire the
+    // overstated read/account_owner scope claim.
+    expect(p).not.toMatch(/Required scope: `read` or `account_owner`\./);
   });
 
   it('CRITICAL Source-of-truth pointers pinned — routes/legal.ts + services/legal.ts + db/legal-repo.ts + services/legal-catalog.ts. Drift would lose the canonical impl pointers.', () => {

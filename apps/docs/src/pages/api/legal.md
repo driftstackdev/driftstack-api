@@ -77,7 +77,8 @@ their acceptance; if the document text has changed in any way —
 even a typo fix — the hash differs and the acceptance is
 rejected with 409 (the customer must re-fetch + re-accept).
 
-Required scope: `read` or `account_owner`.
+Requires authentication; no specific API-key scope is needed beyond a
+valid key.
 
 ## See what needs acceptance
 
@@ -118,7 +119,8 @@ surfaces as `version_outdated` (or `content_hash_changed` for an
 in-place edit). The dashboard surfaces an in-app banner whenever a
 re-acceptance is required.
 
-Required scope: `read` or `account_owner`.
+Requires authentication; no specific API-key scope is needed beyond a
+valid key.
 
 ## Record acceptance
 

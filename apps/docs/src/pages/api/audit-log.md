@@ -295,10 +295,12 @@ for _, entry := range dump.Data {
 
 ## Auth + scoping
 
-Both endpoints accept a customer bearer (API key OR web session)
-with `read` scope. The X-Driftstack-Account header is honored for
-team scopes : a member with read access on the team owner
-sees the OWNER's audit log when the header is set.
+Both endpoints require a customer bearer (API key OR web session)
+with the `account_owner` scope (the service gates the audit read on
+`account_owner` — a bare `read` key is not sufficient). The
+X-Driftstack-Account header is honored for team scopes: a member with
+read access on the team owner sees the OWNER's audit log when the
+header is set.
 
 ## Errors
 
