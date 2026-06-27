@@ -113,6 +113,14 @@ bumps the profile's `last_used_at` fire-and-forget. Cross-account
 from a missing one). See also `POST /v1/profiles/:id/launch` for
 the one-round-trip launch helper.
 
+A profile can have only **one live session at a time**. If the
+`profile_id` already has a non-terminal session, the create is
+refused with `409 profile-in-use` (the body's `active_session_id`
+names the live session) — this prevents two sessions on the same
+profile from overwriting each other's saved cookies and logins.
+End the named session (or wait for it to finish), then launch
+again. Sessions without a `profile_id` are never affected.
+
 `behavioral_profile` (2026-06-05) selects the per-session behavioural
 persona the harness drives touch / scroll / typing cadence with — one
 of `casual`, `regular`, or `power_user`. Defaults to `regular` when
@@ -125,6 +133,8 @@ Errors:
 - `429 ConcurrencyLimit` — concurrent-session cap hit.
 - `404 NotFound` — `profile_id` refers to a profile that doesn't
   exist OR belongs to a different account.
+- `409 profile-in-use` — the `profile_id` already has a live
+  session (the body's `active_session_id` names it). End it first.
 
 ## List
 

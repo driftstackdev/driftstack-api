@@ -276,6 +276,36 @@ class ProxyValidationFailedError(DriftstackError):
         self.reason = reason
 
 
+class ProfileInUseError(ConflictError):
+    """409 — A3 finding #7 single-active-session-per-profile guard.
+
+    A session-create carried a ``profile_id`` that already has a live (non-
+    terminal) session for the account. Two sessions on the same profile would both
+    restore + overwrite the same saved cookie/state blob (losing the customer's
+    logins), so the launch is REFUSED. ``active_session_id`` is the id of the live
+    session (e.g. ``ses_…`` / ``agt_…``) — end it (or wait for it to finish) before
+    launching another. A create without a profile_id never raises this.
+
+    Subclasses :class:`ConflictError` (it IS a 409 conflict) so existing
+    ``except ConflictError`` handlers still catch it.
+
+    Cross-SDK parity: TS exposes ``err.activeSessionId``; Go exposes
+    ``err.ActiveSessionID``; Python exposes snake_case ``err.active_session_id``.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: int | None = 409,
+        problem_type: str | None = None,
+        problem: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message, status=status, problem_type=problem_type, problem=problem)
+        p = problem or {}
+        self.active_session_id: str = str(p.get("active_session_id", ""))
+
+
 # ── Driver / upstream (502) ───────────────────────────────────────────────
 
 
@@ -441,6 +471,8 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/storage-quota-exceeded": StorageQuotaExceededError,
     # Live pre-launch proxy validation (422 at launch).
     "https://errors.driftstack.dev/proxy-validation-failed": ProxyValidationFailedError,
+    # A3 finding #7 — single-active-session-per-profile guard (409 at launch).
+    "https://errors.driftstack.dev/profile-in-use": ProfileInUseError,
     "https://errors.driftstack.dev/revoked-key": RevokedKeyError,
     "https://errors.driftstack.dev/expired-key": ExpiredKeyError,
     "https://errors.driftstack.dev/invalid-key": InvalidKeyError,

@@ -124,6 +124,13 @@ ends. Pass the `prof_<uuid>` id from the profiles API (a bare uuid is also
 accepted). It must reference a profile your account owns; an unknown or
 not-owned id returns `404`. Omit it for a stateless (fresh) session.
 
+A profile can have only **one live session at a time**. If the profile already
+has a non-terminal session, the create is refused with `409 profile-in-use`
+(the body's `active_session_id` names the live session). This prevents two
+sessions on the same profile from overwriting each other's saved cookies and
+logins. End the named session — or wait for it to finish — before launching
+another. Sessions without a `profile_id` are never affected.
+
 The optional `proxy_id` routes the session's egress through one of your saved
 **account proxies** (manage them at `/v1/account/me/proxies`); pass the bare
 proxy uuid. It must reference a proxy your account owns — an unknown or
@@ -547,17 +554,18 @@ Filter via
 
 ## Errors
 
-| Status | Type                         | When                                                                 |
-| -----: | ---------------------------- | -------------------------------------------------------------------- |
-|    400 | validation                   | body fails schema (missing `user_message`, etc.)                     |
-|    404 | not-found                    | session id unknown to the calling account                            |
-|    409 | conflict                     | mode mismatch (e.g. takeover on `mode: 'ai'`)                        |
-|    409 | pair-mode-invalid-transition | state-machine refused the transition (carries `from` + `transition`) |
-|    409 | pair-mode-conflict           | concurrent takeover lost the lock race (carries `winner_client_id`)  |
-|    402 | bundled-llm-budget-exhausted | bundled-LLM monthly cap reached                                      |
-|    402 | bundled-llm-consent-required | deployment has bundled-LLM but customer hasn't opted in              |
-|    502 | byok-anthropic-required      | no BYOK + no consent + no fallback                                   |
-|    503 | feature-unavailable          | deployment activation gate is off (no LLM key path wired)            |
+| Status | Type                         | When                                                                           |
+| -----: | ---------------------------- | ------------------------------------------------------------------------------ |
+|    400 | validation                   | body fails schema (missing `user_message`, etc.)                               |
+|    404 | not-found                    | session id unknown to the calling account                                      |
+|    409 | conflict                     | mode mismatch (e.g. takeover on `mode: 'ai'`)                                  |
+|    409 | profile-in-use               | create's `profile_id` already has a live session (carries `active_session_id`) |
+|    409 | pair-mode-invalid-transition | state-machine refused the transition (carries `from` + `transition`)           |
+|    409 | pair-mode-conflict           | concurrent takeover lost the lock race (carries `winner_client_id`)            |
+|    402 | bundled-llm-budget-exhausted | bundled-LLM monthly cap reached                                                |
+|    402 | bundled-llm-consent-required | deployment has bundled-LLM but customer hasn't opted in                        |
+|    502 | byok-anthropic-required      | no BYOK + no consent + no fallback                                             |
+|    503 | feature-unavailable          | deployment activation gate is off (no LLM key path wired)                      |
 
 The pair-mode state-machine transition errors are typed in all
 three SDKs: `PairModeStateInvalidTransitionError`. Branch on

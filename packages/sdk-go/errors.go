@@ -84,6 +84,8 @@ var (
 	ErrPairModeStateInvalidTransition = errors.New("invalid pair-mode transition")
 	// Live pre-launch proxy validation (422 at launch).
 	ErrProxyValidationFailed = errors.New("proxy validation failed")
+	// A3 finding #7 — single-active-session-per-profile guard (409 at launch).
+	ErrProfileInUse = errors.New("profile already in use")
 )
 
 // AuthError covers any of the auth-related problem types. Use the
@@ -199,6 +201,23 @@ type ProxyValidationFailedError struct {
 
 func (e *ProxyValidationFailedError) Is(target error) bool {
 	return target == ErrProxyValidationFailed
+}
+
+// ProfileInUseError — 409 (A3 finding #7). A session-create carried a
+// profile_id that already has a live (non-terminal) session for the account.
+// Two sessions on the same profile would both restore + overwrite the same
+// saved cookie/state blob (losing the customer's logins), so the launch is
+// REFUSED. ActiveSessionID is the id of the live session (e.g. "ses_…" /
+// "agt_…") — end it (or wait for it to finish) before launching another. A
+// create without a profile_id never raises this. errors.Is matches both
+// ErrProfileInUse and the broader ErrConflict.
+type ProfileInUseError struct {
+	apiError
+	ActiveSessionID string
+}
+
+func (e *ProfileInUseError) Is(target error) bool {
+	return target == ErrProfileInUse || target == ErrConflict
 }
 
 // SessionDestroyedError — 410 when an op targets a destroyed session.

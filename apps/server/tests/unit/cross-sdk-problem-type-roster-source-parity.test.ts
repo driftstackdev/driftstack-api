@@ -75,14 +75,15 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
     );
   });
 
-  it('CRITICAL 31-entry PROBLEM_TYPES roster pinned with `as const`. Each entry is a https://errors.driftstack.dev/<slug> URL. Drift to dropping any entry or changing a URI breaks consumers.', () => {
+  it('CRITICAL 32-entry PROBLEM_TYPES roster pinned with `as const`. Each entry is a https://errors.driftstack.dev/<slug> URL. Drift to dropping any entry or changing a URI breaks consumers.', () => {
     const src = read(PROBLEM_SCHEMA);
 
-    // 31 problem types. v2-#6 added BundledLlm{BudgetExhausted,
+    // 32 problem types. v2-#6 added BundledLlm{BudgetExhausted,
     // ConsentRequired} (402 Payment Required, bundled-LLM rail).
     // v2-#8 added PairMode{Conflict,StateInvalidTransition} (409
     // pair-mode contention). ProxyValidationFailed (422) is the
-    // per-session proxy-config validation failure.
+    // per-session proxy-config validation failure. ProfileInUse (409)
+    // is the A3-#7 single-active-session-per-profile guard.
     const types: Record<string, string> = {
       BadRequest: 'bad-request',
       Unauthorized: 'unauthorized',
@@ -115,8 +116,9 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
       PairModeConflict: 'pair-mode-conflict',
       PairModeStateInvalidTransition: 'pair-mode-invalid-transition',
       ProxyValidationFailed: 'proxy-validation-failed',
+      ProfileInUse: 'profile-in-use',
     };
-    expect(Object.keys(types).length).toBe(31);
+    expect(Object.keys(types).length).toBe(32);
 
     for (const [key, slug] of Object.entries(types)) {
       // Match `<Key>: 'https://errors.driftstack.dev/<slug>',`
@@ -134,11 +136,11 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
     );
   });
 
-  it('CRITICAL all 31 problem-type URIs share the https://errors.driftstack.dev/ prefix. The shared origin is what lets clients pattern-match (e.g. `if (problem.type.startsWith("https://errors.driftstack.dev/"))`). Drift to a different host on any entry would silently break consumers.', () => {
+  it('CRITICAL all 32 problem-type URIs share the https://errors.driftstack.dev/ prefix. The shared origin is what lets clients pattern-match (e.g. `if (problem.type.startsWith("https://errors.driftstack.dev/"))`). Drift to a different host on any entry would silently break consumers.', () => {
     const src = read(PROBLEM_SCHEMA);
     // Count problem-type URIs.
     const errorUris = (src.match(/'https:\/\/errors\.driftstack\.dev\/[a-z-]+'/g) ?? []).length;
-    expect(errorUris, 'PROBLEM_TYPES entry count').toBe(31);
+    expect(errorUris, 'PROBLEM_TYPES entry count').toBe(32);
   });
 
   it('CRITICAL slug format pinned — all URI path slugs are lowercase + hyphens (no underscores, no camelCase). Drift to mixed casing would break URL-template clients that match on hyphen-only slugs.', () => {
@@ -180,16 +182,16 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
     expect(src).toMatch(/RFC 7807 problem details/);
   });
 
-  it('Cross-roster 5-invariant cluster — RFC-7807 shape + 30-entry PROBLEM_TYPES + `as const` + lowercase-hyphen slugs + "keep these URIs forever" framing. Drift on any would fragment the canonical problem-type roster.', () => {
+  it('Cross-roster 5-invariant cluster — RFC-7807 shape + 32-entry PROBLEM_TYPES + `as const` + lowercase-hyphen slugs + "keep these URIs forever" framing. Drift on any would fragment the canonical problem-type roster.', () => {
     const src = read(PROBLEM_SCHEMA);
 
     expect(src).toMatch(/RFC 7807 problem details/);
     expect(src).toMatch(/keep these URIs forever/);
     expect(src).toMatch(/\} as const;/);
 
-    // 31 URIs.
+    // 32 URIs.
     const errorUris = (src.match(/'https:\/\/errors\.driftstack\.dev\/[a-z-]+'/g) ?? []).length;
-    expect(errorUris).toBe(31);
+    expect(errorUris).toBe(32);
 
     // 7 V-anchor comments.
     for (const anchor of ['V-079', 'V-352b', 'V-353e']) {

@@ -40,6 +40,7 @@ from driftstack.errors import (
     NotFoundError,
     PairModeConflictError,
     PairModeStateInvalidTransitionError,
+    ProfileInUseError,
     ProxyValidationFailedError,
     QuotaExceededError,
     RateLimitError,
@@ -101,6 +102,7 @@ __all__ = [
     "BundledLlmConsentRequiredError",
     "PairModeConflictError",
     "PairModeStateInvalidTransitionError",
+    "ProfileInUseError",
     "ProxyValidationFailedError",
     "LiveKitInfo",
     # Customer-facing pydantic models — used as return types on

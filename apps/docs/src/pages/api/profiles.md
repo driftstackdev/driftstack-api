@@ -176,6 +176,9 @@ Errors:
 - `404` if the profile isn't owned by the calling account
   (deliberate anti-enumeration — cross-account `profile_id` is
   indistinguishable from a missing one).
+- `409 profile-in-use` if the profile already has a live session —
+  a profile can run only one session at a time (the body's
+  `active_session_id` names the live one). End it first, then launch.
 - Any error the underlying `POST /v1/sessions` can return — most
   commonly `429` (concurrent-session cap reached) or `400` if the
   EGRESS gate requires a `proxy` envelope on this deployment and the

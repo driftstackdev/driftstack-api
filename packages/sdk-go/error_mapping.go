@@ -50,6 +50,8 @@ var problemTypeToFactory = map[string]func(base apiError, problem map[string]any
 	"https://errors.driftstack.dev/pair-mode-invalid-transition": buildPairModeInvalidTransition,
 	// Live pre-launch proxy validation (422 at launch).
 	"https://errors.driftstack.dev/proxy-validation-failed": buildProxyValidationFailed,
+	// A3 finding #7 — single-active-session-per-profile guard (409 at launch).
+	"https://errors.driftstack.dev/profile-in-use": buildProfileInUse,
 }
 
 // errorFromResponse parses an HTTP response body as RFC 7807
@@ -230,6 +232,11 @@ func buildProxyValidationFailed(base apiError, problem map[string]any, _ string)
 	return &ProxyValidationFailedError{apiError: base, Reason: reason}
 }
 
+func buildProfileInUse(base apiError, problem map[string]any, _ string) error {
+	activeSessionID, _ := problem["active_session_id"].(string)
+	return &ProfileInUseError{apiError: base, ActiveSessionID: activeSessionID}
+}
+
 func intFromProblem(m map[string]any, key string) int {
 	v, ok := m[key]
 	if !ok {
@@ -380,6 +387,9 @@ var (
 	_ error = (*SessionTimeoutError)(nil)
 	_ error = (*LegalAcceptanceRequiredError)(nil)
 	_ error = (*DriverError)(nil)
+	_ error = (*ProfileInUseError)(nil)
+	_ error = (*StorageQuotaExceededError)(nil)
+	_ error = (*ProxyValidationFailedError)(nil)
 	_ error = (*UnknownError)(nil)
 
 	// Defence in depth: HTTP status sanity for the few status codes we

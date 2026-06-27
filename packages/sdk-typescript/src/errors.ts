@@ -30,6 +30,7 @@
 //   https://errors.driftstack.dev/feature-unavailable  → FeatureUnavailableError
 //   https://errors.driftstack.dev/mfa-step-up-required → MfaStepUpRequiredError
 //   https://errors.driftstack.dev/proxy-validation-failed → ProxyValidationFailedError
+//   https://errors.driftstack.dev/profile-in-use        → ProfileInUseError
 //
 // Anything else (network failure, parse error, etc.) surfaces as a
 // `DriftstackError` with `kind: 'transport'` set on the instance.
@@ -259,6 +260,24 @@ export class ProxyValidationFailedError extends DriftstackError {
   }
 }
 
+/**
+ * 409 — a session-create carried a `profile_id` that already has a live
+ * (non-terminal) session for the account. Two sessions on the same profile would
+ * both restore and then overwrite the same saved cookie/state blob, losing the
+ * customer's logins, so the launch is REFUSED. `err.activeSessionId` is the id of
+ * the live session (e.g. `ses_…` / `agt_…`) — end it (or wait for it to finish)
+ * before launching another. A create without a profile_id never raises this; reuses
+ * the `conflict` kind (like the other 409s) so `catch (ConflictError)` still works.
+ */
+export class ProfileInUseError extends DriftstackError {
+  readonly activeSessionId: string | undefined;
+  constructor(p: Problem) {
+    super(toOpts('conflict', p));
+    this.name = 'ProfileInUseError';
+    this.activeSessionId = (p as { active_session_id?: string }).active_session_id;
+  }
+}
+
 // LegalAcceptanceRequiredError — 409 when an operation (e.g. creating
 // an API key) is gated on the customer accepting one or more legal
 // documents. The `pendingAcceptances` array carries the document
@@ -471,6 +490,8 @@ const TYPE_TO_CTOR: Record<string, (p: Problem) => DriftstackError> = {
   'https://errors.driftstack.dev/storage-quota-exceeded': (p) => new StorageQuotaExceededError(p),
   // Live pre-launch proxy validation (422 at launch).
   'https://errors.driftstack.dev/proxy-validation-failed': (p) => new ProxyValidationFailedError(p),
+  // A3 finding #7 — single-active-session-per-profile guard (409 at launch).
+  'https://errors.driftstack.dev/profile-in-use': (p) => new ProfileInUseError(p),
   'https://errors.driftstack.dev/session-destroyed': (p) => new SessionDestroyedError(p),
   'https://errors.driftstack.dev/session-timeout': (p) => new SessionTimeoutError(p),
   'https://errors.driftstack.dev/legal-acceptance-required': (p) =>
