@@ -225,6 +225,48 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
     expect(endpoint.disabledAt).toBeNull();
   });
 
+  it('#6: a RETRY that crosses the 50-consecutive-failure threshold auto-disables the endpoint', async () => {
+    // Regression for the auto-disable check only running on the DLQ branch: an
+    // endpoint that keeps failing — each delivery scheduling a RETRY (not DLQ) —
+    // must still be disabled once consecutiveFailures crosses 50. Seed the
+    // endpoint to 49 consecutive failures (via recordRetry on a throwaway
+    // delivery), then run ONE more failing tick on a fresh delivery: the retry
+    // bumps to 50 and the endpoint must be disabled on the retry path.
+    const { repo, endpoint } = await setupRepoWithEndpoint();
+    const seedId = repo.getAllDeliveries()[0]?.id ?? '';
+    for (let i = 0; i < 49; i += 1) {
+      await repo.recordRetry(seedId, {
+        responseStatus: 500,
+        responseExcerpt: null,
+        lastError: null,
+        attempts: 1, // stays well under MAX so it never DLQs while seeding
+        nextAttemptAt: new Date(NOW.getTime() + 60 * 60_000), // not claim-eligible
+      });
+    }
+    // A FRESH delivery (attempts=0) that fails → retry (nextAttemptIndex=1 < MAX).
+    await repo.enqueueDelivery({
+      webhookId: endpoint.id,
+      eventId: '22222222-3333-4444-5555-666666666666',
+      eventType: 'session.completed',
+      payload: { id: '22222222-3333-4444-5555-666666666666', type: 'session.completed', data: {} },
+      nextAttemptAt: NOW,
+    });
+
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fakeFetch({ status: 500 }),
+      now: constNow,
+    });
+    const { outcomes } = await worker.tickOnce();
+    // The fresh delivery RETRIED (it did not DLQ) …
+    expect(outcomes.some((o) => o.kind === 'retry')).toBe(true);
+    // … and the 50th consecutive failure disabled the endpoint on the retry path.
+    const after = await repo.findEndpointById(endpoint.id);
+    expect(after?.disabledAt).not.toBeNull();
+    expect(after?.active).toBe(false);
+  });
+
   it('the 5th retry (attempts=4 → 5) is scheduled, not DLQd, with the 60-min backoff', async () => {
     // Regression guard for the off-by-one that capped delivery at 4
     // retries: with attempts=4 the next index is 5 (< MAX_ATTEMPTS=6),

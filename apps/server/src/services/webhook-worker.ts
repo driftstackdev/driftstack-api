@@ -305,6 +305,15 @@ export class WebhookDeliveryWorker {
       },
       'webhook delivery scheduled for retry',
     );
+    // Auto-disable check — ALSO run on the RETRY path (not just on DLQ). recordRetry
+    // bumps endpoint.consecutiveFailures by 1, so the post-failure count is
+    // (consecutiveFailures + 1). An endpoint that keeps failing — each delivery
+    // scheduling a retry rather than DLQ'ing — was crossing the threshold without
+    // ever being disabled, because the check only ran in the DLQ branch. Mirror
+    // the DLQ branch so a sustained-failing endpoint is disabled here too.
+    if (endpoint.consecutiveFailures + 1 >= AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES) {
+      await this.config.repo.disableEndpoint(endpoint.id, at);
+    }
     return { kind: 'retry', delivery, nextAttemptAt };
   }
 
