@@ -93,7 +93,7 @@ async function seedAccountWithKey(c: ReturnType<typeof postgres>): Promise<{
 }> {
   const accountId = randomUUID();
   seeded.push(accountId);
-  await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`prof-inuse-${accountId}@test.local`})`;
+  await c`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`prof-inuse-${accountId}@test.local`})`;
   const apiKeyId = randomUUID();
   await c`INSERT INTO api_keys (id, account_id, name, key_prefix, key_hash) VALUES (${apiKeyId}, ${accountId}, ${'prof-inuse'}, ${`dk_${accountId.slice(0, 8)}`}, ${`hash-${accountId}`})`;
   return { accountId, apiKeyId };
@@ -151,11 +151,11 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(rejected).toHaveLength(1);
       expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(ProfileInUseError);
       // Only the one bound row exists for this profile.
-      const [{ count }] = await client`
+      const rows = await client<{ count: number }[]>`
         SELECT count(*)::int AS count FROM sessions
         WHERE account_id = ${accountId} AND metadata->>'profile_id' = ${profileId}
       `;
-      expect(count).toBe(1);
+      expect(rows[0]?.count).toBe(1);
     });
 
     it('driver: a TERMINAL session on the profile does NOT block a new bind', async () => {
