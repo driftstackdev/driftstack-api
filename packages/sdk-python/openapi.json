@@ -19246,6 +19246,9 @@
                     "pay_currency": {
                       "type": ["string", "null"]
                     },
+                    "pay_amount": {
+                      "type": ["number", "null"]
+                    },
                     "created_at": {
                       "type": "string"
                     }
@@ -19259,6 +19262,7 @@
                     "provider",
                     "payment_address",
                     "pay_currency",
+                    "pay_amount",
                     "created_at"
                   ]
                 }
