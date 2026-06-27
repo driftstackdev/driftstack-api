@@ -103,12 +103,21 @@ export function scheduleRecaptureBatch(
       targetVersion,
     };
 
-    // SKIP — already running / queued against this exact target.
+    // SKIP — already running / queued against this target. The in-flight
+    // dedup unit is the iOS version (the archetype lane), consistent with the
+    // HIGH classification below which keys "captured against this version"
+    // solely on `iosVersion`. Keying the SKIP on iosVersion AND safariVersion
+    // (as it once did) let an in-flight run whose Safari version differs only
+    // by a point release slip past the dedup: it isn't SKIP'd, the iosVersion
+    // matches so it isn't HIGH "not yet captured", and a non-completed run
+    // then falls to the HIGH-retry path — queueing a DUPLICATE capture against
+    // a target already in flight (double-capture). Dedup on iosVersion so a
+    // same-target / different-Safari-version in-flight run is treated as the
+    // same unit and skipped.
     if (
       latest !== null &&
       (latest.status === 'queued' || latest.status === 'in_progress') &&
-      latest.targetVersion.iosVersion === targetVersion.iosVersion &&
-      latest.targetVersion.safariVersion === targetVersion.safariVersion
+      latest.targetVersion.iosVersion === targetVersion.iosVersion
     ) {
       skipped.push({
         archetypeId: history.archetypeId,

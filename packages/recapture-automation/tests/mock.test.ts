@@ -126,6 +126,55 @@ describe('MockRecaptureService', () => {
     const ids2 = new Set(page2.data.map((r) => r.id));
     for (const id of ids2) expect(ids1.has(id)).toBe(false);
   });
+
+  it('terminates pagination when the cursor row is no longer in the filtered set (no infinite loop)', async () => {
+    // Regression: when the cursor's row drops out of the filtered set (e.g.
+    // its status changed between pages so it no longer matches a status
+    // filter, or it was deleted), findIndex returned -1 and the unsliced list
+    // was returned WITH a fresh nextCursor → the client got page 1 again plus
+    // a cursor it already held, looping forever. The fix terminates: empty
+    // data + null nextCursor.
+    const svc = new MockRecaptureService();
+    // Create enough runs that a single page wouldn't exhaust the list (so the
+    // bug would have emitted a non-null nextCursor on the bogus-cursor call).
+    for (let i = 0; i < 5; i += 1) {
+      await svc.triggerRecapture({
+        trigger: 'manual_request',
+        archetypeId: `arch_${i.toString()}`,
+        baselineVersion: BASELINE,
+        targetVersion: BASELINE,
+      });
+    }
+    const page = await svc.listRuns({ limit: 2, cursor: 'rcap_99999999' });
+    expect(page.data).toEqual([]);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it('terminates pagination when the cursor row dropped out of a status filter mid-walk', async () => {
+    const svc = new MockRecaptureService();
+    const ids: string[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      const r = await svc.triggerRecapture({
+        trigger: 'manual_request',
+        archetypeId: `arch_${i.toString()}`,
+        baselineVersion: BASELINE,
+        targetVersion: BASELINE,
+      });
+      ids.push(r.id);
+    }
+    // All 4 are 'queued'. Page 1 of the queued filter, limit 2.
+    const page1 = await svc.listRuns({ status: 'queued', limit: 2 });
+    expect(page1.data).toHaveLength(2);
+    expect(page1.nextCursor).not.toBeNull();
+    const cursor = page1.nextCursor!;
+    // The cursor row now finalizes → it leaves the 'queued' filtered set.
+    await svc.finalizeRun(cursor, 'completed');
+    // Resuming the queued walk from a cursor no longer in the queued set must
+    // terminate, not loop.
+    const page2 = await svc.listRuns({ status: 'queued', limit: 2, cursor });
+    expect(page2.nextCursor).toBeNull();
+    expect(page2.data).toEqual([]);
+  });
 });
 
 describe('MockIosVersionWatcher', () => {

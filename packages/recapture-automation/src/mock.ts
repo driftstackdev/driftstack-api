@@ -81,7 +81,17 @@ export class MockRecaptureService implements RecaptureService {
     });
     if (opts.cursor !== undefined) {
       const idx = entries.findIndex((r) => r.id === opts.cursor);
-      if (idx >= 0) entries = entries.slice(idx + 1);
+      if (idx >= 0) {
+        entries = entries.slice(idx + 1);
+      } else {
+        // The cursor row is no longer in the filtered set — e.g. its status
+        // changed between pages so it dropped out of a status filter, or it was
+        // deleted. We can't safely resume from a row we can't find, and
+        // returning the unsliced list with a fresh nextCursor would hand the
+        // client page 1 again + a cursor it already holds → an infinite paging
+        // loop. Terminate pagination instead.
+        return Promise.resolve({ data: [], nextCursor: null });
+      }
     }
     const page = entries.slice(0, limit);
     const nextCursor = entries.length > limit ? (page[page.length - 1]?.id ?? null) : null;

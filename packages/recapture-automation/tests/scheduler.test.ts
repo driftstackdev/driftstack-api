@@ -238,6 +238,36 @@ describe('V-533.C scheduleRecaptureBatch — skip behaviour', () => {
     expect(result.entries).toHaveLength(0);
     expect(result.skipped).toHaveLength(1);
   });
+
+  it('SKIPs an in-flight run on the same iOS version even when the Safari version differs (no double-capture)', () => {
+    // Regression: an in-flight run against the same iOS target but a
+    // different Safari point-version slipped past the dedup (which once keyed
+    // on iosVersion AND safariVersion), the iosVersion match kept it out of
+    // the HIGH "not yet captured" branch, and a non-completed run then fell to
+    // the HIGH-retry path — queueing a DUPLICATE capture against a target
+    // already in flight. The dedup unit is the iOS version, so this must SKIP.
+    const run = makeRun({ archetypeId: 'arch1', targetIos: '18.8', status: 'in_progress' });
+    // Scheduler is invoked for the SAME iOS target but a newer Safari version.
+    const result = scheduleRecaptureBatch({
+      transition: TRANSITION,
+      targetSafariVersion: '26.5', // run's targetVersion.safariVersion is 26.4
+      archetypeHistory: [{ archetypeId: 'arch1', latestRun: run }],
+    });
+    expect(result.entries).toHaveLength(0);
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped[0]?.reason).toContain('in_progress');
+  });
+
+  it('SKIPs a queued run on the same iOS version with a differing Safari version', () => {
+    const run = makeRun({ archetypeId: 'arch1', targetIos: '18.8', status: 'queued' });
+    const result = scheduleRecaptureBatch({
+      transition: TRANSITION,
+      targetSafariVersion: '26.6',
+      archetypeHistory: [{ archetypeId: 'arch1', latestRun: run }],
+    });
+    expect(result.entries).toHaveLength(0);
+    expect(result.skipped).toHaveLength(1);
+  });
 });
 
 describe('V-533.C scheduleRecaptureBatch — ordering', () => {

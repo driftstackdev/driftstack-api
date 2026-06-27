@@ -103,9 +103,13 @@ describe('W460.B packages/recapture-automation/src/scheduler.ts content parity',
     );
   });
 
-  it('SKIP branch: latest !== null && (queued || in_progress) && same iosVersion + safariVersion against target; skipped.push with reason `already ${latest.status} against ${targetVersion.iosVersion}`', () => {
+  it('SKIP branch (in-flight dedup): latest !== null && (queued || in_progress) && same iosVersion against target — keyed on iosVersion ALONE (NOT iosVersion+safariVersion, which let a same-target/different-Safari in-flight run slip past into a HIGH-retry double-capture); skipped.push with reason `already ${latest.status} against ${targetVersion.iosVersion}`', () => {
     expect(body).toMatch(
-      /if \(\s*\n?\s*latest !== null &&\s*\n?\s*\(latest\.status === 'queued' \|\| latest\.status === 'in_progress'\) &&\s*\n?\s*latest\.targetVersion\.iosVersion === targetVersion\.iosVersion &&\s*\n?\s*latest\.targetVersion\.safariVersion === targetVersion\.safariVersion\s*\n?\s*\) \{\s*\n?\s*skipped\.push\(\{\s*\n?\s*archetypeId: history\.archetypeId,\s*\n?\s*reason: `already \$\{latest\.status\} against \$\{targetVersion\.iosVersion\}`,\s*\n?\s*\}\);/,
+      /if \(\s*\n?\s*latest !== null &&\s*\n?\s*\(latest\.status === 'queued' \|\| latest\.status === 'in_progress'\) &&\s*\n?\s*latest\.targetVersion\.iosVersion === targetVersion\.iosVersion\s*\n?\s*\) \{\s*\n?\s*skipped\.push\(\{\s*\n?\s*archetypeId: history\.archetypeId,\s*\n?\s*reason: `already \$\{latest\.status\} against \$\{targetVersion\.iosVersion\}`,\s*\n?\s*\}\);/,
+    );
+    // The Safari-version equality must NOT be part of the SKIP key (the bug).
+    expect(body).not.toMatch(
+      /\(latest\.status === 'queued' \|\| latest\.status === 'in_progress'\) &&\s*\n?\s*latest\.targetVersion\.iosVersion === targetVersion\.iosVersion &&\s*\n?\s*latest\.targetVersion\.safariVersion === targetVersion\.safariVersion/,
     );
   });
 

@@ -69,7 +69,7 @@ describe('W459.B packages/recapture-automation/src/mock.ts content parity', () =
     );
   });
 
-  it('getRun: Promise.resolve(map.get(id) ?? null); listRuns: limit cap min(opts.limit ?? 50, 200); archetypeId + status optional filters; newest-first sort by createdAtMs with id-localeCompare tiebreak; cursor skip via findIndex + slice(idx+1)', () => {
+  it('getRun: Promise.resolve(map.get(id) ?? null); listRuns: limit cap min(opts.limit ?? 50, 200); archetypeId + status optional filters; newest-first sort by createdAtMs with id-localeCompare tiebreak; cursor skip via findIndex + slice(idx+1), and TERMINATES pagination (empty + null cursor) when the cursor row is no longer in the filtered set (no infinite loop)', () => {
     expect(body).toMatch(
       /getRun\(runId: string\): Promise<RecaptureRun \| null> \{\s*\n?\s*return Promise\.resolve\(this\.runs\.get\(runId\) \?\? null\);\s*\n?\s*\}/,
     );
@@ -77,9 +77,13 @@ describe('W459.B packages/recapture-automation/src/mock.ts content parity', () =
     expect(body).toMatch(
       /entries\.sort\(\(a, b\) => \{\s*\n?\s*if \(a\.createdAtMs !== b\.createdAtMs\) return b\.createdAtMs - a\.createdAtMs;\s*\n?\s*return a\.id\.localeCompare\(b\.id\);\s*\n?\s*\}\);/,
     );
+    // Cursor found → slice past it. Cursor NOT found (row dropped out of the
+    // filtered set) → terminate with empty data + null cursor, NOT the
+    // unsliced list + a stale cursor (which looped forever).
     expect(body).toMatch(
-      /if \(opts\.cursor !== undefined\) \{\s*\n?\s*const idx = entries\.findIndex\(\(r\) => r\.id === opts\.cursor\);\s*\n?\s*if \(idx >= 0\) entries = entries\.slice\(idx \+ 1\);\s*\n?\s*\}/,
+      /if \(opts\.cursor !== undefined\) \{\s*\n?\s*const idx = entries\.findIndex\(\(r\) => r\.id === opts\.cursor\);\s*\n?\s*if \(idx >= 0\) \{\s*\n?\s*entries = entries\.slice\(idx \+ 1\);\s*\n?\s*\} else \{/,
     );
+    expect(body).toMatch(/return Promise\.resolve\(\{ data: \[\], nextCursor: null \}\);/);
   });
 
   it("recordComparison: throws 'recordComparison: run ${runId} not found' on missing; first call transitions 'queued' → 'in_progress' (via status ternary) + sets startedAtMs ?? this.now(); appends comparison; per-outcome aggregate count increment (match/diff/capture_error/new_surface/missing_surface)", () => {
