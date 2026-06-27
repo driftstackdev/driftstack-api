@@ -1040,7 +1040,7 @@ async function closeUnresolvedEgressSession(
   agentSessions: AgentSessionsRepo | undefined,
   sessionId: string,
   logger?: { info: (obj: unknown, msg: string) => void; warn: (obj: unknown, msg: string) => void },
-  reason: 'egress_unresolved' | 'dispatch_no_live_node' = 'egress_unresolved',
+  reason: 'egress_unresolved' | 'dispatch_no_live_node' | 'create_failed' = 'egress_unresolved',
 ): Promise<void> {
   if (agentSessions === undefined) return;
   try {
@@ -1789,119 +1789,141 @@ export function registerAgentSessionsRoutes(
         }
         throw err;
       }
-      // Q.1.c — decrypt the customer's stored BYOK key ONCE at
-      // session-create and stash plaintext in the per-session cache.
-      // Bounds AES-GCM unwrap to one operation per session.
-      // v2-#21 — pass `now` so the TTL gate fires for stored keys
-      // older than maxKeyAgeMs (90d default).
-      if (byokService !== undefined && byokKeyCache !== undefined) {
-        // Degrade-not-fail: a corrupted / rotated-but-not-rewrapped BYOK blob (GCM
-        // auth failure) must NOT abort the create here — the row already committed,
-        // so an uncaught throw 500s the response AND leaks the concurrency slot
-        // (the row counts against the cap but the caller got no session id), which
-        // locks the account out as corrupted keys keep failing every retry. Match
-        // the socks5/DEK fail-closed degrade: log + skip the pre-warm. The session
-        // still creates; the AI just resolves its key lazily (header / fallback)
-        // on first use instead of from this cache.
-        try {
-          const stored = await byokService.getPlaintext({
-            accountId: ownerAccountId,
-            now: new Date(),
-          });
-          if (stored !== null) {
-            byokKeyCache.set(created.id, stored);
-          }
-        } catch (err) {
-          req.log.warn(
-            { component: 'agent-session-create', sessionId: created.id, err },
-            'BYOK key hydration failed at session create; degrading to no cached key',
-          );
-        }
-      }
-      // Fleet-CP session dispatch — hand the new session to a connected
-      // harness node (local fleet-demo). No-op in prod (no registry); best-
-      // effort (never throws) so it can't break session-create. Runs BEFORE the
-      // viewer-token mint so the publisher dispatch picks the live box, persists
-      // its node_id, and the viewer token below binds to that SAME box (multi-box
-      // region fix — otherwise the token could point at the region-nearest box
-      // while the publisher landed on an online sibling → black screen).
-      await dispatchSessionAssignOnCreate({
-        sessionId: created.id,
-        fleetControlRegistry,
-        fleetNodesRepo,
-        livekitSecretEncryptionKey,
-        sessionDispatch,
-        logger: req.log,
-        // Profile-backed (file 57): thread the validated profile_id so the
-        // dispatch ships its DEK in SessionAssign.profile. Owner-scoped so an
-        // admin team-launch ships the OWNER's profile DEK (the profile + its
-        // encrypted store live under the owner's account).
-        accountId: ownerAccountId,
-        ...(profileBareId !== undefined ? { profileId: profileBareId } : {}),
-        profilesService,
-        // ARC A — thread the validated proxy_id + service so the dispatch
-        // resolves the customer proxy (owner-scoped) into the inlineProxyConfig.
-        ...(proxyId !== undefined ? { proxyId } : {}),
-        ...(accountProxiesService !== undefined ? { accountProxiesService } : {}),
-        ...(r2 !== undefined ? { r2 } : {}),
-        // Worker-disconnect fix (2026-06-19) — persist session→node so the
-        // disconnect reaper can free this node's slot if the node drops.
-        agentSessions: sessions,
-        // Region-aware dispatch (2026-06-21) — the viewer's home region so the
-        // session routes to the nearest livekit node (EU box for EU customers);
-        // falls back to any node when the home region has none.
-        accountRegion: ctx.account.region,
-        // Customer start URL from the create body — overrides the operator
-        // default; omitted when absent so the fallback applies. The harness opens
-        // this URL on session launch (inert until the box honors initialUrl).
-        ...(parsed.data.initial_url !== undefined ? { initialUrl: parsed.data.initial_url } : {}),
-        // Manual (GUI) sessions are interactively WATCHED — give them a generous idle
-        // timeout AND a generous max-duration so a sim the operator watches without
-        // touching isn't reaped at the box ~300s idle default, nor hard-killed at the
-        // box ~1800s wall-clock default mid-use (A3 W2813 knob). ai/pair stay on the box
-        // defaults (API-driven; bounded by token budget + the orphan reaper).
-        ...(created.mode === 'manual'
-          ? {
-              idleTimeoutSeconds: MANUAL_SESSION_IDLE_TIMEOUT_SECONDS,
-              maxDurationSeconds: MANUAL_SESSION_MAX_DURATION_SECONDS,
-            }
-          : {}),
-      });
-      // Viewer (subscriber) token — minted AFTER the dispatch so it binds to the
-      // node the publisher actually landed on (the dispatch persists node_id to
-      // the live box it picked). Re-read the row to pick up that persisted
-      // node_id; fall back to `created` (node_id still NULL → region-nearest, same
-      // as before) when the re-read misses or the dispatch wiring is inert (prod —
-      // node_id stays NULL and maybeMintLivekit no-ops anyway). A dispatch that
-      // honestly closed the row (no live node) re-reads a closed row; the viewer
-      // token is then harmless (the GUI sees status='closed' and never joins).
-      const dispatched = (await sessions.get(created.id)) ?? created;
-      const livekit = await maybeMintLivekit(
-        created.id,
-        ownerAccountId,
-        ctx.account.region,
-        dispatched.nodeId,
-      );
-      // Slice 6 follow-up 2026-05-20 — agent-session create audit. Best-
-      // effort emit; audit failures don't break the create. Distinct
-      // action from session.created (which audits the underlying driver
-      // session at the regular /v1/sessions surface).
+      // #3 — the concurrency slot is the just-created ACTIVE row. Everything from
+      // here to the 201 response runs AFTER the slot is acquired; if any of it
+      // throws (e.g. the post-dispatch sessions.get re-read hits a DB blip) the
+      // row would stay 'active' forever — a phantom slot that counts against the
+      // per-account cap until the 12h wall-clock reaper, so new launches get
+      // refused / the GUI spins on "launching". Back the post-acquire window with
+      // a try/catch that CLOSES the row (releases the slot) on any unexpected
+      // throw before re-raising — mirroring the decrypt-fail-closed release path
+      // (closeUnresolvedEgressSession) + the sessions-service dispatch-failure
+      // release. The expected best-effort paths below (BYOK hydrate, dispatch,
+      // livekit mint, audit) already swallow their own errors; this guards the
+      // bare awaits + any future addition.
       try {
-        await accountAudit?.record({
-          // Owner-scoped: the session lives under the owner's account, so the
-          // create lands in the OWNER's audit log (an admin team-launch shows
-          // up where the session actually is).
+        // Q.1.c — decrypt the customer's stored BYOK key ONCE at
+        // session-create and stash plaintext in the per-session cache.
+        // Bounds AES-GCM unwrap to one operation per session.
+        // v2-#21 — pass `now` so the TTL gate fires for stored keys
+        // older than maxKeyAgeMs (90d default).
+        if (byokService !== undefined && byokKeyCache !== undefined) {
+          // Degrade-not-fail: a corrupted / rotated-but-not-rewrapped BYOK blob (GCM
+          // auth failure) must NOT abort the create here — the row already committed,
+          // so an uncaught throw 500s the response AND leaks the concurrency slot
+          // (the row counts against the cap but the caller got no session id), which
+          // locks the account out as corrupted keys keep failing every retry. Match
+          // the socks5/DEK fail-closed degrade: log + skip the pre-warm. The session
+          // still creates; the AI just resolves its key lazily (header / fallback)
+          // on first use instead of from this cache.
+          try {
+            const stored = await byokService.getPlaintext({
+              accountId: ownerAccountId,
+              now: new Date(),
+            });
+            if (stored !== null) {
+              byokKeyCache.set(created.id, stored);
+            }
+          } catch (err) {
+            req.log.warn(
+              { component: 'agent-session-create', sessionId: created.id, err },
+              'BYOK key hydration failed at session create; degrading to no cached key',
+            );
+          }
+        }
+        // Fleet-CP session dispatch — hand the new session to a connected
+        // harness node (local fleet-demo). No-op in prod (no registry); best-
+        // effort (never throws) so it can't break session-create. Runs BEFORE the
+        // viewer-token mint so the publisher dispatch picks the live box, persists
+        // its node_id, and the viewer token below binds to that SAME box (multi-box
+        // region fix — otherwise the token could point at the region-nearest box
+        // while the publisher landed on an online sibling → black screen).
+        await dispatchSessionAssignOnCreate({
+          sessionId: created.id,
+          fleetControlRegistry,
+          fleetNodesRepo,
+          livekitSecretEncryptionKey,
+          sessionDispatch,
+          logger: req.log,
+          // Profile-backed (file 57): thread the validated profile_id so the
+          // dispatch ships its DEK in SessionAssign.profile. Owner-scoped so an
+          // admin team-launch ships the OWNER's profile DEK (the profile + its
+          // encrypted store live under the owner's account).
           accountId: ownerAccountId,
-          actorType: 'customer',
-          action: 'agent_session.created',
-          targetResourceId: `agent_session_${created.id}`,
-          payload: { agent_session_id: created.id, initial_mode: created.mode },
-          ipAddress: readClientIp(req),
+          ...(profileBareId !== undefined ? { profileId: profileBareId } : {}),
+          profilesService,
+          // ARC A — thread the validated proxy_id + service so the dispatch
+          // resolves the customer proxy (owner-scoped) into the inlineProxyConfig.
+          ...(proxyId !== undefined ? { proxyId } : {}),
+          ...(accountProxiesService !== undefined ? { accountProxiesService } : {}),
+          ...(r2 !== undefined ? { r2 } : {}),
+          // Worker-disconnect fix (2026-06-19) — persist session→node so the
+          // disconnect reaper can free this node's slot if the node drops.
+          agentSessions: sessions,
+          // Region-aware dispatch (2026-06-21) — the viewer's home region so the
+          // session routes to the nearest livekit node (EU box for EU customers);
+          // falls back to any node when the home region has none.
+          accountRegion: ctx.account.region,
+          // Customer start URL from the create body — overrides the operator
+          // default; omitted when absent so the fallback applies. The harness opens
+          // this URL on session launch (inert until the box honors initialUrl).
+          ...(parsed.data.initial_url !== undefined ? { initialUrl: parsed.data.initial_url } : {}),
+          // Manual (GUI) sessions are interactively WATCHED — give them a generous idle
+          // timeout AND a generous max-duration so a sim the operator watches without
+          // touching isn't reaped at the box ~300s idle default, nor hard-killed at the
+          // box ~1800s wall-clock default mid-use (A3 W2813 knob). ai/pair stay on the box
+          // defaults (API-driven; bounded by token budget + the orphan reaper).
+          ...(created.mode === 'manual'
+            ? {
+                idleTimeoutSeconds: MANUAL_SESSION_IDLE_TIMEOUT_SECONDS,
+                maxDurationSeconds: MANUAL_SESSION_MAX_DURATION_SECONDS,
+              }
+            : {}),
         });
-      } catch {
-        /* swallow */
+        // Viewer (subscriber) token — minted AFTER the dispatch so it binds to the
+        // node the publisher actually landed on (the dispatch persists node_id to
+        // the live box it picked). Re-read the row to pick up that persisted
+        // node_id; fall back to `created` (node_id still NULL → region-nearest, same
+        // as before) when the re-read misses or the dispatch wiring is inert (prod —
+        // node_id stays NULL and maybeMintLivekit no-ops anyway). A dispatch that
+        // honestly closed the row (no live node) re-reads a closed row; the viewer
+        // token is then harmless (the GUI sees status='closed' and never joins).
+        const dispatched = (await sessions.get(created.id)) ?? created;
+        const livekit = await maybeMintLivekit(
+          created.id,
+          ownerAccountId,
+          ctx.account.region,
+          dispatched.nodeId,
+        );
+        // Slice 6 follow-up 2026-05-20 — agent-session create audit. Best-
+        // effort emit; audit failures don't break the create. Distinct
+        // action from session.created (which audits the underlying driver
+        // session at the regular /v1/sessions surface).
+        try {
+          await accountAudit?.record({
+            // Owner-scoped: the session lives under the owner's account, so the
+            // create lands in the OWNER's audit log (an admin team-launch shows
+            // up where the session actually is).
+            accountId: ownerAccountId,
+            actorType: 'customer',
+            action: 'agent_session.created',
+            targetResourceId: `agent_session_${created.id}`,
+            payload: { agent_session_id: created.id, initial_mode: created.mode },
+            ipAddress: readClientIp(req),
+          });
+        } catch {
+          /* swallow */
+        }
+        return reply.code(201).send(publicAgentSession(dispatched, livekit, sessionLivenessStore));
+      } catch (err) {
+        // #3 — release the phantom 'active' slot: the row was created (slot
+        // acquired) but the create couldn't be completed, so close it so it stops
+        // counting against the per-account cap. Best-effort + idempotent
+        // (closeWithReason keeps the first close's timestamp); a close failure
+        // must not mask the original error — the 12h reaper remains the backstop.
+        await closeUnresolvedEgressSession(sessions, created.id, req.log, 'create_failed');
+        throw err;
       }
-      return reply.code(201).send(publicAgentSession(dispatched, livekit, sessionLivenessStore));
     },
   );
 
