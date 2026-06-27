@@ -136,8 +136,12 @@ Event types emitted:
 - `event: incident.resolved` — fires when a public incident transitions
   to `resolved`
 
-`data:` payload (JSON) carries `{ event, incident_id, at }` plus the
-relevant incident summary.
+`data:` payload (JSON) is the full event envelope:
+`{ event, generated_at, incident, update }`, where `event` repeats the
+SSE event name (`incident.created` / `incident.resolved`),
+`generated_at` is an ISO timestamp, `incident` is the public incident
+object (same shape as `GET /v1/status/incidents`), and `update` is the
+incident update that triggered the event.
 
 Heartbeat: a comment line is emitted every 30 seconds to keep the
 connection alive through proxies (Cloudflare's idle timeout is 60s;
@@ -149,12 +153,12 @@ Example (TypeScript browser):
 ```ts
 const stream = new EventSource('https://api.driftstack.dev/v1/status/stream');
 stream.addEventListener('incident.created', (ev) => {
-  const { incident_id, at } = JSON.parse(ev.data);
-  console.log(`[${at}] new incident: ${incident_id}`);
+  const { generated_at, incident } = JSON.parse(ev.data);
+  console.log(`[${generated_at}] new incident: ${incident.id} — ${incident.title}`);
 });
 stream.addEventListener('incident.resolved', (ev) => {
-  const { incident_id } = JSON.parse(ev.data);
-  console.log(`incident ${incident_id} resolved`);
+  const { incident } = JSON.parse(ev.data);
+  console.log(`incident ${incident.id} resolved`);
 });
 ```
 
