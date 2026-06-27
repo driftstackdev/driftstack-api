@@ -721,6 +721,8 @@ type CreateProfileRequest struct {
 	Description string   `json:"description,omitempty"`
 	Folder      string   `json:"folder,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
+	Icon        string   `json:"icon,omitempty"` // short emoji (≤16) — per-account UI metadata
+	Note        string   `json:"note,omitempty"` // short inline note (≤280)
 }
 
 // UpdateProfileRequest — V-426. Server's UpdateProfileRequestSchema
@@ -734,6 +736,8 @@ type UpdateProfileRequest struct {
 	Description *string  `json:"description,omitempty"`
 	Folder      *string  `json:"folder,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
+	Icon        *string  `json:"icon,omitempty"` // short emoji (≤16) — per-account UI metadata
+	Note        *string  `json:"note,omitempty"` // short inline note (≤280)
 }
 
 type ProfilesListPage struct {

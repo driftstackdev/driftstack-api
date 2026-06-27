@@ -56,7 +56,7 @@ describe('W590.B packages/sdk-go/account.go content parity', () => {
     expect(body).toMatch(/\/\/ AccountTeamMembership — V-326c\. One entry per team the calling/);
     expect(body).toMatch(/\/\/ account is a member of\./);
     expect(body).toMatch(
-      /^type AccountTeamMembership struct \{\s*\n\s*OwnerAccountID string `json:"owner_account_id"`\s*\n\s*Role\s+string `json:"role"` \/\/ "admin" \| "member"\s*\n\s*MembershipID\s+string `json:"membership_id"`\s*\n\}/m,
+      /^type AccountTeamMembership struct \{\s*\n\s*OwnerAccountID\s+string\s+`json:"owner_account_id"`\s*\n\s*OwnerEmail\s+string\s+`json:"owner_email"`[^\n]*\n\s*OwnerName\s+\*string\s+`json:"owner_name"`[^\n]*\n\s*Role\s+string\s+`json:"role"`\s*\/\/ "admin" \| "member"\s*\n\s*MembershipID\s+string\s+`json:"membership_id"`\s*\n\}/m,
     );
   });
 

@@ -17,9 +17,11 @@ type AccountResource struct {
 // AccountTeamMembership — V-326c. One entry per team the calling
 // account is a member of.
 type AccountTeamMembership struct {
-	OwnerAccountID string `json:"owner_account_id"`
-	Role           string `json:"role"` // "admin" | "member"
-	MembershipID   string `json:"membership_id"`
+	OwnerAccountID string  `json:"owner_account_id"`
+	OwnerEmail     string  `json:"owner_email"` // owner's email (falls back to acc_<id> server-side)
+	OwnerName      *string `json:"owner_name"`  // nullable — owner's display name if set
+	Role           string  `json:"role"`        // "admin" | "member"
+	MembershipID   string  `json:"membership_id"`
 }
 
 // AccountSelfProfile — full /v1/account/me response. Includes all

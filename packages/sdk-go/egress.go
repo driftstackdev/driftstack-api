@@ -43,7 +43,7 @@ type SessionProxyAttachResponse struct {
 // the VPN blocks carry write-only secret material (wrapped server-side).
 type AccountProxyInput struct {
 	Label     string         `json:"label"`
-	Scheme    string         `json:"scheme"`
+	Scheme    string         `json:"scheme,omitempty"` // empty omitted → server default (socks5); "" would fail the enum
 	Host      string         `json:"host"`
 	Port      int            `json:"port"`
 	Username  *string        `json:"username,omitempty"`
