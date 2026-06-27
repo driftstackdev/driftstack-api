@@ -85,6 +85,54 @@ describe('redactStepForResult', () => {
     const spaRoute: RecipeStep = { kind: 'navigate', url: 'https://app.example/#/dashboard/home' };
     expect(redactStepForResult(spaRoute)).toBe(spaRoute);
   });
+
+  it('redacts a token in a hash-ROUTER fragment (`#/route?access_token=…`), preserving the route', () => {
+    // SPA hash-router shape: the token query sits AFTER a `?` INSIDE the
+    // fragment. A flat `new URLSearchParams(fragment)` treats the whole
+    // `/dashboard?access_token` run as one key, so the secret VALUE survived
+    // into the result — this is the leak. The route prefix must be preserved
+    // and the token redacted.
+    const nav: RecipeStep = {
+      kind: 'navigate',
+      url: 'https://app.example/#/dashboard?access_token=leaktok',
+    };
+    const out = redactStepForResult(nav) as { kind: 'navigate'; url: string };
+    expect(out.url).not.toContain('leaktok'); // token value gone
+    expect(out.url).toContain('/dashboard'); // route prefix preserved
+    expect(out.url).toContain(encodeURIComponent(REDACTED));
+  });
+
+  it('redacts every secret in a nested hash-router fragment, keeping route + non-secret params', () => {
+    const nav: RecipeStep = {
+      kind: 'navigate',
+      url: 'https://app.example/#/auth/callback?id_token=leakid&access_token=leaktok&code=leakcode&state=xyz',
+    };
+    const out = redactStepForResult(nav) as { kind: 'navigate'; url: string };
+    expect(out.url).not.toContain('leakid');
+    expect(out.url).not.toContain('leaktok');
+    expect(out.url).not.toContain('leakcode');
+    expect(out.url).toContain('/auth/callback'); // route prefix preserved
+    expect(out.url).toContain('state=xyz'); // non-secret param preserved
+  });
+
+  it('redacts a token in a wait url-condition hash-router fragment too', () => {
+    const waitUrl: RecipeStep = {
+      kind: 'wait',
+      condition: 'url',
+      value: 'https://app.example/#/callback?access_token=leakme',
+    };
+    const out = redactStepForResult(waitUrl) as { kind: 'wait'; value: string };
+    expect(out.value).not.toContain('leakme');
+    expect(out.value).toContain('/callback');
+  });
+
+  it('leaves a hash-router fragment with only non-secret params byte-for-byte unchanged', () => {
+    const route: RecipeStep = {
+      kind: 'navigate',
+      url: 'https://app.example/#/route?foo=bar&page=2',
+    };
+    expect(redactStepForResult(route)).toBe(route);
+  });
 });
 
 describe('MockRecipeRunner result never carries plaintext type-step text', () => {

@@ -80,15 +80,35 @@ function redactUrlCredentials(url: string): string {
       changed = true;
     }
   }
-  // OAuth implicit/hybrid flows return tokens in the URL FRAGMENT
-  // (`#access_token=…&id_token=…`), which `searchParams` does NOT cover — the
-  // same post-auth-redirect token vector the `wait:url` path anticipates, just
-  // after the `#`. Parse the fragment as params and redact the same known secret
-  // keys. Only rebuilt when a secret key is actually present, so a non-param
-  // fragment (`#section`, `#/spa/route`) is left byte-for-byte untouched
-  // (URLSearchParams round-tripping would otherwise re-encode it).
+  // OAuth implicit/hybrid flows return tokens in the URL FRAGMENT, which
+  // `searchParams` does NOT cover — the same post-auth-redirect token vector
+  // the `wait:url` path anticipates, just after the `#`. Two fragment shapes
+  // carry these tokens:
+  //
+  //   1. Flat:        `#access_token=…&id_token=…`        — the classic
+  //      OAuth implicit/hybrid response_mode=fragment shape.
+  //   2. Hash-router: `#/dashboard?access_token=…&code=…` — an SPA whose
+  //      router lives under the `#`, so the token query sits AFTER a `?`
+  //      INSIDE the fragment.
+  //
+  // A naive `new URLSearchParams(fragment)` only handles shape 1: for shape 2
+  // it treats the entire `/dashboard?access_token` run up to the first `=` as a
+  // single key, so the secret VALUE survives untouched into the result (leak),
+  // and round-tripping mangles the route prefix. Split on the first `?` so the
+  // route prefix (`/dashboard`) is preserved verbatim and only the query suffix
+  // is parsed + redacted. Only rebuilt when a secret key is actually present,
+  // so a non-secret fragment (`#section`, `#/spa/route`, `#/route?foo=bar`) is
+  // left byte-for-byte untouched (URLSearchParams round-tripping would
+  // otherwise re-encode it).
   if (parsed.hash.length > 1) {
-    const frag = new URLSearchParams(parsed.hash.slice(1));
+    const rawFrag = parsed.hash.slice(1);
+    const qIdx = rawFrag.indexOf('?');
+    // Hash-router shape: everything before the first `?` is the route prefix
+    // (kept verbatim); only the suffix is a query string. Flat shape: no `?`,
+    // so the whole fragment is the query string and the prefix is empty.
+    const routePrefix = qIdx === -1 ? '' : rawFrag.slice(0, qIdx);
+    const queryPart = qIdx === -1 ? rawFrag : rawFrag.slice(qIdx + 1);
+    const frag = new URLSearchParams(queryPart);
     let fragChanged = false;
     for (const key of [...frag.keys()]) {
       if (SECRET_QUERY_PARAMS.has(key.toLowerCase())) {
@@ -97,7 +117,10 @@ function redactUrlCredentials(url: string): string {
       }
     }
     if (fragChanged) {
-      parsed.hash = `#${frag.toString()}`;
+      const rebuiltQuery = frag.toString();
+      // Re-attach the route prefix + `?` only when there was one, so a flat
+      // fragment stays `#k=v` (no spurious leading `?`).
+      parsed.hash = qIdx === -1 ? `#${rebuiltQuery}` : `#${routePrefix}?${rebuiltQuery}`;
       changed = true;
     }
   }
