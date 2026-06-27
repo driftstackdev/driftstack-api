@@ -63,14 +63,19 @@ describe('W248.A roadmap doc parity', () => {
     expect(nowBlock).not.toMatch(/Workflow recording/);
   });
 
-  it('Subscribable webhook events list in NOW reflects the live enum count', () => {
+  it('Subscribable webhook events list in NOW reflects the live (firing) event categories', () => {
     const live = SubscribableWebhookEventTypeSchema._def.values as readonly string[];
     expect(live.length).toBeGreaterThanOrEqual(5);
-    // The NOW description groups events by category — at minimum mention
-    // "session lifecycle", "quota", and "API-key" events which are the
-    // three categories the enum currently covers.
+    // The NOW description groups events by category. It must only name
+    // categories that actually FIRE today (have a production emitter) —
+    // session lifecycle (session.completed/failed), crypto-order
+    // (crypto.order.paid/failed), and API-key (api_key.revoked). The
+    // quota.* events are subscribable but [DECLARED] (no emitter wired),
+    // so naming "quota" here in the shipped/NOW bucket would over-state
+    // what delivers — keep it out until a usage-threshold emitter lands.
     expect(nowBlock).toMatch(/session lifecycle/i);
-    expect(nowBlock).toMatch(/quota/i);
+    expect(nowBlock).toMatch(/crypto-order/i);
     expect(nowBlock).toMatch(/API-key/i);
+    expect(nowBlock).not.toMatch(/Subscribe to session lifecycle, quota/i);
   });
 });

@@ -75,9 +75,9 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
     );
   });
 
-  it("Webhooks card framing: 'All seven subscribable event types — session.completed, session.failed, api_key.revoked, quota.warning_80pct, quota.exceeded, crypto.order.paid, crypto.order.failed — with payload shapes and HMAC-SHA256 verification examples.' — pinned so the canonical 7-event subscribable taxonomy + the HMAC-SHA256 signature algorithm stay consistent with the customer-dashboard webhooks page. 'subscribable' not 'LIVE': only 5 of the 7 have a production emitter today (quota.warning_80pct + quota.exceeded are declared/not-yet-firing per the webhook-events catalog), so the card describes what you can subscribe to, not what fires.", () => {
+  it("Webhooks card framing: 'All ten subscribable event types — session.completed, session.failed, api_key.revoked, quota.warning_80pct, quota.exceeded, session.egress_capability_changed, crypto.order.paid, crypto.order.failed, session.challenge_detected, session.profile_save_failed — with payload shapes and HMAC-SHA256 verification examples.' — pinned so the canonical subscribable taxonomy (count = SubscribableWebhookEventTypeSchema, currently 10) + the HMAC-SHA256 signature algorithm stay consistent with the webhook-events catalog. 'subscribable' not 'LIVE': several entries are declared/not-yet-firing (quota.warning_80pct + quota.exceeded + the egress/challenge/profile-save events), so the card describes what you can subscribe to, not what fires.", () => {
     expect(body).toMatch(
-      /All seven subscribable event types — session\.completed, session\.failed,\s*\n?\s*api_key\.revoked, quota\.warning_80pct, quota\.exceeded,\s*\n?\s*crypto\.order\.paid, crypto\.order\.failed — with payload shapes\s*\n?\s*and HMAC-SHA256 verification examples\./,
+      /All ten subscribable event types — session\.completed, session\.failed,\s*\n?\s*api_key\.revoked, quota\.warning_80pct, quota\.exceeded,\s*\n?\s*session\.egress_capability_changed, crypto\.order\.paid,\s*\n?\s*crypto\.order\.failed, session\.challenge_detected,\s*\n?\s*session\.profile_save_failed — with payload shapes\s*\n?\s*and HMAC-SHA256 verification examples\./,
     );
   });
 

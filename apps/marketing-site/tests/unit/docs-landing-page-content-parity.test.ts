@@ -87,16 +87,19 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
     expect(body).toMatch(/Webhook\s+signature verification/);
   });
 
-  it("Webhooks card: 7 subscribable event types pinned + HMAC-SHA256. 'subscribable' not 'LIVE' — only 5 of the 7 have a production emitter (quota.warning_80pct + quota.exceeded are [DECLARED], not-yet-firing); the card describes what you can subscribe to. crypto.order.paid + crypto.order.failed are among the firing five (bdb6cb7a, 2026-05-22).", () => {
+  it("Webhooks card: all 10 subscribable event types pinned + HMAC-SHA256 (count = SubscribableWebhookEventTypeSchema). 'subscribable' not 'LIVE' — several are [DECLARED], not-yet-firing (quota.warning_80pct + quota.exceeded + session.egress_capability_changed + session.challenge_detected + session.profile_save_failed); the card describes what you can subscribe to. crypto.order.paid + crypto.order.failed fire (bdb6cb7a, 2026-05-22).", () => {
     expect(body).toMatch(/Event types \+ signature verification →/);
-    expect(body).toMatch(/All seven subscribable event types/);
+    expect(body).toMatch(/All ten subscribable event types/);
     expect(body).toMatch(/session\.completed/);
     expect(body).toMatch(/session\.failed/);
     expect(body).toMatch(/api_key\.revoked/);
     expect(body).toMatch(/quota\.warning_80pct/);
     expect(body).toMatch(/quota\.exceeded/);
+    expect(body).toMatch(/session\.egress_capability_changed/);
     expect(body).toMatch(/crypto\.order\.paid/);
     expect(body).toMatch(/crypto\.order\.failed/);
+    expect(body).toMatch(/session\.challenge_detected/);
+    expect(body).toMatch(/session\.profile_save_failed/);
     expect(body).toMatch(/HMAC-SHA256 verification examples/);
   });
 
