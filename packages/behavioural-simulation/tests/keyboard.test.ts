@@ -81,6 +81,70 @@ describe('generateKeyboardCadence', () => {
     expect(symbol).toBeGreaterThan(lower);
   });
 
+  it('non-ASCII letters type at the letter cadence, NOT the symbol penalty', () => {
+    // Regression: an ASCII-only classifier mis-classified accented Latin /
+    // Cyrillic / CJK letters as "symbols" and applied the 1.6x number/symbol
+    // layer-switch penalty — a typing-cadence tell for every non-English
+    // persona. A non-English string of LETTERS must type at roughly the
+    // same average cadence as an English string of letters (same length,
+    // same case profile), and clearly FASTER than the same length of actual
+    // symbols.
+    function avgNonFirst(text: string): number {
+      let sum = 0;
+      let n = 0;
+      for (let i = 0; i < 80; i += 1) {
+        const c = generateKeyboardCadence({ text, profile: PROFILE, seed: `u${i}` });
+        for (let k = 1; k < c.delaysMs.length; k += 1) {
+          sum += c.delaysMs[k] as number;
+          n += 1;
+        }
+      }
+      return sum / n;
+    }
+    // All-lowercase, distinct chars, no spaces — isolate the letter-vs-symbol
+    // classification from shift / space / repeat-char effects.
+    const ascii = avgNonFirst('abcdefgh');
+    const accented = avgNonFirst('éàçñüößž'); // accented Latin letters
+    const cyrillic = avgNonFirst('приветдляц'); // Cyrillic letters
+    const cjk = avgNonFirst('你好世界用户名'); // CJK (caseless) letters
+    const symbols = avgNonFirst('1!2@3#4$');
+
+    // Letters in any script should never trip the symbol penalty: each
+    // non-English letter cadence must be far below the actual-symbol cadence.
+    expect(accented).toBeLessThan(symbols);
+    expect(cyrillic).toBeLessThan(symbols);
+    expect(cjk).toBeLessThan(symbols);
+    // And it should sit within a tight band of the ASCII-letter cadence
+    // (same letter cadence, just a different script) — well under the 1.6x
+    // symbol multiplier that the bug applied. Generous 20% tolerance for
+    // gaussian jitter / hesitation draws.
+    expect(accented).toBeGreaterThan(ascii * 0.8);
+    expect(accented).toBeLessThan(ascii * 1.2);
+    expect(cyrillic).toBeGreaterThan(ascii * 0.8);
+    expect(cyrillic).toBeLessThan(ascii * 1.2);
+    expect(cjk).toBeGreaterThan(ascii * 0.8);
+    expect(cjk).toBeLessThan(ascii * 1.2);
+  });
+
+  it('an uppercase non-ASCII letter still costs a Shift tap (not the symbol penalty)', () => {
+    function avgNonFirst(text: string): number {
+      let sum = 0;
+      let n = 0;
+      for (let i = 0; i < 80; i += 1) {
+        const c = generateKeyboardCadence({ text, profile: PROFILE, seed: `us${i}` });
+        for (let k = 1; k < c.delaysMs.length; k += 1) {
+          sum += c.delaysMs[k] as number;
+          n += 1;
+        }
+      }
+      return sum / n;
+    }
+    const lowerCyrillic = avgNonFirst('абвгдежз');
+    const upperCyrillic = avgNonFirst('АБВГДЕЖЗ');
+    // Uppercase Cyrillic costs a Shift tap → slower than lowercase Cyrillic.
+    expect(upperCyrillic).toBeGreaterThan(lowerCyrillic);
+  });
+
   it('scales with the profile mean delay', () => {
     const slow = generateKeyboardCadence({
       text: 'hello world this is a test',

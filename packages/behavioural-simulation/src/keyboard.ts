@@ -91,8 +91,22 @@ function gaussian(rng: () => number): number {
   return (rng() + rng() + rng() - 1.5) / 0.5;
 }
 
-const UPPERCASE = /[A-Z]/;
-const LOWERCASE = /[a-z]/;
+// Unicode-aware character classification. An ASCII-only classifier
+// (`/[A-Z]/`, `/[a-z]/`) mis-classifies every non-English letter —
+// accented Latin (café, niño), Cyrillic (привет), CJK, etc. — as a
+// "symbol", applying the number/symbol-layer switch penalty (symbolMult)
+// to ordinary letters. That is a typing-cadence fingerprint tell for
+// every non-English persona (a real keyboard types those letters at the
+// letter cadence, not the slower symbol cadence). Classify with Unicode
+// property escapes so a letter is a letter in any script:
+//   - LETTER  (\p{L})    → letter cadence; if it is also uppercase
+//                          (\p{Lu}) it costs a Shift tap (shiftMult).
+//   - SYMBOLIC ([0-9] | \p{P} punctuation | \p{S} symbol) → symbolMult
+//     (the number/symbol iOS keyboard layer). Reserved for ACTUAL
+//     digits / punctuation / symbols, not for non-ASCII letters.
+const LETTER = /\p{L}/u;
+const UPPERCASE = /\p{Lu}/u;
+const SYMBOLIC = /[0-9\p{P}\p{S}]/u;
 
 /**
  * Produce per-keystroke timings for `text` typed under `profile`.
@@ -131,10 +145,14 @@ export function generateKeyboardCadence(opts: GenerateKeyboardCadenceOpts): Keyb
     if (char === ' ') {
       delay *= d.spaceMult;
     } else if (UPPERCASE.test(char)) {
+      // Uppercase letter (any script) — costs a Shift tap.
       delay *= d.shiftMult;
-    } else if (!LOWERCASE.test(char)) {
-      // Not a lowercase letter, not a space → digit / punctuation /
-      // symbol, which lives on a switched iOS keyboard layer.
+    } else if (LETTER.test(char)) {
+      // Lowercase or caseless letter (any script — accented Latin,
+      // Cyrillic, CJK, …) — ordinary letter cadence, no layer-switch cost.
+    } else if (SYMBOLIC.test(char)) {
+      // Actual digit / punctuation / symbol — lives on a switched iOS
+      // keyboard layer (number/symbol), so slower than a letter.
       delay *= d.symbolMult;
     }
 
