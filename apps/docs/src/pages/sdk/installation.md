@@ -169,7 +169,7 @@ from driftstack import Driftstack
 
 with Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"]) as client:
     me = client.account.me()
-    print(me.email)
+    print(me["email"])
 ```
 
 **Configure (async):**
@@ -182,7 +182,7 @@ from driftstack import AsyncDriftstack
 async def main():
     async with AsyncDriftstack(api_key=os.environ["DRIFTSTACK_API_KEY"]) as client:
         me = await client.account.me()
-        print(me.email)
+        print(me["email"])
 
 asyncio.run(main())
 ```
