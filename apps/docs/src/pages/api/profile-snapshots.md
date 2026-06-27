@@ -67,8 +67,6 @@ Errors:
 
 - `404 not-found` — the profile id doesn't belong to the calling
   account.
-- `409 conflict` — a snapshot with this `label` already exists for
-  this profile.
 
 Required scope: `write` or `write:profiles`.
 

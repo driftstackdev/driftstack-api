@@ -78,14 +78,18 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     expect(p).not.toMatch(/"size_bytes":/);
   });
 
-  it('CRITICAL capture 404+409 error pair pinned. 404 = not-yours profile id; 409 = duplicate snapshot name for this profile. Drift would let SDK consumers misclassify failures.', () => {
+  it('CRITICAL capture error roster pinned: 404 = not-yours profile id. The capture service (services/profile-snapshots.ts:120-137) only throws NotFoundError; there is NO 409-on-duplicate-label (labels are not unique), so the doc must NOT claim one.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/`404 not-found` — the profile id doesn't belong to the calling/);
     expect(p).toMatch(/account\./);
-    expect(p).toMatch(
-      /`409 conflict` — a snapshot with this `label` already exists for\s*\n?\s+this profile\./,
+    // Guard against a 409-on-duplicate-label reappearing in the Capture
+    // errors block — capture() does not enforce label uniqueness.
+    const captureSection = p.slice(
+      p.indexOf('## Capture a snapshot of a profile'),
+      p.indexOf('## List snapshots of a profile'),
     );
+    expect(captureSection).not.toMatch(/`409 conflict` — a snapshot with this `label`/);
   });
 
   it('CRITICAL per-profile vs cross-account list endpoints pinned. The 2-endpoint split (/v1/profiles/:id/snapshots per-profile + /v1/profile-snapshots cross-account with profile_name field) matches W763 + W756.', () => {
