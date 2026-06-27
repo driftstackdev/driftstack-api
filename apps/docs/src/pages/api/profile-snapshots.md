@@ -174,7 +174,7 @@ Request:
 }
 ```
 
-Response (201):
+Response (200):
 
 ```json
 {
@@ -215,18 +215,16 @@ Required scope: `write` or `write:profiles`.
 
 ## Audit-log emission
 
-Snapshot lifecycle events surface in the customer audit log
-([/api/audit-log](/api/audit-log)). Action values:
+Only the restore operation surfaces in the customer audit log
+([/api/audit-log](/api/audit-log)) — because it creates a new
+profile. Capture and delete do not emit an audit entry today.
 
-- `profile_snapshot.captured` — fires on snapshot create. The
-  `target_resource_id` is the snapshot id; the `payload` includes
-  the snapshot name + the source profile id.
-- `profile_snapshot.restored` — fires on restore. The
-  `target_resource_id` is the new profile id; the `payload`
-  includes the snapshot id and the resulting profile name.
-- `profile_snapshot.deleted` — fires on delete.
+- `profile.created` — fires on restore (creating the new profile).
+  The `target_resource_id` is the new profile id (`profile_<uuid>`);
+  the `payload` includes `name`, `archetype`, and
+  `restored_from_snapshot` (the source snapshot id, `psnap_<uuid>`).
 
-These events filter cleanly via the query parameters; see
+This event filters cleanly via the query parameters; see
 [/api/audit-log](/api/audit-log) for the filter shape.
 
 ## Tier-cap interaction

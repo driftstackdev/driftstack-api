@@ -142,12 +142,16 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     );
   });
 
-  it('CRITICAL 3-audit-event lifecycle pinned — profile_snapshot.captured / .restored / .deleted. Drift would let SDK consumers fail to subscribe to audit-trail.', () => {
+  it('CRITICAL restore audit event pinned — restore emits `profile.created` (creating the new profile); capture + delete emit NO audit entry. The fabricated profile_snapshot.captured/.restored/.deleted actions do not exist in the snapshot service (profile-snapshots.ts emits profile.created on restore only); a consumer subscribing to those would never match. Drift sentinel against the bad action names.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/`profile_snapshot\.captured` — fires on snapshot create\./);
-    expect(p).toMatch(/`profile_snapshot\.restored` — fires on restore\./);
-    expect(p).toMatch(/`profile_snapshot\.deleted` — fires on delete\./);
+    expect(p).toMatch(/`profile\.created` — fires on restore \(creating the new profile\)\./);
+    expect(p).toMatch(/restored_from_snapshot/);
+    expect(p).toMatch(/Capture and delete do not emit an audit entry today\./);
+    // Drift sentinel — the fabricated action names MUST NOT come back.
+    expect(p).not.toMatch(/profile_snapshot\.captured/);
+    expect(p).not.toMatch(/profile_snapshot\.restored/);
+    expect(p).not.toMatch(/profile_snapshot\.deleted/);
   });
 
   it("CRITICAL snapshots-NOT-counted-against-tier framing pinned. The 'Snapshots themselves are NOT counted against PROFILES_PER_TIER. You can hold many snapshots per profile, and many snapshots per account, without affecting your profile-cap budget' wording is the load-bearing customer-comms.", () => {

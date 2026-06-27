@@ -85,7 +85,7 @@ Fires when a customer-visible incident is opened or status-changed.
 ### `audit.high_severity`
 
 Selective republish from the audit log for high-severity actions
-(e.g. `api_key.revoked`, `byok_anthropic.key_set`, `team.member_removed`).
+(e.g. `api_key.revoked`, `account.byok_anthropic_key_set`, `team.member_removed`).
 Low-severity events stay in the audit log only — query
 `GET /v1/account/audit-log` for the full ledger.
 

@@ -49,8 +49,9 @@ Response (200):
 Both `account_id` and `actor_account_id` carry the public `acc_`
 prefix on the wire (matches the format `GET /v1/account/me`
 returns). The bare row `id` is a UUID (no prefix). `actor_key_id`
-uses `key_` for API-key calls and `wsk_` for web-session calls;
-the prefix is the actor-class discriminator.
+is `key_<key-uuid>` for API-key calls and `null` for web-session
+calls (dashboard actions record no key id); the wire value is
+always `key_`-prefixed or `null`.
 
 `next_cursor` is `null` when there are no more pages.
 
@@ -74,9 +75,9 @@ therefore see "who on my team did what" without separate
 correlation. Self-action audit entries have
 `actor_account_id == account_id`.
 
-`actor_key_id` is the synthetic `wsk_<session-uuid>` for web-session
-calls and `key_<key-uuid>` for API-key calls. Both are `null` for
-`system` and `staff` events.
+`actor_key_id` is `key_<key-uuid>` for API-key calls and `null` for
+web-session calls (the dashboard audit emitters record no key id). It
+is also `null` for `system` and `staff` events.
 
 `ip_address` and `user_agent` (top-level fields on the entry) are
 surfaced in the schema but deliberately null in production

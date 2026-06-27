@@ -70,12 +70,15 @@ describe('W768 docs /api/audit-log content parity', () => {
     );
   });
 
-  it('CRITICAL actor_key_id synthetic-wsk_-for-web-session pinned. The "actor_key_id is the synthetic wsk_<session-uuid> for web-session calls and key_<key-uuid> for API-key calls" wording explains the 2-shape discriminator.', () => {
+  it('CRITICAL actor_key_id key_-or-null shape pinned. The audit read route (account-audit.ts) serializes actor_key_id as `key_${row.actorKeyId}` or null — it is ALWAYS key_-prefixed or null, never a bare wsk_. Web-session dashboard actions record no key id (null). Drift sentinel against the fabricated bare-wsk_ wording.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`actor_key_id` is the synthetic `wsk_<session-uuid>` for web-session\s*\n?calls and `key_<key-uuid>` for API-key calls\./,
+      /`actor_key_id` is `key_<key-uuid>` for API-key calls and `null` for\s*\n?web-session calls/,
     );
+    // Drift sentinel — the API never returns a bare wsk_-prefixed
+    // actor_key_id (it is always key_-prefixed or null). MUST NOT return.
+    expect(p).not.toMatch(/synthetic `wsk_<session-uuid>`/);
   });
 
   it("CRITICAL ip_address + user_agent deliberately-null-in-customer-responses framing pinned. The 'deliberately null in production customer-facing responses for privacy' wording is the load-bearing customer-comms privacy contract.", () => {

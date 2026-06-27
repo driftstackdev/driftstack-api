@@ -57,9 +57,9 @@ Returns:
 ```
 
 All amounts are in USD cents. `totalCents` is the sum of the
-five dimensions; rounding is per-dimension (cost engine rounds
-up to the nearest cent so short-duration sessions don't
-undercount).
+five dimensions; rounding is per-dimension (the cost engine rounds
+each dimension to the nearest cent via `Math.round`, then sums the
+already-rounded integer cents).
 
 ### Threshold state
 
