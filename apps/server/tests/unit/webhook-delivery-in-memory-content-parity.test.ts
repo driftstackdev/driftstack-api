@@ -231,15 +231,23 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
     expect(body).toMatch(/redirect: 'error',/);
   });
 
-  it('signPayload returns the canonical t=<emittedAtSec>,v1=<hex> header (HMAC-SHA256 over `<emittedAtSec>.<body>`), matching the SDK verifier', () => {
-    expect(body).toMatch(/Stripe-style `t=<emittedAtSec>,v1=<hex>`/);
+  it('signPayload returns the canonical t=<sentAtSec>,v1=<hex> header (HMAC-SHA256 over `<sentAtSec>.<body>`), re-stamped per send (#7), matching the SDK verifier', () => {
+    expect(body).toMatch(/Stripe-style `t=<sentAtSec>,v1=<hex>`/);
+    // #7 — sentAtSec defaults to emittedAtSec but the worker passes the current
+    // send time so each retry is re-stamped + re-signed (SDK tolerance window).
     expect(body).toMatch(
-      /const data = `\$\{payload\.emittedAtSec\.toString\(\)\}\.\$\{payload\.body\}`;/,
+      /export function signPayload\(\s*\n?\s*secret: string,\s*\n?\s*payload: DeliveryPayload,\s*\n?\s*sentAtSec: number = payload\.emittedAtSec,\s*\n?\s*\): string \{/,
     );
+    expect(body).toMatch(/const data = `\$\{sentAtSec\.toString\(\)\}\.\$\{payload\.body\}`;/);
     expect(body).toMatch(
       /const hex = createHmac\('sha256', secret\)\.update\(data, 'utf-8'\)\.digest\('hex'\);/,
     );
-    expect(body).toMatch(/return `t=\$\{payload\.emittedAtSec\.toString\(\)\},v1=\$\{hex\}`;/);
+    expect(body).toMatch(/return `t=\$\{sentAtSec\.toString\(\)\},v1=\$\{hex\}`;/);
+    // The worker stamps with the CURRENT send time, not the stored emit time.
+    expect(body).toMatch(/const sentAtSec = Math\.floor\(this\.now\(\) \/ 1000\);/);
+    expect(body).toMatch(
+      /const signature = signPayload\(endpoint\.signingSecret, payload, sentAtSec\);/,
+    );
   });
 
   it("dlqReasonFromAttempts: `${count}× ${outcome}: ${errorMessage ?? '(no message)'}` format", () => {

@@ -249,6 +249,45 @@ describe('processTick — failure + retry curve', () => {
     expect(updated?.nextAttemptAtMs).toBe(nowMs() + BACKOFF_MS_BY_ATTEMPT[1]);
   });
 
+  it('#7: a delayed RETRY is re-stamped + re-signed with its OWN send time (not the emit time)', async () => {
+    // First attempt fails → retry scheduled. Advance the clock past the backoff,
+    // then the retry must carry a `t=` reflecting the NEW send time and an HMAC
+    // over that send time — so a tolerance-checking SDK verifier (300s window)
+    // accepts the retry even though emittedAtSec is now far in the past.
+    // The responder runs AFTER the call is pushed, so the first attempt sees
+    // calls.length === 1. Fail that one (→ retry), succeed on the retry.
+    const { fn, calls } = captureFetch(() =>
+      calls.length === 1 ? { status: 500 } : { status: 200 },
+    );
+    const { handles, advance, nowMs } = build(fn);
+    await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+
+    // Attempt 1 (fails) — sent at emit time.
+    await handles.processTick();
+    const firstSig = calls[0]!.headers['x-driftstack-signature']!;
+    const firstT = Number(/t=(\d+)/.exec(firstSig)![1]);
+    expect(firstT).toBe(PAYLOAD.emittedAtSec); // first send == emit time here
+
+    // Advance an hour (past the 60s backoff) and run the retry.
+    advance(60 * 60_000);
+    await handles.processTick();
+    expect(calls).toHaveLength(2);
+    const retrySig = calls[1]!.headers['x-driftstack-signature']!;
+    const retryT = Number(/t=(\d+)/.exec(retrySig)![1]);
+
+    // The retry's timestamp is the CURRENT send time, not the stale emit time.
+    expect(retryT).toBe(Math.floor(nowMs() / 1000));
+    expect(retryT).toBeGreaterThan(firstT);
+
+    // The retry signature is a valid HMAC over `<retryT>.<body>` (re-signed, not reused).
+    const expected = createHmac('sha256', ENDPOINT.signingSecret)
+      .update(`${retryT}.${PAYLOAD.body}`, 'utf-8')
+      .digest('hex');
+    expect(retrySig).toBe(`t=${retryT},v1=${expected}`);
+    // And it differs from the first attempt's signature (stale-timestamp reuse is the bug).
+    expect(retrySig).not.toBe(firstSig);
+  });
+
   it('sixth failure → record promoted to DLQ', async () => {
     const { fn } = captureFetch(() => ({ status: 500 }));
     const { handles, advance } = build(fn);

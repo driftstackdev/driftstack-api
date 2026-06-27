@@ -501,7 +501,14 @@ class DeliveryWorker {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const signature = signPayload(endpoint.signingSecret, payload);
+      // #7 — sign with the CURRENT send time, not payload.emittedAtSec. The HMAC
+      // timestamp must reflect when THIS attempt is sent: backoff can push a retry
+      // an hour out, and the SDK's verifyWebhookSignature rejects timestamps
+      // outside its tolerance window (default 300s). Re-stamping per attempt keeps
+      // every retry's signature valid + matches the server worker (which signs
+      // with Date.now() at delivery time).
+      const sentAtSec = Math.floor(this.now() / 1000);
+      const signature = signPayload(endpoint.signingSecret, payload, sentAtSec);
       return await this.fetchFn(endpoint.url, {
         method: 'POST',
         headers: {
@@ -530,15 +537,26 @@ class DeliveryWorker {
 
 /**
  * Build the canonical `x-driftstack-signature` header value:
- * Stripe-style `t=<emittedAtSec>,v1=<hex>`, where the hex is
- * HMAC-SHA256 over `<emittedAtSec>.<body>`. The single-header
+ * Stripe-style `t=<sentAtSec>,v1=<hex>`, where the hex is
+ * HMAC-SHA256 over `<sentAtSec>.<body>`. The single-header
  * `t=,v1=` shape is what the SDK's verifyWebhookSignature parses;
  * a bare hex would silently fail customer verification.
+ *
+ * #7 — `sentAtSec` defaults to `payload.emittedAtSec` for back-compat, but the
+ * worker passes the CURRENT send time so each retry is re-stamped + re-signed.
+ * The SDK rejects timestamps outside its tolerance window (default 300s), so a
+ * retry that reuses the original emit time (backoff can be up to 60 min) would
+ * fail verification. The timestamp + the HMAC use the SAME value, so the
+ * customer's `<t>.<body>` recomputation always matches.
  */
-export function signPayload(secret: string, payload: DeliveryPayload): string {
-  const data = `${payload.emittedAtSec.toString()}.${payload.body}`;
+export function signPayload(
+  secret: string,
+  payload: DeliveryPayload,
+  sentAtSec: number = payload.emittedAtSec,
+): string {
+  const data = `${sentAtSec.toString()}.${payload.body}`;
   const hex = createHmac('sha256', secret).update(data, 'utf-8').digest('hex');
-  return `t=${payload.emittedAtSec.toString()},v1=${hex}`;
+  return `t=${sentAtSec.toString()},v1=${hex}`;
 }
 
 function dlqReasonFromAttempts(attempts: readonly DeliveryAttempt[]): string {
