@@ -101,7 +101,7 @@ describe('W433.B packages/api-types/src/cli-authorize.ts content parity', () => 
 
   it('CliAuthorizeExchangeStatus enum pinned: pending | bound | expired; status transition rationale comment', () => {
     expect(body).toMatch(
-      /\*\s*`pending` → keep polling\. `bound` → key delivered \(one-shot;\s*\n?\s*\*\s*subsequent calls 404\)\. `expired` → user took too long; restart the\s*\n?\s*\*\s*flow\./,
+      /`pending` → keep polling\. `bound` → key delivered \(one-shot;[\s\S]*?subsequent poll returns[\s\S]*?`\{ status: 'expired' \}` with HTTP 200\)\. `expired` → user took too[\s\S]*?restart the flow\./,
     );
     expect(body).toMatch(
       /export const CliAuthorizeExchangeStatusSchema = z\.enum\(\['pending', 'bound', 'expired'\]\);/,
