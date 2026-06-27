@@ -41,8 +41,19 @@ describe('W342.C admin /rate-limit-overrides bucket_key parity', () => {
     expect(adminSchema).toContain(canonical);
   });
 
-  it('accounts.ts declares the matching bucket_key enum for quota-override POST', () => {
-    expect(accountsSchema).toContain(canonical);
+  it('accounts.ts read-surface enum is the 4-key superset (3 override-able + read-only input_event)', () => {
+    // The GET /v1/account/rate-limits READ surface returns ALL enforced buckets,
+    // including agent_sessions:input_event — which has NO admin-override path, so the
+    // 3-key override enum stays in admin.ts (asserted above). accounts.ts is therefore
+    // a SUPERSET of the override set, not an exact match; pin every key is present.
+    for (const k of [
+      'global',
+      'sessions:create',
+      'agent_sessions:message',
+      'agent_sessions:input_event',
+    ]) {
+      expect(accountsSchema).toContain(`'${k}'`);
+    }
   });
 
   it("MockOverride.bucketKey type union matches ['global', 'sessions:create']", () => {
