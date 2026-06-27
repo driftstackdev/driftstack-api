@@ -32,6 +32,8 @@ async function seedStale(
       price_cents: 2500,
       price_currency: 'EUR',
       payment_id: null,
+      pay_amount: null,
+      pay_currency: null,
       status: opts.status ?? 'pending',
       customer_note: null,
       internal_note: null,

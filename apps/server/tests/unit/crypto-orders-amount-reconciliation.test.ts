@@ -256,6 +256,8 @@ describe('crypto-checkout DB-backed idempotency (#7)', () => {
       price_cents: 100,
       price_currency: 'USD',
       payment_id: null,
+      pay_amount: null,
+      pay_currency: null,
       status: 'pending' as const,
       customer_note: null,
       internal_note: null,

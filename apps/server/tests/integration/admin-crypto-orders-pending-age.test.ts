@@ -43,6 +43,8 @@ async function seed(
       price_cents: 14900,
       price_currency: row.currency ?? 'EUR',
       payment_id: null,
+      pay_amount: null,
+      pay_currency: null,
       status: row.status ?? 'pending',
       customer_note: null,
       internal_note: null,

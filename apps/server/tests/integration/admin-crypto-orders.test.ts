@@ -60,6 +60,8 @@ async function seedOrders(
       price_cents: 299,
       price_currency: 'USD',
       payment_id: null,
+      pay_amount: null,
+      pay_currency: null,
       status: row.status ?? 'pending',
       customer_note: row.customer_note ?? null,
       internal_note: null,

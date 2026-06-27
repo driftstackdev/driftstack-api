@@ -27,6 +27,8 @@ async function seedAt(
     price_cents: 100,
     price_currency: 'EUR',
     payment_id: null,
+    pay_amount: null,
+    pay_currency: null,
     status: args.status ?? 'pending',
     customer_note: null,
     internal_note: null,

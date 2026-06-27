@@ -20,6 +20,8 @@ async function seed(
     price_cents: 299,
     price_currency: 'USD',
     payment_id: null,
+    pay_amount: null,
+    pay_currency: null,
     status: 'pending',
     customer_note: null,
     internal_note: null,
