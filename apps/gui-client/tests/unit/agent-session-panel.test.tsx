@@ -96,6 +96,20 @@ describe('AgentSessionPanel overlay UX', () => {
     expect(dims).toEqual([[1320, 2868]]);
   });
 
+  // P1b — the panel box uses the `aspectRatio` prop (the simulator drives it with the
+  // LIVE content aspect, e.g. 402/714) so box == screen-host == <video> → no bottom
+  // black band. Passing the content aspect must set the box's style aspectRatio to it.
+  it('P1b: the box adopts the passed (live content) aspectRatio so the video fills it edge-to-edge', () => {
+    connectMock.mockReset();
+    connectMock.mockReturnValueOnce(new Promise(() => {}));
+    const contentAspect = 402 / 714; // content-only frame (NOT the full-device 402/874)
+    const { container } = render(<AgentSessionPanel info={INFO} aspectRatio={contentAspect} />);
+    const panel = container.querySelector('[data-component="agent-session-panel"]') as HTMLElement;
+    expect(panel.style.aspectRatio).toBe(contentAspect.toString());
+    // NOT the old hardcoded full-device 402:874 box (which letterboxed the content).
+    expect(panel.style.aspectRatio).not.toBe((1206 / 2622).toString());
+  });
+
   it('on a connect error shows a Reconnect button that re-triggers the connect', async () => {
     connectMock.mockReset();
     connectMock.mockRejectedValueOnce(new Error('boom')).mockReturnValue(new Promise(() => {})); // the retry stays connecting (no churn)

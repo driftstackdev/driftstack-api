@@ -167,6 +167,36 @@ const PAGE_STATE_GRACE_MS = 2500;
 const BACK_FORWARD_ENABLED = true; // A3 navigateHistory handler deployed (bus W2872; A3 01a5d48f1)
 const BEZEL_PAD = 20; // p-[10px] × 2
 const STATUS_STRIP_H = 40;
+
+/** Total non-video chrome height (px) above + around the device screen-host: the
+ *  Mac toolbar, the optional browser-mode address bar + tab strip, the bezel's
+ *  p-[10px] padding (top+bottom = BEZEL_PAD), and the in-screen iOS status strip
+ *  (STATUS_STRIP_H, the <IosStatusBar/> the live video sits BELOW). Every
+ *  window-sizing site derives the window HEIGHT as `chrome + contentW / aspect`,
+ *  where contentW = phoneW − BEZEL_PAD and `aspect` is the LIVE content video
+ *  aspect (videoW/videoH). One helper so the four sizing sites can never drift
+ *  apart (a missing strip on one site re-introduces a top cutoff or bottom black
+ *  band — P1b). */
+export function simulatorChromeHeight(browserModeOn: boolean): number {
+  return TOOLBAR_H + (browserModeOn ? BROWSER_BAR_H + TAB_STRIP_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
+}
+
+/** Pure window-height formula (P1b). The device screen-host must be EXACTLY the
+ *  live content aspect (videoW/videoH) so the <video> fills it edge-to-edge with
+ *  NO letterbox band. window_height = chrome + contentW / aspect, where contentW
+ *  is the phone width minus the bezel padding. The screen-host gets contentW wide
+ *  and contentW/aspect tall — exactly the content aspect — and AgentSessionPanel
+ *  is given the SAME live aspect so its box == host == video (no double
+ *  object-contain). Returns a rounded integer px height; 0 for a non-positive
+ *  aspect/width (caller guards). */
+export function simulatorWindowHeight(
+  phoneW: number,
+  aspect: number,
+  browserModeOn: boolean,
+): number {
+  if (aspect <= 0 || phoneW <= BEZEL_PAD) return 0;
+  return Math.round(simulatorChromeHeight(browserModeOn) + (phoneW - BEZEL_PAD) / aspect);
+}
 // The iPhone CSS-logical width of the launch archetype (iphone17). Fallback for the
 // "actual size" reset (Cmd+0) before the live stream reports its per-archetype dims,
 // so the device renders at true iPhone-logical px, not whatever width the window
@@ -2499,6 +2529,19 @@ export function SimulatorWindow(): JSX.Element {
   // Device aspect (videoW / videoH) from the live stream — drives window sizing so
   // the frame fits ANY archetype. Seeded to iphone17 until the stream reports.
   const deviceAspectRef = useRef(402 / 874);
+  // P1b — the LIVE content aspect passed to AgentSessionPanel so its <video> box ==
+  // the screen-host == the video (no double object-contain → no bottom-black band).
+  // The window-sizing math sizes the screen-host to EXACTLY this aspect (contentW ×
+  // contentW/aspect); giving the panel the SAME aspect makes the video fill it
+  // edge-to-edge. STATE (not just deviceAspectRef) so the panel re-renders with the
+  // real aspect when the first content-only frame reports. Seeded to the launch
+  // archetype's FULL-DEVICE aspect (402×874) until the stream reports the true
+  // CONTENT aspect (e.g. 402×714) — the old hardcoded 402:874 panel box was the bug:
+  // the content-only fork publishes 402×714, so a 402:874 box letterboxed the wider
+  // content top+bottom inside it (founder's persistent bottom-black gap). Held flat
+  // (not landscape-inverted): the panel's own box just needs to match whatever the
+  // <video>'s real frame aspect is, which IS videoW/videoH in either orientation.
+  const [contentAspect, setContentAspect] = useState(402 / 874);
   // The live per-archetype captured-frame LOGICAL CSS-px dims (videoW/DPR ×
   // videoH/DPR) the Mac touch injector addresses (A3 84de32ad4d content-only fork).
   // STATE (not just a ref) so it flows into AgentSessionPanel → useInputCapture and
@@ -2540,13 +2583,12 @@ export function SimulatorWindow(): JSX.Element {
       // and add the drawer back, so the drawer never letterboxes the device.
       const drawerExtra = drawerExtraRef.current;
       const phoneW = curWidth - drawerExtra;
-      const chrome =
-        TOOLBAR_H + (browserModeOn ? BROWSER_BAR_H + TAB_STRIP_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
+      const chrome = simulatorChromeHeight(browserModeOn);
       // The device screen-area must match the video aspect or the video
       // object-contains with side gaps. Height for a phone width = chrome + (w-bezel)/aspect.
       // First pass: ask for that height, pre-capped to the screen work area (a hint).
       const avail = typeof window !== 'undefined' ? (window.screen?.availHeight ?? 0) : 0;
-      let height = Math.round(chrome + (phoneW - BEZEL_PAD) / aspect);
+      let height = simulatorWindowHeight(phoneW, aspect, browserModeOn);
       let width = curWidth; // = phoneW + drawerExtra, preserved
       if (avail > 0 && height > avail - 24) {
         height = avail - 24;
@@ -2577,8 +2619,7 @@ export function SimulatorWindow(): JSX.Element {
       const { LogicalSize } = await import('@tauri-apps/api/dpi');
       const factor = await win.scaleFactor();
       const aspect = sizingAspect();
-      const chrome =
-        TOOLBAR_H + (browserMode ? BROWSER_BAR_H + TAB_STRIP_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
+      const chrome = simulatorChromeHeight(browserMode);
       // Target device-content width = the per-archetype iPhone CSS-logical width (its
       // long edge when rotated to landscape), then the window adds the bezel padding +
       // (if open) the right drawer's fixed width. Live per-archetype width from the
@@ -2591,7 +2632,7 @@ export function SimulatorWindow(): JSX.Element {
         : logicalW;
       const phoneW = targetContentW + BEZEL_PAD;
       let width = phoneW + drawerExtra;
-      let height = Math.round(chrome + (phoneW - BEZEL_PAD) / aspect);
+      let height = simulatorWindowHeight(phoneW, aspect, browserMode);
       // An iPhone is taller than many laptop work areas; if the ideal height would
       // overflow, cap it and derive the width from the aspect so the device still
       // fills the frame edge-to-edge (same guarantee fitWindow makes).
@@ -2636,8 +2677,7 @@ export function SimulatorWindow(): JSX.Element {
       const size = await win.innerSize();
       const h = Math.round(size.height / factor);
       const aspect = sizingAspect();
-      const chrome =
-        TOOLBAR_H + (browserMode ? BROWSER_BAR_H + TAB_STRIP_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
+      const chrome = simulatorChromeHeight(browserMode);
       const width = Math.round((h - chrome) * aspect + BEZEL_PAD) + drawerExtraRef.current;
       if (width > 0) await win.setSize(new LogicalSize(width, h));
     });
@@ -2745,11 +2785,7 @@ export function SimulatorWindow(): JSX.Element {
                 const h = Math.round(size.height / factor);
                 const w = Math.round(size.width / factor);
                 const aspect = sizingAspect();
-                const chrome =
-                  TOOLBAR_H +
-                  (browserMode ? BROWSER_BAR_H + TAB_STRIP_H : 0) +
-                  BEZEL_PAD +
-                  STATUS_STRIP_H;
+                const chrome = simulatorChromeHeight(browserMode);
                 // Window width = phone width (aspect-locked to the height) + the open
                 // drawer's fixed width, so a manual resize scales the PHONE and never
                 // eats the drawer.
@@ -4328,6 +4364,10 @@ export function SimulatorWindow(): JSX.Element {
     // Re-seed the touch logical frame to the launch archetype until the NEW session's
     // first full-res frame reports its per-archetype dims (mirrors sizedToStreamRef).
     setInputLogical({ width: 402, height: 874 });
+    // P1b — re-seed the panel content aspect too, so a new session's first frame
+    // re-adopts ITS true content aspect (a different archetype must not keep the
+    // prior box aspect → letterbox).
+    setContentAspect(402 / 874);
   }, [info?.ws_url, info?.token]);
 
   // The stream reported its REAL pixel dimensions (the archetype's screen
@@ -4339,6 +4379,10 @@ export function SimulatorWindow(): JSX.Element {
     if (sizedToStreamRef.current || w <= 0 || h <= 0) return;
     sizedToStreamRef.current = true;
     deviceAspectRef.current = w / h;
+    // P1b — adopt the LIVE content aspect for the panel box so the <video> fills the
+    // screen-host edge-to-edge (no bottom-black letterbox). Same value that drives the
+    // window-sizing math below, so box == host == video.
+    setContentAspect(w / h);
     // Adopt the per-archetype captured-frame LOGICAL dims (= the FIRST full-res
     // metadata ÷ dpr) for the touch-coordinate mapping. Set ONCE (gated by
     // sizedToStreamRef, cleared only on a new session) so a later SFU-downscaled
@@ -4576,6 +4620,13 @@ export function SimulatorWindow(): JSX.Element {
                 >
                   <AgentSessionPanel
                     info={info}
+                    // P1b — the panel box uses the LIVE content aspect (videoW/videoH)
+                    // so it == the screen-host == the <video>: no double object-contain,
+                    // no bottom-black band. The content-only fork publishes the web
+                    // content edge-to-edge (e.g. 402×714, NOT the full-device 402×874),
+                    // so the old hardcoded 402:874 box letterboxed the wider content
+                    // top+bottom inside it. Seeded to 402:874 until the first frame.
+                    aspectRatio={contentAspect}
                     // Chrome-band masks dropped: the content-only per-archetype fork
                     // (A3 84de32ad4d, box mac-macstadium-us-001) publishes the web
                     // content edge-to-edge with NO bands, so the old bottom/top masks

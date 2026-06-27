@@ -203,16 +203,17 @@ export function AgentSessionPanel({
   // effect keyed on the ref would attach to the stale (null) element.
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const [state, setState] = useState<LivekitConnectionState>({ kind: 'idle' });
-  // Box aspect = the FIXED canonical device aspect (402:874 ≡ 1206/2622), NOT the
-  // live track aspect. Founder 2026-06-23 "iPhone rendered smaller for no reason"
-  // + A3 W2840: the SFU downscales the published 402×874 track to a not-exactly-
-  // 402:874 EVEN resolution, so `videoWidth/videoHeight` ≈ but ≠ 402:874. Driving
-  // the box from that drifted live aspect, while `fitWindow` sizes the screen-host
-  // to EXACTLY 402:874, made the box `object-contain` letterbox a few px INSIDE
-  // its area → a slightly-shrunken view. Locking the box to the canonical aspect
-  // makes box == host; the tiny SFU drift is absorbed sub-pixel by the <video>'s
-  // object-contain. The real dims still drive the one-time WINDOW resize via
-  // onVideoDimensions below — that path is unchanged.
+  // Box aspect = the `aspectRatio` prop, which the simulator drives with the LIVE
+  // CONTENT aspect (videoW/videoH) — the SAME value its window-sizing math uses to
+  // size the screen-host (P1b). So box == host == <video>, and the video fills the
+  // box edge-to-edge with NO letterbox band. This REPLACES the old "lock to the
+  // canonical 402:874" behavior: that was right when the box published the FULL
+  // device (402×874), but the content-only per-archetype fork (A3 84de32ad4d)
+  // publishes the web content edge-to-edge (e.g. 402×714), so a 402:874 box
+  // letterboxed the wider content top+bottom inside it → the founder's persistent
+  // bottom-black gap. The default (402:874) still applies until the first frame
+  // reports. Any sub-pixel SFU-downscale drift (videoW/videoH ≈ but ≠ the exact
+  // content aspect, A3 W2840) is absorbed by the <video>'s own object-contain.
   const effectiveAspectRatio = aspectRatio;
   // Simulator control: the live LiveKit room is lifted to state so the
   // input-capture hook can publish on its DataChannel. In `interactive` mode
