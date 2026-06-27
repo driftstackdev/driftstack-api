@@ -36,17 +36,22 @@ describe('W367.A marketing-site /about page content parity', () => {
   const body = read(PAGE);
 
   it('posture 3-card section pinned: EU-resident / no-behavioural-data / honest-scope', () => {
-    expect(body).toMatch(/<h3 class="font-semibold text-tk-ink">EU-resident, by default<\/h3>/);
+    expect(body).toMatch(/<h3 class="font-semibold text-tk-ink">EU-resident control plane<\/h3>/);
     expect(body).toMatch(
       /<h3 class="font-semibold text-tk-ink">No behavioural data collection<\/h3>/,
     );
     expect(body).toMatch(/<h3 class="font-semibold text-tk-ink">Honest scope<\/h3>/);
   });
 
-  it('F-5 (Issue 6) EU stack reframed: vendor names moved to /trust/sub-processors. Page commits to the residency posture ("Compute, database, object storage, and email all run in the EU") without naming vendors on the about-page splash. Vendor migration discussions belong on the dedicated sub-processor page.', () => {
+  it('EU control-plane posture is accurate: control-plane infra (compute/database/object storage) is EU-resident, but session execution + a few processors transfer to the US under SCCs + EU-US DPF (matches the real /trust/sub-processors list — Anthropic/MacStadium/LiveKit are US). No vendor names on the about-page splash; the dedicated sub-processor page carries the per-vendor breakdown.', () => {
+    expect(body).toMatch(/Compute, database, and object storage all run in the EU\./);
     expect(body).toMatch(
-      /Compute, database, object storage, and email all run in\s+the EU\. Single-region — no silent transatlantic data\s+flows\./,
+      /Session execution and a few processors[\s\S]{0,120}transfer to the US\s*\n?\s*under Standard Contractual Clauses \+ the EU-US Data Privacy\s*\n?\s*Framework/,
     );
+    // Drift sentinel — the absolute "single-region / no transatlantic
+    // flows" claim contradicted the real sub-processor list (US
+    // processors under SCCs + DPF). It MUST NOT come back.
+    expect(body).not.toMatch(/Single-region — no silent transatlantic data/);
     expect(body).toMatch(/href="\/trust\/sub-processors"/);
     expect(body).not.toMatch(/Compute in Hetzner Falkenstein/);
     expect(body).not.toMatch(/Database on Neon EU/);

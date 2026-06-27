@@ -31,8 +31,12 @@ describe('W334.B /about narrative baseline', () => {
     expect(body).toMatch(/we run Apple's WebKit\s+source code/);
   });
 
-  it('F-5 (Issue 6) EU-resident posture: vendor names moved to /trust/sub-processors; the about-page card now links there instead of enumerating vendors inline', () => {
-    expect(body).toMatch(/Compute, database, object storage, and email all run in\s+the EU/);
+  it('EU control-plane posture: control-plane infra is EU-resident, session execution + a few processors transfer to the US under SCCs + EU-US DPF (matches the real sub-processor list); vendor names live on /trust/sub-processors, the about-page card links there instead of enumerating vendors inline', () => {
+    expect(body).toMatch(/Compute, database, and object storage all run in the EU/);
+    expect(body).toMatch(
+      /transfer to the US\s*\n?\s*under Standard Contractual Clauses \+ the EU-US Data Privacy/,
+    );
+    expect(body).not.toMatch(/Single-region — no silent transatlantic data/);
     expect(body).toMatch(/href="\/trust\/sub-processors"/);
     expect(body).not.toMatch(/Hetzner\s+Falkenstein/);
     expect(body).not.toMatch(/Neon\s+EU/);

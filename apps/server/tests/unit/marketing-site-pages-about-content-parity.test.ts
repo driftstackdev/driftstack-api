@@ -51,10 +51,15 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     );
   });
 
-  it("F-5 (Issue 6) EU-resident card no longer names vendors on the about page (moved to /trust/sub-processors). The 'no silent transatlantic data flows' commitment is preserved + a link to the dedicated sub-processor page replaces the vendor enumeration.", () => {
+  it('EU-resident card states the accurate residency posture: control-plane infra (compute/database/object storage) is EU-resident, and session execution + a few processors transfer to the US under SCCs + EU-US DPF (matches the real /trust/sub-processors list — Anthropic/MacStadium/LiveKit are US). No vendor names on the about page (moved to /trust/sub-processors); a link to the dedicated page replaces the vendor enumeration.', () => {
+    expect(body).toMatch(/Compute, database, and object storage all run in the EU\./);
     expect(body).toMatch(
-      /Compute, database, object storage, and email all run in\s*\n?\s*the EU\. Single-region — no silent transatlantic data\s*\n?\s*flows\./,
+      /Session execution and a few processors[\s\S]{0,140}transfer to the US\s*\n?\s*under Standard Contractual Clauses \+ the EU-US Data Privacy\s*\n?\s*Framework — no undisclosed flows\./,
     );
+    // Drift sentinel — the absolute "single-region / no transatlantic
+    // flows" claim contradicted the real sub-processor list. MUST NOT
+    // come back.
+    expect(body).not.toMatch(/Single-region — no silent transatlantic data/);
     expect(body).toMatch(
       /<a href="\/trust\/sub-processors" class="text-tk-accent underline">\/trust\/sub-processors<\/a>/,
     );
@@ -72,18 +77,25 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     );
   });
 
-  it("'Honest scope' posture (recipe library shipped at v1.0 with create/list/read/delete — only execution stays v1.1 — so the line now reads 'with create, list, read, and delete … recipe execution lands at v1.1'; behavioural simulation still genuinely Phase 3 so stays in the no-vaporware line. Drift to claiming SOC 2 still trips the integrity check; drift to re-Phase-3-ing recipes OR back to a 'write-only form' claim would reopen the marketing-vs-reality gap now that the read/management path ships)", () => {
+  it("'Honest scope' posture (the behavioural INPUT engine ships at v1.0 — index.astro markets touch/scroll/typing/persona live + packages/behavioural-simulation is prod-wired as a per-session persona — so the line now reads 'The behavioural input engine … ships at v1.0', NOT the stale 'Behavioural simulation is Phase 3'. Recipe library shipped at v1.0 with create/list/read/delete — only execution stays v1.1. SOC 2 stays a future-revenue milestone. Drift to claiming SOC 2 still trips the integrity check; drift to re-Phase-3-ing recipes OR behavioural simulation OR back to a 'write-only form' claim would reopen the marketing-vs-reality gap)", () => {
     expect(body).toMatch(
-      /We say no to things we can't ship well\. Behavioural simulation\s*\n?\s*is Phase 3 — we'll talk about it when it ships, not before\. The\s*\n?\s*recipe library is live at v1\.0 with create, list, read, and/,
+      /We say no to things we can't ship well\. The behavioural input\s*\n?\s*engine — human-derived touch, scroll, typing and per-profile\s*\n?\s*persona — ships at v1\.0;/,
     );
-    expect(body).toMatch(/recipe\); recipe execution lands at v1\.1/);
     expect(body).toMatch(
-      /SOC 2 is a\s*\n?\s*future-revenue milestone, not today's marketing line\./,
+      /recipe library\s*\n?\s*is live at v1\.0 with create, list, read, and delete/,
+    );
+    expect(body).toMatch(/recipe\s*\n?\s*execution lands at v1\.1/);
+    expect(body).toMatch(
+      /SOC 2 is a future-revenue\s*\n?\s*milestone, not today's marketing line\./,
     );
     // Drift sentinel — the pre-slice-143 "recipe libraries are Phase 3"
     // shape was wrong (contradicted slice 121's roadmap NOW promotion
     // + the live docs/api/recipes.md page). MUST NOT come back.
     expect(body).not.toMatch(/Behavioural simulation\s*\n?\s*and recipe libraries are Phase 3/);
+    // Drift sentinel — the behavioural input engine ships at v1.0 (index.astro
+    // markets it live, packages/behavioural-simulation is prod-wired), so the
+    // stale "Behavioural simulation is Phase 3" claim MUST NOT come back.
+    expect(body).not.toMatch(/Behavioural simulation\s*\n?\s*is Phase 3/);
     // Drift sentinel — the read/management path shipped at v1.0, so the
     // old "write-only form" framing is now inaccurate. MUST NOT come back.
     expect(body).not.toMatch(/recipe library is live at v1\.0 in its write-only form/);
