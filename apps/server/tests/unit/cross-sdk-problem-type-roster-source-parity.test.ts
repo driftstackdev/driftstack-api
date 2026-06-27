@@ -75,13 +75,14 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
     );
   });
 
-  it('CRITICAL 30-entry PROBLEM_TYPES roster pinned with `as const`. Each entry is a https://errors.driftstack.dev/<slug> URL. Drift to dropping any entry or changing a URI breaks consumers.', () => {
+  it('CRITICAL 31-entry PROBLEM_TYPES roster pinned with `as const`. Each entry is a https://errors.driftstack.dev/<slug> URL. Drift to dropping any entry or changing a URI breaks consumers.', () => {
     const src = read(PROBLEM_SCHEMA);
 
-    // 29 problem types. v2-#6 added BundledLlm{BudgetExhausted,
+    // 31 problem types. v2-#6 added BundledLlm{BudgetExhausted,
     // ConsentRequired} (402 Payment Required, bundled-LLM rail).
     // v2-#8 added PairMode{Conflict,StateInvalidTransition} (409
-    // pair-mode contention).
+    // pair-mode contention). ProxyValidationFailed (422) is the
+    // per-session proxy-config validation failure.
     const types: Record<string, string> = {
       BadRequest: 'bad-request',
       Unauthorized: 'unauthorized',
@@ -113,7 +114,9 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
       BundledLlmConsentRequired: 'bundled-llm-consent-required',
       PairModeConflict: 'pair-mode-conflict',
       PairModeStateInvalidTransition: 'pair-mode-invalid-transition',
+      ProxyValidationFailed: 'proxy-validation-failed',
     };
+    expect(Object.keys(types).length).toBe(31);
 
     for (const [key, slug] of Object.entries(types)) {
       // Match `<Key>: 'https://errors.driftstack.dev/<slug>',`
