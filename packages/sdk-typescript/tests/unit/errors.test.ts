@@ -20,6 +20,7 @@ import {
   NotFoundError,
   PairModeConflictError,
   PairModeStateInvalidTransitionError,
+  ProfileInUseError,
   RateLimitError,
   TierLimitError,
   TransportError,
@@ -364,6 +365,24 @@ describe('errorFromProblem — bundled-LLM 402 + pair-mode 409 kind correctness'
     expect(e.status).toBe(409);
     expect((e as PairModeStateInvalidTransitionError).from).toBe('ai-driving');
     expect((e as PairModeStateInvalidTransitionError).transition).toBe('handback');
+    expect(isRetryable(e)).toBe(false);
+  });
+
+  it('maps profile-in-use → ProfileInUseError (kind conflict, status 409, active_session_id surfaced)', () => {
+    // A3 finding #7 — single-active-session-per-profile guard 409.
+    const e = errorFromProblem(
+      {
+        type: PROBLEM_TYPES.ProfileInUse,
+        title: 'Profile already in use',
+        status: 409,
+        active_session_id: 'ses_abc123',
+      },
+      null,
+    );
+    expect(e).toBeInstanceOf(ProfileInUseError);
+    expect(e.kind).toBe('conflict');
+    expect(e.status).toBe(409);
+    expect((e as ProfileInUseError).activeSessionId).toBe('ses_abc123');
     expect(isRetryable(e)).toBe(false);
   });
 });

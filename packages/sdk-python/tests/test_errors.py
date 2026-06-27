@@ -24,6 +24,7 @@ from driftstack.errors import (
     NotFoundError,
     PairModeConflictError,
     PairModeStateInvalidTransitionError,
+    ProfileInUseError,
     ProxyValidationFailedError,
     QuotaExceededError,
     RateLimitError,
@@ -69,6 +70,9 @@ def test_subclass_relationships() -> None:
     assert issubclass(InvalidCredentialsError, AuthError)
     assert issubclass(InvalidAuthTokenError, DriftstackError)
     assert issubclass(EmailNotVerifiedError, ForbiddenError)
+    # A3 finding #7 — ProfileInUseError IS a 409 conflict, so it subclasses
+    # ConflictError; existing `except ConflictError` handlers still catch it.
+    assert issubclass(ProfileInUseError, ConflictError)
 
 
 def test_every_problem_type_maps_to_a_subclass() -> None:
@@ -280,6 +284,35 @@ def test_proxy_validation_failed_reason_absent_is_none() -> None:
     err = _error_from_response_data(status=422, text=body, retry_after_header=None)
     assert isinstance(err, ProxyValidationFailedError)
     assert err.reason is None
+
+
+def test_profile_in_use_extracts_active_session_id() -> None:
+    # A3 finding #7 — single-active-session-per-profile guard 409. The server
+    # spreads `active_session_id` to the problem top level; the SDK surfaces it as
+    # a first-class attribute (cross-SDK parity with TS err.activeSessionId / Go
+    # err.ActiveSessionID).
+    body = (
+        '{"type":"https://errors.driftstack.dev/profile-in-use",'
+        '"title":"Profile already in use","status":409,'
+        '"detail":"This profile already has a live session (ses_abc123).",'
+        '"active_session_id":"ses_abc123","resource":"profile"}'
+    )
+    err = _error_from_response_data(status=409, text=body, retry_after_header=None)
+    assert isinstance(err, ProfileInUseError)
+    assert isinstance(err, ConflictError)  # catchable as a 409 conflict
+    assert err.active_session_id == "ses_abc123"
+    assert err.status == 409
+    assert is_retryable(err) is False
+
+
+def test_profile_in_use_active_session_id_absent_is_empty() -> None:
+    body = (
+        '{"type":"https://errors.driftstack.dev/profile-in-use",'
+        '"title":"Profile already in use","status":409}'
+    )
+    err = _error_from_response_data(status=409, text=body, retry_after_header=None)
+    assert isinstance(err, ProfileInUseError)
+    assert err.active_session_id == ""
 
 
 def test_unknown_problem_type_falls_back_to_base_class() -> None:

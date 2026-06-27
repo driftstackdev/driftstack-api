@@ -238,6 +238,49 @@ func TestSessionTimeoutExtractsTimeoutMs(t *testing.T) {
 	}
 }
 
+func TestProfileInUseExtractsActiveSessionID(t *testing.T) {
+	t.Parallel()
+	// A3 finding #7 — single-active-session-per-profile guard 409. The server
+	// spreads active_session_id to the problem top level; the SDK surfaces it as
+	// ActiveSessionID (cross-SDK parity with TS err.activeSessionId / Python
+	// err.active_session_id). errors.Is matches BOTH ErrProfileInUse and the
+	// broader ErrConflict.
+	body := []byte(`{"type":"https://errors.driftstack.dev/profile-in-use","title":"Profile already in use","status":409,"detail":"This profile already has a live session (ses_abc123).","active_session_id":"ses_abc123","resource":"profile"}`)
+	err := errorFromResponse(409, body, "")
+	var piu *ProfileInUseError
+	if !errors.As(err, &piu) {
+		t.Fatalf("expected *ProfileInUseError, got %T", err)
+	}
+	if piu.ActiveSessionID != "ses_abc123" {
+		t.Errorf("ActiveSessionID=%q, want ses_abc123", piu.ActiveSessionID)
+	}
+	if piu.Status != 409 {
+		t.Errorf("status=%d, want 409", piu.Status)
+	}
+	if !errors.Is(err, ErrProfileInUse) {
+		t.Error("expected errors.Is ErrProfileInUse")
+	}
+	if !errors.Is(err, ErrConflict) {
+		t.Error("expected errors.Is ErrConflict (a profile-in-use IS a 409 conflict)")
+	}
+	if IsRetryable(err) {
+		t.Error("profile-in-use must not be retryable")
+	}
+}
+
+func TestProfileInUseActiveSessionIDAbsentIsEmpty(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"type":"https://errors.driftstack.dev/profile-in-use","title":"Profile already in use","status":409}`)
+	err := errorFromResponse(409, body, "")
+	var piu *ProfileInUseError
+	if !errors.As(err, &piu) {
+		t.Fatalf("expected *ProfileInUseError, got %T", err)
+	}
+	if piu.ActiveSessionID != "" {
+		t.Errorf("ActiveSessionID=%q, want empty", piu.ActiveSessionID)
+	}
+}
+
 func TestUnknownProblemTypeFallsBackToUnknownError(t *testing.T) {
 	t.Parallel()
 	body := []byte(`{"type":"https://errors.driftstack.dev/unknown-future-thing","title":"new","status":418,"detail":"teapot"}`)
