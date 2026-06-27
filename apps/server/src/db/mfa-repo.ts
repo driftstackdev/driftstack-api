@@ -149,11 +149,19 @@ export class DrizzleMfaRepo implements MfaRepo {
     return rows.map(toRecoveryCodeRow);
   }
 
-  async markRecoveryCodeUsed(id: string, now: Date): Promise<void> {
-    await this.database.db
+  async markRecoveryCodeUsed(id: string, now: Date): Promise<boolean> {
+    // Atomic consume: only update the row if it is STILL unused. The conditional
+    // WHERE (id = … AND used_at IS NULL) means two concurrent requests with the
+    // same code race on this UPDATE; exactly one matches a row (→ returns it),
+    // the other matches zero rows. The caller gates success on this so a code can
+    // never be spent twice (#5). `.returning()` lets us read the affected count
+    // (mirrors consumeTotpCounter's atomic-consume pattern).
+    const updated = await this.database.db
       .update(accountMfaRecoveryCodes)
       .set({ usedAt: now })
-      .where(and(eq(accountMfaRecoveryCodes.id, id), isNull(accountMfaRecoveryCodes.usedAt)));
+      .where(and(eq(accountMfaRecoveryCodes.id, id), isNull(accountMfaRecoveryCodes.usedAt)))
+      .returning({ id: accountMfaRecoveryCodes.id });
+    return updated.length === 1;
   }
 
   async markAllRecoveryCodesUsed(accountId: string, now: Date): Promise<void> {

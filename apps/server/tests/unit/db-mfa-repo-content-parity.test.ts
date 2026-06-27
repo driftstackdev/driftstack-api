@@ -118,9 +118,9 @@ describe('W446.A apps/server/src/db/mfa-repo.ts content parity', () => {
     );
   });
 
-  it("markRecoveryCodeUsed: idempotent via and(eq(id), isNull(usedAt)) — replay-safe (can't re-mark used→used)", () => {
+  it('markRecoveryCodeUsed: atomic consume via and(eq(id), isNull(usedAt)) + .returning length===1 — replay-safe AND returns whether THIS call spent it (#5 double-spend gate)', () => {
     expect(body).toMatch(
-      /async markRecoveryCodeUsed\(id: string, now: Date\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(accountMfaRecoveryCodes\)\s*\n?\s*\.set\(\{ usedAt: now \}\)\s*\n?\s*\.where\(and\(eq\(accountMfaRecoveryCodes\.id, id\), isNull\(accountMfaRecoveryCodes\.usedAt\)\)\);\s*\n?\s*\}/,
+      /async markRecoveryCodeUsed\(id: string, now: Date\): Promise<boolean> \{[\s\S]*?const updated = await this\.database\.db\s*\n?\s*\.update\(accountMfaRecoveryCodes\)\s*\n?\s*\.set\(\{ usedAt: now \}\)\s*\n?\s*\.where\(and\(eq\(accountMfaRecoveryCodes\.id, id\), isNull\(accountMfaRecoveryCodes\.usedAt\)\)\)\s*\n?\s*\.returning\(\{ id: accountMfaRecoveryCodes\.id \}\);\s*\n?\s*return updated\.length === 1;\s*\n?\s*\}/,
     );
   });
 

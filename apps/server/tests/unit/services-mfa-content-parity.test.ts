@@ -103,7 +103,7 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
     expect(body).toMatch(
       /listUnusedRecoveryCodes\(accountId: string\): Promise<RecoveryCodeRow\[\]>;/,
     );
-    expect(body).toMatch(/markRecoveryCodeUsed\(id: string, now: Date\): Promise<void>;/);
+    expect(body).toMatch(/markRecoveryCodeUsed\(id: string, now: Date\): Promise<boolean>;/);
     expect(body).toMatch(
       /markAllRecoveryCodesUsed\(accountId: string, now: Date\): Promise<void>;/,
     );
@@ -205,8 +205,10 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
       /\/\/ scrypt is constant-time-friendly per-row but the loop itself\s*\n?\s*\/\/ leaks "how many unused codes\." Customer's own action; not a\s*\n?\s*\/\/ cross-account leak\. Acceptable\./,
     );
     expect(body).toMatch(/const ok = await verifyApiKey\(normalized, c\.codeHash\);/);
+    // #5 — success is gated on the atomic consume's rowcount: a concurrent
+    // second consume of the same code returns false → null (no double-spend).
     expect(body).toMatch(
-      /await this\.repo\.markRecoveryCodeUsed\(c\.id, new Date\(\)\);\s*\n?\s*await this\.repo\.touchLastUsed\(args\.accountId, new Date\(\)\);/,
+      /const consumed = await this\.repo\.markRecoveryCodeUsed\(c\.id, new Date\(\)\);\s*\n?\s*if \(!consumed\) return null;\s*\n?\s*await this\.repo\.touchLastUsed\(args\.accountId, new Date\(\)\);/,
     );
     expect(body).toMatch(
       /action: 'account\.recovery_code_used',[\s\S]+?payload: \{ remaining: candidates\.length - 1 \},/,

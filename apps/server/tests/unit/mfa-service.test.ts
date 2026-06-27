@@ -91,9 +91,14 @@ function makeRepo(): {
     },
     listUnusedRecoveryCodes: () => Promise.resolve(state.codes.filter((c) => c.usedAt === null)),
     markRecoveryCodeUsed: (id, now) => {
+      // Faithful to the DB's atomic conditional UPDATE (WHERE id = … AND used_at
+      // IS NULL): only flip if STILL unused; return whether THIS call consumed it.
       const row = state.codes.find((c) => c.id === id);
-      if (row) row.usedAt = now;
-      return Promise.resolve();
+      if (row && row.usedAt === null) {
+        row.usedAt = now;
+        return Promise.resolve(true);
+      }
+      return Promise.resolve(false);
     },
     markAllRecoveryCodesUsed: (_acc, now) => {
       for (const c of state.codes) if (c.usedAt === null) c.usedAt = now;
@@ -346,6 +351,33 @@ describe('V-553.B-11 MfaService.verifyCode', () => {
     const result2 = await svc.verifyCode({ accountId: 'acc_1', input: recovery });
     expect(result2).toBeNull();
   });
+
+  // #5 — two concurrent verifies of the SAME recovery code: exactly ONE may
+  // succeed. The fix gates success on the atomic conditional-UPDATE rowcount, so
+  // the loser of the race gets null even though it also scrypt-matched the code.
+  it(
+    'concurrent consume of the same recovery code: exactly one succeeds (#5)',
+    { timeout: 30_000 },
+    async () => {
+      const { repo, state } = makeRepo();
+      const svc = new MfaService(repo, SVC_CONFIG);
+      const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
+      const secretBytes = base32Decode(start.secretBase32);
+      const totp = computeTotpCode(secretBytes, Math.floor(Date.now() / 1000));
+      const { recoveryCodes } = await svc.completeEnrollment({ accountId: 'acc_1', code: totp });
+      const recovery = recoveryCodes[0];
+      if (!recovery) throw new Error('no recovery code');
+
+      const [a, b] = await Promise.all([
+        svc.verifyCode({ accountId: 'acc_1', input: recovery }),
+        svc.verifyCode({ accountId: 'acc_1', input: recovery }),
+      ]);
+      const successes = [a, b].filter((r) => r === 'recovery');
+      expect(successes).toHaveLength(1);
+      // And the code is now spent (only one row consumed).
+      expect(state.codes.filter((c) => c.usedAt !== null)).toHaveLength(1);
+    },
+  );
 
   it('rejects garbage input (non-digit, non-10-char) without scanning recovery codes', async () => {
     const { repo, state } = makeRepo();

@@ -87,8 +87,10 @@ export interface MfaRepo {
   insertRecoveryCodes(args: { accountId: string; hashes: string[]; now: Date }): Promise<void>;
   /** V-353b — list unused recovery codes (used by the verify path). */
   listUnusedRecoveryCodes(accountId: string): Promise<RecoveryCodeRow[]>;
-  /** V-353b — mark a single recovery code consumed. */
-  markRecoveryCodeUsed(id: string, now: Date): Promise<void>;
+  /** V-353b — atomically consume a single recovery code. Returns true iff THIS
+   *  call flipped it from unused → used (rowCount === 1); false when it was
+   *  already spent (a concurrent consume won the race). Gates double-spend (#5). */
+  markRecoveryCodeUsed(id: string, now: Date): Promise<boolean>;
   /** V-353b — bulk-mark every unused recovery code consumed (used by
    *  regenerate). */
   markAllRecoveryCodesUsed(accountId: string, now: Date): Promise<void>;
@@ -309,7 +311,13 @@ export class MfaService {
 
       const ok = await verifyApiKey(normalized, c.codeHash);
       if (ok) {
-        await this.repo.markRecoveryCodeUsed(c.id, new Date());
+        // #5 — atomic single-use: only ONE concurrent consume of the same code
+        // can flip it unused → used. If the conditional UPDATE matched 0 rows the
+        // code was already spent (a sibling request won the race), so this attempt
+        // must NOT grant access — reject as if the code were invalid. Without this
+        // gate two concurrent requests with the same code both succeeded.
+        const consumed = await this.repo.markRecoveryCodeUsed(c.id, new Date());
+        if (!consumed) return null;
         await this.repo.touchLastUsed(args.accountId, new Date());
         if (this.accountAudit) {
           try {

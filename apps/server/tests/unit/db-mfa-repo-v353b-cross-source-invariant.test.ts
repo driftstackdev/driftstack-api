@@ -73,7 +73,7 @@ describe('W997 db/mfa-repo V-353b cross-source invariant', () => {
     expect(p).toMatch(
       /async listUnusedRecoveryCodes\(accountId: string\): Promise<RecoveryCodeRow\[\]> \{/,
     );
-    expect(p).toMatch(/async markRecoveryCodeUsed\(id: string, now: Date\): Promise<void> \{/);
+    expect(p).toMatch(/async markRecoveryCodeUsed\(id: string, now: Date\): Promise<boolean> \{/);
     expect(p).toMatch(
       /async markAllRecoveryCodesUsed\(accountId: string, now: Date\): Promise<void> \{/,
     );
@@ -150,13 +150,15 @@ describe('W997 db/mfa-repo V-353b cross-source invariant', () => {
 
   // ─── markRecoveryCodeUsed isNull double-check ────────────────
 
-  it("CRITICAL markRecoveryCodeUsed double-check — 'and(eq(id), isNull(usedAt))' prevents replay (idempotency). The isNull(usedAt) guard makes the mark-used UPDATE no-op if the code was already redeemed (race-safety).", () => {
+  it("CRITICAL markRecoveryCodeUsed double-check — 'and(eq(id), isNull(usedAt))' prevents replay (idempotency) + returns rowcount (#5 double-spend gate). The isNull(usedAt) guard makes the mark-used UPDATE match exactly one row on the first consume; .returning + length===1 lets the caller reject a concurrent second consume.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/mfa-repo.ts'));
     expect(p).toMatch(/\.update\(accountMfaRecoveryCodes\)/);
     expect(p).toMatch(/\.set\(\{ usedAt: now \}\)/);
     expect(p).toMatch(
-      /\.where\(and\(eq\(accountMfaRecoveryCodes\.id, id\), isNull\(accountMfaRecoveryCodes\.usedAt\)\)\);/,
+      /\.where\(and\(eq\(accountMfaRecoveryCodes\.id, id\), isNull\(accountMfaRecoveryCodes\.usedAt\)\)\)/,
     );
+    expect(p).toMatch(/\.returning\(\{ id: accountMfaRecoveryCodes\.id \}\);/);
+    expect(p).toMatch(/return updated\.length === 1;/);
   });
 
   // ─── markAllRecoveryCodesUsed mass-set ───────────────────────

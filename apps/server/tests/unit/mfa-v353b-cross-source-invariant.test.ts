@@ -186,9 +186,9 @@ describe('W938 V-353b MFA cross-source invariant', () => {
 
   // ─── Recovery code single-use via markRecoveryCodeUsed ───────
 
-  it('CRITICAL MfaRepo declares markRecoveryCodeUsed(id, now) — sets usedAt on consume. The single-use sets-used-at-on-consume is what makes recovery codes one-shot per the recovery-code framing.', () => {
+  it('CRITICAL MfaRepo declares markRecoveryCodeUsed(id, now): Promise<boolean> — atomically consumes + returns whether THIS call spent it. The boolean gates double-spend (#5): the caller only grants access when the conditional UPDATE matched a row.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/mfa.ts'));
-    expect(p).toMatch(/markRecoveryCodeUsed\(id: string, now: Date\): Promise<void>;/);
+    expect(p).toMatch(/markRecoveryCodeUsed\(id: string, now: Date\): Promise<boolean>;/);
   });
 
   // ─── Disable wipes all recovery codes ────────────────────────
