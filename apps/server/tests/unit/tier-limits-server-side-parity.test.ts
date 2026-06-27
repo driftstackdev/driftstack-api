@@ -164,7 +164,7 @@ describe('W730 tier-limit server-side records parity', () => {
 
     // Enterprise: server 32, marketing 'Custom' (correct — marketing shows "Custom"; server enforces 32 default floor).
     expect(common).toMatch(/enterprise: 32,/);
-    expect(pricing).toMatch(/id: 'enterprise',[\s\S]{0,700}concurrent: 'Custom',/);
+    expect(pricing).toMatch(/id: 'enterprise',[\s\S]{0,1200}concurrent: 'Custom',/);
   });
 
   it('CRITICAL cross-marketing-server profile-cap parity. The numeric values match across both files.', () => {
@@ -190,7 +190,7 @@ describe('W730 tier-limit server-side records parity', () => {
 
     // Enterprise: server 'custom' (lowercase), marketing 'Custom' (display).
     expect(common).toMatch(/enterprise: 'custom',/);
-    expect(pricing).toMatch(/id: 'enterprise',[\s\S]{0,600}profiles: 'Custom',/);
+    expect(pricing).toMatch(/id: 'enterprise',[\s\S]{0,1100}profiles: 'Custom',/);
   });
 
   it('Tier-limits 5-invariant cluster — 2 canonical Records (PROFILES + CONCURRENT) + 8 entries each + sentinel-floor framing + helper-function indirection + cross-marketing parity reconciled per tier.', () => {

@@ -489,7 +489,7 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
               {tier.id === 'enterprise' ? (
                 <div class="mt-3">
                   <span class="text-2xl font-semibold text-tk-ink">
-                    from {fmtUsd(tier.annualUsd)}/mo
+                    from {fmtUsd(tier.annualMonthlyEquivalentUsd)}/mo
                   </span>
                   <div class="text-xs text-tk-ink-3">annual contract only</div>
                 </div>

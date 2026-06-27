@@ -191,8 +191,15 @@ export const API_TIERS: ApiTier[] = [
     tierType: 'api',
     name: 'Enterprise',
     monthlyUsd: null,
-    annualMonthlyEquivalentUsd: null,
-    annualUsd: 4_000,
+    // Enterprise is annual-contracts-only with a negotiated floor. The
+    // entry floor is "$4,000/mo on annual contracts", so the per-month
+    // figure lives in annualMonthlyEquivalentUsd (12 × that = the yearly
+    // total in annualUsd), mirroring the self_hosted_enterprise SKU. This
+    // keeps annualUsd a true YEARLY total across every tier — the API
+    // ladder above (annualUsd = annualMonthlyEquivalentUsd × 12) and the
+    // self-hosted SKUs both share that invariant.
+    annualMonthlyEquivalentUsd: 4_000,
+    annualUsd: 48_000,
     profiles: 'Custom',
     hoursLabel: 'Unlimited',
     overagePerHourUsd: null,

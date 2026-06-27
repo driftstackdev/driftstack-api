@@ -146,18 +146,19 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     expect(p).toMatch(/id: 'api_scale',[\s\S]{0,700}support: 'Slack Connect · 4h SLA',/);
   });
 
-  it('CRITICAL Enterprise tier — monthlyUsd null + annualUsd 4_000 + Custom profiles + Custom concurrent + dedicated CSM 1h + Contact sales CTA. The 4_000 annual figure is the entry floor for the negotiated commitment.', () => {
+  it('CRITICAL Enterprise tier — monthlyUsd null + annualMonthlyEquivalentUsd 4_000 (the $4,000/mo entry floor) + annualUsd 48_000 (= 4_000 × 12, a true YEARLY total like every other tier) + Custom profiles + Custom concurrent + dedicated CSM 1h + Contact sales CTA. The $4,000/mo floor is the entry for the negotiated commitment.', () => {
     const p = read(PRICING);
 
     expect(p).toMatch(/id: 'enterprise',[\s\S]{0,400}monthlyUsd: null,/);
-    expect(p).toMatch(/id: 'enterprise',[\s\S]{0,500}annualUsd: 4_000,/);
-    expect(p).toMatch(/id: 'enterprise',[\s\S]{0,600}profiles: 'Custom',/);
-    expect(p).toMatch(/id: 'enterprise',[\s\S]{0,700}concurrent: 'Custom',/);
-    expect(p).toMatch(/id: 'enterprise',[\s\S]{0,800}support: 'Dedicated CSM · 1h SLA',/);
+    expect(p).toMatch(/id: 'enterprise',[\s\S]{0,900}annualMonthlyEquivalentUsd: 4_000,/);
+    expect(p).toMatch(/id: 'enterprise',[\s\S]{0,950}annualUsd: 48_000,/);
+    expect(p).toMatch(/id: 'enterprise',[\s\S]{0,1100}profiles: 'Custom',/);
+    expect(p).toMatch(/id: 'enterprise',[\s\S]{0,1200}concurrent: 'Custom',/);
+    expect(p).toMatch(/id: 'enterprise',[\s\S]{0,1300}support: 'Dedicated CSM · 1h SLA',/);
     expect(p).toMatch(
-      /id: 'enterprise',[\s\S]{0,1000}cta: \{ label: 'Contact sales', href: 'mailto:sales@driftstack\.dev' \}/,
+      /id: 'enterprise',[\s\S]{0,1500}cta: \{ label: 'Contact sales', href: 'mailto:sales@driftstack\.dev' \}/,
     );
-    expect(p).toMatch(/id: 'enterprise',[\s\S]{0,1000}llmBilling: 'byok_or_bundled_custom',/);
+    expect(p).toMatch(/id: 'enterprise',[\s\S]{0,1500}llmBilling: 'byok_or_bundled_custom',/);
   });
 
   it('CRITICAL aiAgent boolean gates pinned correctly — false on free + solo_manual; true on team_manual + agency_manual + all api_* + enterprise. The free/solo lock-out is per founder Tier 3 spec post-V-072.', () => {
