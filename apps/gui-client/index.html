@@ -49,17 +49,29 @@
         window.addEventListener('unhandledrejection', function (e) {
           window.__dsFatal('UNHANDLED_REJECTION', e.reason);
         });
-        setTimeout(function () {
+        // Poll for the React mount instead of one hard 8s deadline: a CPU-starved
+        // machine (a heavy build/CI on the same box) can take well over 8s to
+        // parse + mount a ~1.4MB bundle in WKWebView, and a hard fail there is a
+        // FALSE negative that blocks a perfectly good app. Succeed the instant
+        // #root has children; only surface MOUNT_TIMEOUT if it TRULY never mounts
+        // within a generous window.
+        var __dsMountStart = Date.now();
+        var __dsMountPoll = setInterval(function () {
           var root = document.getElementById('root');
-          if (root && root.childElementCount === 0 && !window.__dsFatalShown) {
+          if (root && root.childElementCount > 0) {
+            clearInterval(__dsMountPoll); // mounted — all good
+            return;
+          }
+          if (Date.now() - __dsMountStart >= 30000 && !window.__dsFatalShown) {
+            clearInterval(__dsMountPoll);
             window.__dsFatal(
               'MOUNT_TIMEOUT',
               new Error(
-                'UI did not render within 8s — the bundle loaded but React did not mount. (Architectural fail-visible guard; previously this was a blank/flickering window.)',
+                'UI did not render within 30s — the bundle loaded but React did not mount.',
               ),
             );
           }
-        }, 8000);
+        }, 500);
       })();
     </script>
   </head>
