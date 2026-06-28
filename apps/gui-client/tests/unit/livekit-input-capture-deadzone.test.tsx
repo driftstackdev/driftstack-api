@@ -119,13 +119,13 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
     vi.unstubAllGlobals();
   });
 
-  it('STILL TAP: press + release with no move → exactly touchStart then touchEnd at the press point (devY-compensated y), no touchMove', () => {
+  it('STILL TAP: press + release with no move → exactly touchStart then touchEnd at the press point (no Y offset — content-only stream), no touchMove', () => {
     const video = mountCapture();
     fireMouse(video, 'mousedown', 150, 300, 1000);
     fireMouse(video, 'mouseup', 150, 300, 1080);
     expect(emittedTypes()).toEqual(['touchStart', 'touchEnd']);
-    expect(eventsOfType('touchStart')[0]).toMatchObject({ x: 150, y: 268 }); // 300 - 32 devY
-    expect(eventsOfType('touchEnd')[0]).toMatchObject({ x: 150, y: 268 });
+    expect(eventsOfType('touchStart')[0]).toMatchObject({ x: 150, y: 300 }); // TAP_Y_OFFSET=0 (content-only)
+    expect(eventsOfType('touchEnd')[0]).toMatchObject({ x: 150, y: 300 });
   });
 
   it('QUICK DRIFTY TAP: press + ~28px FAST drift + release → NO touchMove (the founder fix — a drifty quick tap no longer scrolls)', () => {
@@ -174,7 +174,7 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
     fireMouse(video, 'mousedown', 100, 100, 1000);
     fireMouse(video, 'mousemove', 100, 160, 1030); // 60px > 44 → commit
     fireMouse(video, 'mouseup', 100, 160, 1050);
-    expect(eventsOfType('touchStart')[0]).toMatchObject({ x: 100, y: 68 }); // press 100 - 32 devY
+    expect(eventsOfType('touchStart')[0]).toMatchObject({ x: 100, y: 100 }); // press point, TAP_Y_OFFSET=0
   });
 
   it('LATCH: once committed, a follow-up move back near the press still streams', () => {

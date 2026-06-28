@@ -480,4 +480,41 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
     expect(pane.textContent).toContain("couldn't load cookies — retrying");
     expect(pane.textContent).not.toContain('next device update');
   });
+
+  // Finding #4 — a 200 `unavailable` whose `reason` is one of the three INTERNAL server
+  // diagnostics is mapped to friendly customer copy by the LIST poll (the raw debug
+  // phrase must not leak). An actionable reason still passes through (see the helper
+  // unit tests in simulator-window-sizing.test.ts).
+  it('finding #4: an internal "unavailable" reason shows friendly copy, not the raw phrase', async () => {
+    cookiesMock.mockResolvedValue({
+      status: 'unavailable',
+      cookies: null,
+      reason: 'session is not live on a node',
+    });
+    const { container } = renderSim();
+    openCookies(container);
+
+    const pane = await waitFor(() => {
+      const p = container.querySelector('[data-component="simulator-cookies"]');
+      if (!p || !p.textContent?.includes("isn't live on a device")) throw new Error('not yet');
+      return p;
+    });
+    expect(pane.textContent).toContain("the session isn't live on a device right now");
+    // The raw internal diagnostic is NOT surfaced.
+    expect(pane.textContent).not.toContain('session is not live on a node');
+  });
+
+  // Finding #5 — the poll self-schedules the next tick ONLY after the prior request
+  // settles, so requests can never overlap/stack. With a request that never resolves,
+  // only ONE call is ever made (the old setInterval would have fired several more).
+  it('finding #5: requests never stack — a pending request blocks the next tick (single-flight)', async () => {
+    cookiesMock.mockReturnValue(new Promise(() => {})); // never settles
+    const { container } = renderSim();
+    openCookies(container);
+
+    // Give the would-be 3s interval ample real time to fire repeatedly if it were still
+    // a fixed-interval poll; the self-scheduling poll must stay at exactly one in-flight.
+    await new Promise((r) => setTimeout(r, 250));
+    expect(cookiesMock).toHaveBeenCalledTimes(1);
+  });
 });

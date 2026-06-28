@@ -5,7 +5,11 @@
 // top cutoff or a bottom gap), across ≥2 archetypes with content-only heights.
 
 import { describe, expect, it } from 'vitest';
-import { simulatorChromeHeight, simulatorWindowHeight } from '../../src/views/SimulatorWindow';
+import {
+  friendlyUnavailableNote,
+  simulatorChromeHeight,
+  simulatorWindowHeight,
+} from '../../src/views/SimulatorWindow';
 
 // The chrome constants, restated here so the test FAILS if any of them changes
 // without the formula being re-reasoned (these are load-bearing for "no bottom gap").
@@ -137,5 +141,89 @@ describe('simulatorWindowHeight — screen-host sized to the LIVE content aspect
     expect(simulatorWindowHeight(100, 0, false)).toBe(0);
     expect(simulatorWindowHeight(100, -1, false)).toBe(0);
     expect(simulatorWindowHeight(BEZEL_PAD, 0.5, false)).toBe(0);
+  });
+});
+
+// #75b — the RUNTIME screen-clamp (fitWindow / resetToActualSize / onResized) that the
+// pure formula tests above do NOT cover. On a short laptop work area the keyboard-DOCKED
+// window overflows `avail - 24`, so the clamp pins the height and re-derives the width
+// from (height - chrome) * aspect. If KEYBOARD_H is still folded into `chrome` there, the
+// video area shrinks and the window narrows ("keyboard crops the browser"). The fix
+// OVERLAYS the keyboard instead (KEYBOARD_H excluded from chrome), preserving the video
+// width. This reproduces the clamp arithmetic over the exported chrome/height helpers.
+describe('#75b — keyboard overlay vs docked under the short-screen clamp', () => {
+  // The exact clamp the sizing closures run:
+  //   height = avail - 24; width = (height - chrome) * aspect + BEZEL_PAD
+  function clampedWidth(
+    avail: number,
+    aspect: number,
+    browserMode: boolean,
+    keyboardFoldedIntoChrome: boolean,
+  ): { videoW: number; windowW: number; videoH: number } {
+    const height = avail - 24;
+    const chrome = simulatorChromeHeight(browserMode, keyboardFoldedIntoChrome);
+    const videoH = height - chrome;
+    const videoW = videoH * aspect; // content width the video gets
+    return { videoW, windowW: Math.round(videoW + BEZEL_PAD), videoH };
+  }
+
+  it('a docked keyboard on a short (875px) work area overflows then would shrink the video (the bug)', () => {
+    const aspect = 402 / 714;
+    const phoneW = 402 + BEZEL_PAD;
+    // The docked-keyboard ideal height for a natural-size 16 Pro overflows avail-24…
+    const idealDockedH = simulatorWindowHeight(phoneW, aspect, false, true);
+    const avail = 875; // typical laptop work area
+    expect(idealDockedH).toBeGreaterThan(avail - 24); // the clamp fires
+    // …and the OLD behavior (KEYBOARD_H folded into chrome during the clamp) shrinks the
+    // video well below its natural 402 width.
+    const docked = clampedWidth(avail, aspect, false, true);
+    expect(docked.videoW).toBeLessThan(402 - 30); // materially narrower (the founder symptom)
+  });
+
+  it('the overlay path (KEYBOARD_H NOT folded into chrome) PRESERVES the video width under the same clamp', () => {
+    const aspect = 402 / 714;
+    const avail = 875;
+    const docked = clampedWidth(avail, aspect, false, true); // keyboard in chrome (bug)
+    const overlay = clampedWidth(avail, aspect, false, false); // keyboard excluded (fix)
+    // The overlay keeps strictly MORE video width than the shrinking docked path…
+    expect(overlay.videoW).toBeGreaterThan(docked.videoW);
+    // …and matches the no-keyboard clamp exactly (the keyboard never carves the video).
+    expect(overlay).toEqual(clampedWidth(avail, aspect, false, false));
+    // The overlay video area is the full clamped height minus only the real chrome.
+    expect(overlay.videoH).toBe(avail - 24 - simulatorChromeHeight(false, false));
+  });
+
+  it('on a TALL screen the docked keyboard fits (no clamp) so it stays docked, full size', () => {
+    const aspect = 402 / 714;
+    const phoneW = 402 + BEZEL_PAD;
+    const idealDockedH = simulatorWindowHeight(phoneW, aspect, false, true);
+    const avail = 1440; // a tall external display
+    expect(idealDockedH).toBeLessThanOrEqual(avail - 24); // no clamp then docks below, full aspect
+  });
+});
+
+// Finding #4 — the cookies/downloads LIST polls map the three INTERNAL server
+// 'unavailable' reasons to one friendly line, while passing every other reason through
+// (RELAY_BUSY, harness messages, the calm 'not available yet' fallback) so actionable
+// copy still shows.
+describe('friendlyUnavailableNote — map internal diagnostics, pass through the rest', () => {
+  it('maps the three known internal reasons to a single friendly line', () => {
+    const friendly = "the session isn't live on a device right now";
+    expect(friendlyUnavailableNote('session is not live on a node')).toBe(friendly);
+    expect(friendlyUnavailableNote('session node is not connected')).toBe(friendly);
+    expect(friendlyUnavailableNote('fleet control plane not enabled')).toBe(friendly);
+  });
+
+  it('passes through an actionable reason verbatim (RELAY_BUSY, harness messages)', () => {
+    const relay = 'too many concurrent requests for this account — retry shortly';
+    expect(friendlyUnavailableNote(relay)).toBe(relay);
+    expect(friendlyUnavailableNote('proxy handshake failed')).toBe('proxy handshake failed');
+  });
+
+  it('falls back to the calm pending copy when no reason is given', () => {
+    expect(friendlyUnavailableNote(null)).toBe('not available yet');
+    expect(friendlyUnavailableNote(undefined)).toBe('not available yet');
+    // The pinned legacy string is preserved (a server that already sends it stays calm).
+    expect(friendlyUnavailableNote('not available yet')).toBe('not available yet');
   });
 });

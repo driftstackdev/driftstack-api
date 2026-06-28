@@ -1,0 +1,203 @@
+// SimulatorWindow — page-state POLL grace gate (Finding #7). The 2s page-state poll
+// reads a server-side page-state store with no per-navigation correlation. Right after
+// an operator navigate (or "Try again") — which clears the error overlay and re-arms the
+// before-loaded gate — the NEXT poll can still read a STALE 'errored' from the store
+// (the box hasn't re-reported the in-flight navigate yet) and re-pop the overlay on top
+// of the now-loading page (the founder's "network-error overlay reappears even though the
+// page loaded"). The fix gates the RAISE on the post-navigate/-switch grace window; a
+// stale 'errored' is DEFERRED (not lost) until grace expires, while a genuine error still
+// raises immediately via the live data-channel push. Own file so the controllable poll
+// mock + fake timers don't leak into the base suites.
+
+import { useEffect } from 'react';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { render, fireEvent, act } from '@testing-library/react';
+
+const sendNavigate = vi.fn(() => Promise.resolve());
+// Controllable page-state poll — each test sets what the ~2s poll returns.
+const pageStateMock = vi.fn(() => Promise.resolve<unknown>(null));
+
+vi.mock('../../src/lib/livekit', () => ({
+  createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
+  connectToAgentSession: () => new Promise(() => {}),
+  sendInputEvent: vi.fn(() => Promise.resolve()),
+  sendNavigate: (...a: unknown[]) => sendNavigate(...(a as [])),
+  sendTabListUpdate: vi.fn(() => Promise.resolve()),
+  sendActivateTab: vi.fn(() => Promise.resolve('req_test')),
+  RoomEvent: {
+    TrackSubscribed: 'trackSubscribed',
+    Disconnected: 'disconnected',
+    Reconnecting: 'reconnecting',
+    Reconnected: 'reconnected',
+    DataReceived: 'dataReceived',
+  },
+}));
+
+const fakeRoom = {
+  on: vi.fn(),
+  off: vi.fn(),
+  localParticipant: { publishData: vi.fn(() => Promise.resolve()) },
+};
+vi.mock('../../src/components/AgentSessionPanel', () => ({
+  AgentSessionPanel: (props: {
+    onRoom?: (room: unknown) => void;
+    onStateChange?: (s: { kind: string }) => void;
+    onPublisher?: (p: string) => void;
+  }) => {
+    useEffect(() => {
+      props.onRoom?.(fakeRoom);
+      props.onStateChange?.({ kind: 'connected' });
+      props.onPublisher?.('publishing');
+    }, [props]);
+    return <div data-component="agent-session-panel-mock" />;
+  },
+}));
+
+vi.mock('../../src/lib/agent-session-control', () => ({
+  uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
+  listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
+  fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),
+  getAgentSession: () => Promise.resolve({ mode: 'manual', pairKind: null }),
+  getAgentSessionPageState: () => pageStateMock(),
+  getAgentSessionCookies: () => Promise.resolve({ status: 'unavailable', cookies: null }),
+  setSessionMode: vi.fn(),
+  takeoverSession: vi.fn(),
+  handbackSession: vi.fn(),
+  sendAgentMessage: vi.fn(),
+  endAgentSession: vi.fn(),
+  AgentSessionControlError: class extends Error {},
+}));
+
+const { SimulatorWindow } = await import('../../src/views/SimulatorWindow');
+const { RecordingsProvider } = await import('../../src/lib/recordings');
+
+function renderSim() {
+  window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&session=agt_x');
+  return render(
+    <RecordingsProvider>
+      <SimulatorWindow />
+    </RecordingsProvider>,
+  );
+}
+
+// Fire a page_state frame on the data channel (the live, ungated push path).
+function fireDataFrame(obj: unknown): void {
+  const payload = new TextEncoder().encode(JSON.stringify(obj));
+  fakeRoom.on.mock.calls
+    .filter((c) => c[0] === 'dataReceived')
+    .forEach((c) => {
+      try {
+        (c[1] as (p: Uint8Array) => void)(payload);
+      } catch {
+        /* the latency-ping subscriber ignores a non-ping frame */
+      }
+    });
+}
+
+// Let pending promises (the poll result) resolve + React flush, under fake timers.
+async function flush(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+// Advance the fake clock by `ms` and flush the resulting poll tick + React updates.
+async function advance(ms: number): Promise<void> {
+  await act(async () => {
+    vi.advanceTimersByTime(ms);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+const overlay = (c: HTMLElement): Element | null =>
+  c.querySelector('[data-component="page-error-overlay"]');
+
+const ERRORED = {
+  state: 'errored',
+  url: 'https://nope.invalid/',
+  error: { kind: 'dns', message: 'lookup failed' },
+};
+
+describe('SimulatorWindow — page-state poll error grace gate (Finding #7)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    fakeRoom.on.mockClear();
+    sendNavigate.mockClear();
+    pageStateMock.mockReset();
+    pageStateMock.mockResolvedValue(null);
+  });
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
+
+  it('a stale "errored" poll does NOT re-raise the overlay during the post-navigate grace window', async () => {
+    const { container } = renderSim();
+    await flush();
+    expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
+
+    // A real top-level navigation failure raises the overlay (live data-channel push).
+    act(() => {
+      fireDataFrame({ state: 'loading', url: 'https://nope.invalid/' });
+      fireDataFrame(ERRORED);
+    });
+    expect(overlay(container)).not.toBeNull();
+
+    // The operator hits Try again / navigates: clears the overlay + opens the grace
+    // window (lastNavAtRef = now, before-loaded gate re-armed).
+    const addr = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    act(() => {
+      fireEvent.change(addr, { target: { value: 'https://nope.invalid/' } });
+      fireEvent.submit(addr.closest('form') as HTMLFormElement);
+    });
+    expect(sendNavigate).toHaveBeenCalled();
+    expect(overlay(container)).toBeNull(); // dismissed
+
+    // The box hasn't re-reported the in-flight navigate yet, so the store still holds
+    // the prior 'errored'. Advance ONE poll tick (2s) — still inside the 2.5s grace.
+    pageStateMock.mockResolvedValue(ERRORED);
+    await advance(2000);
+    // The stale error must NOT re-pop the overlay during grace (the founder's bug).
+    expect(overlay(container)).toBeNull();
+  });
+
+  it('once the grace window expires, a still-"errored" store DOES raise (deferred, not lost)', async () => {
+    const { container } = renderSim();
+    await flush();
+
+    // Navigate to open the grace window.
+    const addr = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    act(() => {
+      fireEvent.change(addr, { target: { value: 'https://nope.invalid/' } });
+      fireEvent.submit(addr.closest('form') as HTMLFormElement);
+    });
+    expect(overlay(container)).toBeNull();
+
+    // The store keeps reporting a genuine top-level 'errored'.
+    pageStateMock.mockResolvedValue(ERRORED);
+    await advance(2000); // tick #1 — still in grace → suppressed
+    expect(overlay(container)).toBeNull();
+    await advance(2000); // ~4s elapsed → out of grace → raises (deferred, never dropped)
+    expect(overlay(container)).not.toBeNull();
+  });
+
+  it('a non-error poll state still clears a showing overlay (self-heal preserved)', async () => {
+    const { container } = renderSim();
+    await flush();
+
+    // Raise a real overlay via the live push (before any loaded → honored).
+    act(() => {
+      fireDataFrame({ state: 'loading', url: 'https://x/' });
+      fireDataFrame({ state: 'errored', url: 'https://x/', error: { kind: 'net', message: 'x' } });
+    });
+    expect(overlay(container)).not.toBeNull();
+
+    // A later poll reports the page is loading/loaded again → the overlay clears
+    // unconditionally (the grace gate only blocks RAISING, never clearing).
+    pageStateMock.mockResolvedValue({ state: 'loaded', url: 'https://x/' });
+    await advance(2000);
+    expect(overlay(container)).toBeNull();
+  });
+});

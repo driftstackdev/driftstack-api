@@ -216,17 +216,27 @@ const MOVE_DEADZONE = 14;
 const DRAG_HOLD_MS = 140;
 const DRAG_HARD_PX = 44;
 
-/** Tap-landing Y compensation (founder 2026-06-21; A3 W2725/26-ack). The device
- *  renders a ~32px iOS title band atop the streamed screen that the box's
- *  tap-coordinate mapping does NOT subtract, so an injected tap/touch lands ~32px
- *  too LOW — the autonomous probe (scripts/sim-tap-probe.mjs) measured a uniform
- *  +32px Y offset, X exact, across the screen. Subtract it from the Y we SEND so
- *  a tap lands where the operator clicked. v1 constant for iphone17 (the only
- *  shipped archetype); A3's content-only "(B)" stream (native content, no title
- *  band) zeroes it → set TAP_Y_OFFSET=0 when (B) ships. Applied to SENT coords
- *  ONLY: the scroll-vs-tap deadzone keeps RAW pointerToViewport coords (a uniform
- *  shift doesn't change distances) and pointerToViewport stays the pure mapping. */
-const TAP_Y_OFFSET = 32;
+/** Tap-landing Y compensation. ZEROED 2026-06-28 — the content-only "(B)" stream
+ *  has shipped (A1 fork 84de32ad4d, deployed on mac-macstadium-us-001 with
+ *  MULTI_ARCHETYPE_DISPATCH=1; A3 confirmed via the bus 2026-06-27 W2993): in
+ *  content-only mode the 92px hidden-bar reserve AND the 32px macOS title band are
+ *  DROPPED, so the captured frame is the web content edge-to-edge (screen_width ×
+ *  inner_height) and the injector addresses that web-content space (origin:viewport;
+ *  A3 confirmed W2976-Q1). There is NO LONGER a title band to compensate for, so the
+ *  old +32 subtraction now lands every tap ~32px TOO HIGH — directly the founder's
+ *  "taps do nothing on gmail" (the tap hits the element 32px above the target).
+ *
+ *  HISTORY: when the box published the FULL 402×874 screen (chrome rendered) the
+ *  fork baked a ~32px iOS title band atop the captured screen that the box's tap
+ *  mapping did not subtract, so the GUI subtracted it here (probe-measured +32, X
+ *  exact). The original comment said "set TAP_Y_OFFSET=0 when (B) ships" — (B) has
+ *  shipped, so it is now 0. The harness does NOT re-subtract a devY (it injects the
+ *  GUI's wire Y verbatim — A3 W2940 box-trace `wire-y=218 (devY 250−32)` showed the
+ *  injected value == the GUI-sent value), so there is no double-count risk; the GUI
+ *  was the sole applier and is now the sole zeroer. Kept as a named constant (not
+ *  inlined) so a future archetype that re-introduces a title band can re-set it.
+ *  Applied to SENT coords ONLY (the scroll-vs-tap deadzone keeps RAW coords). */
+const TAP_Y_OFFSET = 0;
 const devY = (y: number): number => Math.max(0, y - TAP_Y_OFFSET);
 
 /** Inertial slide (founder 2026-06-21 "slide simulation like a new iphone"): on a

@@ -177,6 +177,21 @@ const SWITCH_AFFORDANCE_TIMEOUT_MS = 6000;
 const PAGE_STATE_GRACE_MS = 2500;
 // flip true when A3's navigateHistory handler deploys — bus W2870
 const BACK_FORWARD_ENABLED = true; // A3 navigateHistory handler deployed (bus W2872; A3 01a5d48f1)
+// Finding #6 — throttle for the unrecognized-data-frame breadcrumb (below). One warn at
+// most per window so a flood of drifted frames can't spam the console.
+const UNRECOGNIZED_FRAME_WARN_THROTTLE_MS = 10_000;
+let lastUnrecognizedFrameWarnAt = 0;
+function warnUnrecognizedDataFrame(msg: { type?: string; state?: string }): void {
+  // Only frames that LOOK like a structured event (a non-empty type or state) are worth
+  // flagging — bare/empty objects are noise. The ping channel is excluded by the caller.
+  if ((msg.type ?? '') === '' && (msg.state ?? '') === '') return;
+  const now = Date.now();
+  if (now - lastUnrecognizedFrameWarnAt < UNRECOGNIZED_FRAME_WARN_THROTTLE_MS) return;
+  lastUnrecognizedFrameWarnAt = now;
+  // Intentional, prod-visible drift breadcrumb (no Sentry message API — telemetry.ts is
+  // crash-only by privacy contract); visible in the Tauri WebView console.
+  console.warn('[simulator] unrecognized data frame', msg.type, msg.state);
+}
 const BEZEL_PAD = 20; // p-[10px] × 2
 const STATUS_STRIP_H = 40;
 
@@ -220,6 +235,24 @@ export function simulatorWindowHeight(
   return Math.round(
     simulatorChromeHeight(browserModeOn, keyboardVisible) + (phoneW - BEZEL_PAD) / aspect,
   );
+}
+
+/** Finding #4 — the cookies/downloads LIST polls render a 200 `status:'unavailable'`
+ *  result's `reason` verbatim. The server emits three INTERNAL diagnostic phrases for
+ *  that state (agent-sessions.ts) that read as raw debug strings, not customer copy.
+ *  Map ONLY those three to a single friendly line; pass everything else through
+ *  unchanged so genuinely-actionable reasons (RELAY_BUSY "too many concurrent
+ *  requests…", harness outcome messages) and the calm fallback "not available yet"
+ *  still surface. Pure + exported for unit tests. */
+export function friendlyUnavailableNote(reason: string | null | undefined): string {
+  switch (reason) {
+    case 'session is not live on a node':
+    case 'session node is not connected':
+    case 'fleet control plane not enabled':
+      return "the session isn't live on a device right now";
+    default:
+      return reason ?? 'not available yet';
+  }
 }
 // The iPhone CSS-logical width of the launch archetype (iphone17). Fallback for the
 // "actual size" reset (Cmd+0) before the live stream reports its per-archetype dims,
@@ -2631,6 +2664,47 @@ export function SimulatorWindow(): JSX.Element {
   // The window-sizing aspect: inverted when rotated to landscape.
   const sizingAspect = (): number =>
     landscapeRef.current ? 1 / deviceAspectRef.current : deviceAspectRef.current;
+  // #75b — on a SHORT (laptop) work area, docking the keyboard BELOW the video grows
+  // the window past `avail - 24`, which trips the screen-clamp in fitWindow /
+  // resetToActualSize / onResized: the height is pinned to avail-24 and the width is
+  // re-derived from (height - chrome) * aspect. Because `chrome` then includes
+  // KEYBOARD_H, the video area = realH - chrome shrinks dramatically and the window
+  // NARROWS with it — the keyboard appears to crop the browser (founder's exact
+  // symptom) instead of merely growing the window. So when the keyboard-docked window
+  // would NOT fit, OVERLAY the keyboard over the bottom of the video instead of
+  // docking it below — exactly iPhone-faithful (the keyboard occludes the page) and it
+  // keeps KEYBOARD_H OUT of `chrome` at every sizing site so the video keeps its full
+  // aspect + width. pointerToViewport reads video.getBoundingClientRect (which the
+  // overlay does not change), so taps stay aligned; taps under the keyboard correctly
+  // hit the keyboard. Decided off the device's NATURAL logical size (the actual-size
+  // target) so the render + the sizing closures agree deterministically and the
+  // decision does not oscillate with the operator's drag width.
+  const keyboardWouldOverlay = (browserModeOn: boolean): boolean => {
+    const avail = typeof window !== 'undefined' ? (window.screen?.availHeight ?? 0) : 0;
+    if (avail <= 0) return false; // unknown screen → keep the docked-below behavior
+    const aspect = sizingAspect();
+    const logicalW = deviceLogicalRef.current.width || DEVICE_LOGICAL_WIDTH;
+    const naturalContentW = landscapeRef.current
+      ? Math.round(logicalW / deviceAspectRef.current)
+      : logicalW;
+    const idealDockedH = simulatorWindowHeight(
+      naturalContentW + BEZEL_PAD,
+      aspect,
+      browserModeOn,
+      true,
+    );
+    return idealDockedH > avail - 24;
+  };
+  // Derived for the render (overlay vs docked-sibling), recomputed when the keyboard
+  // toggles or the live aspect / orientation / browser-mode change. A mirror ref lets
+  // the window-sizing closures read it synchronously without re-subscribing.
+  const keyboardOverlay = keyboardVisible && keyboardWouldOverlay(browserMode);
+  const keyboardOverlayRef = useRef(keyboardOverlay);
+  keyboardOverlayRef.current = keyboardOverlay;
+  // The keyboard contributes KEYBOARD_H to `chrome` ONLY when it docks BELOW the video
+  // (not in overlay mode). One helper so every sizing site agrees — a site that still
+  // subtracted KEYBOARD_H after an overlay clamp would re-narrow the window.
+  const keyboardChromeOn = (): boolean => keyboardVisibleRef.current && !keyboardOverlayRef.current;
   // Size the window so the device video FILLS the frame width AND the whole window
   // FITS the screen height. The iPhone's tall aspect makes a width-driven height
   // overflow a laptop screen → the OS clamps the height → the device letterboxes
@@ -2650,10 +2724,13 @@ export function SimulatorWindow(): JSX.Element {
       // and add the drawer back, so the drawer never letterboxes the device.
       const drawerExtra = drawerExtraRef.current;
       const phoneW = curWidth - drawerExtra;
-      // The on-screen keyboard (when shown) docks BELOW the video, so the window
-      // must grow by KEYBOARD_H — folded into the chrome term — or the flex-1
-      // screen-host would lose that height to a bottom black band (#75).
-      const keyboardOn = keyboardVisibleRef.current;
+      // The on-screen keyboard adds KEYBOARD_H to the chrome ONLY when it docks
+      // BELOW the video; on a short laptop work area it overlays the video instead
+      // (#75b), and must NOT be folded into chrome there or the screen-clamp would
+      // carve KEYBOARD_H out of the video and narrow the window ("keyboard crops the
+      // browser"). keyboardChromeOn() is the single source of truth across all five
+      // sizing sites.
+      const keyboardOn = keyboardChromeOn();
       const chrome = simulatorChromeHeight(browserModeOn, keyboardOn);
       // The device screen-area must match the video aspect or the video
       // object-contains with side gaps. Height for a phone width = chrome + (w-bezel)/aspect.
@@ -2690,9 +2767,10 @@ export function SimulatorWindow(): JSX.Element {
       const { LogicalSize } = await import('@tauri-apps/api/dpi');
       const factor = await win.scaleFactor();
       const aspect = sizingAspect();
-      // Keyboard (when shown) docks below the video → grow the window by KEYBOARD_H
-      // via the chrome term so the video keeps its full aspect, no bottom band (#75).
-      const keyboardOn = keyboardVisibleRef.current;
+      // Keyboard docks below the video → grow the window by KEYBOARD_H via the chrome
+      // term so the video keeps its full aspect, no bottom band (#75). On a short work
+      // area it overlays instead and is excluded from chrome (#75b) via keyboardChromeOn.
+      const keyboardOn = keyboardChromeOn();
       const chrome = simulatorChromeHeight(browserMode, keyboardOn);
       // Target device-content width = the per-archetype iPhone CSS-logical width (its
       // long edge when rotated to landscape), then the window adds the bezel padding +
@@ -2738,16 +2816,18 @@ export function SimulatorWindow(): JSX.Element {
     // the screen and re-introduce the side-gap letterbox).
     fitWindow(next);
   };
-  // Show/hide the on-screen iOS keyboard. The keyboard docks BELOW the video inside
-  // the phone screen, so showing it must GROW the window by KEYBOARD_H (and hiding
-  // it shrink back) — keeping the video at its full content aspect with the keyboard
-  // below it, instead of the flex-1 screen-host losing the keyboard's height to a
-  // bottom black band (#75). Set the ref synchronously BEFORE fitWindow so the
-  // sizing closure (which reads keyboardVisibleRef, not the not-yet-committed state)
-  // sees the new value this tick. fitWindow re-derives the height from the new chrome.
+  // Show/hide the on-screen iOS keyboard. When it docks BELOW the video, showing it
+  // GROWS the window by KEYBOARD_H (and hiding it shrinks back) so the video keeps its
+  // full content aspect with the keyboard below it (#75). On a short laptop work area
+  // it OVERLAYS the bottom of the video instead (#75b), in which case KEYBOARD_H is NOT
+  // added to chrome (the video keeps its full size). BOTH refs are set synchronously
+  // BEFORE fitWindow so the sizing closure (which reads the refs, not the not-yet-
+  // committed state) sees the new values this tick; otherwise the first fitWindow after
+  // a toggle reads a stale overlay flag and re-introduces the shrink for a frame.
   const toggleKeyboard = (): void => {
     const next = !keyboardVisibleRef.current;
     keyboardVisibleRef.current = next;
+    keyboardOverlayRef.current = next && keyboardWouldOverlay(browserMode);
     setKeyboardVisible(next);
     fitWindow(browserMode);
   };
@@ -2764,7 +2844,7 @@ export function SimulatorWindow(): JSX.Element {
       const size = await win.innerSize();
       const h = Math.round(size.height / factor);
       const aspect = sizingAspect();
-      const chrome = simulatorChromeHeight(browserMode, keyboardVisibleRef.current);
+      const chrome = simulatorChromeHeight(browserMode, keyboardChromeOn());
       const width = Math.round((h - chrome) * aspect + BEZEL_PAD) + drawerExtraRef.current;
       if (width > 0) await win.setSize(new LogicalSize(width, h));
     });
@@ -2872,7 +2952,7 @@ export function SimulatorWindow(): JSX.Element {
                 const h = Math.round(size.height / factor);
                 const w = Math.round(size.width / factor);
                 const aspect = sizingAspect();
-                const chrome = simulatorChromeHeight(browserMode, keyboardVisibleRef.current);
+                const chrome = simulatorChromeHeight(browserMode, keyboardChromeOn());
                 // Window width = phone width (aspect-locked to the height) + the open
                 // drawer's fixed width, so a manual resize scales the PHONE and never
                 // eats the drawer. The keyboard (when shown) is folded into `chrome`
@@ -3278,7 +3358,15 @@ export function SimulatorWindow(): JSX.Element {
           msg.state === 'loaded' ||
           msg.state === 'errored' ||
           msg.state === 'stalled';
-        if (msg.type !== 'page_state' && !isHarnessState) return;
+        if (msg.type !== 'page_state' && !isHarnessState) {
+          // Finding #6 — the frame matched NONE of the known discriminants
+          // (activateTabResult / tabListRestore / page_state / a harness state). The
+          // latency-ping channel shares this data channel, so exclude it first; then
+          // emit a throttled, prod-visible breadcrumb so a real box-envelope drift is
+          // diagnosable instead of silently stalling page_state + the overlays.
+          if (msg.type !== 'ping') warnUnrecognizedDataFrame(msg);
+          return;
+        }
         // Box is the ONLY writer of a tab's stored url/title (live-state accuracy
         // refactor). Route by tabId when the frame carries one, else the active tab;
         // a title-only frame (no url) still refreshes the label. The derived effect
@@ -3409,9 +3497,17 @@ export function SimulatorWindow(): JSX.Element {
           // payload as the data-channel path); 'errored' shows the overlay ONLY before
           // the page ever loaded (#72), any other state clears it. A blank new-tab
           // whose branded page couldn't load through the proxy is graceful (no overlay).
-          setPageError(
+          setPageError((prev) =>
             ps.state === 'errored' && !isNewTabLoadError(ps.url) && !pageReachedLoadedRef.current
-              ? (ps.error ?? {})
+              ? // #7 — within the post-navigate / post-switch grace window a stale
+                // 'errored' from the un-correlated store must NOT re-raise the overlay
+                // the operator just dismissed (keep `prev`); the live data-channel push
+                // surfaces a REAL post-nav error immediately, and the next out-of-grace
+                // poll still raises it (the store keeps the latest 'errored', so it is
+                // deferred, not lost — mirroring the 'loading' grace below).
+                inGrace
+                ? prev
+                : (ps.error ?? {})
               : null,
           );
           const loading = ps.state === 'loading';
@@ -3485,7 +3581,17 @@ export function SimulatorWindow(): JSX.Element {
     // (was gated on the whole drawer being open). Switching away tears the
     // interval down via the effect cleanup; switching back re-fires tick().
     if (!cookiesPaneActive || sessionId === '' || room === null) return;
+    // Finding #5 — self-scheduling poll with exponential backoff. The next tick is
+    // scheduled ONLY inside .finally (after the prior request settles), so requests can
+    // never overlap/stack (this self-scheduling IS the single-flight guard; the server
+    // holds a cookies request up to ~10s, so a fixed 3s interval would pile ~3-4 in
+    // flight). Steady cadence stays 3s; on a persistently gated/unreachable path the
+    // delay doubles (cap 30s) so the GUI stops hammering the control plane. backoff
+    // resets to 3s only on a TRUE 'ok' — a calm timeout/pending is the persistently-
+    // degraded case that should back off too.
     let cancelled = false;
+    let backoff = 3000;
+    let handle: ReturnType<typeof setTimeout> | null = null;
     const tick = (): void => {
       void getAgentSessionCookies(sessionId, controlAuth)
         .then((res) => {
@@ -3493,13 +3599,15 @@ export function SimulatorWindow(): JSX.Element {
           if (res.status === 'ok') {
             setCookies(res.cookies ?? []);
             setCookiesNote(null);
+            backoff = 3000; // reset cadence on a real success
           } else {
             setCookies(null);
             setCookiesNote(
               res.status === 'timeout'
                 ? 'waiting for the device…'
-                : (res.reason ?? 'not available yet'),
+                : friendlyUnavailableNote(res.reason),
             );
+            backoff = Math.min(backoff * 2, 30000); // degraded → back off
           }
         })
         .catch((err: unknown) => {
@@ -3524,13 +3632,17 @@ export function SimulatorWindow(): JSX.Element {
                   ? "cookies aren't enabled on this deployment"
                   : "couldn't load cookies — retrying",
           );
+          backoff = Math.min(backoff * 2, 30000); // failure → back off
+        })
+        .finally(() => {
+          if (cancelled) return; // a torn-down effect never reschedules
+          handle = setTimeout(tick, backoff);
         });
     };
     tick();
-    const handle = window.setInterval(tick, 3000);
     return () => {
       cancelled = true;
-      window.clearInterval(handle);
+      if (handle !== null) clearTimeout(handle);
     };
   }, [cookiesPaneActive, sessionId, controlAuth, room]);
 
@@ -3627,7 +3739,15 @@ export function SimulatorWindow(): JSX.Element {
     // browser-bar indicator is shown (browser mode); single shared interval. Cleanup
     // tears the interval down on switching away; switching back re-fires tick().
     if (!downloadsPollActive || sessionId === '' || room === null) return;
+    // Finding #5 — self-scheduling poll with exponential backoff (twin of the cookies
+    // poll). The next tick is scheduled ONLY in .finally, so requests never overlap/
+    // stack — the server holds a downloads request up to ~30s, so a fixed 3s interval
+    // could pile ~10 in flight. backoff resets to 3s only on a TRUE 'ok'; a calm
+    // timeout/pending or a failure doubles it (cap 30s) so a persistently gated path
+    // stops hammering the control plane.
     let cancelled = false;
+    let backoff = 3000;
+    let handle: ReturnType<typeof setTimeout> | null = null;
     const tick = (): void => {
       void listAgentSessionDownloads(sessionId, controlAuth)
         .then((res) => {
@@ -3635,13 +3755,15 @@ export function SimulatorWindow(): JSX.Element {
           if (res.status === 'ok') {
             setDownloads(res.files ?? []);
             setDownloadsNote(null);
+            backoff = 3000; // reset cadence on a real success
           } else {
             setDownloads(null);
             setDownloadsNote(
               res.status === 'timeout'
                 ? 'waiting for the device…'
-                : (res.reason ?? 'not available yet'),
+                : friendlyUnavailableNote(res.reason),
             );
+            backoff = Math.min(backoff * 2, 30000); // degraded → back off
           }
         })
         .catch((err: unknown) => {
@@ -3652,22 +3774,33 @@ export function SimulatorWindow(): JSX.Element {
           // "next device update" that doesn't exist (mirrors the cookies-#58 stale
           // pending bug). Branch on the real HTTP status so the note reflects reality:
           //   401/403 → the per-session control key expired (24h TTL) → reopen.
-          //   else (gated 503 / 404 / network) → retrying on the next tick; the
-          //   download jail simply has no files until a page saves one.
+          //   404 → the session is no longer live (a 404 is thrown only for a missing/
+          //         inaccessible session; an EMPTY download jail returns 200 ok files:[],
+          //         never a 404 — so "appear once a page saves" would be the wrong copy).
+          //   503 → the downloads route is gated off on this deployment.
+          //   else (network / 5xx) → a genuine transient gap we retry on the next tick.
           setDownloads(null);
           const status = err instanceof AgentSessionControlError ? err.status : 0;
           setDownloadsNote(
             status === 401 || status === 403
               ? 'Session control credential expired — reopen the session to refresh.'
-              : "couldn't reach the device for downloads — retrying",
+              : status === 404
+                ? 'Session is no longer live.'
+                : status === 503
+                  ? "downloads aren't enabled on this deployment"
+                  : "couldn't reach the device for downloads — retrying",
           );
+          backoff = Math.min(backoff * 2, 30000); // failure → back off
+        })
+        .finally(() => {
+          if (cancelled) return; // a torn-down effect never reschedules
+          handle = setTimeout(tick, backoff);
         });
     };
     tick();
-    const handle = window.setInterval(tick, 3000);
     return () => {
       cancelled = true;
-      window.clearInterval(handle);
+      if (handle !== null) clearTimeout(handle);
     };
   }, [downloadsPollActive, sessionId, controlAuth, room]);
 
@@ -4846,32 +4979,73 @@ export function SimulatorWindow(): JSX.Element {
                       style={{ left: t.x, top: t.y }}
                     />
                   ))}
+                  {/* #75b — OVERLAY keyboard: on a short laptop work area the
+                    docked-below keyboard would overflow the screen and trip the
+                    screen-clamp, which carves KEYBOARD_H out of the video and narrows
+                    the window ("keyboard crops the browser"). Instead, anchor the
+                    keyboard over the BOTTOM of the video — exactly iPhone-faithful (the
+                    keyboard occludes the page) — and exclude KEYBOARD_H from chrome (see
+                    keyboardChromeOn) so the video keeps its full aspect + width.
+                    pointer-events stay live (keys fire); the video's getBoundingClientRect
+                    that pointerToViewport reads is unchanged, so taps under the keyboard
+                    correctly hit the keyboard. Anchored INSIDE simulator-screen so its
+                    bottom-row corners follow the rounded display mask — which is what a
+                    real on-screen iPhone keyboard does (it lives inside the display). */}
+                  {keyboardOverlay && controlMode !== 'ai' && (
+                    <div
+                      data-tauri-drag-region="false"
+                      data-component="ios-keyboard-overlay"
+                      className="absolute inset-x-0 bottom-0 z-30"
+                    >
+                      <IOSKeyboard
+                        room={room}
+                        width={inputLogical.width}
+                        onDismiss={() => {
+                          if (!keyboardVisibleRef.current) return;
+                          keyboardVisibleRef.current = false;
+                          keyboardOverlayRef.current = false;
+                          setKeyboardVisible(false);
+                          fitWindow(browserMode);
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
-                {/* On-screen iOS keyboard (founder 2026-06-25 "behave exactly like
-                    a real iPhone"). GUI chrome BELOW the video, inside the screen
-                    (overlays the bottom of the phone view); it's a flex sibling of
-                    the screen-host (which is flex-1), so it shrinks the video area
-                    without moving the <video>'s own on-screen rect that
-                    pointerToViewport maps against — taps/scroll stay aligned. Only
-                    in manual/pair mode (AI mode = the agent drives; local input
-                    would fight it). Emits the SAME keyDown/keyUp the host keyboard
-                    does — pure chrome, no fingerprint change (the viewport-resize
-                    that WOULD change the page's view is deferred to A3, W2992). */}
-                {keyboardVisible && controlMode !== 'ai' && (
-                  <div data-tauri-drag-region="false" className="shrink-0">
-                    <IOSKeyboard
-                      room={room}
-                      width={inputLogical.width}
-                      onDismiss={() => {
-                        if (!keyboardVisibleRef.current) return;
-                        keyboardVisibleRef.current = false;
-                        setKeyboardVisible(false);
-                        fitWindow(browserMode);
-                      }}
-                    />
-                  </div>
-                )}
               </div>
+              {/* On-screen iOS keyboard (founder 2026-06-25 "behave exactly like
+                  a real iPhone"). GUI chrome BELOW the rounded phone screen, a flex
+                  sibling of `simulator-screen` (the flex-1 device screen) inside the
+                  bezel (`simulator-device`). It must live OUTSIDE `simulator-screen`:
+                  that container is `rounded-[2.1rem] overflow-hidden`, so a keyboard
+                  nested inside it had its bottom row's corners clipped by the ~34px
+                  corner radius (founder "keyboard renders cropped"). As a sibling it
+                  renders un-clipped below the screen. The window-sizing math reserves
+                  KEYBOARD_H in `chrome`, so `simulator-screen` (flex-1) still gets the
+                  full video-aspect height and the <video>'s own on-screen rect that
+                  pointerToViewport maps against is unchanged — taps/scroll stay
+                  aligned. Only in manual/pair mode (AI mode = the agent drives; local
+                  input would fight it). Emits the SAME keyDown/keyUp the host keyboard
+                  does — pure chrome, no fingerprint change (the viewport-resize that
+                  WOULD change the page's view is deferred to A3, W2992). */}
+              {keyboardVisible && !keyboardOverlay && controlMode !== 'ai' && (
+                <div
+                  data-tauri-drag-region="false"
+                  data-component="ios-keyboard-docked"
+                  className="shrink-0"
+                >
+                  <IOSKeyboard
+                    room={room}
+                    width={inputLogical.width}
+                    onDismiss={() => {
+                      if (!keyboardVisibleRef.current) return;
+                      keyboardVisibleRef.current = false;
+                      keyboardOverlayRef.current = false;
+                      setKeyboardVisible(false);
+                      fitWindow(browserMode);
+                    }}
+                  />
+                </div>
+              )}
             </div>
             {/* Activity-bar drawer (founder 2026-06-24) — the icon RAIL is ALWAYS
               docked beside the phone (VS Code's activity bar). The window widens by
