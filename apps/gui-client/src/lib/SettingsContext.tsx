@@ -203,7 +203,15 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
       return;
     }
     try {
-      const me = await client.account.me();
+      const raw = await client.account.me();
+      // Normalize at the SOURCE: the SDK's account.me() does NO shape validation
+      // (it casts the JSON), so a partial/legacy/malformed /v1/account/me that
+      // omits `teams` would leave every consumer (Sidebar, App shell, the
+      // reconciliation just below) to throw "Cannot read properties of undefined
+      // (reading 'length'/'some')". Guarantee `teams` is always an array here so
+      // one bad payload can't blank the whole window via a render outside the
+      // per-view ErrorBoundary.
+      const me = raw.teams === undefined ? { ...raw, teams: [] } : raw;
       setAccountMe(me);
       // Reconcile a persisted/active team workspace against the CURRENT account's
       // teams. If the active workspace owner id isn't one of this key's teams

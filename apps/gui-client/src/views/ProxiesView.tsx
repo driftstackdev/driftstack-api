@@ -38,9 +38,11 @@ import { validateOpenVpnConfig } from '../lib/parse-openvpn';
 import {
   buildWireGuardProxyInput,
   buildOpenVpnProxyInput,
+  deleteProxy as deleteAccountProxy,
   type AccountProxyScheme,
 } from '../lib/account-proxies';
 import { clearBindingsForProxy } from '../lib/profile-bindings';
+import { useSettings } from '../lib/SettingsContext';
 
 interface ListState {
   proxies: ProxyConfig[];
@@ -85,6 +87,7 @@ const EMPTY_DRAFT: ProxyDraft = {
 };
 
 export function ProxiesView(): JSX.Element {
+  const { settings } = useSettings();
   const [state, setState] = useState<ListState>({
     proxies: [],
     loading: true,
@@ -127,7 +130,15 @@ export function ProxiesView(): JSX.Element {
       for (const [id, c] of Object.entries(cache)) {
         tr[id] = c.result;
         if (typeof c.at === 'number') ta[id] = c.at;
-        if (c.exitIp !== undefined) {
+        // Only re-hydrate exit-geo when the LAST capability probe was healthy.
+        // saveProbeResult preserves the prior exitIp/country across a failed
+        // re-test (capability + exit probes are separate), so a proxy that was
+        // healthy (exit IP cached) then went down would, after a reload, show its
+        // STALE exit IP + country flag next to the red "unreachable" pill — a
+        // misleading "exits from US 1.2.3.4" for a dead proxy. In-session
+        // handleTest already drops the exit on a failed probe; this matches that
+        // for the reload path.
+        if (c.exitIp !== undefined && c.result.reachable && c.result.auth_ok) {
           er[id] = {
             ip: c.exitIp,
             country: c.exitCountry ?? null,
@@ -186,7 +197,28 @@ export function ProxiesView(): JSX.Element {
   async function handleRemove(id: string): Promise<void> {
     setBusyId(id);
     try {
+      // Capture the server-side account_proxies id (set on first launch-sync)
+      // BEFORE the local entry is wiped, so we can also delete the encrypted
+      // server row. Without this the wrapped password / VPN secret orphans on
+      // the server forever after a local delete — a credential-hygiene leak for
+      // an anti-detect tool, and a CRUD desync (the proxy is "gone" locally but
+      // still resolvable server-side by its id).
+      const removed = state.proxies.find((p) => p.id === id);
       await removeProxy(id);
+      // Best-effort server delete: the account row deletion must not block the
+      // local remove (offline / unauth still leaves the operator with the proxy
+      // gone locally). deleteAccountProxy treats a 404 as already-gone.
+      if (
+        removed?.serverId !== undefined &&
+        settings.apiKey !== null &&
+        settings.apiKey.length > 0
+      ) {
+        void deleteAccountProxy(settings.baseUrl, settings.apiKey, removed.serverId).catch(
+          (err: unknown) => {
+            console.warn('[proxies] failed to delete server-side proxy row', err);
+          },
+        );
+      }
       testEpochRef.current++; // discard any in-flight probe for the removed proxy
       // Drop the cached probe too, else its exit-IP/geo orphans in the
       // cache (and a future re-minted id could inherit stale geo).
@@ -295,6 +327,14 @@ export function ProxiesView(): JSX.Element {
     setTestingAll(true);
     try {
       for (const p of state.proxies) {
+        // Only SOCKS5 (or legacy-undefined) proxies have an honest native SOCKS5
+        // probe. Running it against a VPN/HTTP endpoint ALWAYS returns
+        // reachable:false (no SOCKS5 handshake there) — which would (a) flag a
+        // healthy VPN proxy "unreachable" in the pool stats and (b) persist that
+        // false-negative to the probe cache, so the launch path's test-before-open
+        // gate then spuriously warns "was unreachable" every launch. The per-card
+        // Test button already gates on this; Test-all must too.
+        if (!isSocks5Probeable(p.scheme)) continue;
         await handleTest(p);
       }
     } finally {

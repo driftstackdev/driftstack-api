@@ -36,6 +36,12 @@ vi.mock('../../src/lib/profile-bindings', () => ({
   clearBindingsForProxy: (id: string) => clearBindingsForProxy(id),
 }));
 
+// ProxiesView reads useSettings() (to delete the server-side account_proxies row
+// on remove). With apiKey:null the server delete is skipped — the local CRUD +
+// binding-clear path under test is unaffected. Stable object → useEffect-dep safe.
+const settingsStub = { settings: { apiKey: null, baseUrl: 'http://localhost:3000' } };
+vi.mock('../../src/lib/SettingsContext', () => ({ useSettings: () => settingsStub }));
+
 const { ProxiesView } = await import('../../src/views/ProxiesView');
 
 const PROXY: ProxyConfig = {

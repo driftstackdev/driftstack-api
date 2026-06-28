@@ -70,6 +70,11 @@ vi.mock('../../src/lib/proxy-probe-cache', () => ({
   saveProbeResult: vi.fn(() => Promise.resolve()),
 }));
 
+// ProxiesView reads useSettings() (server-side proxy delete on remove). Stub it —
+// apiKey:null short-circuits the server call; the edit path under test is unaffected.
+const settingsStub = { settings: { apiKey: null, baseUrl: 'http://localhost:3000' } };
+vi.mock('../../src/lib/SettingsContext', () => ({ useSettings: () => settingsStub }));
+
 const { ProxiesView } = await import('../../src/views/ProxiesView');
 
 async function openEditAndRename(label: string, newLabel: string): Promise<void> {

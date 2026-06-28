@@ -1602,7 +1602,18 @@ export function ProfilesView({
       // arms the retry path. crypto.randomUUID is available in the Tauri webview.
       const idempotencyKey = crypto.randomUUID();
       const created = await client.agentSessions.create(createBody, { idempotencyKey });
-      await markLaunched(profile.id, created.id);
+      // BEST-EFFORT: the binding is a local Tauri store write; the session is
+      // already created + billed. If markLaunched threw (store IO failure), the
+      // unguarded await used to jump straight to the catch — surfacing an error
+      // but NEVER closing the session, stranding a billed, running session with
+      // no binding so the row's Stop button (gated on boundSession) never showed.
+      // Swallow the write failure and proceed to open the simulator (the actual
+      // goal); the row falls back to idle but the simulator window can still stop
+      // the session, matching the leak-guards in the !sim.opened / no-livekit
+      // branches below. (audit)
+      await markLaunched(profile.id, created.id).catch((err: unknown) => {
+        console.warn('[profiles] markLaunched failed (session created):', err);
+      });
       if (created.livekit) {
         // Mint the per-session gui_control_key so the SEPARATE simulator
         // app (which can't read this app's keychain) can drive the
@@ -1938,7 +1949,24 @@ export function ProfilesView({
   // profile (a gated/failed one is skipped, the rest still launch).
   async function handleBulkLaunch(): Promise<void> {
     if (!client || selectedIds.size === 0 || bulkLaunching) return;
-    const targets = state.profiles.filter((p) => selectedIds.has(p.id));
+    // Read-only team member: the per-row Launch is disabled (teamLaunchBlocked),
+    // but the bulk-bar Launch wasn't gated — so a non-admin could click it and get
+    // N opaque per-profile 403s instead of a clean block. Surface the same reason
+    // up front and don't fire any (billed-on-the-server-attempt) create calls.
+    if (teamLaunchBlocked) {
+      setState((s) => ({ ...s, error: teamLaunchBlockedReason }));
+      return;
+    }
+    // Skip profiles that ALREADY have a live session. The per-row Launch routes a
+    // running profile to reopenStream (never a second create), but bulk launch
+    // called handleLaunch unconditionally — and handleLaunch has no running guard
+    // (the UI gated it), so a "select all → Launch" over a list that includes
+    // running profiles spun up a SECOND billed session for each one already live
+    // (double-billing + a duplicate fleet browser). Filter them out here so bulk
+    // launch only creates sessions for idle profiles, matching the single-row path.
+    const targets = state.profiles.filter(
+      (p) => selectedIds.has(p.id) && boundSession(p.id) === null,
+    );
     if (targets.length === 0) return;
     const ok = await confirm(
       `Launch ${targets.length.toString()} session${
@@ -2844,6 +2872,16 @@ export function ProfilesView({
                     // proxy row + latency meter + health pill all read these.
                     const px = pickProxy(profile.id);
                     const probe = px !== null ? probeCache[px.id] : undefined;
+                    // Only surface the cached exit IP / country / flag when the LAST
+                    // capability probe was actually healthy. saveProbeResult preserves
+                    // a proxy's prior exit-geo across a FAILED capability re-test
+                    // (capability + exit probes are separate), so without this gate a
+                    // proxy that was healthy (exit US 1.2.3.4 cached) then went down
+                    // would still show a misleading "exits from US 1.2.3.4" — for an
+                    // anti-detect tool, a stale exit geo on a dead proxy is a real
+                    // hazard. Matches the in-session/reload gate in ProxiesView.
+                    const exitOk =
+                      probe !== undefined && probe.result.reachable && probe.result.auth_ok;
                     const lat = probe?.result.latency_ms;
                     // latency meter fill: 0–250ms mapped to 0–100% (clamped).
                     const latFill =
@@ -2866,9 +2904,9 @@ export function ProfilesView({
                           note={profilesMeta[profile.id]?.note ?? ''}
                           onSaveNote={(note) => handleSaveNote(profile.id, note)}
                           hasProxy={px !== null}
-                          flag={probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}
-                          countryCode={probe?.exitCountry ?? null}
-                          exitIp={probe?.exitIp ?? null}
+                          flag={exitOk && probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}
+                          countryCode={exitOk ? (probe?.exitCountry ?? null) : null}
+                          exitIp={exitOk ? (probe?.exitIp ?? null) : null}
                           latencyMs={lat ?? null}
                           latencyFillPct={latFill}
                           latencyGood={latGood}
@@ -2927,6 +2965,12 @@ export function ProfilesView({
                     const bound = boundSession(profile.id);
                     const px = pickProxy(profile.id);
                     const probe = px !== null ? probeCache[px.id] : undefined;
+                    // Gate the exit IP / country / location on the last capability
+                    // probe being healthy — saveProbeResult preserves prior exit-geo
+                    // across a failed re-test, so a down proxy must NOT keep showing a
+                    // stale "exits from US 1.2.3.4". Matches the grid card + ProxiesView.
+                    const exitOk =
+                      probe !== undefined && probe.result.reachable && probe.result.auth_ok;
                     const caps = probe !== undefined ? proxyCapabilities(probe.result) : null;
                     const udp: 'ok' | 'fail' | 'unknown' =
                       caps === null
@@ -2942,15 +2986,17 @@ export function ProfilesView({
                       running: bound !== null,
                       runningSinceIso: boundSessionStartedAt(profile.id),
                       hasProxy: px !== null,
-                      flag: probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍',
-                      countryCode: probe?.exitCountry ?? null,
-                      exitIp: probe?.exitIp ?? null,
+                      flag: exitOk && probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍',
+                      countryCode: exitOk ? (probe?.exitCountry ?? null) : null,
+                      exitIp: exitOk ? (probe?.exitIp ?? null) : null,
                       proxyAddress: px !== null ? `${px.host}:${px.port}` : null,
                       // Prefer the granular lumtest geo (city, region) when the
                       // exit probe captured it; the flag already conveys the
-                      // country, so fall back to the country name otherwise.
-                      locationLabel:
-                        probe?.exitCity != null && probe.exitCity.length > 0
+                      // country, so fall back to the country name otherwise. Gated on
+                      // exitOk so a down proxy doesn't show a stale location.
+                      locationLabel: !exitOk
+                        ? null
+                        : probe?.exitCity != null && probe.exitCity.length > 0
                           ? [probe.exitCity, probe.exitRegion]
                               .filter((s): s is string => typeof s === 'string' && s.length > 0)
                               .join(', ')
@@ -4167,10 +4213,21 @@ function EditProfileModal({
         await client.profiles.update(profile.id, diff);
       }
       // Rebind the proxy when it changed ('first-available' = null binding).
-      // Local store write (the binding) — parent refresh reloads it into pickProxy.
+      // BEST-EFFORT: this is a local Tauri store write and the org-metadata
+      // edit has ALREADY been accepted server-side above. If setDefaultProxy
+      // threw, the unguarded await used to jump to the catch — onSaved (which
+      // mirrors the just-saved folder/tags/icon/note into the local cache) was
+      // then never called, so the server had the new values but the hub kept
+      // rendering the OLD ones (local-wins seed-down never re-seeds a profile
+      // that already has a local entry), making the edit look silently
+      // reverted. Swallow a rebind-write failure so the org-metadata mirror
+      // below always runs; the proxy binding is independently recoverable from
+      // the row. (audit)
       const nextProxyId = proxyChoice === 'first-available' ? null : proxyChoice;
       if (nextProxyId !== currentProxyId) {
-        await setDefaultProxy(profile.id, nextProxyId);
+        await setDefaultProxy(profile.id, nextProxyId).catch((err: unknown) => {
+          console.warn('[profiles] setDefaultProxy failed (profile updated):', err);
+        });
       }
       onSaved({ icon, folder: nextFolder, tags: tagList, note: nextNote });
     } catch (err) {

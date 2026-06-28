@@ -177,7 +177,9 @@ describe('ProfilesView organization management', () => {
     addFolder.mockClear();
     removeTag.mockClear();
     renameTag.mockClear();
-    setDefaultProxy.mockClear();
+    setDefaultProxy.mockReset();
+    setDefaultProxy.mockResolvedValue(undefined);
+    saveProfileMeta.mockClear();
     saveProfilesMetaBulk.mockClear();
     reseedMeta();
   });
@@ -300,6 +302,51 @@ describe('ProfilesView organization management', () => {
         expect(profilesUpdate).toHaveBeenCalledWith('prof_1', { name: 'Renamed' }),
       );
       expect(setDefaultProxy).not.toHaveBeenCalled();
+    });
+
+    // Audit (finding 4): a FAILED local proxy-rebind (a Tauri store IO error)
+    // must NOT discard the just-saved org metadata. The server PATCH already
+    // succeeded; onSaved → saveProfileMeta mirrors folder/tags/icon/note into the
+    // local cache (the hub's source of truth — seedMetaFromServer never re-seeds a
+    // profile that already has a local entry). Before the fix, the unguarded
+    // setDefaultProxy await jumped to the catch and skipped onSaved, so the edit
+    // looked silently reverted in the hub. setDefaultProxy is now best-effort, so
+    // saveProfileMeta still runs even when the rebind throws.
+    it('still mirrors org metadata (saveProfileMeta) when the proxy rebind throws', async () => {
+      // The local rebind write fails on THIS save only.
+      setDefaultProxy.mockRejectedValueOnce(new Error('store IO error'));
+      await openEdit();
+      // Edit the NOTE (an org-metadata field that flows through onSaved) AND
+      // change the proxy so both code paths run on the same save. The Note
+      // textarea starts empty (meta.note === ''); the Description textarea holds
+      // 'orig desc' — pick the empty one so we target Note, not Description.
+      const textareas = screen.getAllByRole('textbox').filter((el) => el.tagName === 'TEXTAREA');
+      const noteField = textareas.find((el) => (el as HTMLTextAreaElement).value === '');
+      expect(noteField).toBeTruthy();
+      fireEvent.change(noteField!, { target: { value: 'keep this note' } });
+      fireEvent.change(screen.getByRole('combobox', { name: 'Profile proxy' }), {
+        target: { value: 'px_2' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+      // The rebind was attempted (and rejected)…
+      await waitFor(() => expect(setDefaultProxy).toHaveBeenCalledWith('prof_1', 'px_2'));
+      // …but the org-metadata mirror STILL ran (onSaved was not skipped), so the
+      // hub keeps the new values instead of silently reverting to the old ones.
+      // The edited note rides through to the local cache write.
+      await waitFor(() =>
+        expect(saveProfileMeta).toHaveBeenCalledWith(
+          'prof_1',
+          expect.objectContaining({ note: 'keep this note' }),
+          expect.anything(),
+        ),
+      );
+      // The server PATCH of the edited note also went through (not aborted).
+      expect(profilesUpdate).toHaveBeenCalledWith('prof_1', { note: 'keep this note' });
+      // The modal closed on success (onSaved → setEditTarget(null)) — a rebind
+      // failure no longer surfaces as a blocking form error.
+      await waitFor(() =>
+        expect(screen.queryByRole('heading', { name: 'Edit profile' })).toBeNull(),
+      );
     });
   });
 

@@ -40,6 +40,11 @@ vi.mock('../../src/lib/proxies', () => ({
   probeProxyExit: () => Promise.resolve(null),
 }));
 
+// ProxiesView reads useSettings() (server-side proxy delete on remove). Stub it —
+// apiKey:null short-circuits the server call; the probe paths under test are unaffected.
+const settingsStub = { settings: { apiKey: null, baseUrl: 'http://localhost:3000' } };
+vi.mock('../../src/lib/SettingsContext', () => ({ useSettings: () => settingsStub }));
+
 const { ProxiesView } = await import('../../src/views/ProxiesView');
 
 async function clickTestAndSettle(): Promise<void> {

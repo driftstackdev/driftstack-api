@@ -266,7 +266,11 @@ function Shell(): JSX.Element {
     setView,
     onShowShortcuts: () => setCheatsheetOpen(true),
     showFleet: !isCloudBaseUrl(settings.baseUrl),
-    showTeam: paletteShowTeam(accountMe?.tier ?? null, accountMe?.teams.length ?? 0),
+    // `accountMe?.teams.length` only guards a null accountMe — a non-null /me
+    // with teams missing (partial/legacy server response) would throw "Cannot
+    // read properties of undefined (reading 'length')" here, in the shell render
+    // ABOVE the per-view ErrorBoundary, blanking the whole window. Guard teams too.
+    showTeam: paletteShowTeam(accountMe?.tier ?? null, accountMe?.teams?.length ?? 0),
   });
   // V-244 — track wizard state. Customer with no apiKey on boot
   // sees the wizard; once apiKey is set (via wizard or any other
@@ -275,6 +279,24 @@ function Shell(): JSX.Element {
   // it forever; once true, they get the normal shell + can still
   // configure via Settings.
   const [wizardDismissed, setWizardDismissed] = useState(false);
+  // The wizard saves the API key BEFORE its final "First profile" step (the
+  // ProfileStep needs the now-validated client from SettingsContext to call
+  // profiles.create). If the gate keyed only on `settings.apiKey === null`,
+  // that save would flip the gate the instant the key validated and unmount
+  // the wizard MID-FLOW — the customer never reaches the First-profile step
+  // the stepper advertises; they're dumped straight into the app shell. Track
+  // an explicit "wizard owns the screen" flag that latches true while the
+  // wizard is running and only clears on its onComplete (skip / created /
+  // dismissed). It re-arms on sign-out (apiKey → null) via the effect below.
+  const [wizardActive, setWizardActive] = useState(false);
+  // Latch the wizard ON only on the no-key edge (boot-with-no-key once settings
+  // have loaded, or sign-out clearing the key). Gated on `!loading` so the
+  // transient DEFAULT_SETTINGS (apiKey=null) during boot doesn't arm it for a
+  // user who actually has a saved key, and never auto-CLEARS — the wizard's own
+  // mid-flow key save can't unmount it (only onComplete clears it).
+  useEffect(() => {
+    if (!loading && settings.apiKey === null && !wizardDismissed) setWizardActive(true);
+  }, [loading, settings.apiKey, wizardDismissed]);
 
   // V-263 — Cmd+, shortcut. MUST live above any conditional returns
   // below; React hooks order is positional, so registering the effect
@@ -400,9 +422,21 @@ function Shell(): JSX.Element {
     );
   }
 
-  // V-244 — first-run gate. No apiKey + not dismissed → wizard.
-  if (settings.apiKey === null && !wizardDismissed) {
-    return <FirstRunWizard onComplete={() => setWizardDismissed(true)} />;
+  // V-244 — first-run gate. Show the wizard when there's no key (the direct
+  // check renders it on the very first post-load frame, no flash of the empty
+  // shell while the latching effect runs) OR while the wizard is mid-flow
+  // (wizardActive latched true) — the latter keeps it mounted past its own key
+  // save, which would otherwise null the `apiKey === null` check and unmount it
+  // before the First-profile step the stepper advertises.
+  if ((settings.apiKey === null || wizardActive) && !wizardDismissed) {
+    return (
+      <FirstRunWizard
+        onComplete={() => {
+          setWizardActive(false);
+          setWizardDismissed(true);
+        }}
+      />
+    );
   }
 
   const mode = deploymentLabel(settings.baseUrl);

@@ -69,7 +69,13 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
   const profileCap = accountMe?.profile_cap ?? null;
   const sessionsActive = accountMe?.concurrent_session_active ?? null;
   const sessionsCap = accountMe?.concurrent_session_cap ?? null;
-  const teamCount = accountMe?.teams.length ?? 0;
+  // `accountMe?.teams.length` only guards a null accountMe — a non-null /me with
+  // teams missing (partial/legacy/malformed server response — the SDK does NO
+  // shape validation, it casts the JSON) would throw "Cannot read properties of
+  // undefined (reading 'length')" in THIS render. The Sidebar mounts OUTSIDE the
+  // per-view ErrorBoundary, so that throw bubbles to RootErrorBoundary and blanks
+  // the whole window with no recover path. Optional-chain teams too.
+  const teamCount = accountMe?.teams?.length ?? 0;
   // Show the Team section to anyone who's a MEMBER of a team (teamCount>0) OR
   // is on a team-capable tier (so an owner can manage their team even before
   // adding members) — "if the user has access for Teams" (founder 2026-06-16).
@@ -219,7 +225,7 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
               re-scopes every read/write to that team's workspace; Personal =
               null. account.me() ignores the effective-account header, so this
               list (the caller's own memberships) stays stable across switches. */}
-          {accountMe !== null && accountMe.teams.length > 0 && (
+          {accountMe !== null && (accountMe.teams?.length ?? 0) > 0 && (
             <label className="flex flex-col gap-1 px-1">
               <span className="text-2xs text-ink-muted">Workspace</span>
               <select
@@ -230,7 +236,7 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
                 className="rounded border border-surface-divider bg-surface-inset px-1.5 py-1 text-xs text-ink-secondary"
               >
                 <option value="">Personal</option>
-                {accountMe.teams.map((t) => (
+                {(accountMe.teams ?? []).map((t) => (
                   <option key={t.membership_id} value={t.owner_account_id}>
                     {workspaceLabel(t)}
                   </option>
