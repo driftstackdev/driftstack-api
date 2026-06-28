@@ -240,3 +240,53 @@ describe('SimulatorWindow — page-navigation error overlay (W616)', () => {
     expect(container.querySelector('[data-component="page-error-overlay"]')).toBeNull();
   });
 });
+
+// #72 — a LATE 'errored' frame AFTER the page already reached 'loaded'+painted is a
+// sub-resource / late-request failure, NOT a top-level navigation failure. It must
+// NOT pop the full-screen overlay over a working page (which would invite a "Try
+// again" full refresh that nukes a perfectly good page — the founder's exact report).
+// The overlay is honored ONLY before the page ever loaded.
+describe('SimulatorWindow — late sub-resource error does not nuke a loaded page (#72)', () => {
+  beforeEach(() => {
+    fakeRoom.on.mockClear();
+  });
+
+  it('suppresses the error overlay when an errored frame arrives AFTER the page loaded', async () => {
+    const { container } = renderSim();
+    await waitFor(() => {
+      expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
+    });
+    // The page opens + paints (loaded), THEN a smaller late request fails (errored).
+    act(() => {
+      fireDataFrame({ state: 'loaded', url: 'https://app.example/' });
+    });
+    act(() => {
+      fireDataFrame({
+        state: 'errored',
+        url: 'https://app.example/',
+        error: { kind: 'net', message: 'a beacon failed' },
+      });
+    });
+    // No overlay — the working page stays on screen, no forced refresh.
+    expect(container.querySelector('[data-component="page-error-overlay"]')).toBeNull();
+  });
+
+  it('STILL shows the overlay for a top-level failure (errored before any loaded)', async () => {
+    const { container } = renderSim();
+    await waitFor(() => {
+      expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
+    });
+    // A fresh navigation that fails before ever loading → a real nav failure.
+    act(() => {
+      fireDataFrame({ state: 'loading', url: 'https://nope.invalid/' });
+    });
+    act(() => {
+      fireDataFrame({
+        state: 'errored',
+        url: 'https://nope.invalid/',
+        error: { kind: 'dns', message: 'lookup failed' },
+      });
+    });
+    expect(container.querySelector('[data-component="page-error-overlay"]')).not.toBeNull();
+  });
+});

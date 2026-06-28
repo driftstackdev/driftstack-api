@@ -146,6 +146,59 @@ describe('SimulatorWindow — file-download Downloads section (A3 W2856)', () =>
     expect(container.querySelector('[data-component="simulator-download-indicator"]')).toBeNull();
   });
 
+  // #73 — the OLD copy promised "downloads ship with the next device update", a
+  // misleading future-feature claim (the download path is actually LIVE; the jail is
+  // just empty until a page saves a file). The honest copy must NEVER promise a
+  // device update — for an 'unavailable' fetch result OR a failed list poll.
+  it('an unavailable download fetch shows honest copy, never a "device update" promise', async () => {
+    listMock.mockResolvedValue({
+      status: 'ok',
+      files: [{ name: 'report.pdf', size: 2048, mime: 'application/pdf' }],
+    });
+    fetchMock.mockResolvedValue({
+      status: 'unavailable',
+      file: null,
+      reason: 'session is not live on a node',
+    });
+    const { container } = renderSim();
+    openDrawer(container);
+    const saveBtn = await waitFor(() => {
+      const b = container.querySelector(
+        '[data-component="simulator-downloads"] button[aria-label^="Save "]',
+      );
+      expect(b).not.toBeNull();
+      return b as HTMLButtonElement;
+    });
+    fireEvent.click(saveBtn);
+    await waitFor(() => {
+      const txt =
+        container.querySelector('[data-component="simulator-downloads"]')?.textContent ?? '';
+      expect(txt).not.toMatch(/device update/i);
+      expect(txt).toMatch(/session is not live on a node/i);
+    });
+  });
+
+  it('a failed downloads list poll shows an honest "retrying" note, never a "device update" promise', async () => {
+    class CtrlErr extends Error {
+      status: number;
+      constructor(status: number) {
+        super('boom');
+        this.status = status;
+      }
+    }
+    // 503 (gated) → the catch-path; must read as a transient reachability gap, not a
+    // missing future feature. (401/403 has its own reopen note, covered by the impl.)
+    listMock.mockRejectedValue(new CtrlErr(503));
+    const { container } = renderSim();
+    openDrawer(container);
+    await waitFor(() => {
+      const txt =
+        container.querySelector('[data-component="simulator-downloads"]')?.textContent ?? '';
+      expect(txt).toMatch(/retrying/i);
+      expect(txt).not.toMatch(/device update/i);
+    });
+  });
+
   it('clicking Save fetches the file bytes by name', async () => {
     listMock.mockResolvedValue({
       status: 'ok',

@@ -14,6 +14,7 @@ const BROWSER_BAR_H = 40;
 const TAB_STRIP_H = 32;
 const BEZEL_PAD = 20; // p-[10px] × 2
 const STATUS_STRIP_H = 40; // the rendered <IosStatusBar/> the video sits BELOW
+const KEYBOARD_H = 200; // the on-screen iOS keyboard, docked below the video when shown
 
 describe('simulatorChromeHeight — non-video chrome above/around the screen-host', () => {
   it('content mode (browser bars hidden) = toolbar + bezel + status strip', () => {
@@ -29,6 +30,23 @@ describe('simulatorChromeHeight — non-video chrome above/around the screen-hos
     );
     expect(simulatorChromeHeight(true)).toBe(166);
   });
+
+  // #75 — the on-screen iOS keyboard docks BELOW the video (a flex sibling of the
+  // flex-1 screen-host). When SHOWN the window must grow by exactly KEYBOARD_H, or
+  // the screen-host loses that height and the video letterboxes into a bottom band.
+  // When HIDDEN the keyboard is conditionally NOT rendered → zero extra height.
+  it('keyboard HIDDEN (default) reserves no extra height', () => {
+    expect(simulatorChromeHeight(false, false)).toBe(simulatorChromeHeight(false));
+    expect(simulatorChromeHeight(true, false)).toBe(simulatorChromeHeight(true));
+  });
+
+  it('keyboard SHOWN adds exactly KEYBOARD_H to the chrome (content + browser mode)', () => {
+    expect(simulatorChromeHeight(false, true)).toBe(
+      simulatorChromeHeight(false, false) + KEYBOARD_H,
+    );
+    expect(simulatorChromeHeight(true, true)).toBe(simulatorChromeHeight(true, false) + KEYBOARD_H);
+    expect(simulatorChromeHeight(false, true)).toBe(94 + KEYBOARD_H);
+  });
 });
 
 describe('simulatorWindowHeight — screen-host sized to the LIVE content aspect (P1b)', () => {
@@ -40,11 +58,12 @@ describe('simulatorWindowHeight — screen-host sized to the LIVE content aspect
     contentW: number,
     contentH: number,
     browserMode: boolean,
+    keyboardVisible = false,
   ): void {
     const aspect = contentW / contentH; // live CONTENT aspect (e.g. 402/714)
     const phoneW = contentW + BEZEL_PAD;
-    const height = simulatorWindowHeight(phoneW, aspect, browserMode);
-    const chrome = simulatorChromeHeight(browserMode);
+    const height = simulatorWindowHeight(phoneW, aspect, browserMode, keyboardVisible);
+    const chrome = simulatorChromeHeight(browserMode, keyboardVisible);
     // The screen-host height the layout will give the <video> = window − chrome.
     const hostHeight = height - chrome;
     // It must equal contentW / aspect = contentH (within rounding) — i.e. the host
@@ -85,6 +104,33 @@ describe('simulatorWindowHeight — screen-host sized to the LIVE content aspect
     const hostHeight = contentHeight - simulatorChromeHeight(false);
     expect(Math.round(hostHeight)).toBe(714);
     expect(Math.round(hostHeight)).not.toBe(874);
+  });
+
+  // #75 — with the keyboard SHOWN the video STILL fills the screen-host exactly
+  // (host == contentH, no bottom band): the window grew by KEYBOARD_H so the
+  // keyboard docks below the full-aspect video, ≥2 archetypes, both modes.
+  it('16 Pro content (402×714) keeps the exact video fit with the keyboard shown (content mode)', () => {
+    expectExactFit('16pro+kbd', 402, 714, false, true);
+  });
+  it('16 Pro content (402×714) keeps the exact video fit with the keyboard shown (browser mode)', () => {
+    expectExactFit('16pro+kbd', 402, 714, true, true);
+  });
+  it('13 Pro content (390×699) keeps the exact video fit with the keyboard shown', () => {
+    expectExactFit('13pro+kbd', 390, 699, false, true);
+  });
+
+  it('showing the keyboard grows the window by exactly KEYBOARD_H (the video size is unchanged)', () => {
+    const phoneW = 402 + BEZEL_PAD;
+    const aspect = 402 / 714;
+    const hiddenH = simulatorWindowHeight(phoneW, aspect, false, false);
+    const shownH = simulatorWindowHeight(phoneW, aspect, false, true);
+    expect(shownH - hiddenH).toBe(KEYBOARD_H);
+    // The video-area height (window − chrome) is identical in both — the keyboard is
+    // PURELY additive, never carved out of the screen-host (the #75 bottom-band bug).
+    const hiddenHost = hiddenH - simulatorChromeHeight(false, false);
+    const shownHost = shownH - simulatorChromeHeight(false, true);
+    expect(shownHost).toBe(hiddenHost);
+    expect(Math.round(shownHost)).toBe(714);
   });
 
   it('returns 0 for a non-positive aspect or a width below the bezel (caller guards)', () => {

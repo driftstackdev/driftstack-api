@@ -78,6 +78,17 @@ const BROWSER_BAR_H = 40; // dedicated browser-mode address bar (its own row)
 // or the device letterboxes (the 402×714 viewport invariant). It's GUI chrome
 // OUTSIDE the video — the rendered fingerprint viewport is unchanged.
 const TAB_STRIP_H = 32;
+// On-screen iOS keyboard height (px). Mounted INSIDE the phone screen, BELOW the
+// video (a flex sibling of the screen-host). When SHOWN it must be added to the
+// chrome term at every window-sizing site so the window GROWS by exactly its
+// height — keeping the video at its full content aspect with the keyboard docked
+// below it (iPhone-faithful), instead of letting the flex layout STEAL the
+// keyboard's space from the flex-1 screen-host (which shrank the video and left a
+// black band — founder #75). Measured from IOSKeyboard's box model: 4 rows ×
+// h-[42px] + 3 × gap-[6px] (between the 4 rows) + pt-[8px] + pb-[6px] = 168 + 18 +
+// 14 = 200. When the keyboard is HIDDEN it is conditionally NOT rendered (zero
+// space), so this term is added ONLY while it's visible.
+const KEYBOARD_H = 200;
 
 /** A browser page tab in the GUI's tab model (doc-150 item 4). Mirrors the
  *  `tabListUpdate` / `activateTab` contract entry shape exactly (id/url/scrollY/
@@ -171,15 +182,24 @@ const STATUS_STRIP_H = 40;
 
 /** Total non-video chrome height (px) above + around the device screen-host: the
  *  Mac toolbar, the optional browser-mode address bar + tab strip, the bezel's
- *  p-[10px] padding (top+bottom = BEZEL_PAD), and the in-screen iOS status strip
- *  (STATUS_STRIP_H, the <IosStatusBar/> the live video sits BELOW). Every
- *  window-sizing site derives the window HEIGHT as `chrome + contentW / aspect`,
- *  where contentW = phoneW − BEZEL_PAD and `aspect` is the LIVE content video
- *  aspect (videoW/videoH). One helper so the four sizing sites can never drift
- *  apart (a missing strip on one site re-introduces a top cutoff or bottom black
- *  band — P1b). */
-export function simulatorChromeHeight(browserModeOn: boolean): number {
-  return TOOLBAR_H + (browserModeOn ? BROWSER_BAR_H + TAB_STRIP_H : 0) + BEZEL_PAD + STATUS_STRIP_H;
+ *  p-[10px] padding (top+bottom = BEZEL_PAD), the in-screen iOS status strip
+ *  (STATUS_STRIP_H, the <IosStatusBar/> the live video sits BELOW), and — only
+ *  while the on-screen keyboard is shown — KEYBOARD_H (the keyboard is a flex
+ *  sibling BELOW the video). Every window-sizing site derives the window HEIGHT as
+ *  `chrome + contentW / aspect`, where contentW = phoneW − BEZEL_PAD and `aspect`
+ *  is the LIVE content video aspect (videoW/videoH). One helper so the sizing
+ *  sites can never drift apart (a missing strip on one site re-introduces a top
+ *  cutoff or bottom black band — P1b). `keyboardVisible` defaults false so every
+ *  call site that doesn't care about the keyboard reads the keyboard-hidden
+ *  height unchanged. */
+export function simulatorChromeHeight(browserModeOn: boolean, keyboardVisible = false): number {
+  return (
+    TOOLBAR_H +
+    (browserModeOn ? BROWSER_BAR_H + TAB_STRIP_H : 0) +
+    BEZEL_PAD +
+    STATUS_STRIP_H +
+    (keyboardVisible ? KEYBOARD_H : 0)
+  );
 }
 
 /** Pure window-height formula (P1b). The device screen-host must be EXACTLY the
@@ -194,9 +214,12 @@ export function simulatorWindowHeight(
   phoneW: number,
   aspect: number,
   browserModeOn: boolean,
+  keyboardVisible = false,
 ): number {
   if (aspect <= 0 || phoneW <= BEZEL_PAD) return 0;
-  return Math.round(simulatorChromeHeight(browserModeOn) + (phoneW - BEZEL_PAD) / aspect);
+  return Math.round(
+    simulatorChromeHeight(browserModeOn, keyboardVisible) + (phoneW - BEZEL_PAD) / aspect,
+  );
 }
 // The iPhone CSS-logical width of the launch archetype (iphone17). Fallback for the
 // "actual size" reset (Cmd+0) before the live stream reports its per-archetype dims,
@@ -1752,9 +1775,10 @@ function CookiesPane({
 
   // Import: read the chosen .json as text → JSON.parse → shape-validate an array of
   // cookies → write into the live session over the control plane. Surfaces success /
-  // the failure reason / the calm "ships with the next device update" only for the
-  // gated-inert (status:'unavailable') state — so it no-ops gracefully until the box
-  // half lands. Mirrors the upload pane's FileReader idiom (readAsText vs DataURL).
+  // the failure reason / an honest "not available on this session right now" for the
+  // gated-inert (status:'unavailable' / 503) state — so it no-ops gracefully until the
+  // box half lands, without promising a (non-existent) future device update (#73).
+  // Mirrors the upload pane's FileReader idiom (readAsText vs DataURL).
   const onImportFile = (file: File): void => {
     setImporting(true);
     setImportNote(null);
@@ -1794,7 +1818,11 @@ function CookiesPane({
               `Imported ${validated.length} cookie${validated.length === 1 ? '' : 's'}.`,
             );
           } else if (res.status === 'unavailable') {
-            setImportNote('Import pending — cookie import ships with the next device update.');
+            setImportNote(
+              res.reason !== undefined
+                ? `Can't import right now: ${res.reason}`
+                : "Can't import — cookie import isn't available on this session right now.",
+            );
           } else if (res.status === 'timeout') {
             setImportNote("Import timed out — the device didn't respond.");
           } else {
@@ -1814,7 +1842,7 @@ function CookiesPane({
           } else if (status === 404) {
             setImportNote('Session is no longer live.');
           } else if (status === 503) {
-            setImportNote('Import pending — cookie import ships with the next device update.');
+            setImportNote("Cookie import isn't available on this session right now.");
           } else {
             setImportNote('Could not import cookies — please try again.');
           }
@@ -2461,6 +2489,14 @@ export function SimulatorWindow(): JSX.Element {
   // <video> on-screen rect the tap/scroll coord mapping reads. Forwarded only in
   // manual/pair mode (in AI mode the agent drives — local input would fight it).
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  // Live mirror of keyboardVisible for the window-sizing closures (fitWindow /
+  // resetToActualSize / refitForDrawer / the onResized aspect-lock), which close
+  // over the value and must read the CURRENT one without re-subscribing. The
+  // chrome height grows by KEYBOARD_H while the keyboard is shown, so the window
+  // gets taller for it (video keeps its full aspect, keyboard docks below) rather
+  // than the flex-1 screen-host losing the keyboard's height to a bottom band (#75).
+  const keyboardVisibleRef = useRef(keyboardVisible);
+  keyboardVisibleRef.current = keyboardVisible;
   // Pin = always-on-top (the floating-iPhone default). Unpinned the window
   // behaves like a normal sibling window (Cmd+` cycling, Mission Control,
   // doesn't hover over other apps) — the strongest separate-window identity
@@ -2614,12 +2650,16 @@ export function SimulatorWindow(): JSX.Element {
       // and add the drawer back, so the drawer never letterboxes the device.
       const drawerExtra = drawerExtraRef.current;
       const phoneW = curWidth - drawerExtra;
-      const chrome = simulatorChromeHeight(browserModeOn);
+      // The on-screen keyboard (when shown) docks BELOW the video, so the window
+      // must grow by KEYBOARD_H — folded into the chrome term — or the flex-1
+      // screen-host would lose that height to a bottom black band (#75).
+      const keyboardOn = keyboardVisibleRef.current;
+      const chrome = simulatorChromeHeight(browserModeOn, keyboardOn);
       // The device screen-area must match the video aspect or the video
       // object-contains with side gaps. Height for a phone width = chrome + (w-bezel)/aspect.
       // First pass: ask for that height, pre-capped to the screen work area (a hint).
       const avail = typeof window !== 'undefined' ? (window.screen?.availHeight ?? 0) : 0;
-      let height = simulatorWindowHeight(phoneW, aspect, browserModeOn);
+      let height = simulatorWindowHeight(phoneW, aspect, browserModeOn, keyboardOn);
       let width = curWidth; // = phoneW + drawerExtra, preserved
       if (avail > 0 && height > avail - 24) {
         height = avail - 24;
@@ -2650,7 +2690,10 @@ export function SimulatorWindow(): JSX.Element {
       const { LogicalSize } = await import('@tauri-apps/api/dpi');
       const factor = await win.scaleFactor();
       const aspect = sizingAspect();
-      const chrome = simulatorChromeHeight(browserMode);
+      // Keyboard (when shown) docks below the video → grow the window by KEYBOARD_H
+      // via the chrome term so the video keeps its full aspect, no bottom band (#75).
+      const keyboardOn = keyboardVisibleRef.current;
+      const chrome = simulatorChromeHeight(browserMode, keyboardOn);
       // Target device-content width = the per-archetype iPhone CSS-logical width (its
       // long edge when rotated to landscape), then the window adds the bezel padding +
       // (if open) the right drawer's fixed width. Live per-archetype width from the
@@ -2663,7 +2706,7 @@ export function SimulatorWindow(): JSX.Element {
         : logicalW;
       const phoneW = targetContentW + BEZEL_PAD;
       let width = phoneW + drawerExtra;
-      let height = simulatorWindowHeight(phoneW, aspect, browserMode);
+      let height = simulatorWindowHeight(phoneW, aspect, browserMode, keyboardOn);
       // An iPhone is taller than many laptop work areas; if the ideal height would
       // overflow, cap it and derive the width from the aspect so the device still
       // fills the frame edge-to-edge (same guarantee fitWindow makes).
@@ -2695,6 +2738,19 @@ export function SimulatorWindow(): JSX.Element {
     // the screen and re-introduce the side-gap letterbox).
     fitWindow(next);
   };
+  // Show/hide the on-screen iOS keyboard. The keyboard docks BELOW the video inside
+  // the phone screen, so showing it must GROW the window by KEYBOARD_H (and hiding
+  // it shrink back) — keeping the video at its full content aspect with the keyboard
+  // below it, instead of the flex-1 screen-host losing the keyboard's height to a
+  // bottom black band (#75). Set the ref synchronously BEFORE fitWindow so the
+  // sizing closure (which reads keyboardVisibleRef, not the not-yet-committed state)
+  // sees the new value this tick. fitWindow re-derives the height from the new chrome.
+  const toggleKeyboard = (): void => {
+    const next = !keyboardVisibleRef.current;
+    keyboardVisibleRef.current = next;
+    setKeyboardVisible(next);
+    fitWindow(browserMode);
+  };
   // Widen/narrow the window by PANE_W when a pane opens/closes (the rail's RAIL_W
   // is always present). HEIGHT-driven (keep the height, re-derive the phone width,
   // add the drawer) — distinct from the width-preserving fitWindow, which would
@@ -2708,7 +2764,7 @@ export function SimulatorWindow(): JSX.Element {
       const size = await win.innerSize();
       const h = Math.round(size.height / factor);
       const aspect = sizingAspect();
-      const chrome = simulatorChromeHeight(browserMode);
+      const chrome = simulatorChromeHeight(browserMode, keyboardVisibleRef.current);
       const width = Math.round((h - chrome) * aspect + BEZEL_PAD) + drawerExtraRef.current;
       if (width > 0) await win.setSize(new LogicalSize(width, h));
     });
@@ -2816,10 +2872,11 @@ export function SimulatorWindow(): JSX.Element {
                 const h = Math.round(size.height / factor);
                 const w = Math.round(size.width / factor);
                 const aspect = sizingAspect();
-                const chrome = simulatorChromeHeight(browserMode);
+                const chrome = simulatorChromeHeight(browserMode, keyboardVisibleRef.current);
                 // Window width = phone width (aspect-locked to the height) + the open
                 // drawer's fixed width, so a manual resize scales the PHONE and never
-                // eats the drawer.
+                // eats the drawer. The keyboard (when shown) is folded into `chrome`
+                // so the aspect-lock derives the phone width from the video-only height.
                 const needW =
                   Math.round((h - chrome) * aspect + BEZEL_PAD) + drawerExtraRef.current;
                 if (needW > 0 && Math.abs(w - needW) > 4) {
@@ -2908,6 +2965,21 @@ export function SimulatorWindow(): JSX.Element {
   // LiveSessionView already shows this overlay; the standalone Simulator (the
   // surface used daily) did not — this closes that gap with the same per-kind copy.
   const [pageError, setPageError] = useState<PageErrorInfo | null>(null);
+  // #72 — has the CURRENT navigation already reached a painted 'loaded' state? The box
+  // emits page_state{state:'errored'} for a navigation failure, but a LATE 'errored'
+  // frame that arrives AFTER the page already loaded+painted is a SUB-RESOURCE / late
+  // request failure (an analytics beacon, a lazy image, a fetch the page itself made) —
+  // NOT a top-level navigation failure. Slamming the full-screen "Page failed to load"
+  // overlay over a working page (and inviting a "Try again" that re-navigates = a full
+  // refresh) nukes a perfectly good page — the founder's exact report ("the page
+  // actually opened, maybe just failed a smaller request later, which causes a full
+  // refresh which is bad"). So we only honor an 'errored' frame as a REAL nav failure
+  // until the page reaches 'loaded'; once loaded, a later 'errored' for the same page is
+  // suppressed (the overlay is for a page that NEVER opened, not one that did). Reset to
+  // false on every navigate / tab switch (a fresh navigation can legitimately fail), and
+  // set true when a 'loaded' frame arrives. A ref (not state): the data-channel + poll
+  // callbacks read it synchronously and it must never itself trigger a re-render.
+  const pageReachedLoadedRef = useRef(false);
   // Browser-style page TABS (doc-150 item 4; locked A2↔A3 contract). The GUI owns the
   // tab model; each tab is a page the harness keeps a renderer for, and `activeTabId`
   // is the one currently published into the video. We seed exactly one tab on mount so
@@ -3066,6 +3138,9 @@ export function SimulatorWindow(): JSX.Element {
     setPageStalled(false);
     setPageLoading(false);
     setLoadProgress(null);
+    // #72 — a switched-to / freshly-opened tab is a new navigation; until IT reaches
+    // 'loaded', an 'errored' frame is a real top-level failure (so re-arm the gate).
+    pageReachedLoadedRef.current = false;
     clearLoadWatchdog();
   }, []);
   useEffect(() => {
@@ -3222,15 +3297,30 @@ export function SimulatorWindow(): JSX.Element {
         // applyStalledState stamps the frame time so the TTL sweep can self-clear a
         // stale latch (the store re-applies a one-time stall forever otherwise).
         if (isHarnessState) applyStalledState(msg.state === 'stalled');
+        // #72 — track when THIS navigation reaches a painted 'loaded' state. A later
+        // 'errored' after that is a sub-resource / late-request failure, not a
+        // top-level nav failure → it must NOT pop the full-screen overlay (which would
+        // nuke a working page + invite a "Try again" full refresh).
+        if (msg.state === 'loaded' && !isNewTabLoadError(msg.url)) {
+          pageReachedLoadedRef.current = true;
+        }
         // W616 — a page-NAVIGATION error: surface the per-kind error overlay (the
         // failure must not read as a blank successful load). Any other harness
         // state means the page is loading/loaded/responsive → clear it.
         if (isHarnessState) {
-          if (msg.state === 'errored' && !isNewTabLoadError(msg.url)) {
+          // #72 — only honor 'errored' as a REAL navigation failure BEFORE the page
+          // ever loaded. Once loaded, suppress it (late sub-resource error) — keep the
+          // working page on screen, no overlay, no refresh.
+          if (
+            msg.state === 'errored' &&
+            !isNewTabLoadError(msg.url) &&
+            !pageReachedLoadedRef.current
+          ) {
             setPageError(typeof msg.error === 'object' && msg.error !== null ? msg.error : {});
           } else {
             // A real error overlay, OR a blank new-tab whose branded page couldn't load
-            // through the proxy → clear/never show the hard error (graceful blank tab).
+            // through the proxy, OR a late post-load sub-resource error (#72) → clear/
+            // never show the hard error (keep the page that already opened).
             setPageError(null);
           }
         }
@@ -3309,12 +3399,20 @@ export function SimulatorWindow(): JSX.Element {
           // stamp: a real ongoing stall keeps re-stamping (badge stays lit), while a
           // one-time stall the store keeps re-reading self-clears after the TTL.
           applyStalledState(ps.state === 'stalled');
+          // #72 — same painted-'loaded' gate as the data-channel path: once this
+          // navigation has loaded, a later 'errored' poll is a sub-resource failure,
+          // not a top-level nav failure → don't pop the overlay over a working page.
+          if (ps.state === 'loaded' && !isNewTabLoadError(ps.url)) {
+            pageReachedLoadedRef.current = true;
+          }
           // W616 — surface/clear the page-navigation error from the poll too (same
-          // payload as the data-channel path); 'errored' shows the overlay, any
-          // other state clears it. A blank new-tab whose branded page couldn't load
-          // through the proxy is graceful (no overlay) — never a hard error.
+          // payload as the data-channel path); 'errored' shows the overlay ONLY before
+          // the page ever loaded (#72), any other state clears it. A blank new-tab
+          // whose branded page couldn't load through the proxy is graceful (no overlay).
           setPageError(
-            ps.state === 'errored' && !isNewTabLoadError(ps.url) ? (ps.error ?? {}) : null,
+            ps.state === 'errored' && !isNewTabLoadError(ps.url) && !pageReachedLoadedRef.current
+              ? (ps.error ?? {})
+              : null,
           );
           const loading = ps.state === 'loading';
           // Don't let a stale 'loaded' (the box hasn't seen our just-submitted
@@ -3484,7 +3582,14 @@ export function SimulatorWindow(): JSX.Element {
             setFiles((prev) => [h, ...prev]);
             setUploadNote(null);
           } else if (res.status === 'unavailable') {
-            setUploadNote('Upload pending — file control ships with the next device update.');
+            // Honest (#73 twin): the upload path is LIVE; 'unavailable' = the session
+            // isn't live on a node right now, not a future feature. `reason` carries
+            // the precise server cause when present.
+            setUploadNote(
+              res.reason !== undefined
+                ? `Can't upload right now: ${res.reason}`
+                : "Can't upload — the session isn't live on a device right now.",
+            );
           } else if (res.status === 'timeout') {
             setUploadNote("Upload timed out — the device didn't respond.");
           } else {
@@ -3494,8 +3599,9 @@ export function SimulatorWindow(): JSX.Element {
           }
         })
         .catch(() => {
-          // Gated 503 / 404 / network — file control isn't live on this build/box yet.
-          setUploadNote('Upload pending — file control ships with the next device update.');
+          // Gated 503 / 404 / network — a transient reachability gap, not a missing
+          // feature. Retry by picking the file again once the session is reachable.
+          setUploadNote("Couldn't upload — the device isn't reachable right now.");
         })
         .finally(() => {
           setUploading(false);
@@ -3540,16 +3646,20 @@ export function SimulatorWindow(): JSX.Element {
         })
         .catch((err: unknown) => {
           if (cancelled) return;
-          // An expired per-session control key (401/403) degrades calmly to a reopen
-          // hint instead of the misleading "ships with the next device update" pending
-          // copy (matching the cookies pane + refreshControl graceful degradation).
-          // Everything else (gated 503 / 404 / network) keeps the calm pending note.
+          // Honest current-state copy (#73): the download list/fetch path IS live
+          // (server route + harness wire shipped) — a failed poll is a transient
+          // reachability gap, NOT a missing future feature. The OLD copy promised a
+          // "next device update" that doesn't exist (mirrors the cookies-#58 stale
+          // pending bug). Branch on the real HTTP status so the note reflects reality:
+          //   401/403 → the per-session control key expired (24h TTL) → reopen.
+          //   else (gated 503 / 404 / network) → retrying on the next tick; the
+          //   download jail simply has no files until a page saves one.
           setDownloads(null);
           const status = err instanceof AgentSessionControlError ? err.status : 0;
           setDownloadsNote(
             status === 401 || status === 403
               ? 'Session control credential expired — reopen the session to refresh.'
-              : 'pending — downloads ship with the next device update',
+              : "couldn't reach the device for downloads — retrying",
           );
         });
     };
@@ -3580,7 +3690,14 @@ export function SimulatorWindow(): JSX.Element {
             setDownloadsNote('Could not save the file.');
           }
         } else if (res.status === 'unavailable') {
-          setDownloadsNote('Downloads pending — file control ships with the next device update.');
+          // Honest (#73): the download path is live; 'unavailable' = the session isn't
+          // live on a node right now (ended / node offline / control plane off), NOT a
+          // future feature. `reason` carries the precise server cause when present.
+          setDownloadsNote(
+            res.reason !== undefined
+              ? `Can't fetch the file right now: ${res.reason}`
+              : "Can't fetch the file — the session isn't live on a device right now.",
+          );
         } else if (res.status === 'timeout') {
           setDownloadsNote("Download timed out — the device didn't respond.");
         } else {
@@ -3590,7 +3707,7 @@ export function SimulatorWindow(): JSX.Element {
         }
       })
       .catch(() => {
-        setDownloadsNote('Downloads pending — file control ships with the next device update.');
+        setDownloadsNote("Couldn't fetch the file — the device isn't reachable right now.");
       })
       .finally(() => {
         setDownloadingName(null);
@@ -4354,6 +4471,10 @@ export function SimulatorWindow(): JSX.Element {
     // W616 — a fresh navigate clears any stale page-error overlay; the box
     // re-asserts 'errored' if THIS navigation also fails.
     setPageError(null);
+    // #72 — a NEW top-level navigation re-arms the error gate: until this navigation
+    // reaches 'loaded', an 'errored' frame is a real failure worth the overlay (after
+    // it loads, a later 'errored' is a sub-resource failure and stays suppressed).
+    pageReachedLoadedRef.current = false;
     lastNavAtRef.current = Date.now();
     clearLoadWatchdog();
     loadWatchdogRef.current = window.setTimeout(() => {
@@ -4374,6 +4495,12 @@ export function SimulatorWindow(): JSX.Element {
   // daemon handler lands). No-op until the room is connected.
   const onHistory = (direction: 'back' | 'forward'): void => {
     if (room === null || sessionId === '') return;
+    // #72 — back/forward is a fresh top-level navigation: re-arm the error gate (and
+    // grace window) so an 'errored' on the navigated-to page can surface, while a late
+    // sub-resource error after it loads stays suppressed. Clear any stale overlay too.
+    setPageError(null);
+    pageReachedLoadedRef.current = false;
+    lastNavAtRef.current = Date.now();
     void navigateAgentSessionHistory(sessionId, direction, controlAuth).catch(() => {
       setNotice(`Could not go ${direction}`);
       window.setTimeout(() => setNotice(null), 3000);
@@ -4488,7 +4615,7 @@ export function SimulatorWindow(): JSX.Element {
             onToggleRecord={toggleRecord}
             running={sessionId !== ''}
             keyboardVisible={keyboardVisible}
-            onToggleKeyboard={() => setKeyboardVisible((v) => !v)}
+            onToggleKeyboard={toggleKeyboard}
           />
           {/* Browser-style page TAB strip (doc-150 item 4) — full-width row between
               the toolbar and the address bar, gated on browserMode exactly like the
@@ -4735,7 +4862,12 @@ export function SimulatorWindow(): JSX.Element {
                     <IOSKeyboard
                       room={room}
                       width={inputLogical.width}
-                      onDismiss={() => setKeyboardVisible(false)}
+                      onDismiss={() => {
+                        if (!keyboardVisibleRef.current) return;
+                        keyboardVisibleRef.current = false;
+                        setKeyboardVisible(false);
+                        fitWindow(browserMode);
+                      }}
                     />
                   </div>
                 )}

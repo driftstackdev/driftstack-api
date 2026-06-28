@@ -293,7 +293,8 @@ export async function getAgentSessionCookies(
 /** Discriminated result of POST /v1/agent-sessions/:id/cookies/set (cookie-import —
  *  the write-twin of getAgentSessionCookies). `ok` → the jar was written; every
  *  other status is an inert/failure state the Import button surfaces calmly
- *  ('unavailable' → "ships with the next device update"). */
+ *  ('unavailable' → "not available on this session right now", never a device-update
+ *  promise — #73). */
 export interface SetCookiesResult {
   status: 'ok' | 'unavailable' | 'timeout' | 'error';
   reason?: string;
@@ -324,7 +325,7 @@ export async function setAgentSessionCookies(
 /** Discriminated result of POST /v1/agent-sessions/:id/history (sim back/forward —
  *  the sibling of setAgentSessionCookies). `ok` → the step was applied; every other
  *  status is an inert/failure state the back/forward buttons surface calmly
- *  ('unavailable' → "ships with the next device update"). A3 W2870. */
+ *  ('unavailable' → "not available on this session right now"). A3 W2870. */
 export interface NavigateHistoryResult {
   status: 'ok' | 'unavailable' | 'timeout' | 'error';
   reason?: string;
