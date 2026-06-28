@@ -2679,26 +2679,17 @@ export function SimulatorWindow(): JSX.Element {
   // hit the keyboard. Decided off the device's NATURAL logical size (the actual-size
   // target) so the render + the sizing closures agree deterministically and the
   // decision does not oscillate with the operator's drag width.
-  const keyboardWouldOverlay = (browserModeOn: boolean): boolean => {
-    const avail = typeof window !== 'undefined' ? (window.screen?.availHeight ?? 0) : 0;
-    if (avail <= 0) return false; // unknown screen → keep the docked-below behavior
-    const aspect = sizingAspect();
-    const logicalW = deviceLogicalRef.current.width || DEVICE_LOGICAL_WIDTH;
-    const naturalContentW = landscapeRef.current
-      ? Math.round(logicalW / deviceAspectRef.current)
-      : logicalW;
-    const idealDockedH = simulatorWindowHeight(
-      naturalContentW + BEZEL_PAD,
-      aspect,
-      browserModeOn,
-      true,
-    );
-    return idealDockedH > avail - 24;
-  };
-  // Derived for the render (overlay vs docked-sibling), recomputed when the keyboard
-  // toggles or the live aspect / orientation / browser-mode change. A mirror ref lets
-  // the window-sizing closures read it synchronously without re-subscribing.
-  const keyboardOverlay = keyboardVisible && keyboardWouldOverlay(browserMode);
+  // iPhone-faithful: the on-screen keyboard ALWAYS overlays the bottom of the video
+  // (position:absolute) and NEVER resizes the phone window. We previously docked the
+  // keyboard below the video and grew/clamped the window when the screen had headroom,
+  // but that made the phone visibly resize on every toggle (founder: "toggling the
+  // keyboard resizes the phone smaller instead of being on the screen"). A real iPhone
+  // slides the keyboard up OVER the page; the window/device never changes size. So
+  // keyboardOverlay == keyboardVisible, and KEYBOARD_H is never folded into the window
+  // chrome (keyboardChromeOn stays false). pointerToViewport reads
+  // video.getBoundingClientRect (unchanged by an overlay) so taps stay aligned; a tap
+  // under the keyboard correctly hits the keyboard.
+  const keyboardOverlay = keyboardVisible;
   const keyboardOverlayRef = useRef(keyboardOverlay);
   keyboardOverlayRef.current = keyboardOverlay;
   // The keyboard contributes KEYBOARD_H to `chrome` ONLY when it docks BELOW the video
@@ -2827,7 +2818,7 @@ export function SimulatorWindow(): JSX.Element {
   const toggleKeyboard = (): void => {
     const next = !keyboardVisibleRef.current;
     keyboardVisibleRef.current = next;
-    keyboardOverlayRef.current = next && keyboardWouldOverlay(browserMode);
+    keyboardOverlayRef.current = next; // always overlay — never resize the window
     setKeyboardVisible(next);
     fitWindow(browserMode);
   };
