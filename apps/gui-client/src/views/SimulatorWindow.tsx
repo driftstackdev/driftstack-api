@@ -3006,6 +3006,15 @@ export function SimulatorWindow(): JSX.Element {
   // stamp + state stay consistent (data channel ~3043, poll ~3127).
   const STALLED_BADGE_TTL_MS = 12_000;
   const lastStalledAtRef = useRef(0);
+  // Wall-clock of the most-recent DATA-CHANNEL page-state frame. The data channel is
+  // the AUTHORITATIVE live source (the box pushes it the instant the renderer state
+  // changes); the ~2s control-plane poll reads a store with NO TTL, so right after the
+  // box recovers (data channel pushes 'loaded' → badge cleared) a poll can still read
+  // the STALE 'stalled' record and re-raise the "Reconnecting — page unresponsive"
+  // badge — which then stays lit/flickers for up to STALLED_BADGE_TTL_MS because every
+  // poll re-stamps the TTL. Recording the live frame time lets the poll defer to a
+  // fresher data-channel state instead of re-raising over a page that already recovered.
+  const lastDataChannelStateAtRef = useRef(0);
   const applyStalledState = useCallback((isStalled: boolean): void => {
     if (isStalled) lastStalledAtRef.current = Date.now();
     else lastStalledAtRef.current = 0;
@@ -3108,6 +3117,13 @@ export function SimulatorWindow(): JSX.Element {
   useEffect(() => {
     activeTabIdRef.current = activeTabId;
   }, [activeTabId]);
+  // Live mirror of the tab list for the data-channel callbacks (onData closes over a
+  // stale `tabs`). Used by the activateTabResult revert path to look up the
+  // previously-active tab's url/scrollY so the box can be switched BACK to it.
+  const tabsRef = useRef(tabs);
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
   // Resolve a tab's switch: clear the "switching…" affordance if THIS tab is the one
   // being switched to, and cancel any pending re-issue timer for it. Called when the
   // box acks the switch, reports a page for the tab, or a newer switch supersedes it.
@@ -3279,6 +3295,23 @@ export function SimulatorWindow(): JSX.Element {
             // (a sensible state — never leave it half-switched) and show a brief,
             // NON-BLOCKING notice. No alert(); the toast auto-dismisses.
             setActiveTabId(pending.prevTabId);
+            // The box switched (or tried to) to the REJECTED tab and is now publishing
+            // it — reverting only the GUI's activeTabId leaves the video on the failed
+            // page while the strip + address bar show the previous tab. Re-activate the
+            // previous tab on the box too so the published page matches the reverted UI
+            // (correlated activateTab, like a normal switch). Look the prev tab up from
+            // the live ref (onData closes over a stale `tabs`); guard on it still
+            // existing + a connected room.
+            const prevTab = tabsRef.current.find((t) => t.id === pending.prevTabId);
+            if (prevTab !== undefined && room !== null) {
+              const activateUrl = isBlankTabUrl(prevTab.url) ? NEW_TAB_URL : prevTab.url;
+              sendActivateAttemptRef.current({
+                tabId: prevTab.id,
+                prevTabId: pending.tabId,
+                url: activateUrl,
+                scrollY: prevTab.scrollY,
+              });
+            }
             setNotice('Could not switch tab');
             window.setTimeout(() => setNotice(null), 3000);
           } else if (
@@ -3375,7 +3408,12 @@ export function SimulatorWindow(): JSX.Element {
         // other harness state clears it (the page is responsive again). #4 —
         // applyStalledState stamps the frame time so the TTL sweep can self-clear a
         // stale latch (the store re-applies a one-time stall forever otherwise).
-        if (isHarnessState) applyStalledState(msg.state === 'stalled');
+        if (isHarnessState) {
+          // Stamp the live-source time FIRST so a near-simultaneous poll defers to this
+          // authoritative frame (the poll's un-TTL'd store can lag behind a recovery).
+          lastDataChannelStateAtRef.current = Date.now();
+          applyStalledState(msg.state === 'stalled');
+        }
         // #72 — track when THIS navigation reaches a painted 'loaded' state. A later
         // 'errored' after that is a sub-resource / late-request failure, not a
         // top-level nav failure → it must NOT pop the full-screen overlay (which would
@@ -3439,7 +3477,14 @@ export function SimulatorWindow(): JSX.Element {
   // (including the first page it opens + redirects). Best-effort + guarded; null
   // until the box reports. BrowserBar won't clobber what the operator is typing.
   useEffect(() => {
-    if (sessionId === '' || room === null || !browserMode) return;
+    // Stop polling once the session has terminally ended (one-way latch): otherwise the
+    // poll keeps calling writeTabPageState / setPageLoading / applyStalledState /
+    // setPageError against the dead session, so the loading bar can keep trickling and
+    // the stalled badge keep re-stamping UNDER the "Session ended" overlay (those render
+    // as window chrome OUTSIDE the overlaid video panel). When sessionEnded flips the
+    // effect re-runs, returns early, and the cleanup tears the interval down — freezing
+    // the chrome in its last live state.
+    if (sessionId === '' || room === null || !browserMode || sessionEnded !== null) return;
     let cancelled = false;
     const tick = (): void => {
       void getAgentSessionPageState(sessionId, controlAuth)
@@ -3477,7 +3522,17 @@ export function SimulatorWindow(): JSX.Element {
           // #4 — through applyStalledState so each 'stalled' poll refreshes the TTL
           // stamp: a real ongoing stall keeps re-stamping (badge stays lit), while a
           // one-time stall the store keeps re-reading self-clears after the TTL.
-          applyStalledState(ps.state === 'stalled');
+          //
+          // BUT defer to a fresher DATA-CHANNEL frame: the poll reads an un-TTL'd store
+          // that lags a recovery, so right after the box recovers (data channel pushed a
+          // non-stalled state, badge cleared) a stale 'stalled' poll would re-raise the
+          // badge — and then keep it lit for the full TTL (each poll re-stamps it). When
+          // the live data channel reported within the grace window, skip the poll's
+          // stale stall flip entirely; a genuinely-still-stalled page keeps pushing
+          // 'stalled' over the data channel, so the badge stays lit for a REAL freeze.
+          const liveFrameFresh =
+            Date.now() - lastDataChannelStateAtRef.current < PAGE_STATE_GRACE_MS;
+          if (!liveFrameFresh) applyStalledState(ps.state === 'stalled');
           // #72 — same painted-'loaded' gate as the data-channel path: once this
           // navigation has loaded, a later 'errored' poll is a sub-resource failure,
           // not a top-level nav failure → don't pop the overlay over a working page.
@@ -3519,7 +3574,15 @@ export function SimulatorWindow(): JSX.Element {
       cancelled = true;
       window.clearInterval(handle);
     };
-  }, [sessionId, controlAuth, room, browserMode, writeTabPageState, applyStalledState]);
+  }, [
+    sessionId,
+    controlAuth,
+    room,
+    browserMode,
+    writeTabPageState,
+    applyStalledState,
+    sessionEnded,
+  ]);
 
   // P1a — TERMINAL session-end poll. The freeze cluster's auto-reconnect/resubscribe/
   // rebuild machinery treated a session that ACTUALLY ENDED (the worker browser
@@ -3534,7 +3597,10 @@ export function SimulatorWindow(): JSX.Element {
   // SESSION lifecycle). Runs whenever there's a session id; best-effort + guarded — a
   // transient control-API error is non-fatal (a transport blip must NOT read as ended).
   useEffect(() => {
-    if (sessionId === '') return;
+    // Once the terminal end has latched (one-way) there's nothing left to detect — stop
+    // GET-ing the dead session every 5s forever. When sessionEnded flips the effect
+    // re-runs, returns early, and the cleanup clears the interval.
+    if (sessionId === '' || sessionEnded !== null) return;
     let cancelled = false;
     const reqSessionId = sessionId;
     const tick = (): void => {
@@ -3547,8 +3613,21 @@ export function SimulatorWindow(): JSX.Element {
           // poll un-end a closed session). A fresh session swap resets sessionEnded.
           if (s.terminal) setSessionEnded({ reason: s.closedReason });
         })
-        .catch(() => {
-          /* best-effort poll — a transient control-API error is NOT a terminal end */
+        .catch((err: unknown) => {
+          // Drop a result that resolved after an in-place session swap (mirrors .then).
+          if (cancelled || reqSessionId !== sessionIdRef.current) return;
+          // An expired/invalid per-session gui_control_key (24h TTL, standalone
+          // Simulator app) 401/403s EVERY poll, so this terminal session-end poll can
+          // never read status='closed' again — `sessionEnded` silently stops latching,
+          // and a worker browser that then closes leaves the reconnecting overlay lit
+          // forever ("session shows running after the browser closed"). Surface the
+          // degraded state via the always-visible controlUnreachable badge (controlError
+          // only renders when mode===null, i.e. invisible in the common browser-mode
+          // case) so the operator knows live-status detection is degraded and to reopen
+          // the session. Transient/network/5xx errors stay silent (retry next tick) — a
+          // transport blip must NOT read as ended.
+          const status = err instanceof AgentSessionControlError ? err.status : 0;
+          if (status === 401 || status === 403) setControlUnreachable(true);
         });
     };
     tick();
@@ -3557,7 +3636,7 @@ export function SimulatorWindow(): JSX.Element {
       cancelled = true;
       window.clearInterval(handle);
     };
-  }, [sessionId, controlAuth]);
+  }, [sessionId, controlAuth, sessionEnded]);
 
   // Founder #48 — live cookie-jar view. Polls GET /v1/agent-sessions/:id/cookies
   // ONLY while the session-info / diagnostics panel is open (no background load on
@@ -4363,6 +4442,20 @@ export function SimulatorWindow(): JSX.Element {
       // Whether the close moves focus to a neighbour (we closed the ACTIVE tab). Side
       // effects (grace-arm + chrome reset) run OUTSIDE the setTabs reducer to keep it pure.
       const closingActive = id === activeTabId;
+      // Compute the neighbour we're focusing (deterministic from the current `tabs`) so we
+      // can ask the box to ACTIVATE it — tabListUpdate is fire-and-forget state-only and
+      // does NOT switch the published page (only activateTab does, per the A2↔A3 contract,
+      // agent-tab-ops.ts). Without an activateTab the strip + address bar flip to the
+      // neighbour but the BOX keeps publishing the just-closed tab's page → the founder's
+      // "closed a tab and the content didn't change."
+      let focusNeighbor: SimTab | undefined;
+      if (closingActive) {
+        const idx = tabs.findIndex((t) => t.id === id);
+        const remaining = tabs.filter((t) => t.id !== id);
+        if (idx !== -1 && remaining.length > 0) {
+          focusNeighbor = remaining[Math.max(0, idx - 1)] ?? remaining[0];
+        }
+      }
       if (closingActive) {
         // Arm the switch grace window so the ~2s poll doesn't clobber the newly-active
         // neighbour's url with the just-closed tab's stale prior-page url (the box is
@@ -4391,8 +4484,28 @@ export function SimulatorWindow(): JSX.Element {
         if (nextActive !== activeTabId) setActiveTabId(nextActive);
         return next;
       });
+      // Tell the box to actually switch the published page to the focused neighbour
+      // (correlated activateTab, re-issued on a missed ack like a normal switch). Done
+      // OUTSIDE the reducer (keep it pure); guarded on a real neighbour + a connected
+      // room. A blank/seed neighbour stores url='' which the box's navigate allowlist
+      // rejects → send the branded new-tab url instead (mirrors onActivateTab).
+      if (closingActive && focusNeighbor !== undefined && room !== null) {
+        const activateUrl = isBlankTabUrl(focusNeighbor.url) ? NEW_TAB_URL : focusNeighbor.url;
+        setSwitchingTabId(focusNeighbor.id);
+        // Via the ref (sendActivateAttempt is declared below; the ref is stable + the
+        // handler runs post-render, so .current is always the latest).
+        sendActivateAttemptRef.current({
+          tabId: focusNeighbor.id,
+          prevTabId: id,
+          url: activateUrl,
+          scrollY: focusNeighbor.scrollY,
+        });
+        window.setTimeout(() => {
+          setSwitchingTabId((s) => (s === focusNeighbor?.id ? null : s));
+        }, SWITCH_AFFORDANCE_TIMEOUT_MS);
+      }
     },
-    [activeTabId, emitTabList, resetPageChromeForSwitch],
+    [activeTabId, emitTabList, resetPageChromeForSwitch, room, tabs],
   );
   // Send a single activateTab attempt for a switch + arm the ack-miss re-issue timer
   // (founder 2026-06-25 softer "could not switch tab" handling). On a missed ack the

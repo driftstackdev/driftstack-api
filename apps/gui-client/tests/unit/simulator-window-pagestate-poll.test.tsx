@@ -201,3 +201,58 @@ describe('SimulatorWindow — page-state poll error grace gate (Finding #7)', ()
     expect(overlay(container)).toBeNull();
   });
 });
+
+// The stalled badge has the same dual-source race as the error overlay: the data
+// channel is the live source, the ~2s poll reads an un-TTL'd store. After the box
+// RECOVERS (data channel pushes a non-stalled state → badge cleared) a poll can still
+// read the STALE 'stalled' record and re-raise the "Reconnecting — page unresponsive"
+// badge — which then stays lit for the full TTL because every poll re-stamps it. The
+// fix defers the poll's stall flip to a fresher data-channel frame.
+describe('SimulatorWindow — page-stalled badge poll-re-raise gate', () => {
+  const stalledBadge = (c: HTMLElement): Element | null =>
+    c.querySelector('[data-component="page-stalled-badge"]');
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    fakeRoom.on.mockClear();
+    pageStateMock.mockReset();
+    pageStateMock.mockResolvedValue(null);
+  });
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
+
+  it('a stale "stalled" poll does NOT re-raise the badge right after the live channel cleared it', async () => {
+    const { container } = renderSim();
+    await flush();
+    expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
+
+    // The renderer hung, then recovered — both reported over the live data channel.
+    act(() => {
+      fireDataFrame({ state: 'stalled', url: 'https://app.example' });
+    });
+    expect(stalledBadge(container)).not.toBeNull();
+    act(() => {
+      fireDataFrame({ state: 'loaded', url: 'https://app.example' });
+    });
+    expect(stalledBadge(container)).toBeNull();
+
+    // The un-TTL'd store still holds the prior 'stalled'. A poll tick lands within the
+    // grace window of the fresh data-channel 'loaded' → it must NOT re-raise the badge.
+    pageStateMock.mockResolvedValue({ state: 'stalled', url: 'https://app.example' });
+    await advance(2000);
+    expect(stalledBadge(container)).toBeNull();
+  });
+
+  it('a genuine ongoing stall STILL raises from the poll when no fresher live frame exists', async () => {
+    const { container } = renderSim();
+    await flush();
+
+    // No data-channel frame at all — the poll is the only source. A real 'stalled'
+    // store read must light the badge (poll-as-fallback is preserved).
+    pageStateMock.mockResolvedValue({ state: 'stalled', url: 'https://app.example' });
+    await advance(2000);
+    expect(stalledBadge(container)).not.toBeNull();
+  });
+});

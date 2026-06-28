@@ -79,10 +79,18 @@ function fireWindow(type: string, x: number, y: number, ts: number): void {
   window.dispatchEvent(ev);
 }
 
-/** Dispatch a wheel event on the video element. */
+/** Dispatch a wheel event on the video element (cursor centred by default). */
 function fireWheel(el: HTMLElement, deltaX: number, deltaY: number): void {
   el.dispatchEvent(
     new WheelEvent('wheel', { clientX: 200, clientY: 400, deltaX, deltaY, bubbles: true }),
+  );
+}
+
+/** Dispatch a wheel event with the cursor at an explicit clientX (to exercise the
+ *  near-side-edge re-centre regression). */
+function fireWheelAt(el: HTMLElement, clientX: number, deltaX: number, deltaY: number): void {
+  el.dispatchEvent(
+    new WheelEvent('wheel', { clientX, clientY: 400, deltaX, deltaY, bubbles: true }),
   );
 }
 
@@ -432,6 +440,31 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('NEAR-SIDE-EDGE cursor: a VERTICAL scroll stays ONE continuous gesture (the off-axis X is not edge-tested)', () => {
+    const video = mountCapture();
+    // Cursor sits 10px from the LEFT edge of the 402px-wide phone (< margin=48). A
+    // vertical scroll locks dirY, so the finger X is constant at ~10 — within the
+    // side margin. Before the fix the re-centre condition tested the constant X
+    // against the edge every frame, fragmenting one smooth scroll into a flood of
+    // touchEnd+touchStart legs (the W2768 oscillation, re-triggered by a near-edge
+    // cursor). Each leg is short, so multiple legs would still net a downward scroll
+    // and slip past the monotonic-y assertions — assert the gesture is NOT fragmented.
+    fireWheelAt(video, 10, 0, 80);
+    flushRaf();
+    fireWheelAt(video, 10, 0, 80);
+    flushRaf();
+    fireWheelAt(video, 10, 0, 80);
+    flushRaf();
+    // ONE gesture: a single touchStart, NO touchEnd until the scroll truly ends.
+    expect(eventsOfType('touchStart').length).toBe(1);
+    expect(eventsOfType('touchEnd').length).toBe(0);
+    // Still a clean scroll-down (finger up).
+    const moves = eventsOfType('touchMove') as (InputEvent & { y: number })[];
+    expect(moves.length).toBeGreaterThanOrEqual(1);
+    const ts0 = eventsOfType('touchStart')[0] as InputEvent & { y: number };
+    expect(moves.at(-1)!.y).toBeLessThan(ts0.y);
   });
 
   it('FAST FLICK: a long scroll re-centres at the edge but stays one-directional (every leg scrolls down, no bounce)', () => {

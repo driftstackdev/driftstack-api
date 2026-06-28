@@ -136,6 +136,8 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
 // P1a — getAgentSession is the lifecycle/liveness source. Mutable so a test can flip
 // it to a TERMINAL status (the worker browser closed / session destroyed) and assert
 // the freeze recovery machinery short-circuits + the terminal overlay shows.
+// `error` lets a test force getAgentSession to REJECT (e.g. a 401/403 from an
+// expired gui_control_key) instead of resolving — exercising finding #4.
 const sessionState = {
   current: {
     mode: 'manual' as const,
@@ -144,20 +146,44 @@ const sessionState = {
     status: 'active' as string | null,
     closedReason: null as string | null,
   },
+  error: null as unknown,
 };
+// A minimal AgentSessionControlError twin carrying `status` (the real one does too) so
+// the catch can branch on 401/403.
+class FakeControlError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'AgentSessionControlError';
+  }
+}
+// Spies (not inline arrows) so the poll-stop tests can count invocations.
+const getAgentSessionSpy = vi.fn(() => {
+  // Local const so TS narrows the rejection reason to Error after the null check
+  // (a mutable object property does not narrow inside this closure).
+  const err = sessionState.error;
+  // err is an Error (AgentSessionControlError) when non-null; the rule's narrowing
+  // check is over-strict for a mutable property read into a local, so scope-disable.
+  // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+  if (err !== null) return Promise.reject(err);
+  return Promise.resolve({ ...sessionState.current });
+});
+const getAgentSessionPageStateSpy = vi.fn(() => Promise.resolve(null));
 vi.mock('../../src/lib/agent-session-control', () => ({
   uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
   listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
   fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),
-  getAgentSession: () => Promise.resolve({ ...sessionState.current }),
-  getAgentSessionPageState: () => Promise.resolve(null),
+  getAgentSession: () => getAgentSessionSpy(),
+  getAgentSessionPageState: () => getAgentSessionPageStateSpy(),
   getAgentSessionCookies: () => Promise.resolve({ status: 'unavailable', cookies: null }),
   setSessionMode: vi.fn(),
   takeoverSession: vi.fn(),
   handbackSession: vi.fn(),
   sendAgentMessage: vi.fn(),
   endAgentSession: vi.fn(),
-  AgentSessionControlError: class extends Error {},
+  AgentSessionControlError: FakeControlError,
 }));
 
 const { SimulatorWindow } = await import('../../src/views/SimulatorWindow');
@@ -199,6 +225,9 @@ describe('SimulatorWindow — client video-freeze detector', () => {
       status: 'active',
       closedReason: null,
     };
+    sessionState.error = null;
+    getAgentSessionSpy.mockClear();
+    getAgentSessionPageStateSpy.mockClear();
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -394,5 +423,146 @@ describe('SimulatorWindow — client video-freeze detector', () => {
     // A sustained freeze still escalates resubscribe→rebuild (existing behavior intact).
     advance(20);
     expect(panelCbs.recoverActions.map((r) => r.mode)).toEqual(['resubscribe', 'rebuild']);
+  });
+});
+
+// Finding #4 — an expired per-session gui_control_key (24h TTL) 401/403s every
+// terminal session-end poll, silently disabling ended-session detection. Surface it via
+// the always-visible controlUnreachable badge so the operator knows live-status
+// detection is degraded and to reopen the session.
+describe('SimulatorWindow — gui_control_key expiry surfaces controlUnreachable', () => {
+  beforeEach(() => {
+    panelCbs.sessionEnded = null;
+    sessionState.current = {
+      mode: 'manual',
+      pairKind: null,
+      terminal: false,
+      status: 'active',
+      closedReason: null,
+    };
+    sessionState.error = null;
+    getAgentSessionSpy.mockClear();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const badge = (c: HTMLElement): Element | null =>
+    c.querySelector('[data-component="control-unreachable-badge"]');
+
+  it('raises the controlUnreachable badge when the session-end poll gets a 401', async () => {
+    vi.useFakeTimers();
+    const { container } = renderSim();
+    expect(badge(container)).toBeNull();
+    // The per-session key ages out → every getAgentSession 401s.
+    sessionState.error = new FakeControlError('expired', 401);
+    await act(async () => {
+      vi.advanceTimersByTime(5_100); // the ~5s session-end poll fires
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(badge(container)).not.toBeNull();
+  });
+
+  it('raises the controlUnreachable badge on a 403 too', async () => {
+    vi.useFakeTimers();
+    const { container } = renderSim();
+    sessionState.error = new FakeControlError('forbidden', 403);
+    await act(async () => {
+      vi.advanceTimersByTime(5_100);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(badge(container)).not.toBeNull();
+  });
+
+  it('does NOT raise the badge for a transient/network error (status 0 → silent retry)', async () => {
+    vi.useFakeTimers();
+    const { container } = renderSim();
+    // A bare Error (no status) models a network blip — must NOT read as a degraded key.
+    sessionState.error = new Error('network');
+    await act(async () => {
+      vi.advanceTimersByTime(5_100);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(badge(container)).toBeNull();
+  });
+});
+
+// Finding #5 — once the session terminally ends (one-way latch), the background polls
+// must stop hammering / mutating UI on the dead session. Both effects gain a
+// `sessionEnded !== null` early-return + a sessionEnded dep so they tear their interval
+// down the moment the terminal end latches.
+describe('SimulatorWindow — polls stop after the session terminally ends', () => {
+  beforeEach(() => {
+    panelCbs.sessionEnded = null;
+    sessionState.current = {
+      mode: 'manual',
+      pairKind: null,
+      terminal: false,
+      status: 'active',
+      closedReason: null,
+    };
+    sessionState.error = null;
+    getAgentSessionSpy.mockClear();
+    getAgentSessionPageStateSpy.mockClear();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('stops the session-end poll AND the page-state poll once the session ends', async () => {
+    vi.useFakeTimers();
+    renderSim();
+    // The session ends — the next ~5s poll latches it.
+    sessionState.current = {
+      mode: 'manual',
+      pairKind: null,
+      terminal: true,
+      status: 'closed',
+      closedReason: 'idle_timeout',
+    };
+    await act(async () => {
+      vi.advanceTimersByTime(5_100);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(panelCbs.sessionEnded).toEqual({ reason: 'idle_timeout' });
+
+    // Both polls must now be quiescent: snapshot the call counts, advance well past
+    // several of BOTH intervals (2s page-state, 5s session-end), and assert no growth.
+    const endCallsAfterLatch = getAgentSessionSpy.mock.calls.length;
+    const pageCallsAfterLatch = getAgentSessionPageStateSpy.mock.calls.length;
+    await act(async () => {
+      vi.advanceTimersByTime(20_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(getAgentSessionSpy.mock.calls.length).toBe(endCallsAfterLatch);
+    expect(getAgentSessionPageStateSpy.mock.calls.length).toBe(pageCallsAfterLatch);
+  });
+
+  it('keeps BOTH polls running while the session is still live (the gate is precise)', async () => {
+    vi.useFakeTimers();
+    renderSim();
+    // Session stays live (terminal=false) — let the polls run for a while.
+    await act(async () => {
+      vi.advanceTimersByTime(11_000); // ≥2 session-end ticks + ≥5 page-state ticks
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const endCalls = getAgentSessionSpy.mock.calls.length;
+    const pageCalls = getAgentSessionPageStateSpy.mock.calls.length;
+    expect(endCalls).toBeGreaterThan(1);
+    expect(pageCalls).toBeGreaterThan(1);
+    // Keep advancing — a live session must keep polling.
+    await act(async () => {
+      vi.advanceTimersByTime(11_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(getAgentSessionSpy.mock.calls.length).toBeGreaterThan(endCalls);
+    expect(getAgentSessionPageStateSpy.mock.calls.length).toBeGreaterThan(pageCalls);
   });
 });

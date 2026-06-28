@@ -510,6 +510,13 @@ export function AgentSessionPanel({
     }
     // 'resubscribe' — off then back on after a short beat so the SFU registers the
     // unsubscribe before the re-subscribe (a same-tick toggle can collapse to a no-op).
+    // Hold the publication in the CLOSURE, not via videoPublicationRef, for the
+    // re-subscribe leg: `setSubscribed(false)` makes livekit-client fire
+    // RoomEvent.TrackUnsubscribed, whose handler NULLS videoPublicationRef.current —
+    // so reading the ref 250ms later would find null and the re-subscribe would silently
+    // no-op, leaving the stream unsubscribed (the freeze never clears, recovery is dead).
+    // The captured `pub` is the same RemoteTrackPublication object livekit re-uses across
+    // an unsub→resub on the same track, so setSubscribed(true) re-establishes it.
     const pub = videoPublicationRef.current;
     if (pub?.setSubscribed === undefined) return;
     try {
@@ -519,7 +526,7 @@ export function AgentSessionPanel({
     }
     const resubHandle = setTimeout(() => {
       try {
-        videoPublicationRef.current?.setSubscribed?.(true);
+        pub.setSubscribed?.(true);
       } catch {
         /* publication detached mid-toggle — ignore */
       }

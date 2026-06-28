@@ -825,8 +825,17 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // True-edge re-centre, CARRYING the locked direction (never a fresh-sign reset). The
       // fork resets lastTouchPoint on touchStart, so re-anchoring does NOT jump the page;
       // the next move continues in the identical direction. Re-base accum/travel to 0 at
-      // the new centre and apply this frame's `advance` fresh from there.
-      if (ny < margin || ny > vh - margin || nx < margin || nx > vw - margin) {
+      // the new centre and apply this frame's `advance` fresh from there. Check ONLY the
+      // locked axis (wheelDirX/Y): the off-axis coord is constant (anchored at the start
+      // x = wheelCursorX for a vertical scroll), so testing it against the edge fires a
+      // SPURIOUS re-centre on EVERY frame whenever the cursor sits within `margin` of a
+      // side edge of the narrow (~402px) phone — fragmenting one smooth vertical scroll
+      // into a flood of touchEnd+touchStart legs (the very "9 re-anchored oscillating
+      // gestures" the W2768 ratchet exists to prevent, re-triggered by a near-edge cursor).
+      const hitEdge =
+        (wheelDirY !== 0 && (ny < margin || ny > vh - margin)) ||
+        (wheelDirX !== 0 && (nx < margin || nx > vw - margin));
+      if (hitEdge) {
         const keepDirX = wheelDirX;
         const keepDirY = wheelDirY;
         // liftWheelFinger (NOT endWheelDrag): KEEP wheelPendingDx/Dy so a flick whose

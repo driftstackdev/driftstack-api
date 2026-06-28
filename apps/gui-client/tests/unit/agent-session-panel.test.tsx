@@ -311,7 +311,13 @@ describe('AgentSessionPanel overlay UX', () => {
         await Promise.resolve();
       });
       // A video track arrives WITH its publication (the 2nd TrackSubscribed arg).
-      const setSubscribed = vi.fn();
+      // Model the REAL livekit-client side-effect: setSubscribed(false) unsubscribes
+      // the track, which fires RoomEvent.TrackUnsubscribed (the panel's handler then
+      // nulls its internal publication ref). The re-subscribe leg must NOT depend on
+      // that nulled ref — it must drive setSubscribed(true) on the SAME publication.
+      const setSubscribed = vi.fn((sub: boolean) => {
+        if (sub === false) handlers['trackUnsubscribed']?.({ kind: 'video' });
+      });
       act(() => {
         handlers['trackSubscribed']?.({ kind: 'video', attach: vi.fn() }, { setSubscribed });
       });
@@ -327,6 +333,7 @@ describe('AgentSessionPanel overlay UX', () => {
       act(() => {
         vi.advanceTimersByTime(300);
       });
+      // The re-subscribe must still land even though the unsubscribe nulled the ref.
       expect(setSubscribed).toHaveBeenCalledWith(true);
     } finally {
       vi.useRealTimers();

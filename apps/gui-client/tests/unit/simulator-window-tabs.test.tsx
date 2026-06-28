@@ -243,6 +243,33 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(lastTabListCall().activeTabId).not.toBe(tab2Id);
   });
 
+  it('closing the ACTIVE tab sends activateTab for the neighbour so the box switches the published page', () => {
+    const { container } = renderSim();
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+    const tab1Id = (lastTabListCall().tabs[0] as { id: string }).id;
+    sendActivateTab.mockClear();
+    // Close the active (second) tab — focus moves to tab1.
+    const closeBtn = within(tabEls(container)[1]).getByLabelText('Close tab');
+    fireEvent.click(closeBtn);
+    // tabListUpdate alone does NOT switch the published video (it's fire-and-forget
+    // state, per agent-tab-ops.ts) — the box only switches on activateTab. So closing
+    // the active tab MUST emit an activateTab for the neighbour, else the founder closes
+    // a tab and the content doesn't change.
+    expect(sendActivateTab).toHaveBeenCalledTimes(1);
+    const arg = sendActivateTab.mock.calls[0][1] as { tabId: string };
+    expect(arg.tabId).toBe(tab1Id);
+  });
+
+  it('closing an INACTIVE tab does NOT send activateTab (the published page is unchanged)', () => {
+    const { container } = renderSim();
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+    sendActivateTab.mockClear();
+    // Close the FIRST (inactive) tab — the active tab is unaffected, so no switch.
+    const closeBtn = within(tabEls(container)[0]).getByLabelText('Close tab');
+    fireEvent.click(closeBtn);
+    expect(sendActivateTab).not.toHaveBeenCalled();
+  });
+
   it('a navigate updates the ACTIVE tab url + publishes the list', () => {
     const { container } = renderSim();
     const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
@@ -341,6 +368,31 @@ describe('SimulatorWindow — page tab strip', () => {
     // Reverted: the second tab is active again.
     expect(tabEls(container)[1].getAttribute('data-active')).toBe('true');
     expect(tabEls(container)[0].getAttribute('data-active')).toBe('false');
+  });
+
+  it('on a rejected switch, re-activates the previous tab on the box (not just the GUI)', async () => {
+    const { container } = renderSim();
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+    const tab2Id = (lastTabListCall().tabs[1] as { id: string }).id;
+    sendActivateTab.mockClear();
+    fireEvent.click(tabEls(container)[0]); // switch to tab1 (optimistic) — activateTab #1
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(dataHandler).not.toBeNull();
+    act(() => {
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({ type: 'activateTabResult', requestId: 'req_1', ok: false }),
+        ),
+      );
+    });
+    // Reverting only the GUI's activeTabId leaves the box publishing the REJECTED tab.
+    // The revert must ALSO send an activateTab for the previously-active tab so the
+    // published video returns to it — not just flip the strip highlight.
+    const reactivate = sendActivateTab.mock.calls.find(
+      (c) => (c[1] as { tabId: string }).tabId === tab2Id,
+    );
+    expect(reactivate).toBeDefined();
   });
 
   it('a new ("+") tab opens the branded Driftstack new-tab page (NOT about:blank) and does NOT inherit the prior page url/title', () => {
