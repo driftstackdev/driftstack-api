@@ -259,7 +259,7 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
     expect(setCookiesMock).not.toHaveBeenCalled();
   });
 
-  it('Import surfaces the calm "next device update" note when the box half is not live (unavailable)', async () => {
+  it('Import surfaces the REAL unavailable reason (honest copy, not a "next device update" mask)', async () => {
     cookiesMock.mockResolvedValue({ status: 'ok', cookies: [] });
     setCookiesMock.mockResolvedValue({
       status: 'unavailable',
@@ -280,7 +280,8 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
 
     await waitFor(() => {
       const note = container.querySelector('[data-component="simulator-cookies-import-note"]');
-      if (!note || !note.textContent?.includes('next device update')) throw new Error('not yet');
+      if (!note || !note.textContent?.includes("Can't import right now"))
+        throw new Error('not yet');
       return note;
     });
     expect(setCookiesMock).toHaveBeenCalledTimes(1);

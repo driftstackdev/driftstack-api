@@ -145,7 +145,7 @@ describe('SimulatorWindow — file-upload Files section (A3 W2851)', () => {
     });
   });
 
-  it("an 'unavailable' upload result shows the calm pending note (not an error)", async () => {
+  it("an 'unavailable' upload result shows the honest 'not live on a device' note (not an error)", async () => {
     uploadMock.mockResolvedValue({ status: 'unavailable', handle: null });
     const { container } = renderSim();
     openDrawer(container);
@@ -154,7 +154,7 @@ describe('SimulatorWindow — file-upload Files section (A3 W2851)', () => {
     });
     await waitFor(() => {
       expect(container.querySelector('[data-component="simulator-files"]')?.textContent).toMatch(
-        /pending/i,
+        /can't upload/i,
       );
     });
   });
