@@ -184,7 +184,10 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
       /if \(action\.mode === 'rebuild'\) \{\s*\n?\s*setRetryNonce\(\(n\) => n \+ 1\);/,
     );
     expect(body).toMatch(/pub\.setSubscribed\(false\);/);
-    expect(body).toMatch(/videoPublicationRef\.current\?\.setSubscribed\?\.\(true\);/);
+    // Re-subscribe via the CLOSURE-captured publication, NOT videoPublicationRef.current:
+    // setSubscribed(false) fires TrackUnsubscribed which nulls the ref, so reading the
+    // ref 250ms later was a silent no-op (every freeze escalated to a full Room rebuild).
+    expect(body).toMatch(/pub\.setSubscribed\?\.\(true\);/);
     // The recovery effect keys on the recoverAction prop.
     expect(body).toMatch(/\}, \[recoverAction\]\);/);
   });
