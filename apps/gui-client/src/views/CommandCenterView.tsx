@@ -202,7 +202,7 @@ export function CommandCenterView({
    *  the cards fall back to the bare Profiles list. */
   onOpenProfile?: (profileId: string) => void;
 }): JSX.Element {
-  const { accountMe, client, refreshAccountMe } = useSettings();
+  const { accountMe, client, refreshAccountMe, activeWorkspace } = useSettings();
   // Refresh accountMe when the home view mounts. The session-health rollup below
   // independently re-fetches on every mount, but accountMe (which drives the cap
   // alerts + the profile/Live-now KPIs) is otherwise only fetched on client change
@@ -424,29 +424,53 @@ export function CommandCenterView({
         </div>
       </section>
 
-      {/* Fleet KPI strip — icon-led cards (moved here from Profiles). */}
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Kpi icon={<IconLayers />} label="Profiles" value={ratio(profileCount, profileCap)} />
-        <Kpi
-          icon={<IconBolt />}
-          // "Active" (not "Live now") matches the server's
-          // concurrent_session_active semantics: ALL non-destroyed sessions
-          // (creating + ready + busy + errored). The Session-health "Running"
-          // tile below counts ready+busy only, so the two are different measures
-          // by design — labeling this "Active" stops them reading as the same
-          // number and visibly contradicting (audit: liveNow=3 vs Running=1).
-          label="Active"
-          value={liveNow !== null ? String(liveNow) : '—'}
-          accent
-          onClick={liveNowAction}
-          title="Sessions counting against your concurrency cap — includes starting up and errored sessions, not just running ones."
-        />
-        <Kpi
-          icon={<IconGlobe />}
-          label="Proxies"
-          value={proxyCount !== null ? String(proxyCount) : '—'}
-        />
-        <Kpi icon={<IconBadge />} label="Plan" value={tier !== null ? titleCase(tier) : '—'} />
+      {/* Fleet KPI strip — icon-led cards (moved here from Profiles). The
+          Profiles/Active counts + the Plan tile come from account.me(), which
+          (per the Sidebar contract) IGNORES the active-workspace header and so
+          always reflects the PERSONAL account's caps — whereas the strips below
+          ("Jump back in", "Session health") DO honor it. While viewing a team
+          workspace those two scopes describe different numbers, so label this
+          strip "Your account" to stop the personal caps reading as this team's
+          counts (caps are per-account by design; there is no workspace-scoped
+          authoritative count endpoint to swap in). */}
+      <section className="flex flex-col gap-2">
+        {activeWorkspace !== null && (
+          <span className="section-label" data-component="account-kpi-label">
+            Your account
+          </span>
+        )}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Kpi
+            icon={<IconLayers />}
+            label="Profiles"
+            value={ratio(profileCount, profileCap)}
+            title={
+              activeWorkspace !== null
+                ? 'Profile cap is per your account, not per workspace.'
+                : undefined
+            }
+          />
+          <Kpi
+            icon={<IconBolt />}
+            // "Active" (not "Live now") matches the server's
+            // concurrent_session_active semantics: ALL non-destroyed sessions
+            // (creating + ready + busy + errored). The Session-health "Running"
+            // tile below counts ready+busy only, so the two are different measures
+            // by design — labeling this "Active" stops them reading as the same
+            // number and visibly contradicting (audit: liveNow=3 vs Running=1).
+            label="Active"
+            value={liveNow !== null ? String(liveNow) : '—'}
+            accent
+            onClick={liveNowAction}
+            title="Sessions counting against your concurrency cap — includes starting up and errored sessions, not just running ones."
+          />
+          <Kpi
+            icon={<IconGlobe />}
+            label="Proxies"
+            value={proxyCount !== null ? String(proxyCount) : '—'}
+          />
+          <Kpi icon={<IconBadge />} label="Plan" value={tier !== null ? titleCase(tier) : '—'} />
+        </div>
       </section>
 
       {/* Live session health — loads independently; degrades gracefully. */}

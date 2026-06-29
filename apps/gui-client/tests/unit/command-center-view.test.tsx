@@ -13,8 +13,14 @@ import type { HomeNavTarget } from '../../src/views/CommandCenterView';
 
 let accountMe: unknown = null;
 let client: unknown = null;
+let activeWorkspace: string | null = null;
 vi.mock('../../src/lib/SettingsContext', () => ({
-  useSettings: () => ({ accountMe, client, refreshAccountMe: () => Promise.resolve() }),
+  useSettings: () => ({
+    accountMe,
+    client,
+    activeWorkspace,
+    refreshAccountMe: () => Promise.resolve(),
+  }),
 }));
 
 const {
@@ -158,6 +164,7 @@ describe('CommandCenterView', () => {
     cleanup();
     accountMe = null;
     client = null;
+    activeWorkspace = null;
   });
 
   it('leads with Automate: the hero CTAs route to ai and recipes', () => {
@@ -180,6 +187,31 @@ describe('CommandCenterView', () => {
     render(<CommandCenterView onNavigate={nav()} />);
     expect(screen.getByText('Builder')).toBeTruthy();
     expect(screen.getByText('7 / 25')).toBeTruthy(); // Profiles KPI
+  });
+
+  it('labels the account KPI strip "Your account" only in a team workspace', () => {
+    accountMe = { ...ACC, tier: 'builder' };
+    // Personal scope (no active workspace) → the account caps ARE the only
+    // numbers, so no disambiguating label.
+    activeWorkspace = null;
+    const { unmount } = render(<CommandCenterView onNavigate={nav()} />);
+    expect(screen.queryByText('Your account')).toBeNull();
+    unmount();
+
+    // Team workspace → the personal-scoped caps must read as "Your account" so
+    // they don't masquerade as this team's counts (the workspace-scoped strips
+    // below show the team's numbers).
+    activeWorkspace = 'acct_team_owner_1';
+    render(<CommandCenterView onNavigate={nav()} />);
+    expect(screen.getByText('Your account')).toBeTruthy();
+  });
+
+  it('clarifies the Profiles cap is per-account when in a team workspace', () => {
+    accountMe = { ...ACC, tier: 'builder', profile_count: 2, profile_cap: 50 };
+    activeWorkspace = 'acct_team_owner_1';
+    render(<CommandCenterView onNavigate={nav()} />);
+    const profilesTile = screen.getByText('2 / 50').closest('[title]');
+    expect(profilesTile?.getAttribute('title')).toMatch(/per your account/i);
   });
 
   it('shows a cap alert when at the session limit, and Manage navigates', () => {

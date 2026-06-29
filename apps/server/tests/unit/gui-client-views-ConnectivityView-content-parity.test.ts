@@ -83,10 +83,13 @@ describe('W481.C apps/gui-client/src/views/ConnectivityView.tsx content parity',
     );
   });
 
-  it("API-key masking + 'not set' fallback: settings.apiKey === null → 'not set — configure under Settings' in text-status-error else `${slice(0, 8)}…${slice(-4)}` (8-char prefix + ellipsis + 4-char suffix); apiKey unmasked has 'configure under Settings' nudge so user knows where to set it", () => {
+  it("API-key masking + 'not set' fallback: settings.apiKey === null → 'not set — configure under Settings' in text-status-error else maskApiKey(settings.apiKey) — the shared, prefix-aware mask (consistency standardization, replacing the old non-standard inline slice(0,8)…slice(-4)); apiKey unmasked has 'configure under Settings' nudge so user knows where to set it", () => {
     expect(body).toMatch(
-      /\{settings\.apiKey === null \? \(\s*\n?\s*<span className="text-status-error">not set — configure under Settings<\/span>\s*\n?\s*\) : \(\s*\n?\s*`\$\{settings\.apiKey\.slice\(0, 8\)\}…\$\{settings\.apiKey\.slice\(-4\)\}`\s*\n?\s*\)\}/,
+      /\{settings\.apiKey === null \? \(\s*\n?\s*<span className="text-status-error">not set — configure under Settings<\/span>\s*\n?\s*\) : \([\s\S]*?maskApiKey\(settings\.apiKey\)\s*\n?\s*\)\}/,
     );
+  });
+  it('imports the shared maskApiKey from ApiKeyMaskedSpan (prefix-aware mask used everywhere a key is shown)', () => {
+    expect(body).toMatch(/import \{ maskApiKey \} from '\.\.\/components\/ApiKeyMaskedSpan';/);
   });
 
   it("V-337 server-info rows: driver row 'playwright (chromium)' format when driver===playwright && playwright_browser truthy + version row 'X.Y.Z · gitsha7' format when git_sha !== 'unknown' (.slice(0,7) short-sha); both rows only render when serverInfo !== null", () => {

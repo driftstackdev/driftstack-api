@@ -85,7 +85,10 @@ interface RecordingsContextValue {
   /** Delete a recording from memory + disk. Resolves true on success; false if
    *  the on-disk delete failed (the row is restored so the UI matches reality). */
   deleteRecording: (id: string) => Promise<boolean>;
-  /** Lazy-load frames for a persisted recording. Resolves with the populated Recording. */
+  /** Lazy-load frames for a persisted recording. Resolves with the populated
+   *  Recording. REJECTS when the on-disk read fails (corrupt/locked ndjson,
+   *  perms) so the caller can surface a real error + retry instead of treating
+   *  the recording as empty. */
   hydrateFrames: (id: string) => Promise<Recording | null>;
   /** Convenience: the recording id that is currently active for a given session, if any. */
   activeRecordingFor: (sessionId: string) => string | null;
@@ -109,6 +112,34 @@ export function RecordingsProvider({ children }: { children: ReactNode }): JSX.E
   const recordingsRef = useRef(recordings);
   recordingsRef.current = recordings;
 
+  // Re-read the on-disk index and merge it into state. Used both on mount and
+  // when the window regains focus/visibility. The merge preserves anything live
+  // in THIS provider that the index can't represent:
+  //   • live (still-recording) entries — not yet persisted, must survive a refresh,
+  //   • frame-loaded entries — keep the in-memory frames rather than reverting to
+  //     a header-only stub (which would force a re-hydrate / blank the player).
+  const refreshIndex = useCallback(async (): Promise<void> => {
+    const index = await loadIndex();
+    setRecordings((prev) => {
+      const next = new Map<string, Recording>();
+      for (const h of index) {
+        const existing = prev.get(h.id);
+        // Keep an already-frame-loaded copy (hydrated===false, frames present)
+        // so opening it again doesn't re-read the disk / flash empty.
+        if (existing && !existing.hydrated && existing.frames.length > 0) {
+          next.set(h.id, existing);
+        } else {
+          next.set(h.id, headerToRecording(h));
+        }
+      }
+      // Re-add any live, not-yet-persisted recordings the index can't know about.
+      for (const r of prev.values()) {
+        if (r.endedAt === null && !next.has(r.id)) next.set(r.id, r);
+      }
+      return next;
+    });
+  }, []);
+
   // Hydrate index on mount.
   useEffect(() => {
     let cancelled = false;
@@ -131,6 +162,33 @@ export function RecordingsProvider({ children }: { children: ReactNode }): JSX.E
       cancelled = true;
     };
   }, []);
+
+  // Refresh the list when the window regains focus / becomes visible. Recordings
+  // are CREATED in the simulator window but VIEWED in the main window — separate
+  // RecordingsProvider instances with separate in-memory Maps, each backed by the
+  // same on-disk index. Without this re-read, the main window's Recordings list
+  // is hydrated once on mount and NEVER updates: a session recorded in the
+  // simulator never appears (and a deletion in one window lingers in the other)
+  // until a full app restart.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onActive = (): void => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void refreshIndex().catch(() => {
+        // Transient disk-read failure — keep the current view; next focus retries.
+      });
+    };
+    window.addEventListener('focus', onActive);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onActive);
+    }
+    return () => {
+      window.removeEventListener('focus', onActive);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onActive);
+      }
+    };
+  }, [refreshIndex]);
 
   // Auto-flush any active recordings on unmount (app close).
   useEffect(() => {
@@ -295,8 +353,13 @@ export function RecordingsProvider({ children }: { children: ReactNode }): JSX.E
         return next;
       });
       return updated;
-    } catch {
-      return cur;
+    } catch (err) {
+      // A disk read failure (corrupt/locked ndjson, perms) must PROPAGATE so the
+      // player shows its "Couldn't load frames / Try again" state and Export
+      // reports "Export failed" — rather than being swallowed into a resolved
+      // 0-frame recording that reads as "No frames captured" / "Nothing to
+      // export" (misleading: the frames exist on disk, the read just failed).
+      throw err instanceof Error ? err : new Error('Could not read the recording from disk.');
     }
   }, []);
 

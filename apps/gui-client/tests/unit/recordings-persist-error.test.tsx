@@ -134,6 +134,83 @@ describe('RecordingsProvider — persist-failure surfacing', () => {
     expect(result.current.recordings.has('rec_2')).toBe(false);
   });
 
+  it('hydrateFrames REJECTS when the on-disk read fails (player can show retry, not "no frames")', async () => {
+    // A persisted recording with frames on disk, hydrated into the list on mount.
+    loadIndex.mockResolvedValue([
+      {
+        id: 'rec_h',
+        sessionId: 'ses_h',
+        label: null,
+        startedAt: 1,
+        endedAt: 2,
+        totalCaptured: 3,
+        frameCount: 3,
+        totalBytes: 30,
+      },
+    ]);
+    // The disk read throws (corrupt/locked ndjson, perms).
+    loadFrames.mockRejectedValue(new Error('EACCES: permission denied'));
+
+    const { result } = renderHook(() => useRecordings(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // The failure must PROPAGATE — previously it was swallowed (resolved with a
+    // 0-frame recording) so the player read "No frames captured" / Export said
+    // "Nothing to export" even though the frames exist on disk.
+    await expect(result.current.hydrateFrames('rec_h')).rejects.toThrow(/permission denied/);
+  });
+
+  it('refreshes the list on window focus so a recording made in another window appears', async () => {
+    // Mount with an empty index (the simulator made a recording AFTER this
+    // window mounted — separate provider, separate in-memory Map).
+    loadIndex.mockResolvedValue([]);
+    const { result } = renderHook(() => useRecordings(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.recordings.size).toBe(0);
+
+    // A new recording lands on disk; the next focus must surface it without a restart.
+    loadIndex.mockResolvedValue([
+      {
+        id: 'rec_new',
+        sessionId: 'ses_new',
+        label: 'From simulator',
+        startedAt: 5,
+        endedAt: 6,
+        totalCaptured: 2,
+        frameCount: 2,
+        totalBytes: 20,
+      },
+    ]);
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(result.current.recordings.has('rec_new')).toBe(true));
+    expect(result.current.recordings.get('rec_new')?.label).toBe('From simulator');
+  });
+
+  it('a focus refresh keeps a still-LIVE recording the on-disk index cannot know about', async () => {
+    loadIndex.mockResolvedValue([]);
+    const { result } = renderHook(() => useRecordings(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let liveId = '';
+    act(() => {
+      liveId = result.current.startRecording('ses_live', 'Live');
+    });
+    expect(result.current.recordings.has(liveId)).toBe(true);
+
+    // Focus re-reads the (still empty) index — the un-persisted live recording
+    // must survive the merge, not get wiped.
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await Promise.resolve();
+    });
+    expect(result.current.recordings.has(liveId)).toBe(true);
+    expect(result.current.recordings.get(liveId)?.endedAt).toBeNull();
+  });
+
   it('leaves persistError null on a successful Stop write', async () => {
     persistRecording.mockResolvedValue({});
     const { result } = renderHook(() => useRecordings(), { wrapper });

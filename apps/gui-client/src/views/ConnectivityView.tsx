@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError } from '../lib/client';
+import { maskApiKey } from '../components/ApiKeyMaskedSpan';
 
 interface CheckResult {
   ok: boolean;
@@ -87,7 +88,12 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
             {settings.apiKey === null ? (
               <span className="text-status-error">not set — configure under Settings</span>
             ) : (
-              `${settings.apiKey.slice(0, 8)}…${settings.apiKey.slice(-4)}`
+              // Use the shared, prefix-aware mask (strips the known ds_live_
+              // prefix + shows 4+4 of the random body) so on-screen exposure
+              // matches the project's masking standard everywhere a key is
+              // shown. The old inline slice(0,8)…slice(-4) was a non-standard,
+              // prefix-unaware mask; this is a consistency fix. (audit)
+              maskApiKey(settings.apiKey)
             )}
           </span>
         </Row>

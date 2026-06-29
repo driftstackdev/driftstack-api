@@ -18,7 +18,7 @@ import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { useSettings } from '../lib/SettingsContext';
 import { isCloudBaseUrl } from '../lib/telemetry';
-import { rememberedKeyFor } from '../lib/settings';
+import { DEFAULT_SETTINGS, rememberedKeyFor } from '../lib/settings';
 import { normalizeNavigateUrl } from '../lib/address-bar';
 import { useConfirm } from '../components/ConfirmProvider';
 import { maskApiKey } from '../components/ApiKeyMaskedSpan';
@@ -179,17 +179,25 @@ export function SettingsView(): JSX.Element {
     if (startUrlInvalid) return;
     setSaving(true);
     const url = draftUrl.trim().replace(/\/+$/, '') || 'http://localhost:3000';
+    // A blank field clears to the default; a non-empty field is guaranteed valid
+    // here (the startUrlInvalid guard blocked an invalid one above), so
+    // normalizeNavigateUrl can't return null for a non-empty value. Fall back to
+    // the DEFAULT start URL (not settings.startUrl): a customer who clears the
+    // field intends to reset to the default — keeping the OLD value left the
+    // field blank while the save silently retained the previous custom URL, so
+    // `dirty` stayed true ('' !== saved) and the field looked stuck/unsaved
+    // forever. (audit)
+    const nextStartUrl = normalizeNavigateUrl(draftStartUrl) ?? DEFAULT_SETTINGS.startUrl;
     try {
       await update({
         apiKey: draftKey.length > 0 ? draftKey : null,
         baseUrl: url,
         telemetryOptIn: draftTelemetry,
-        // A blank field clears to the default; a non-empty field is guaranteed
-        // valid here (the startUrlInvalid guard blocked an invalid one above), so
-        // normalizeNavigateUrl can't return null for a non-empty value. The ??
-        // only covers the empty-field case.
-        startUrl: normalizeNavigateUrl(draftStartUrl) ?? settings.startUrl,
+        startUrl: nextStartUrl,
       });
+      // Reflect the persisted value back into the field so a blank-clear shows the
+      // default it reset to (instead of staying blank + re-arming `dirty`).
+      setDraftStartUrl(nextStartUrl);
       setSavedAt(Date.now());
     } finally {
       setSaving(false);

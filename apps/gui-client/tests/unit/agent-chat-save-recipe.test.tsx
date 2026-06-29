@@ -11,9 +11,13 @@ import type { ChatTurn, UseAgentChatResult } from '../../src/lib/use-agent-chat'
 
 const createRecipe = vi.fn(() => Promise.resolve({ id: 'rec_1', label: 'My flow' }));
 const pushToast = vi.fn();
+// LiveAutomationPanel fetches the per-session LiveKit token via this method. The
+// live-view tests below swap its implementation per case (503, success, count).
+const livekitToken = vi.fn(() => Promise.resolve({ ws_url: '', room: '', token: '' }));
 
 const client = {
   recipes: { create: (body: unknown) => createRecipe(body) },
+  agentSessions: { livekitToken: (id: string) => livekitToken(id) },
   // AgentChatView loads profiles in a mount effect; yield nothing. A plain
   // generator satisfies the `for await…of` consumer without a needless async.
   profiles: {
@@ -25,6 +29,12 @@ const client = {
 
 vi.mock('../../src/lib/SettingsContext', () => ({
   useSettings: () => ({ client, settings: { apiKey: 'sk-test' } }),
+}));
+// Stub the live-stream panel: the retry-success path renders it, and the real
+// one opens a LiveKit connection on mount (no transport in jsdom). A marker div
+// is enough to assert the panel mounted.
+vi.mock('../../src/components/AgentSessionPanel', () => ({
+  AgentSessionPanel: () => <div data-testid="agent-session-panel" />,
 }));
 vi.mock('../../src/lib/toasts', () => ({
   useToasts: () => ({ push: pushToast }),
@@ -196,6 +206,69 @@ describe('AgentChatView live-view toggle (narrow widths)', () => {
     expect(screen.getByRole('button', { name: 'Close live view' })).toBeTruthy();
     // The toggle label flips to Hide.
     expect(screen.getByRole('button', { name: 'Toggle live view' })).toHaveTextContent('Hide live');
+  });
+});
+
+describe('AgentChatView live-view token-fetch failure (friendly copy + Retry)', () => {
+  beforeEach(() => {
+    livekitToken.mockReset();
+    // Default to a resolving stub; cases that need a failure override it.
+    livekitToken.mockResolvedValue({ ws_url: '', room: '', token: '' });
+  });
+
+  /** A 503 from livekitToken, carrying a numeric `.status` exactly like the SDK
+   *  DriftstackError does. Reject with a real Error (not a bare object) so the
+   *  promise-rejection lint stays happy; the status field is declared on a typed
+   *  local so the assignment isn't an unsafe `any` member access. */
+  function reject503(): void {
+    const err: Error & { status: number } = Object.assign(
+      new Error('HTTP 503: Service Unavailable'),
+      { status: 503 },
+    );
+    livekitToken.mockRejectedValueOnce(err);
+  }
+
+  it('maps a 503 (no live device yet) to reassuring copy — never the raw "HTTP 503" jargon', async () => {
+    reject503();
+    chatState = baseChat({ session: SESSION, turns: [] });
+    render(<AgentChatView />);
+
+    // The placeholder body is the friendly message, not transport jargon.
+    expect(
+      await screen.findByText(
+        'No live device is running for this chat yet — dispatch a task, then retry.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/HTTP 503/)).toBeNull();
+    // …and the error state is recoverable in place via a Retry affordance.
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+  });
+
+  it('maps a network/transport failure to a connection message (raw text not surfaced)', async () => {
+    livekitToken.mockRejectedValueOnce(new Error('fetch failed'));
+    chatState = baseChat({ session: SESSION, turns: [] });
+    render(<AgentChatView />);
+
+    expect(
+      await screen.findByText(
+        "Couldn't reach the live-stream server — check your connection, then retry.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/fetch failed/)).toBeNull();
+  });
+
+  it('Retry re-runs the token fetch — recovering in place once the worker is up', async () => {
+    // First attempt 503s; the retry resolves (worker now ready).
+    reject503();
+    chatState = baseChat({ session: SESSION, turns: [] });
+    render(<AgentChatView />);
+
+    const retry = await screen.findByRole('button', { name: 'Retry' });
+    expect(livekitToken).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(retry);
+    // Bumping retryNonce re-runs the effect → a second fetch attempt.
+    await waitFor(() => expect(livekitToken).toHaveBeenCalledTimes(2));
   });
 });
 

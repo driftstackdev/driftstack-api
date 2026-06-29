@@ -623,6 +623,12 @@ function LiveAutomationPanel({
 }): JSX.Element {
   const { client } = useSettings();
   const [watch, setWatch] = useState<WatchState>({ kind: 'idle' });
+  // The token fetch's common failure is a 503: the chat session has no Mac/
+  // LiveKit worker yet (driver:mock, or the dispatch is still spinning up). The
+  // effect only re-runs on a sessionId/client change, so without a manual retry
+  // the user was stranded on the error with no way to re-attempt short of
+  // switching chats. Bumping this re-runs the fetch on the Retry button.
+  const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
     // No session dispatched yet → the placeholder ("Dispatch a task…").
@@ -648,13 +654,14 @@ function LiveAutomationPanel({
         if (cancelled) return;
         // A session with no Mac/LiveKit registered yet (503) or a not-yet-ready
         // worker is the common case here — keep the copy reassuring, not alarming.
-        const msg = err instanceof Error ? err.message : 'Could not start the live view.';
-        setWatch({ kind: 'error', message: msg });
+        // Surface customer-friendly copy (the raw err.message leaks transport/HTTP
+        // jargon — "HTTP 503", "fetch failed" — the comment above promised to avoid).
+        setWatch({ kind: 'error', message: friendlyLiveViewError(err) });
       });
     return () => {
       cancelled = true;
     };
-  }, [client, sessionId]);
+  }, [client, sessionId, retryNonce]);
 
   return (
     <aside
@@ -702,7 +709,12 @@ function LiveAutomationPanel({
           </div>
         )}
         {watch.kind === 'error' && (
-          <WatchPlaceholder title="Live view unavailable" body={watch.message} tone="muted" />
+          <WatchPlaceholder
+            title="Live view unavailable"
+            body={watch.message}
+            tone="muted"
+            onRetry={() => setRetryNonce((n) => n + 1)}
+          />
         )}
         {watch.kind === 'live' && (
           // READ-ONLY: `interactive` omitted (defaults false) → no input capture.
@@ -720,14 +732,34 @@ function LiveAutomationPanel({
   );
 }
 
+/** Map a live-view token-fetch error to reassuring copy. The token fetch's most
+ *  common failure here is the 503 a chat session returns before its worker is up
+ *  (driver:mock / still dispatching) — the raw err.message ("HTTP 503", "fetch
+ *  failed") reads as a hard error, so soften it and keep the raw text only as a
+ *  last-resort fallback. */
+function friendlyLiveViewError(err: unknown): string {
+  const status = (err as { status?: number } | null)?.status;
+  const msg = err instanceof Error ? err.message : '';
+  if (status === 503 || /503|not ready|unavailable|no worker|no session/i.test(msg)) {
+    return 'No live device is running for this chat yet — dispatch a task, then retry.';
+  }
+  if (/load failed|network|fetch|ECONN|getaddrinfo|timeout|unreachable/i.test(msg)) {
+    return "Couldn't reach the live-stream server — check your connection, then retry.";
+  }
+  return msg.length > 0 ? msg : 'Could not start the live view.';
+}
+
 function WatchPlaceholder({
   title,
   body,
   tone = 'default',
+  onRetry,
 }: {
   title: string;
   body: string;
   tone?: 'default' | 'muted';
+  /** When set, a small Retry button re-attempts the live-view token fetch. */
+  onRetry?: () => void;
 }): JSX.Element {
   return (
     <div className="flex max-w-[14rem] flex-col items-center gap-2 text-center">
@@ -741,6 +773,15 @@ function WatchPlaceholder({
       </span>
       <p className="text-xs font-medium text-ink-secondary">{title}</p>
       <p className="text-2xs text-ink-muted">{body}</p>
+      {onRetry !== undefined && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-1 rounded border border-surface-divider px-2 py-1 text-2xs font-medium text-ink-secondary transition-colors hover:text-ink-primary"
+        >
+          Retry
+        </button>
+      )}
     </div>
   );
 }

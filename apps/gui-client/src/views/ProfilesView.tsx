@@ -463,22 +463,46 @@ export function ProfilesView({
   // folders/icons + tags) from the server so it follows the account across
   // machines. Server WINS on a successful load; the local folders/tags store
   // (loaded above) is the offline cache, kept aligned via replaceAll*. Re-runs
-  // if the key/baseUrl change. Failure (offline/unauth) keeps the local cache.
+  // if the key/baseUrl/workspace change. Failure (offline/unauth) keeps cache.
+  //
+  // The folders.json / tags.json caches are a SINGLE global store (NOT keyed by
+  // workspace), so on a workspace SWITCH they still hold the PRIOR workspace's
+  // taxonomy. The seed-from-local branch below would then push that prior
+  // taxonomy into the newly-active (empty) workspace's SERVER record —
+  // cross-contaminating one workspace's folders/tags into another. So the seed
+  // only fires for the SAME scope as last run (the genuine #441 offline-then-
+  // online case for the current account/workspace); a scope CHANGE accepts the
+  // empty server taxonomy and reconciles the cache to it. (audit)
+  const prevOrgScopeRef = useRef<string | null>(null);
   useEffect(() => {
     const apiKey = settings.apiKey;
     if (apiKey === null || apiKey.length === 0) return;
+    const scope = `${apiKey} ${settings.baseUrl} ${activeWorkspace ?? ''}`;
+    const prevScope = prevOrgScopeRef.current;
+    // Seed the empty server taxonomy from the local cache on the FIRST run
+    // (prevScope === null — genuine #441 offline-then-online, where the global
+    // cache IS this scope's data) or a same-scope re-run. Block ONLY on a scope
+    // CHANGE (a workspace switch): the global cache then still holds the prior
+    // workspace's taxonomy, so seeding would leak it into the new workspace.
+    const seedAllowed = prevScope === null || prevScope === scope;
+    prevOrgScopeRef.current = scope;
+    let cancelled = false;
     void (async () => {
       try {
         const org = await fetchOrganization(settings.baseUrl, apiKey, activeWorkspace);
+        if (cancelled) return; // a newer scope superseded this fetch — don't clobber it
         // Don't let a fresh/empty server taxonomy WIPE locally-created (offline) folders/tags:
         // if the server has nothing but the local cache has entries, SEED the server from local
-        // instead of clobbering local to empty. (#441 data-loss)
-        if (org.folders.length === 0 && org.tags.length === 0) {
+        // instead of clobbering local to empty. (#441 data-loss) — but ONLY when seeding is
+        // allowed (first run / same scope), so a workspace switch can't leak the prior
+        // workspace's taxonomy into the newly-active (empty) workspace.
+        if (seedAllowed && org.folders.length === 0 && org.tags.length === 0) {
           const [localFolders, localIcons, localTags] = await Promise.all([
             loadFolders(),
             loadFolderIcons(),
             loadTags(),
           ]);
+          if (cancelled) return;
           if (localFolders.length > 0 || localTags.length > 0) {
             void saveOrganization(
               settings.baseUrl,
@@ -512,6 +536,9 @@ export function ProfilesView({
         /* offline / unauth → keep the local cache loaded on mount */
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [settings.apiKey, settings.baseUrl, activeWorkspace]);
 
   // org-sync — push the full account taxonomy to the server after a local

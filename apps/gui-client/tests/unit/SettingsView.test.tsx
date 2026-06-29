@@ -150,6 +150,38 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
     expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
   });
 
+  it('clearing the Start URL field saves the DEFAULT (not the old custom value) and re-syncs the field', async () => {
+    const update = vi.fn(() => Promise.resolve());
+    useSettingsMock.mockReturnValue({
+      settings: {
+        apiKey: 'ds_live_x',
+        baseUrl: 'https://api.driftstack.dev',
+        telemetryOptIn: null,
+        // A custom start URL the customer previously saved.
+        startUrl: 'https://shop.example.com',
+      },
+      loading: false,
+      client: null,
+      accountMe: null,
+      refreshAccountMe: vi.fn(() => Promise.resolve()),
+      update,
+    });
+    renderWithToasts();
+
+    const startInput = screen.getByDisplayValue<HTMLInputElement>('https://shop.example.com');
+    // Clear the field — intent is "reset to default", not "keep my old custom URL".
+    fireEvent.change(startInput, { target: { value: '' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    // The persisted startUrl must be the DEFAULT, not the prior custom value — a
+    // blank-clear that silently kept the old value left the field stuck/dirty.
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    expect(update.mock.calls[0]?.[0]).toMatchObject({ startUrl: 'https://driftstack.dev' });
+    // And the field re-syncs to the saved default instead of staying blank.
+    expect(startInput.value).toBe('https://driftstack.dev');
+  });
+
   it('the Connected banner masks the key with the shared prefix-aware mask (not 16 contiguous chars)', () => {
     const realKey = 'ds_live_abcdef0123456789zzzz';
     useSettingsMock.mockReturnValue({
@@ -164,10 +196,14 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
 
     // The shared maskApiKey strips the ds_live_ prefix + shows only 4 body chars:
     // ds_live_abcd…zzzz. The old inline mask leaked 16 contiguous real chars
-    // (ds_live_abcdef01…zzzz).
-    expect(screen.getByText(/ds_live_abcd…zzzz/)).toBeInTheDocument();
-    // The over-exposing 12-from-start body must NOT appear anywhere.
+    // (ds_live_abcdef01…zzzz). The masked form now appears in BOTH the banner AND
+    // the embedded connectivity probe (which also adopted the shared mask — audit),
+    // so assert ≥1 occurrence rather than exactly one.
+    expect(screen.getAllByText(/ds_live_abcd…zzzz/).length).toBeGreaterThanOrEqual(1);
+    // The over-exposing 12-from-start body must NOT appear anywhere (banner OR probe).
     expect(screen.queryByText(/abcdef0123/)).toBeNull();
+    // The connectivity probe's old 8-from-start slice (ds_live_…) must not leak either.
+    expect(screen.queryByText(/abcdef01…/)).toBeNull();
     expect(screen.queryByText(realKey)).toBeNull();
   });
 
