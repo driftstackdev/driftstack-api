@@ -123,6 +123,19 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     if (!r || r.accountId !== input.accountId || r.disabledAt !== null) {
       return Promise.resolve(null);
     }
+    // V-359.G — mirror the Drizzle guard: a SECOND *customer* rotation
+    // while a prior customer rotation is STILL inside its dual-sign grace
+    // window must NOT clobber secret_prev (that would discard the ORIGINAL
+    // secret the customer is still rolling). No-op: return the UNCHANGED
+    // in-flight row. A server force-rotation window (forceRotatedAt set)
+    // is exempt — the customer's escape-hatch rotation proceeds.
+    if (
+      r.secretPrevExpiresAt !== null &&
+      r.secretPrevExpiresAt.getTime() > input.now.getTime() &&
+      r.forceRotatedAt === null
+    ) {
+      return Promise.resolve(r);
+    }
     const updated: WebhookEndpointRow = {
       ...r,
       secret: input.newSecret,

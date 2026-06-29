@@ -58,6 +58,17 @@ export const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = {
 export const DEFAULT_TIMEOUT_MS = 10_000;
 export const DEFAULT_MAX_ATTEMPTS = 6; // initial + 5 retries (backoff[5] = 60 min); DLQ on the 6th
 
+// V-173.R — reclaim STALE in_flight rows. A worker that crashed / was deployed
+// mid-batch leaves a row stuck `in_flight` forever (it's never re-selected → the
+// webhook is silently lost, skipping all remaining retries). The claim sets
+// `updated_at = NOW()`, so an in_flight row whose `updated_at` is older than this
+// threshold has no live worker on it — re-claim it. The threshold is ≫ the
+// per-attempt DEFAULT_TIMEOUT_MS so a merely-slow (not crashed) delivery isn't
+// reclaimed out from under a live worker; a re-delivery is acceptable anyway
+// (webhooks are at-least-once, event-id-dedupable). Mirrors the live
+// DrizzleWebhooksRepo.claim (webhooks-repo.ts).
+export const RECLAIM_STALE_IN_FLIGHT_MS = 5 * 60 * 1000;
+
 export interface DurableWebhookDeliveryDeps {
   database: Database;
   /** Test seam — defaults to the SSRF-guarded fetch (connection-time DNS pin). */
@@ -355,23 +366,38 @@ export class DurableWebhookWorker {
     // postgres-js's Bind step with Buffer.byteLength(date). Same
     // class of bug that fired the 2026-05-19 scheduled-jobs incident.
     const nowIso = nowDate.toISOString();
+    // V-173.R — staleness anchor for in_flight reclaim. An in_flight row whose
+    // updated_at is older than this has no live worker on it (the claim below
+    // sets updated_at to nowDate) → re-claim it.
+    const staleBeforeIso = new Date(nowMs - RECLAIM_STALE_IN_FLIGHT_MS).toISOString();
 
     // Atomic claim: SELECT due rows + flip to in_flight in one txn.
     // FOR UPDATE SKIP LOCKED ensures concurrent workers each get a
-    // disjoint slice.
+    // disjoint slice. Picks up both due pending rows AND stale in_flight
+    // rows (V-173.R — a crashed/redeployed worker's stranded row) so a
+    // delivery is never silently lost.
     const claimed = await this.database.db.transaction(async (tx) => {
       const candidates = await tx.execute(sql`
         SELECT id FROM webhook_deliveries
-        WHERE status = 'pending' AND next_attempt_at <= ${nowIso}
+        WHERE (status = 'pending' AND next_attempt_at <= ${nowIso})
+           OR (status = 'in_flight' AND updated_at <= ${staleBeforeIso})
         ORDER BY next_attempt_at ASC
         LIMIT ${batchSize}
         FOR UPDATE SKIP LOCKED
       `);
-      const ids = (candidates as unknown as { rows: Array<{ id: string }> }).rows.map((r) => r.id);
+      // The postgres-js driver returns the RowList directly (array-like); the
+      // pg/neon drivers wrap it as { rows }. Handle both — matching the
+      // established idiom in scheduled-jobs-repo.ts / atlas-priority-events-repo.ts.
+      const candidateRows =
+        (candidates as unknown as { rows?: Array<{ id: string }> }).rows ??
+        (candidates as unknown as Array<{ id: string }>);
+      const ids = candidateRows.map((r) => r.id);
       if (ids.length === 0) return [] as string[];
+      // Set updated_at = now so the reclaim staleness anchor advances; without
+      // it a reclaimed row would still read as stale on the next tick.
       await tx
         .update(webhookDeliveries)
-        .set({ status: 'in_flight' })
+        .set({ status: 'in_flight', updatedAt: nowDate })
         .where(inArray(webhookDeliveries.id, ids));
       return ids;
     });
@@ -511,7 +537,7 @@ export class DurableWebhookWorker {
     }
 
     if (attempt.outcome === 'success') {
-      await this.database.db
+      const [updated] = await this.database.db
         .update(webhookDeliveries)
         .set({
           status: 'delivered',
@@ -521,8 +547,18 @@ export class DurableWebhookWorker {
           lastResponseStatus: attempt.responseStatus,
           lastResponseExcerpt: attempt.responseExcerpt,
           lastError: null,
+          updatedAt: new Date(this.now()),
         })
-        .where(eq(webhookDeliveries.id, delivery.id));
+        // Fence on in_flight (review wjf04whfl #1): the worker only finalizes a
+        // row it claimed in_flight. If a >RECLAIM_STALE_IN_FLIGHT_MS-stalled
+        // worker's write lands after another tick reclaimed + finalized the row,
+        // this matches 0 rows → the no-op below skips it. Without the fence the
+        // stale write would resurrect a finalized delivery + corrupt its state.
+        .where(
+          and(eq(webhookDeliveries.id, delivery.id), eq(webhookDeliveries.status, 'in_flight')),
+        )
+        .returning({ id: webhookDeliveries.id });
+      if (!updated) return 'delivered';
       try {
         this.metrics?.inc(METRIC_NAMES.webhookDeliveryTerminalTotal, {
           terminal_state: 'delivered',
@@ -534,7 +570,7 @@ export class DurableWebhookWorker {
     }
 
     if (attemptNumber >= DEFAULT_MAX_ATTEMPTS) {
-      await this.database.db
+      const [updated] = await this.database.db
         .update(webhookDeliveries)
         .set({
           status: 'dlq',
@@ -542,8 +578,15 @@ export class DurableWebhookWorker {
           lastResponseStatus: attempt.responseStatus,
           lastResponseExcerpt: attempt.responseExcerpt,
           lastError: attempt.errorMessage,
+          updatedAt: new Date(this.now()),
         })
-        .where(eq(webhookDeliveries.id, delivery.id));
+        // Fence on in_flight (review wjf04whfl #1): only the current owner of an
+        // in_flight row may finalize it; a stale-worker write matches 0 rows.
+        .where(
+          and(eq(webhookDeliveries.id, delivery.id), eq(webhookDeliveries.status, 'in_flight')),
+        )
+        .returning({ id: webhookDeliveries.id });
+      if (!updated) return 'dlqed';
       try {
         this.metrics?.inc(METRIC_NAMES.webhookDeliveryTerminalTotal, { terminal_state: 'dlq' });
       } catch {
@@ -562,8 +605,13 @@ export class DurableWebhookWorker {
         lastResponseStatus: attempt.responseStatus,
         lastResponseExcerpt: attempt.responseExcerpt,
         lastError: attempt.errorMessage,
+        updatedAt: new Date(this.now()),
       })
-      .where(eq(webhookDeliveries.id, delivery.id));
+      // Fence on in_flight (review wjf04whfl #1): only the current owner of an
+      // in_flight row may re-arm it for retry; a stale-worker write matches 0
+      // rows and is a no-op, so it can't resurrect a finalized delivery.
+      .where(and(eq(webhookDeliveries.id, delivery.id), eq(webhookDeliveries.status, 'in_flight')))
+      .returning({ id: webhookDeliveries.id });
     return 'retried';
   }
 }

@@ -68,8 +68,13 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
       /Worker uses SELECT\.\.\.FOR UPDATE SKIP LOCKED for cross-process\s*\n?\s*\/\/\s*coordination \(the existing webhook-worker\.ts already uses this\s*\n?\s*\/\/\s*pattern via WebhooksRepo\.claim; V-173 reuses the same primitive\s*\n?\s*\/\/\s*inline rather than depending on the existing repo\)\./,
     );
     expect(body).toMatch(/const nowIso = nowDate\.toISOString\(\);/);
+    // V-173.R — claim widened to also reclaim stale in_flight rows (a crashed/
+    // redeployed worker's stranded row) so a delivery is never silently lost.
     expect(body).toMatch(
-      /SELECT id FROM webhook_deliveries\s*\n?\s*WHERE status = 'pending' AND next_attempt_at <= \$\{nowIso\}\s*\n?\s*ORDER BY next_attempt_at ASC\s*\n?\s*LIMIT \$\{batchSize\}\s*\n?\s*FOR UPDATE SKIP LOCKED/,
+      /const staleBeforeIso = new Date\(nowMs - RECLAIM_STALE_IN_FLIGHT_MS\)\.toISOString\(\);/,
+    );
+    expect(body).toMatch(
+      /SELECT id FROM webhook_deliveries\s*\n?\s*WHERE \(status = 'pending' AND next_attempt_at <= \$\{nowIso\}\)\s*\n?\s*OR \(status = 'in_flight' AND updated_at <= \$\{staleBeforeIso\}\)\s*\n?\s*ORDER BY next_attempt_at ASC\s*\n?\s*LIMIT \$\{batchSize\}\s*\n?\s*FOR UPDATE SKIP LOCKED/,
     );
   });
 
@@ -119,13 +124,33 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     );
   });
 
-  it('processTick: SELECT FOR UPDATE SKIP LOCKED claim → flip to in_flight in same txn; default batchSize=25', () => {
+  it('processTick: SELECT FOR UPDATE SKIP LOCKED claim → flip to in_flight (with updated_at = now staleness anchor) in same txn; default batchSize=25', () => {
     expect(body).toMatch(/const batchSize = opts\.batchSize \?\? 25;/);
+    expect(body).toMatch(/\/\/ Atomic claim: SELECT due rows \+ flip to in_flight in one txn\./);
+    // V-173.R — the in_flight flip sets updated_at = now so the reclaim
+    // staleness anchor advances (otherwise a reclaimed row reads stale forever).
     expect(body).toMatch(
-      /\/\/ Atomic claim: SELECT due rows \+ flip to in_flight in one txn\.\s*\n?\s*\/\/ FOR UPDATE SKIP LOCKED ensures concurrent workers each get a\s*\n?\s*\/\/ disjoint slice\./,
+      /await tx\s*\n?\s*\.update\(webhookDeliveries\)\s*\n?\s*\.set\(\{ status: 'in_flight', updatedAt: nowDate \}\)\s*\n?\s*\.where\(inArray\(webhookDeliveries\.id, ids\)\);/,
     );
-    expect(body).toMatch(
-      /await tx\s*\n?\s*\.update\(webhookDeliveries\)\s*\n?\s*\.set\(\{ status: 'in_flight' \}\)\s*\n?\s*\.where\(inArray\(webhookDeliveries\.id, ids\)\);/,
+  });
+
+  it('V-173.R review wjf04whfl #1 — the three terminal/retry UPDATEs fence on status=in_flight (.returning + 0-row no-op) so a stale/reclaimed worker cannot resurrect a finalized delivery', () => {
+    // RECLAIM_STALE_IN_FLIGHT_MS constant exported + used as the reclaim anchor.
+    expect(body).toMatch(/export const RECLAIM_STALE_IN_FLIGHT_MS = 5 \* 60 \* 1000;/);
+    // Every terminal/retry UPDATE narrows its WHERE to the current in_flight
+    // owner. There are exactly three (success / dlq / retry).
+    // Format-tolerant: prettier may wrap the .where(...) across lines, so match
+    // the fenced predicate itself (kept on one line) rather than the .where wrapper.
+    const fenced = body.match(
+      /and\(eq\(webhookDeliveries\.id, delivery\.id\), eq\(webhookDeliveries\.status, 'in_flight'\)\)/g,
+    );
+    expect(fenced?.length).toBe(3);
+    // The success + dlq branches treat a 0-row result as a no-op (early-return).
+    expect(body).toMatch(/if \(!updated\) return 'delivered';/);
+    expect(body).toMatch(/if \(!updated\) return 'dlqed';/);
+    // No terminal/retry UPDATE matches by id alone (the un-fenced pre-fix shape).
+    expect(body).not.toMatch(
+      /\.set\(\{[\s\S]*?status: 'delivered',[\s\S]*?\}\)\s*\n?\s*\.where\(eq\(webhookDeliveries\.id, delivery\.id\)\);/,
     );
   });
 

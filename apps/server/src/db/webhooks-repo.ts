@@ -187,6 +187,25 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     // overwrite current with the new pair, set the grace expiry.
     // No SELECT-then-UPDATE race — Postgres reads the row's current
     // values at UPDATE time.
+    //
+    // V-359.G — guard against a SECOND *customer* rotation while a prior
+    // customer rotation is STILL inside its dual-sign grace window.
+    // Without the guard the new rotation would copy the *current*
+    // (already-new) secret into secret_prev, silently discarding the
+    // ORIGINAL secret the customer is still rolling across their verifier
+    // infra — breaking inbound HMAC verification for the first new secret.
+    // The WHERE only matches when no live customer grace window is in
+    // flight (secret_prev_expires_at IS NULL or already elapsed), so the
+    // destructive copy can never clobber a still-valid secret_prev. The
+    // guard rides on the rotation UPDATE itself, so it stays atomic (no
+    // SELECT-then-UPDATE race introduced).
+    //
+    // A server-initiated FORCE-rotation (force_rotated_at IS NOT NULL)
+    // does NOT block: that window is the server migrating the customer
+    // OFF an aged secret, and a customer manually rotating in response is
+    // exactly the intended escape hatch (sub-slice 28.7 — it must clear
+    // force_rotated_at + grace_window_ends_at). Only a prior *customer*
+    // rotation (force_rotated_at IS NULL) opens a guarded window.
     const [row] = await this.database.db
       .update(webhookEndpoints)
       .set({
@@ -212,10 +231,33 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
           eq(webhookEndpoints.id, input.id),
           eq(webhookEndpoints.accountId, input.accountId),
           isNull(webhookEndpoints.disabledAt),
+          // V-359.G — only rotate when no prior *customer* grace window
+          // is live. A force-rotation window (force_rotated_at NOT NULL)
+          // is exempt so the customer's escape-hatch rotation proceeds.
+          sql`(${webhookEndpoints.secretPrevExpiresAt} IS NULL OR ${webhookEndpoints.secretPrevExpiresAt} <= ${input.now} OR ${webhookEndpoints.forceRotatedAt} IS NOT NULL)`,
         ),
       )
       .returning();
-    return row ? toEndpointRow(row) : null;
+    if (row) return toEndpointRow(row);
+
+    // The guarded UPDATE matched nothing. Distinguish a still-in-flight
+    // grace window (no-op: return the UNCHANGED in-flight row so the
+    // caller sees the original secret_prev preserved, NOT a spurious
+    // not-found) from a genuinely absent / disabled endpoint (null).
+    // This read runs only on the rare miss path and is NOT part of the
+    // rotation write, so it does not reintroduce a rotation race.
+    const [existing] = await this.database.db
+      .select()
+      .from(webhookEndpoints)
+      .where(
+        and(
+          eq(webhookEndpoints.id, input.id),
+          eq(webhookEndpoints.accountId, input.accountId),
+          isNull(webhookEndpoints.disabledAt),
+        ),
+      )
+      .limit(1);
+    return existing ? toEndpointRow(existing) : null;
   }
 
   async findEndpointsNeedingForceRotation(args: {

@@ -267,6 +267,62 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
     expect(after?.active).toBe(false);
   });
 
+  it('two same-endpoint failures in ONE batch cross the threshold off the LIVE counter (not the stale claim-time snapshot) → endpoint disabled', async () => {
+    // Regression for the stale-snapshot double-count: deliver() captures
+    // endpoint.consecutiveFailures once at claim time, and a batch runs its
+    // deliveries concurrently via Promise.all. When two+ deliveries for the
+    // SAME endpoint fail in one batch, the OLD auto-disable check evaluated
+    // `snapshot + 1 >= 50` against the IDENTICAL pre-batch snapshot for every
+    // delivery — so with the count seeded to 48, both reads computed 49 (< 50)
+    // and the endpoint was NEVER disabled even though the real counter climbed
+    // 48 → 49 → 50. The fix re-reads the CURRENT consecutiveFailures after each
+    // record* increment commits, so the second failure observes 50 and disables.
+    const { repo, endpoint } = await setupRepoWithEndpoint();
+    // Seed the endpoint to 48 consecutive failures via a throwaway delivery
+    // that is NOT claim-eligible (nextAttemptAt in the future).
+    const seedId = repo.getAllDeliveries()[0]?.id ?? '';
+    for (let i = 0; i < 48; i += 1) {
+      await repo.recordRetry(seedId, {
+        responseStatus: 500,
+        responseExcerpt: null,
+        lastError: null,
+        attempts: 1,
+        nextAttemptAt: new Date(NOW.getTime() + 60 * 60_000),
+      });
+    }
+    // Two FRESH deliveries (attempts=0) for the SAME endpoint, both claim-
+    // eligible at NOW → claimed together + run concurrently via Promise.all.
+    for (const eventId of [
+      '44444444-5555-6666-7777-888888888888',
+      '55555555-6666-7777-8888-999999999999',
+    ]) {
+      await repo.enqueueDelivery({
+        webhookId: endpoint.id,
+        eventId,
+        eventType: 'session.completed',
+        payload: { id: eventId, type: 'session.completed', data: {} },
+        nextAttemptAt: NOW,
+      });
+    }
+
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fakeFetch({ status: 500 }),
+      now: constNow,
+    });
+    const { claimed, outcomes } = await worker.tickOnce();
+    // Both fresh deliveries were claimed in one batch and retried.
+    expect(claimed).toBe(2);
+    expect(outcomes.every((o) => o.kind === 'retry')).toBe(true);
+    // The two increments pushed the live counter 48 → 49 → 50: the endpoint
+    // MUST be disabled (pre-fix it stays enabled — both checks saw 48+1=49).
+    const after = await repo.findEndpointById(endpoint.id);
+    expect(after?.consecutiveFailures).toBe(50);
+    expect(after?.disabledAt).not.toBeNull();
+    expect(after?.active).toBe(false);
+  });
+
   it('the 5th retry (attempts=4 → 5) is scheduled, not DLQd, with the 60-min backoff', async () => {
     // Regression guard for the off-by-one that capped delivery at 4
     // retries: with attempts=4 the next index is 5 (< MAX_ATTEMPTS=6),

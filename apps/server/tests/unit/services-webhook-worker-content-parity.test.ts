@@ -113,13 +113,28 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
     );
   });
 
-  it('handleOutcome: nextAttemptIndex >= MAX_ATTEMPTS → recordDlq + auto-disable check (consecutiveFailures+1 >= AUTO_DISABLE threshold)', () => {
+  it('handleOutcome: nextAttemptIndex >= MAX_ATTEMPTS → recordDlq + auto-disable check (via maybeAutoDisable, re-reading the CURRENT consecutiveFailures)', () => {
     expect(body).toMatch(
       /if \(nextAttemptIndex >= MAX_ATTEMPTS\) \{\s*\n?\s*await this\.config\.repo\.recordDlq\(delivery\.id, \{\s*\n?\s*responseStatus,\s*\n?\s*lastError,\s*\n?\s*at,\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(/'webhook delivery → DLQ \(max attempts\)',/);
     expect(body).toMatch(
-      /\/\/ Auto-disable check\s*\n?\s*if \(endpoint\.consecutiveFailures \+ 1 >= AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES\) \{\s*\n?\s*await this\.config\.repo\.disableEndpoint\(endpoint\.id, at\);/,
+      /\/\/ Auto-disable check\s*\n?\s*await this\.maybeAutoDisable\(endpoint\.id, at\);/,
+    );
+  });
+
+  it('maybeAutoDisable: re-reads the CURRENT consecutiveFailures (not the claim-time snapshot) so concurrent same-batch failures count once each, then disables idempotently past the threshold', () => {
+    expect(body).toMatch(
+      /private async maybeAutoDisable\(endpointId: string, at: Date\): Promise<void> \{/,
+    );
+    // Re-read the live endpoint row, skip if already disabled/deleted.
+    expect(body).toMatch(
+      /const current = await this\.config\.repo\.findEndpointById\(endpointId\);/,
+    );
+    expect(body).toMatch(/if \(!current \|\| current\.disabledAt !== null\) return;/);
+    // Threshold check is against the re-read CURRENT count, not snapshot+1.
+    expect(body).toMatch(
+      /if \(current\.consecutiveFailures >= AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES\) \{\s*\n?\s*await this\.config\.repo\.disableEndpoint\(endpointId, at\);/,
     );
   });
 

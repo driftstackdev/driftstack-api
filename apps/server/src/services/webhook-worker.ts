@@ -277,9 +277,7 @@ export class WebhookDeliveryWorker {
         'webhook delivery → DLQ (max attempts)',
       );
       // Auto-disable check
-      if (endpoint.consecutiveFailures + 1 >= AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES) {
-        await this.config.repo.disableEndpoint(endpoint.id, at);
-      }
+      await this.maybeAutoDisable(endpoint.id, at);
       return { kind: 'dlq', delivery };
     }
 
@@ -311,10 +309,31 @@ export class WebhookDeliveryWorker {
     // scheduling a retry rather than DLQ'ing — was crossing the threshold without
     // ever being disabled, because the check only ran in the DLQ branch. Mirror
     // the DLQ branch so a sustained-failing endpoint is disabled here too.
-    if (endpoint.consecutiveFailures + 1 >= AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES) {
-      await this.config.repo.disableEndpoint(endpoint.id, at);
-    }
+    await this.maybeAutoDisable(endpoint.id, at);
     return { kind: 'retry', delivery, nextAttemptAt };
+  }
+
+  /**
+   * Auto-disable an endpoint once its consecutive-failure count crosses the
+   * threshold. Re-reads the endpoint's CURRENT consecutiveFailures rather than
+   * the claim-time snapshot captured by deliver(): a batch runs its deliveries
+   * concurrently via Promise.all, so two+ failures for the SAME endpoint would
+   * otherwise each evaluate `snapshot + 1 >= threshold` against the identical
+   * pre-batch count — double-counting off a stale base and disabling at the
+   * wrong count. recordRetry/recordDlq have already committed their +1 (each
+   * in its own transaction, fenced on in_flight) before this runs, so the
+   * re-read observes every committed increment and the threshold is checked
+   * against the live counter — counting each concurrent failure once. The
+   * disable UPDATE is idempotent + scoped to this one endpoint id, so a
+   * redundant call from a sibling delivery in the same batch is harmless.
+   */
+  private async maybeAutoDisable(endpointId: string, at: Date): Promise<void> {
+    const current = await this.config.repo.findEndpointById(endpointId);
+    // Already disabled (by a sibling delivery, or deleted) → nothing to do.
+    if (!current || current.disabledAt !== null) return;
+    if (current.consecutiveFailures >= AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES) {
+      await this.config.repo.disableEndpoint(endpointId, at);
+    }
   }
 
   private now(): Date {

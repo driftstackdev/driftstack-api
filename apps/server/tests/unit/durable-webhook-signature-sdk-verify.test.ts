@@ -52,7 +52,14 @@ function makeMockDb(
       }),
     }),
     insert: () => ({ values: () => Promise.resolve(undefined) }),
-    update: () => ({ set: () => ({ where: () => Promise.resolve(undefined) }) }),
+    // Terminal/retry UPDATEs are now fenced on status=in_flight and call
+    // .returning(...); a 1-row result means the fence matched (the no-op
+    // early-return path is exercised by the integration suite). The claim-flip
+    // UPDATE inside the txn (above) still resolves to a bare Promise — it has
+    // no .returning().
+    update: () => ({
+      set: () => ({ where: () => ({ returning: () => Promise.resolve([{ id: delivery.id }]) }) }),
+    }),
   };
   return { db } as unknown as Database;
 }
