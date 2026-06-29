@@ -1555,22 +1555,11 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`Profile ${parsed.data.profile_id} not found.`);
         }
         await profilesService.get({ id: profileBareId, accountId: ownerAccountId });
-        // doc-150 item 6 — HARD per-account storage-quota gate. A profile-backed
-        // create is the point where NEW persisted state starts growing (the
-        // dispatch mints the R2 sealed-blob save-back URL → bumps size_bytes), so
-        // we refuse the launch (409 storage_quota_exceeded) BEFORE dispatch when
-        // the OWNER's aggregate profile size_bytes has reached its tier's hard
-        // cap. Mirrors routes/sessions.ts resolveProfileBinding exactly: the gate
-        // runs AFTER ownership is confirmed (we only meter the owner that actually
-        // owns the resolved profile) and uses the OWNER's tier — self-scoped is
-        // the caller's own tier; team-scoped looks the owner account up via
-        // authRepo. Enterprise is soft-only (never blocks — that's in the helper).
-        // A create WITHOUT a profile_id never reaches here, so it's never gated.
-        const ownerTier = await resolveOwnerTier(ctx, effective);
-        await profilesService.assertWithinStorageQuotaForLaunch({
-          accountId: ownerAccountId,
-          tier: ownerTier,
-        });
+        // doc-150 item 6 — the HARD storage-quota gate that used to sit HERE moved
+        // to AFTER the idempotency replay (#79), beside the proxy probe + active-
+        // session cap, so a RETRIED create replays the cached 201 instead of newly
+        // 409-ing on quota. Ownership validation (above) stays here — a foreign/
+        // unknown profile_id is a clean 404 regardless of idempotency.
       }
 
       // ARC A — a supplied proxy_id MUST reference an owned proxy; validate
@@ -1703,6 +1692,26 @@ export function registerAgentSessionsRoutes(
           proxyId,
           accountId: ownerAccountId,
           logger: req.log,
+        });
+      }
+
+      // doc-150 item 6 — HARD per-account storage-quota gate (#79: relocated here from
+      // the profile-validation block above, to sit AFTER the idempotency replay like
+      // the proxy probe + active-session cap). A retry of an already-succeeded create
+      // replays the cached 201 WITHOUT re-gating — idempotency must always replay
+      // success; a profile-backed create that already launched must not newly 409 on
+      // quota when re-sent. Only a genuinely NEW profile-backed create reaches here;
+      // the dispatch mints the R2 sealed-blob save-back URL → bumps size_bytes, so we
+      // refuse (409 storage_quota_exceeded) when the OWNER's aggregate size_bytes has
+      // hit the tier hard cap. Owner-scoped (self = caller tier, team = owner's tier
+      // via authRepo; enterprise soft-only — in the helper). The profilesService check
+      // is structurally redundant (profileBareId is only set after the unwired 404
+      // above) — it is for TS narrowing across the idempotency block.
+      if (profileBareId !== undefined && profilesService !== undefined) {
+        const ownerTier = await resolveOwnerTier(ctx, effective);
+        await profilesService.assertWithinStorageQuotaForLaunch({
+          accountId: ownerAccountId,
+          tier: ownerTier,
         });
       }
 
