@@ -171,11 +171,19 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
     expect(body).toMatch(
       /V-666\.K — auto-expire a single pending order if it's older than\s*\n?\s*\*\s*`olderThanMs`\. Only `pending` orders are eligible/,
     );
-    expect(body).toMatch(/if \(order\.status !== 'pending'\) return null;/);
+    // #79 — expireOrder now re-checks + writes under the row lock (SELECT…FOR UPDATE)
+    // so a concurrent IPN (pending→paid) can't be clobbered back to failed by an
+    // unlocked read-modify-upsert; the guard reads the LOCKED committed row.
+    expect(body).toMatch(
+      /await this\.opts\.repo\.withOrderLock<CryptoOrder \| null>\(\s*\n?\s*args\.order_id,/,
+    );
+    expect(body).toMatch(
+      /if \(order\.status !== 'pending' \|\| now - order\.created_at < args\.olderThanMs\) \{/,
+    );
     expect(body).toMatch(
       /events: \[\.\.\.order\.events, \{ status: 'failed', at: now, source: 'expired' \}\],/,
     );
-    expect(body).toMatch(/await this\.emitFailedTransition\(updated, 'expired'\);/);
+    expect(body).toMatch(/await this\.emitFailedTransition\(expiredOrder, 'expired'\);/);
   });
 
   it('V-666.K sweepExpiredOrders: default limit=500 + oldest-first listPendingOlderThan scan + capped=(scan filled limit) honest signal; per-row emitFailedTransition source=swept', () => {
@@ -186,10 +194,14 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
     expect(body).toMatch(
       /this\.opts\.repo\.listPendingOlderThan\(\{ olderThan: cutoff, limit \}\)/,
     );
+    // #79 — the sweep now re-checks + writes per-row under withOrderLock, not the stale
+    // listPendingOlderThan snapshot, so a concurrent IPN that flipped the row pending→paid
+    // is SEEN under the lock and the row is skipped (no blind clobber to failed).
+    expect(body).toMatch(/this\.opts\.repo\.withOrderLock<CryptoOrder \| null>\(o\.order_id,/);
     expect(body).toMatch(
-      /events: \[\.\.\.o\.events, \{ status: 'failed', at: now, source: 'swept' \}\],/,
+      /events: \[\.\.\.order\.events, \{ status: 'failed', at: now, source: 'swept' \}\],/,
     );
-    expect(body).toMatch(/await this\.emitFailedTransition\(updated, 'swept'\);/);
+    expect(body).toMatch(/await this\.emitFailedTransition\(swept, 'swept'\);/);
     // `capped` keys off whether the scan filled the limit (more may
     // remain), not the flip count — so the cron re-runs correctly.
     expect(body).toMatch(/return \{ expired, capped: candidates\.length === limit \};/);

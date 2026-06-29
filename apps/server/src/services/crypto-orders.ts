@@ -1135,21 +1135,33 @@ export class CryptoOrdersService {
    * when the order doesn't exist / isn't expirable / isn't old enough.
    */
   async expireOrder(args: { order_id: string; olderThanMs: number }): Promise<CryptoOrder | null> {
-    const order = await this.opts.repo.getById(args.order_id);
-    if (order === null) return null;
-    if (order.status !== 'pending') return null;
     const now = this.nowFn();
-    if (now - order.created_at < args.olderThanMs) return null;
-    const updated: CryptoOrder = {
-      ...order,
-      status: 'failed',
-      events: [...order.events, { status: 'failed', at: now, source: 'expired' }],
-      updated_at: now,
-    };
-    await this.opts.repo.upsert(updated);
-    // V-666.AN — fire crypto.order.failed on the expire transition.
-    await this.emitFailedTransition(updated, 'expired');
-    return updated;
+    // #79 — re-check + write under the row lock (SELECT…FOR UPDATE), like cancelOrder /
+    // applyIpnStatus. The previous unlocked read-modify-upsert could clobber a
+    // concurrently-PAID order back to 'failed': an IPN flipping pending→paid between
+    // the read and the upsert was blindly overwritten, so a paid customer lost their
+    // tier AND got a contradictory crypto.order.failed webhook. The guard now reads the
+    // LOCKED committed row, so a won-the-race IPN is seen here and the expire is skipped.
+    const expiredOrder = await this.opts.repo.withOrderLock<CryptoOrder | null>(
+      args.order_id,
+      (order) => {
+        if (order.status !== 'pending' || now - order.created_at < args.olderThanMs) {
+          return { updated: null, result: null };
+        }
+        const updated: CryptoOrder = {
+          ...order,
+          status: 'failed',
+          events: [...order.events, { status: 'failed', at: now, source: 'expired' }],
+          updated_at: now,
+        };
+        return { updated, result: updated };
+      },
+    );
+    if (expiredOrder === null) return null; // not found OR no longer pending/old-enough
+    // V-666.AN — fire crypto.order.failed on the expire transition (only when we
+    // actually performed the pending→failed write).
+    await this.emitFailedTransition(expiredOrder, 'expired');
+    return expiredOrder;
   }
 
   /**
@@ -1180,22 +1192,28 @@ export class CryptoOrdersService {
     const candidates = await this.opts.repo.listPendingOlderThan({ olderThan: cutoff, limit });
     let expired = 0;
     for (const o of candidates) {
-      // Defensive re-check: the repo query already filters to pending +
-      // past-cutoff, but guard against a race with a concurrent IPN
-      // transition between the query and the upsert below.
-      if (o.status !== 'pending' || now - o.created_at < opts.olderThanMs) continue;
-      const updated: CryptoOrder = {
-        ...o,
-        status: 'failed',
-        events: [...o.events, { status: 'failed', at: now, source: 'swept' }],
-        updated_at: now,
-      };
-      await this.opts.repo.upsert(updated);
-      // V-666.AN — fire crypto.order.failed for each swept order.
-      // Per-row emission rather than a single batch event so a
-      // customer who paid mid-sweep sees the transition the same
-      // way as a single expireOrder call.
-      await this.emitFailedTransition(updated, 'swept');
+      // #79 — re-check + write under the row lock (not the stale listPendingOlderThan
+      // snapshot). The old "defensive re-check" tested `o.status` from the non-locking
+      // SELECT, so a concurrent IPN flipping this row pending→paid between the scan and
+      // the upsert was clobbered back to 'failed' (paid customer loses tier + spurious
+      // failed webhook). The locked read sees the won-the-race IPN and skips the row.
+      const swept = await this.opts.repo.withOrderLock<CryptoOrder | null>(o.order_id, (order) => {
+        if (order.status !== 'pending' || now - order.created_at < opts.olderThanMs) {
+          return { updated: null, result: null };
+        }
+        const updated: CryptoOrder = {
+          ...order,
+          status: 'failed',
+          events: [...order.events, { status: 'failed', at: now, source: 'swept' }],
+          updated_at: now,
+        };
+        return { updated, result: updated };
+      });
+      if (swept === null) continue; // a concurrent IPN won the row, or it vanished
+      // V-666.AN — fire crypto.order.failed for each swept order. Per-row emission
+      // rather than a single batch event so a customer who paid mid-sweep sees the
+      // transition the same way as a single expireOrder call.
+      await this.emitFailedTransition(swept, 'swept');
       expired += 1;
     }
     // `capped` reflects whether the SCAN filled the limit (more stale
