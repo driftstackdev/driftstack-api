@@ -102,24 +102,25 @@ describe('SimulatorWindow — iOS address-bar treatment', () => {
     });
   }
 
-  it('collapses to the hostname while NOT editing, and shows the full URL when focused', () => {
+  it('resting bar shows host + path (scheme dropped) so same-site nav is visible; full URL when focused', () => {
     const { container } = renderSim();
     pushPageState({ state: 'loaded', url: 'https://example.com/path?q=1', title: 'Example' });
     const input = addressInput(container);
-    // Resting: hostname only (iOS Safari collapse), not the raw full URL.
-    expect(input.value).toBe('example.com');
-    // Focus → the full URL is shown for editing.
+    // Resting: host + path + query, scheme dropped (founder 2026-06-29 — host-only hid
+    // same-site path changes so the URL looked frozen; the lock icon conveys https).
+    expect(input.value).toBe('example.com/path?q=1');
+    // Focus → the full raw URL is shown for editing.
     fireEvent.focus(input);
     expect(input.value).toBe('https://example.com/path?q=1');
-    // Blur → collapses back to the hostname.
+    // Blur → back to the resting host+path form.
     fireEvent.blur(input);
-    expect(input.value).toBe('example.com');
+    expect(input.value).toBe('example.com/path?q=1');
   });
 
-  it('keeps a subdomain host (.host convention; eTLD+1 collapse is a later refinement)', () => {
+  it('keeps the full subdomain host + path in the resting bar', () => {
     const { container } = renderSim();
     pushPageState({ state: 'loaded', url: 'https://news.bbc.co.uk/world', title: 'BBC' });
-    expect(addressInput(container).value).toBe('news.bbc.co.uk');
+    expect(addressInput(container).value).toBe('news.bbc.co.uk/world');
   });
 
   it('shows the full URL on focus and select()s it so the next keystroke overtypes', () => {

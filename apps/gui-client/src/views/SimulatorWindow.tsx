@@ -1222,8 +1222,20 @@ function BrowserBar({
     }
   })();
   const restingDisplay = (() => {
+    // Founder 2026-06-29: show host + path + query (NOT host-only) so the resting bar
+    // visibly reflects the REAL current URL as the page navigates within a site —
+    // host-only collapsed every same-site navigation to the unchanged hostname, which
+    // read as "the URL isn't updating in realtime". Drop only the scheme (the lock
+    // icon already conveys https) so the bar stays clean but tracks the live URL.
+    // about:blank / data: / empty / unparseable fall back to the raw value.
     try {
-      return new URL(liveUrl).host || liveUrl;
+      const u = new URL(liveUrl);
+      // No host (data:/about:/blob:) → show the raw value (a bare path would be
+      // confusing). With a host, show host + path + query so same-site navigation is
+      // visible in the resting bar; strip a lone trailing slash for cleanliness.
+      if (u.host === '') return liveUrl;
+      const tail = `${u.host}${u.pathname}${u.search}${u.hash}`.replace(/\/$/, '');
+      return tail.length > 0 ? tail : u.host;
     } catch {
       return liveUrl;
     }
