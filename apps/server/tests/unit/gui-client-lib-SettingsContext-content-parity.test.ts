@@ -130,7 +130,14 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
     expect(body).toMatch(
       /const refreshAccountMe = useCallback\(async \(\): Promise<void> => \{\s*\n\s*if \(!client\) \{\s*\n\s*setAccountMe\(null\);\s*\n\s*return;\s*\n\s*\}/,
     );
-    expect(body).toMatch(/const me = await client\.account\.me\(\);/);
+    expect(body).toMatch(/const raw = await client\.account\.me\(\);/);
+    // round-3 — normalize `teams` to an array at the SOURCE so a partial/legacy
+    // /v1/account/me (omitting `teams`) can't crash the whole window via a render
+    // outside the per-view ErrorBoundary. Pin the normalization so a refactor
+    // can't quietly drop it.
+    expect(body).toMatch(
+      /const me = raw\.teams === undefined \? \{ \.\.\.raw, teams: \[\] \} : raw;/,
+    );
     expect(body).toMatch(/setAccountMe\(me\);/);
     expect(body).toMatch(
       /if \(\s*\n\s*activeWorkspace !== null &&\s*\n\s*!me\.teams\.some\(\(t\) => t\.owner_account_id === activeWorkspace\)\s*\n\s*\) \{\s*\n\s*setActiveWorkspace\(null\);\s*\n\s*\}/,

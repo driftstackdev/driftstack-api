@@ -51,7 +51,11 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
   it('Count-badge data sources pinned: Profiles X/Y via accountMe.profile_count / .profile_cap, Team N via accountMe.teams.length, Recordings N via RecordingsContext map size — pin so a casual refactor cannot drop a counter without showing up in the diff. (Sessions badge dropped 2026-06-15 with the Raw sessions nav item.)', () => {
     expect(body).toMatch(/accountMe\?\.profile_count \?\? null/);
     expect(body).toMatch(/accountMe\?\.profile_cap \?\? null/);
-    expect(body).toMatch(/accountMe\?\.teams\.length \?\? 0/);
+    // round-3 — `teams` is now optional-chained too (accountMe?.teams?.length) so a
+    // non-null /account/me that omits `teams` (partial/legacy/malformed payload) can't
+    // throw "Cannot read properties of undefined (reading 'length')" and blank the
+    // whole window (the Sidebar mounts outside the per-view ErrorBoundary).
+    expect(body).toMatch(/accountMe\?\.teams\?\.length \?\? 0/);
     expect(body).toMatch(/recordings\.size/);
   });
 
@@ -74,7 +78,10 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
 
   it('Workspace switcher (founder-approved): footer <select> rendered only for members of >=1 team (accountMe.teams.length > 0); options = Personal (value="") + each team; onChange -> setActiveWorkspace(value===""? null : value) which re-scopes the SDK effectiveAccount. Pinned so a solo account never sees the affordance and the switch wiring cannot silently drop.', () => {
     expect(body).toMatch(/activeWorkspace, setActiveWorkspace \} = useSettings\(\);/);
-    expect(body).toMatch(/accountMe !== null && accountMe\.teams\.length > 0 &&/);
+    // round-3 — the team-count gate is optional-chained ((accountMe.teams?.length ?? 0) > 0)
+    // so a malformed /account/me missing `teams` survives instead of throwing in this render.
+    // Still gated on a non-null accountMe AND >=1 team, so a solo account never sees the switcher.
+    expect(body).toMatch(/accountMe !== null && \(accountMe\.teams\?\.length \?\? 0\) > 0 &&/);
     expect(body).toMatch(/aria-label="Active workspace"/);
     expect(body).toMatch(/value=\{activeWorkspace \?\? ''\}/);
     expect(body).toContain(

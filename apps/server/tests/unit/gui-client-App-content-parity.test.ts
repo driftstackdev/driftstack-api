@@ -82,8 +82,15 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
   });
 
   it('V-244 first-run gate: settings.apiKey === null && !wizardDismissed → FirstRunWizard with onComplete that flips wizardDismissed — pinned so customers without creds land on the wizard (not the empty shell) and the wizard-skip path still gives them the regular shell + Settings access', () => {
+    // round-3 — the gate now also stays mounted while the wizard is mid-flow
+    // (`wizardActive` latched true). Without that latch, the wizard's own
+    // BEFORE-the-First-profile-step key save flipped `apiKey === null` false
+    // and unmounted the wizard, so the "First profile" step the stepper
+    // advertises was unreachable. Pin the latch + the onComplete that clears
+    // BOTH flags so the fix can't silently regress.
+    expect(body).toMatch(/\/\/ V-244 — first-run gate\. Show the wizard when there's no key/);
     expect(body).toMatch(
-      /\/\/ V-244 — first-run gate\. No apiKey \+ not dismissed → wizard\.\s*\n?\s*if \(settings\.apiKey === null && !wizardDismissed\) \{\s*\n?\s*return <FirstRunWizard onComplete=\{\(\) => setWizardDismissed\(true\)\} \/>;\s*\n?\s*\}/,
+      /if \(\(settings\.apiKey === null \|\| wizardActive\) && !wizardDismissed\) \{\s*\n?\s*return \(\s*\n?\s*<FirstRunWizard\s*\n?\s*onComplete=\{\(\) => \{\s*\n?\s*setWizardActive\(false\);\s*\n?\s*setWizardDismissed\(true\);\s*\n?\s*\}\}\s*\n?\s*\/>\s*\n?\s*\);\s*\n?\s*\}/,
     );
     expect(body).toMatch(
       /\/\/ V-244 — track wizard state\. Customer with no apiKey on boot\s*\n?\s*\/\/ sees the wizard; once apiKey is set \(via wizard or any other\s*\n?\s*\/\/ path\) the regular shell takes over\. `wizardDismissed` lets the\s*\n?\s*\/\/ customer skip the wizard mid-flow without leaving them stuck on\s*\n?\s*\/\/ it forever; once true, they get the normal shell \+ can still\s*\n?\s*\/\/ configure via Settings\./,
