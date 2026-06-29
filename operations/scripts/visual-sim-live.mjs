@@ -157,17 +157,53 @@ try {
     v.bottomBandSuspected = v.bottomGapPx > 8;
   }
 
-  // 3. drive a tap on the middle of the video + see if a reaction fires (page_state
-  // url change is hard to observe here, but a console/DOM signal or no-throw is a
-  // baseline; the functional auto-verify harness asserts the real injection).
+  // 3. drive a tap THROUGH the GUI's pointer→viewport mapping (which uses inputLogical
+  // = the box's page_state logicalContentWidth/Height — the durable fix) at a chosen
+  // LOGICAL coord, then verify it LANDED by reading the GUI address bar before/after.
+  // A url change proves the tap hit the link → the coordinate mapping is correct
+  // end-to-end (not just dispatched). The pixel is computed with the SAME math the GUI
+  // inverts, so a round-trip preserves the logical coord. Defaults ≈ the example.com
+  // "More information…" link; override TAP_LOGICAL_X/Y to aim elsewhere, or set
+  // TAP_FULLPAGE_LINK=1 + NAV_URL to a page whose whole viewport navigates (center tap).
+  const LOGW = Number(process.env.TAP_LOGICAL_W || 402);
+  const LOGH = Number(process.env.TAP_LOGICAL_H || 714);
+  const FULLPAGE = process.env.TAP_FULLPAGE_LINK === '1';
+  const LX = FULLPAGE ? LOGW / 2 : Number(process.env.TAP_LOGICAL_X || 122);
+  const LY = FULLPAGE ? LOGH / 2 : Number(process.env.TAP_LOGICAL_Y || 207);
+  const addrVal = async () =>
+    page.evaluate(() => {
+      const a = document.querySelector('[aria-label="Address bar"]');
+      return a instanceof HTMLInputElement ? a.value : null;
+    });
   let tapErr = null;
+  const urlBefore = await addrVal();
   try {
-    if (m.video) await page.mouse.click(m.video.x + m.video.w / 2, m.video.y + m.video.h / 2);
-    await sleep(800);
+    if (m.video) {
+      // Match the GUI's object-contain pointer math EXACTLY (livekit-input-capture
+      // pointerToViewport) so a logical→pixel→logical round-trip is identity even when
+      // the stream is bar-boxed within the element (aspect mismatch). Without this, an
+      // aspect mismatch would land the verify tap off-target → a false negative.
+      const elementAspect = m.video.w / m.video.h;
+      const videoAspect = LOGW / LOGH;
+      let dispW = m.video.w;
+      let dispH = m.video.h;
+      if (videoAspect > elementAspect) dispH = m.video.w / videoAspect;
+      else if (videoAspect < elementAspect) dispW = m.video.h * videoAspect;
+      const px = m.video.x + (m.video.w - dispW) / 2 + (LX / LOGW) * dispW;
+      const py = m.video.y + (m.video.h - dispH) / 2 + (LY / LOGH) * dispH;
+      await page.mouse.click(px, py);
+      v.tapPixel = { x: Math.round(px), y: Math.round(py), logical: { x: LX, y: LY } };
+    }
+    await sleep(2400);
   } catch (e) {
     tapErr = String(e);
   }
+  const urlAfter = await addrVal();
   v.tapDispatched = tapErr === null;
+  v.urlBefore = urlBefore;
+  v.urlAfter = urlAfter;
+  v.navigated = urlBefore !== null && urlAfter !== null && urlBefore !== urlAfter;
+  await page.screenshot({ path: resolve(OUT, 'live-after-tap.png') });
 
   console.log(JSON.stringify({ measured: m, verdict: v, pageErrors: errors.slice(0, 6) }, null, 2));
 } finally {
