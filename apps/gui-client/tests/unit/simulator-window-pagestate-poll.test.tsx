@@ -255,4 +255,28 @@ describe('SimulatorWindow — page-stalled badge poll-re-raise gate', () => {
     await advance(2000);
     expect(stalledBadge(container)).not.toBeNull();
   });
+
+  it('a page_state frame carrying logicalContentWidth/Height is processed normally (A3 W3005 dims reader is additive — never drops the frame or its state)', async () => {
+    const { container } = renderSim();
+    await flush();
+    // A loading→errored sequence whose frames ALSO carry the fixed logical dims must
+    // still raise the error overlay — proving the dims reader (which runs first) does
+    // not drop or short-circuit the frame's state handling.
+    act(() => {
+      fireDataFrame({
+        state: 'loading',
+        url: 'https://dims.example/',
+        logicalContentWidth: 402,
+        logicalContentHeight: 678,
+      });
+      fireDataFrame({
+        state: 'errored',
+        url: 'https://dims.example/',
+        error: { kind: 'dns', message: 'lookup failed' },
+        logicalContentWidth: 402,
+        logicalContentHeight: 678,
+      });
+    });
+    expect(overlay(container)).not.toBeNull();
+  });
 });

@@ -2654,6 +2654,12 @@ export function SimulatorWindow(): JSX.Element {
   });
   const deviceLogicalRef = useRef(inputLogical);
   deviceLogicalRef.current = inputLogical;
+  // A3 W3005 — once the box's page_state delivers the FIXED per-archetype logical
+  // content dims, they OWN the tap/scroll coordinate space; the track-derived dims in
+  // handleVideoDimensions become a pre-first-page_state fallback only (the encoded
+  // track downscales under bandwidth → can't be trusted for tap coords). Latched true
+  // on the first frame carrying dims; reset per session alongside sizedToStreamRef.
+  const hasPageStateDimsRef = useRef(false);
   // Landscape ref kept current every render so the window-sizing closures (fitWindow
   // + the onResized listener) use the ROTATED aspect — else rotate snaps back to a
   // portrait sliver (audit B2/B3). Declared here (before fitWindow) so those
@@ -3240,6 +3246,13 @@ export function SimulatorWindow(): JSX.Element {
           title?: string;
           loading?: boolean;
           progress?: number;
+          // A3 W3005 / box 76b720c0d — the per-archetype FIXED logical content
+          // viewport (CSS-px the injector's origin:viewport maps to, e.g. 402×714
+          // launch / 402×678 Family-A), emitted on EVERY page_state frame. The GUI
+          // uses THIS as the tap/scroll coordinate space, never the SFU-downscaled
+          // video track px (which vary with bandwidth → would corrupt tap coords).
+          logicalContentWidth?: number;
+          logicalContentHeight?: number;
           // tabId (doc-150 item 4 → live-state accuracy) — a page_state frame the box
           // attributes to a specific renderer. When present we route url/title to THAT
           // tab; absent → the active tab. Forward-compatible: per-tab routing activates
@@ -3389,6 +3402,23 @@ export function SimulatorWindow(): JSX.Element {
           // diagnosable instead of silently stalling page_state + the overlays.
           if (msg.type !== 'ping') warnUnrecognizedDataFrame(msg);
           return;
+        }
+        // A3 W3005 — adopt the box's FIXED per-archetype logical content dims as the
+        // tap/scroll coordinate space (every page_state frame carries them). The
+        // durable fix for SFU-downscale tap drift: the encoded track px vary with
+        // bandwidth, but these CSS-px viewport dims are stable, so taps map 1:1 to what
+        // the injector's origin:viewport expects. Update only when present + changed (a
+        // CP-poll frame without dims never clears them); latch so the track-derived
+        // fallback in handleVideoDimensions stops overriding.
+        {
+          const lw = msg.logicalContentWidth;
+          const lh = msg.logicalContentHeight;
+          if (typeof lw === 'number' && lw > 0 && typeof lh === 'number' && lh > 0) {
+            hasPageStateDimsRef.current = true;
+            if (deviceLogicalRef.current.width !== lw || deviceLogicalRef.current.height !== lh) {
+              setInputLogical({ width: lw, height: lh });
+            }
+          }
         }
         // Box is the ONLY writer of a tab's stored url/title (live-state accuracy
         // refactor). Route by tabId when the frame carries one, else the active tab;
@@ -4755,6 +4785,9 @@ export function SimulatorWindow(): JSX.Element {
   // different-aspect archetype keeps the prior window shape + letterboxes (audit S5).
   useEffect(() => {
     sizedToStreamRef.current = false;
+    // A3 W3005 — a new session re-negotiates its archetype dims; drop the latch so the
+    // box's fresh page_state dims (or the track fallback) re-own the touch space.
+    hasPageStateDimsRef.current = false;
     // Re-seed the touch logical frame to the launch archetype until the NEW session's
     // first full-res frame reports its per-archetype dims (mirrors sizedToStreamRef).
     setInputLogical({ width: 402, height: 874 });
@@ -4777,20 +4810,21 @@ export function SimulatorWindow(): JSX.Element {
     // screen-host edge-to-edge (no bottom-black letterbox). Same value that drives the
     // window-sizing math below, so box == host == video.
     setContentAspect(w / h);
-    // Adopt the captured-frame dims DIRECTLY as the touch-coordinate space. A3's
-    // 2026-06-29 black-band fix changed the box capture to inner_height, so the
-    // published track is now the 1×-display content viewport (e.g. 402×714), NOT the
-    // old 3×-dpr full-res frame — the previous ÷STREAM_DPR mapped taps into a 1/3-size
-    // space, landing them ~3× off (A3 carried a box-side reconcile stopgap until this
-    // ships; on install A3 flips RECONCILE=0). Set ONCE (gated by sizedToStreamRef,
-    // cleared only on a new session) so a later SFU-downscaled metadata event can't
-    // shrink the touch space (A3 W2811). The captured frame is the content-only web
-    // viewport the injector targets via origin:viewport, so these dims are exactly
-    // the space tap/scroll coords must be in.
-    setInputLogical({
-      width: Math.round(w),
-      height: Math.round(h),
-    });
+    // FALLBACK touch-coordinate space ONLY. The box's page_state now delivers the
+    // FIXED per-archetype logical content dims (A3 W3005) which OWN the touch space —
+    // see the page_state reader's hasPageStateDimsRef latch above. Until the first
+    // page_state frame carrying dims arrives, derive a provisional space from the
+    // captured-frame dims (A3's 2026-06-29 inner_height capture makes the track ≈ the
+    // content viewport, e.g. 402×714) so very-early taps aren't wildly off. Once the
+    // latch is set the fixed page_state dims win and this never overrides them — the
+    // encoded track downscales under bandwidth (268×476 / 300×654 observed) and is
+    // unreliable for tap coords (A3 W2811 / W3004).
+    if (!hasPageStateDimsRef.current) {
+      setInputLogical({
+        width: Math.round(w),
+        height: Math.round(h),
+      });
+    }
     // Fit ONCE to the real device aspect + the current chrome, in EITHER orientation —
     // fitWindow's sizingAspect inverts for landscape. The old early-return on landscape
     // dropped the aspect entirely → the window stayed at the seeded 402/874 and letterboxed
