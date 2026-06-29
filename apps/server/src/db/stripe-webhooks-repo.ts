@@ -82,8 +82,25 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
     cancelAtPeriodEnd: boolean;
     canceledAt: Date | null;
     at: Date;
-  }): Promise<void> {
-    await this.database.db
+  }): Promise<{ applied: boolean }> {
+    // Event-recency guard. `args.at` is the EVENT time (event.created), the
+    // canonical ordering signal — Stripe does not guarantee delivery order
+    // and re-delivers failed events for up to 3 days, so a stale / out-of-
+    // order event must not overwrite a fresher mirror row. On INSERT (no
+    // conflict) the row always applies. On CONFLICT we skip the UPDATE only
+    // when the incoming event is STRICTLY OLDER than the stored row, i.e.
+    // we apply when `stored.updated_at <= excluded.updated_at` (setWhere).
+    // `<=` (not `<`) is deliberate: event.created is second-granularity, so
+    // two genuinely-distinct ordered events (e.g. a created immediately
+    // followed by an updated) can share a second — equal-time events must
+    // still apply (last-processed-wins, matching the prior behaviour, the
+    // best we can do without sub-second ordering). Only a strictly-older
+    // event is rejected. A skipped UPDATE matches the conflict target but
+    // fails the WHERE, so Postgres writes nothing and `.returning()` yields
+    // no row: `applied = result.length > 0` distinguishes "wrote (fresh
+    // insert or newer/equal update)" from "skipped (stale event)". Callers
+    // gate the tier mutation on it.
+    const result = await this.database.db
       .insert(subscriptions)
       .values({
         accountId: args.accountId,
@@ -99,6 +116,7 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
       })
       .onConflictDoUpdate({
         target: subscriptions.stripeSubscriptionId,
+        setWhere: sql`${subscriptions.updatedAt} <= excluded.updated_at`,
         set: {
           accountId: args.accountId,
           stripePriceId: args.stripePriceId,
@@ -109,7 +127,9 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
           canceledAt: args.canceledAt,
           updatedAt: args.at,
         },
-      });
+      })
+      .returning({ id: subscriptions.id });
+    return { applied: result.length > 0 };
   }
 
   async setAccountTier(args: {

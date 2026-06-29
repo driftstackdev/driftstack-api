@@ -72,12 +72,12 @@ describe('W446.C apps/server/src/db/stripe-webhooks-repo.ts content parity', () 
     );
   });
 
-  it('upsertSubscription: 8-status enum union (incomplete|incomplete_expired|trialing|active|past_due|canceled|unpaid|paused) Stripe-mirror; onConflictDoUpdate target=stripeSubscriptionId; updates accountId+stripePriceId+tier+status+currentPeriodEnd+cancelAtPeriodEnd+canceledAt+updatedAt on conflict', () => {
+  it('upsertSubscription: 8-status enum union (incomplete|incomplete_expired|trialing|active|past_due|canceled|unpaid|paused) Stripe-mirror; onConflictDoUpdate target=stripeSubscriptionId; V-079 event-recency setWhere (updated_at <= excluded.updated_at) gates the conflict UPDATE; updates accountId+stripePriceId+tier+status+currentPeriodEnd+cancelAtPeriodEnd+canceledAt+updatedAt on conflict; .returning() surfaces the {applied} signal', () => {
     expect(body).toMatch(
       /status:\s*\n?\s*\| 'incomplete'\s*\n?\s*\| 'incomplete_expired'\s*\n?\s*\| 'trialing'\s*\n?\s*\| 'active'\s*\n?\s*\| 'past_due'\s*\n?\s*\| 'canceled'\s*\n?\s*\| 'unpaid'\s*\n?\s*\| 'paused';/,
     );
     expect(body).toMatch(
-      /\.onConflictDoUpdate\(\{\s*\n?\s*target: subscriptions\.stripeSubscriptionId,\s*\n?\s*set: \{\s*\n?\s*accountId: args\.accountId,\s*\n?\s*stripePriceId: args\.stripePriceId,\s*\n?\s*tier: args\.tier,\s*\n?\s*status: args\.status,\s*\n?\s*currentPeriodEnd: args\.currentPeriodEnd,\s*\n?\s*cancelAtPeriodEnd: args\.cancelAtPeriodEnd,\s*\n?\s*canceledAt: args\.canceledAt,\s*\n?\s*updatedAt: args\.at,\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /\.onConflictDoUpdate\(\{\s*\n?\s*target: subscriptions\.stripeSubscriptionId,\s*\n?\s*setWhere: sql`\$\{subscriptions\.updatedAt\} <= excluded\.updated_at`,\s*\n?\s*set: \{\s*\n?\s*accountId: args\.accountId,\s*\n?\s*stripePriceId: args\.stripePriceId,\s*\n?\s*tier: args\.tier,\s*\n?\s*status: args\.status,\s*\n?\s*currentPeriodEnd: args\.currentPeriodEnd,\s*\n?\s*cancelAtPeriodEnd: args\.cancelAtPeriodEnd,\s*\n?\s*canceledAt: args\.canceledAt,\s*\n?\s*updatedAt: args\.at,\s*\n?\s*\},\s*\n?\s*\}\)\s*\n?\s*\.returning\(\{ id: subscriptions\.id \}\);\s*\n?\s*return \{ applied: result\.length > 0 \};/,
     );
   });
 

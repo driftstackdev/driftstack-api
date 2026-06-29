@@ -64,8 +64,16 @@ export interface StripeWebhooksRepo {
 
   /**
    * Upsert a subscription mirror row keyed on `stripeSubscriptionId`.
-   * If a row with that id exists, UPDATE its mutable fields; otherwise
-   * INSERT new. Returns nothing — handlers don't need the returned row.
+   * If a row with that id exists, UPDATE its mutable fields ONLY when the
+   * incoming event is newer than the stored row (event-recency guard —
+   * Stripe does not guarantee delivery order and re-delivers for up to 3
+   * days, so an out-of-order / retried-old event must not revert a fresher
+   * mirror). `args.at` carries the EVENT time (event.created), not the
+   * processing time, and is the recency signal. Returns `{ applied }`:
+   * `true` on a fresh INSERT or a newer-event UPDATE; `false` when a
+   * conflicting row already holds a strictly-newer event (write skipped).
+   * Callers gate the account-tier mutation on `applied` so a stale event
+   * touches neither the mirror nor the tier.
    */
   upsertSubscription(args: {
     accountId: string;
@@ -85,7 +93,7 @@ export interface StripeWebhooksRepo {
     cancelAtPeriodEnd: boolean;
     canceledAt: Date | null;
     at: Date;
-  }): Promise<void>;
+  }): Promise<{ applied: boolean }>;
 
   /**
    * Set the account's `tier` column. Used when subscription state
@@ -326,8 +334,13 @@ export class StripeWebhooksService {
       );
     }
 
-    const at = new Date();
-    await this.repo.upsertSubscription({
+    // Use the EVENT time (event.created) — not the processing time — as
+    // the recency signal so the upsert can reject a stale / out-of-order
+    // re-delivery (Stripe gives no ordering guarantee and retries for 3
+    // days). Falls back to processing time when `created` is absent (rare)
+    // so behaviour never regresses below the prior blind-write.
+    const at = eventTime(event);
+    const { applied } = await this.repo.upsertSubscription({
       accountId,
       stripeSubscriptionId,
       stripePriceId: priceId,
@@ -338,6 +351,16 @@ export class StripeWebhooksService {
       canceledAt,
       at,
     });
+
+    // A stale event (an older one processed after a newer one) is skipped
+    // by the recency guard — it neither rewrote the mirror nor may it
+    // touch the account tier (which would revert the customer to the stale
+    // tier until the next in-order event). Ack as handled (idempotent, no
+    // Stripe retry) but mutate nothing further.
+    if (!applied) {
+      this.logEvent(event, `subscription ${status} (stale event — skipped)`);
+      return 'handled';
+    }
 
     // Tier change only when the subscription is in an active-paying
     // state. Trialing counts as active for our purposes (the customer
@@ -380,9 +403,12 @@ export class StripeWebhooksService {
     });
     if (accountId === null) return 'ignored';
 
-    const at = new Date();
+    // Event time (event.created) drives the recency guard so a stale
+    // re-delivered cancel can't clobber a fresher mirror / re-downgrade an
+    // account that has since been re-subscribed by a newer event.
+    const at = eventTime(event);
     const priceId = readSubscriptionPriceId(sub);
-    await this.repo.upsertSubscription({
+    const { applied } = await this.repo.upsertSubscription({
       accountId,
       stripeSubscriptionId,
       stripePriceId: priceId ?? '',
@@ -393,6 +419,13 @@ export class StripeWebhooksService {
       canceledAt: at,
       at,
     });
+    // Stale cancel (a newer event already moved the row past this one) —
+    // skip the downgrade so the customer keeps the tier the latest event
+    // granted. Ack handled; mutate nothing further.
+    if (!applied) {
+      this.logEvent(event, 'subscription canceled (stale event — skipped)');
+      return 'handled';
+    }
     const downgradeTier = this.config.cancelDowngradeTier ?? 'free';
     const { previousTier } = await this.repo.setAccountTier({
       accountId,
@@ -507,6 +540,20 @@ export class StripeWebhooksService {
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Canonical event time for the recency guard. Stripe's `event.created`
+ * (unix seconds) is the authoritative ordering signal across deliveries
+ * of different events; the subscription mirror stamps it as `updated_at`
+ * so an out-of-order / retried-old event can be rejected. When `created`
+ * is absent (should never happen for a real Stripe event, but the field
+ * is optional in our minimal shape) fall back to processing time so the
+ * guard degrades to the prior last-processed-wins behaviour rather than
+ * dropping the write.
+ */
+function eventTime(event: StripeEvent): Date {
+  return event.created !== undefined ? new Date(event.created * 1000) : new Date();
+}
 
 function readString(obj: Record<string, unknown>, key: string): string | null {
   const v = obj[key];

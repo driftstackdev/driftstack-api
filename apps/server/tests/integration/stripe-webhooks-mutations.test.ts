@@ -32,13 +32,18 @@ function buildSubscriptionEvent(args: {
   cancelAtPeriodEnd?: boolean;
   currentPeriodEndSec?: number;
   canceledAtSec?: number | null;
+  /**
+   * Override `event.created` (unix seconds). Drives the event-recency
+   * guard: an event with a smaller `created` is older. Defaults to now.
+   */
+  createdSec?: number;
 }): string {
   return JSON.stringify({
     id: args.eventId,
     object: 'event',
     type: args.type,
     api_version: '2024-12-18.acacia',
-    created: nowSec(),
+    created: args.createdSec ?? nowSec(),
     livemode: false,
     data: {
       object: {
@@ -381,5 +386,247 @@ describe('Stripe tier change invalidates the cached AccountContext', () => {
       }),
     );
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// Audit #79 — event-recency guard for out-of-order / retried Stripe events.
+//
+// Stripe gives NO webhook delivery-order guarantee and re-delivers failed
+// deliveries for up to 3 days. Dispatch is idempotent on event.id but
+// imposes no ordering, so without a recency guard a stale (older-`created`)
+// `customer.subscription.updated` processed AFTER a newer one blindly
+// reverts accounts.tier + the subscription mirror (current_period_end,
+// status, price) to the stale value — the customer is mis-tiered (over- or
+// under-privileged vs what they pay for) until the next in-order event.
+//
+// The fix stamps the mirror's updated_at with event.created and only
+// applies an upsert when the incoming event is strictly newer than the
+// stored row; the account-tier mutation is then gated on the upsert
+// actually applying. These tests pin all four required behaviours and FAIL
+// on the pre-fix (blind-write, processing-time) code.
+// ───────────────────────────────────────────────────────────────────────
+describe('Audit #79 — out-of-order / retried Stripe subscription events', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  const T1 = 1_700_000_000; // older event.created
+  const T2 = T1 + 3600; // newer event.created (one hour later)
+  const PERIOD_END_NEW = T2 + 30 * 24 * 60 * 60;
+  const PERIOD_END_OLD = T1 + 30 * 24 * 60 * 60;
+
+  it('(1) a stale "updated" event processed AFTER a newer one does NOT revert tier or current_period_end', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    const subId = 'sub_recency_revert';
+
+    // Newer event lands first: upgrades to api_builder with the later period end.
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_recency_new',
+        type: 'customer.subscription.updated',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+        createdSec: T2,
+        currentPeriodEndSec: PERIOD_END_NEW,
+      }),
+    );
+
+    // Sanity: newer event applied.
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+    let subs = fx.stripeWebhooksRepo.listSubscriptions();
+    expect(subs).toHaveLength(1);
+    expect(subs[0]?.currentPeriodEnd?.getTime()).toBe(PERIOD_END_NEW * 1000);
+
+    // Stale (older `created`) re-delivery of a DIFFERENT price/period arrives
+    // LATE. Pre-fix it blindly reverts tier→api_starter + period→OLD; with the
+    // recency guard it is skipped and acked as handled.
+    const stale = (await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_recency_stale',
+        type: 'customer.subscription.updated',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_starter_monthly',
+        status: 'active',
+        createdSec: T1,
+        currentPeriodEndSec: PERIOD_END_OLD,
+      }),
+    )) as { statusCode: number; body: { outcome: string } };
+    expect(stale.statusCode).toBe(200);
+    expect(stale.body.outcome).toBe('handled');
+
+    // Mirror + tier must STILL reflect the newer event.
+    subs = fx.stripeWebhooksRepo.listSubscriptions();
+    expect(subs).toHaveLength(1);
+    expect(subs[0]?.tier).toBe('api_builder');
+    expect(subs[0]?.stripePriceId).toBe('price_api_builder_monthly');
+    expect(subs[0]?.currentPeriodEnd?.getTime()).toBe(PERIOD_END_NEW * 1000);
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+  });
+
+  it('(2) a newer "updated" event processed AFTER an older one DOES update the mirror + tier', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    const subId = 'sub_recency_apply';
+
+    // Older event first: starter tier.
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_recency_old_first',
+        type: 'customer.subscription.updated',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_starter_monthly',
+        status: 'active',
+        createdSec: T1,
+        currentPeriodEndSec: PERIOD_END_OLD,
+      }),
+    );
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_starter');
+
+    // Newer event in order: must upgrade to builder + advance the period end.
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_recency_new_second',
+        type: 'customer.subscription.updated',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+        createdSec: T2,
+        currentPeriodEndSec: PERIOD_END_NEW,
+      }),
+    );
+
+    const subs = fx.stripeWebhooksRepo.listSubscriptions();
+    expect(subs).toHaveLength(1);
+    expect(subs[0]?.tier).toBe('api_builder');
+    expect(subs[0]?.stripePriceId).toBe('price_api_builder_monthly');
+    expect(subs[0]?.currentPeriodEnd?.getTime()).toBe(PERIOD_END_NEW * 1000);
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+  });
+
+  it('(3) a fresh subscription with no existing mirror row still INSERTs + sets tier (conservative: insert always applies)', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+
+    const result = (await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_recency_fresh',
+        type: 'customer.subscription.created',
+        stripeSubscriptionId: 'sub_recency_fresh',
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+        // Deliberately an OLD created stamp — a fresh insert has no row to
+        // compare against, so it must apply regardless of how old the event is.
+        createdSec: T1,
+        currentPeriodEndSec: PERIOD_END_OLD,
+      }),
+    )) as { statusCode: number; body: { outcome: string } };
+    expect(result.statusCode).toBe(200);
+    expect(result.body.outcome).toBe('handled');
+
+    const subs = fx.stripeWebhooksRepo.listSubscriptions();
+    expect(subs).toHaveLength(1);
+    expect(subs[0]?.tier).toBe('api_builder');
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+  });
+
+  it('(4) a stale "deleted" event processed AFTER a newer "updated" does NOT re-cancel / downgrade', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    const subId = 'sub_recency_delete';
+
+    // An OLD cancel was generated at T1 (e.g. a failed-payment cancel) but its
+    // delivery is retried for days. Meanwhile the customer fixed payment and a
+    // NEWER updated event at T2 reactivated + upgraded them.
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_recency_reactivated',
+        type: 'customer.subscription.updated',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+        createdSec: T2,
+        currentPeriodEndSec: PERIOD_END_NEW,
+      }),
+    );
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+
+    // The stale cancel (created at T1 < T2) finally arrives. Pre-fix it marks
+    // the mirror canceled + downgrades the active, paying customer to free.
+    const stale = (await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_recency_stale_cancel',
+        type: 'customer.subscription.deleted',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'canceled',
+        createdSec: T1,
+        canceledAtSec: T1,
+      }),
+    )) as { statusCode: number; body: { outcome: string } };
+    expect(stale.statusCode).toBe(200);
+    expect(stale.body.outcome).toBe('handled');
+
+    // Mirror stays active/builder; account stays api_builder (paying customer
+    // must NOT be downgraded by a stale cancel).
+    const subs = fx.stripeWebhooksRepo.listSubscriptions();
+    expect(subs).toHaveLength(1);
+    expect(subs[0]?.status).toBe('active');
+    expect(subs[0]?.tier).toBe('api_builder');
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+  });
+
+  it('(4b) an in-order "deleted" newer than the mirror STILL cancels + downgrades (guard does not over-block)', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    const subId = 'sub_recency_delete_inorder';
+
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_recency_active_first',
+        type: 'customer.subscription.created',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+        createdSec: T1,
+        currentPeriodEndSec: PERIOD_END_OLD,
+      }),
+    );
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+
+    // Newer cancel — must apply.
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_recency_cancel_second',
+        type: 'customer.subscription.deleted',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'canceled',
+        createdSec: T2,
+        canceledAtSec: T2,
+      }),
+    );
+
+    const subs = fx.stripeWebhooksRepo.listSubscriptions();
+    expect(subs).toHaveLength(1);
+    expect(subs[0]?.status).toBe('canceled');
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('free');
   });
 });

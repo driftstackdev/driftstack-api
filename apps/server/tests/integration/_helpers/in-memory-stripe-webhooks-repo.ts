@@ -110,11 +110,21 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     cancelAtPeriodEnd: boolean;
     canceledAt: Date | null;
     at: Date;
-  }): Promise<void> {
+  }): Promise<{ applied: boolean }> {
     const existing = Array.from(this.subs.values()).find(
       (s) => s.stripeSubscriptionId === args.stripeSubscriptionId,
     );
     if (existing) {
+      // Event-recency guard mirror (matches the Drizzle setWhere
+      // `updated_at <= excluded.updated_at`): on conflict, skip only when
+      // the incoming event is STRICTLY OLDER than the stored row, so an
+      // out-of-order / retried-old event is rejected instead of reverting
+      // the mirror. Equal-time events still apply (`<=` apply ⇒ skip iff
+      // strictly older) — event.created is second-granularity so two
+      // distinct ordered events can share a second.
+      if (args.at.getTime() < existing.updatedAt.getTime()) {
+        return Promise.resolve({ applied: false });
+      }
       this.subs.set(existing.id, {
         ...existing,
         accountId: args.accountId,
@@ -142,7 +152,7 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
         updatedAt: args.at,
       });
     }
-    return Promise.resolve();
+    return Promise.resolve({ applied: true });
   }
 
   setAccountTier(args: {

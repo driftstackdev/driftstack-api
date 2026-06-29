@@ -138,8 +138,10 @@ describe('W1003 db/stripe-webhooks-repo V-080 + V-089 cross-source invariant', (
 
   it("CRITICAL upsertSubscription SET 8-field — accountId + stripePriceId + tier + status + currentPeriodEnd + cancelAtPeriodEnd + canceledAt + updatedAt. The SET excludes stripeSubscriptionId (it's the conflict target).", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/stripe-webhooks-repo.ts'));
-    // SET clause field names (lookahead avoiding insert values block by anchoring to ` set: {`).
-    const setMatch = p.match(/set: \{([\s\S]+?)\},\s*\}\);/);
+    // SET clause field names (anchored on ` set: {` then closing `},` of the
+    // onConflictDoUpdate object — which is now followed by `)` then a chained
+    // `.returning(...)` for the V-079 event-recency `applied` signal).
+    const setMatch = p.match(/set: \{([\s\S]+?)\},\s*\}\)\s*\.returning\(/);
     expect(setMatch).toBeTruthy();
     const setBlock = setMatch?.[1] ?? '';
     expect(setBlock).toMatch(/accountId: args\.accountId,/);
