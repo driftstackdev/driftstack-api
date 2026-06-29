@@ -1207,6 +1207,27 @@ function BrowserBar({
     );
   };
   const copyTarget = (liveUrl || draft).trim();
+  // iOS-Safari address treatment: a closed padlock for https origins and, while
+  // not editing, the resting field collapses to the hostname (example.com) rather
+  // than the raw full URL. Display-only — draft/submit/reload/copy keep the full
+  // URL so navigation logic is untouched. about:blank / data: / empty / unparseable
+  // values throw in new URL() → fall back to the raw value (never an empty bar),
+  // reusing the tab-strip's proven try/catch pattern. (eTLD+1 collapse would need a
+  // public-suffix list; .host is the file's existing convention + a large win.)
+  const isHttps = (() => {
+    try {
+      return new URL(liveUrl).protocol === 'https:';
+    } catch {
+      return false;
+    }
+  })();
+  const restingDisplay = (() => {
+    try {
+      return new URL(liveUrl).host || liveUrl;
+    } catch {
+      return liveUrl;
+    }
+  })();
   return (
     <div
       data-component="simulator-address-bar"
@@ -1293,27 +1314,54 @@ function BrowserBar({
           submit();
         }}
       >
-        <svg
-          viewBox="0 0 24 24"
-          width="12"
-          height="12"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-          className="shrink-0 text-white/35"
-        >
-          <circle cx="12" cy="12" r="9" />
-          <path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18" />
-        </svg>
+        {isHttps ? (
+          // Closed padlock — https origin (iOS Safari secure-site treatment).
+          <svg
+            viewBox="0 0 24 24"
+            width="12"
+            height="12"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className="shrink-0 text-white/35"
+          >
+            <rect x="5" y="11" width="14" height="10" rx="2" />
+            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+          </svg>
+        ) : (
+          // Globe — http / about: / data: / unparseable (neutral, lower-risk).
+          <svg
+            viewBox="0 0 24 24"
+            width="12"
+            height="12"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className="shrink-0 text-white/35"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18" />
+          </svg>
+        )}
         <input
           type="text"
-          value={draft}
+          // Resting → hostname-only (iOS Safari collapse); editing → full URL so
+          // the user sees/edits the real address. draft still holds the full URL.
+          value={focused ? draft : restingDisplay}
           disabled={!canNavigate}
           onChange={(e) => setDraft(e.target.value)}
-          onFocus={() => setFocused(true)}
+          onFocus={(e) => {
+            setFocused(true);
+            // iOS Safari selects the whole URL on tap so the next keystroke
+            // overtypes it (matches the omnibox muscle-memory).
+            e.currentTarget.select();
+          }}
           onBlur={() => setFocused(false)}
           placeholder={canNavigate ? 'Search or enter address' : 'connecting…'}
           title={
@@ -1592,10 +1640,13 @@ function IosStatusBar(): JSX.Element {
       className="relative flex h-[40px] w-full shrink-0 items-center justify-between bg-black px-[24px] text-white"
     >
       {/* Dynamic island — centered in the strip (its natural home now that the
-          strip is reserved space rather than an overlay). */}
+          strip is reserved space rather than an overlay). Proportioned to the real
+          iPhone island (~125×37pt at the 393–402pt device width): wider + taller
+          than the old 92×26 pill so it reads as the island, not a notch dot. A
+          faint top-rim highlight + soft outer shadow seat it as recessed glass. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-1/2 h-[26px] w-[92px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black shadow-[inset_0_1px_1px_rgba(255,255,255,0.04)]"
+        className="pointer-events-none absolute left-1/2 top-1/2 h-[32px] w-[120px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.06),0_1px_2px_rgba(0,0,0,0.6)]"
       />
       <span className="pointer-events-none text-[14px] font-semibold tracking-tight tabular-nums">
         {time}
@@ -5116,7 +5167,7 @@ export function SimulatorWindow(): JSX.Element {
                       key={t.id}
                       data-component="tap-ripple"
                       aria-hidden="true"
-                      className="ds-tap-ring pointer-events-none absolute z-20 h-9 w-9 rounded-full border-2 border-white/80"
+                      className="ds-tap-ring pointer-events-none absolute z-20 h-9 w-9 rounded-full border border-white/55 bg-white/10"
                       style={{ left: t.x, top: t.y }}
                     />
                   ))}
@@ -5136,7 +5187,7 @@ export function SimulatorWindow(): JSX.Element {
                     <div
                       data-tauri-drag-region="false"
                       data-component="ios-keyboard-overlay"
-                      className="absolute inset-x-0 bottom-0 z-30"
+                      className="absolute inset-x-0 bottom-0 z-30 animate-keyboard-in"
                     >
                       <IOSKeyboard
                         room={room}

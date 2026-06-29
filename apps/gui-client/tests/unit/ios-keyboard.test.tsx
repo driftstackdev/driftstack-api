@@ -246,6 +246,43 @@ describe('IOSKeyboard — named keys', () => {
   });
 });
 
+describe('IOSKeyboard — bottom-row emoji key', () => {
+  it('renders the 😀 emoji key (left of the spacebar) on the letters layer', () => {
+    const { container } = render(<IOSKeyboard room={ROOM} />);
+    const emoji = container.querySelector('[data-key="😀"]');
+    expect(emoji).not.toBeNull();
+    // It is a function key (no char popup), labelled Emoji.
+    expect(emoji).toHaveAttribute('aria-label', 'Emoji');
+    expect(emoji).toHaveAttribute('data-key-kind', 'fn');
+  });
+
+  it('persists across the numbers + symbols layers (every iOS layer has it)', () => {
+    const { container } = render(<IOSKeyboard room={ROOM} />);
+    tap(container, '123');
+    expect(container.querySelector('[data-key="😀"]')).not.toBeNull();
+    tap(container, '#+=');
+    expect(container.querySelector('[data-key="😀"]')).not.toBeNull();
+  });
+
+  it('is a zero-fingerprint no-op — tapping it emits NO input events', () => {
+    const { container } = render(<IOSKeyboard room={ROOM} />);
+    tap(container, '😀');
+    expect(sendInputEventMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('IOSKeyboard — return key colour', () => {
+  it('renders GREY by default (real iOS on a generic field) yet stays kind="return"', () => {
+    const { container } = render(<IOSKeyboard room={ROOM} />);
+    const ret = el(container, '[data-key="return"]');
+    // Semantically still the return key (not relabelled to a plain fn key).
+    expect(ret).toHaveAttribute('data-key-kind', 'return');
+    // Grey iOS function-key fill, NOT the blue accent (#0a84ff).
+    expect(ret.className).toContain('bg-[#aeb3bd]');
+    expect(ret.className).not.toContain('bg-[#0a84ff]');
+  });
+});
+
 describe('IOSKeyboard — key pop-up magnifier', () => {
   it('shows the iOS pop-up over a pressed character key, dismissed on release', () => {
     const { container } = render(<IOSKeyboard room={ROOM} />);

@@ -147,6 +147,12 @@
 }
 .ds-tap-ring {
   animation: ds-tap 0.46s ease-out forwards;
+  /* A faint dark glow under the white ring so the bloom stays legible on a LIGHT
+     web page (Google, most sites) — a pure border-white/80 ring is invisible on
+     white, so the tap then reads as "nothing happened" exactly where the founder
+     wanted tap confirmation. The drop-shadow rides the ring stroke (not a box)
+     and is near-invisible on a dark page, so it reads on any background. */
+  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.45));
 }
 
 /* iOS fingertip touch cursor (SimulatorWindow, founder 2026-06-21 "make it more
@@ -167,7 +173,14 @@
     rgba(255, 255, 255, 0.14) 56%,
     rgba(255, 255, 255, 0) 72%
   );
-  box-shadow: 0 1px 7px rgba(0, 0, 0, 0.18);
+  /* A faint dark contour ring + soft drop so the translucent white disc stays
+     visible on a LIGHT web page (a pure-white radial vanishes on white — the
+     fingertip cursor then disappears over Google et al.). The inset hairline
+     reads as the fingertip's edge; both are near-invisible on a dark page, so
+     the dot reads on any background. */
+  box-shadow:
+    0 1px 7px rgba(0, 0, 0, 0.22),
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.25);
   transform: translate(-50%, -50%) scale(1);
   transition:
     transform 130ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -182,6 +195,25 @@
     rgba(255, 255, 255, 0.26) 56%,
     rgba(255, 255, 255, 0) 72%
   );
+}
+
+/* On-screen iOS keyboard slide-up (SimulatorWindow) — a real iPhone keyboard
+   slides up from the bottom edge on show rather than popping in. The overlay is
+   anchored absolute inset-x-0 bottom-0 inside simulator-screen (overflow-hidden
+   rounded), so the translateY(100%) start state is clipped below the screen and
+   the keyboard rises cleanly from the bottom. Show-only: React unmounts the
+   overlay synchronously on hide, so dismiss stays instant. The reduced-motion
+   baseline above clamps the duration automatically. */
+@keyframes ds-keyboard-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.animate-keyboard-in {
+  animation: ds-keyboard-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* ─── Fleet design-system token layer (2026-06-12 rework) ─────────────

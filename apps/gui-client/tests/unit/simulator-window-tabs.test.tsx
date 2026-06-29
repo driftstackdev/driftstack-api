@@ -309,9 +309,11 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(tabs[0].getAttribute('data-active')).toBe('false');
     expect(tabs[1].getAttribute('data-active')).toBe('true');
     expect(tabs[2].getAttribute('data-active')).toBe('false');
-    // The address bar reflects the active tab's url (BrowserBar reads liveUrl).
+    // The address bar reflects the active tab's url (BrowserBar reads liveUrl). While
+    // not editing it collapses to the hostname (iOS Safari treatment); the full url is
+    // still verified via the tab model elsewhere.
     const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
-    expect(addressInput.value).toBe('https://b.example/');
+    expect(addressInput.value).toBe('b.example');
   });
 
   it('ignores a malformed tabListRestore frame (tabs missing / not-an-array) — keeps the current bar', () => {
@@ -484,16 +486,18 @@ describe('SimulatorWindow — page tab strip', () => {
     const tab2Id = (lastTabListCall().tabs[1] as { id: string }).id;
 
     const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    // The resting bar collapses to the hostname (iOS Safari) — still uniquely identifies
+    // each tab's page; the full stored urls are asserted via tabsById() below.
     // Switch back to tab 1 — address bar shows A; both tabs keep their own url.
     fireEvent.click(tabEls(container)[0]);
-    expect(addressInput.value).toBe('https://alpha.example/');
+    expect(addressInput.value).toBe('alpha.example');
     // Switch to tab 2 — this is the exact "2nd switch" the founder hit. It must show
     // B, NOT stay on A (the old self-reinforcing clobber converged both to one url).
     fireEvent.click(tabEls(container)[1]);
-    expect(addressInput.value).toBe('https://bravo.example/');
+    expect(addressInput.value).toBe('bravo.example');
     // And back to tab 1 a THIRD time — still A. Neither tab's stored url drifted.
     fireEvent.click(tabEls(container)[0]);
-    expect(addressInput.value).toBe('https://alpha.example/');
+    expect(addressInput.value).toBe('alpha.example');
 
     const byId = tabsById();
     expect(byId.get(tab1Id)?.url).toBe('https://alpha.example/');
@@ -539,7 +543,8 @@ describe('SimulatorWindow — page tab strip', () => {
       // Switch back to tab 1 (active = A). Arm a STALE poll that still reports B (the
       // prior tab) with NO tabId — exactly the prod page-state poll lagging a switch.
       fireEvent.click(tabEls(container)[0]);
-      expect(addressInput.value).toBe('https://aaa.example/');
+      // Resting bar shows the hostname (iOS Safari collapse); stored full url asserted below.
+      expect(addressInput.value).toBe('aaa.example');
       pageStateValue = {
         state: 'loaded',
         url: 'https://bbb.example/',
@@ -554,7 +559,7 @@ describe('SimulatorWindow — page tab strip', () => {
         await Promise.resolve();
         await Promise.resolve();
       });
-      expect(addressInput.value).toBe('https://aaa.example/');
+      expect(addressInput.value).toBe('aaa.example');
       // Tab 1's stored url is still A; tab 2 (B) is untouched.
       const byId = tabsById();
       expect([...byId.values()].some((t) => t.url === 'https://aaa.example/')).toBe(true);
@@ -607,9 +612,10 @@ describe('SimulatorWindow — page tab strip', () => {
           }),
       );
 
-      // Switch from tab 2 (B) back to tab 1 (A) — the address bar shows A immediately.
+      // Switch from tab 2 (B) back to tab 1 (A) — the address bar shows A immediately
+      // (hostname collapse: 'aaa.example'). The full stored urls are asserted below.
       fireEvent.click(tabEls(container)[0]);
-      expect(addressInput.value).toBe('https://aaa.example/');
+      expect(addressInput.value).toBe('aaa.example');
 
       // Let the macrotask reconcile resolve INSIDE the grace window. The stale B url
       // must be suppressed — tab 1 stays on A, tab 2 keeps B; NEITHER flips to the
@@ -617,7 +623,7 @@ describe('SimulatorWindow — page tab strip', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1);
       });
-      expect(addressInput.value).toBe('https://aaa.example/');
+      expect(addressInput.value).toBe('aaa.example');
       const byId = tabsById();
       expect(byId.get(tab1Id)?.url).toBe('https://aaa.example/');
       expect(byId.get(tab2Id)?.url).toBe('https://bbb.example/');
@@ -741,9 +747,10 @@ describe('SimulatorWindow — page tab strip', () => {
     // The active tab 2 is untouched by a frame addressed to tab 1.
     expect(byId.get(tab2Id)?.url).toBe('https://two.example/');
     expect(byId.get(tab2Id)?.title).toBe('Two');
-    // And the address bar (active = tab 2) still shows tab 2's url, not tab 1's.
+    // And the address bar (active = tab 2) still shows tab 2's url, not tab 1's
+    // (resting hostname collapse — 'two.example', not the redirected tab 1).
     const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
-    expect(addressInput.value).toBe('https://two.example/');
+    expect(addressInput.value).toBe('two.example');
   });
 
   // ── Branded new-tab page (founder 2026-06-25) ─────────────────────────────────

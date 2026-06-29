@@ -205,7 +205,7 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
         );
       })}
 
-      {/* Bottom row: 123/ABC layer switch · space (widest) · return. */}
+      {/* Bottom row: 123/ABC layer switch · 😀 emoji · space (widest) · return. */}
       <div className="flex w-full items-stretch justify-center gap-[6px]">
         {layer === 'letters' ? (
           <FnKey
@@ -217,6 +217,12 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
         ) : (
           <FnKey label="ABC" ariaLabel="Letters" flex={1.6} onPress={() => setLayer('letters')} />
         )}
+        {/* iOS bottom-row emoji key, left of the spacebar. The default single-
+            keyboard iPhone shows 😀 here (the 🌐 globe appears only with ≥2
+            keyboards installed). Visual-only no-op — there is no emoji panel, so
+            it sends nothing (zero fingerprint impact); FnKey's active:brightness-95
+            still gives it a real press affordance. */}
+        <FnKey label="😀" ariaLabel="Emoji" flex={1} onPress={() => {}} />
         {onDismiss !== undefined && (
           <FnKey label="⌄" ariaLabel="Hide keyboard" flex={1.2} onPress={onDismiss} />
         )}
@@ -233,7 +239,7 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
         >
           space
         </button>
-        <FnKey label="return" ariaLabel="Return" flex={2} accent onPress={onReturn} />
+        <FnKey label="return" ariaLabel="Return" flex={2} onPress={onReturn} />
       </div>
     </div>
   );
@@ -285,10 +291,12 @@ function CharKey({
   );
 }
 
-/** A grey function key (shift/delete/123/ABC/#+=/space-switch) or the blue-ish
- *  return. No pop-up magnifier (iOS shows it for character keys only). `wide`
- *  gives shift/delete their ~1.5-unit width; `flex` overrides the grow weight
- *  for the bottom-row keys; `accent` paints the return blue. */
+/** A grey function key (shift/delete/123/ABC/#+=/space-switch/emoji/return). No
+ *  pop-up magnifier (iOS shows it for character keys only). `wide` gives shift/
+ *  delete their ~1.5-unit width; `flex` overrides the grow weight for the bottom-
+ *  row keys. `accent` paints a key blue — currently unused (return is grey by
+ *  default like real iOS on a generic field); reserved for the future
+ *  enterkeyhint Go/Search/Send signal that re-enables the blue return. */
 function FnKey({
   label,
   ariaLabel,
@@ -308,8 +316,9 @@ function FnKey({
   active?: boolean;
   locked?: boolean;
 }): JSX.Element {
-  // Grey function keys (#aeb3bd-ish) vs the blue return. Caps-locked shift gets a
-  // white highlight (iOS lights the shift key); one-shot shift a lighter grey.
+  // Grey function keys (#aeb3bd-ish); accent → blue is reserved (return is grey by
+  // default like real iOS). Caps-locked shift gets a white highlight (iOS lights
+  // the shift key); one-shot shift a lighter grey.
   const base = accent
     ? 'bg-[#0a84ff] text-white'
     : locked
@@ -321,7 +330,11 @@ function FnKey({
     <button
       type="button"
       data-key={label}
-      data-key-kind={accent ? 'return' : 'fn'}
+      // Keep the return key semantically "return" even though it now renders grey
+      // (real iOS shows grey 'return' on a generic field; accent/blue is reserved
+      // for a future enterkeyhint Go/Search/Send signal). Color and kind are
+      // decoupled: ariaLabel pins the kind, accent only paints.
+      data-key-kind={ariaLabel === 'Return' ? 'return' : accent ? 'return' : 'fn'}
       data-active={active ? 'true' : undefined}
       data-locked={locked ? 'true' : undefined}
       aria-label={ariaLabel}

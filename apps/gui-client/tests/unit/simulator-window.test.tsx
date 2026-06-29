@@ -340,6 +340,14 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(host?.contains(ripple as Node)).toBe(true);
     expect(ripple?.className).toContain('pointer-events-none');
     expect(ripple?.className).toContain('ds-tap-ring');
+    // The bloom is a SOFT translucent disc (matches the .ds-touch-dot fingertip),
+    // not a stark hard white outline that reads as a QA/click-test marker. Lock in
+    // the thin translucent stroke + faint fill so it can't regress to the old
+    // border-2 border-white/80 ring (legibility on light pages comes from the
+    // .ds-tap-ring drop-shadow in CSS, which jsdom can't carry).
+    expect(ripple?.className).toContain('border-white/55');
+    expect(ripple?.className).toContain('bg-white/10');
+    expect(ripple?.className).not.toContain('border-2');
   });
 
   it('iOS touch-point cursor: the screen host hides the PC arrow (cursor-none) and a pointer-move over the screen shows a fingertip dot that never intercepts the tap', () => {
