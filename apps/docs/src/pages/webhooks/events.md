@@ -414,7 +414,10 @@ existing endpoint is an in-place `PATCH /v1/webhooks/:id` with the new
 
 The plaintext signing secret is returned **once** in the create
 response. Store it server-side; the Driftstack API never returns it
-again. To rotate, delete + re-create the endpoint.
+again. To rotate without downtime, call
+`POST /v1/webhooks/:id/rotate-secret` — Driftstack dual-signs every
+delivery for a 24-hour grace window so you can roll the new secret out
+before the old one stops working.
 
 ## Verification
 

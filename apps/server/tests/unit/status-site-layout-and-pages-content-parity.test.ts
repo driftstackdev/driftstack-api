@@ -66,24 +66,24 @@ describe('W790 status-site src content parity bundle', () => {
     );
   });
 
-  it('CRITICAL driftstack.dev nav + privacy-policy footer link pinned.', () => {
+  it('CRITICAL driftstack.dev nav + privacy footer link pinned.', () => {
     const p = read(LAYOUT);
 
     expect(p).toMatch(
       /<a href="https:\/\/driftstack\.dev" class="text-ink-muted hover:text-ink-primary">\s*\n\s+driftstack\.dev\s*\n\s+<\/a>/,
     );
     expect(p).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/privacy-policy" class="hover:text-ink-primary">\s*\n\s+Privacy\s*\n\s+<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/privacy" class="hover:text-ink-primary">\s*\n\s+Privacy\s*\n\s+<\/a>/,
     );
   });
 
   // ─── 404.astro ────────────────────────────────────────────────
 
-  it("CRITICAL 404 single-overview + /incidents/<id> framing pinned. The 'The status site only hosts a single overview page plus per-incident pages under /incidents/<id>' wording explains the route surface.", () => {
+  it("CRITICAL 404 single-overview + /incident?id=<id> framing pinned. The 'The status site only hosts a single overview page plus per-incident pages under /incident?id=<id>' wording explains the route surface (incident.astro at /incident with a ?id= query).", () => {
     const p = read(PAGE_404);
 
     expect(p).toMatch(
-      /The status site only hosts a single overview page plus per-incident pages\s*\n\s+under <code class="font-mono text-sm text-ink-secondary">\/incidents\/&lt;id&gt;<\/code>\./,
+      /The status site only hosts a single overview page plus per-incident pages\s*\n\s+under <code class="font-mono text-sm text-ink-secondary">\/incident\?id=&lt;id&gt;<\/code>\./,
     );
     expect(p).toMatch(
       /<a href="\/" class="text-sm text-ink-secondary underline hover:text-ink-primary">\s*\n\s+← Back to overview\s*\n\s+<\/a>/,

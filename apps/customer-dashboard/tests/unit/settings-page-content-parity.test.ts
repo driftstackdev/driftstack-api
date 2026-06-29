@@ -68,9 +68,13 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
   it('V-079 /v1/auth/password-reset/request is the change-password trigger', () => {
     expect(read(AUTH_ROUTE)).toContain("'/v1/auth/password-reset/request'");
     expect(body).toContain('/v1/auth/password-reset/request');
-    // Customer-facing copy commits to magic-link + 15-min expiry.
+    // Customer-facing copy commits to magic-link + 60-min expiry
+    // (matches AUTH_TOKEN_TTL_MS.passwordReset = 60 * 60 * 1000, the
+    // server TTL for the /v1/auth/password-reset/request link this
+    // triggers — the prior "15 minutes" copy was the magic-link TTL
+    // for a different flow, fixed alongside the /forgot-password drift).
     expect(body).toMatch(
-      /We email you a magic link to confirm\. The link expires after 15\s+minutes/,
+      /We email you a magic link to confirm\. The link expires after 60\s+minutes/,
     );
     // Existing sessions are NOT invalidated by password-reset
     // request — load-bearing behavioural claim.

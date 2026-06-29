@@ -126,9 +126,9 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
     );
   });
 
-  it("V-079 change-password via password-reset request framing: 'We email you a magic link to confirm. The link expires after 15 minutes; old sessions stay signed in until they naturally expire.' + POST /v1/auth/password-reset/request { email } — pinned so the magic-link UX + the 15-min expiry + the old-sessions-stay-alive contract all survive (drift to revoke-on-reset would force customers to re-login everywhere on a routine password change)", () => {
+  it("V-079 change-password via password-reset request framing: 'We email you a magic link to confirm. The link expires after 60 minutes; old sessions stay signed in until they naturally expire.' + POST /v1/auth/password-reset/request { email } — pinned so the magic-link UX + the 60-min expiry (this flow issues AUTH_TOKEN_TTL_MS.passwordReset = 60min via requestPasswordReset, NOT the 15-min magicLink) + the old-sessions-stay-alive contract all survive (drift to revoke-on-reset would force customers to re-login everywhere on a routine password change)", () => {
     expect(body).toMatch(
-      /We email you a magic link to confirm\. The link expires after 15\s*\n?\s*minutes; old sessions stay signed in until they naturally expire\./,
+      /We email you a magic link to confirm\. The link expires after 60\s*\n?\s*minutes; old sessions stay signed in until they naturally expire\./,
     );
     expect(body).toMatch(
       /fetch\(apiBaseUrl \+ '\/v1\/auth\/password-reset\/request', \{\s*\n?\s*method: 'POST',/,

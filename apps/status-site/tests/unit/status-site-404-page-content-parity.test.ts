@@ -31,7 +31,7 @@ describe('W607 apps/status-site/src/pages/404.astro content parity', () => {
       /The status site only hosts a single overview page plus per-incident pages/,
     );
     expect(body).toMatch(
-      /under <code class="font-mono text-sm text-ink-secondary">\/incidents\/&lt;id&gt;<\/code>\./,
+      /under <code class="font-mono text-sm text-ink-secondary">\/incident\?id=&lt;id&gt;<\/code>\./,
     );
     expect(body).toMatch(
       /<a href="\/" class="text-sm text-ink-secondary underline hover:text-ink-primary">/,

@@ -111,7 +111,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             HMAC-SHA256, replay-windowed.
           </h2>
           <p class="mt-3 text-tk-ink-2">
-            Outbound webhook deliveries carry a Driftstack-Signature header
+            Outbound webhook deliveries carry an X-Driftstack-Signature header
             in the form <code class="font-mono">t=&lt;timestamp&gt;,v1=&lt;hex&gt;</code>.
             Customers verify with the SDK's
             <code class="font-mono">verifyWebhookSignature</code> helper

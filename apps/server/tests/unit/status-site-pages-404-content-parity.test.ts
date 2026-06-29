@@ -37,9 +37,9 @@ describe('status-site/pages/404 content parity', () => {
     );
   });
 
-  it("Status-site scope copy pinned: 'The status site only hosts a single overview page plus per-incident pages under /incidents/<id>.' — pinned so the single-overview + per-incident-route documentation contract stays documented (drift to a wider scope claim would over-promise; drift to a narrower one would orphan the /incidents/<id> URLs from discoverability)", () => {
+  it("Status-site scope copy pinned: 'The status site only hosts a single overview page plus per-incident pages under /incident?id=<id>.' — pinned so the single-overview + per-incident-route contract stays documented (the page is incident.astro served at /incident with a ?id= query; the old /incidents/<id> path had no matching route)", () => {
     expect(body).toMatch(
-      /The status site only hosts a single overview page plus per-incident pages\s*\n?\s*under <code class="font-mono text-sm text-ink-secondary">\/incidents\/&lt;id&gt;<\/code>\./,
+      /The status site only hosts a single overview page plus per-incident pages\s*\n?\s*under <code class="font-mono text-sm text-ink-secondary">\/incident\?id=&lt;id&gt;<\/code>\./,
     );
   });
 
