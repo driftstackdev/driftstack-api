@@ -260,13 +260,12 @@ export function friendlyUnavailableNote(reason: string | null | undefined): stri
 // happens to have been dragged to. Once the stream reports, the reset uses the live
 // per-archetype logical width (deviceLogicalRef) instead.
 const DEVICE_LOGICAL_WIDTH = 402;
-// The device-pixel-ratio of the captured iPhone stream (dpr 3 fleet-wide). The
-// content-only fork (A3 84de32ad4d) publishes the per-archetype web content at this
-// scale, so the captured-frame LOGICAL CSS-px dims the Mac touch injector addresses
-// = videoWidth/DPR × videoHeight/DPR (e.g. iphone16pro 1206×2142 px → 402×714
-// logical). dpr is uniform across the shipped archetypes; if a future device ships a
-// different ratio, thread it from the dispatched archetype config.
-const STREAM_DPR = 3;
+// NOTE: the box formerly published the web content at 3× dpr (e.g. 1206×2142 px), so
+// the touch space was videoWidth/3 × videoHeight/3. A3's 2026-06-29 black-band fix
+// switched the capture to 1×-display content res — the published track IS now the
+// logical viewport (e.g. 402×714) — so the touch space is the track dims directly and
+// the former STREAM_DPR division is removed in handleVideoDimensions (taps were
+// landing 3× off otherwise; A3 carries a box-side reconcile stopgap until this ships).
 // Activity-bar drawer (founder 2026-06-24) — a slim icon RAIL is ALWAYS docked
 // next to the phone; clicking a section icon EXPANDS its content PANE to the
 // right of the rail (VS Code's activity-bar + side-panel idiom). The window
@@ -4778,15 +4777,19 @@ export function SimulatorWindow(): JSX.Element {
     // screen-host edge-to-edge (no bottom-black letterbox). Same value that drives the
     // window-sizing math below, so box == host == video.
     setContentAspect(w / h);
-    // Adopt the per-archetype captured-frame LOGICAL dims (= the FIRST full-res
-    // metadata ÷ dpr) for the touch-coordinate mapping. Set ONCE (gated by
-    // sizedToStreamRef, cleared only on a new session) so a later SFU-downscaled
-    // metadata event can't shrink the touch space (A3 W2811). The captured frame is
-    // the content-only web viewport the injector targets, so these logical dims are
-    // exactly the space tap/scroll coords must be in.
+    // Adopt the captured-frame dims DIRECTLY as the touch-coordinate space. A3's
+    // 2026-06-29 black-band fix changed the box capture to inner_height, so the
+    // published track is now the 1×-display content viewport (e.g. 402×714), NOT the
+    // old 3×-dpr full-res frame — the previous ÷STREAM_DPR mapped taps into a 1/3-size
+    // space, landing them ~3× off (A3 carried a box-side reconcile stopgap until this
+    // ships; on install A3 flips RECONCILE=0). Set ONCE (gated by sizedToStreamRef,
+    // cleared only on a new session) so a later SFU-downscaled metadata event can't
+    // shrink the touch space (A3 W2811). The captured frame is the content-only web
+    // viewport the injector targets via origin:viewport, so these dims are exactly
+    // the space tap/scroll coords must be in.
     setInputLogical({
-      width: Math.round(w / STREAM_DPR),
-      height: Math.round(h / STREAM_DPR),
+      width: Math.round(w),
+      height: Math.round(h),
     });
     // Fit ONCE to the real device aspect + the current chrome, in EITHER orientation —
     // fitWindow's sizingAspect inverts for landscape. The old early-return on landscape
