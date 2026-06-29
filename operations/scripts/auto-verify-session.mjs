@@ -121,8 +121,12 @@ const COOKIES_TIMEOUT_MS = 15_000;
 //   - TAP_URL             : a page whose primary link navigates somewhere distinct,
 //                           so a successful tap is provable by a page_state url change.
 const DEVICE_LOGICAL_WIDTH = 402;
-const DEVICE_LOGICAL_HEIGHT = 874;
-const TAP_Y_OFFSET = 32;
+// A3's 2026-06-29 black-band fix: the box captures inner_height now, so the
+// content frame is 714 (was 874), and the GUI no longer applies a TAP_Y_OFFSET
+// (the durable ÷STREAM_DPR-removal maps coords 1:1 to the 402×714 track). Harness
+// updated to match: no Y offset, 714-tall logical frame.
+const DEVICE_LOGICAL_HEIGHT = 714;
+const TAP_Y_OFFSET = 0;
 const devY = (y) => Math.max(0, y - TAP_Y_OFFSET);
 // example.com is a single centred paragraph + ONE link ("More information…") to
 // iana.org; tapping it is the cleanest provable tap target. Overridable so the
