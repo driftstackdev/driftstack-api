@@ -106,6 +106,10 @@ export interface AgentSessionPanelProps {
    *  transient transport drop leaves this undefined so the bounded auto-reconnect
    *  still runs. */
   sessionEnded?: { reason: string | null } | null;
+  /** True while a tab switch is in flight (the box hasn't published the new tab's page
+   *  yet). Shows an about:blank-style placeholder over the video so the OLD tab doesn't
+   *  linger during the switch latency (founder #5 2026-06-30 "keeps showing old tab"). */
+  switching?: boolean;
   /** P1a — invoked by the terminal "Session ended" overlay's Close button. The
    *  simulator wires this to closing the floating-iPhone window. */
   onClose?: () => void;
@@ -195,6 +199,7 @@ export function AgentSessionPanel({
   inputLogical,
   recoverAction,
   sessionEnded = null,
+  switching = false,
   onClose,
 }: AgentSessionPanelProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -623,6 +628,20 @@ export function AgentSessionPanel({
           reconnecting/launch-failed/disconnected overlay so the founder sees a clear
           ended state with a Close action — NOT an endless "reconnecting" against a
           session that's gone. */}
+      {/* About:blank placeholder while a tab switch is in flight (founder #5 2026-06-30:
+          "keeps showing the old tab, no about:blank"). The box takes a beat to publish the
+          NEW tab's page; until then the video still shows the OLD tab. Cover it with a clean
+          white blank (like iOS Safari's blank tab) so the old tab never lingers — it clears
+          the instant the new page's first page_state arrives (switching → false). Sits below
+          the terminal "Session ended" overlay (z-30) so a real end always wins. */}
+      {sessionEnded === null && switching && (
+        <div
+          data-overlay="tab-switching"
+          className="absolute inset-0 z-20 flex items-center justify-center bg-white"
+        >
+          <span className="text-[11px] font-medium tracking-wide text-black/30">Switching…</span>
+        </div>
+      )}
       {sessionEnded !== null && (
         <div
           data-overlay="session-ended"

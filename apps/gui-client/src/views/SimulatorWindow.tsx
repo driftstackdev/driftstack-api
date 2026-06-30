@@ -5170,6 +5170,9 @@ export function SimulatorWindow(): JSX.Element {
                     // (worker browser closed / destroyed / reaped), the panel stops all
                     // reconnect/resubscribe/rebuild machinery and shows "Session ended".
                     sessionEnded={sessionEnded}
+                    // #5 (founder 2026-06-30) — while a tab switch is in flight, blank the
+                    // video with an about:blank placeholder so the OLD tab doesn't linger.
+                    switching={switchingTabId !== null}
                     onClose={() => void withCurrentWindow((w) => w.close())}
                   />
                   {/* iOS touch-point cursor — a soft fingertip dot that tracks the

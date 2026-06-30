@@ -157,6 +157,20 @@ describe('AgentSessionPanel overlay UX', () => {
     expect(panel.style.aspectRatio).not.toBe((1206 / 2622).toString());
   });
 
+  it('shows an about:blank placeholder over the video while switching tabs; a terminal end wins (founder #5)', () => {
+    connectMock.mockReset();
+    connectMock.mockReturnValue(new Promise(() => {}));
+    const { container, rerender } = render(<AgentSessionPanel info={INFO} switching={false} />);
+    expect(container.querySelector('[data-overlay="tab-switching"]')).toBeNull();
+    // A switch in flight → the blank placeholder covers the (stale) old-tab video.
+    rerender(<AgentSessionPanel info={INFO} switching={true} />);
+    expect(container.querySelector('[data-overlay="tab-switching"]')).not.toBeNull();
+    // A terminal "Session ended" takes priority over the switching placeholder.
+    rerender(<AgentSessionPanel info={INFO} switching={true} sessionEnded={{ reason: null }} />);
+    expect(container.querySelector('[data-overlay="tab-switching"]')).toBeNull();
+    expect(container.querySelector('[data-overlay="session-ended"]')).not.toBeNull();
+  });
+
   it('on a connect error shows a Reconnect button that re-triggers the connect', async () => {
     connectMock.mockReset();
     connectMock.mockRejectedValueOnce(new Error('boom')).mockReturnValue(new Promise(() => {})); // the retry stays connecting (no churn)
