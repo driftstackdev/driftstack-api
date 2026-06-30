@@ -2210,4 +2210,69 @@ describe('POST /v1/agent-sessions storage quota (doc-150 item 6)', () => {
     });
     expect(res.statusCode).toBe(201);
   });
+
+  it('#79 idempotent retry REPLAYS the original 201 even after the account exceeds its storage cap (the quota gate must NOT re-run on a replay — idempotency always replays success)', async () => {
+    // Regression for commit 9026682ce: the per-account storage-quota gate
+    // (assertWithinStorageQuotaForLaunch) used to run BEFORE the idempotency
+    // replay short-circuit, so a RETRY of an already-succeeded profile-backed
+    // create newly 409'd once the account crossed its tier cap between calls —
+    // a non-idempotent retry. The gate now sits AFTER the replay (beside the
+    // proxy probe + active-session cap), so the retry replays the cached 201.
+    fx = await buildTestApp({ enableAgentRuntime: true, tier: 'solo_manual' });
+    const cap = TIER_STORAGE_BYTES_CAP.solo_manual;
+
+    // 1. Seed the profile JUST UNDER the cap so the FIRST create passes the gate.
+    const profileId = await createProfileWithSize(fx, 'borderline-profile', cap - 1);
+    const bareId = profileId.replace(/^prof_/, '');
+
+    // 2. First create with an Idempotency-Key → 201 (under cap). Capture the id.
+    const key = 'idem-key-quota-replay-1';
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'idempotency-key': key },
+      payload: { token_budget: 50_000, profile_id: profileId },
+    });
+    expect(first.statusCode).toBe(201);
+    const firstId = first.json<{ id: string }>().id;
+
+    // 3. The account's aggregate size_bytes now crosses the cap (>= cap → hard
+    //    block for any GENUINELY-NEW profile-backed create).
+    await fx.profilesRepo.recordSave({
+      id: bareId,
+      accountId: fx.accountId,
+      at: new Date(),
+      sizeBytes: cap + 1,
+    });
+
+    // 4. Retry the SAME key + SAME profile → MUST replay the original 201 with the
+    //    SAME id (pre-fix: this 409'd storage_quota_exceeded because the gate ran
+    //    before the replay).
+    const replay = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'idempotency-key': key },
+      payload: { token_budget: 50_000, profile_id: profileId },
+    });
+    expect(replay.statusCode).toBe(201);
+    expect(replay.json<{ id: string }>().id).toBe(firstId);
+    // The replay did not mint a second session — exactly one active row.
+    expect(await fx.agentSessionsRepo!.countActive(fx.accountId)).toBe(1);
+
+    // 5. Sibling proof the gate STILL works for a genuinely-new create: a FRESH
+    //    idempotency-key, same over-cap account → 409 (only the replay bypasses).
+    const fresh = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'idempotency-key': 'idem-key-quota-replay-2-fresh',
+      },
+      payload: { token_budget: 50_000, profile_id: profileId },
+    });
+    expect(fresh.statusCode).toBe(409);
+    expect(fresh.json<{ type: string }>().type).toBe(PROBLEM_TYPES.StorageQuotaExceeded);
+    // The rejected new create added no row — still exactly one active.
+    expect(await fx.agentSessionsRepo!.countActive(fx.accountId)).toBe(1);
+  });
 });
