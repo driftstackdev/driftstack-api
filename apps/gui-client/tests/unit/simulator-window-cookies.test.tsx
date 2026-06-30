@@ -175,16 +175,16 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
     fireEvent.click(exportBtn);
     expect(downloadBlobMock).toHaveBeenCalledTimes(1);
     const [filename, blob] = downloadBlobMock.mock.calls[0] as [string, Blob];
-    expect(filename).toBe('cookies-agt_ck.json');
+    expect(filename).toBe('cookies.json');
     expect(blob).toBeInstanceOf(Blob);
 
-    // Import is now enabled (a live session) + targets a real import, not the
-    // "next device update" placeholder title.
+    // Import is now enabled (a live session) + advertises the smart multi-format
+    // import (founder #3) — not the old JSON-only title.
     const importBtn = container.querySelector(
       '[data-action="import-cookies"]',
     ) as HTMLButtonElement;
     expect(importBtn.disabled).toBe(false);
-    expect(importBtn.getAttribute('title')).toContain('Import a cookies.json');
+    expect(importBtn.getAttribute('title')).toContain('cookies.txt');
   });
 
   it('Import reads a valid cookies.json, validates it, and calls setAgentSessionCookies → success note', async () => {
@@ -218,11 +218,18 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
       if (!note || !note.textContent?.includes('Imported')) throw new Error('not yet');
       return note;
     });
-    // Called with the session id + the validated jar (round-trips 1:1).
+    // Called with the session id + the parsed jar. The smart parser NORMALIZES
+    // (e.g. stamps an explicit expires:null for session cookies), so assert the
+    // essential per-cookie fields rather than a raw deep-equal.
     expect(setCookiesMock).toHaveBeenCalledTimes(1);
-    const [calledId, calledJar] = setCookiesMock.mock.calls[0] as [string, unknown[]];
+    const [calledId, calledJar] = setCookiesMock.mock.calls[0] as [
+      string,
+      Array<{ name: string; value: string; domain: string }>,
+    ];
     expect(calledId).toBe('agt_ck');
-    expect(calledJar).toEqual(jar);
+    expect(calledJar).toHaveLength(2);
+    expect(calledJar.map((c) => c.name)).toEqual(['sid', 'pref']);
+    expect(calledJar[0]).toMatchObject({ domain: '.example.com', value: 'abc', httpOnly: true });
     const note = container.querySelector(
       '[data-component="simulator-cookies-import-note"]',
     ) as HTMLElement;
@@ -246,16 +253,15 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
 
     await waitFor(() => {
       const note = container.querySelector('[data-component="simulator-cookies-import-note"]');
-      if (!note || !note.textContent?.includes('not a valid cookies file'.toLowerCase())) {
-        // case-insensitive substring check below; here just wait for any note text
-        if (!note || note.textContent === '') throw new Error('not yet');
-      }
+      if (!note || note.textContent === '' || note.textContent === null) throw new Error('not yet');
       return note;
     });
     const note = container.querySelector(
       '[data-component="simulator-cookies-import-note"]',
     ) as HTMLElement;
-    expect(note.textContent?.toLowerCase()).toContain('not a valid cookies file');
+    // The smart parser finds 0 valid cookies in [{foo:1}] (no name/value) → a clear
+    // "couldn't…" note + NO server round-trip (the import never reaches the device).
+    expect(note.textContent?.toLowerCase()).toContain("couldn't");
     expect(setCookiesMock).not.toHaveBeenCalled();
   });
 

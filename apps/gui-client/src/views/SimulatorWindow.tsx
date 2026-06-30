@@ -36,6 +36,8 @@ import {
   type Recording,
 } from '../lib/recordings';
 import { buildRecordingExport, recordingExportFilename } from '../lib/recordings-export';
+import { exportCookies } from '../lib/cookie-export';
+import { parseCookies } from '../lib/cookie-import';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { IOSKeyboard } from '../components/IOSKeyboard';
 import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
@@ -1794,32 +1796,9 @@ function CookieFlag({
   );
 }
 
-/** Validate a parsed cookies.json into a SessionCookie[] — accepts the exact shape
- *  Export emits (an array whose every entry has string domain/name/value). Returns
- *  the typed array or null when the shape is wrong (so the Import button can surface
- *  a clear "not a valid cookies file" rather than POSTing garbage). Optional fields
- *  are passed through verbatim; the server's CookieSchema is the authoritative
- *  validator (this is the client-side shape pre-check the task asks for). */
-function parseImportedCookies(raw: unknown): SessionCookie[] | null {
-  if (!Array.isArray(raw) || raw.length === 0) return null;
-  const out: SessionCookie[] = [];
-  for (const entry of raw) {
-    if (typeof entry !== 'object' || entry === null) return null;
-    const c = entry as Record<string, unknown>;
-    if (typeof c.domain !== 'string' || typeof c.name !== 'string' || typeof c.value !== 'string') {
-      return null;
-    }
-    const cookie: SessionCookie = { domain: c.domain, name: c.name, value: c.value };
-    if (typeof c.path === 'string') cookie.path = c.path;
-    if (typeof c.expires === 'number' || c.expires === null) cookie.expires = c.expires;
-    if (typeof c.httpOnly === 'boolean') cookie.httpOnly = c.httpOnly;
-    if (typeof c.secure === 'boolean') cookie.secure = c.secure;
-    if (c.sameSite === 'Strict' || c.sameSite === 'Lax' || c.sameSite === 'None')
-      cookie.sameSite = c.sameSite;
-    out.push(cookie);
-  }
-  return out;
-}
+// (parseImportedCookies removed 2026-06-30 — the smart multi-format parseCookies in
+// ../lib/cookie-import.ts supersedes the old JSON-array-only shape validator; founder #3
+// "make import really smart so it takes many formats".)
 
 /**
  * The fancy Cookies pane body — a self-contained sub-component so its local
@@ -1872,10 +1851,20 @@ function CookiesPane({
 
   const canExport = cookies !== null && cookies.length >= 1;
   const onExport = (): void => {
-    void downloadBlob(
-      `cookies-${sessionId !== '' ? sessionId : 'session'}.json`,
-      new Blob([JSON.stringify(cookies ?? [], null, 2)], { type: 'application/json' }),
-    );
+    if (cookies === null || cookies.length === 0) return;
+    // Shared exporter → clean JSON that round-trips with the smart importer + is
+    // EditThisCookie/Playwright-compatible. AWAIT the write + surface a note: the old
+    // fire-and-forget wrote to ~/Downloads silently, which read as "export not working"
+    // (founder #3, 2026-06-30).
+    const out = exportCookies(cookies, 'json');
+    const n = cookies.length;
+    void downloadBlob(out.filename, new Blob([out.text], { type: out.mime })).then((ok) => {
+      setImportNote(
+        ok
+          ? `Exported ${n} cookie${n === 1 ? '' : 's'} to your Downloads folder (${out.filename}).`
+          : "Couldn't save the export — check the app's file-access permission.",
+      );
+    });
   };
 
   // Import: read the chosen .json as text → JSON.parse → shape-validate an array of
@@ -1894,18 +1883,18 @@ function CookiesPane({
     };
     reader.onload = (): void => {
       const text = typeof reader.result === 'string' ? reader.result : '';
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
+      // Smart multi-format parse (Netscape cookies.txt / JSON array / EditThisCookie /
+      // Playwright storageState / raw `Cookie:` header / name=value pairs — auto-detected).
+      // Never throws; malformed lines become warnings (founder #3 2026-06-30 "make import
+      // really smart so it takes many formats").
+      const { cookies: validated, format, warnings } = parseCookies(text);
+      if (validated.length === 0) {
         setImporting(false);
-        setImportNote('That file is not valid JSON.');
-        return;
-      }
-      const validated = parseImportedCookies(parsed);
-      if (validated === null) {
-        setImporting(false);
-        setImportNote('Not a valid cookies file (expected an array of cookies).');
+        setImportNote(
+          warnings.length > 0
+            ? `Couldn't read any cookies — ${warnings[0]}`
+            : "Couldn't find any cookies in that file (tried JSON, cookies.txt, Cookie header + name=value).",
+        );
         return;
       }
       // Client-side cap to match the server schema (z.array(CookieSchema).min(1).max(2000)).
@@ -1916,11 +1905,12 @@ function CookiesPane({
         setImportNote('That cookies file has too many cookies (max 2000).');
         return;
       }
+      const fmtNote = ` (read as ${format}${warnings.length > 0 ? `, ${warnings.length} skipped` : ''})`;
       void setAgentSessionCookies(sessionId, validated, controlAuth)
         .then((res) => {
           if (res.status === 'ok') {
             setImportNote(
-              `Imported ${validated.length} cookie${validated.length === 1 ? '' : 's'}.`,
+              `Imported ${validated.length} cookie${validated.length === 1 ? '' : 's'}${fmtNote}.`,
             );
           } else if (res.status === 'unavailable') {
             setImportNote(
@@ -1999,7 +1989,7 @@ function CookiesPane({
             type="button"
             data-action="import-cookies"
             aria-label="Import cookies"
-            title="Import a cookies.json into the session"
+            title="Import cookies — JSON, cookies.txt, EditThisCookie, or a Cookie: header (auto-detected)"
             disabled={!canImport}
             onClick={() => importInputRef.current?.click()}
             className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-0.5 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
@@ -2011,7 +2001,7 @@ function CookiesPane({
           <input
             ref={importInputRef}
             type="file"
-            accept=".json,application/json"
+            accept=".json,.txt,.text,application/json,text/plain"
             data-component="simulator-cookies-import-input"
             className="hidden"
             onChange={(e) => {
