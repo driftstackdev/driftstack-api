@@ -2,6 +2,7 @@
 
 import { and, count, desc, eq, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { isUniqueViolation } from '../lib/pg-error.js';
+import { StorageQuotaExceededError } from '../lib/errors.js';
 import type {
   ListProfilesArgs,
   ListProfilesPage,
@@ -10,6 +11,11 @@ import type {
   ProfileUpdates,
   ProfilesRepo,
 } from '../services/profiles.js';
+// #2 (2026-06-30) — the SAME pure cap-vs-usage math the create-time hard gate
+// uses (assertWithinStorageQuotaForLaunch -> computeAccountStorageState),
+// reused here so restore() enforces an identical rule instead of a
+// hand-duplicated threshold that could drift from it.
+import { computeAccountStorageState } from '../services/profile-storage-quota.js';
 import type { Database } from './client.js';
 import { accounts, profiles } from './schema.js';
 import { parseUuidCursor } from '../lib/keyset-cursor.js';
@@ -307,32 +313,10 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
     id: string;
     accountId: string;
   }): Promise<'restored' | 'not_found' | 'name_conflict'> {
-    const [trashed] = await this.database.db
-      .select({ name: profiles.name })
-      .from(profiles)
-      .where(
-        and(
-          eq(profiles.id, args.id),
-          eq(profiles.accountId, args.accountId),
-          isNotNull(profiles.deletedAt),
-        ),
-      )
-      .limit(1);
-    if (trashed === undefined) return 'not_found';
-
-    const [liveSameName] = await this.database.db
-      .select({ id: profiles.id })
-      .from(profiles)
-      .where(
-        and(eq(profiles.accountId, args.accountId), eq(profiles.name, trashed.name), notDeleted),
-      )
-      .limit(1);
-    if (liveSameName !== undefined) return 'name_conflict';
-
-    try {
-      const result = await this.database.db
-        .update(profiles)
-        .set({ deletedAt: null, updatedAt: new Date() })
+    return this.database.db.transaction(async (tx) => {
+      const [trashed] = await tx
+        .select({ name: profiles.name, sizeBytes: profiles.sizeBytes })
+        .from(profiles)
         .where(
           and(
             eq(profiles.id, args.id),
@@ -340,12 +324,76 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
             isNotNull(profiles.deletedAt),
           ),
         )
-        .returning({ id: profiles.id });
-      return result.length > 0 ? 'restored' : 'not_found';
-    } catch (err) {
-      if (isUniqueViolation(err, 'profiles_account_name_unique')) return 'name_conflict';
-      throw err;
-    }
+        .limit(1);
+      if (trashed === undefined) return 'not_found';
+
+      const [liveSameName] = await tx
+        .select({ id: profiles.id })
+        .from(profiles)
+        .where(
+          and(eq(profiles.accountId, args.accountId), eq(profiles.name, trashed.name), notDeleted),
+        )
+        .limit(1);
+      if (liveSameName !== undefined) return 'name_conflict';
+
+      // #2 (2026-06-30) anti-abuse — re-validate the account's storage cap
+      // BEFORE un-trashing, mirroring the create-time hard gate
+      // (assertWithinStorageQuotaForLaunch). sumSizeBytesByAccount /
+      // countByAccount only ever summed LIVE rows, so a customer at the cap
+      // could soft-delete a large profile to instantly free reported quota
+      // (the real R2 bytes are untouched by a soft delete) and bring the
+      // exact same bytes back later via restore with zero re-check — a
+      // trash+restore round-trip silently bypassed the hard cap for the
+      // entire 30-day trash retention window. `FOR UPDATE` on the owning
+      // account row serializes this against a concurrent insertWithLimit (or
+      // another restore) on the same account — same lock-ordering convention
+      // as insertWithLimit above (accounts row locked first). A missing
+      // account row (shouldn't happen — profiles FK to accounts) skips the
+      // check rather than blocking the restore on unrelated data.
+      const [account] = await tx
+        .select({ tier: accounts.tier })
+        .from(accounts)
+        .where(eq(accounts.id, args.accountId))
+        .for('update')
+        .limit(1);
+      if (account !== undefined) {
+        const [sumRow] = await tx
+          .select({ total: sql<string>`coalesce(sum(${profiles.sizeBytes}), 0)::bigint` })
+          .from(profiles)
+          .where(and(eq(profiles.accountId, args.accountId), notDeleted));
+        const liveUsedBytes = sumRow ? Number(sumRow.total) : 0;
+        const projectedUsedBytes = liveUsedBytes + (trashed.sizeBytes ?? 0);
+        const state = computeAccountStorageState({
+          usedBytes: projectedUsedBytes,
+          tier: account.tier,
+        });
+        if (state.state === 'hard') {
+          throw new StorageQuotaExceededError({
+            usedBytes: state.usedBytes,
+            capBytes: state.capBytes,
+            tier: account.tier,
+          });
+        }
+      }
+
+      try {
+        const result = await tx
+          .update(profiles)
+          .set({ deletedAt: null, updatedAt: new Date() })
+          .where(
+            and(
+              eq(profiles.id, args.id),
+              eq(profiles.accountId, args.accountId),
+              isNotNull(profiles.deletedAt),
+            ),
+          )
+          .returning({ id: profiles.id });
+        return result.length > 0 ? 'restored' : 'not_found';
+      } catch (err) {
+        if (isUniqueViolation(err, 'profiles_account_name_unique')) return 'name_conflict';
+        throw err;
+      }
+    });
   }
 
   // L4b Step 4 — retention purge. The ONLY hard DELETE on profiles (delete()

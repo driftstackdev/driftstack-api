@@ -147,6 +147,15 @@ export interface ProfilesRepo {
    *  - 'name_conflict' a LIVE profile now holds the name (it was freed + reused
    *                    while trashed), so the partial unique index rejects the
    *                    restore — the caller must rename one first.
+   *
+   * #2 (2026-06-30) — also THROWS StorageQuotaExceededError when restoring
+   * would push the account's live storage usage over its tier's hard cap
+   * (the same rule assertWithinStorageQuotaForLaunch enforces at create
+   * time). Without this, soft-deleting a large profile instantly (and
+   * wrongly) freed reported quota — sumSizeBytesByAccount only ever summed
+   * LIVE rows — and restoring it later brought the exact same bytes back
+   * with zero re-check, bypassing the hard cap for the whole 30-day trash
+   * window.
    */
   restore(args: {
     id: string;
@@ -217,6 +226,20 @@ export interface CreateProfileArgs {
   note?: string;
 }
 
+/**
+ * #1/#3 (2026-06-30) — minimal shape this service needs to refuse a hard-
+ * delete-adjacent profile mutation (purge / transfer-out) while a session is
+ * still actively bound to the profile. Matches
+ * `AgentSessionsRepo.countActiveForProfile` (services/agent-sessions.ts)
+ * structurally — the real repo satisfies this without an import cycle; a
+ * lightweight fake suffices in tests. Mirrors the #14 trim guard
+ * (routes/profiles.ts `POST /:id/trim`), which checks the identical
+ * condition before an out-of-session R2 write for the identical reason.
+ */
+export interface ProfileSessionGuard {
+  countActiveForProfile(profileId: string): Promise<number>;
+}
+
 export class ProfilesService {
   constructor(
     private readonly repo: ProfilesRepo,
@@ -244,6 +267,16 @@ export class ProfilesService {
      */
     private readonly r2: R2 | null = null,
     private readonly logger: Logger | null = null,
+    /**
+     * #1/#3 (2026-06-30) — agent-sessions lookup backing the "is this
+     * profile bound to a live session?" guard purge() and transferProfile()
+     * run before a hard-delete-adjacent mutation (see assertNoActiveSession).
+     * Null (the default — no caller currently wires this) → the guard is
+     * skipped, exactly the same fail-open contract every other optional
+     * dependency above uses; no behavior change until a real
+     * AgentSessionsRepo is passed in at construction.
+     */
+    private readonly agentSessions: ProfileSessionGuard | null = null,
   ) {}
 
   /**
@@ -547,12 +580,52 @@ export class ProfilesService {
   }
 
   /**
+   * #1/#3 (2026-06-30) — refuse purge()/transferProfile() against a profile
+   * that still has a non-terminal session bound to it. A live session holds a
+   * long-TTL presigned save-back PUT URL minted independently of the profile
+   * row at session-assign (buildAssignProfileBlock, profile-store.ts) and
+   * will write its sealed state back at session-end regardless of what
+   * happens to the row in the meantime:
+   *   - purge(): the row + R2 blob are gone by then, so the late save-back
+   *     silently RECREATES a now-orphaned `profiles/<id>.sealed` object —
+   *     "permanent delete" isn't permanent, and no sweep ever reaps a blob
+   *     whose DB row no longer exists.
+   *   - transferProfile(): touch()/recordSave() are notDeleted-scoped, so the
+   *     late save-back silently no-ops against the now-trashed source row —
+   *     the session's final size_bytes/last_saved_at is lost.
+   * Mirrors the #14 trim guard (routes/profiles.ts, `agentSessions.
+   * countActiveForProfile`). No-op when the checker isn't wired — same
+   * fail-open-to-prior-behavior contract every optional dependency here uses.
+   */
+  private async assertNoActiveSession(profileId: string, action: string): Promise<void> {
+    if (this.agentSessions === null) return;
+    const activeCount = await this.agentSessions.countActiveForProfile(profileId);
+    if (activeCount > 0) {
+      throw new ConflictError(
+        `This profile has a live session in progress — stop it before you can ${action} this profile.`,
+        { resource: 'profile', field: 'session' },
+      );
+    }
+  }
+
+  /**
    * Anti-abuse (2026-06-17) — permanently delete ONE trashed profile so a user
    * at their cap can free a slot immediately (trashed profiles now count toward
    * the cap). Owner-scoped + trashed-only in the repo; 404 if no trashed row
    * matches. Best-effort profile.purged audit.
+   *
+   * #1 (2026-06-30) — owner+existence is confirmed FIRST (against the trash
+   * listing) before the active-session guard runs, so the guard never
+   * confirms the existence/activity of another account's profile id (the
+   * same ordering rationale the #14 trim route uses).
    */
   async purge(args: { id: string; accountId: string }): Promise<void> {
+    const trashed = await this.repo.listTrashed({ accountId: args.accountId });
+    if (!trashed.some((row) => row.id === args.id)) {
+      throw new NotFoundError('Trashed profile not found.');
+    }
+    await this.assertNoActiveSession(args.id, 'purge');
+
     const purged = await this.repo.purgeTrashed(args);
     if (!purged) throw new NotFoundError('Trashed profile not found.');
     // Best-effort R2 cleanup of the now-orphaned sealed blob. R2 DELETE is
@@ -869,6 +942,14 @@ export class ProfilesService {
       accountId: args.sourceAccountId,
     });
     if (source === null) throw new NotFoundError('Profile not found.');
+
+    // #3 (2026-06-30) — refuse the transfer while the source profile still
+    // has a live session bound to it (see assertNoActiveSession). findById
+    // above already owner-scoped sourceProfileId to sourceAccountId, so this
+    // never confirms another account's profile activity. Thrown BEFORE any
+    // mutation, same as the cap/name-race checks below — a refused transfer
+    // leaves the source profile untouched.
+    await this.assertNoActiveSession(args.sourceProfileId, 'transfer');
 
     const limit = profileLimitFor(args.recipientTier);
     if (limit !== null) {

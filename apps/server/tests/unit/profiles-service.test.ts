@@ -20,6 +20,7 @@ import {
   ProfilesService,
   type ProfileRecord,
   type ProfilesRepo,
+  type ProfileSessionGuard,
   type ProfileUpdates,
   type NewProfileInput,
 } from '../../src/services/profiles.js';
@@ -762,6 +763,108 @@ describe('ProfilesService.purge — R2 sealed-blob cleanup (FIX 2)', () => {
     ]);
     const svc = new ProfilesService(repo); // no R2
     await expect(svc.purge({ id: 'p1', accountId: 'acc_1' })).resolves.toBeUndefined();
+  });
+});
+
+// #1 (2026-06-30) — purge() must refuse to hard-delete a profile that still
+// has a live session bound to it: the harness holds a long-TTL presigned
+// save-back URL minted independently of the DB row and will resurrect a
+// permanently-orphaned R2 blob at session-end otherwise. Mirrors the #14
+// trim guard (routes/profiles.ts) at the service layer.
+function stubAgentSessions(active: Record<string, number> = {}): {
+  agentSessions: ProfileSessionGuard;
+  calls: string[];
+} {
+  const calls: string[] = [];
+  const agentSessions: ProfileSessionGuard = {
+    countActiveForProfile: (profileId: string) => {
+      calls.push(profileId);
+      return Promise.resolve(active[profileId] ?? 0);
+    },
+  };
+  return { agentSessions, calls };
+}
+
+describe('ProfilesService.purge — live-session guard (FIX #1)', () => {
+  it('refuses to purge a trashed profile with a live session bound to it, leaving the row intact', async () => {
+    const { repo, state } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_1', name: 'gone', deletedAt: new Date() }),
+    ]);
+    const { agentSessions } = stubAgentSessions({ p1: 1 });
+    const svc = new ProfilesService(repo, null, null, null, null, agentSessions);
+    await expect(svc.purge({ id: 'p1', accountId: 'acc_1' })).rejects.toThrow(ConflictError);
+    expect(state.rows.find((r) => r.id === 'p1')).toBeDefined();
+  });
+
+  it('purges normally once the profile has no active session bound to it', async () => {
+    const { repo, state } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_1', name: 'gone', deletedAt: new Date() }),
+    ]);
+    const { agentSessions } = stubAgentSessions({ p1: 0 });
+    const svc = new ProfilesService(repo, null, null, null, null, agentSessions);
+    await expect(svc.purge({ id: 'p1', accountId: 'acc_1' })).resolves.toBeUndefined();
+    expect(state.rows.find((r) => r.id === 'p1')).toBeUndefined();
+  });
+
+  it('purge still works when agentSessions is not wired (fail-open, no behavior change)', async () => {
+    const { repo, state } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_1', name: 'gone', deletedAt: new Date() }),
+    ]);
+    const svc = new ProfilesService(repo); // no agentSessions checker
+    await expect(svc.purge({ id: 'p1', accountId: 'acc_1' })).resolves.toBeUndefined();
+    expect(state.rows.find((r) => r.id === 'p1')).toBeUndefined();
+  });
+
+  it("404s on an unowned/non-trashed id WITHOUT ever calling the active-session checker (never confirms another account's profile)", async () => {
+    const { repo } = makeRepo([
+      // Live (not trashed) profile owned by a DIFFERENT account, with an
+      // active session — purge must 404 on ownership/trashed-state first.
+      makeProfile({ id: 'p_other', accountId: 'acc_other', name: 'live' }),
+    ]);
+    const { agentSessions, calls } = stubAgentSessions({ p_other: 1 });
+    const svc = new ProfilesService(repo, null, null, null, null, agentSessions);
+    await expect(svc.purge({ id: 'p_other', accountId: 'acc_1' })).rejects.toThrow(NotFoundError);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+// #3 (2026-06-30) — transferProfile() must refuse to soft-delete the source
+// profile while a live session is still bound to it: touch()/recordSave()
+// are notDeleted-scoped, so the session's final save-back would silently
+// no-op against the now-trashed row. Same guard as #1's purge fix.
+describe('ProfilesService.transferProfile — live-session guard (FIX #3)', () => {
+  it('refuses the transfer when the source profile has a live session bound to it, leaving the source intact and minting nothing for the recipient', async () => {
+    const { repo, state } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_src', name: 'movable' }),
+    ]);
+    const { agentSessions } = stubAgentSessions({ p1: 1 });
+    const svc = new ProfilesService(repo, null, null, null, null, agentSessions);
+    await expect(
+      svc.transferProfile({
+        sourceProfileId: 'p1',
+        sourceAccountId: 'acc_src',
+        recipientAccountId: 'acc_dst',
+        recipientTier: TEAM,
+      }),
+    ).rejects.toThrow(ConflictError);
+    expect(state.rows).toHaveLength(1);
+    expect(state.rows[0]?.accountId).toBe('acc_src');
+  });
+
+  it('transfers normally once the source profile has no active session bound to it', async () => {
+    const { repo, state } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_src', name: 'movable' }),
+    ]);
+    const { agentSessions } = stubAgentSessions({ p1: 0 });
+    const svc = new ProfilesService(repo, null, null, null, null, agentSessions);
+    const { newProfile } = await svc.transferProfile({
+      sourceProfileId: 'p1',
+      sourceAccountId: 'acc_src',
+      recipientAccountId: 'acc_dst',
+      recipientTier: TEAM,
+    });
+    expect(newProfile.accountId).toBe('acc_dst');
+    expect(state.rows.find((r) => r.id === 'p1')).toBeUndefined();
   });
 });
 

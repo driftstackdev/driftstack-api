@@ -1128,6 +1128,13 @@ export async function createProductionDeps(
     // profile's R2 sealed blob (no-op when R2 isn't configured).
     r2,
     logger,
+    // Security fix (2026-06-30 audit) — without this, purge()/transferProfile()'s
+    // live-session guard is wired but INERT (the 6th param defaults to null,
+    // fail-open): a profile could be hard-deleted (or its identity transferred
+    // away) while an agent session still held it bound, silently orphaning the
+    // session and resurrecting the "permanently deleted" R2 blob via the
+    // session's independently-minted, long-TTL save-back PUT URL.
+    agentSessionsRepo,
   );
   // V-312 — profile snapshots service shares the profiles repo for
   // tier-cap + name-conflict enforcement on restore.
