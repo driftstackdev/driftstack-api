@@ -630,3 +630,191 @@ describe('Audit #79 — out-of-order / retried Stripe subscription events', () =
     expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('free');
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────
+// billing-edges audit — past_due/unpaid never downgraded tier.
+//
+// handleSubscriptionUpsert (customer.subscription.created/updated, which is
+// what every Stripe dunning-status transition arrives as) only mutated
+// accounts.tier when status was active/trialing. A card decline during
+// Stripe's Smart Retries dunning window moves the subscription to
+// past_due — and a Stripe account configured with the "mark unpaid"
+// dunning policy parks it at unpaid forever — WITHOUT ever firing
+// customer.subscription.deleted. Neither status touched tier, so a
+// customer who stopped being billed kept full paid-tier access (session
+// caps, profile caps, rate limits) indefinitely. Fixed by downgrading to
+// the same `cancelDowngradeTier` target handleSubscriptionDeleted already
+// uses, triggered by past_due/unpaid status too. The subscription MIRROR
+// still records the real status (not 'canceled') so Stripe's own retry
+// recovering the subscription to 'active' naturally re-upgrades via the
+// existing active/trialing branch — no separate recovery path needed.
+// ───────────────────────────────────────────────────────────────────────
+describe('billing-edges audit — past_due/unpaid subscription status downgrades tier', () => {
+  let fx: TestAppFixture;
+
+  const T1 = 1_700_000_000; // older event.created
+  const T2 = T1 + 3600; // newer event.created (one hour later)
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('downgrades the account to the free tier when an active subscription moves to past_due', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    const subId = 'sub_pastdue_001';
+
+    // Active first — establishes the paid tier.
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_pastdue_active',
+        type: 'customer.subscription.created',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+        createdSec: T1,
+      }),
+    );
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+
+    // Card declines; Stripe's dunning moves the subscription to past_due
+    // via customer.subscription.updated. No deletion ever fires.
+    const result = (await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_pastdue_update',
+        type: 'customer.subscription.updated',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'past_due',
+        createdSec: T2,
+      }),
+    )) as { statusCode: number; body: { outcome: string } };
+    expect(result.body.outcome).toBe('handled');
+
+    // Tier is downgraded...
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('free');
+    // ...but the mirror keeps the REAL status (past_due, not canceled) so
+    // the distinction from an explicit cancel survives in the DB.
+    const subs = fx.stripeWebhooksRepo.listSubscriptions();
+    expect(subs).toHaveLength(1);
+    expect(subs[0]?.status).toBe('past_due');
+  });
+
+  it('downgrades the account to the free tier when a subscription moves to unpaid (terminal dunning, never deletes)', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    const subId = 'sub_unpaid_001';
+
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_unpaid_active',
+        type: 'customer.subscription.created',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+        createdSec: T1,
+      }),
+    );
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_unpaid_update',
+        type: 'customer.subscription.updated',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'unpaid',
+        createdSec: T2,
+      }),
+    );
+
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('free');
+    const subs = fx.stripeWebhooksRepo.listSubscriptions();
+    expect(subs[0]?.status).toBe('unpaid');
+  });
+
+  it('re-upgrades the account when Stripe recovers a past_due subscription back to active (own retry succeeds)', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    const subId = 'sub_pastdue_recover_001';
+
+    // Active -> past_due (downgrade) -> active again (Stripe's own retry
+    // succeeded, e.g. the customer updated their card and Smart Retries
+    // billed it successfully). Same handler, same code path, just a
+    // different status value each time.
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_recover_active_1',
+        type: 'customer.subscription.created',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+        createdSec: T1,
+      }),
+    );
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_recover_pastdue',
+        type: 'customer.subscription.updated',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'past_due',
+        createdSec: T2,
+      }),
+    );
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('free');
+
+    const T3 = T2 + 3600;
+    const result = (await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_recover_active_2',
+        type: 'customer.subscription.updated',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+        createdSec: T3,
+      }),
+    )) as { statusCode: number; body: { outcome: string } };
+    expect(result.body.outcome).toBe('handled');
+
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+    const subs = fx.stripeWebhooksRepo.listSubscriptions();
+    expect(subs[0]?.status).toBe('active');
+  });
+
+  it('does not downgrade on incomplete/incomplete_expired/paused (only past_due/unpaid trigger the dunning downgrade)', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const subId = 'sub_other_status_001';
+
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_other_status',
+        type: 'customer.subscription.updated',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'paused',
+        createdSec: T1,
+      }),
+    );
+
+    // Unchanged — 'paused' is neither an active-paying status nor a
+    // dunning-downgrade status; this test pins that the new branch is
+    // scoped to exactly past_due/unpaid and doesn't over-fire.
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+  });
+});

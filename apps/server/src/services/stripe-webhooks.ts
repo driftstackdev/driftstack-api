@@ -385,6 +385,38 @@ export class StripeWebhooksService {
           stripeEventId: event.id,
         });
       }
+    } else if (status === 'past_due' || status === 'unpaid') {
+      // Dunning: Stripe keeps the subscription object alive (no
+      // `customer.subscription.deleted` fires while it merely cycles
+      // through past_due, and Stripe's "mark unpaid" dunning policy
+      // leaves it parked at `unpaid` forever) but payment has stopped
+      // succeeding. Downgrade using the SAME target + mechanism as an
+      // explicit cancellation (handleSubscriptionDeleted below) — an
+      // account that isn't being billed doesn't keep paid-tier access
+      // for the full multi-week dunning window. The subscription MIRROR
+      // already recorded the real status (past_due/unpaid, not
+      // 'canceled') via the upsertSubscription call above, so the
+      // distinction from a true cancel survives in the DB; if Stripe's
+      // retry later succeeds, the event arrives as status === 'active'
+      // and the branch above naturally re-upgrades on the next in-order
+      // event — no separate recovery path needed.
+      const downgradeTier = this.config.cancelDowngradeTier ?? 'free';
+      const { previousTier } = await this.repo.setAccountTier({
+        accountId,
+        tier: downgradeTier,
+        at,
+      });
+      if (previousTier !== downgradeTier) await this.invalidateAuthCache(accountId);
+      if (this.accountLifecycle !== null) {
+        await this.accountLifecycle.emit(accountId, {
+          kind: 'subscription.tier_changed',
+          fromTier: previousTier,
+          toTier: downgradeTier,
+          effectiveAt: at,
+          stripeEventType: event.type,
+          stripeEventId: event.id,
+        });
+      }
     }
 
     this.logEvent(event, `subscription ${status}`);
