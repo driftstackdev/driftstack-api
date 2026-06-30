@@ -402,6 +402,36 @@ describe('SimulatorWindow — client video-freeze detector', () => {
     expect(panelCbs.recoverActions).toHaveLength(0);
   });
 
+  // P1a (finding #7) — the toolbar's pulsing green "Live" indicator must CLEAR the
+  // instant the session terminally ends, so it can't read as Live while the panel
+  // shows the "Session ended" overlay (the "running after the browser closed"
+  // confusion). The running indicator is gated on `running = sessionId !== '' &&
+  // sessionEnded === null`.
+  it('P1a: the toolbar "Live" running indicator clears once the session terminally ends', async () => {
+    vi.useFakeTimers();
+    const { container } = renderSim();
+    const liveCue = (): Element | null =>
+      container.querySelector('[data-component="simulator-running-indicator"]');
+    // A bound, still-live session shows the Live cue.
+    expect(liveCue()).not.toBeNull();
+    // The session terminally ends on the worker (browser closed); the ~5s poll latches it.
+    sessionState.current = {
+      mode: 'manual',
+      pairKind: null,
+      terminal: true,
+      status: 'closed',
+      closedReason: 'idle_timeout',
+    };
+    await act(async () => {
+      vi.advanceTimersByTime(5_100);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(panelCbs.sessionEnded).toEqual({ reason: 'idle_timeout' });
+    // The Live cue is gone — it no longer contradicts the "Session ended" overlay.
+    expect(liveCue()).toBeNull();
+  });
+
   // P1a guard — a transient freeze on a LIVE session (status stays 'active') STILL
   // recovers; the terminal gate must not break the existing recovery path.
   it('P1a guard: a freeze on a still-LIVE session still drives recovery (terminal gate is precise)', () => {

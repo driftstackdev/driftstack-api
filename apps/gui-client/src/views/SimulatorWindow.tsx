@@ -5113,7 +5113,13 @@ export function SimulatorWindow(): JSX.Element {
           <DeviceToolbar
             deviceName={deviceName}
             profileName={profileName}
-            running={sessionId !== ''}
+            // P1a — the green pulsing "Live" indicator must clear the instant the
+            // session TERMINALLY ends, matching the "Session ended" overlay the panel
+            // renders. sessionId stays non-empty after a terminal end (it isn't cleared
+            // until a fresh session swaps in), so gate on the sessionEnded latch too —
+            // otherwise the toolbar reads "Live" while the screen says the session
+            // stopped (the exact "running after the browser closed" confusion).
+            running={sessionId !== '' && sessionEnded === null}
             keyboardVisible={keyboardVisible}
             onToggleKeyboard={toggleKeyboard}
             inputEnabled={controlMode !== 'ai'}

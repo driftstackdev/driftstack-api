@@ -515,6 +515,11 @@ describe('AgentSessionPanel overlay UX', () => {
     const ended = container.querySelector('[data-overlay="session-ended"]');
     expect(ended).not.toBeNull();
     expect(ended?.textContent).toMatch(/session ended/i);
+    // Finding #8 — the standalone Simulator can't relaunch in place (no account
+    // API key / SDK client to mint a fresh session+token; that lives in the main
+    // app), so the overlay must give the concrete next step instead of a dead-end
+    // "Relaunch the profile to start a new one" with only a Close button.
+    expect(ended?.textContent).toMatch(/relaunch the profile from the main Driftstack window/i);
     // No competing overlays.
     expect(container.querySelector('[data-overlay="connection-state"]')).toBeNull();
     expect(container.querySelector('[data-overlay="publisher-state"]')).toBeNull();

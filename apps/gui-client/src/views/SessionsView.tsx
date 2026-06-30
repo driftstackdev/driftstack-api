@@ -11,9 +11,23 @@ import { RelativeTime } from '../components/RelativeTime';
 import { LiveElapsed } from '../components/LiveElapsed';
 import { useSettings } from '../lib/SettingsContext';
 import { useToasts } from '../lib/toasts';
+import { useConfirm } from '../components/ConfirmProvider';
 import { DriftstackError, type Session } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { listProxies, type ProxyConfig as LocalProxyConfig } from '../lib/proxies';
+import { countActiveAgentSessions } from '../lib/active-agent-sessions';
+
+// Consistency #5 — the minimal agent-session shape SessionsView renders. A
+// profile launch creates an `agt_` AGENT session (no driver row), which the
+// driver-only `client.sessions.list()` never returns — so without this the
+// running phone is invisible here. We list active agent sessions alongside the
+// driver sessions so a launched profile is visible + stoppable on this surface.
+interface AgentSessionLite {
+  id: string;
+  status: 'active' | 'paused' | 'closed';
+  created_at: string;
+  mode: 'manual' | 'ai' | 'pair';
+}
 
 // 2026-05-20 — slow the background poll from 5s → 15s + suppress the
 // visible "loading" flicker on background refreshes (customer reported
@@ -24,6 +38,9 @@ const REFRESH_MS = 15_000;
 
 interface SessionsState {
   sessions: Session[];
+  // Consistency #5 — profile-launched agent sessions, surfaced alongside the
+  // driver sessions so a running launched profile is visible + actionable here.
+  agentSessions: AgentSessionLite[];
   refreshedAt: number | null;
   loading: boolean;
   error: string | null;
@@ -36,8 +53,10 @@ export interface SessionsViewProps {
 export function SessionsView({ onGoToSettings }: SessionsViewProps): JSX.Element {
   const { client, settings, accountMe, refreshAccountMe } = useSettings();
   const { push: pushToast } = useToasts();
+  const confirm = useConfirm();
   const [state, setState] = useState<SessionsState>({
     sessions: [],
+    agentSessions: [],
     refreshedAt: null,
     loading: false,
     error: null,
@@ -71,12 +90,23 @@ export function SessionsView({ onGoToSettings }: SessionsViewProps): JSX.Element
     }
   }, [state.sessions, pushToast]);
 
+  // Consistency #5/#43 — `concurrent_session_active` is the server's DRIVER-only
+  // count, but profile launches create AGENT sessions (the path most GUI users
+  // take). Fold the active agent count in so the cap gate + the "X / Y" header
+  // reflect every running phone — otherwise the gate reads "0 / 3" while three
+  // launched phones run and the proactive cap-gate it exists to provide fails.
+  // Driver + agent ids are disjoint, so adding never double-counts.
+  const activeAgentCount = countActiveAgentSessions(state.agentSessions);
+
   // V-239 — gate the New session button when the customer is at the
   // concurrent cap. Server enforces (V-073 returns 402); the GUI's job
   // is to surface the cap proactively so the customer never sees the
   // 402 in normal flow. accountMe === null (not loaded) → don't gate.
   const concurrentCap = accountMe?.concurrent_session_cap ?? null;
-  const concurrentActive = accountMe?.concurrent_session_active ?? null;
+  const concurrentActive =
+    accountMe?.concurrent_session_active !== undefined
+      ? accountMe.concurrent_session_active + activeAgentCount
+      : null;
   const atConcurrentCap =
     concurrentCap !== null && concurrentActive !== null && concurrentActive >= concurrentCap;
 
@@ -97,21 +127,52 @@ export function SessionsView({ onGoToSettings }: SessionsViewProps): JSX.Element
   // "Active/running" = non-terminal sessions only. state.sessions includes
   // destroyed/errored entries until the next poll drops them (the server list
   // is account-scoped, not status-filtered), so counting the raw array length
-  // over-reports running sessions.
-  const activeCount = counts.ready + counts.busy;
+  // over-reports running sessions. Add the active agent sessions (consistency
+  // #5) so the "running" line counts launched profiles too.
+  const activeCount = counts.ready + counts.busy + activeAgentCount;
 
   const refresh = useCallback(
     async (showLoading: boolean): Promise<void> => {
       if (!client) {
-        setState({ sessions: [], refreshedAt: null, loading: false, error: null });
+        setState({
+          sessions: [],
+          agentSessions: [],
+          refreshedAt: null,
+          loading: false,
+          error: null,
+        });
         return;
       }
       if (showLoading) setState((s) => ({ ...s, loading: true }));
       try {
-        const page = await client.sessions.list();
+        // Consistency #5 — fetch driver + agent sessions together so the list +
+        // counters reflect both. The agent-session list is best-effort: it 503s
+        // when the agent runtime isn't wired on the deployment, which must not
+        // blank the driver list — fall back to the prior agent list on failure.
+        const [page, agentSessions] = await Promise.all([
+          client.sessions.list(),
+          typeof client.agentSessions.list === 'function'
+            ? client.agentSessions
+                .list()
+                .then((p) =>
+                  p.data.map(
+                    (s): AgentSessionLite => ({
+                      id: s.id,
+                      status: s.status,
+                      created_at: s.created_at,
+                      mode: s.mode,
+                    }),
+                  ),
+                )
+                .catch(() => null)
+            : Promise.resolve(null),
+        ]);
         setState((s) => ({
           ...s,
           sessions: page.data,
+          // null = agent fetch failed/unavailable → keep the prior list rather
+          // than wrongly emptying it (mirrors the driver list's recover path).
+          agentSessions: agentSessions ?? s.agentSessions,
           refreshedAt: Date.now(),
           loading: false,
           // Clear any prior error — a successful list() proves the list is
@@ -161,6 +222,20 @@ export function SessionsView({ onGoToSettings }: SessionsViewProps): JSX.Element
         return;
       }
       const proxy = toServerProxyEnvelope(first);
+      // Consistency #11 — this New-session path creates a bare driver session:
+      // no saved profile (so no persistent identity — cookies/logins don't
+      // survive), the operator-default device, through the FIRST saved proxy
+      // (not one the user picked here). Confirm so the founder isn't surprised
+      // by a no-identity session on a slot/bill they didn't intend, and is
+      // pointed at the profile-based launch when they want a saved identity.
+      const proceed = await confirm(
+        `Start a quick session with NO saved profile?\n\n` +
+          `• No persistent identity — cookies/logins won't be saved or restored.\n` +
+          `• Uses the default device and your first saved proxy (${first.label}).\n\n` +
+          `For a saved identity + a device/proxy you choose, launch a profile from Profiles instead.`,
+        { confirmLabel: 'Start quick session' },
+      );
+      if (!proceed) return; // finally resets busyId
       // SDK type doesn't yet declare the proxy field — server accepts
       // it via the EG-API-1.6 raw-body pass-through. Cast through
       // unknown to keep the call typesafe at the type-narrow boundary.
@@ -224,11 +299,32 @@ export function SessionsView({ onGoToSettings }: SessionsViewProps): JSX.Element
     }
   }
 
+  // Consistency #5 — stop a profile-launched AGENT session from this surface
+  // (its row's Stop), so a running launched profile is actionable here, not
+  // only from its Profiles row.
+  async function handleCloseAgent(id: string): Promise<void> {
+    if (!client) return;
+    setBusyId(id);
+    try {
+      await client.agentSessions.close(id);
+      await refresh(false);
+      await refreshAccountMe();
+    } catch (err) {
+      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   if (!client) {
     return <EmptyConnect baseUrl={settings.baseUrl} onGoToSettings={onGoToSettings} />;
   }
 
-  const hasSessions = state.sessions.length > 0;
+  // Consistency #5 — only ACTIVE agent sessions are rendered as live cards
+  // (paused/closed are terminal/inactive here). Listed alongside driver
+  // sessions so a launched profile is visible + stoppable on this surface.
+  const liveAgentSessions = state.agentSessions.filter((s) => s.status === 'active');
+  const hasSessions = state.sessions.length > 0 || liveAgentSessions.length > 0;
   const showSkeleton = state.loading && !hasSessions;
 
   // The primary New-session control, shared verbatim by the hero + the empty
@@ -399,6 +495,17 @@ export function SessionsView({ onGoToSettings }: SessionsViewProps): JSX.Element
         />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Profile-launched agent sessions first (consistency #5) — these are
+              the running phones the user launched from Profiles; without them
+              this list claimed "no active sessions" while a phone was live. */}
+          {liveAgentSessions.map((s) => (
+            <AgentSessionCard
+              key={s.id}
+              session={s}
+              busy={busyId === s.id}
+              onStop={() => void handleCloseAgent(s.id)}
+            />
+          ))}
           {state.sessions.map((s) => (
             <SessionCard
               key={s.id}
@@ -410,6 +517,81 @@ export function SessionsView({ onGoToSettings }: SessionsViewProps): JSX.Element
         </div>
       )}
     </div>
+  );
+}
+
+// Consistency #5 — a profile-launched AGENT session rendered in the Sessions
+// list. Distinct from SessionCard (driver `Session`): an agent session carries
+// no archetype/egress facts, so this is a lighter card — identity (id + mode) +
+// a live "running for" timer + a Stop action (client.agentSessions.close). The
+// "Profile session" label + a distinct chip make clear it's a launched profile,
+// not a raw driver session.
+function AgentSessionCard({
+  session,
+  busy,
+  onStop,
+}: {
+  session: AgentSessionLite;
+  busy: boolean;
+  onStop: () => void;
+}): JSX.Element {
+  const modeLabel =
+    session.mode === 'ai' ? 'AI-driven' : session.mode === 'pair' ? 'Pair mode' : 'Manual';
+  return (
+    <article className="group flex flex-col gap-3.5 rounded-xl border border-status-ready/50 bg-surface-raised p-4 shadow-sm transition-all hover:-translate-y-px hover:shadow-md">
+      <div className="flex items-start gap-3">
+        <span
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent/15 text-accent"
+          aria-hidden="true"
+        >
+          <IconPhone />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-semibold tracking-tight text-ink-primary">
+            Profile session
+          </p>
+          <p className="mono mt-0.5 truncate text-[10.5px] text-ink-muted" title={session.id}>
+            {session.id}
+          </p>
+        </div>
+        <span
+          className="shrink-0 whitespace-nowrap text-[10px] text-ink-muted"
+          title={`Started ${new Date(session.created_at).toLocaleString()}`}
+        >
+          <LiveElapsed iso={session.created_at} tooltipPrefix="Started" />
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium">
+          <span className="status-pip bg-status-ready" />
+          <span className="text-status-ready">running</span>
+        </span>
+        <span className="mono truncate text-[11px] text-ink-muted" title={modeLabel}>
+          {modeLabel}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2 rounded-lg bg-surface-inset px-2.5 py-1.5">
+        <span aria-hidden="true" className="text-ink-secondary">
+          <IconPhone />
+        </span>
+        <span className="text-[10.5px] text-ink-muted">
+          Launched from a profile — manage it from its Profiles row too.
+        </span>
+      </div>
+
+      <div className="mt-auto flex gap-2 pt-0.5">
+        <button
+          type="button"
+          className="btn-danger flex-1 text-xs"
+          onClick={onStop}
+          disabled={busy}
+        >
+          {busy ? 'Stopping…' : 'Stop'}
+        </button>
+      </div>
+    </article>
   );
 }
 

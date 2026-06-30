@@ -317,6 +317,52 @@ describe('ProfilesView bulk launch guards', () => {
     await waitFor(() => expect(agentCreate).toHaveBeenCalledTimes(1));
   });
 
+  // Consistency #9: Launch is gated at the CONCURRENT-SESSION cap, including the
+  // active AGENT sessions the server's driver-only count omits. Here cap=5 and 5
+  // active agent sessions run, so the account is AT the cap (0 driver + 5 agent).
+  it('blocks bulk Launch at the concurrent cap (counting active agent sessions) — clean message, no create', async () => {
+    agentSessionsList.mockResolvedValue({
+      data: Array.from({ length: 5 }, (_, i) => ({
+        id: `agt_other_${i.toString()}`,
+        created_at: '2026-06-25T00:00:00Z',
+        status: 'active',
+        liveness: { state: 'active', fresh: true },
+      })),
+    });
+    renderView();
+
+    fireEvent.click(await screen.findByLabelText('Select Idle'));
+    await screen.findByText(/1 selected/);
+
+    fireEvent.click(bulkLaunchButton());
+    // The cap message surfaces up front; no confirm opens and no create fires.
+    expect(await screen.findByText(/Concurrent session cap reached/i)).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(agentCreate).not.toHaveBeenCalled();
+  });
+
+  it('disables the per-row Launch at the concurrent cap (idle profile, cap reached via agent sessions)', async () => {
+    agentSessionsList.mockResolvedValue({
+      data: Array.from({ length: 5 }, (_, i) => ({
+        id: `agt_other_${i.toString()}`,
+        created_at: '2026-06-25T00:00:00Z',
+        status: 'active',
+        liveness: { state: 'active', fresh: true },
+      })),
+    });
+    renderView();
+    // Neither profile is bound to a session here, so both rows show Launch — and
+    // at the cap every per-row Launch is disabled with the cap-reached title.
+    await waitFor(() => {
+      const launches = screen.getAllByRole('button', { name: 'Launch' });
+      expect(launches.length).toBeGreaterThan(0);
+      for (const btn of launches) {
+        expect(btn).toBeDisabled();
+        expect(btn.getAttribute('title')).toMatch(/Concurrent session cap reached/i);
+      }
+    });
+  });
+
   // Finding 3 (high): markLaunched is best-effort — a binding-write failure after
   // a successful create must NOT abort the launch (which would strand a billed,
   // unstoppable session). The launch proceeds to open the controllable simulator.

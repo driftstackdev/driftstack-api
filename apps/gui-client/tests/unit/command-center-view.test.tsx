@@ -49,12 +49,16 @@ function makeClient(over?: {
   sessions?: () => Promise<unknown>;
   auditLog?: () => Promise<unknown>;
   profiles?: () => Promise<unknown>;
+  // Consistency #5 — profile-launched AGENT sessions folded into the active
+  // surfaces. Defaults to an empty list.
+  agentSessions?: () => Promise<unknown>;
 }) {
   const emptyPage = () => Promise.resolve({ data: [], has_more: false, next_cursor: null });
   return {
     sessions: { list: over?.sessions ?? emptyPage },
     auditLog: { list: over?.auditLog ?? emptyPage },
     profiles: { list: over?.profiles ?? emptyPage },
+    agentSessions: { list: over?.agentSessions ?? emptyPage },
   };
 }
 
@@ -342,6 +346,36 @@ describe('CommandCenterView', () => {
     await screen.findByText('Running'); // health loaded → liveNow resolved to 0
     expect(screen.queryByRole('button', { name: /Active/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Running/ })).toBeNull();
+  });
+
+  it('consistency #5: folds active AGENT sessions into the Active KPI, Running tile, and cap alert', async () => {
+    // The server's concurrent_session_active is DRIVER-only (0 here), but the
+    // user launched a profile → an active `agt_` session. cap=1, so adding it
+    // hits the cap. Every surface must reflect 1 running, not 0.
+    accountMe = { ...ACC, concurrent_session_active: 0, concurrent_session_cap: 1 };
+    const onNavigate = nav();
+    client = makeClient({
+      // No driver sessions — without the fold, Session health would say "No
+      // sessions yet" and the Active KPI would read 0.
+      sessions: () => Promise.resolve({ data: [], has_more: false, next_cursor: null }),
+      agentSessions: () =>
+        Promise.resolve({
+          data: [{ status: 'active' }, { status: 'closed' }],
+          has_more: false,
+          next_cursor: null,
+        }),
+    });
+    render(<CommandCenterView onNavigate={onNavigate} />);
+    // Active KPI is now clickable (1 running) and jumps to sessions.
+    const live = await screen.findByRole('button', { name: /Active/ });
+    expect(live.textContent).toContain('1');
+    fireEvent.click(live);
+    expect(onNavigate).toHaveBeenCalledWith('sessions');
+    // Session health renders tiles (not the empty placeholder) with Running 1.
+    const running = await screen.findByText('Running');
+    expect(running.closest('button, div')?.textContent).toContain('1');
+    // Cap alert fires against the REAL count (1/1) — the proactive "at limit".
+    expect(screen.getByText('At your session limit')).toBeTruthy();
   });
 
   it('loads + renders the recent-activity feed from client.auditLog.list', async () => {

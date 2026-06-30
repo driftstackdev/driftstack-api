@@ -19,6 +19,7 @@ import { useSettings } from '../lib/SettingsContext';
 import { useRecordings } from '../lib/recordings';
 import { isCloudBaseUrl } from '../lib/telemetry';
 import { listProxies } from '../lib/proxies';
+import { fetchActiveAgentSessionCount } from '../lib/active-agent-sessions';
 
 export type SidebarViewKind =
   | 'home'
@@ -42,10 +43,27 @@ interface SidebarProps {
 }
 
 export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.Element {
-  const { settings, accountMe, activeWorkspace, setActiveWorkspace } = useSettings();
+  const { settings, client, accountMe, activeWorkspace, setActiveWorkspace } = useSettings();
   const { recordings } = useRecordings();
   const signedIn = settings.apiKey !== null;
   const [proxyCount, setProxyCount] = useState<number | null>(null);
+  // Consistency #5 — `accountMe.concurrent_session_active` is the SERVER's
+  // driver-only count, so profile-launched AGENT sessions (the normal launch
+  // path) never show in the "Active sessions" usage row. Fold the active agent
+  // count in client-side so the row reflects every running phone. null = not
+  // wired / fetch failed → don't adjust (never undercount, never overcount).
+  const [activeAgentCount, setActiveAgentCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchActiveAgentSessionCount(client).then((n) => {
+      if (!cancelled) setActiveAgentCount(n);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Re-fetch on nav (cheap) + on workspace switch so the count tracks the
+    // visible surface; accountMe is refreshed by the views that mutate sessions.
+  }, [client, current, activeWorkspace]);
 
   // Local proxies live in the Tauri store, not the server. Poll lazily —
   // counts that drift one tick out of date are fine; they re-sync on the
@@ -67,7 +85,15 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
 
   const profileCount = accountMe?.profile_count ?? null;
   const profileCap = accountMe?.profile_cap ?? null;
-  const sessionsActive = accountMe?.concurrent_session_active ?? null;
+  const driverActive = accountMe?.concurrent_session_active ?? null;
+  // Total active = driver sessions (server count) + active agent sessions
+  // (folded in client-side). Disjoint id-spaces, so the sum never
+  // double-counts. When either input is unknown (null) keep the other rather
+  // than blanking the row.
+  const sessionsActive =
+    driverActive === null && activeAgentCount === null
+      ? null
+      : (driverActive ?? 0) + (activeAgentCount ?? 0);
   const sessionsCap = accountMe?.concurrent_session_cap ?? null;
   // `accountMe?.teams.length` only guards a null accountMe — a non-null /me with
   // teams missing (partial/legacy/malformed server response — the SDK does NO

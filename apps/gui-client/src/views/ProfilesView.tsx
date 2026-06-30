@@ -281,6 +281,24 @@ export function ProfilesView({
   const profileCapReason = `Profile cap reached (${(profileCap ?? 0).toString()} for ${
     accountMe?.tier ?? 'this tier'
   }). Delete a profile or upgrade to add more.`;
+  // Consistency #9 — gate Launch at the CONCURRENT-SESSION cap (mirrors
+  // SessionsView's New-session gate). Launching a profile creates an agent
+  // session that consumes a concurrent slot; the server returns a 402 at the
+  // cap, but only AFTER a ~12s pre-launch proxy probe → a slow, opaque reject.
+  // Pre-check the cap so Launch is greyed with a clear reason instead. The
+  // server's `concurrent_session_active` is driver-only, so add the active
+  // agent sessions this view already tracks (disjoint ids → no double-count).
+  const activeAgentCount = agentSessions.filter((s) => s.status === 'active').length;
+  const concurrentCap = accountMe?.concurrent_session_cap ?? null;
+  const concurrentActive =
+    accountMe?.concurrent_session_active !== undefined
+      ? accountMe.concurrent_session_active + activeAgentCount
+      : null;
+  const atConcurrentCap =
+    concurrentCap !== null && concurrentActive !== null && concurrentActive >= concurrentCap;
+  const concurrentCapReason = `Concurrent session cap reached (${(concurrentCap ?? 0).toString()} for ${
+    accountMe?.tier ?? 'this tier'
+  }). Stop a running session or upgrade to launch more.`;
   // Teams (2026-06-16) — the server now lets a team ADMIN launch the owner's
   // profiles (agent-sessions create honors X-Driftstack-Account for admins;
   // the client already ships that header for the active workspace). So launch
@@ -1539,6 +1557,15 @@ export function ProfilesView({
     // bulk loop is unaffected — it awaits each handleLaunch sequentially, so busyId
     // is null at the start of each iteration.
     if (!client || busyId !== null) return;
+    // Consistency #9 — pre-gate the concurrent-session cap so a launch at the
+    // cap shows a clear "at your limit" message instead of firing a create that
+    // runs the server's ~12s pre-launch proxy probe before returning an opaque
+    // 402. Covers the single-row Launch + each bulk iteration (handleBulkLaunch
+    // awaits handleLaunch per profile). Team block is checked at the call sites.
+    if (atConcurrentCap) {
+      setState((s) => ({ ...s, error: concurrentCapReason }));
+      return;
+    }
     setBusyId(profile.id);
     try {
       const proxy = pickProxy(profile.id);
@@ -1982,6 +2009,13 @@ export function ProfilesView({
     // up front and don't fire any (billed-on-the-server-attempt) create calls.
     if (teamLaunchBlocked) {
       setState((s) => ({ ...s, error: teamLaunchBlockedReason }));
+      return;
+    }
+    // Consistency #9 — already at the concurrent cap → block the whole batch up
+    // front with the cap message (handleLaunch also guards per-iteration, but
+    // this gives one clean reason instead of letting the first launch error).
+    if (atConcurrentCap) {
+      setState((s) => ({ ...s, error: concurrentCapReason }));
       return;
     }
     // Skip profiles that ALREADY have a live session. The per-row Launch routes a
@@ -2946,8 +2980,14 @@ export function ProfilesView({
                           anyBusy={busyId !== null}
                           testing={px !== null && testingProxyId === px.id}
                           testDisabled={testingProxyId !== null}
-                          launchDisabled={teamLaunchBlocked}
-                          launchDisabledReason={teamLaunchBlockedReason}
+                          // Consistency #9 — gate Launch at the concurrent cap
+                          // too (team block takes precedence). The card applies
+                          // launchDisabled only to IDLE profiles, so a running
+                          // profile's Stop/Open stays enabled.
+                          launchDisabled={teamLaunchBlocked || atConcurrentCap}
+                          launchDisabledReason={
+                            teamLaunchBlocked ? teamLaunchBlockedReason : concurrentCapReason
+                          }
                           onToggleSelect={() => toggleSelected(profile.id)}
                           onPrimary={() => {
                             // A running profile re-opens its live stream in the
@@ -3043,13 +3083,17 @@ export function ProfilesView({
                       busy: busyId === profile.id,
                       testing: px !== null && testingProxyId === px.id,
                       testDisabled: testingProxyId !== null,
-                      // Launch blocks NON-admin team members only — the server
-                      // lets admins launch the owner's profile (V-326e3-style);
-                      // admins + Personal can launch. NOT atProfileCap: the cap
-                      // limits CREATING, launching consumes a session slot
-                      // (free-tier fix 0ccff415; the table Launch is busy-only).
-                      launchDisabled: teamLaunchBlocked,
-                      launchDisabledReason: teamLaunchBlockedReason,
+                      // Launch blocks NON-admin team members (the server lets
+                      // admins launch the owner's profile, V-326e3-style) AND at
+                      // the CONCURRENT-SESSION cap (consistency #9 — launching
+                      // consumes a session slot; pre-gate so the founder isn't
+                      // hit by the slow ~12s 402). NOT atProfileCap: that cap
+                      // limits CREATING, not launching. The table applies
+                      // launchDisabled only to idle rows, so Stop/Open stay live.
+                      launchDisabled: teamLaunchBlocked || atConcurrentCap,
+                      launchDisabledReason: teamLaunchBlocked
+                        ? teamLaunchBlockedReason
+                        : concurrentCapReason,
                     };
                   });
                   // 2026-06-20 — UNIFIED sort: `rows` is built from the already
@@ -3391,6 +3435,11 @@ function CreateProfileModal({
       } else if (proxyChoice === 'create-new') {
         const label = newProxy.label.trim();
         if (label.length === 0) {
+          // Consistency #10 — the error renders in the always-visible preview
+          // rail, but it names a field on the Proxy tab. Switch to that tab so
+          // the founder can SEE the field the message is about (otherwise the
+          // error reads as a dead-end when they're on the Identity tab).
+          setTab('proxy');
           setError('Proxy label is required.');
           setSubmitting(false);
           return;
@@ -3399,6 +3448,7 @@ function CreateProfileModal({
         if (newProxy.scheme === 'wireguard') {
           const built = buildWireGuardProxyInput(label, parseWireGuardConfig(newProxy.configBlob));
           if ('error' in built) {
+            setTab('proxy'); // #10 — reveal the WireGuard paste field
             setError(`WireGuard config: ${built.error}`);
             setSubmitting(false);
             return;
@@ -3415,6 +3465,7 @@ function CreateProfileModal({
         } else if (newProxy.scheme === 'openvpn') {
           const v = validateOpenVpnConfig(newProxy.configBlob);
           if (!v.ok) {
+            setTab('proxy'); // #10 — reveal the OpenVPN paste field
             setError(`OpenVPN config: ${v.reason}`);
             setSubmitting(false);
             return;
@@ -3424,6 +3475,7 @@ function CreateProfileModal({
             port: v.remotePort,
           });
           if ('error' in built) {
+            setTab('proxy'); // #10 — reveal the OpenVPN paste field
             setError(`OpenVPN config: ${built.error}`);
             setSubmitting(false);
             return;
@@ -3445,6 +3497,7 @@ function CreateProfileModal({
             portNum < 1 ||
             portNum > 65535
           ) {
+            setTab('proxy'); // #10 — reveal the host/port fields
             setError('Proxy host and a port between 1–65535 are all required.');
             setSubmitting(false);
             return;

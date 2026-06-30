@@ -21,6 +21,7 @@ import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { useSettings } from '../lib/SettingsContext';
 import { RelativeTime } from '../components/RelativeTime';
 import { listProxies } from '../lib/proxies';
+import { fetchActiveAgentSessionCount } from '../lib/active-agent-sessions';
 
 export type HomeNavTarget = 'ai' | 'recipes' | 'profiles' | 'proxies' | 'sessions';
 
@@ -215,8 +216,38 @@ export function CommandCenterView({
   const profileCount = accountMe?.profile_count ?? null;
   const profileCap = accountMe?.profile_cap ?? null;
   const tier = accountMe?.tier ?? null;
-  const capAlerts = computeCapAlerts(accountMe ?? null);
   const hello = greeting(new Date().getHours());
+
+  // Consistency #5 — fold profile-launched AGENT sessions into the "active
+  // sessions" surfaces. `concurrent_session_active` is the server's driver-only
+  // count, so a profile launch (which creates an `agt_` agent session with no
+  // driver row) leaves the Active KPI + cap alerts + Running tile reading 0
+  // while a phone runs. Agent and driver ids are disjoint, so adding the active
+  // agent count never double-counts. null = unknown → don't adjust.
+  const [activeAgentCount, setActiveAgentCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchActiveAgentSessionCount(client).then((n) => {
+      if (!cancelled) setActiveAgentCount(n);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  // Adjust accountMe's concurrent count by the active agent sessions so the cap
+  // alerts ("At/Near your session limit") fire against the REAL number of
+  // running sessions, matching what the user launched.
+  const accountForAlerts =
+    accountMe !== null && activeAgentCount !== null
+      ? {
+          concurrent_session_active: accountMe.concurrent_session_active + activeAgentCount,
+          concurrent_session_cap: accountMe.concurrent_session_cap,
+          profile_count: accountMe.profile_count,
+          profile_cap: accountMe.profile_cap,
+        }
+      : (accountMe ?? null);
+  const capAlerts = computeCapAlerts(accountForAlerts);
 
   // Live session-health rollup — loads independently of (and after) the hero +
   // KPI so a slow/failed fetch never blocks or breaks the landing.
@@ -321,9 +352,15 @@ export function CommandCenterView({
   // + active statuses) over the session-health rollup, which only summarizes the
   // first page (≤50, createdAt-ordered, incl. destroyed) and so undercounts live
   // runs once an account has churned >50 sessions. (audit wn1ghalx1)
-  const liveNow =
+  // Consistency #5 — add the active agent sessions (profile launches) the
+  // server's driver-only count omits, so the Active KPI matches reality.
+  const driverLiveNow =
     accountMe?.concurrent_session_active ??
     (health.kind === 'ready' ? health.health.running : null);
+  const liveNow =
+    driverLiveNow === null && activeAgentCount === null
+      ? null
+      : (driverLiveNow ?? 0) + (activeAgentCount ?? 0);
   // The "Live now" KPI is a jump-off to live runs only when there's something to
   // jump to — a 0 (or unloaded) count stays a passive stat.
   const liveNowAction = liveNow !== null && liveNow > 0 ? () => onNavigate('sessions') : undefined;
@@ -487,7 +524,14 @@ export function CommandCenterView({
         </div>
         {/* aria-live so SR users hear the loading → ready/error/empty transition. */}
         <div aria-live="polite">
-          <SessionHealthStrip state={health} onViewLive={() => onNavigate('sessions')} />
+          <SessionHealthStrip
+            state={health}
+            // Consistency #5 — the rollup summarizes driver sessions only; add
+            // the active agent sessions (profile launches) so "Running"/"Total"
+            // don't read 0 while a launched phone is live.
+            extraRunning={activeAgentCount ?? 0}
+            onViewLive={() => onNavigate('sessions')}
+          />
         </div>
       </section>
 
@@ -531,9 +575,13 @@ export function CommandCenterView({
 function SessionHealthStrip({
   state,
   onViewLive,
+  extraRunning = 0,
 }: {
   state: HealthState;
   onViewLive: () => void;
+  /** Active agent (profile-launched) sessions to fold into Running/Total — the
+   *  driver-only rollup omits them (consistency #5). */
+  extraRunning?: number;
 }): JSX.Element {
   if (state.kind === 'idle') {
     return (
@@ -559,7 +607,10 @@ function SessionHealthStrip({
     );
   }
   const h = state.health;
-  if (h.total === 0) {
+  // Fold profile-launched agent sessions into Running/Total (consistency #5).
+  const running = h.running + extraRunning;
+  const total = h.total + extraRunning;
+  if (total === 0) {
     return (
       <div className="rounded-xl border border-dashed border-surface-divider px-4 py-3 text-xs text-ink-muted">
         No sessions yet — launch a profile or ask the AI to start one.
@@ -572,13 +623,13 @@ function SessionHealthStrip({
           something live to view (a 0 stays a passive stat). */}
       <HealthTile
         label="Running"
-        value={h.running}
+        value={running}
         tone="ready"
-        onClick={h.running > 0 ? onViewLive : undefined}
+        onClick={running > 0 ? onViewLive : undefined}
       />
       <HealthTile label="Creating" value={h.creating} tone="busy" />
       <HealthTile label="Errored" value={h.errored} tone={h.errored > 0 ? 'error' : 'muted'} />
-      <HealthTile label="Total" value={h.total} tone="muted" />
+      <HealthTile label="Total" value={total} tone="muted" />
     </div>
   );
 }

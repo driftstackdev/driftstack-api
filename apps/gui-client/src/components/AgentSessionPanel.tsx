@@ -666,8 +666,16 @@ export function AgentSessionPanel({
           <span className="font-medium">Session ended</span>
           <span className="max-w-xs text-xs text-ink-secondary">
             {sessionEnded.reason === 'idle_timeout'
-              ? 'This session was closed after a period of inactivity. Relaunch the profile to start a new one.'
-              : 'This session has stopped — the browser on the worker closed. Relaunch the profile to start a new one.'}
+              ? 'This session was closed after a period of inactivity.'
+              : 'This session has stopped — the browser on the worker closed.'}{' '}
+            {/* #8 — concrete next step instead of a dead-end. The standalone Simulator
+                window can't relaunch in place (it holds only the per-session control key,
+                not the account API key/SDK client a fresh session+token needs — that lives
+                in the main app's keychain, and launch is driven from there). So tell the
+                founder exactly where to go: close this window, then relaunch from the main
+                Driftstack window. */}
+            Close this window, then relaunch the profile from the main Driftstack window to get a
+            fresh live view.
           </span>
           {onClose !== undefined && (
             <button
