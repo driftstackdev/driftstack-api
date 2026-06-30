@@ -129,6 +129,14 @@ describe('V-664.B CORS — every customer-facing header is allowlisted', () => {
     'idempotency-key', // V-666.AO + v2-#19 idempotent POSTs
     'x-byok-anthropic-api-key', // Q.1.c BYOK per-request override
     'x-driftstack-account', // V-330 team-scope act-as
+    // 2026-06-30 — the GUI sends the per-session control credential as
+    // `x-driftstack-gui-control-key` on GET /:id/cookies, GET /:id/downloads,
+    // /downloads/content, taps + history. It was missing from allowedHeaders,
+    // so the browser preflight failed → the GET never fired → founder saw
+    // "couldn't load cookies / couldn't reach the device for downloads —
+    // retrying" (journal showed OPTIONS-only, no GET). Guarded here so a trim
+    // can't silently re-break the live cookies/downloads panes again.
+    'x-driftstack-gui-control-key',
   ];
 
   for (const header of customerHeaders) {

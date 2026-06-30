@@ -844,6 +844,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // V-330 — team-scoped writes use this header to act-as the
       // team owner. Same browser preflight gap.
       'x-driftstack-account',
+      // 2026-06-30 — the GUI authenticates per-session control calls
+      // (GET /:id/cookies, GET /:id/downloads, /downloads/content, taps,
+      // history) with the scoped `x-driftstack-gui-control-key` instead of
+      // the API bearer (agent-session-control.ts). Without this allowance the
+      // browser preflight (OPTIONS) fails → the GET never fires and the box is
+      // never asked → founder saw "couldn't load cookies / couldn't reach the
+      // device for downloads — retrying" (OPTIONS-only, no GET, in the journal).
+      'x-driftstack-gui-control-key',
     ],
     exposedHeaders: [
       'x-request-id',
