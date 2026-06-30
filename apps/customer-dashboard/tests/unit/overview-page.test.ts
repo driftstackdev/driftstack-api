@@ -230,6 +230,38 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
     expect(listText).not.toContain('T10:00:00');
   });
 
+  it('sessions: status badge color matches /sessions per-status map (2026-06-30 fix) — creating/busy are NOT hardcoded emerald', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter({
+        me: { name: 'A', tier: 'solo_manual' },
+        sessions: [
+          { id: 'sess_creating', status: 'creating', created_at: '2026-05-20T10:00:00.000Z' },
+          { id: 'sess_busy', status: 'busy', created_at: '2026-05-20T10:00:00.000Z' },
+          { id: 'sess_ready', status: 'ready', created_at: '2026-05-20T10:00:00.000Z' },
+        ],
+      }),
+    });
+    win = window;
+    await flush();
+    const list = window.document.querySelector('[data-sessions-list]');
+    expect(list).not.toBeNull();
+    const rows = Array.from(list?.querySelectorAll('li') ?? []);
+    const badgeClassFor = (id: string): string => {
+      const row = rows.find((li) => li.textContent?.includes(id));
+      return row?.querySelector('span')?.className ?? '';
+    };
+    // 'creating' must NOT render the green "ready" emerald badge — it's
+    // still spinning up. Distinct accent color, same map as /sessions.
+    expect(badgeClassFor('sess_creating')).toContain('tk-accent');
+    expect(badgeClassFor('sess_creating')).not.toContain('emerald');
+    // 'busy' must NOT render green either — mid-operation, not idle-ready.
+    expect(badgeClassFor('sess_busy')).toContain('blue');
+    expect(badgeClassFor('sess_busy')).not.toContain('emerald');
+    // 'ready' legitimately gets the green/emerald badge.
+    expect(badgeClassFor('sess_ready')).toContain('emerald');
+  });
+
   it('billing: an active subscription renders the subscription card', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       token: 'tok',

@@ -196,9 +196,52 @@ describe('sessions page — local integration', () => {
     const recentText = text(window, '[data-list="recent"]');
     expect(recentText).toContain('sess_gone');
     expect(recentText).toContain('sess_err');
-    // active rows expose Open + Destroy affordances; recent rows expose a recording link.
+    // 2026-06-30 — active rows expose a real "Destroy" button (wired to
+    // DELETE /v1/sessions/:id below). "Open" / "View recording" were
+    // removed entirely — they were dead #detail-/#replay-<id> hash
+    // anchors with no backing route (no /sessions/:id page, no
+    // customer-facing recording UI yet).
     expect(activeText).toContain('Destroy');
-    expect(recentText).toContain('View recording');
+    expect(activeText).not.toContain('Open');
+    expect(recentText).not.toContain('View recording');
+  });
+
+  it('Destroy: confirms, DELETEs /v1/sessions/:id, then refreshes the list', async () => {
+    let sessions = [
+      makeSession({ id: 'sess_live', status: 'ready' }),
+      makeSession({ id: 'sess_other', status: 'busy' }),
+    ];
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        const u = call.url;
+        if (/\/v1\/sessions\/sess_live$/.test(u) && call.init?.method === 'DELETE') {
+          sessions = sessions.filter((s) => s.id !== 'sess_live');
+          return new Response(null, { status: 204 });
+        }
+        if (/\/v1\/sessions$/.test(u)) return json({ data: sessions });
+        if (/\/v1\/usage$/.test(u)) return json({ tier: 'api_builder' });
+        return json({}, 500);
+      },
+    });
+    win = window;
+    // Branded confirm modal lives in DashboardLayout, which this built
+    // page (sessions/index.html) doesn't include — stub it to auto-accept,
+    // same as the page's own fallback-to-native-confirm contract.
+    // @ts-expect-error — jsdom global is loose
+    window.driftstackConfirm = () => Promise.resolve(true);
+    await flush();
+    const destroyBtn = window.document.querySelector('[data-destroy="sess_live"]');
+    expect(destroyBtn).not.toBeNull();
+    destroyBtn?.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush(12);
+    const deleteCall = fetchCalls.find(
+      (c) => /\/v1\/sessions\/sess_live$/.test(c.url) && c.init?.method === 'DELETE',
+    );
+    expect(deleteCall).toBeDefined();
+    expect(text(window, '[data-list="active"]')).not.toContain('sess_live');
+    expect(text(window, '[data-list="active"]')).toContain('sess_other');
+    expect(text(window, '[data-banner]')).toContain('Session destroyed');
   });
 
   it('concurrent meter: now = active count, cap = usage tier limit', async () => {

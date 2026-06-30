@@ -521,12 +521,15 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           profileFrag +
           '</p></div>' +
           '<div class="flex shrink-0 flex-col items-end gap-2">' +
-          '<a href="#detail-' +
+          // 2026-06-30 — "Open" / "View recording" dropped (no /sessions/:id
+          // detail route or customer-facing recording UI exist yet — see the
+          // read-only note above + the V-040 R2-mirror note below). "Destroy"
+          // is wired to DELETE /v1/sessions/:id (wireDestroyButtons) so a
+          // customer can actually free a concurrent slot, instead of a dead
+          // #destroy-<id> hash anchor.
+          '<button type="button" data-destroy="' +
           escapeHtml(s.id) +
-          '" class="text-sm text-tk-accent hover:underline">Open</a>' +
-          '<a href="#destroy-' +
-          escapeHtml(s.id) +
-          '" class="text-sm text-red-700 hover:underline">Destroy</a>' +
+          '" class="text-sm text-red-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50">Destroy</button>' +
           '</div></li>'
         );
       }
@@ -571,9 +574,10 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           ' · destroyed ' +
           escapeHtml(fmtIso(s.destroyed_at)) +
           '</p></div>' +
-          '<a href="#replay-' +
-          escapeHtml(s.id) +
-          '" class="text-sm text-tk-accent hover:underline">View recording</a>' +
+          // 2026-06-30 — "View recording" dropped: it was a dead #replay-<id>
+          // hash anchor with no backing route. Customer-facing recording UI
+          // lands when the V-040 R2 mirror ships (see the note below the
+          // lists); shipping a no-op link until then reads as a broken page.
           '</li>'
         );
       }
@@ -628,44 +632,106 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       let currentNow = null;
       let currentCap = null;
 
-      const sessionsP = fetch(apiBaseUrl + '/v1/sessions', {
-        headers: {
+      function sessionsAuthHeaders() {
+        return {
           authorization: 'Bearer ' + token,
           ...(typeof window.driftstackActAsHeaders === 'function'
             ? window.driftstackActAsHeaders()
             : {}),
-        },
-        credentials: 'include',
-      })
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-        .then((body) => {
-          const sessions = body.data || [];
-          const active = sessions.filter(
-            (s) => s.status !== 'destroyed' && s.status !== 'errored',
-          );
-          const recent = sessions.filter(
-            (s) => s.status === 'destroyed' || s.status === 'errored',
-          );
-          renderList('active', active, 'active');
-          renderList('recent', recent, 'recent');
-          currentNow = active.length;
-          updateMeter(currentNow, currentCap);
-          if (sessions.length === 0) {
-            showBanner('No sessions yet — create one to get started.');
-          }
+        };
+      }
+
+      // 2026-06-30 — factored out of the initial-load IIFE so the
+      // "Destroy" action (wireDestroyButtons below) can re-fetch +
+      // re-render the list after killing a session, instead of leaving
+      // the destroyed row sitting in the "active" list with a stale
+      // concurrent meter until the next full page load.
+      function fetchSessions() {
+        return fetch(apiBaseUrl + '/v1/sessions', {
+          headers: sessionsAuthHeaders(),
+          credentials: 'include',
         })
-        .catch((err) => {
-          // 2026-06-24 — reset the active count to 0 on failure so the
-          // meter never sits on a stale/fabricated value. The cap stays
-          // as whatever /v1/usage resolved to (or the "—" placeholder).
-          currentNow = 0;
-          updateMeter(0, currentCap);
-          showBanner(
-            "Couldn't load live sessions (" +
-              (err && err.message ? err.message : 'network error') +
-              ').',
-          );
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => {
+            const sessions = body.data || [];
+            const active = sessions.filter(
+              (s) => s.status !== 'destroyed' && s.status !== 'errored',
+            );
+            const recent = sessions.filter(
+              (s) => s.status === 'destroyed' || s.status === 'errored',
+            );
+            renderList('active', active, 'active');
+            renderList('recent', recent, 'recent');
+            wireDestroyButtons();
+            currentNow = active.length;
+            updateMeter(currentNow, currentCap);
+            if (sessions.length === 0) {
+              showBanner('No sessions yet — create one to get started.');
+            }
+          })
+          .catch((err) => {
+            // 2026-06-24 — reset the active count to 0 on failure so the
+            // meter never sits on a stale/fabricated value. The cap stays
+            // as whatever /v1/usage resolved to (or the "—" placeholder).
+            currentNow = 0;
+            updateMeter(0, currentCap);
+            showBanner(
+              "Couldn't load live sessions (" +
+                (err && err.message ? err.message : 'network error') +
+                ').',
+            );
+          });
+      }
+
+      // 2026-06-30 — wires the "Destroy" button rendered by activeLi()
+      // to DELETE /v1/sessions/:id (the only billing meter — concurrent
+      // caps — so this is the customer's one way to free a stuck slot
+      // from the dashboard). Re-bound after every render() call since
+      // renderList() replaces the <ul> innerHTML wholesale.
+      function wireDestroyButtons() {
+        const buttons = root.querySelectorAll('[data-destroy]');
+        buttons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-destroy');
+            if (!id) return;
+            void window
+              .driftstackConfirm(
+                'Destroy session ' +
+                  id +
+                  '? This frees its concurrent slot immediately and cannot be undone.',
+                { confirmLabel: 'Destroy' },
+              )
+              .then((ok) => {
+                if (!ok) return;
+                btn.disabled = true;
+                btn.textContent = 'Destroying…';
+                fetch(apiBaseUrl + '/v1/sessions/' + encodeURIComponent(id), {
+                  method: 'DELETE',
+                  headers: sessionsAuthHeaders(),
+                  credentials: 'include',
+                })
+                  .then((r) => {
+                    if (r.ok || r.status === 204) {
+                      return fetchSessions().then(() => showBanner('Session destroyed.'));
+                    }
+                    return r
+                      .json()
+                      .catch(() => ({}))
+                      .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+                  })
+                  .catch((err) => {
+                    showBanner(
+                      'Destroy failed: ' + (err && err.message ? err.message : 'network error'),
+                    );
+                    btn.disabled = false;
+                    btn.textContent = 'Destroy';
+                  });
+              });
+          });
         });
+      }
+
+      const sessionsP = fetchSessions();
 
       const usageP = fetch(apiBaseUrl + '/v1/usage', {
         headers: {

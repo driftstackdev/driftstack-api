@@ -139,6 +139,46 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
     </header>
 
+    {/* 2026-06-30 — dedicated not-found / cross-account state. A 404
+        from GET /v1/agent-sessions/:id previously fell through to the
+        generic paintError() path: a tiny grey "OFFLINE" pill (the
+        actual reason hidden in a hover-only title attribute) sitting
+        beside the fully-rendered, inviting "No turns yet — type a task
+        below" composer — nothing told the customer the session simply
+        doesn't exist, was purged, or belongs to another account, and
+        there was no recovery affordance besides the header back link.
+        Mirrors recipes/[id].astro's not-found panel; replaces the
+        whole workbench body (hides <main> via mainEl.style.display). */}
+    <div
+      data-component="WorkbenchUnavailable"
+      class="hidden flex-1 flex-col items-center justify-center gap-4 px-6 text-center"
+    >
+      <div class="flex h-12 w-12 items-center justify-center rounded-md bg-slate-800 text-slate-400">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M9.5 9.5l5 5M14.5 9.5l-5 5" />
+        </svg>
+      </div>
+      <div class="space-y-1">
+        <p data-unavailable-title class="text-sm font-medium text-tk-ink">This agent session is unavailable</p>
+        <p data-unavailable-detail class="max-w-sm text-xs text-tk-ink-3"></p>
+      </div>
+      <div class="mt-2 flex items-center gap-3">
+        <a
+          href="/agent-sessions"
+          class="rounded-md border border-slate-700 px-4 py-2 text-sm font-medium text-tk-ink-2 hover:border-slate-600 hover:text-tk-ink"
+        >
+          ← Back to agent sessions
+        </a>
+        <a
+          href="/agent-sessions"
+          class="rounded-md bg-tk-accent px-4 py-2 text-sm font-medium text-white hover:bg-tk-accent/90"
+        >
+          Start a new session
+        </a>
+      </div>
+    </div>
+
     {/* 2026-05-22 — chat now dominant (60%); live preview secondary
         (40%). Was 50/50 which made the chat feel cramped given how
         info-rich a turn can be. */}
@@ -248,6 +288,18 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       {/* DOM second; CSS order-1 puts it left (dominant column). */}
       <section class="order-1 bg-slate-950 flex flex-col" data-component="RightPanel" aria-label="AI chat">
+        {/* 2026-06-30 — closed-session notice. A session that has ended
+            (status='closed' — budget exhaustion, customer DELETE, etc.)
+            still 200s on GET /v1/agent-sessions/:id with its transcript
+            intact, so we keep showing it (read-only) instead of walling
+            it off like a true 404. Previously there was no visible signal
+            at all besides a tiny "OFFLINE"-style pill with the reason
+            hidden in a hover tooltip. */}
+        <div
+          data-component="SessionClosedNotice"
+          class="hidden border-b border-amber-900/40 bg-amber-950/30 px-6 py-2 text-xs text-amber-200"
+          role="status"
+        ></div>
         {/* 2026-05-22 — mode toggle row with bigger pills + icons +
             descriptive sub-labels. Each mode now has a small caption
             explaining what it does (manual = you click; ai = agent
@@ -502,6 +554,10 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
     const composerSubmit = composerForm?.querySelector('button[type="submit"]');
     const overlay = root.querySelector('[data-component="ManualControlOverlay"]');
     const livekitVideo = root.querySelector('[data-livekit-video]');
+    // 2026-06-30 — not-found / closed-session state elements.
+    const unavailablePanel = root.querySelector('[data-component="WorkbenchUnavailable"]');
+    const workbenchMain = root.querySelector('main[data-component="SplitScreen"]');
+    const closedNotice = root.querySelector('[data-component="SessionClosedNotice"]');
 
     /** @type {'manual'|'ai'|'pair'} */
     let mode = 'ai';
@@ -557,11 +613,73 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
       if (composerSubmit) composerSubmit.disabled = true;
     }
 
+    // 2026-06-30 — dedicated 404 / cross-account state. Replaces the whole
+    // workbench body with a clear "not found" panel + recovery affordances
+    // (back to the list / start a new session), instead of falling through
+    // to paintError()'s small "OFFLINE" pill next to a fully-interactive-
+    // looking (but composer-disabled) empty chat. inline style (not a
+    // Tailwind `hidden` class) on <main> so it reliably wins over the
+    // `grid` display utility already baked into that element's class list.
+    function showUnavailable(title, detail) {
+      if (unavailablePanel) {
+        const t = unavailablePanel.querySelector('[data-unavailable-title]');
+        const d = unavailablePanel.querySelector('[data-unavailable-detail]');
+        if (t) t.textContent = title;
+        if (d) d.textContent = detail;
+        unavailablePanel.classList.remove('hidden');
+        unavailablePanel.classList.add('flex');
+      }
+      if (workbenchMain) workbenchMain.style.display = 'none';
+      if (statusPill) {
+        statusPill.textContent = 'UNAVAILABLE';
+        statusPill.className = 'text-xs px-2 py-1 rounded bg-slate-800 text-slate-300';
+        statusPill.title = detail;
+      }
+      for (const btn of modeButtons) {
+        btn.disabled = true;
+      }
+      if (composerTextarea) composerTextarea.disabled = true;
+      if (composerSubmit) composerSubmit.disabled = true;
+    }
+
+    // 2026-06-30 — closed-but-found state. The session row still exists
+    // (GET 200s, transcript intact) — status flips to 'closed' on budget
+    // exhaustion, customer DELETE, etc. We keep the transcript visible
+    // (read-only) rather than walling it off like showUnavailable() does
+    // for a true 404, and surface the reason in a visible banner instead
+    // of only a hover-only status-pill title.
+    function disableForClosed(reason) {
+      if (closedNotice) {
+        closedNotice.textContent =
+          'This agent session is closed' +
+          (reason ? ' — ' + reason + '.' : '.') +
+          ' The transcript below is read-only; start a new session to continue.';
+        closedNotice.classList.remove('hidden');
+      }
+      if (statusPill) {
+        statusPill.textContent = 'CLOSED';
+        statusPill.className = 'text-xs px-2 py-1 rounded bg-slate-800 text-slate-300';
+        statusPill.title = reason || 'Session closed.';
+      }
+      for (const btn of modeButtons) {
+        btn.disabled = true;
+      }
+      if (composerTextarea) composerTextarea.disabled = true;
+      if (composerSubmit) composerSubmit.disabled = true;
+    }
+
     async function hydrateFromServer() {
       try {
         const res = await fetch(apiBaseUrl + '/v1/agent-sessions/' + encodeURIComponent(sessionId), {
           headers: { ...authHeaders() },
         });
+        if (res.status === 404) {
+          showUnavailable(
+            'Agent session not found',
+            'This agent session was not found, was deleted, or belongs to another account.',
+          );
+          return;
+        }
         if (!res.ok) {
           paintError('GET /v1/agent-sessions/' + sessionId + ' returned ' + res.status.toString());
           return;
@@ -575,6 +693,23 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
             ? body.pair_mode_state
             : null;
         paintMode();
+
+        if (body && body.status === 'closed') {
+          disableForClosed(typeof body.closed_reason === 'string' ? body.closed_reason : null);
+        }
+
+        // 2026-06-30 — backfill the transcript. Without this, reopening a
+        // session from the /agent-sessions list, refreshing mid-task, or
+        // sharing the session URL with a teammate showed "No turns yet"
+        // even though the transcript was fully intact server-side — the
+        // pane was only ever populated by NEW composer submits made in
+        // THIS page load. transcript_length comes from this same response
+        // (no extra round-trip to know whether there's anything to backfill).
+        const transcriptLength =
+          body && typeof body.transcript_length === 'number' ? body.transcript_length : 0;
+        if (transcriptLength > 0) {
+          loadTranscriptBackfill(transcriptLength);
+        }
 
         // 2026-05-22 — surface BYOK status in the header model pill so
         // customers know upfront which key path will be used (their
@@ -822,7 +957,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
     const emptyHint = transcript?.querySelector('[data-empty]');
     let pendingTurnEl = null;
 
-    function appendTurn(role, body) {
+    function appendTurn(role, body, atIso) {
       if (!transcript) return null;
       if (emptyHint && !emptyHint.classList.contains('hidden')) {
         emptyHint.classList.add('hidden');
@@ -833,7 +968,12 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
       const wrap = document.createElement('div');
       wrap.className = 'flex gap-3';
       wrap.dataset.role = role;
-      const ts = Date.now();
+      // 2026-06-30 — backfilled turns (loadTranscriptBackfill) pass the
+      // entry's real `at` timestamp so a reopened session shows "2h ago"
+      // instead of every historical turn reading "now". New composer
+      // turns omit atIso and keep the original Date.now() behavior.
+      const parsedAt = atIso ? new Date(atIso).getTime() : NaN;
+      const ts = Number.isFinite(parsedAt) ? parsedAt : Date.now();
       wrap.dataset.turnTs = String(ts);
 
       const avatar = document.createElement('div');
@@ -859,7 +999,12 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
       time.className = 'text-[10px] font-mono text-tk-ink-3';
       time.dataset.turnAge = String(ts);
       time.dateTime = new Date(ts).toISOString();
-      time.textContent = 'now';
+      // 2026-06-30 — was hardcoded 'now'; fine for a fresh composer turn
+      // (ts === Date.now()) but wrong for a backfilled historical turn
+      // (ts === the entry's real `at`) — that wouldn't correct itself
+      // until the 5s tick interval next ran. fmtTurnAge is hoisted, so
+      // it's safely callable here even though it's defined further down.
+      time.textContent = fmtTurnAge(ts);
       labelRow.appendChild(label);
       labelRow.appendChild(time);
       const bubble = document.createElement('div');
@@ -925,6 +1070,62 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
       transcript.appendChild(wrap);
       transcript.scrollTop = transcript.scrollHeight;
       return wrap;
+    }
+
+    // 2026-06-30 — one-shot transcript backfill. The only way to read PAST
+    // transcript entries is the same SSE endpoint the live /agent-sessions
+    // list page uses for streaming (GET …/transcript — there's no plain
+    // JSON list endpoint): the server replays every existing entry
+    // (index 0..transcript_length-1) on connect, then switches to live
+    // mode. We close the connection once we've rendered `expectedCount`
+    // entries (the transcript_length this same hydrateFromServer call
+    // already read) so we never re-render a turn this tab's own composer
+    // submit handler already painted optimistically — there's no shared
+    // turn-id to dedupe against otherwise. A turn from THIS tab's composer
+    // keeps rendering via the existing optimistic path; a teammate driving
+    // the SAME session concurrently in another tab won't appear live here.
+    // That's an acceptable trade-off: the bug this fixes is lost history on
+    // reopen/refresh/share-the-URL, not cross-tab live sync.
+    function loadTranscriptBackfill(expectedCount) {
+      const token = localStorage.getItem('ds_web_session_token') || '';
+      const url =
+        apiBaseUrl +
+        '/v1/agent-sessions/' +
+        encodeURIComponent(sessionId) +
+        '/transcript?ds_token=' +
+        encodeURIComponent(token);
+      const es = new EventSource(url);
+      let received = 0;
+      es.addEventListener('transcript.entry', (ev) => {
+        let payload = null;
+        try {
+          payload = JSON.parse(ev.data);
+        } catch {
+          return;
+        }
+        const entry = payload && payload.entry;
+        if (!entry) return;
+        // TranscriptEntry.role is 'user' | 'agent' | 'operator' (server
+        // services/agent-decomposer.ts) — appendTurn only distinguishes
+        // 'agent' (renders as "Driftstack agent") from everything else
+        // (renders as "You"), so both the customer's own turns ('user')
+        // and manual-mode-driven turns ('operator') map to that.
+        appendTurn(entry.role === 'agent' ? 'agent' : 'customer', entry.body || '', entry.at);
+        received += 1;
+        if (received >= expectedCount) {
+          es.close();
+        }
+      });
+      es.addEventListener('error', () => {
+        // Best-effort — a drop mid-replay just leaves the transcript
+        // partially backfilled (still strictly better than "No turns
+        // yet"). The browser's EventSource auto-reconnects with
+        // Last-Event-ID, which the server honors to resume the replay
+        // from where it left off, so most transient drops self-heal.
+      });
+      const closeBackfillStream = () => es.close();
+      window.addEventListener('beforeunload', closeBackfillStream);
+      document.addEventListener('astro:before-swap', closeBackfillStream);
     }
 
     // Tick the per-turn timestamps every 5s ("now" → "5s ago" →
