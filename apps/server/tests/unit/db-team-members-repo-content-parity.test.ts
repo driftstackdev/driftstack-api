@@ -3,8 +3,10 @@
 // refresh-on-existing-pending-invite path on upsertInvite (every
 // re-invite would create a new row → email gets multiple unique
 // invite links + accept-flow ambiguity) or breaks the
-// onConflictDoNothing on upsertMembership (re-accepting same invite
-// would throw unique-violation instead of returning idempotently).
+// onConflictDoUpdate on upsertMembership (2026-06-30, audit
+// w76s5l9nb — re-accepting same invite must idempotently UPDATE the
+// role, not just return the stale pre-existing row, or a role
+// demotion via re-invite silently no-ops).
 //
 //   • V-298c framing pinned.
 //   • toInviteRow: 9-field TeamInviteRow.
@@ -12,9 +14,10 @@
 //     for (ownerAccountId, inviteeEmail); UPDATE if found (refresh
 //     token+expiry+role+invitedByAccountId); else INSERT new row.
 //   • findInviteByTokenHash + findAccountEmail: limit 1 lookups.
-//   • upsertMembership: INSERT … onConflictDoNothing on (owner,
-//     member) composite; SELECT fallback on conflict so we always
-//     return a row.
+//   • upsertMembership: INSERT … onConflictDoUpdate on (owner,
+//     member) composite, SET role/invitedAt/invitedByAccountId so a
+//     re-accept actually applies a changed role (acceptedAt excluded
+//     from SET — "member since" is preserved).
 //   • markInviteAccepted: 1-field set acceptedAt where id=inviteId.
 //   • listMembers: innerJoin accounts on member.memberAccountId =
 //     accounts.id → memberEmail surface at list-time; orderBy
@@ -86,13 +89,18 @@ describe('W448.C apps/server/src/db/team-members-repo.ts content parity', () => 
     );
   });
 
-  it("upsertMembership: INSERT 6-field values + onConflictDoNothing target=[ownerAccountId, memberAccountId] composite; SELECT fallback on conflict; throws 'team_members upsert produced no row'", () => {
+  it("upsertMembership: INSERT 6-field values + onConflictDoUpdate target=[ownerAccountId, memberAccountId] composite, SET role/invitedAt/invitedByAccountId (acceptedAt excluded — preserves 'member since'); .returning() always yields a row; throws 'team_members upsert produced no row'", () => {
+    // 2026-06-30 (audit w76s5l9nb, security) — was onConflictDoNothing + a
+    // SELECT-fallback that silently discarded the new role on a re-accept, so
+    // an owner demoting an 'admin' team member to 'member' via re-invite
+    // silently no-op'd (the member kept full admin write access —
+    // effectiveAccountIdForWrite gates real elevated access on this exact
+    // column). DO UPDATE actually applies the new role on conflict.
     expect(body).toMatch(
-      /\.onConflictDoNothing\(\{\s*\n?\s*target: \[teamMembers\.ownerAccountId, teamMembers\.memberAccountId\],\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);/,
+      /\.onConflictDoUpdate\(\{\s*\n?\s*target: \[teamMembers\.ownerAccountId, teamMembers\.memberAccountId\],\s*\n?\s*set: \{\s*\n?\s*role: input\.role,\s*\n?\s*invitedAt: input\.invitedAt,\s*\n?\s*invitedByAccountId: input\.invitedByAccountId,\s*\n?\s*\},\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);/,
     );
-    expect(body).toMatch(
-      /const row =\s*\n?\s*inserted \?\?\s*\n?\s*\([\s\S]*?\.select\(\)\s*\n?\s*\.from\(teamMembers\)\s*\n?\s*\.where\(\s*\n?\s*and\(\s*\n?\s*eq\(teamMembers\.ownerAccountId, input\.ownerAccountId\),\s*\n?\s*eq\(teamMembers\.memberAccountId, input\.memberAccountId\),\s*\n?\s*\),\s*\n?\s*\)\s*\n?\s*\.limit\(1\)/,
-    );
+    // acceptedAt is intentionally NOT in the SET clause (stays "member since").
+    expect(body).not.toMatch(/set: \{[\s\S]{0,200}acceptedAt: input\.acceptedAt/);
     expect(body).toMatch(/if \(!row\) throw new Error\('team_members upsert produced no row'\);/);
   });
 

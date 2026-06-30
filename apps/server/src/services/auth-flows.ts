@@ -378,6 +378,17 @@ function dummyPasswordHash(): Promise<string> {
   return dummyPasswordHashPromise;
 }
 
+// Security fix (2026-06-30 audit) — V-353e.A per-account attempt-lockout
+// key for stepUpReauth. Distinct from `mfaChallengeAttemptsKey` (imported
+// above as `mfaChallengeAttemptsKey`), which keys the login-path
+// challenge-token counter; this flow has no per-attempt token to key on
+// (the caller already holds a persistent, valid web session), so it keys
+// on the account instead. See stepUpReauth()'s doc comment for the full
+// rationale.
+function stepUpAttemptsKey(accountId: string): string {
+  return `mfa-stepup-attempts:${accountId}`;
+}
+
 export class AuthFlowsService {
   constructor(
     private readonly repo: AuthFlowsRepo,
@@ -413,6 +424,50 @@ export class AuthFlowsService {
      */
     private readonly mfaChallenges: MfaChallengeStore | null = null,
   ) {}
+
+  /**
+   * Security fix (2026-06-30 audit) — in-process single-flight queue
+   * keyed on an arbitrary string (refreshSession keys on the presented
+   * token's hash). Closes a TOCTOU race: refreshSession does
+   * find-active-session (SELECT) → revoke (UPDATE) → mint (INSERT) with
+   * no atomic claim between the read and the mint — unlike every OTHER
+   * single-use-token flow in this file (verifyEmail / consumeMagicLink /
+   * confirmPasswordReset), which reject a concurrent loser via
+   * `consumeAuthToken`'s atomic UPDATE...RETURNING boolean.
+   * `AuthFlowsRepo.revokeWebSession` has no equivalent boolean return,
+   * so two requests racing the SAME refresh token could both pass the
+   * find before either's revoke lands, and both mint an independent new
+   * session. `withKeyedLock` serializes callers sharing a key so the
+   * second caller's find always observes the first caller's revoke and
+   * correctly rejects with `invalid_auth_token` — the same "reject the
+   * race loser" contract the codebase already guarantees elsewhere.
+   * This is process-wide (not cross-process/cross-host); the Driftstack
+   * API runs one Node process per host (systemd Type=simple, no cluster
+   * mode — infra/systemd/driftstack-api.service), so this closes the
+   * race for the current deployment topology. If the service is ever
+   * horizontally scaled, the durable fix is to give
+   * `AuthFlowsRepo.revokeWebSession` an atomic claim-and-return-boolean
+   * (mirroring `consumeAuthToken`) so the guarantee survives across
+   * processes too.
+   */
+  private readonly keyedLocks = new Map<string, Promise<void>>();
+
+  private withKeyedLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const previousTail = this.keyedLocks.get(key) ?? Promise.resolve();
+    const result = previousTail.then(fn);
+    const tail: Promise<void> = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.keyedLocks.set(key, tail);
+    void tail.then(() => {
+      // Only this call's own queue entry should be cleaned up — a
+      // newer caller may have already chained another tail onto this
+      // key while we were running.
+      if (this.keyedLocks.get(key) === tail) this.keyedLocks.delete(key);
+    });
+    return result;
+  }
 
   private async emitAuditBestEffort(
     accountId: string,
@@ -905,19 +960,23 @@ export class AuthFlowsService {
   }
 
   async refreshSession(args: RefreshSessionArgs): Promise<RefreshSessionResult> {
-    const now = new Date();
-    const old = await this.repo.findActiveWebSession({
-      tokenHash: tokenHash(args.token),
-      now,
-    });
-    if (old === null) throw new AuthFlowError('invalid_auth_token');
+    const hash = tokenHash(args.token);
+    // Security fix (2026-06-30 audit) — serialize concurrent refreshes of
+    // the SAME token so the find-then-revoke-then-mint sequence below
+    // can't race itself. See withKeyedLock's doc comment for the full
+    // rationale.
+    return this.withKeyedLock(hash, async () => {
+      const now = new Date();
+      const old = await this.repo.findActiveWebSession({ tokenHash: hash, now });
+      if (old === null) throw new AuthFlowError('invalid_auth_token');
 
-    // Rotate: revoke the old row, issue a new one. The plaintext returned
-    // is the new token; the old plaintext is now useless.
-    await this.repo.revokeWebSession(old.id, now);
-    const account = await this.requireAccount(old.accountId);
-    const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
-    return { account, session };
+      // Rotate: revoke the old row, issue a new one. The plaintext returned
+      // is the new token; the old plaintext is now useless.
+      await this.repo.revokeWebSession(old.id, now);
+      const account = await this.requireAccount(old.accountId);
+      const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
+      return { account, session };
+    });
   }
 
   async logout(plaintextToken: string): Promise<void> {
@@ -958,6 +1017,31 @@ export class AuthFlowsService {
   }): Promise<{ via: 'totp' | 'recovery'; mfaSatisfiedAt: Date }> {
     if (!this.mfa) {
       throw new AuthFlowError('invalid_auth_token', 'MFA step-up not available on this server.');
+    }
+    // Security fix (2026-06-30 audit) — bound brute-force the same way
+    // completeMfaChallenge (the login-path sibling, above) does. That
+    // flow keys its counter on the single-use challenge_token and
+    // invalidates the token past MAX_MFA_CHALLENGE_ATTEMPTS, forcing a
+    // fresh /login. stepUpReauth has no token to invalidate — the
+    // caller already holds a persistent, valid web session — so this
+    // keys the same counter primitive on accountId instead: once an
+    // account hits MAX_MFA_CHALLENGE_ATTEMPTS attempts inside the
+    // MFA_CHALLENGE_TTL_SECONDS window, every further attempt — even a
+    // correct code — is refused (without even calling mfa.verifyCode)
+    // until the window lapses. Without this, loginGate's per-IP-only
+    // throttle (routes/auth.ts) could be bypassed by spreading guesses
+    // across source IPs against this already-authenticated endpoint.
+    if (this.mfaChallenges) {
+      const attempts = await this.mfaChallenges.incrAttempts(
+        stepUpAttemptsKey(args.accountId),
+        MFA_CHALLENGE_TTL_SECONDS,
+      );
+      if (attempts > MAX_MFA_CHALLENGE_ATTEMPTS) {
+        throw new AuthFlowError(
+          'invalid_auth_token',
+          'Too many incorrect codes. Wait a few minutes and try again.',
+        );
+      }
     }
     const result = await this.mfa.verifyCode({
       accountId: args.accountId,

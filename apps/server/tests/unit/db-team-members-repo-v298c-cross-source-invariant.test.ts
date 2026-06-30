@@ -113,28 +113,31 @@ describe('W1000 db/team-members-repo V-298c cross-source invariant', () => {
     expect(p).toMatch(/if \(!updated\) throw new Error\('team_invites refresh returned no row'\);/);
   });
 
-  // ─── upsertMembership onConflictDoNothing ────────────────────
+  // ─── upsertMembership onConflictDoUpdate (security fix 2026-06-30) ──
 
-  it("CRITICAL upsertMembership framing — 'Use ON CONFLICT (owner, member) DO NOTHING via INSERT ... .returning() — falls through to a SELECT on conflict so we always return a TeamMemberRow'. The conflict-fallthrough design always returns a row even on conflict.", () => {
+  it("CRITICAL upsertMembership framing — 'Security fix (2026-06-30 audit) — ON CONFLICT (owner, member) DO UPDATE, not DO NOTHING' — with DO NOTHING the pre-existing row (with the OLD role) was returned unchanged, so an owner demoting an 'admin' member silently no-op'd (effectiveAccountIdForWrite gates real elevated access on this column). The DO-UPDATE design ensures a re-accept actually applies the new role.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
-    expect(p).toMatch(/\/\/ Use ON CONFLICT \(owner, member\) DO NOTHING via INSERT \.\.\./);
-    expect(p).toMatch(/\/\/ \.returning\(\) — falls through to a SELECT on conflict so we/);
-    expect(p).toMatch(/\/\/ always return a TeamMemberRow\./);
+    expect(p).toMatch(
+      /\/\/ Security fix \(2026-06-30 audit\) — ON CONFLICT \(owner, member\) DO\s*\n\s*\/\/ UPDATE, not DO NOTHING\./,
+    );
+    expect(p).toMatch(/silently no-op'd — the member kept/);
+    expect(p).toMatch(/\/\/ the SELECT-on-conflict fallback is no longer needed\./);
   });
 
-  it('CRITICAL upsertMembership conflict target is [ownerAccountId, memberAccountId] compound. The compound-key conflict matches the (owner, member) UNIQUE index.', () => {
+  it('CRITICAL upsertMembership conflict target is [ownerAccountId, memberAccountId] compound, DO UPDATE sets role/invitedAt/invitedByAccountId. The compound-key conflict matches the (owner, member) UNIQUE index; DO UPDATE (not DO NOTHING) actually applies a changed role on re-accept.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
-    expect(p).toMatch(/\.onConflictDoNothing\(\{/);
+    expect(p).toMatch(/\.onConflictDoUpdate\(\{/);
     expect(p).toMatch(/target: \[teamMembers\.ownerAccountId, teamMembers\.memberAccountId\],/);
+    expect(p).toMatch(/set: \{\s*\n\s*role: input\.role,/);
   });
 
-  it("CRITICAL upsertMembership fallthrough SELECT — 'inserted ?? (await SELECT ... where (owner, member) ...).[0]'. The ?? fallback handles the no-conflict case by reading the existing row.", () => {
+  it("CRITICAL upsertMembership .returning() always yields the affected row — 'if (!row) throw new Error(...)'. DO UPDATE means there is no more conflict-fallthrough SELECT branch to maintain (removed alongside the security fix).", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
-    expect(p).toMatch(/const row =/);
-    expect(p).toMatch(/inserted \?\?/);
-    expect(p).toMatch(/eq\(teamMembers\.ownerAccountId, input\.ownerAccountId\),/);
-    expect(p).toMatch(/eq\(teamMembers\.memberAccountId, input\.memberAccountId\),/);
+    expect(p).toMatch(/const \[row\] = await this\.database\.db/);
     expect(p).toMatch(/if \(!row\) throw new Error\('team_members upsert produced no row'\);/);
+    // The old SELECT-on-conflict fallback branch is gone — `inserted ??` no
+    // longer appears in this method.
+    expect(p).not.toMatch(/inserted \?\?/);
   });
 
   // ─── listMembers innerJoin accounts ──────────────────────────

@@ -80,7 +80,18 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
       (m) =>
         m.ownerAccountId === input.ownerAccountId && m.memberAccountId === input.memberAccountId,
     );
-    if (existing) return existing;
+    if (existing) {
+      // Security fix (2026-06-30 audit) — mirror DrizzleTeamMembersRepo's
+      // onConflictDoUpdate: a re-accept with a new role must actually
+      // overwrite the stored role, not silently no-op (see
+      // db/team-members-repo.ts upsertMembership for the full
+      // rationale). acceptedAt intentionally untouched, same as the
+      // Drizzle SET clause.
+      existing.role = input.role;
+      existing.invitedAt = input.invitedAt;
+      existing.invitedByAccountId = input.invitedByAccountId;
+      return existing;
+    }
     const row: TeamMemberRow = {
       id: randomUUID(),
       ownerAccountId: input.ownerAccountId,

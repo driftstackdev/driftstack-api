@@ -209,6 +209,84 @@ describe('TeamMembersService.accept', () => {
     expect(repo.getAllMembers()).toHaveLength(1);
     expect(first.membership.id).toBeDefined();
   });
+
+  // Security fix (2026-06-30 audit, HIGH/CRITICAL — privilege
+  // de-escalation failure): re-inviting an existing member with a
+  // DIFFERENT role is the only documented role-change mechanism (see
+  // the module doc at the top of services/team-members.ts). Before the
+  // fix, upsertMembership used onConflictDoNothing (Drizzle) /
+  // `if (existing) return existing;` (in-memory) on conflict, so the
+  // new role was silently discarded and accept() returned 200 with the
+  // STALE role — an owner demoting an 'admin' to 'member' had no
+  // effect and no error. `team_members.role` is the literal column
+  // `effectiveAccountIdForWrite` (routes/sessions.ts, reused by
+  // profiles.ts/webhooks.ts) gates real elevated write access on, so a
+  // stuck-stale 'admin' role is live, working access — not dead
+  // metadata.
+  it('demotes a member: re-invite + re-accept with a DIFFERENT role actually changes it', async () => {
+    const { repo, service } = build();
+    repo.upsertAccountEmail(INVITEE_ACCOUNT, INVITEE_EMAIL);
+    const { generateAuthToken, tokenHash } = await import('../../src/lib/auth-tokens.js');
+
+    // 1. Invite + accept as 'admin'. Drive accept() the same way the
+    // other tests in this file do: upsert the invite row directly
+    // (capturing the real plaintext), then call accept() with it.
+    const adminPlaintext = generateAuthToken();
+    await repo.upsertInvite({
+      ownerAccountId: OWNER,
+      inviteeEmail: INVITEE_EMAIL,
+      role: 'admin',
+      inviteTokenHash: tokenHash(adminPlaintext),
+      inviteExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      invitedByAccountId: INVITER,
+    });
+    const adminAccept = await service.accept({
+      plaintextToken: adminPlaintext,
+      acceptingAccountId: INVITEE_ACCOUNT,
+    });
+    expect(adminAccept.membership.role).toBe('admin');
+    expect(repo.getAllMembers()).toHaveLength(1);
+    expect(repo.getAllMembers()[0]!.role).toBe('admin');
+
+    // 2. Owner re-invites the SAME email with role:'member' (the
+    // documented demotion mechanism) and the member re-accepts.
+    const memberPlaintext = generateAuthToken();
+    await repo.upsertInvite({
+      ownerAccountId: OWNER,
+      inviteeEmail: INVITEE_EMAIL,
+      role: 'member',
+      inviteTokenHash: tokenHash(memberPlaintext),
+      inviteExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      invitedByAccountId: INVITER,
+    });
+    const demoteAccept = await service.accept({
+      plaintextToken: memberPlaintext,
+      acceptingAccountId: INVITEE_ACCOUNT,
+    });
+
+    // The accept call must report the ACTUAL new role, not the stale one.
+    expect(demoteAccept.membership.role).toBe('member');
+
+    // Still exactly one membership row (owner, member) — no duplicate
+    // inserted, the existing row was updated in place.
+    expect(repo.getAllMembers()).toHaveLength(1);
+
+    // The stored row — the literal source `effectiveAccountIdForWrite`
+    // (routes/sessions.ts) reads `role` from to gate admin write
+    // access — must reflect the demotion. Before the fix this stayed
+    // 'admin' forever; an attacker/stale-admin member would still pass
+    // `effective.role === 'admin'` and keep elevated write access to
+    // the owner's sessions/profiles/webhooks indefinitely.
+    const stored = repo.getAllMembers()[0]!;
+    expect(stored.role).toBe('member');
+    expect(stored.role === 'admin').toBe(false);
+
+    // listMembers (what the dashboard + auth-cache rehydration read)
+    // agrees.
+    const listed = await service.listMembers(OWNER);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]!.role).toBe('member');
+  });
 });
 
 describe('TeamMembersService.listMembers + listPendingInvites + removeMember', () => {

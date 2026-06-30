@@ -110,10 +110,21 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
     acceptedAt: Date;
     invitedByAccountId: string | null;
   }): Promise<TeamMemberRow> {
-    // Use ON CONFLICT (owner, member) DO NOTHING via INSERT ...
-    // .returning() — falls through to a SELECT on conflict so we
-    // always return a TeamMemberRow.
-    const [inserted] = await this.database.db
+    // Security fix (2026-06-30 audit) — ON CONFLICT (owner, member) DO
+    // UPDATE, not DO NOTHING. Re-inviting + re-accepting an existing
+    // member with a DIFFERENT role is the only documented role-change
+    // mechanism (see team-members.ts module doc); with DO NOTHING the
+    // INSERT was skipped entirely on conflict and the pre-existing row
+    // (with the OLD role) was returned unchanged, so an owner demoting
+    // an 'admin' member to 'member' silently no-op'd — the member kept
+    // full admin write access (effectiveAccountIdForWrite in
+    // sessions.ts/profiles.ts/webhooks.ts gates on this exact column).
+    // DO UPDATE always returns the affected row via .returning(), so
+    // the SELECT-on-conflict fallback is no longer needed. acceptedAt
+    // is intentionally NOT in the SET clause — it stays the original
+    // accept timestamp ("member since"); only role/invitedAt/inviter
+    // refresh on a re-accept.
+    const [row] = await this.database.db
       .insert(teamMembers)
       .values({
         ownerAccountId: input.ownerAccountId,
@@ -123,24 +134,15 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
         acceptedAt: input.acceptedAt,
         invitedByAccountId: input.invitedByAccountId,
       })
-      .onConflictDoNothing({
+      .onConflictDoUpdate({
         target: [teamMembers.ownerAccountId, teamMembers.memberAccountId],
+        set: {
+          role: input.role,
+          invitedAt: input.invitedAt,
+          invitedByAccountId: input.invitedByAccountId,
+        },
       })
       .returning();
-    const row =
-      inserted ??
-      (
-        await this.database.db
-          .select()
-          .from(teamMembers)
-          .where(
-            and(
-              eq(teamMembers.ownerAccountId, input.ownerAccountId),
-              eq(teamMembers.memberAccountId, input.memberAccountId),
-            ),
-          )
-          .limit(1)
-      )[0];
     if (!row) throw new Error('team_members upsert produced no row');
     return this.attachMemberEmail(row, input.memberEmail);
   }

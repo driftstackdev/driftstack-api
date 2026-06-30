@@ -8,6 +8,27 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
+import { createTestLogger } from '../../src/lib/logger.js';
+import { createEmailService } from '../../src/services/email.js';
+import { AuthFlowError, AuthFlowsService } from '../../src/services/auth-flows.js';
+import {
+  InMemoryMfaChallengeStore,
+  MAX_MFA_CHALLENGE_ATTEMPTS,
+} from '../../src/services/mfa-challenge-store.js';
+import { InMemoryAuthFlowsRepo } from './_helpers/in-memory-auth-flows-repo.js';
+
+function makeDirectService(): { repo: InMemoryAuthFlowsRepo; service: AuthFlowsService } {
+  const repo = new InMemoryAuthFlowsRepo();
+  const logger = createTestLogger();
+  const email = createEmailService({ config: null, logger });
+  const service = new AuthFlowsService(repo, email, logger, {
+    verifyEmailUrl: 'https://app.driftstack.local/auth/verify-email',
+    magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
+    passwordResetUrl: 'https://app.driftstack.local/auth/password-reset',
+    exposeDebugToken: true,
+  });
+  return { repo, service };
+}
 
 interface SignupResponse {
   verification_email_expires_at: string;
@@ -552,6 +573,223 @@ describe('POST /v1/auth/refresh + /v1/auth/logout', () => {
       payload: { token: 'a'.repeat(43) },
     });
     expect(res.statusCode).toBe(200);
+  });
+});
+
+// Security fix (2026-06-30 audit, MEDIUM): refreshSession previously did
+// find-active-session (SELECT) → revoke (UPDATE) → mint (INSERT) with no
+// atomic claim between the read and the mint — unlike every OTHER
+// single-use-token flow in this file (verifyEmail / consumeMagicLink /
+// confirmPasswordReset), which reject a concurrent race-loser via
+// `consumeAuthToken`'s atomic UPDATE...RETURNING boolean.
+// `AuthFlowsRepo.revokeWebSession` has no equivalent boolean return, so
+// two requests racing the SAME refresh token could both pass the find
+// before either's revoke landed, and both mint an independent new
+// session — letting a stolen/leaked token race a legitimate client's own
+// refresh into TWO valid sessions instead of being caught. These tests
+// construct AuthFlowsService directly (same pattern as the magic-link
+// race-regression test in auth-flows-email.test.ts) so the race is
+// deterministic against the in-memory repo.
+describe('AuthFlowsService.refreshSession — single-use under concurrency (security fix)', () => {
+  it('two simultaneous refreshes of the same token: exactly one succeeds, one InvalidAuthToken', async () => {
+    const { repo, service } = makeDirectService();
+    const signup = await service.signup({
+      email: 'refresh-race@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const verify = await service.verifyEmail({
+      token: signup.debugToken!,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    const oldToken = verify.session.plaintext;
+
+    const results = await Promise.allSettled([
+      service.refreshSession({ token: oldToken, issuedFromIp: null, userAgent: null }),
+      service.refreshSession({ token: oldToken, issuedFromIp: null, userAgent: null }),
+    ]);
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(AuthFlowError);
+    expect(((rejected[0] as PromiseRejectedResult).reason as AuthFlowError).code).toBe(
+      'invalid_auth_token',
+    );
+
+    // Exactly one active session for the account survives the race — not
+    // two. Before the fix, both racers would mint a fresh row here.
+    const active = await repo.listActiveWebSessionsForAccount(verify.account.id, new Date());
+    expect(active).toHaveLength(1);
+    expect(active[0]!.id).not.toBe(verify.session.row.id); // the NEW row; old one revoked
+  });
+
+  it('sequential refreshes still both succeed (the lock is per-call, not a permanent hold)', async () => {
+    const { service } = makeDirectService();
+    const signup = await service.signup({
+      email: 'refresh-sequential@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const verify = await service.verifyEmail({
+      token: signup.debugToken!,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    const first = await service.refreshSession({
+      token: verify.session.plaintext,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    const second = await service.refreshSession({
+      token: first.session.plaintext,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    expect(second.session.plaintext).not.toBe(first.session.plaintext);
+    expect(second.session.plaintext).not.toBe(verify.session.plaintext);
+  });
+
+  it('refreshing two DIFFERENT accounts concurrently does not block on each other', async () => {
+    const { service } = makeDirectService();
+    const signupA = await service.signup({
+      email: 'refresh-a@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const signupB = await service.signup({
+      email: 'refresh-b@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const verifyA = await service.verifyEmail({
+      token: signupA.debugToken!,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    const verifyB = await service.verifyEmail({
+      token: signupB.debugToken!,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    const [resultA, resultB] = await Promise.all([
+      service.refreshSession({
+        token: verifyA.session.plaintext,
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+      service.refreshSession({
+        token: verifyB.session.plaintext,
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+    ]);
+    expect(resultA.account.id).toBe(verifyA.account.id);
+    expect(resultB.account.id).toBe(verifyB.account.id);
+  });
+});
+
+// Security fix (2026-06-30 audit, LOW): stepUpReauth (the already-
+// authenticated MFA re-confirm gate, distinct from the login-path
+// completeMfaChallenge above) had no per-account brute-force lockout,
+// unlike its login-path sibling which bounds wrong-code guesses via
+// `MAX_MFA_CHALLENGE_ATTEMPTS`. Its only throttle was the route's
+// per-IP `loginGate`, bypassable by spreading guesses across source
+// IPs. These tests construct AuthFlowsService directly with a
+// controllable fake MfaService (the `verifyCode` surface is the only
+// method stepUpReauth calls) so the attempt-counter logic can be
+// exercised deterministically without real TOTP enrollment.
+describe('AuthFlowsService.stepUpReauth — per-account attempt lockout (security fix)', () => {
+  function makeStepUpService(verifyCodeResult: () => Promise<'totp' | 'recovery' | null>): {
+    service: AuthFlowsService;
+    callCount: () => number;
+  } {
+    const repo = new InMemoryAuthFlowsRepo();
+    const logger = createTestLogger();
+    const email = createEmailService({ config: null, logger });
+    const mfaChallenges = new InMemoryMfaChallengeStore();
+    let calls = 0;
+    const fakeMfa = {
+      verifyCode: () => {
+        calls += 1;
+        return verifyCodeResult();
+      },
+    } as never;
+    const service = new AuthFlowsService(
+      repo,
+      email,
+      logger,
+      {
+        verifyEmailUrl: 'https://app.driftstack.local/auth/verify-email',
+        magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
+        passwordResetUrl: 'https://app.driftstack.local/auth/password-reset',
+        exposeDebugToken: true,
+      },
+      null,
+      null,
+      fakeMfa,
+      mfaChallenges,
+    );
+    return { service, callCount: () => calls };
+  }
+
+  it('locks out after MAX_MFA_CHALLENGE_ATTEMPTS wrong codes, refusing even a subsequently-correct code', async () => {
+    let nextResult: 'totp' | 'recovery' | null = null;
+    const { service, callCount } = makeStepUpService(() => Promise.resolve(nextResult));
+    const accountId = 'acc_stepup_lockout';
+
+    for (let i = 0; i < MAX_MFA_CHALLENGE_ATTEMPTS; i++) {
+      await expect(
+        service.stepUpReauth({ accountId, sessionId: 'sess_1', input: '000000' }),
+      ).rejects.toThrow(/Code is invalid/);
+    }
+    expect(callCount()).toBe(MAX_MFA_CHALLENGE_ATTEMPTS);
+
+    // The (MAX+1)th attempt is refused even though the code is now
+    // "correct" — proving this is a real lockout (blocks the account),
+    // not just a per-attempt rejection. verifyCode is never invoked for
+    // this call (callCount doesn't increase).
+    nextResult = 'totp';
+    await expect(
+      service.stepUpReauth({ accountId, sessionId: 'sess_1', input: '999999' }),
+    ).rejects.toThrow(/Too many/);
+    expect(callCount()).toBe(MAX_MFA_CHALLENGE_ATTEMPTS);
+  });
+
+  it('a correct code on the FIRST attempt succeeds (no false-positive lockout)', async () => {
+    const { service, callCount } = makeStepUpService(() => Promise.resolve('totp'));
+    const result = await service.stepUpReauth({
+      accountId: 'acc_stepup_ok',
+      sessionId: 'sess_1',
+      input: '123456',
+    });
+    expect(result.via).toBe('totp');
+    expect(callCount()).toBe(1);
+  });
+
+  it('a different account is unaffected by another account being locked out', async () => {
+    let nextResult: 'totp' | 'recovery' | null = null;
+    const { service } = makeStepUpService(() => Promise.resolve(nextResult));
+
+    for (let i = 0; i < MAX_MFA_CHALLENGE_ATTEMPTS; i++) {
+      await expect(
+        service.stepUpReauth({ accountId: 'acc_victim', sessionId: 'sess_1', input: '000000' }),
+      ).rejects.toThrow(/Code is invalid/);
+    }
+    // acc_victim is now locked out.
+    await expect(
+      service.stepUpReauth({ accountId: 'acc_victim', sessionId: 'sess_1', input: '000000' }),
+    ).rejects.toThrow(/Too many/);
+
+    // A different account, same fake MFA service, succeeds normally.
+    nextResult = 'recovery';
+    const result = await service.stepUpReauth({
+      accountId: 'acc_other',
+      sessionId: 'sess_2',
+      input: 'recovery-code',
+    });
+    expect(result.via).toBe('recovery');
   });
 });
 
