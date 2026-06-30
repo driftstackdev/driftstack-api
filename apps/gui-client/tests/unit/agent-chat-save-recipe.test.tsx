@@ -228,23 +228,25 @@ describe('AgentChatView live-view token-fetch failure (friendly copy + Retry)', 
     livekitToken.mockRejectedValueOnce(err);
   }
 
-  it('maps a 503 (no live device yet) to reassuring copy — never the raw "HTTP 503" jargon', async () => {
+  it('finding #2 — a 503/DriverNotIntegrated shows the calm "simulated" steady-state with NO Retry (a Retry would 503 forever)', async () => {
     reject503();
     chatState = baseChat({ session: SESSION, turns: [] });
     render(<AgentChatView />);
 
-    // The placeholder body is the friendly message, not transport jargon.
+    // The simulated-deployment copy mirrors the chat banner — honest "not available
+    // yet", not an alarming failure — and never leaks the raw "HTTP 503" jargon.
+    expect(await screen.findByText('Live view not available yet')).toBeTruthy();
     expect(
-      await screen.findByText(
-        'No live device is running for this chat yet — dispatch a task, then retry.',
+      screen.getByText(
+        'Browser actions are simulated in this deployment — the live device view turns on when the live driver is enabled.',
       ),
     ).toBeTruthy();
     expect(screen.queryByText(/HTTP 503/)).toBeNull();
-    // …and the error state is recoverable in place via a Retry affordance.
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    // The dead-end Retry loop is GONE: a 503 never recovers here, so no Retry button.
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
 
-  it('maps a network/transport failure to a connection message (raw text not surfaced)', async () => {
+  it('maps a network/transport failure to a connection message (raw text not surfaced) — and keeps a Retry', async () => {
     livekitToken.mockRejectedValueOnce(new Error('fetch failed'));
     chatState = baseChat({ session: SESSION, turns: [] });
     render(<AgentChatView />);
@@ -255,11 +257,13 @@ describe('AgentChatView live-view token-fetch failure (friendly copy + Retry)', 
       ),
     ).toBeTruthy();
     expect(screen.queryByText(/fetch failed/)).toBeNull();
+    // A genuine transport blip IS recoverable in place — keep the Retry affordance.
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
   });
 
-  it('Retry re-runs the token fetch — recovering in place once the worker is up', async () => {
-    // First attempt 503s; the retry resolves (worker now ready).
-    reject503();
+  it('Retry re-runs the token fetch on a transient network failure — recovering in place', async () => {
+    // First attempt is a TRANSIENT network failure (Retry-able); the retry resolves.
+    livekitToken.mockRejectedValueOnce(new Error('fetch failed'));
     chatState = baseChat({ session: SESSION, turns: [] });
     render(<AgentChatView />);
 

@@ -71,12 +71,15 @@ function describe(event: NotificationEvent): { title: string; body: string } {
 }
 
 export function NotificationToastStack(): JSX.Element | null {
-  const { events, connection, dismiss } = useNotifications();
-  // Render the overlay only when there's something to show. The
-  // 'closed' state surfaces only IF events are queued (the customer
-  // saw something then we dropped — worth a hint). 'closed' with
-  // zero events stays hidden so sign-out doesn't spam a banner.
-  if (events.length === 0 && connection !== 'reconnecting') {
+  const { events, connection, dismiss, reconnect } = useNotifications();
+  // Render the overlay when there's something to show OR the stream needs
+  // attention. 'closed' now surfaces even with zero queued events: the
+  // subscriber latches 'closed' only after it actively gave up retrying (the
+  // bounded-error give-up), which is a real degraded state the customer should
+  // see and be able to fix — NOT the silent sign-out case ('idle'). So a
+  // closed stream is always visible with a working Reconnect button, instead
+  // of dying silently whenever the event ring happens to be empty.
+  if (events.length === 0 && connection !== 'reconnecting' && connection !== 'closed') {
     return null;
   }
   return (
@@ -94,12 +97,20 @@ export function NotificationToastStack(): JSX.Element | null {
           Notification stream reconnecting…
         </div>
       )}
-      {connection === 'closed' && events.length > 0 && (
+      {connection === 'closed' && (
         <div
           data-testid="notification-connection-banner"
-          className="pointer-events-auto rounded border border-status-error/40 bg-status-error/10 px-3 py-2 text-xs text-status-error shadow"
+          className="pointer-events-auto flex items-center justify-between gap-2 rounded border border-status-error/40 bg-status-error/10 px-3 py-2 text-xs text-status-error shadow"
         >
-          Notification stream closed — open Settings to reconnect.
+          <span>Notification stream disconnected.</span>
+          <button
+            type="button"
+            onClick={reconnect}
+            data-testid="notification-reconnect"
+            className="shrink-0 rounded border border-status-error/40 px-2 py-0.5 font-medium hover:bg-status-error/15"
+          >
+            Reconnect
+          </button>
         </div>
       )}
       {events.map((event, idx) => {

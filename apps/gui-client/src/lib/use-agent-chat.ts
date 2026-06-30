@@ -22,6 +22,7 @@ import type {
   ConsequentialActionCategory,
 } from '@driftstack/sdk';
 import { useSettings } from './SettingsContext';
+import { clearSession as clearProfileSession, markLaunched } from './profile-bindings';
 
 /** Map a raw agent-request error to customer-friendly copy (the chat error
  *  banner showed raw err.message — auth/network jargon a user can't act on). */
@@ -86,6 +87,12 @@ export interface UseAgentChatOpts {
   /** S16 — attach the agent session to a saved profile (the identity the AI
    *  works on). Omit for a stateless session. */
   profileId?: string;
+  /** Egress-leak fix — the server-side account-proxy id the session must exit
+   *  through (resolved by the view from the profile's bound proxy, the SAME way
+   *  ProfilesView's manual launch does). Threaded into agentSessions.create as
+   *  `proxy_id`. Omit (undefined) → operator-default egress, as before. Without
+   *  this an AI session on a proxied profile silently leaked the operator IP. */
+  proxyId?: string;
 }
 
 export interface UseAgentChatResult {
@@ -136,6 +143,20 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   // client identity change.
   const clientRef = useRef(client);
   clientRef.current = client;
+  // The attached profile id, mirrored into a ref so the teardown paths (unmount
+  // cleanup / reset / restore) can clear THIS profile's local "running" binding
+  // when they close the live session — keeping the Profiles hub in sync (the row
+  // returns to idle/Launch) instead of leaving it stuck "running" on an AI
+  // session that's gone. Best-effort + idempotent; never throws.
+  const profileIdRef = useRef<string | undefined>(opts.profileId);
+  profileIdRef.current = opts.profileId;
+  // Clear the local profile→session binding so the Profiles hub stops showing
+  // this profile as running once its AI session is closed/abandoned. Best-effort
+  // (a Tauri-store write); a failure is a reaper fallback, not a user error.
+  const clearProfileBinding = useCallback((profileId: string | undefined): void => {
+    if (profileId === undefined) return;
+    void clearProfileSession(profileId).catch(() => undefined);
+  }, []);
   // Best-effort close a server-side agent session (idempotent server-side). Never
   // throws: a failed close is a reaper fallback, not a user-visible error.
   const closeServerSession = useCallback((sid: string | null): void => {
@@ -199,9 +220,13 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   useEffect(
     () => () => {
       cancelGenRef.current += 1;
+      // Only clear the profile binding if a live session actually backed it (a
+      // session id is present) — leaving the AI view before the first send must
+      // not wipe a binding the manual-launch path may own.
+      if (sessionIdRef.current !== null) clearProfileBinding(profileIdRef.current);
       closeServerSession(sessionIdRef.current);
     },
-    [closeServerSession],
+    [closeServerSession, clearProfileBinding],
   );
 
   const post = useCallback(
@@ -259,6 +284,12 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
             ...(opts.model !== undefined ? { model: opts.model } : {}),
             ...(opts.tokenBudget !== undefined ? { token_budget: opts.tokenBudget } : {}),
             ...(opts.profileId !== undefined ? { profile_id: opts.profileId } : {}),
+            // Egress-leak fix — route the AI session through the profile's bound
+            // proxy (the view resolved it to a server proxy_id, exactly like
+            // ProfilesView's manual launch). Absent → operator-default egress, as
+            // before. Without this an AI session on a proxied profile silently
+            // exited via the operator/datacenter IP instead of the configured exit.
+            ...(opts.proxyId !== undefined ? { proxy_id: opts.proxyId } : {}),
           });
           // Stop/reset/restore (a chat switch or New chat) may have happened while
           // create() was in flight. Without this guard, setSession(created) would
@@ -277,6 +308,16 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
             return false;
           }
           setSession(created);
+          // Profiles-hub parity — when this AI session attaches to a saved
+          // profile, write the SAME local binding the manual launch does
+          // (ProfilesView.handleLaunch). Without it the Profiles hub reads the
+          // profile as idle/Launch while a billed AI session is live on it, with
+          // no Stop affordance — so the user could double-launch it. Best-effort
+          // (a local Tauri-store write): a failure must not break the chat, which
+          // is already created + running. Fire-and-forget on the success path.
+          if (opts.profileId !== undefined) {
+            void markLaunched(opts.profileId, created.id).catch(() => undefined);
+          }
           // A fresh live session now backs the chat — the restored-history
           // boundary no longer applies (the new session's transcript grows from
           // here), so clear the divider marker.
@@ -310,7 +351,16 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         if (cancelGenRef.current === gen) setSending(false);
       }
     },
-    [client, session, opts.model, opts.tokenBudget, opts.profileId, nextId, closeServerSession],
+    [
+      client,
+      session,
+      opts.model,
+      opts.tokenBudget,
+      opts.profileId,
+      opts.proxyId,
+      nextId,
+      closeServerSession,
+    ],
   );
 
   const send = useCallback((userMessage: string): Promise<boolean> => post(userMessage), [post]);
@@ -364,6 +414,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     // Best-effort close the chat we're leaving so its server session + any
     // dispatched Mac don't leak until the reaper (sweep2). Read via the ref so we
     // close the CURRENT session, not a stale closure capture.
+    if (sessionIdRef.current !== null) clearProfileBinding(profileIdRef.current);
     closeServerSession(sessionIdRef.current);
     setSending(false);
     setTurns([]);
@@ -372,7 +423,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     setResolvedTurnId(null);
     setLastUserMessage(null);
     setRestoredHistoryCount(0);
-  }, [closeServerSession]);
+  }, [closeServerSession, clearProfileBinding]);
 
   const restore = useCallback(
     (restoredTurns: ReadonlyArray<ChatTurn>): void => {
@@ -380,6 +431,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       // its late response can't attach to (and persist onto) the restored chat.
       cancelGenRef.current += 1;
       // Best-effort close the chat we're switching AWAY from (same leak as reset).
+      if (sessionIdRef.current !== null) clearProfileBinding(profileIdRef.current);
       closeServerSession(sessionIdRef.current);
       setSending(false);
       setTurns([...restoredTurns]);
@@ -400,7 +452,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       // confirmation lookup stay correct when the customer continues the chat.
       idRef.current = restoredTurns.reduce((m, t) => Math.max(m, t.id), 0);
     },
-    [closeServerSession],
+    [closeServerSession, clearProfileBinding],
   );
 
   return {

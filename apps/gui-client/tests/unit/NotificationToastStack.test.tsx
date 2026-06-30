@@ -10,6 +10,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import type { NotificationEvent } from '../../src/lib/notifications';
 
 const dismissMock = vi.fn();
+const reconnectMock = vi.fn();
 
 const hookState: {
   events: NotificationEvent[];
@@ -24,6 +25,7 @@ vi.mock('../../src/lib/use-notifications', () => ({
     events: hookState.events,
     connection: hookState.connection,
     dismiss: dismissMock,
+    reconnect: reconnectMock,
   }),
 }));
 
@@ -86,16 +88,32 @@ describe('NotificationToastStack', () => {
     );
   });
 
-  it("connection 'closed' + at least one event surfaces the rose banner with Settings hint", () => {
+  it("connection 'closed' + at least one event surfaces the rose banner with a working Reconnect button", () => {
     setHookState([baseEvent], 'closed');
+    reconnectMock.mockClear();
     render(<NotificationToastStack />);
     expect(screen.getByTestId('notification-connection-banner').textContent).toMatch(
-      /closed.*Settings to reconnect/i,
+      /disconnected/i,
     );
+    fireEvent.click(screen.getByTestId('notification-reconnect'));
+    expect(reconnectMock).toHaveBeenCalledTimes(1);
   });
 
-  it("connection 'closed' with zero events stays hidden (no banner spam after sign-out)", () => {
+  it("connection 'closed' with zero events STILL surfaces the banner + Reconnect (the subscriber actively gave up; a silent death is the bug we're fixing — sign-out is 'idle', not 'closed')", () => {
     setHookState([], 'closed');
+    reconnectMock.mockClear();
+    render(<NotificationToastStack />);
+    // The degraded state is visible even with an empty ring…
+    expect(screen.getByTestId('notification-connection-banner').textContent).toMatch(
+      /disconnected/i,
+    );
+    // …and the only affordance is a Reconnect that actually re-subscribes.
+    fireEvent.click(screen.getByTestId('notification-reconnect'));
+    expect(reconnectMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("connection 'idle' with zero events stays hidden (sign-out / no key → no banner spam)", () => {
+    setHookState([], 'idle');
     const { container } = render(<NotificationToastStack />);
     expect(container.firstChild).toBeNull();
   });

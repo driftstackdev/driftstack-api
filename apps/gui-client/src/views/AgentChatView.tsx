@@ -32,6 +32,12 @@ import {
   type StoredChat,
 } from '../lib/chat-history';
 import { RelativeTime } from '../components/RelativeTime';
+import { listProxies, setProxyServerId, type ProxyConfig } from '../lib/proxies';
+import { listBindings } from '../lib/profile-bindings';
+import {
+  createProxy as createAccountProxy,
+  updateProxy as updateAccountProxy,
+} from '../lib/account-proxies';
 
 const MODELS: ReadonlyArray<{ id: ChatModel; label: string }> = [
   { id: 'claude-opus-4-8', label: 'Opus 4.8' },
@@ -39,6 +45,96 @@ const MODELS: ReadonlyArray<{ id: ChatModel; label: string }> = [
   { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
   { id: 'claude-haiku-4-5', label: 'Haiku 4.5' },
 ];
+
+// ─── egress: resolve a profile's bound proxy → server proxy_id ─────
+//
+// Egress-leak fix. The AI-browser session-create only ever forwarded `profile_id`
+// — never a proxy — so a session on a profile with a bound residential proxy
+// silently exited via the OPERATOR-DEFAULT IP (the opposite of what an
+// anti-detect tool promises). The manual launch (ProfilesView.handleLaunch) does
+// real proxy work — pickProxy(profile) → ensureServerProxy() (sync the GUI-local
+// proxy into an account_proxies row) → pass proxy_id on create. We MIRROR that
+// here so the two launch paths can't diverge. Proxy bindings are LOCAL-ONLY
+// (Tauri stores), so this reads them directly rather than via ProfilesView state.
+
+/** Mirror of ProfilesView.pickProxy: the proxy a profile launches through.
+ *  An EXPLICIT default binding to a now-deleted proxy returns null (do NOT
+ *  silently reroute through proxies[0] — that would leak a different IP/country
+ *  for an anti-detect tool); no explicit binding → the first saved proxy. */
+function pickProxyFor(
+  profileId: string,
+  bindings: ReadonlyArray<{ profileId: string; defaultProxyId: string | null }>,
+  proxies: ReadonlyArray<ProxyConfig>,
+): ProxyConfig | null {
+  const binding = bindings.find((b) => b.profileId === profileId);
+  if (binding?.defaultProxyId !== undefined && binding.defaultProxyId !== null) {
+    return proxies.find((p) => p.id === binding.defaultProxyId) ?? null;
+  }
+  return proxies[0] ?? null;
+}
+
+/** Mirror of ProfilesView.ensureServerProxy: ensure the picked local proxy has a
+ *  server-side account_proxies row (encrypted under the account TMK) and return
+ *  its id to pass as proxy_id. Creates on first use (caching the id on the local
+ *  proxy), refreshes on later launches so an edited host/credential stays current.
+ *  Returns undefined when there's no API key (caller launches without proxy_id →
+ *  operator-default egress, same as today). */
+async function ensureServerProxyId(
+  p: ProxyConfig,
+  baseUrl: string,
+  apiKey: string | null,
+): Promise<string | undefined> {
+  if (apiKey === null || apiKey.length === 0) return undefined;
+  const input = {
+    label: p.label,
+    scheme: p.scheme ?? ('socks5' as const),
+    host: p.host,
+    port: p.port,
+    username: p.username,
+    password: p.password,
+    ...(p.openvpn !== undefined ? { openvpn: p.openvpn } : {}),
+    ...(p.wireguard !== undefined ? { wireguard: p.wireguard } : {}),
+  };
+  if (p.serverId !== undefined) {
+    try {
+      await updateAccountProxy(baseUrl, apiKey, p.serverId, input);
+      return p.serverId;
+    } catch (err) {
+      // Stale cached serverId (the account_proxies row was deleted server-side):
+      // the PUT 404s. Self-heal by re-creating below instead of failing forever.
+      // Any other error is real — re-throw it.
+      if ((err as { status?: number }).status !== 404) throw err;
+    }
+  }
+  const created = await createAccountProxy(baseUrl, apiKey, input);
+  await setProxyServerId(p.id, created.id);
+  return created.id;
+}
+
+/** Resolve the server proxy_id an AI session for `profileId` must exit through,
+ *  by reading the LOCAL proxy + binding stores (where the GUI keeps them) and
+ *  mirroring the manual-launch resolution. Returns undefined when the profile has
+ *  no proxy (→ operator-default egress, unchanged behavior). Best-effort: a sync
+ *  failure resolves to undefined (launch proceeds without proxy_id) rather than
+ *  blocking the chat — exactly the fallback ProfilesView.handleLaunch keeps. */
+async function resolveProfileProxyId(
+  profileId: string,
+  baseUrl: string,
+  apiKey: string | null,
+): Promise<string | undefined> {
+  try {
+    const [bindings, proxies] = await Promise.all([listBindings(), listProxies()]);
+    const proxy = pickProxyFor(profileId, bindings, proxies);
+    if (proxy === null) return undefined; // no proxy bound → operator-default egress
+    return await ensureServerProxyId(proxy, baseUrl, apiKey);
+  } catch (err) {
+    // Mirror ProfilesView's best-effort posture: a proxy-sync failure (offline /
+    // SSRF-rejected host / unauth) must NOT block the chat — warn + proceed
+    // without proxy_id (the session still runs, on operator-default egress).
+    console.warn('[ai-chat] proxy account-sync failed; launching without proxy_id', err);
+    return undefined;
+  }
+}
 
 export function AgentChatView({
   initialProfileId,
@@ -57,7 +153,20 @@ export function AgentChatView({
   const [profileId, setProfileId] = useState<string>(initialProfileId ?? '');
   const [profiles, setProfiles] = useState<ReadonlyArray<{ id: string; name: string }>>([]);
   const [draft, setDraft] = useState('');
-  const chat = useAgentChat({ model, ...(profileId !== '' ? { profileId } : {}) });
+  // Egress-leak fix — the server proxy_id the selected profile must exit through,
+  // resolved from its LOCAL proxy binding the SAME way ProfilesView's manual launch
+  // does (resolveProfileProxyId). Threaded into the chat session create so an AI
+  // session on a proxied profile uses the configured residential exit instead of
+  // silently leaking the operator/datacenter IP. undefined → no bound proxy →
+  // operator-default egress (unchanged). Resolved BEFORE the first send creates the
+  // session (the resolution effect runs while the picker is still editable); the
+  // profile + session are locked together once a chat starts.
+  const [proxyId, setProxyId] = useState<string | undefined>(undefined);
+  const chat = useAgentChat({
+    model,
+    ...(profileId !== '' ? { profileId } : {}),
+    ...(proxyId !== undefined ? { proxyId } : {}),
+  });
   const started = chat.turns.length > 0;
   // Below the lg breakpoint the live-view pane is hidden inline; this toggles it
   // as a slide-over so a narrow window can still open it (it used to vanish with
@@ -105,6 +214,28 @@ export function AgentChatView({
     }
     prevInitialProfileIdRef.current = initialProfileId;
   }, [initialProfileId]);
+  // Egress-leak fix — resolve the selected profile's bound proxy to a server
+  // proxy_id BEFORE the first send creates the session, so the AI session exits
+  // through the configured proxy (not the operator default). Re-runs when the
+  // selected profile changes WHILE the chat is still un-started (the picker locks
+  // once a chat begins, so the resolved proxy can't drift from the live session).
+  // Temporary profile (profileId === '') → clear it (no proxy). Best-effort: a
+  // sync failure resolves to undefined and the chat proceeds without proxy_id
+  // (resolveProfileProxyId already warns + falls back, matching ProfilesView).
+  useEffect(() => {
+    if (started) return undefined; // locked to the live session — don't re-resolve
+    if (profileId === '') {
+      setProxyId(undefined);
+      return undefined;
+    }
+    let cancelled = false;
+    void resolveProfileProxyId(profileId, settings.baseUrl, settings.apiKey).then((id) => {
+      if (!cancelled) setProxyId(id);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId, started, settings.baseUrl, settings.apiKey]);
   // Persist the active chat whenever its transcript changes (skip the empty
   // pre-first-message state). createdAt is sticky per chat id.
   useEffect(() => {
@@ -594,7 +725,12 @@ type WatchState =
   | { kind: 'idle' } // no chat session dispatched yet
   | { kind: 'loading' } // fetching the LiveKit token
   | { kind: 'live'; info: LiveKitInfo } // token in hand → stream
-  | { kind: 'error'; message: string }; // token fetch failed
+  // The deployment runs simulated (no live device driver): the token fetch 503s
+  // with DriverNotIntegrated and ALWAYS will here, so this is a calm STEADY-STATE
+  // that mirrors the chat's "actions are simulated" banner — NOT a transient error,
+  // and Retry would just 503 forever, so it carries no Retry. (finding #2)
+  | { kind: 'simulated' }
+  | { kind: 'error'; message: string }; // transient token fetch failure (Retry-able)
 
 /**
  * Read-only live iPhone view bound to the chat's agent session. When a task is
@@ -652,16 +788,61 @@ function LiveAutomationPanel({
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        // A session with no Mac/LiveKit registered yet (503) or a not-yet-ready
-        // worker is the common case here — keep the copy reassuring, not alarming.
-        // Surface customer-friendly copy (the raw err.message leaks transport/HTTP
-        // jargon — "HTTP 503", "fetch failed" — the comment above promised to avoid).
-        setWatch({ kind: 'error', message: friendlyLiveViewError(err) });
+        // finding #2 — a 503/DriverNotIntegrated means this deployment has NO live
+        // device driver: the token fetch 503s now and ALWAYS will, so a Retry loops
+        // forever. Surface it as the calm "simulated deployment" steady-state that
+        // mirrors the chat's banner (no Retry), NOT a transient error. A genuine
+        // network/transport failure stays the Retry-able 'error' branch.
+        setWatch(classifyLiveViewError(err));
       });
     return () => {
       cancelled = true;
     };
   }, [client, sessionId, retryNonce]);
+
+  // finding #3 — react to the agent session ending. The token fetch above is
+  // one-shot (it only re-runs on a sessionId/client/retry change), so a session
+  // reaped server-side mid-chat (idle reaper / worker browser closed) left the
+  // pane holding a DEAD token: AgentSessionPanel then fell into its publisher-lost
+  // / disconnected branch and surfaced the scary "Couldn't start the session — the
+  // proxy or connection may be down" overlay, implying broken infra when the
+  // session merely ended normally. Poll the chat's agent-session lifecycle (the
+  // SAME ~5s GET the simulator runs) and latch the terminal end so AgentSessionPanel
+  // shows its honest "Session ended" overlay instead. Only polls while a live
+  // stream is up and stops once ended (a closed session never un-closes).
+  const [sessionEnded, setSessionEnded] = useState<{ reason: string | null } | null>(null);
+  // A fresh session id (or no session) clears any prior terminal-end latch.
+  useEffect(() => {
+    setSessionEnded(null);
+  }, [sessionId]);
+  useEffect(() => {
+    if (sessionId === null || watch.kind !== 'live' || sessionEnded !== null) return undefined;
+    if (client === null || typeof client.agentSessions?.get !== 'function') return undefined;
+    let cancelled = false;
+    const poll = (): void => {
+      void client.agentSessions
+        .get(sessionId)
+        .then((s) => {
+          if (cancelled) return;
+          // Terminal when the lifecycle status is 'closed' OR a close timestamp /
+          // reason is set (worker browser closed / destroyed / orphan-swept). A
+          // transient transport drop stays status='active' so the panel's own
+          // bounded reconnect still runs — we only latch a REAL end.
+          const ended =
+            s.status === 'closed' ||
+            (typeof s.closed_at === 'string' && s.closed_at.length > 0) ||
+            (typeof s.closed_reason === 'string' && s.closed_reason.length > 0);
+          if (ended) setSessionEnded({ reason: s.closed_reason });
+        })
+        .catch(() => undefined); // a transient GET failure is not a terminal end
+    };
+    poll();
+    const handle = setInterval(poll, 5_000);
+    return () => {
+      cancelled = true;
+      clearInterval(handle);
+    };
+  }, [client, sessionId, watch.kind, sessionEnded]);
 
   return (
     <aside
@@ -677,7 +858,12 @@ function LiveAutomationPanel({
     >
       <div className="flex items-center gap-2 border-b border-surface-divider px-3 py-2.5">
         <span className="text-xs font-medium text-ink-primary">Live view</span>
-        <span className="text-2xs text-ink-muted">read-only — the agent is driving</span>
+        {/* finding #2 — only claim "the agent is driving" once a stream is actually
+            up. Before that (and in the simulated deployment) say what the pane IS so
+            it doesn't over-promise a live iPhone the deployment can't show. */}
+        <span className="text-2xs text-ink-muted">
+          {watch.kind === 'live' ? 'read-only — the agent is driving' : 'read-only'}
+        </span>
         {/* Close affordance for the below-lg overlay (no-op visual at lg+ where
             the pane is a permanent column). */}
         <button
@@ -693,7 +879,7 @@ function LiveAutomationPanel({
         {watch.kind === 'idle' && (
           <WatchPlaceholder
             title="Nothing running yet"
-            body="Dispatch a task to watch it run live on the phone."
+            body="Dispatch a task — the live device view turns on when the live driver is enabled for this deployment."
           />
         )}
         {watch.kind === 'loading' && (
@@ -708,6 +894,16 @@ function LiveAutomationPanel({
             <span>Starting the live view…</span>
           </div>
         )}
+        {/* finding #2 — simulated deployment: a calm steady-state that mirrors the
+            chat banner. NO Retry (it would 503 forever) — this is the honest "not
+            available yet", not a failure the user can act on. */}
+        {watch.kind === 'simulated' && (
+          <WatchPlaceholder
+            title="Live view not available yet"
+            body="Browser actions are simulated in this deployment — the live device view turns on when the live driver is enabled."
+            tone="muted"
+          />
+        )}
         {watch.kind === 'error' && (
           <WatchPlaceholder
             title="Live view unavailable"
@@ -720,11 +916,16 @@ function LiveAutomationPanel({
           // READ-ONLY: `interactive` omitted (defaults false) → no input capture.
           // coverChromeBand reuses the simulator's bezel-black letterbox so there
           // is no white-space border around the stream.
+          // finding #3 — sessionEnded latches the chat's agent-session terminal end
+          // so AgentSessionPanel shows its honest "Session ended" overlay instead of
+          // the scary "proxy may be down" / endless-reconnect overlays once a reaped
+          // or worker-closed session leaves this pane holding a dead token.
           <AgentSessionPanel
             info={watch.info}
             interactive={false}
             coverChromeBand
             aspectRatio={IPHONE_WATCH_ASPECT_RATIO}
+            sessionEnded={sessionEnded}
           />
         )}
       </div>
@@ -732,21 +933,28 @@ function LiveAutomationPanel({
   );
 }
 
-/** Map a live-view token-fetch error to reassuring copy. The token fetch's most
- *  common failure here is the 503 a chat session returns before its worker is up
- *  (driver:mock / still dispatching) — the raw err.message ("HTTP 503", "fetch
- *  failed") reads as a hard error, so soften it and keep the raw text only as a
- *  last-resort fallback. */
-function friendlyLiveViewError(err: unknown): string {
+/** finding #2 — classify a live-view token-fetch failure into the right WATCH
+ *  STATE, not just copy. The dominant failure here is the 503/DriverNotIntegrated a
+ *  chat session returns when the deployment runs simulated (no live device driver):
+ *  that NEVER recovers, so a Retry button loops 503 forever. Map it to the calm
+ *  `simulated` steady-state (mirrors the chat banner, no Retry). A genuine network/
+ *  transport failure stays a Retry-able `error` with reassuring copy (the raw
+ *  err.message — "HTTP 503", "fetch failed" — is never surfaced). */
+function classifyLiveViewError(
+  err: unknown,
+): { kind: 'simulated' } | { kind: 'error'; message: string } {
   const status = (err as { status?: number } | null)?.status;
   const msg = err instanceof Error ? err.message : '';
-  if (status === 503 || /503|not ready|unavailable|no worker|no session/i.test(msg)) {
-    return 'No live device is running for this chat yet — dispatch a task, then retry.';
+  if (status === 503 || /503|not ready|unavailable|no worker|no session|driver/i.test(msg)) {
+    return { kind: 'simulated' };
   }
   if (/load failed|network|fetch|ECONN|getaddrinfo|timeout|unreachable/i.test(msg)) {
-    return "Couldn't reach the live-stream server — check your connection, then retry.";
+    return {
+      kind: 'error',
+      message: "Couldn't reach the live-stream server — check your connection, then retry.",
+    };
   }
-  return msg.length > 0 ? msg : 'Could not start the live view.';
+  return { kind: 'error', message: msg.length > 0 ? msg : 'Could not start the live view.' };
 }
 
 function WatchPlaceholder({

@@ -255,6 +255,17 @@ fn open_or_focus_sim_window(app: &tauri::AppHandle, label: &str, b64: &str) {
         .unwrap_or(false);
     if is_main_session {
         if let Some(win) = app.get_webview_window("main") {
+            // Hand the FRESH payload (a brand-new LiveKit join token) to the
+            // already-open window so it swaps the session in place — without
+            // this, re-opening a session whose stream/token has expired only
+            // focused the dead window (the user's only recovery, "relaunch the
+            // profile", silently did nothing). The SimulatorWindow's `ds-session`
+            // listener (atob → setQuery) + AgentSessionPanel's connect effect
+            // (re-runs on a changed token) handle the in-place reconnect.
+            // Emitting an unchanged token is a safe no-op (effect deps don't
+            // change). Mirrors the `dev.driftstack.gui` main-window emit above.
+            use tauri::Emitter;
+            let _ = win.emit("ds-session", b64);
             let _ = win.unminimize();
             let _ = win.set_focus();
             return;
@@ -271,6 +282,12 @@ fn open_or_focus_sim_window(app: &tauri::AppHandle, label: &str, b64: &str) {
     }
     let win_label = format!("sim-{label}");
     if let Some(win) = app.get_webview_window(&win_label) {
+        // Same in-place reconnect as the `main`-session branch above: hand the
+        // fresh payload to the existing per-session window so an expired-token
+        // window can actually recover via "relaunch the profile" instead of
+        // only being brought to the front with its stream still dead.
+        use tauri::Emitter;
+        let _ = win.emit("ds-session", b64);
         let _ = win.unminimize();
         let _ = win.set_focus();
         return;

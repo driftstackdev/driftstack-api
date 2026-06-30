@@ -17,6 +17,16 @@ vi.mock('../../src/lib/SettingsContext', () => ({
   useSettings: () => ({ client: { agentSessions: { create, message, close } } }),
 }));
 
+// Egress + profiles-hub parity: the hook writes/clears the local profile binding so
+// the Profiles hub reflects an AI-driven profile as running. Mock the store so no
+// Tauri runtime is needed and the calls are observable.
+const markLaunched = vi.fn(() => Promise.resolve());
+const clearProfileSession = vi.fn(() => Promise.resolve());
+vi.mock('../../src/lib/profile-bindings', () => ({
+  markLaunched: (profileId: string, sessionId: string) => markLaunched(profileId, sessionId),
+  clearSession: (profileId: string) => clearProfileSession(profileId),
+}));
+
 const { useAgentChat } = await import('../../src/lib/use-agent-chat');
 
 const SESSION: AgentSession = {
@@ -334,5 +344,105 @@ describe('useAgentChat session-leak close', () => {
     expect(close).not.toHaveBeenCalled();
     unmount();
     expect(close).toHaveBeenCalledWith('agt_1');
+  });
+});
+
+// Egress-leak fix — the AI session create must carry the resolved proxy_id so a
+// session on a proxied profile exits through the configured proxy, not the
+// operator default. The view resolves the id from the profile's local binding and
+// threads it via the proxyId opt; the hook forwards it verbatim to create().
+describe('useAgentChat egress proxy_id threading', () => {
+  beforeEach(() => {
+    create.mockReset();
+    message.mockReset();
+    create.mockResolvedValue(SESSION);
+    message.mockResolvedValue(DONE);
+    markLaunched.mockClear();
+    clearProfileSession.mockClear();
+  });
+
+  it('forwards proxy_id + profile_id on create when a proxied profile is attached', async () => {
+    const { result } = renderHook(() =>
+      useAgentChat({ profileId: 'prof_x', proxyId: 'apx_residential_1' }),
+    );
+    await act(async () => {
+      await result.current.send('open the bank');
+    });
+    expect(create).toHaveBeenCalledTimes(1);
+    const body = create.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(body.proxy_id).toBe('apx_residential_1');
+    expect(body.profile_id).toBe('prof_x');
+    expect(body.mode).toBe('ai');
+  });
+
+  it('omits proxy_id entirely when no proxy is resolved (operator-default egress, unchanged)', async () => {
+    const { result } = renderHook(() => useAgentChat({ profileId: 'prof_x' }));
+    await act(async () => {
+      await result.current.send('open the bank');
+    });
+    const body = create.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect('proxy_id' in body).toBe(false);
+    expect(body.profile_id).toBe('prof_x');
+  });
+});
+
+// Profiles-hub parity — an AI session on a saved profile must mark that profile
+// "running" (the same local binding the manual launch writes) so the Profiles hub
+// shows it as busy with a Stop, and clear it when the session is closed/abandoned.
+describe('useAgentChat profile binding (Profiles-hub running state)', () => {
+  beforeEach(() => {
+    create.mockReset();
+    message.mockReset();
+    close.mockReset();
+    create.mockResolvedValue(SESSION);
+    message.mockResolvedValue(DONE);
+    close.mockResolvedValue(undefined);
+    markLaunched.mockClear();
+    clearProfileSession.mockClear();
+  });
+
+  it('markLaunched(profileId, sessionId) fires after the AI session is created', async () => {
+    const { result } = renderHook(() => useAgentChat({ profileId: 'prof_x' }));
+    await act(async () => {
+      await result.current.send('do a thing');
+    });
+    expect(markLaunched).toHaveBeenCalledWith('prof_x', 'agt_1');
+  });
+
+  it('does NOT bind a stateless (temporary) session', async () => {
+    const { result } = renderHook(() => useAgentChat());
+    await act(async () => {
+      await result.current.send('do a thing');
+    });
+    expect(markLaunched).not.toHaveBeenCalled();
+  });
+
+  it('clears the profile binding on reset (New chat returns the Profiles row to idle)', async () => {
+    const { result } = renderHook(() => useAgentChat({ profileId: 'prof_x' }));
+    await act(async () => {
+      await result.current.send('do a thing');
+    });
+    expect(clearProfileSession).not.toHaveBeenCalled();
+    act(() => {
+      result.current.reset();
+    });
+    expect(clearProfileSession).toHaveBeenCalledWith('prof_x');
+  });
+
+  it('clears the profile binding on unmount (leaving the view frees the Profiles row)', async () => {
+    const { result, unmount } = renderHook(() => useAgentChat({ profileId: 'prof_x' }));
+    await act(async () => {
+      await result.current.send('do a thing');
+    });
+    unmount();
+    expect(clearProfileSession).toHaveBeenCalledWith('prof_x');
+  });
+
+  it('does NOT clear a binding when no live session ever started (no manual-launch binding stomp)', () => {
+    const { unmount } = renderHook(() => useAgentChat({ profileId: 'prof_x' }));
+    // Leaving the view before sending anything must not wipe a binding the
+    // manual-launch path may own for this profile.
+    unmount();
+    expect(clearProfileSession).not.toHaveBeenCalled();
   });
 });

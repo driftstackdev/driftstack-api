@@ -21,7 +21,7 @@ import { useAppVersion } from './lib/app-version';
 import { ConnectivityView } from './views/ConnectivityView';
 import { FirstRunWizard } from './views/FirstRunWizard';
 import { CommandPalette, type PaletteAction } from './components/CommandPalette';
-import { ToastProvider } from './lib/toasts';
+import { ToastProvider, useToasts } from './lib/toasts';
 import { AgentChatView } from './views/AgentChatView';
 import { CommandCenterView } from './views/CommandCenterView';
 import { RecipesView } from './views/RecipesView';
@@ -209,7 +209,14 @@ export function App(): JSX.Element {
   return (
     <SettingsProvider>
       <RecordingsProvider>
-        <Shell />
+        {/* ToastProvider lifted to wrap Shell so the app-boot deep-link
+            listener (in Shell, above the view tree) can push a toast when
+            "Open in desktop client" fails — previously its failure was
+            swallowed to console.warn only. Transparent for the loading /
+            first-run-wizard early returns. */}
+        <ToastProvider>
+          <Shell />
+        </ToastProvider>
       </RecordingsProvider>
     </SettingsProvider>
   );
@@ -221,6 +228,10 @@ function Shell(): JSX.Element {
   // P2 #11 — the real app version (Tauri runtime / build-time), not a hardcoded
   // literal that silently lies after a version bump.
   const appVersion = useAppVersion();
+  // Toast surface for the app-boot deep-link listener below: a dashboard
+  // "Open in desktop client" that can't open the window must SHOW the reason,
+  // not bury it in console.warn (the customer re-clicks with no idea why).
+  const { push } = useToasts();
   // 2026-06-14 — Command Center ('home') is the default landing (5→10 G4):
   // it leads with Automate (Ask AI / recipes) + an account/session overview,
   // making automation the primary surface; Profiles/Sessions are one click away.
@@ -387,10 +398,21 @@ function Shell(): JSX.Element {
                   sessionId,
                 }).then((res) => {
                   if (!res.opened) {
+                    // Keep the console line for diagnostics…
                     console.warn(
                       '[app] session-open deep-link could not open the simulator:',
                       res.reason ?? 'unknown',
                     );
+                    // …but ALSO surface it: the customer clicked "Open in
+                    // desktop client" on the dashboard expecting the iPhone
+                    // window — when it fails (signed out / session ended /
+                    // Simulator app not installed) they must see why, not have
+                    // nothing happen.
+                    push({
+                      tone: 'error',
+                      title: 'Could not open the session',
+                      body: friendlyDeepLinkReason(res.reason),
+                    });
                   }
                 });
               },
@@ -411,7 +433,7 @@ function Shell(): JSX.Element {
       cancelled = true;
       if (unlisten !== undefined) unlisten();
     };
-  }, [settings.apiKey, settings.baseUrl, activeWorkspace]);
+  }, [settings.apiKey, settings.baseUrl, activeWorkspace, push]);
 
   // While settings load, render nothing rather than flashing the wizard.
   if (loading) {
@@ -441,7 +463,7 @@ function Shell(): JSX.Element {
 
   const mode = deploymentLabel(settings.baseUrl);
   return (
-    <ToastProvider>
+    <>
       <div className="flex h-screen w-screen flex-col bg-surface-base">
         {/* 2026-05-20 — GUI panel notification overlay. Mounts at the
           shell level (above any view) so cost / incident / audit /
@@ -553,7 +575,7 @@ function Shell(): JSX.Element {
         />
         <ShortcutsCheatsheet open={cheatsheetOpen} onClose={() => setCheatsheetOpen(false)} />
       </div>
-    </ToastProvider>
+    </>
   );
 }
 
@@ -663,6 +685,31 @@ function deploymentLabel(baseUrl: string): 'cloud' | 'self-hosted' {
     // since cloud customers wouldn't typo their base URL).
     return 'self-hosted';
   }
+}
+
+/** Map an openSessionById failure `reason` to friendly, actionable toast copy.
+ *  The known reasons come from open-simulator.ts: 'not signed in', the
+ *  Simulator-app-not-installed message, the browser-preview guard, plus the
+ *  raw error message from a livekitToken mint (a closed/expired session 403s/
+ *  404s). Anything unrecognised falls back to the raw reason so the customer
+ *  still gets a clue instead of nothing. */
+export function friendlyDeepLinkReason(reason: string | undefined): string {
+  const raw = reason ?? '';
+  const r = raw.toLowerCase();
+  if (r.includes('not signed in')) {
+    return 'Sign in to the desktop app first, then open the session from the dashboard.';
+  }
+  if (r.includes('not installed')) {
+    return 'Install the Driftstack Simulator app to open sessions in a separate window.';
+  }
+  if (r.includes('browser preview') || r.includes('not running under tauri')) {
+    return 'Open sessions from the desktop app — this view can’t launch the Simulator window.';
+  }
+  if (r.includes('403') || r.includes('404') || r.includes('not found') || r.includes('expired')) {
+    return 'That session has ended — launch the profile again to start a new one.';
+  }
+  // Unknown failure: surface the raw reason (trimmed) so it isn't a dead end.
+  return raw.length > 0 ? raw : 'Something went wrong opening the session. Please try again.';
 }
 
 /**
