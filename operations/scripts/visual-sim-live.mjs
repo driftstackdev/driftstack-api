@@ -114,6 +114,39 @@ try {
   }
   await sleep(1500);
 
+  // Mimic the real app's fitWindow: the Tauri simulator window resizes ITSELF to the
+  // LIVE content aspect, so the screen-host == content aspect and the aspect-locked
+  // container fills it. The headless preview has no Tauri window, so a too-tall default
+  // viewport CLAMPS the container (h-full + max-w-full) → a letterbox the real app never
+  // shows (false negative — this masked the 2026-06-30 top-band fix verification). Resize
+  // the viewport so the screen-host matches the content aspect, exactly as fitWindow would,
+  // BEFORE screenshotting + measuring the band.
+  if (gotVideo) {
+    const fit = await page.evaluate(() => {
+      const v = document.querySelector('video');
+      const host =
+        document.querySelector('[data-component="simulator-screen-host"]') ||
+        document.querySelector('[data-component="simulator-screen"]');
+      if (!v || !host || !v.videoWidth || !v.videoHeight) return null;
+      const hb = host.getBoundingClientRect();
+      return {
+        hostW: hb.width,
+        hostH: hb.height,
+        contentAspect: v.videoWidth / v.videoHeight,
+        vh: window.innerHeight,
+      };
+    });
+    if (fit && fit.hostW > 0 && fit.contentAspect > 0) {
+      const targetHostH = fit.hostW / fit.contentAspect; // host height for a no-clamp fit
+      const chromeH = fit.vh - fit.hostH; // toolbar/status-strip above+below the host (fixed)
+      const newVH = Math.max(360, Math.round(targetHostH + chromeH));
+      if (Math.abs(newVH - fit.vh) > 4) {
+        await page.setViewportSize({ width: W, height: newVH });
+        await sleep(800); // let the layout reflow to the device-faithful window
+      }
+    }
+  }
+
   if (WANT_KB) {
     const tg = page.locator('[data-component="simulator-keyboard-toggle"]');
     if (await tg.count()) {
