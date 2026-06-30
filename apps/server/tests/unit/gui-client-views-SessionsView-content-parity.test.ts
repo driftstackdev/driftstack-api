@@ -66,8 +66,15 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
   });
 
   it("atConcurrentCap = concurrentCap !== null && concurrentActive !== null && concurrentActive >= concurrentCap — pinned so a null (unloaded accountMe) doesn't accidentally gate the button (false positive that disables Spawn for legitimate accounts)", () => {
+    // 2026-06-30 — #5/#13 (2nd proactive audit) folds the active AGENT-session count
+    // into concurrentActive (the server's concurrent_session_active counts only the
+    // driver-table sessions; a launched profile session has none), so a launched
+    // profile session shows up in this same cap math instead of being invisible.
+    // concurrentActive's null-safety is preserved: still null whenever accountMe (or
+    // its concurrent_session_active) hasn't loaded — the load-bearing invariant this
+    // test protects — only the SOURCE of the non-null value changed.
     expect(body).toMatch(
-      /const concurrentCap = accountMe\?\.concurrent_session_cap \?\? null;\s*\n?\s*const concurrentActive = accountMe\?\.concurrent_session_active \?\? null;\s*\n?\s*const atConcurrentCap =\s*\n?\s*concurrentCap !== null && concurrentActive !== null && concurrentActive >= concurrentCap;/,
+      /const concurrentCap = accountMe\?\.concurrent_session_cap \?\? null;\s*\n?\s*const concurrentActive =\s*\n?\s*accountMe\?\.concurrent_session_active !== undefined\s*\n?\s*\? accountMe\.concurrent_session_active \+ activeAgentCount\s*\n?\s*: null;\s*\n?\s*const atConcurrentCap =\s*\n?\s*concurrentCap !== null && concurrentActive !== null && concurrentActive >= concurrentCap;/,
     );
   });
 

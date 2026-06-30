@@ -62,9 +62,14 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     expect(body).not.toMatch(/LiveSessionView/);
   });
 
-  it('Provider nesting: SettingsProvider → RecordingsProvider → Shell — pinned so RecordingsProvider stays inside SettingsProvider (RecordingsProvider depends on the client from SettingsContext; flipping the order breaks recording persistence)', () => {
+  it('Provider nesting: SettingsProvider → RecordingsProvider → (ToastProvider →) Shell — pinned so RecordingsProvider stays inside SettingsProvider (RecordingsProvider depends on the client from SettingsContext; flipping the order breaks recording persistence)', () => {
+    // 2026-06-30 — ToastProvider lifted to wrap Shell (the app-boot deep-link
+    // handler surfaces a failure as a toast) — it nests INSIDE RecordingsProvider,
+    // so the load-bearing invariant (RecordingsProvider stays inside
+    // SettingsProvider, wraps all the way down to Shell) still holds; the regex
+    // now tolerates that extra layer between RecordingsProvider and Shell.
     expect(body).toMatch(
-      /<SettingsProvider>\s*\n?\s*<RecordingsProvider>\s*\n?\s*<Shell \/>\s*\n?\s*<\/RecordingsProvider>\s*\n?\s*<\/SettingsProvider>/,
+      /<SettingsProvider>\s*\n?\s*<RecordingsProvider>\s*\n?[\s\S]{0,400}?<Shell \/>\s*\n?[\s\S]{0,200}?<\/RecordingsProvider>\s*\n?\s*<\/SettingsProvider>/,
     );
   });
 

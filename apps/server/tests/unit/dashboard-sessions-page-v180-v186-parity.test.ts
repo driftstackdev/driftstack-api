@@ -140,7 +140,11 @@ describe('W749 dashboard /sessions page V-180 + V-186 parity', () => {
     expect(p).toMatch(/Both fetches run in parallel; meter updates as soon as the slower/);
     expect(p).toMatch(/of the two settles\./);
 
-    expect(p).toMatch(/const sessionsP = fetch\(apiBaseUrl \+ '\/v1\/sessions'/);
+    // 2026-06-30 — the sessions GET was factored into a reusable fetchSessions()
+    // so the Destroy handler can re-fetch the list without a full page reload; the
+    // parallel-Promise.all framing this test protects (sessionsP + usageP racing
+    // together) is unchanged, just the sessions side is now a named call.
+    expect(p).toMatch(/const sessionsP = fetchSessions\(\)/);
     expect(p).toMatch(/const usageP = fetch\(apiBaseUrl \+ '\/v1\/usage'/);
     expect(p).toMatch(/void Promise\.all\(\[sessionsP, usageP\]\)/);
   });
@@ -180,22 +184,25 @@ describe('W749 dashboard /sessions page V-180 + V-186 parity', () => {
     expect(okBranches, 'r.ok branches on both fetches').toBe(2);
   });
 
-  it("CRITICAL Active list view-action set — 'Open' + 'Destroy' (2 actions). Drift to adding 3+ actions would crowd the row; drift to dropping 'Destroy' would force customers to the SDK for what should be a 1-click admin action.", () => {
+  it("CRITICAL Active list view-action set — 'Destroy' is the ONLY action (Open was a dead #detail-<id> hash anchor — no /sessions/:id route ever existed — removed 2026-06-30). Drift to re-adding a dead link would resurrect the 'looks tappable, does nothing' bug; drift to dropping 'Destroy' would force customers to the SDK for what should be a 1-click admin action.", () => {
     const p = read(PAGE);
 
+    // 'Open' is gone for good — no detail route exists to open.
+    expect(p).not.toMatch(/#detail-/);
+    // Destroy is now a REAL wired <button data-destroy> (DELETE /v1/sessions/:id via
+    // wireDestroyButtons), not a dead #destroy-<id> hash anchor.
     expect(p).toMatch(
-      /#detail-' \+\s*\n\s+escapeHtml\(s\.id\) \+\s*\n\s+'" class="text-sm text-tk-accent hover:underline">Open<\/a>'/,
-    );
-    expect(p).toMatch(
-      /#destroy-' \+\s*\n\s+escapeHtml\(s\.id\) \+\s*\n\s+'" class="text-sm text-red-700 hover:underline">Destroy<\/a>'/,
+      /<button type="button" data-destroy="' \+\s*\n\s+escapeHtml\(s\.id\) \+\s*\n\s+'" class="text-sm text-red-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50">Destroy<\/button>'/,
     );
   });
 
-  it("CRITICAL Recent list view-action — single 'View recording' link. Matches /sessions read-only-recordings-on-dashboard convention.", () => {
+  it("CRITICAL Recent list has NO view-action — 'View recording' was a dead #replay-<id> hash anchor (no recording UI exists yet on the dashboard) — removed 2026-06-30, matching the live read-only-no-detail-route convention.", () => {
     const p = read(PAGE);
-    expect(p).toMatch(
-      /#replay-' \+\s*\n\s+escapeHtml\(s\.id\) \+\s*\n\s+'" class="text-sm text-tk-accent hover:underline">View recording<\/a>'/,
-    );
+    // The OLD dead-anchor markup is gone (a code comment documenting the removal
+    // may still mention the old #replay-<id> hash in prose, so match the actual
+    // <a href="#replay-..."> construction, not a bare substring).
+    expect(p).not.toMatch(/'#replay-' \+/);
+    expect(p).not.toMatch(/View recording<\/a>/);
   });
 
   it("CRITICAL profile_id 16-char preview pinned — `profile_id.slice(0, 16)` + '…' ellipsis. Drift to longer would crowd the row; drift to shorter would lose discrimination value across multi-profile accounts. 2026-05-21 — SSR no longer renders profile_id (skeleton-only pre-hydration; c5a50f56); only the JS-side render is pinned now.", () => {

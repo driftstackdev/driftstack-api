@@ -155,19 +155,24 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
   it('Launch gates on `busy` ONLY, not atProfileCap (free-tier fix 0ccff415): the profile cap limits CREATING profiles, not launching an existing one (launch consumes a session slot). A regression to `disabled={busy || atProfileCap}` re-greys Launch on a free-tier account (profile_cap 1) so the one allowed profile can never launch — the exact bug a self-hosted user hit. GRID + LIST(table) both route Launch through handleLaunch with launchDisabled gated on activeWorkspace only. (Duplicate removed per founder 2026-06-15.)', () => {
     expect(body).toMatch(/void handleLaunch\(profile\)/);
     // The fix's rationale comment must stay (explains why Launch is busy-only).
-    expect(body).toMatch(/NOT atProfileCap: the/);
+    // 2026-06-30 — reworded "the cap" -> "that cap" alongside the #9 concurrent-cap
+    // addition; the substance (NOT atProfileCap) is unchanged.
+    expect(body).toMatch(/NOT atProfileCap: that/);
     // The specific regression guard: the Launch button must never re-gate on the
     // profile cap. (`state.loading || atProfileCap` on the New-profile button is
     // correct + separately pinned above; this targets the `busy || atProfileCap` form.)
     expect(body).not.toMatch(/disabled=\{busy\s*\|\|\s*atProfileCap\}/);
   });
 
-  it("Launch in a team workspace is gated by ROLE (2026-06-16): the server now lets a team ADMIN launch the owner's profile (agent-sessions create honors X-Driftstack-Account for admins, mirroring driver V-326e3), so only NON-admin members are blocked. activeRole reads the membership role for the active workspace; teamLaunchBlocked = activeWorkspace !== null && activeRole !== 'admin'. GRID gates via the ProfilePhoneCard launchDisabled prop, LIST via the row-model field — both off the shared teamLaunchBlocked.", () => {
+  it("Launch in a team workspace is gated by ROLE (2026-06-16): the server now lets a team ADMIN launch the owner's profile (agent-sessions create honors X-Driftstack-Account for admins, mirroring driver V-326e3), so only NON-admin members are blocked. activeRole reads the membership role for the active workspace; teamLaunchBlocked = activeWorkspace !== null && activeRole !== 'admin'. GRID gates via the ProfilePhoneCard launchDisabled prop, LIST via the row-model field — both off the shared teamLaunchBlocked (OR'd with atConcurrentCap since 2026-06-30's #9 cap-gate).", () => {
     expect(body).toMatch(
       /const teamLaunchBlocked = activeWorkspace !== null && activeRole !== 'admin'/,
     );
-    expect(body).toContain('launchDisabled={teamLaunchBlocked}'); // grid card prop
-    expect(body).toContain('launchDisabled: teamLaunchBlocked'); // table row model
+    // 2026-06-30 — #9 (proactive audit) pre-gates Launch at the concurrent-session
+    // cap too, so both sites now OR in atConcurrentCap; teamLaunchBlocked is still
+    // present (never dropped) in both expressions.
+    expect(body).toContain('launchDisabled={teamLaunchBlocked || atConcurrentCap}'); // grid card prop
+    expect(body).toContain('launchDisabled: teamLaunchBlocked || atConcurrentCap'); // table row model
     expect(body).toMatch(/ask a team admin to launch it/);
   });
 

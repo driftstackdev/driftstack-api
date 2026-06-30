@@ -115,9 +115,12 @@ describe('apps/gui-client/src/views/CommandCenterView.tsx content parity', () =>
       "const liveNowAction = liveNow !== null && liveNow > 0 ? () => onNavigate('sessions') : undefined;",
     );
     expect(body).toContain('onClick={liveNowAction}');
-    expect(body).toContain('onClick={h.running > 0 ? onViewLive : undefined}');
-    expect(body).toContain(
-      "<SessionHealthStrip state={health} onViewLive={() => onNavigate('sessions')} />",
-    );
+    // 2026-06-30 — the SessionHealthStrip's running threshold is on its own
+    // destructured `running` prop (not an inline `h.running` accessor), and the
+    // component invocation wraps across multiple lines (extraRunning prop added) —
+    // the underlying invariant (jump to sessions only when running > 0) is unchanged.
+    expect(body).toContain('onClick={running > 0 ? onViewLive : undefined}');
+    expect(body).toContain('<SessionHealthStrip');
+    expect(body).toContain("onViewLive={() => onNavigate('sessions')}");
   });
 });
