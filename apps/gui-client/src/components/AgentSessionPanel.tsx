@@ -275,6 +275,34 @@ export function AgentSessionPanel({
   useEffect(() => {
     onPublisherRef.current?.(publisher);
   }, [publisher]);
+  // Aspect-track — onVideoDimensions in a ref (same identity-decoupling rationale) so the
+  // resize-listener effect below depends ONLY on the video element, not the callback's
+  // identity (re-attaching the listener every render would be churn).
+  const onVideoDimensionsRef = useRef(onVideoDimensions);
+  useEffect(() => {
+    onVideoDimensionsRef.current = onVideoDimensions;
+  }, [onVideoDimensions]);
+  // The <video> intrinsic (videoWidth/videoHeight) can CHANGE after the first
+  // loadedmetadata frame: the worker first publishes a frame at one aspect, then the
+  // content-only steady state settles a beat later at the real content aspect (e.g. the
+  // first frame is ~0.497 then steady ~0.593). The media element fires a `resize` event
+  // each time its intrinsic dimensions change — forward it to the parent so the simulator
+  // can re-fit the screen-host to the LIVE aspect (no stale-aspect TOP/BOTTOM letterbox).
+  // The parent's handler is thrash-guarded (it ignores pure-resolution SFU downscales that
+  // preserve the aspect), so firing on every resize is safe. Keyed on the element so it
+  // (re)attaches when the <video> mounts/remounts.
+  useEffect(() => {
+    if (videoEl === null) return;
+    const onResize = (): void => {
+      if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+        onVideoDimensionsRef.current?.(videoEl.videoWidth, videoEl.videoHeight);
+      }
+    };
+    videoEl.addEventListener('resize', onResize);
+    return () => {
+      videoEl.removeEventListener('resize', onResize);
+    };
+  }, [videoEl]);
   // P1a — the latest terminal-end flag in a ref so the connect effect's event
   // handlers (Disconnected / publisher-lost / no-publisher timer) can short-circuit
   // WITHOUT re-running the connect effect (which depends only on ws_url/token/
@@ -571,8 +599,11 @@ export function AgentSessionPanel({
           // window resizes itself to match).
           const el = e.currentTarget;
           if (el.videoWidth > 0 && el.videoHeight > 0) {
-            // Real dims drive ONLY the one-time window resize (not the box aspect,
-            // which is the fixed canonical 402:874 — see effectiveAspectRatio).
+            // Real dims drive the parent's window resize (the FIRST-frame fit). Later
+            // intrinsic changes reach the parent via the `resize` listener effect above,
+            // so a steady-state aspect that settles after this first frame still re-fits
+            // the screen-host. This does NOT change the panel's own box aspect (that's the
+            // `aspectRatio` prop the simulator drives — see effectiveAspectRatio).
             onVideoDimensions?.(el.videoWidth, el.videoHeight);
           }
         }}

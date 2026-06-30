@@ -237,6 +237,33 @@ export function simulatorWindowHeight(
   );
 }
 
+/** P1b/aspect-track — should an incoming video intrinsic (w×h) trigger a re-fit of the
+ *  screen-host to a NEW content aspect? The window-sizing + panel box are sized ONCE from
+ *  the first onLoadedMetadata frame, but the live steady-state intrinsic can settle to a
+ *  DIFFERENT aspect later (e.g. the first frame is 393×790 ≈ 0.497 then the content-only
+ *  steady state is 268×452 ≈ 0.593) → the host stays the stale aspect and the wider live
+ *  content letterboxes inside it (the founder's TOP black band). So the host must TRACK the
+ *  live intrinsic aspect, not just the first frame.
+ *
+ *  Thrash-guard: the SFU DOWNSCALES the encoded track under bandwidth (268×452 → smaller)
+ *  but those resolution changes PRESERVE the aspect — they must NOT re-fit (a per-frame
+ *  window resize would jitter the window). Only re-fit when the ASPECT itself moves beyond
+ *  `threshold` (relative). Returns false for a non-positive incoming/current aspect (caller
+ *  guards w>0/h>0; a 0 current aspect is never a real "changed" signal). Pure + exported so
+ *  the decision is unit-tested independently of the Tauri window plumbing. */
+export function shouldRefitForAspectChange(
+  currentAspect: number,
+  w: number,
+  h: number,
+  threshold = 0.015,
+): boolean {
+  if (w <= 0 || h <= 0 || currentAspect <= 0) return false;
+  const incoming = w / h;
+  // Relative difference so the threshold means the same thing at any aspect; a pure
+  // resolution downscale that preserves the aspect yields ~0 here → no re-fit.
+  return Math.abs(incoming - currentAspect) / currentAspect > threshold;
+}
+
 /** Finding #4 — the cookies/downloads LIST polls render a 200 `status:'unavailable'`
  *  result's `reason` verbatim. The server emits three INTERNAL diagnostic phrases for
  *  that state (agent-sessions.ts) that read as raw debug strings, not customer copy.
@@ -4866,7 +4893,19 @@ export function SimulatorWindow(): JSX.Element {
   // from the aspect + the fixed chrome (toolbar / bezel / status strip).
   // Works for ANY archetype — nothing per-device hardcoded.
   const handleVideoDimensions = (w: number, h: number): void => {
-    if (sizedToStreamRef.current || w <= 0 || h <= 0) return;
+    if (w <= 0 || h <= 0) return;
+    const isFirstFrame = !sizedToStreamRef.current;
+    // After the first frame the host is sized to the first-frame aspect, but the live
+    // steady-state intrinsic can settle to a DIFFERENT aspect (the content-only frame
+    // arrives a beat later, e.g. first 393×790 ≈ 0.497 then steady 268×452 ≈ 0.593). If
+    // the host keeps the stale aspect the wider live content letterboxes inside it → the
+    // founder's TOP/BOTTOM black band. So TRACK the live aspect: re-fit whenever it moves
+    // beyond the threshold. Thrash-guard: the SFU downscales the encoded track under
+    // bandwidth (268×452 → smaller) PRESERVING the aspect — shouldRefitForAspectChange
+    // returns false for those, so a pure resolution change never re-fits the window.
+    const aspectChanged =
+      !isFirstFrame && shouldRefitForAspectChange(deviceAspectRef.current, w, h);
+    if (!isFirstFrame && !aspectChanged) return;
     sizedToStreamRef.current = true;
     deviceAspectRef.current = w / h;
     // P1b — adopt the LIVE content aspect for the panel box so the <video> fills the
@@ -4881,17 +4920,21 @@ export function SimulatorWindow(): JSX.Element {
     // content viewport, e.g. 402×714) so very-early taps aren't wildly off. Once the
     // latch is set the fixed page_state dims win and this never overrides them — the
     // encoded track downscales under bandwidth (268×476 / 300×654 observed) and is
-    // unreliable for tap coords (A3 W2811 / W3004).
-    if (!hasPageStateDimsRef.current) {
+    // unreliable for tap coords (A3 W2811 / W3004). Set ONLY on the FIRST frame: a later
+    // aspect-track re-fit must NOT touch the touch space (it's decoupled from the video
+    // aspect — the fixed page_state dims own it, and the first-frame fallback already
+    // seeded it; re-seeding from a downscaled later frame would drift taps).
+    if (isFirstFrame && !hasPageStateDimsRef.current) {
       setInputLogical({
         width: Math.round(w),
         height: Math.round(h),
       });
     }
-    // Fit ONCE to the real device aspect + the current chrome, in EITHER orientation —
+    // Fit to the real device aspect + the current chrome, in EITHER orientation —
     // fitWindow's sizingAspect inverts for landscape. The old early-return on landscape
     // dropped the aspect entirely → the window stayed at the seeded 402/874 and letterboxed
     // permanently (audit #4: landscape-at-first-frame / in-place relaunch while rotated).
+    // Runs on the first frame AND on a real later aspect change (rare, thrash-guarded above).
     fitWindow(browserMode);
   };
 

@@ -96,6 +96,53 @@ describe('AgentSessionPanel overlay UX', () => {
     expect(dims).toEqual([[1320, 2868]]);
   });
 
+  // Aspect-track — the <video> intrinsic can CHANGE after the first loadedmetadata frame
+  // (the worker first publishes one aspect, then the content-only steady state settles a
+  // beat later at the real aspect). The media element fires a native `resize` event each
+  // time; the panel must FORWARD that to onVideoDimensions so the simulator re-fits the
+  // screen-host to the live aspect (the founder's TOP black band: the host stayed sized to
+  // the stale first-frame aspect → letterbox).
+  it('forwards LATER intrinsic changes via the video `resize` event (steady-state aspect)', () => {
+    connectMock.mockReset();
+    connectMock.mockReturnValueOnce(new Promise(() => {}));
+    const dims: Array<[number, number]> = [];
+    const { container } = render(
+      <AgentSessionPanel info={INFO} onVideoDimensions={(w, h) => dims.push([w, h])} />,
+    );
+    const video = container.querySelector('video') as HTMLVideoElement;
+    // First frame (loadedmetadata) at one aspect…
+    Object.defineProperty(video, 'videoWidth', { configurable: true, value: 393 });
+    Object.defineProperty(video, 'videoHeight', { configurable: true, value: 790 });
+    fireEvent.loadedMetadata(video);
+    // …then the steady-state intrinsic settles to a DIFFERENT aspect and fires `resize`.
+    Object.defineProperty(video, 'videoWidth', { configurable: true, value: 268 });
+    Object.defineProperty(video, 'videoHeight', { configurable: true, value: 452 });
+    act(() => {
+      video.dispatchEvent(new Event('resize'));
+    });
+    // Both the first-frame dims AND the later steady-state dims reach the parent.
+    expect(dims).toEqual([
+      [393, 790],
+      [268, 452],
+    ]);
+  });
+
+  it('ignores a `resize` that reports zero intrinsics (pre-metadata noise)', () => {
+    connectMock.mockReset();
+    connectMock.mockReturnValueOnce(new Promise(() => {}));
+    const dims: Array<[number, number]> = [];
+    const { container } = render(
+      <AgentSessionPanel info={INFO} onVideoDimensions={(w, h) => dims.push([w, h])} />,
+    );
+    const video = container.querySelector('video') as HTMLVideoElement;
+    Object.defineProperty(video, 'videoWidth', { configurable: true, value: 0 });
+    Object.defineProperty(video, 'videoHeight', { configurable: true, value: 0 });
+    act(() => {
+      video.dispatchEvent(new Event('resize'));
+    });
+    expect(dims).toEqual([]);
+  });
+
   // P1b — the panel box uses the `aspectRatio` prop (the simulator drives it with the
   // LIVE content aspect, e.g. 402/714) so box == screen-host == <video> → no bottom
   // black band. Passing the content aspect must set the box's style aspectRatio to it.

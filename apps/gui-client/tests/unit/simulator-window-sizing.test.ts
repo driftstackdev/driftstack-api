@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   friendlyUnavailableNote,
+  shouldRefitForAspectChange,
   simulatorChromeHeight,
   simulatorWindowHeight,
 } from '../../src/views/SimulatorWindow';
@@ -199,6 +200,52 @@ describe('#75b — keyboard overlay vs docked under the short-screen clamp', () 
     const idealDockedH = simulatorWindowHeight(phoneW, aspect, false, true);
     const avail = 1440; // a tall external display
     expect(idealDockedH).toBeLessThanOrEqual(avail - 24); // no clamp then docks below, full aspect
+  });
+});
+
+// Aspect-track — the screen-host must TRACK the live video intrinsic aspect, not just the
+// first onLoadedMetadata frame. The founder's TOP black band: the first frame was ~0.497
+// (393×790), the steady-state content was ~0.593 (268×452); the host stayed sized to the
+// stale 0.497 so the wider 0.593 content object-contained inside it → black bars top+bottom.
+// shouldRefitForAspectChange decides when a later frame re-fits — it MUST re-fit on a real
+// aspect change but NOT on the SFU's pure-resolution downscale (which preserves the aspect),
+// or the window would jitter on every bandwidth dip.
+describe('shouldRefitForAspectChange — re-fit only on a real aspect change (no thrash)', () => {
+  it('re-fits when the live aspect moves to the steady-state content aspect (the founder bug)', () => {
+    // Host sized to the first-frame 393×790 ≈ 0.4975; the steady content settles at
+    // 268×452 ≈ 0.5929 — a ~19% aspect jump → must re-fit (else top/bottom letterbox).
+    const firstAspect = 393 / 790;
+    expect(shouldRefitForAspectChange(firstAspect, 268, 452)).toBe(true);
+  });
+
+  it('does NOT re-fit for a pure-resolution SFU downscale that PRESERVES the aspect', () => {
+    // 268×452 (0.5929) downscaled to 134×226 — identical aspect → no re-fit (no jitter).
+    const aspect = 268 / 452;
+    expect(shouldRefitForAspectChange(aspect, 134, 226)).toBe(false);
+    // …and a near-exact downscale with sub-pixel rounding drift stays under the threshold.
+    expect(shouldRefitForAspectChange(aspect, 200, 337)).toBe(false); // 200/337 ≈ 0.5935
+  });
+
+  it('does NOT re-fit when the SAME intrinsic re-reports (idempotent resize events)', () => {
+    const aspect = 402 / 714;
+    expect(shouldRefitForAspectChange(aspect, 402, 714)).toBe(false);
+  });
+
+  it('honors the relative threshold boundary (default 1.5%)', () => {
+    const aspect = 0.5;
+    // +1.0% aspect change (0.505) is BELOW the 1.5% threshold → no re-fit.
+    expect(shouldRefitForAspectChange(aspect, 0.505, 1)).toBe(false);
+    // +2.0% aspect change (0.51) is ABOVE the threshold → re-fit.
+    expect(shouldRefitForAspectChange(aspect, 0.51, 1)).toBe(true);
+    // A custom (tighter) threshold flips the +1.0% case to a re-fit.
+    expect(shouldRefitForAspectChange(aspect, 0.505, 1, 0.005)).toBe(true);
+  });
+
+  it('returns false for non-positive inputs (caller already guards w>0/h>0)', () => {
+    expect(shouldRefitForAspectChange(0.5, 0, 100)).toBe(false);
+    expect(shouldRefitForAspectChange(0.5, 100, 0)).toBe(false);
+    expect(shouldRefitForAspectChange(0, 100, 200)).toBe(false); // no current aspect yet
+    expect(shouldRefitForAspectChange(0.5, -1, 100)).toBe(false);
   });
 });
 
