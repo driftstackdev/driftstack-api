@@ -1,6 +1,6 @@
 // Drizzle-backed implementation of WebhooksRepo.
 
-import { and, desc, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, lt, ne, sql } from 'drizzle-orm';
 import type {
   EndpointDeliveryCounts,
   ListDeliveriesPage,
@@ -611,6 +611,27 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     return row?.cnt ?? 0;
   }
 
+  // Backs THREE callers: customer self-service replay
+  // (WebhooksService.replayDeliveryAsCustomer), admin replay
+  // (WebhooksAdminService.replayDelivery — "regardless of current
+  // status" by design, e.g. re-firing a 'delivered' or 'failed' row),
+  // and admin DLQ-requeue (WebhooksAdminService.requeueFromDlq, which
+  // already pre-checks status==='dlq' itself before calling this).
+  // Because the first two intentionally reset a delivery from ANY
+  // terminal/queued status, this can't fence on status='dlq' the way
+  // deleteDelivery does below — that would break legitimate replays
+  // of non-DLQ rows. What it CAN'T be allowed to do is stomp a row a
+  // worker currently has claimed: claim() (above) atomically moves
+  // pending rows to 'in_flight' and only record{Delivered,Retry,Dlq}
+  // are allowed to finalize an in_flight row (those are fenced on
+  // status='in_flight' themselves). An unguarded reset here would let
+  // a replay land on an in_flight row mid-delivery, immediately
+  // re-claimable by the next claim() tick while the original attempt
+  // is still running — double-delivering the customer's endpoint and
+  // silently dropping the original attempt's outcome. Fencing OUT
+  // in_flight (rather than fencing IN dlq) preserves every legitimate
+  // replay path while closing that race; a guarded miss is a no-op
+  // (null), exactly like deleteDelivery's contract.
   async resetDeliveryToPending(deliveryId: string, at: Date): Promise<WebhookDeliveryRow | null> {
     const [row] = await this.database.db
       .update(webhookDeliveries)
@@ -624,7 +645,7 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
         deliveredAt: null,
         updatedAt: at,
       })
-      .where(eq(webhookDeliveries.id, deliveryId))
+      .where(and(eq(webhookDeliveries.id, deliveryId), ne(webhookDeliveries.status, 'in_flight')))
       .returning();
     return row ? toDeliveryRow(row) : null;
   }

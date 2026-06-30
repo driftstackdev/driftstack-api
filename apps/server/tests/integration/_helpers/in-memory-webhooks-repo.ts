@@ -403,9 +403,15 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     return Promise.resolve(cnt);
   }
 
+  // Mirrors the Drizzle repo's in_flight fence: a row a worker
+  // currently has claimed (status='in_flight') can't be reset out
+  // from under it — see the long comment on the Drizzle
+  // implementation for why this fences OUT in_flight rather than
+  // fencing IN status='dlq' (replay paths intentionally reset
+  // non-DLQ rows too).
   resetDeliveryToPending(deliveryId: string, at: Date): Promise<WebhookDeliveryRow | null> {
     const row = this.deliveries.get(deliveryId);
-    if (!row) return Promise.resolve(null);
+    if (!row || row.status === 'in_flight') return Promise.resolve(null);
     const updated: WebhookDeliveryRow = {
       ...row,
       status: 'pending',

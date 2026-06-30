@@ -32,7 +32,8 @@
 //     + nextCursor=createdAt.toISOString() convention; V-512 endpointId
 //     filter on listDlqDeliveries.
 //   • resetDeliveryToPending: 8-field reset incl. attempts:0 + null
-//     clear for response fields.
+//     clear for response fields; WHERE and(id, status != 'in_flight')
+//     so a replay can't stomp a row a worker currently has claimed.
 //   • rawToDeliveryRow: snake_case→camelCase mapping for postgres-js
 //     CTE result row.
 
@@ -56,9 +57,9 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     expect(body).toMatch(/\/\/ Drizzle-backed implementation of WebhooksRepo\./);
   });
 
-  it('imports: and/desc/eq/isNotNull/isNull/lt/sql from drizzle-orm; 9 service types; Database; accounts + webhookDeliveries + webhookEndpoints schemas', () => {
+  it('imports: and/desc/eq/isNotNull/isNull/lt/ne/sql from drizzle-orm; 9 service types; Database; accounts + webhookDeliveries + webhookEndpoints schemas', () => {
     expect(body).toMatch(
-      /import \{ and, desc, eq, isNotNull, isNull, lt, sql \} from 'drizzle-orm';/,
+      /import \{ and, desc, eq, isNotNull, isNull, lt, ne, sql \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(
       /import type \{\s*\n?\s*EndpointDeliveryCounts,\s*\n?\s*ListDeliveriesPage,\s*\n?\s*NewWebhookDeliveryInput,\s*\n?\s*NewWebhookEndpointInput,\s*\n?\s*WebhookDeliveryRow,\s*\n?\s*WebhookDeliveryStatus,\s*\n?\s*WebhookEndpointRow,\s*\n?\s*WebhookEventType,\s*\n?\s*WebhooksRepo,\s*\n?\s*\} from '\.\.\/services\/webhooks\.js';/,
@@ -178,6 +179,12 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
   it("resetDeliveryToPending: 8-field reset (status:'pending' + attempts:0 + nextAttemptAt + 4× null clears + updatedAt)", () => {
     expect(body).toMatch(
       /\.set\(\{\s*\n?\s*status: 'pending',\s*\n?\s*attempts: 0,\s*\n?\s*nextAttemptAt: at,\s*\n?\s*lastResponseStatus: null,\s*\n?\s*lastResponseExcerpt: null,\s*\n?\s*lastError: null,\s*\n?\s*deliveredAt: null,\s*\n?\s*updatedAt: at,\s*\n?\s*\}\)/,
+    );
+  });
+
+  it("resetDeliveryToPending: WHERE and(id, status != 'in_flight') — fences OUT in_flight (not IN 'dlq') so customer/admin replay of a non-DLQ row still works, but can't stomp a row a worker currently has claimed", () => {
+    expect(body).toMatch(
+      /\.where\(and\(eq\(webhookDeliveries\.id, deliveryId\), ne\(webhookDeliveries\.status, 'in_flight'\)\)\)\s*\n?\s*\.returning\(\);\s*\n?\s*return row \? toDeliveryRow\(row\) : null;/,
     );
   });
 
