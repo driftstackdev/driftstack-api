@@ -6,9 +6,9 @@
 // or skips ensureCustomerId (creates orphan checkout without a
 // Stripe customer record).
 //
-//   • V-082 framing pinned: 3-write + 1-read shape; idempotent
-//     checkout (two valid URLs returned; Stripe Checkout handles
-//     "already has sub").
+//   • V-082 framing pinned: 3-write + 1-read shape; checkout-session
+//     409s on an existing active/trialing subscription (double-
+//     subscribe guard — Stripe Checkout does NOT dedupe this for us).
 //   • Trial pack: ADR-003 $2.99 one-time one-per-account; portal
 //     requires stripe_customer_id (409 if not bootstrapped).
 //   • BillingProvider boundary: ensureCustomer + createSubscription
@@ -47,7 +47,17 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
   it('V-082 framing pinned: 2-write (checkout / portal) + 1-read (getBillingState); trial-pack op retired 2026-05-27', () => {
     expect(body).toMatch(/Billing service \(V-082\)\./);
     expect(body).toMatch(
-      /1\. Checkout-session — start a paid-tier subscription\. Idempotent\s*\n?\s*\/\/\s*from the customer's perspective: hitting create twice for the\s*\n?\s*\/\/\s*same tier returns two valid Checkout URLs \(Stripe handles the\s*\n?\s*\/\/\s*"user already has a sub" path inside Checkout\)\./,
+      /1\. Checkout-session — start a paid-tier subscription\. Rejects with\s*\n?\s*\/\/\s*a 409 \(ConflictError\) when the account already has an active or\s*\n?\s*\/\/\s*trialing subscription\./,
+    );
+    // The double-subscribe guard rationale: Stripe Checkout does NOT
+    // dedupe an existing subscription for us — this is the misconception
+    // the old comment encoded (and the actual double-billing bug it
+    // caused before the guard landed).
+    expect(body).toMatch(
+      /Stripe Checkout in `subscription` mode\s*\n?\s*\/\/\s*does NOT dedupe this on its own/,
+    );
+    expect(body).not.toMatch(
+      /Stripe handles the\s*\n?\s*\/\/\s*"user already has a sub" path inside Checkout/,
     );
     expect(body).toMatch(
       /2\. Customer portal — open Stripe Customer Portal for self-service\s*\n?\s*\/\/\s*plan change \/ payment-method update \/ cancellation\./,
@@ -55,6 +65,20 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
     expect(body).not.toMatch(/Trial-pack/);
     expect(body).toMatch(
       /Stripe API access is gated behind `BillingProvider` so tests run\s*\n?\s*\/\/\s*against an in-memory provider without touching real Stripe\./,
+    );
+  });
+
+  it('createCheckoutSession: double-subscribe guard — findCurrentSubscription + ConflictError when active|trialing, BEFORE the tier-price lookup (so it never reaches the provider)', () => {
+    expect(body).toMatch(
+      /const existingSubscription = await this\.repo\.findCurrentSubscription\(args\.accountId\);\s*\n?\s*if \(\s*\n?\s*existingSubscription !== null &&\s*\n?\s*\(existingSubscription\.status === 'active' \|\| existingSubscription\.status === 'trialing'\)\s*\n?\s*\) \{\s*\n?\s*throw new ConflictError\(\s*\n?\s*'Account already has an active subscription\. Use the customer portal to change plans instead of starting a new checkout\.',/,
+    );
+    expect(body).toMatch(
+      /resource: 'subscription',\s*\n?\s*existing_tier: existingSubscription\.tier,\s*\n?\s*existing_status: existingSubscription\.status,/,
+    );
+    // past_due / canceled / etc are intentionally NOT blocked — only
+    // active/trialing (currently-billed) subscriptions trigger the guard.
+    expect(body).toMatch(
+      /past_due \/ canceled \/ incomplete subscriptions are NOT\s*\n?\s*\/\/\s*blocked here: those aren't currently being billed/,
     );
   });
 

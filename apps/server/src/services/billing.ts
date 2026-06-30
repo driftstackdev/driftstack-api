@@ -2,10 +2,17 @@
 //
 // Two customer-facing operations:
 //
-//   1. Checkout-session — start a paid-tier subscription. Idempotent
-//      from the customer's perspective: hitting create twice for the
-//      same tier returns two valid Checkout URLs (Stripe handles the
-//      "user already has a sub" path inside Checkout).
+//   1. Checkout-session — start a paid-tier subscription. Rejects with
+//      a 409 (ConflictError) when the account already has an active or
+//      trialing subscription. Stripe Checkout in `subscription` mode
+//      does NOT dedupe this on its own — without this guard, a second
+//      checkout-session call for an already-subscribed customer (e.g. a
+//      stale "Change plan" link routing back through Checkout instead
+//      of the portal) would silently mint a SECOND concurrent
+//      subscription and double-bill the customer. Already-subscribed
+//      customers must use the customer portal for plan changes, which
+//      prorates an existing subscription in place instead of starting
+//      a new one.
 //
 //   2. Customer portal — open Stripe Customer Portal for self-service
 //      plan change / payment-method update / cancellation. Requires
@@ -130,6 +137,27 @@ export class BillingService {
   }): Promise<{ url: string; sessionId: string }> {
     const account = await this.repo.getAccount(args.accountId);
     if (account === null) throw new NotFoundError('Account not found.');
+
+    // Double-subscribe guard — see the file header. A customer with an
+    // active or trialing subscription must change plans via the portal
+    // (createPortalSession), not by starting a brand-new Checkout
+    // session. past_due / canceled / incomplete subscriptions are NOT
+    // blocked here: those aren't currently being billed, so letting the
+    // customer re-checkout to recover is the right behavior.
+    const existingSubscription = await this.repo.findCurrentSubscription(args.accountId);
+    if (
+      existingSubscription !== null &&
+      (existingSubscription.status === 'active' || existingSubscription.status === 'trialing')
+    ) {
+      throw new ConflictError(
+        'Account already has an active subscription. Use the customer portal to change plans instead of starting a new checkout.',
+        {
+          resource: 'subscription',
+          existing_tier: existingSubscription.tier,
+          existing_status: existingSubscription.status,
+        },
+      );
+    }
 
     const prices = this.config.tierPrices[args.tier];
     if (prices === undefined) {

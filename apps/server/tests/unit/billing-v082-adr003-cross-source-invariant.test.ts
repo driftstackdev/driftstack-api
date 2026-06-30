@@ -74,15 +74,28 @@ describe('W939 V-082 + ADR-003 billing cross-source invariant', () => {
     expect(p).not.toMatch(/Trial-pack/);
   });
 
-  // ─── Checkout idempotence + Stripe-handles-dup ───────────────
+  // ─── Checkout double-subscribe guard ──────────────────────────
+  //
+  // The old framing here ("Idempotent ... Stripe handles the 'user
+  // already has a sub' path inside Checkout") encoded a real
+  // misconception: Stripe Checkout in `subscription` mode does NOT
+  // dedupe against an existing subscription — it mints a second
+  // concurrent one, double-billing the customer. The comment (and the
+  // code) were fixed together: a 409 (ConflictError) on an existing
+  // active/trialing subscription, enforced server-side in
+  // createCheckoutSession, independent of dashboard UI behavior.
 
-  it("CRITICAL checkout idempotence framing — 'Idempotent from the customer's perspective: hitting create twice for the same tier returns two valid Checkout URLs (Stripe handles the \"user already has a sub\" path inside Checkout)'. The idempotent-on-our-side + Stripe-validates contract avoids client-side dup-checks.", () => {
+  it("CRITICAL checkout double-subscribe guard framing — 'Rejects with a 409 (ConflictError) when the account already has an active or trialing subscription' + 'Stripe Checkout in `subscription` mode does NOT dedupe this on its own'. Replaces the old (incorrect) 'Stripe handles the already-has-a-sub path' claim that caused a real double-billing bug.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/billing.ts'));
     expect(p).toMatch(
-      /Idempotent\s*\n\/\/\s+from the customer's perspective: hitting create twice for the/,
+      /Rejects with\s*\n\/\/\s+a 409 \(ConflictError\) when the account already has an active or\s*\n\/\/\s+trialing subscription\./,
     );
-    expect(p).toMatch(/same tier returns two valid Checkout URLs \(Stripe handles the/);
-    expect(p).toMatch(/"user already has a sub" path inside Checkout\)/);
+    expect(p).toMatch(
+      /Stripe Checkout in `subscription` mode\s*\n\/\/\s+does NOT dedupe this on its own/,
+    );
+    expect(p).not.toMatch(
+      /Stripe handles the\s*\n\/\/\s+"user already has a sub" path inside Checkout/,
+    );
   });
 
   // ─── ADR-003 trial-pack retired 2026-05-27 ───────────────────

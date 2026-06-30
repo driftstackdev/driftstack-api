@@ -20,7 +20,12 @@
 //   • V-501 withBusy disabled-while-pending double-checkout
 //     guard (no double-Stripe-session).
 //   • "All tiers run the same engine — only caps change" framing.
-//   • "Cancel anytime; pro-rated refunds within the first 14 days".
+//   • Refund-honesty copy (legal-grounded rewrite, replaces the old
+//     false automated "pro-rated refund within 14 days" promise —
+//     refunds are admin-manual only): plan stays active through the
+//     paid period, no automatic refunds, EU/UK 14-day withdrawal
+//     handled case-by-case via support@driftstack.dev, crypto
+//     non-refundable.
 //   • Change-plan-reuse comment (page reachable from /billing too).
 //   • withSidebar={false} pre-subscribed layout.
 
@@ -110,11 +115,15 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
     );
   });
 
-  it('Cancel + pro-rata refund framing pinned (2026-05-16 enhancement-review C4: vague "Cancel anytime; pro-rated refunds within the first 14 days" → explicit mechanism "Cancel or downgrade anytime; if you cancel within the first 14 days of a billing cycle we refund the unused remainder pro-rated to the day.")', () => {
+  it("Cancel + refund-honesty framing pinned (legal-grounded rewrite: the old automated '14-day pro-rated refund' promise — refunds are admin-manual only, no automated mechanism exists — replaced with 'plan stays active through the paid period, no automatic refunds for unused time, EU/UK 14-day withdrawal handled case-by-case via support@driftstack.dev, crypto non-refundable')", () => {
     expect(body).toMatch(
-      /Cancel or downgrade anytime; if you cancel within the\s+first 14 days of a billing cycle we refund the unused remainder\s+pro-rated to the day\./,
+      /Cancel or downgrade anytime — your plan stays active\s+through the end of the period you've already paid for\. We don't\s+provide automatic refunds for unused time\./,
+    );
+    expect(body).toMatch(
+      /If you're an EU\/UK\s+consumer and want to cancel within 14 days of first subscribing,\s+contact <a href="mailto:support@driftstack\.dev"[^>]*>support@driftstack\.dev<\/a>\s+and we'll handle it case by case\. Crypto payments are non-refundable\./,
     );
     expect(body).not.toMatch(/Cancel anytime; pro-rated refunds within the first 14 days\./);
+    expect(body).not.toMatch(/we refund the unused remainder\s+pro-rated to the day\./);
   });
 
   it("change-plan-reuse comment pinned (page reachable from /billing 'Change plan' too)", () => {

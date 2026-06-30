@@ -150,16 +150,48 @@ const apiBaseUrl = resolveApiBaseUrl();
       // /select-tier sets success_url to /first-session?subscribed=<tier>
       // for paid tiers; without this handler the customer arrives with no
       // confirmation their payment landed.
-      (function showPostCheckoutBanner() {
+      //
+      // Finding #19 fix — the bare ?subscribed= query param only proves
+      // Stripe Checkout REDIRECTED here; it does NOT prove the
+      // subscription is active. The webhook that actually flips the
+      // subscription mirror row to active/trialing can lag the redirect
+      // (or fail). Confirm against GET /v1/billing before claiming
+      // "Subscription active" so a lagging/failed webhook shows an
+      // honest "still activating" state instead of a false confirmation.
+      async function showPostCheckoutBanner() {
         const params = new URLSearchParams(window.location.search);
         const subscribed = params.get('subscribed');
         if (!subscribed) return;
         const postCheckout = root.querySelector('[data-post-checkout]');
         if (!postCheckout) return;
-        postCheckout.textContent =
-          'Subscription active — welcome. Create your first session below; your concurrent cap is set by your tier.';
+
+        postCheckout.textContent = 'Payment received — activating your subscription…';
         postCheckout.classList.remove('hidden');
-      })();
+        if (!token) return; // the no-token redirect below handles this case.
+
+        try {
+          const res = await fetch(apiBaseUrl + '/v1/billing', {
+            headers: { authorization: 'Bearer ' + token },
+            credentials: 'include',
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const body = await res.json();
+          const status = body && body.subscription ? body.subscription.status : null;
+          if (status === 'active' || status === 'trialing') {
+            postCheckout.textContent =
+              'Subscription active — welcome. Create your first session below; your concurrent cap is set by your tier.';
+          } else {
+            postCheckout.textContent =
+              'Payment received — your subscription is being activated, this can take a moment. ' +
+              "Refresh this page in a minute if it doesn't update on its own.";
+          }
+        } catch (_err) {
+          // Best-effort confirmation only — leave the "activating"
+          // message up rather than block the page on a transient
+          // billing-read failure.
+        }
+      }
+      void showPostCheckoutBanner();
 
       // Defensive redirect if user landed here without a token.
       if (!token) {

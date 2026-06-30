@@ -92,15 +92,19 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
     );
   });
 
-  it('CRITICAL "All tiers run the same engine" no-fingerprint/feature-gating framing pinned + 2026-05-16 enhancement-review C4 refund-clarity update. The "no fingerprint or feature gating" customer-facing claim is unchanged; the prior "Cancel anytime; pro-rated refunds within the first 14 days" replaced with mechanism-clear "Cancel or downgrade anytime; if you cancel within the first 14 days of a billing cycle we refund the unused remainder pro-rated to the day."', () => {
+  it('CRITICAL "All tiers run the same engine" no-fingerprint/feature-gating framing pinned + legal-grounded refund-honesty rewrite. The "no fingerprint or feature gating" customer-facing claim is unchanged; the false automated "14-day pro-rated refund" promise (refunds are admin-manual only — no automated mechanism exists) is replaced with: plan stays active through the paid period, no automatic refunds for unused time, EU/UK 14-day withdrawal handled case-by-case via support@driftstack.dev, crypto non-refundable.', () => {
     const p = read(PAGE);
     expect(p).toMatch(
       /All tiers run the same engine\. Only concurrent caps and profile\s*\n\s+counts change between them — there's no fingerprint or feature\s*\n\s+gating/,
     );
     expect(p).toMatch(
-      /Cancel or downgrade anytime; if you cancel within the\s+first 14 days of a billing cycle we refund the unused remainder\s+pro-rated to the day/,
+      /Cancel or downgrade anytime — your plan stays active\s+through the end of the period you've already paid for\. We don't\s+provide automatic refunds for unused time\./,
+    );
+    expect(p).toMatch(
+      /If you're an EU\/UK\s+consumer and want to cancel within 14 days of first subscribing,\s+contact <a href="mailto:support@driftstack\.dev"[^>]*>support@driftstack\.dev<\/a>\s+and we'll handle it case by case\. Crypto payments are non-refundable\./,
     );
     expect(p).not.toMatch(/Cancel anytime; pro-rated refunds within the first 14 days/);
+    expect(p).not.toMatch(/we refund the unused remainder\s+pro-rated to the day/);
   });
 
   it("CRITICAL paid-tier POST /v1/billing/checkout-session contract pinned — body {tier, billing_period:'monthly', success_url, cancel_url}. success_url lands on /first-session?subscribed=<tier>; cancel_url returns to /select-tier.", () => {
@@ -111,14 +115,17 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
     );
   });
 
-  it('CRITICAL on-checkout-response redirect to body.checkout_url. The redirect IS the Stripe handoff; drift to dropping would leave customers stuck on /select-tier with no path forward.', () => {
+  it('CRITICAL on-checkout-response redirect to body.checkout_url, guarded against a missing checkout_url (Finding #20 — a 200 with no checkout_url must throw, not leave the button stuck on "Redirecting…" forever). The redirect IS the Stripe handoff; drift to dropping would leave customers stuck on /select-tier with no path forward.', () => {
     const p = read(PAGE);
 
     // The paid-tier checkout-session flow redirects to body.checkout_url
     // (the one-time trial-pack flow was retired; crypto uses a modal).
-    const redirects = (
-      p.match(/if \(body\.checkout_url\) window\.location\.href = body\.checkout_url/g) ?? []
-    ).length;
+    // A response missing checkout_url throws instead of silently
+    // no-oping, so withBusy's .catch resets the disabled button.
+    expect(p).toMatch(
+      /if \(!body\.checkout_url\) throw new Error\('No checkout URL returned\.'\);\s*\n\s+window\.location\.href = body\.checkout_url;/,
+    );
+    const redirects = (p.match(/window\.location\.href = body\.checkout_url/g) ?? []).length;
     expect(redirects, 'body.checkout_url redirects').toBe(1);
   });
 

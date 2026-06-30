@@ -79,11 +79,19 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
     );
   });
 
-  it("Hero framing + 2026-05-16 enhancement-review C4 refund-clarity update: 'no feature gating' value-prop preserved + the 14-day pro-rated refund window stays explicit with the new mechanism-clear copy ('Cancel or downgrade anytime; if you cancel within the first 14 days of a billing cycle we refund the unused remainder pro-rated to the day.').", () => {
+  it("Hero framing + legal-grounded refund-honesty rewrite: 'no feature gating' value-prop preserved + the false '14-day pro-rated refund' promise (no automated refund mechanism exists; refunds are admin-manual only) replaced with the legally-grounded copy — plan stays active through the paid period, no automatic refunds for unused time, EU/UK 14-day withdrawal handled case-by-case via support@driftstack.dev (NOT an outright waiver — CRD Art 14(4)(b) makes an invalid waiver claim worse than none), crypto non-refundable.", () => {
     expect(body).toMatch(
-      /All tiers run the same engine\. Only concurrent caps and profile\s*\n?\s*counts change between them — there's no fingerprint or feature\s*\n?\s*gating\. Cancel or downgrade anytime; if you cancel within the\s*\n?\s*first 14 days of a billing cycle we refund the unused remainder\s*\n?\s*pro-rated to the day\./,
+      /All tiers run the same engine\. Only concurrent caps and profile\s*\n?\s*counts change between them — there's no fingerprint or feature\s*\n?\s*gating\. Cancel or downgrade anytime — your plan stays active\s*\n?\s*through the end of the period you've already paid for\. We don't\s*\n?\s*provide automatic refunds for unused time\. If you're an EU\/UK\s*\n?\s*consumer and want to cancel within 14 days of first subscribing,\s*\n?\s*contact <a href="mailto:support@driftstack\.dev" class="text-tk-accent underline">support@driftstack\.dev<\/a>\s*\n?\s*and we'll handle it case by case\. Crypto payments are non-refundable\./,
     );
+    // The old (false) automated pro-rated-refund promises must be gone —
+    // both the original vague wording and the 2026-05-16 "mechanism-
+    // clear" rewrite that still incorrectly promised an automated
+    // pro-rated refund the system never implemented (refunds are
+    // admin-manual only; see admin-accounts.ts refund-record).
     expect(body).not.toMatch(/Cancel anytime; pro-rated refunds within the first 14 days\./);
+    expect(body).not.toMatch(
+      /if you cancel within the\s*\n?\s*first 14 days of a billing cycle we refund the unused remainder/,
+    );
   });
 
   it("V-501 withBusy wrapper: btn.disabled = true + textContent = 'Redirecting…' + restore original on error + early-bail if btn.disabled — pinned so double-clicks don't fire two POST /v1/billing/* calls (which would create two Stripe checkout sessions for the same intent)", () => {

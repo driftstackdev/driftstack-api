@@ -147,6 +147,44 @@ describe('POST /v1/billing/checkout-session', () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  // Double-subscribe guard (route-level): an already-subscribed
+  // customer hitting checkout-session a second time — e.g. the
+  // dashboard's "Change plan"/"Upgrade"/"Downgrade" buttons routing
+  // through /select-tier instead of the customer portal — must be
+  // rejected, not silently mint a second concurrent Stripe
+  // subscription (double billing). Service-level status coverage
+  // (active/trialing blocked; past_due/canceled/etc allowed) lives in
+  // tests/unit/billing.test.ts; this confirms the route surfaces the
+  // ConflictError as an actual 409 HTTP response.
+  it('409 Conflict when the account already has an active subscription (double-subscribe guard)', async () => {
+    fx = await buildTestApp();
+    seedActiveSubscription(fx, { tier: 'api_builder', status: 'active' });
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/checkout-session',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { tier: 'api_scale', billing_period: 'monthly' },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.Conflict);
+    // No second Checkout session was started.
+    expect(fx.billingProvider.state.checkoutSessions).toHaveLength(0);
+  });
+
+  it('200 still allowed when the existing subscription is canceled (not currently billed)', async () => {
+    fx = await buildTestApp();
+    seedActiveSubscription(fx, { tier: 'api_builder', status: 'canceled' });
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/checkout-session',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { tier: 'api_scale', billing_period: 'monthly' },
+    });
+    expect(res.statusCode).toBe(200);
+  });
 });
 
 describe('POST /v1/billing/portal-session', () => {

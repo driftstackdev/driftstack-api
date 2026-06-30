@@ -95,9 +95,27 @@ const apiBaseUrl = resolveApiBaseUrl();
             MOCK_SUBSCRIPTION && !MOCK_SUBSCRIPTION.cancel_at_period_end ? '' : 'hidden',
           ]}
         >
-          Cancel subscription
+          Cancel in Stripe portal
         </button>
       </div>
+      {/* Finding #9 fix — the cancel button opens the same generic
+          Stripe Customer Portal as "Manage in Stripe portal" (Stripe
+          doesn't expose a one-click cancel-only deep link through this
+          flow); clicking it does NOT cancel anything by itself. The
+          button label above says "Cancel in Stripe portal" (not "Cancel
+          subscription") and this line spells out the one extra step, so
+          a customer can't believe they're cancelled the moment the
+          portal opens and then get surprised by the next renewal
+          charge. */}
+      <p
+        data-field="cancel-hint"
+        class:list={[
+          'mt-2 text-xs text-tk-ink-3',
+          MOCK_SUBSCRIPTION && !MOCK_SUBSCRIPTION.cancel_at_period_end ? '' : 'hidden',
+        ]}
+      >
+        Opens the Stripe billing portal in a new step — choose "Cancel plan" there to finish cancelling.
+      </p>
     </section>
 
     {/* 2026-05-23 — icon header on the invoices card. */}
@@ -198,6 +216,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       // banner if no token rather than silently no-oping.
       const portalBtn = root.querySelector('[data-action="portal"]');
       const cancelBtn = root.querySelector('[data-action="cancel"]');
+      const cancelHint = root.querySelector('[data-field="cancel-hint"]');
 
       function handlePortal() {
         if (!token) {
@@ -265,10 +284,14 @@ const apiBaseUrl = resolveApiBaseUrl();
             // Paid subscriber: portal + (conditionally) cancel apply.
             if (portalBtn) portalBtn.classList.remove('hidden');
             setText('plan-cta', 'Change plan');
-            // Cancel button visibility.
+            // Cancel button (+ its honesty hint) visibility.
             if (cancelBtn) {
               if (sub.cancel_at_period_end) cancelBtn.classList.add('hidden');
               else cancelBtn.classList.remove('hidden');
+            }
+            if (cancelHint) {
+              if (sub.cancel_at_period_end) cancelHint.classList.add('hidden');
+              else cancelHint.classList.remove('hidden');
             }
           } else {
             setText('sub-tier', 'No active subscription');
@@ -282,6 +305,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             // The plan CTA becomes "Choose a plan" (not "Change").
             if (portalBtn) portalBtn.classList.add('hidden');
             if (cancelBtn) cancelBtn.classList.add('hidden');
+            if (cancelHint) cancelHint.classList.add('hidden');
             setText('plan-cta', 'Choose a plan');
           }
         })
@@ -307,6 +331,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             setText('sub-status-badge', 'pending setup');
             if (portalBtn) portalBtn.classList.add('hidden');
             if (cancelBtn) cancelBtn.classList.add('hidden');
+            if (cancelHint) cancelHint.classList.add('hidden');
           } else {
             // 2026-06-24 — on a generic (non-503) failure, don't leave the
             // SSG mock subscription (fabricated tier + renew date) on screen —
@@ -325,6 +350,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             setText('sub-status-badge', 'unavailable');
             if (portalBtn) portalBtn.classList.add('hidden');
             if (cancelBtn) cancelBtn.classList.add('hidden');
+            if (cancelHint) cancelHint.classList.add('hidden');
           }
         })
         .finally(function () {

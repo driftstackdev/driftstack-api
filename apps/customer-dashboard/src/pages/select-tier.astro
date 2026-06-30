@@ -38,6 +38,13 @@ const TIERS: {
   { id: 'api_builder', label: 'API Builder', price: '$499/mo', ladder: 'API', priceCents: 49900 },
   { id: 'api_scale', label: 'API Scale', price: '$1,499/mo', ladder: 'API', priceCents: 149900 },
 ];
+
+// 2026-06-30 — tier id → human label, passed into the client script so the
+// "already subscribed" branch (see the inline script below) can render
+// "You're on the API Builder plan" instead of the raw "api_builder" id.
+const TIER_LABELS: Record<string, string> = Object.fromEntries(
+  TIERS.map((t) => [t.id, t.label]),
+);
 ---
 
 <DashboardLayout title="Select tier" withSidebar={false}>
@@ -54,9 +61,12 @@ const TIERS: {
     <p class="mt-3 text-sm text-tk-ink-2">
       All tiers run the same engine. Only concurrent caps and profile
       counts change between them — there's no fingerprint or feature
-      gating. Cancel or downgrade anytime; if you cancel within the
-      first 14 days of a billing cycle we refund the unused remainder
-      pro-rated to the day.
+      gating. Cancel or downgrade anytime — your plan stays active
+      through the end of the period you've already paid for. We don't
+      provide automatic refunds for unused time. If you're an EU/UK
+      consumer and want to cancel within 14 days of first subscribing,
+      contact <a href="mailto:support@driftstack.dev" class="text-tk-accent underline">support@driftstack.dev</a>
+      and we'll handle it case by case. Crypto payments are non-refundable.
     </p>
 
     <div
@@ -71,17 +81,19 @@ const TIERS: {
         card below upgrades to a paid tier; there is no purchase step to
         stay free. (The one-time entry pack was retired alongside the
         free tier — its checkout endpoint no longer exists.) */}
-    <!-- Free-tier note -->
-    <div class="mt-8 rounded-lg border border-tk-border bg-tk-surface p-6">
+    <!-- Free-tier note — replaced with the real current-plan summary
+         client-side when the account already has an active/trialing
+         subscription (see the inline script's applySubscriptionState). -->
+    <div class="mt-8 rounded-lg border border-tk-border bg-tk-surface p-6" data-plan-note>
       <h2 class="flex items-center gap-2 text-xl font-semibold text-tk-ink">
         <span class="flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M20 6 9 17l-5-5" />
           </svg>
         </span>
-        You're on the free plan
+        <span data-field="plan-note-title">You're on the free plan</span>
       </h2>
-      <p class="mt-2 text-sm text-tk-ink-2">
+      <p class="mt-2 text-sm text-tk-ink-2" data-field="plan-note-body">
         Free includes 1 profile, 1 concurrent session, and sessions up
         to 20 minutes each — drive them from the API or GUI, no card
         required, and it never expires. Upgrade below for more concurrency,
@@ -203,7 +215,7 @@ const TIERS: {
             Order <code data-field="crypto-order-id" class="font-mono">—</code> · once your
             transaction is detected (usually within minutes), your subscription activates
             automatically. You can close this window — your order is tracked even if you
-            navigate away.
+            navigate away. Crypto payments are final and non-refundable.
           </p>
         </div>
       </div>
@@ -215,7 +227,7 @@ const TIERS: {
     </div>
   </div>
 
-  <script is:inline define:vars={{ apiBaseUrl }}>
+  <script is:inline define:vars={{ apiBaseUrl, tierLabels: TIER_LABELS }}>
     (function () {
       const root = document.querySelector('[data-page="select-tier"]');
       if (!root) return;
@@ -256,7 +268,60 @@ const TIERS: {
           });
       }
 
+      // 2026-06-30 — double-subscribe fix (finding #1). An already-subscribed
+      // customer must change plans through the Stripe Customer Portal
+      // (in-place proration), never by starting a brand-new Checkout
+      // session — Stripe Checkout in `subscription` mode does not
+      // dedupe against an existing subscription and would mint a
+      // SECOND concurrent one (double billing). `currentSubscription`
+      // is populated best-effort from GET /v1/billing below; the
+      // server independently rejects a stray checkout-session call
+      // with 409 even if this client-side state is stale/bypassed.
+      let currentSubscription = null;
+      function isActiveSubscription(sub) {
+        return !!sub && (sub.status === 'active' || sub.status === 'trialing');
+      }
+
       const tierButtons = root.querySelectorAll('[data-action="buy-tier"]');
+      const cryptoLinksByTier = new Map();
+
+      function applySubscriptionState(sub) {
+        currentSubscription = sub;
+        if (!isActiveSubscription(sub)) return;
+
+        const label = (sub.tier && tierLabels[sub.tier]) || sub.tier;
+        const titleEl = root.querySelector('[data-field="plan-note-title"]');
+        const bodyEl = root.querySelector('[data-field="plan-note-body"]');
+        if (titleEl) titleEl.textContent = "You're on the " + label + ' plan';
+        if (bodyEl) {
+          bodyEl.textContent =
+            'Your ' +
+            label +
+            ' plan is ' +
+            sub.status +
+            (sub.cancel_at_period_end ? ' (cancels at the end of the current period)' : '') +
+            '. Pick a different tier below to switch plans — plan changes go through the' +
+            ' Stripe customer portal so any price difference is prorated automatically.';
+        }
+
+        tierButtons.forEach((btn) => {
+          const tier = btn.getAttribute('data-tier');
+          const cryptoLink = cryptoLinksByTier.get(tier);
+          if (tier === sub.tier) {
+            btn.textContent = 'Current plan';
+            btn.disabled = true;
+            btn.classList.add('opacity-60', 'cursor-not-allowed');
+            if (cryptoLink) cryptoLink.classList.add('hidden');
+          } else {
+            btn.textContent = 'Switch to this plan';
+            // Starting a NEW crypto order while already on a paid Stripe
+            // subscription is the same double-subscribe risk class — hide
+            // it too; switching plans goes through the portal above.
+            if (cryptoLink) cryptoLink.classList.add('hidden');
+          }
+        });
+      }
+
       tierButtons.forEach((btn) => {
         btn.addEventListener('click', () => {
           if (!token) {
@@ -264,6 +329,36 @@ const TIERS: {
             return;
           }
           const tier = btn.getAttribute('data-tier');
+
+          if (isActiveSubscription(currentSubscription)) {
+            if (tier === currentSubscription.tier) return; // "Current plan" — disabled, no-op.
+            withBusy(btn, () =>
+              authedFetch('/v1/billing/portal-session', { method: 'POST', body: '{}' })
+                .then((r) =>
+                  r.ok
+                    ? r.json()
+                    : r
+                        .json()
+                        .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+                )
+                .then((body) => {
+                  // Finding #20 — don't leave the button stuck on
+                  // "Redirecting…" forever if the 200 body is malformed
+                  // and has no portal_url; throw so withBusy's .catch
+                  // restores the button and the banner shows an error.
+                  if (!body.portal_url) throw new Error('No portal URL returned.');
+                  window.location.href = body.portal_url;
+                }),
+            ).catch((err) => {
+              showBanner(
+                "Couldn't open the billing portal (" +
+                  (err && err.message ? err.message : 'network error') +
+                  ').',
+              );
+            });
+            return;
+          }
+
           withBusy(btn, () =>
             authedFetch('/v1/billing/checkout-session', {
               method: 'POST',
@@ -286,12 +381,27 @@ const TIERS: {
                     ),
                   );
                 }
+                // 2026-06-30 — surface a 409 double-subscribe rejection (the
+                // server-side backstop for finding #1) with an honest
+                // message rather than a bare "HTTP 409".
+                if (r.status === 409) {
+                  return Promise.reject(
+                    new Error(
+                      'You already have an active subscription. Use the billing portal to change plans.',
+                    ),
+                  );
+                }
                 return r.ok
                   ? r.json()
                   : r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
               })
               .then((body) => {
-                if (body.checkout_url) window.location.href = body.checkout_url;
+                // Finding #20 — a 200 with no checkout_url (malformed/
+                // altered response) must not leave the button stuck on
+                // "Redirecting…" with no way to retry; throw so
+                // withBusy's .catch resets it and shows an error.
+                if (!body.checkout_url) throw new Error('No checkout URL returned.');
+                window.location.href = body.checkout_url;
               }),
           ).catch((err) => {
             showBanner(
@@ -309,12 +419,25 @@ const TIERS: {
       // /v1/billing/crypto-checkout with the tier's price_cents. All
       // tiers clear NowPayments' $19.16 USD-equivalent floor.
       const cryptoBtns = root.querySelectorAll('[data-action="buy-tier-crypto"]');
+      cryptoBtns.forEach((btn) => {
+        const tier = btn.getAttribute('data-tier');
+        if (tier) cryptoLinksByTier.set(tier, btn);
+      });
       const cryptoModal = root.querySelector('[data-crypto-modal]');
       const cryptoLoading = root.querySelector('[data-crypto-modal-loading]');
       const cryptoError = root.querySelector('[data-crypto-modal-error]');
       const cryptoReady = root.querySelector('[data-crypto-modal-ready]');
       const cryptoCloseBtn = root.querySelector('[data-crypto-modal-close]');
       const cryptoCopyBtn = root.querySelector('[data-crypto-copy]');
+
+      // Finding #8 — re-clicking "pay with crypto" must not mint a
+      // SECOND order with a different payment address. cryptoOrderCache
+      // remembers the already-minted order per tier (re-showing the
+      // SAME address on a repeat open); cryptoRequestInFlight blocks a
+      // second mint while one is already in flight (the modal is a
+      // singleton, so only one mint can be meaningfully in progress).
+      const cryptoOrderCache = new Map();
+      let cryptoRequestInFlight = false;
 
       function setCryptoText(key, value) {
         const el = root.querySelector('[data-field="' + key + '"]');
@@ -344,16 +467,37 @@ const TIERS: {
             showBanner('Sign in to pay with crypto.');
             return;
           }
+          if (cryptoRequestInFlight) return; // guard: a mint is already in flight.
           const tier = btn.getAttribute('data-tier');
           const tierLabel = btn.getAttribute('data-tier-label') ?? tier;
           const priceCents = Number(btn.getAttribute('data-tier-price-cents'));
           if (!tier || !Number.isFinite(priceCents)) return;
           if (!cryptoLoading || !cryptoError || !cryptoReady) return;
           setCryptoText('crypto-tier-label', tierLabel);
-          cryptoLoading.classList.remove('hidden');
           cryptoError.classList.add('hidden');
+
+          // Re-opening for a tier that already minted an order this page
+          // load re-shows the SAME address rather than starting a second
+          // order (each mint gets its own distinct address — two open
+          // orders for one tier is a real double-payment risk since
+          // crypto payments are non-refundable).
+          const cached = cryptoOrderCache.get(tier);
+          if (cached) {
+            cryptoLoading.classList.add('hidden');
+            setCryptoText('crypto-amount', cached.payAmount);
+            setCryptoText('crypto-currency', cached.payCurrency);
+            setCryptoText('crypto-address', cached.paymentAddress);
+            setCryptoText('crypto-order-id', cached.orderId);
+            cryptoReady.classList.remove('hidden');
+            showCryptoModal();
+            return;
+          }
+
+          cryptoLoading.classList.remove('hidden');
           cryptoReady.classList.add('hidden');
           showCryptoModal();
+          cryptoRequestInFlight = true;
+          btn.disabled = true;
           try {
             const idempotencyKey =
               typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -385,6 +529,12 @@ const TIERS: {
               );
               return;
             }
+            cryptoOrderCache.set(tier, {
+              payAmount: String(body.pay_amount),
+              payCurrency: body.pay_currency,
+              paymentAddress: body.payment_address,
+              orderId: body.order_id,
+            });
             cryptoLoading.classList.add('hidden');
             setCryptoText('crypto-amount', String(body.pay_amount));
             setCryptoText('crypto-currency', body.pay_currency);
@@ -393,6 +543,9 @@ const TIERS: {
             cryptoReady.classList.remove('hidden');
           } catch (err) {
             showCryptoError(err && err.message ? err.message : 'network error');
+          } finally {
+            cryptoRequestInFlight = false;
+            btn.disabled = false;
           }
         });
       });
@@ -417,6 +570,23 @@ const TIERS: {
             /* swallow */
           }
         });
+      }
+
+      // Finding #1 — load the account's live billing state so an
+      // already-subscribed customer sees "Switch to this plan" /
+      // portal-routed CTAs instead of fresh "Start <tier>" Checkout
+      // buttons. Best-effort: a failed/unconfigured read just leaves
+      // the default free-tier UI up — the server-side 409 guard on
+      // checkout-session is the real backstop either way.
+      if (token) {
+        authedFetch('/v1/billing', { method: 'GET' })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((body) => {
+            if (body && body.subscription) applySubscriptionState(body.subscription);
+          })
+          .catch(() => {
+            /* best-effort; see comment above */
+          });
       }
     })();
   </script>
