@@ -156,6 +156,24 @@ try {
     v.sideBandSuspected = v.rightGapPx > 6 || m.video.x - m.screen.x > 6;
     v.bottomBandSuspected = v.bottomGapPx > 8;
   }
+  // TOP/BOTTOM letterbox detection (the founder's "black space at the top"): with
+  // object-contain, a screen-host sized to the WRONG aspect bar-boxes the real content —
+  // black bars ABOVE + below it. Compare the video INTRINSIC aspect (the true captured
+  // content) to the element aspect; a correctly-sized host matches → ~0 letterbox. This
+  // is the class verify-all previously MISSED — it only checked the element-vs-screen gap
+  // (sideBand/bottomBand), never the content-vs-element letterbox INSIDE the <video>.
+  if (m.video && m.videoIntrinsic && m.videoIntrinsic.vh > 0 && m.videoIntrinsic.vw > 0) {
+    const elementAspect = m.video.w / m.video.h;
+    const intrinsicAspect = m.videoIntrinsic.vw / m.videoIntrinsic.vh;
+    v.elementAspect = Math.round(elementAspect * 1000) / 1000;
+    v.intrinsicAspect = Math.round(intrinsicAspect * 1000) / 1000;
+    if (intrinsicAspect > elementAspect)
+      v.letterboxTopBottomPx = Math.round((m.video.h - m.video.w / intrinsicAspect) / 2);
+    else if (intrinsicAspect < elementAspect)
+      v.letterboxLeftRightPx = Math.round((m.video.w - m.video.h * intrinsicAspect) / 2);
+    // a top/bottom bar > 8px is a visible black band (the founder's top-black regression)
+    v.topBandSuspected = (v.letterboxTopBottomPx || 0) > 8;
+  }
 
   // 3. drive a tap THROUGH the GUI's pointer→viewport mapping (which uses inputLogical
   // = the box's page_state logicalContentWidth/Height — the durable fix) at a chosen

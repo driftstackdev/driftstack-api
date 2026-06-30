@@ -52,6 +52,9 @@ echo "--- [3/3] black-band + layout (visual-sim-live, example.com) ---"
 V2=$(run_visual "" "https://example.com")
 echo "$V2" | grep -qaiE '"bottomBandSuspected": *false' && ok "no-black-band" "video fills, no bottom band" || bad "no-black-band" "bottom band suspected"
 echo "$V2" | grep -qaiE '"sideBandSuspected": *false'   && ok "no-side-band"  "no side band"               || bad "no-side-band"  "side band suspected"
+# top/bottom letterbox INSIDE the <video> (screen-host aspect ≠ captured-content aspect) —
+# the founder's "black space at the top". Caught here so it never reaches their screen again.
+echo "$V2" | grep -qaiE '"topBandSuspected": *false'    && ok "no-top-band"   "no top letterbox (host aspect matches content)" || bad "no-top-band" "TOP letterbox — screen-host aspect ≠ content"
 
 echo "=== verdict: ${pass} pass / ${fail} fail ==="
 [ "$fail" -eq 0 ] && { echo "ALL GREEN — safe to ask the founder to test."; exit 0; }
