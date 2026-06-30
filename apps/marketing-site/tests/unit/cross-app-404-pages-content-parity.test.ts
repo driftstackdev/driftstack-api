@@ -14,7 +14,7 @@
 //     CTA.
 //   • status-site: StatusLayout + status-site-specific framing
 //     ("only hosts a single overview page plus per-incident
-//     pages under /incidents/<id>") + ←-Back-to-overview link.
+//     pages under /incident?id=<id>") + ←-Back-to-overview link.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -96,9 +96,9 @@ describe('W379.B cross-app 404 pages content parity', () => {
       expect(body).toMatch(/<StatusLayout title="404 · Driftstack status">/);
     });
 
-    it('status-site-specific copy: "only hosts a single overview page plus per-incident pages under /incidents/<id>"', () => {
+    it('status-site-specific copy: "only hosts a single overview page plus per-incident pages under /incident?id=<id>"', () => {
       expect(body).toMatch(
-        /The status site only hosts a single overview page plus per-incident pages\s+under <code class="font-mono text-sm text-ink-secondary">\/incidents\/&lt;id&gt;<\/code>/,
+        /The status site only hosts a single overview page plus per-incident pages\s+under <code class="font-mono text-sm text-ink-secondary">\/incident\?id=&lt;id&gt;<\/code>/,
       );
     });
 

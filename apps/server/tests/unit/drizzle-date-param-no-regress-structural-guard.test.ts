@@ -93,7 +93,17 @@ const ALLOW_LIST: Record<string, string[]> = {
     'webhookEndpoints.consecutiveFailures',
     'webhookEndpoints.events',
     'eventType',
+    // #79 rotation grace-window guard — column REFERENCES (render as SQL
+    // identifiers at build time, not JS Date values): the guard SQL is
+    // `secret_prev_expires_at IS NULL OR secret_prev_expires_at <= force_rotated_at`.
+    'webhookEndpoints.secretPrevExpiresAt',
+    'webhookEndpoints.forceRotatedAt',
   ],
+  // #79 Stripe out-of-order recency guard — `subscriptions.updatedAt <=
+  // excluded.updated_at` in the onConflictDoUpdate setWhere. A column REFERENCE
+  // (stored row) compared to the EXCLUDED pseudo-table column, NOT a JS Date
+  // value bound into the template. Safe.
+  'apps/server/src/db/stripe-webhooks-repo.ts': ['subscriptions.updatedAt'],
   // §8.1.b atlas-priority repo getStats uses sinceIso (string).
   'apps/server/src/db/atlas-priority-events-repo.ts': ['sinceIso'],
   // schema.ts partial-index expressions reference Drizzle COLUMNS via
