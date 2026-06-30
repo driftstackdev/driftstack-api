@@ -27,6 +27,24 @@ const apiBaseUrl = resolveApiBaseUrl();
     >
     </div>
 
+    {/* 2026-06-30 — team membership (invite/remove/list) is always
+        self-scoped — it does NOT honor the "Acting as" picker (see
+        the X-Driftstack-Account OpenAPI note: "/v1/team/* do NOT
+        honor the header"). Without this notice, a member who flips
+        "Acting as <owner>" and opens /team sees the layout's global
+        banner promise that "all actions read + write that team's
+        resources" while this page silently manages THEIR OWN team
+        instead — contradicting the banner with no error. JS below
+        reveals this only while acting-as is active. */}
+    <div
+      data-self-scoped-notice
+      class="mb-6 hidden rounded-lg border border-tk-accent/30 bg-tk-accent/10 px-4 py-3 text-sm text-tk-ink-2"
+      role="status"
+    >
+      Team membership always manages <strong>your own</strong> account, even while "Acting as"
+      another account is selected above — the members and invites below are yours, not theirs.
+    </div>
+
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
         <p class="text-sm text-tk-ink-3">Account-scoped team</p>
@@ -156,6 +174,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const root = document.querySelector('[data-page="team"]');
       if (!root) return;
       const banner = root.querySelector('[data-banner]');
+      const selfScopedNotice = root.querySelector('[data-self-scoped-notice]');
       const membersList = root.querySelector('[data-members-list]');
       const invitesList = root.querySelector('[data-invites-list]');
       const showInviteBtn = root.querySelector('[data-show-invite]');
@@ -441,6 +460,24 @@ const apiBaseUrl = resolveApiBaseUrl();
             });
         });
       }
+
+      // 2026-06-30 — team membership is always self-scoped (it does
+      // not honor the "Acting as" header — see the OpenAPI X-Driftstack-
+      // Account note). Surface that explicitly whenever the global
+      // picker has an active selection, so this page never silently
+      // contradicts the layout's "Acting as <owner>" banner.
+      function revealSelfScopedNoticeIfActingAs() {
+        if (!selfScopedNotice) return;
+        let actingAs = '';
+        try {
+          actingAs = localStorage.getItem('ds_act_as_account') || '';
+        } catch (_) {
+          actingAs = '';
+        }
+        if (actingAs) selfScopedNotice.classList.remove('hidden');
+        else selfScopedNotice.classList.add('hidden');
+      }
+      revealSelfScopedNoticeIfActingAs();
 
       refresh();
     })();

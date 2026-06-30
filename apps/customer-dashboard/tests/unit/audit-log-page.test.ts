@@ -175,6 +175,32 @@ describe('customer-dashboard Audit Log (audit-log.astro) behaviour', () => {
     expect(text(window, '[data-banner]')).toContain("Couldn't load audit log");
   });
 
+  it('fetch failure on initial load: clears the SSR skeleton + shows a retry row instead of pulsing forever', async () => {
+    let calls = 0;
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: () => {
+        calls++;
+        return json({ detail: 'nope' }, 500);
+      },
+    });
+    win = window;
+    await flush();
+    // The skeleton <li>s (no data-action) are gone — replaced by a
+    // single retry row, not left pulsing forever.
+    expect(window.document.querySelectorAll('[data-list] > li').length).toBe(1);
+    const retryBtn = window.document.querySelector(
+      '[data-action="retry-audit-log"]',
+    ) as HTMLButtonElement | null;
+    expect(retryBtn).toBeTruthy();
+    expect(isHidden(window, '[data-list]')).toBe(false);
+    // Clicking retry re-fetches the first page.
+    retryBtn?.click();
+    await flush();
+    expect(calls).toBe(2);
+    expect(fetchCalls.length).toBe(2);
+  });
+
   it('cursor pagination: Load more fetches the next page with the cursor and appends', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',

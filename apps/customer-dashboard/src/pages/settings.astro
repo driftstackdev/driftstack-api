@@ -996,8 +996,9 @@ const EMAIL_EVENTS = [
           });
       }
 
-      function saveEmailPref(eventType, optedIn) {
+      function saveEmailPref(eventType, optedIn, input) {
         if (!token) return;
+        if (input) input.disabled = true;
         authedFetch('/v1/account/email-preferences', {
           method: 'PUT',
           body: JSON.stringify({ event_type: eventType, opted_in: optedIn }),
@@ -1011,8 +1012,16 @@ const EMAIL_EVENTS = [
             setTimeout(hideBanner, 2000);
           })
           .catch((err) => {
+            // The checkbox already flipped optimistically on 'change' —
+            // revert it so the displayed state matches what the server
+            // actually has, instead of silently lying about whether the
+            // customer is opted in/out of this email.
+            if (input) input.checked = !optedIn;
             const msg = err && err.message ? err.message : 'network error';
             showBanner("Couldn't save email preference (" + msg + ').');
+          })
+          .finally(() => {
+            if (input) input.disabled = false;
           });
       }
 
@@ -1026,7 +1035,7 @@ const EMAIL_EVENTS = [
           )
             return;
           const eventType = target.getAttribute('data-event-type');
-          if (eventType) saveEmailPref(eventType, target.checked);
+          if (eventType) saveEmailPref(eventType, target.checked, target);
         });
       }
 
@@ -1871,11 +1880,21 @@ const EMAIL_EVENTS = [
       }
 
       function verifyEnrollment() {
+        // Guard against a double-click firing two POSTs with the same
+        // TOTP code while the first is still in flight — the second
+        // would replay-fail ("Verify failed") even though enrollment
+        // already succeeded. Same disabled-while-pending pattern as
+        // profileSaveBtn / byokTestBtn above.
+        if (mfaVerifyBtn && mfaVerifyBtn.disabled) return;
         clearMfaError();
         const code = (mfaVerifyInput && mfaVerifyInput.value || '').trim();
         if (!/^\d{6}$/.test(code)) {
           showMfaError('Enter a 6-digit code from your authenticator.');
           return;
+        }
+        if (mfaVerifyBtn) {
+          mfaVerifyBtn.disabled = true;
+          mfaVerifyBtn.textContent = 'Verifying…';
         }
         authedFetch('/v1/account/mfa/verify', {
           method: 'POST',
@@ -1904,7 +1923,13 @@ const EMAIL_EVENTS = [
             showHidden(mfaRecoverySection, false);
             showHidden(mfaEnrollStep, true);
           })
-          .catch((err) => showMfaError(err.message || 'Verify failed.'));
+          .catch((err) => showMfaError(err.message || 'Verify failed.'))
+          .finally(() => {
+            if (mfaVerifyBtn) {
+              mfaVerifyBtn.disabled = false;
+              mfaVerifyBtn.textContent = 'Confirm + finish';
+            }
+          });
       }
 
       function copyRecoveryCodes() {

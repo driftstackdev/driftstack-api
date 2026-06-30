@@ -495,6 +495,29 @@ const FILTER_OPTIONS = [
         return apiBaseUrl + '/v1/account/audit-log?' + params.join('&');
       }
 
+      // A failed initial fetch left the SSR skeleton <li>s pulsing
+      // forever — the success-only render path is the only one that
+      // ever replaces them. Clear the skeleton + show an explicit
+      // retry row so the page doesn't look permanently "loading".
+      // Only applies to a fresh (cursor-less) load; a failed
+      // load-more page leaves the already-rendered entries in place.
+      function renderLoadError() {
+        if (!list || !empty) return;
+        empty.classList.add('hidden');
+        list.classList.remove('hidden');
+        list.innerHTML =
+          '<li class="px-6 py-12 text-center text-sm text-tk-ink-3">' +
+          "Couldn't load the audit log. " +
+          '<button type="button" data-action="retry-audit-log" class="text-tk-accent underline">Retry</button>' +
+          '</li>';
+        const retryBtn = list.querySelector('[data-action="retry-audit-log"]');
+        if (retryBtn)
+          retryBtn.addEventListener('click', function () {
+            fetchPage(null);
+          });
+        setLoadMoreVisible(false);
+      }
+
       function fetchPage(cursor) {
         const token = getToken();
         if (!token) {
@@ -504,6 +527,7 @@ const FILTER_OPTIONS = [
           setLoadMoreVisible(false);
           return Promise.resolve();
         }
+        const isFreshLoad = !cursor;
         return fetch(buildUrl(cursor), {
           headers: {
             authorization: 'Bearer ' + token,
@@ -542,6 +566,7 @@ const FILTER_OPTIONS = [
             updateCount();
           })
           .catch(function (err) {
+            if (isFreshLoad) renderLoadError();
             showBanner(
               "Couldn't load audit log (" +
                 (err && err.message ? err.message : 'network error') +

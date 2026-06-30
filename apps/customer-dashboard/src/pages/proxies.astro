@@ -372,6 +372,27 @@ const apiBaseUrl = resolveApiBaseUrl();
           .join('');
       }
 
+      // A transient load failure (5xx / 401 / network blip) is NOT the
+      // same thing as "you have zero saved proxies" — these are egress
+      // credentials the customer relies on, and rendering the empty
+      // state on a load error reads as data loss. Reserve renderList's
+      // empty branch strictly for a successful 200 with an empty array;
+      // a failed fetch renders this distinct retry-capable error row
+      // instead (matches the sessions.astro pattern of never zeroing
+      // the list to a fabricated empty state on failure).
+      function renderLoadError() {
+        if (!list || !empty) return;
+        list.classList.add('hidden');
+        empty.classList.remove('hidden');
+        empty.innerHTML =
+          '<div class="rounded-lg border border-tk-border bg-tk-surface px-4 py-3 text-sm text-tk-ink-2">' +
+          "Couldn't load your saved proxies. " +
+          '<button type="button" data-action="retry-proxies" class="text-tk-accent underline">Retry</button>' +
+          '</div>';
+        const retryBtn = empty.querySelector('[data-action="retry-proxies"]');
+        if (retryBtn) retryBtn.addEventListener('click', () => fetchList());
+      }
+
       function escapeHtml(s) {
         return String(s ?? '').replace(/[&<>"']/g, (c) =>
           c === '&'
@@ -407,7 +428,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           const body = await res.json();
           renderList(body.data || []);
         } catch (err) {
-          renderList([]);
+          renderLoadError();
           showBanner('Could not load saved proxies (' + ((err && err.message) || 'network') + ').');
         } finally {
           // 2026-05-21 — same opacity-gate signal (success / failure
@@ -426,6 +447,17 @@ const apiBaseUrl = resolveApiBaseUrl();
       function readString(id) {
         const el = root.querySelector('#' + id);
         return el && el.value ? el.value.trim() : '';
+      }
+      // After a successful save the form fields stay populated with no
+      // server-side dedup on (scheme, host, port) — a customer who
+      // misses the small 'Saved.' status line will likely click Save
+      // again and create a duplicate. Clear the relevant inputs once
+      // the list has refreshed so 'Saved.' reads as a completed action.
+      function clearFields(ids) {
+        ids.forEach((id) => {
+          const el = root.querySelector('#' + id);
+          if (el) el.value = '';
+        });
       }
 
       saveBtn?.addEventListener('click', async () => {
@@ -467,6 +499,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           } else {
             setStatus('Saved.', 'success');
             await fetchList();
+            clearFields(['proxy-label', 'proxy-host', 'proxy-port', 'proxy-username', 'proxy-password']);
           }
         } catch (err) {
           setStatus(
@@ -564,6 +597,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           } else {
             setOvpnStatus('Saved.', 'success');
             await fetchList();
+            clearFields(['ovpn-label', 'ovpn-blob', 'ovpn-username', 'ovpn-password']);
           }
         } catch (err) {
           setOvpnStatus(
@@ -673,6 +707,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           } else {
             setWgStatus('Saved.', 'success');
             await fetchList();
+            clearFields(['wg-label', 'wg-conf']);
           }
         } catch (err) {
           setWgStatus('Could not reach the API (' + ((err && err.message) || 'network') + ').', 'error');

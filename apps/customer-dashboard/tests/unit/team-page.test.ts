@@ -31,6 +31,7 @@ interface MockFetchCall {
 interface SetUpOpts {
   token?: string;
   confirmReturns?: boolean;
+  actAsAccount?: string;
   route: (call: MockFetchCall) => Response;
 }
 
@@ -59,6 +60,8 @@ function setUpDom(
     return Promise.resolve(opts.route(call));
   };
   if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
+  if (opts.actAsAccount !== undefined)
+    window.localStorage.setItem('ds_act_as_account', opts.actAsAccount);
   const __cr = opts.confirmReturns ?? true;
   // @ts-expect-error — driftstackConfirm is injected by DashboardLayout (not eval'd here)
   window.driftstackConfirm = () => Promise.resolve(__cr);
@@ -150,6 +153,31 @@ describe('team page — local integration', () => {
     win = null;
   });
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
+
+  it('"Acting as" notice is hidden by default (no global act-as selection)', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter([], []),
+    });
+    win = window;
+    await flush();
+    expect(
+      window.document.querySelector('[data-self-scoped-notice]')?.classList.contains('hidden'),
+    ).toBe(true);
+  });
+
+  it('"Acting as" notice is revealed when ds_act_as_account is set — team membership never silently claims to manage the acted-as account while the global banner says otherwise', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      actAsAccount: 'acc_00000000-0000-4000-8000-000000000099',
+      route: makeRouter([], []),
+    });
+    win = window;
+    await flush();
+    expect(
+      window.document.querySelector('[data-self-scoped-notice]')?.classList.contains('hidden'),
+    ).toBe(false);
+  });
 
   it('empty: both lists render their inline empty states', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {

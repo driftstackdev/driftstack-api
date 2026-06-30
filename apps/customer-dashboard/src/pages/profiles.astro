@@ -1,6 +1,6 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import { MOCK_PROFILES, MOCK_USAGE_SUMMARY } from '../data/mocks.ts';
+import { MOCK_PROFILES, MOCK_USAGE_SUMMARY, TIER_DISPLAY_NAMES } from '../data/mocks.ts';
 import {
   ARCHETYPE_REGISTRY,
   LOCKED_ARCHETYPE_ID,
@@ -91,7 +91,7 @@ const IMPORT_EXPORT_ENABLED = false;
 
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
-        <p class="text-sm text-tk-ink-3" data-field="tier-line">{MOCK_USAGE_SUMMARY.tier} tier</p>
+        <p class="text-sm text-tk-ink-3" data-field="tier-line">{TIER_DISPLAY_NAMES[MOCK_USAGE_SUMMARY.tier] || MOCK_USAGE_SUMMARY.tier} tier</p>
         <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Profiles</h1>
         <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
           Persistent identity slots that survive across sessions. Each profile carries its own
@@ -563,7 +563,7 @@ const IMPORT_EXPORT_ENABLED = false;
  — progressive-enhancement script. Live-fetches /v1/profiles +
     /v1/account/me; wires create + delete actions.
   -->
-  <script is:inline define:vars={{ apiBaseUrl, archetypeLabels: ARCHETYPE_LABELS, storageCaps: TIER_STORAGE_BYTES_CAP, storageSoftFraction: STORAGE_SOFT_WARN_FRACTION, cloneEnabled: CLONE_ENABLED, importExportEnabled: IMPORT_EXPORT_ENABLED }}>
+  <script is:inline define:vars={{ apiBaseUrl, archetypeLabels: ARCHETYPE_LABELS, storageCaps: TIER_STORAGE_BYTES_CAP, storageSoftFraction: STORAGE_SOFT_WARN_FRACTION, cloneEnabled: CLONE_ENABLED, importExportEnabled: IMPORT_EXPORT_ENABLED, tierDisplayNames: TIER_DISPLAY_NAMES }}>
     (function () {
       const root = document.querySelector('[data-page="profiles"]');
       if (!root) return;
@@ -608,6 +608,13 @@ const IMPORT_EXPORT_ENABLED = false;
       function fmtIso(iso) {
         if (!iso) return '—';
         return new Date(iso).toISOString().slice(0, 10);
+      }
+      // Map the backend tier id to its human plan name (Personal / Team /
+      // Agency / API Starter …) so the customer never sees a raw id like
+      // "solo_manual" — matches overview/billing/usage/subscription.
+      // Falls back to the id if an unknown tier appears.
+      function tierLabel(t) {
+        return (t && tierDisplayNames[t]) || t || '—';
       }
       // doc-150 item 5/6 — human-readable byte size. null/undefined → "—" (never
       // saved). BINARY units (1024-based, KiB/MiB/GiB) so the quota cap renders
@@ -845,6 +852,13 @@ const IMPORT_EXPORT_ENABLED = false;
             hideBanner();
           })
           .catch((err) => {
+            // A failed initial load left the SSR skeleton <li>s pulsing
+            // forever (the success-only render path never ran) — the
+            // page looked permanently "loading" with only a thin
+            // banner explaining the failure. Clear the skeleton + show
+            // an explicit retry row so the dominant visual state
+            // matches reality.
+            renderLoadError();
             showBanner(
               "Couldn't load profiles (" +
                 (err && err.message ? err.message : 'network error') +
@@ -992,6 +1006,19 @@ const IMPORT_EXPORT_ENABLED = false;
           if (storageBar) storageBar.style.width = '0%';
         }
         storageLine.classList.remove('hidden');
+      }
+
+      function renderLoadError() {
+        if (!list || !empty) return;
+        empty.classList.add('hidden');
+        list.classList.remove('hidden');
+        list.innerHTML =
+          '<li class="px-6 py-12 text-center text-sm text-tk-ink-3">' +
+          "Couldn't load profiles. " +
+          '<button type="button" data-action="retry-profiles" class="text-tk-accent underline">Retry</button>' +
+          '</li>';
+        const retryBtn = list.querySelector('[data-action="retry-profiles"]');
+        if (retryBtn) retryBtn.addEventListener('click', refresh);
       }
 
       function renderProfiles(profiles) {
@@ -1220,7 +1247,7 @@ const IMPORT_EXPORT_ENABLED = false;
         const countEl = root.querySelector('[data-field="count"]');
         const limitEl = root.querySelector('[data-field="limit"]');
         const usageLine = root.querySelector('[data-field="usage-line"]');
-        if (tierLine) tierLine.textContent = (me.tier || '—') + ' tier';
+        if (tierLine) tierLine.textContent = tierLabel(me.tier) + ' tier';
         if (countEl) countEl.textContent = String(count);
         const cap = me.profile_cap;
         if (limitEl) {

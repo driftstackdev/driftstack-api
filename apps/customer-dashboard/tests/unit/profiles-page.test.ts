@@ -163,6 +163,32 @@ describe('profiles page — local integration', () => {
   });
   const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
 
+  it('initial load failure: clears the SSR skeleton + shows a retry row instead of pulsing forever', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/profiles(\?|$)/.test(call.url)) return json({ detail: 'nope' }, 500);
+        if (/\/v1\/account\/me$/.test(call.url)) return json({}, 500);
+        if (/\/v1\/profiles\/trash$/.test(call.url)) return json({ data: [] });
+        return json({ data: [] });
+      },
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-banner]')).toBe(false);
+    expect(rowCount(window)).toBe(1);
+    const retryBtn = window.document.querySelector(
+      '[data-action="retry-profiles"]',
+    ) as HTMLButtonElement | null;
+    expect(retryBtn).toBeTruthy();
+    expect(isHidden(window, '[data-list]')).toBe(false);
+    expect(isHidden(window, '[data-empty]')).toBe(true);
+    const before = fetchCalls.length;
+    retryBtn?.click();
+    await flush();
+    expect(fetchCalls.length).toBeGreaterThan(before);
+  });
+
   it('empty list: shows the empty state, hides the list', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
@@ -214,6 +240,24 @@ describe('profiles page — local integration', () => {
     expect(text).toContain('iPhone 15 Pro / iOS 17.5 / Safari 17.5');
     // The raw slug must NOT leak into the row (the pre-fix bug rendered it raw).
     expect(text).not.toContain('iphone15pro_ios17_5_safari17_5');
+  });
+
+  it('tier line: shows the friendly plan name ("Personal tier"), never the raw backend tier id ("solo_manual tier")', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/account\/me$/.test(call.url)) {
+          return json({ tier: 'solo_manual', profile_cap: 10 });
+        }
+        return makeRouter([])(call);
+      },
+    });
+    win = window;
+    await flush();
+    const tierLine = window.document.querySelector('[data-field="tier-line"]')?.textContent ?? '';
+    expect(tierLine).toBe('Personal tier');
+    // The pre-fix bug rendered the raw id verbatim.
+    expect(tierLine).not.toContain('solo_manual');
   });
 
   it('create: POSTs {name} and the new profile appears after refresh', async () => {

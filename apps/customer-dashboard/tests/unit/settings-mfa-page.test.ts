@@ -93,6 +93,16 @@ function makeRouter(mfa: MfaState): (c: MockFetchCall) => Response {
       mfa.steppedUp = true;
       return json({ ok: true });
     }
+    if (/\/v1\/account\/mfa\/enroll$/.test(u) && method === 'POST') {
+      return json({
+        otpauth_uri: 'otpauth://totp/Driftstack:me%40example.com?secret=ABC&issuer=Driftstack',
+        secret_base32: 'ABCDEFGHIJKLMNOP',
+      });
+    }
+    if (/\/v1\/account\/mfa\/verify$/.test(u) && method === 'POST') {
+      mfa.enrolled = true;
+      return json({ recovery_codes: ['aaaa-1111', 'bbbb-2222'] });
+    }
     if (/\/v1\/account\/mfa$/.test(u)) {
       if (method === 'DELETE') {
         if (mfa.requireStepUp && !mfa.steppedUp) {
@@ -212,5 +222,41 @@ describe('settings page — MFA (2FA) disable', () => {
       fetchCalls.some((c) => c.init?.method === 'DELETE' && /\/v1\/account\/mfa$/.test(c.url)),
     ).toBe(false);
     expect(isHidden(window, '[data-section="mfa-enrolled"]')).toBe(false);
+  });
+});
+
+describe('settings page — MFA (2FA) enrollment verify', () => {
+  let win: JSDOM['window'] | null = null;
+  afterEach(() => {
+    win?.close?.();
+    win = null;
+  });
+  const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
+
+  it('verify: double-click while the request is in flight fires only one POST /v1/account/mfa/verify (button disabled meanwhile)', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: makeRouter(newMfa({ enrolled: false })),
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-button="mfa-start"]') as HTMLButtonElement).click();
+    await flush();
+    (window.document.querySelector('[data-field="mfa-verify-code"]') as HTMLInputElement).value =
+      '123456';
+    const verifyBtn = window.document.querySelector(
+      '[data-button="mfa-verify"]',
+    ) as HTMLButtonElement;
+    verifyBtn.click();
+    // Second click lands while the first request is still in flight
+    // (fetch hasn't resolved yet — no await between the two clicks).
+    verifyBtn.click();
+    expect(verifyBtn.disabled).toBe(true);
+    await flush();
+    const verifyPosts = fetchCalls.filter(
+      (c) => c.init?.method === 'POST' && /\/v1\/account\/mfa\/verify$/.test(c.url),
+    );
+    expect(verifyPosts.length).toBe(1);
+    // Re-enabled once the (successful) request settles.
+    expect(verifyBtn.disabled).toBe(false);
   });
 });

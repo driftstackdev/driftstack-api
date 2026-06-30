@@ -220,3 +220,74 @@ describe('settings page — web-session management (security)', () => {
     expect(del).toBeTruthy();
   });
 });
+
+describe('settings page — email notification preferences', () => {
+  let win: JSDOM['window'] | null = null;
+  afterEach(() => {
+    win?.close?.();
+    win = null;
+  });
+  const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
+
+  function routerWithEmailPref(putStatus: number): (c: MockFetchCall) => Response {
+    return (call: MockFetchCall): Response => {
+      const method = (call.init?.method || 'GET').toUpperCase();
+      const u = call.url.replace(/^https?:\/\/[^/]+/, '');
+      if (/\/v1\/account\/email-preferences$/.test(u) && method === 'PUT') {
+        return putStatus === 204 ? new Response(null, { status: 204 }) : json({}, putStatus);
+      }
+      if (/\/v1\/account\/email-preferences$/.test(u) && method === 'GET') {
+        return json({ data: [{ event_type: 'billing-receipt', opted_in: true }] });
+      }
+      if (/\/v1\/account\/web-sessions$/.test(u)) return json({ data: [] });
+      if (/\/v1\/account\/me$/.test(u) && method === 'GET') {
+        return json({ email: 'me@example.com', name: 'Me', slug: 'me', region: 'eu' });
+      }
+      if (/\/v1\/account\/audit-log/.test(u)) return json({ data: [] });
+      return json({}, 404);
+    };
+  }
+
+  it('toggle off a preference that SAVES OK: stays unchecked + shows "saved"', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), { route: routerWithEmailPref(204) });
+    win = window;
+    await flush();
+    const checkbox = window.document.querySelector(
+      'input[data-event-type="billing-receipt"]',
+    ) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    checkbox.checked = false;
+    checkbox.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await flush();
+    const put = fetchCalls.find(
+      (c) => c.init?.method === 'PUT' && /\/email-preferences$/.test(c.url),
+    );
+    expect(JSON.parse(String(put?.init?.body))).toEqual({
+      event_type: 'billing-receipt',
+      opted_in: false,
+    });
+    expect(checkbox.checked).toBe(false);
+  });
+
+  it('toggle off a preference whose save FAILS: reverts the checkbox back to checked instead of silently lying about the opted-in state', async () => {
+    const { window } = setUpDom(loadBuiltPage(), { route: routerWithEmailPref(500) });
+    win = window;
+    await flush();
+    const checkbox = window.document.querySelector(
+      'input[data-event-type="billing-receipt"]',
+    ) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    checkbox.checked = false;
+    checkbox.dispatchEvent(new window.Event('change', { bubbles: true }));
+    // Optimistically unchecked the instant the customer clicks…
+    expect(checkbox.checked).toBe(false);
+    await flush();
+    // …but the PUT failed, so it must revert to match what the server
+    // actually has — otherwise the customer believes they opted out of
+    // an email the server is still sending.
+    expect(checkbox.checked).toBe(true);
+    const banner = window.document.querySelector('[data-banner]');
+    expect(banner?.classList.contains('hidden')).toBe(false);
+    expect(banner?.textContent).toContain("Couldn't save email preference");
+  });
+});
