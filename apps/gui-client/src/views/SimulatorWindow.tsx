@@ -1955,8 +1955,12 @@ function CookiesPane({
       data-component="simulator-cookies"
       className="flex flex-col overflow-hidden rounded-lg bg-black/20"
     >
-      {/* Header row — title + live indicator + Export / (disabled) Import. */}
-      <div className="flex items-center gap-2 border-b border-white/10 px-3 pb-2 pt-2.5">
+      {/* Header row — title + live indicator + Export / Import. Wraps at the narrow
+          252px drawer width so the action buttons never clip off-edge (founder #2
+          2026-06-30 "all content of the sidebar must always be in view at small width") —
+          the buttons drop to a second right-aligned row when the title + badge leave no
+          room, and stay inline when the window is widened. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-white/10 px-3 pb-2 pt-2.5">
         <span className="flex items-center gap-1.5 font-sans text-[12px] font-semibold text-white">
           <span aria-hidden="true">🍪</span>
           Cookies
