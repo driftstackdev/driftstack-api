@@ -216,8 +216,6 @@ export function Gallery(): JSX.Element {
           <DeviceToolbar
             deviceName="iPhone 17"
             profileName="amsterdam shopper"
-            recording={false}
-            onToggleRecord={noop}
             running={false}
             keyboardVisible={false}
             onToggleKeyboard={noop}
@@ -230,8 +228,6 @@ export function Gallery(): JSX.Element {
           <DeviceToolbar
             deviceName="iPhone 17"
             profileName="amsterdam shopper"
-            recording={false}
-            onToggleRecord={noop}
             running
             keyboardVisible={false}
             onToggleKeyboard={noop}
@@ -239,13 +235,11 @@ export function Gallery(): JSX.Element {
         </div>
         <div className="w-72">
           <span className="mb-1 block text-2xs uppercase tracking-wide text-ink-muted">
-            recording
+            keyboard open
           </span>
           <DeviceToolbar
             deviceName="iPhone 17"
             profileName="amsterdam shopper"
-            recording
-            onToggleRecord={noop}
             running
             keyboardVisible
             onToggleKeyboard={noop}

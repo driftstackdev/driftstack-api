@@ -575,16 +575,12 @@ function DriftMark(): JSX.Element {
 export function DeviceToolbar({
   deviceName,
   profileName,
-  recording,
-  onToggleRecord,
   running,
   keyboardVisible,
   onToggleKeyboard,
 }: {
   deviceName: string;
   profileName: string;
-  recording: boolean;
-  onToggleRecord: () => void;
   /** True when a live agent session is bound to this window — drives the running
    *  indicator. */
   running: boolean;
@@ -679,25 +675,12 @@ export function DeviceToolbar({
             data-component="simulator-keyboard-toggle"
             className={
               keyboardVisible
-                ? 'rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-accent transition hover:bg-white/15'
-                : 'rounded px-1.5 py-0.5 text-[13px] transition hover:bg-white/10 hover:text-ink-primary'
+                ? 'rounded bg-white/10 px-2 py-0.5 text-[18px] leading-none text-accent transition hover:bg-white/15'
+                : 'rounded px-2 py-0.5 text-[18px] leading-none transition hover:bg-white/10 hover:text-ink-primary'
             }
             onClick={onToggleKeyboard}
           >
             ⌨
-          </button>
-          <button
-            type="button"
-            aria-label={recording ? 'Stop recording' : 'Start recording'}
-            title={recording ? 'Stop and save the recording' : 'Record this session (1fps)'}
-            className={
-              recording
-                ? 'animate-pulse rounded px-1.5 py-0.5 text-[13px] text-red-400 transition hover:bg-white/10'
-                : 'rounded px-1.5 py-0.5 text-[13px] transition hover:bg-white/10 hover:text-ink-primary'
-            }
-            onClick={onToggleRecord}
-          >
-            ●
           </button>
         </div>
       </div>
@@ -4991,8 +4974,6 @@ export function SimulatorWindow(): JSX.Element {
           <DeviceToolbar
             deviceName={deviceName}
             profileName={profileName}
-            recording={recordingId !== null}
-            onToggleRecord={toggleRecord}
             running={sessionId !== ''}
             keyboardVisible={keyboardVisible}
             onToggleKeyboard={toggleKeyboard}

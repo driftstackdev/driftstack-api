@@ -110,7 +110,7 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(statusBar?.className).toContain('shrink-0');
   });
 
-  it('renders the Driftstack control toolbar above the device: device name + close/minimize + a record + the expand chevron (controls live in the expandable panel)', () => {
+  it('renders the Driftstack control toolbar above the device: device name + close/minimize + the keyboard toggle (controls live in the expandable panel)', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
     const { container } = render(
       <RecordingsProvider>
@@ -121,14 +121,20 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(toolbar).not.toBeNull();
     // Device name (from the ?name= query) shows in the toolbar.
     expect(toolbar?.textContent).toContain('iPhone 17');
-    // Window controls + the quick record live in the slim bar. The window is
-    // BORDERLESS (the iPhone look, founder 2026-06-18 "back like it was"), so
-    // close/minimize live here — the separate Dock icon comes from the standalone
-    // app, not a title bar. (The drawer is now an always-docked rail, so the old
-    // Show-controls chevron is gone.) aria-labels are the contract.
-    for (const label of ['Close', 'Minimize', 'Start recording']) {
+    // Window controls live in the slim bar. The window is BORDERLESS (the iPhone
+    // look, founder 2026-06-18 "back like it was"), so close/minimize live here —
+    // the separate Dock icon comes from the standalone app, not a title bar. (The
+    // drawer is now an always-docked rail, so the old Show-controls chevron is gone.)
+    // aria-labels are the contract.
+    for (const label of ['Close', 'Minimize']) {
       expect(toolbar?.querySelector(`[aria-label="${label}"]`), label).not.toBeNull();
     }
+    // Founder 2026-06-25: the recording dot was REMOVED from the chrome ("a dot for
+    // recording which I don't like to be there") — recording lives in the drawer's
+    // recording pane now, not the slim bar.
+    expect(toolbar?.querySelector('[aria-label="Start recording"]')).toBeNull();
+    // The on-screen keyboard toggle stays in the chrome.
+    expect(toolbar?.querySelector('[data-component="simulator-keyboard-toggle"]')).not.toBeNull();
     // Founder 2026-06-17: the rotate / pin / info controls moved into
     // the EXPANDABLE panel, so the default (collapsed) chrome stays minimal —
     // they are NOT in the DOM until the panel is expanded.

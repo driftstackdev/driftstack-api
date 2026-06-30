@@ -325,8 +325,6 @@ describe('DeviceToolbar — keyboard show/hide toggle', () => {
         <DeviceToolbar
           deviceName="iPhone 17"
           profileName="amsterdam"
-          recording={false}
-          onToggleRecord={() => {}}
           running
           keyboardVisible={visible}
           onToggleKeyboard={() => setVisible((v) => !v)}
