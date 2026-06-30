@@ -10,6 +10,7 @@ import {
   classifyUnsafeHost,
   classifyUnsafeVpnTargets,
   openvpnRemoteHosts,
+  openvpnProxyHosts,
 } from '../../src/lib/webhook-target-guard.js';
 
 describe('unsafeWebhookTargetReason — rejects internal/reserved targets', () => {
@@ -220,5 +221,38 @@ describe('classifyUnsafeVpnTargets — guards the REAL VPN egress (endpoint/dns/
       'a.example',
       'b.example',
     ]);
+  });
+  // A `remote`-only guard misses a SECOND, distinct egress vector: OpenVPN's
+  // `http-proxy`/`socks-proxy` directives tell the client to route the tunnel
+  // connection itself through another host — a customer config with an
+  // entirely benign `remote` can still smuggle an internal/metadata target via
+  // `http-proxy`/`socks-proxy`, which the old remote-only extraction never saw.
+  it('flags a malicious http-proxy directive even when the remote host is benign', () => {
+    expect(
+      classifyUnsafeVpnTargets({
+        configBlob: 'client\nremote vpn.example.com 1194\nhttp-proxy 169.254.169.254 80\n',
+      }),
+    ).toBe('private');
+  });
+  it('flags a malicious socks-proxy directive even when the remote host is benign', () => {
+    expect(
+      classifyUnsafeVpnTargets({
+        configBlob: 'client\nremote vpn.example.com 1194\nsocks-proxy 10.0.0.5 1080\n',
+      }),
+    ).toBe('private');
+  });
+  it('openvpnProxyHosts extracts every http-proxy / socks-proxy host', () => {
+    expect(
+      openvpnProxyHosts(
+        'http-proxy a.example 8080 auto\nsocks-proxy b.example 1080\nremote c.example 1194\nfoo',
+      ),
+    ).toEqual(['a.example', 'b.example']);
+  });
+  it('passes a fully public http-proxy / socks-proxy OpenVPN config (no false positives)', () => {
+    expect(
+      classifyUnsafeVpnTargets({
+        configBlob: 'client\nremote vpn.example.com 1194\nhttp-proxy proxy.example.com 8080\n',
+      }),
+    ).toBeNull();
   });
 });

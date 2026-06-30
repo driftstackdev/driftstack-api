@@ -167,11 +167,28 @@ export function openvpnRemoteHosts(configBlob: string): string[] {
 }
 
 /**
+ * Hosts of every `http-proxy <host> <port> [...]` / `socks-proxy <host> [<port>]` directive in
+ * an OpenVPN config blob. These are a SECOND, distinct egress target from `remote` (the VPN
+ * server itself): they tell the OpenVPN client to route the (cleartext, pre-tunnel) connection
+ * to `remote` through this secondary proxy host instead of connecting directly. A config with
+ * an entirely benign `remote` can still smuggle an internal/metadata target this way (e.g.
+ * `http-proxy 169.254.169.254 80`), which `openvpnRemoteHosts` alone never sees — SSRF.
+ */
+export function openvpnProxyHosts(configBlob: string): string[] {
+  const hosts: string[] = [];
+  for (const line of configBlob.split(/\r?\n/)) {
+    const m = line.trim().match(/^(?:http-proxy|socks-proxy)\s+(\S+)/i);
+    if (m) hosts.push(m[1]!);
+  }
+  return hosts;
+}
+
+/**
  * Returns the unsafe reason for the FIRST private/loopback/metadata VPN egress target, or
  * null when all are safe. Guards the REAL connection destinations the cosmetic display
  * `host` field does NOT cover: a WireGuard `endpoint` host + `dns`, and every OpenVPN
- * `remote` host. Without this a customer can tunnel sessions to 169.254.169.254 / RFC1918
- * even though the display host passed classifyUnsafeHost (SSRF).
+ * `remote` / `http-proxy` / `socks-proxy` host. Without this a customer can tunnel sessions
+ * to 169.254.169.254 / RFC1918 even though the display host passed classifyUnsafeHost (SSRF).
  */
 export function classifyUnsafeVpnTargets(opts: {
   endpoint?: string | null;
@@ -189,7 +206,11 @@ export function classifyUnsafeVpnTargets(opts: {
     }
   }
   if (opts.configBlob) {
-    for (const h of openvpnRemoteHosts(opts.configBlob)) {
+    const configHosts = [
+      ...openvpnRemoteHosts(opts.configBlob),
+      ...openvpnProxyHosts(opts.configBlob),
+    ];
+    for (const h of configHosts) {
       const r = classifyUnsafeHost(h);
       if (r !== null) return r;
     }
