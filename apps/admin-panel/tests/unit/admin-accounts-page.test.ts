@@ -162,6 +162,76 @@ describe('admin-panel Accounts (accounts.astro) behaviour', () => {
     expect(text(window, '[data-banner]')).toContain('admin scope required');
   });
 
+  it('CRITICAL SSO-bridge race: a token written to localStorage AFTER this page\'s own script has already run (simulating AdminLayout\'s trailing hash-bridge <script>, which sits later in document order) is still picked up — no false "sign in" banner + stale mock data on a fresh sign-in (audit waefer6wu)', async () => {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      // Deliberately omit `token` here — at the moment this page's script
+      // runs (synchronously, during the eval below), localStorage has NO
+      // token yet, exactly like a fresh SSO sign-in where AdminLayout's
+      // bridge script hasn't executed its write yet.
+      route: () => json({ data: [ACCOUNT], has_more: false }),
+    });
+    win = window;
+    // Simulate AdminLayout's later <script> (the SSO hash bridge) writing
+    // the token a tick after this page's own script executed.
+    window.localStorage.setItem('ds_web_session_token', 'tok');
+    await flush();
+    expect(fetchCalls.length).toBeGreaterThan(0);
+    expect(text(window, '[data-banner]')).not.toContain('Sign in with a staff admin account');
+    expect(text(window, '[data-list="accounts"]')).toContain('Acme Corp');
+  });
+
+  it('CRITICAL pagination: has_more + next_cursor reveals "Load more"; clicking it fetches the next cursor page and APPENDS rows instead of leaving them permanently unreachable (audit waefer6wu)', async () => {
+    const ACCOUNT_2 = {
+      ...ACCOUNT,
+      id: 'acc_def456',
+      email: 'second@acme.example',
+      name: 'Second Co',
+    };
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: (call) => {
+        if (/cursor=acc_def456/.test(call.url)) {
+          return json({ data: [ACCOUNT_2], has_more: false, next_cursor: null });
+        }
+        return json({ data: [ACCOUNT], has_more: true, next_cursor: 'acc_def456' });
+      },
+    });
+    win = window;
+    await flush();
+    const loadMoreBtn = window.document.querySelector(
+      '[data-action="load-more"]',
+    ) as HTMLButtonElement;
+    expect(loadMoreBtn.classList.contains('hidden')).toBe(false);
+    expect(text(window, '[data-field="footnote"]')).toContain('more available');
+
+    loadMoreBtn.click();
+    await flush();
+
+    const cursorCall = fetchCalls.find((c) => /cursor=acc_def456/.test(c.url));
+    expect(cursorCall).toBeTruthy();
+    const list = text(window, '[data-list="accounts"]');
+    // Both pages' rows are present — the second page was appended, not
+    // swapped in, so the first page's row stays visible.
+    expect(list).toContain('Acme Corp');
+    expect(list).toContain('Second Co');
+    // has_more is now false, so the button hides again.
+    expect(loadMoreBtn.classList.contains('hidden')).toBe(true);
+    expect(text(window, '[data-field="footnote"]')).toContain('Showing 2 accounts');
+  });
+
+  it('pagination: has_more=false keeps "Load more" hidden', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: () => json({ data: [ACCOUNT], has_more: false }),
+    });
+    win = window;
+    await flush();
+    const loadMoreBtn = window.document.querySelector(
+      '[data-action="load-more"]',
+    ) as HTMLButtonElement;
+    expect(loadMoreBtn.classList.contains('hidden')).toBe(true);
+  });
+
   it('search filter: typing refetches /v1/admin/accounts with email_contains', async () => {
     const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',

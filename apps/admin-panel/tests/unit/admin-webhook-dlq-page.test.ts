@@ -31,6 +31,7 @@ interface DlqEntry {
 }
 interface SetUpOpts {
   confirmReturns?: boolean;
+  confirmCalls?: unknown[];
   route: (call: MockFetchCall) => Response;
 }
 
@@ -61,7 +62,10 @@ function setUpDom(
   window.localStorage.setItem('ds_web_session_token', 'staff-tok');
   const cr = opts.confirmReturns ?? true;
   // @ts-expect-error — driftstackConfirm is injected by AdminLayout
-  window.driftstackConfirm = () => Promise.resolve(cr);
+  window.driftstackConfirm = (_message: string, confirmOpts: unknown) => {
+    opts.confirmCalls?.push(confirmOpts);
+    return Promise.resolve(cr);
+  };
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="admin-dlq"'));
   if (!pageScript) throw new Error('admin webhook-dlq inline script not found');
@@ -123,6 +127,23 @@ describe('admin webhook-dlq page — discard / requeue (operator)', () => {
     await flush();
     expect(window.document.querySelector('[data-action="requeue"][data-id="whd_1"]')).toBeTruthy();
     expect(window.document.querySelector('[data-action="discard"][data-id="whd_1"]')).toBeTruthy();
+  });
+
+  it('CRITICAL discard confirm is destructive:true — without it a stray Enter fires the irrecoverable hard-delete with no click required (audit waefer6wu)', async () => {
+    const confirmCalls: unknown[] = [];
+    const { window } = setUpDom(loadBuiltPage(), {
+      confirmReturns: true,
+      confirmCalls,
+      route: makeRouter([mkEntry({ id: 'whd_1' })]),
+    });
+    win = window;
+    await flush();
+    (
+      window.document.querySelector('[data-action="discard"][data-id="whd_1"]') as HTMLButtonElement
+    ).click();
+    await flush();
+    expect(confirmCalls.length).toBe(1);
+    expect(confirmCalls[0]).toMatchObject({ destructive: true });
   });
 
   it('discard: confirm-gated POST /:id/discard then refresh removes that entry (others remain)', async () => {

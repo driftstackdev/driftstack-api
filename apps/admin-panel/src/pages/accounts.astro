@@ -158,10 +158,25 @@ const apiBaseUrl = resolveApiBaseUrl();
       </table>
     </div>
 
-    <p class="mt-4 text-xs text-tk-ink-3" data-field="footnote">
-      Showing {MOCK_ACCOUNTS.length} of {MOCK_ACCOUNTS.length} accounts. Pagination
-      via cursor when count exceeds page size (50 default).
-    </p>
+    <div class="mt-4 flex items-center gap-4">
+      <p class="text-xs text-tk-ink-3" data-field="footnote">
+        Showing {MOCK_ACCOUNTS.length} of {MOCK_ACCOUNTS.length} accounts. Pagination
+        via cursor when count exceeds page size (50 default).
+      </p>
+      {/* audit waefer6wu — the footnote advertised cursor pagination the UI
+          never actually implemented: GET /v1/admin/accounts already returns
+          has_more + next_cursor (apps/server/src/routes/admin-accounts.ts),
+          but buildQuery() never sent a cursor and nothing ever read
+          next_cursor, so rows past the first 50 were silently unreachable.
+          This button wires the existing server-side cursor support. */}
+      <button
+        type="button"
+        data-action="load-more"
+        class="hidden shrink-0 text-xs font-medium text-tk-accent hover:underline"
+      >
+        Load more
+      </button>
+    </div>
   </div>
 
   <script is:inline define:vars={{ apiBaseUrl }}>
@@ -174,7 +189,17 @@ const apiBaseUrl = resolveApiBaseUrl();
       const searchEl = root.querySelector('[data-field="search"]');
       const statusEl = root.querySelector('[data-field="status"]');
       const tierEl = root.querySelector('[data-field="tier"]');
-      const token = localStorage.getItem('ds_web_session_token');
+      // audit waefer6wu — SSO-bridge race: this page's own <script> is
+      // nested inside <AdminLayout>'s <slot/>, so it parses + runs BEFORE
+      // AdminLayout's trailing <script> that reads the #token= hash from a
+      // fresh SSO sign-in and writes it to localStorage. Reading the token
+      // here synchronously (as this used to) ran before that write landed,
+      // so every fresh sign-in showed a false "not signed in" banner with
+      // no automatic recovery. `token` is read inside start(), which is
+      // deferred to DOMContentLoaded — guaranteeing every earlier blocking
+      // <script> in the document (including the SSO bridge) has already
+      // executed and the real token is in localStorage by the time it's read.
+      let token = null;
 
       const STATUS_BADGE = {
         active: 'bg-emerald-50 text-emerald-700',
@@ -250,21 +275,42 @@ const apiBaseUrl = resolveApiBaseUrl();
         );
       }
 
-      function buildQuery() {
+      // audit waefer6wu — the footnote advertised cursor pagination
+      // ("Pagination via cursor when count exceeds page size") that the UI
+      // never actually implemented: buildQuery() never sent `cursor`, and
+      // nothing ever read `body.next_cursor`, so once a (possibly filtered)
+      // list exceeded 50 rows, every row past the 50th was permanently
+      // unreachable with no indication more existed. The server already
+      // fully supports this (admin-accounts.ts accepts `cursor`, returns
+      // `has_more` + `next_cursor: acc_<uuid>`) — wire it client-side.
+      function buildQuery(cursor) {
         const params = new URLSearchParams();
         params.set('limit', '50');
         if (statusEl && statusEl.value) params.set('status', statusEl.value);
         if (tierEl && tierEl.value) params.set('tier', tierEl.value);
         if (searchEl && searchEl.value.trim())
           params.set('email_contains', searchEl.value.trim());
+        if (cursor) params.set('cursor', cursor);
         return params;
       }
 
+      const loadMoreBtn = root.querySelector('[data-action="load-more"]');
+      let loadedAccounts = [];
+      let nextCursor = null;
+
       let inFlight = 0;
-      function load() {
+      // append=true fetches the next cursor page and adds it to the
+      // currently-rendered rows (the "Load more" click path); the default
+      // (filter change / initial load / 30s live poll) always starts a
+      // fresh first page — auto-poll intentionally resets any "loaded more"
+      // state back to the canonical first 50 rather than trying to merge.
+      function load(opts) {
+        const append = !!(opts && opts.append);
         if (!token) return Promise.resolve();
+        if (append && !nextCursor) return Promise.resolve();
         const myReq = ++inFlight;
-        const params = buildQuery();
+        const params = buildQuery(append ? nextCursor : undefined);
+        if (loadMoreBtn) loadMoreBtn.disabled = true;
         return fetch(apiBaseUrl + '/v1/admin/accounts?' + params.toString(), {
           headers: { authorization: 'Bearer ' + token },
           credentials: 'include',
@@ -276,43 +322,57 @@ const apiBaseUrl = resolveApiBaseUrl();
           .then((body) => {
             if (myReq !== inFlight) return; // stale response, ignore
             const accounts = body.data || [];
+            loadedAccounts = append ? loadedAccounts.concat(accounts) : accounts;
+            nextCursor = body.next_cursor || null;
             if (tbody) {
-              if (accounts.length === 0) {
+              if (loadedAccounts.length === 0) {
                 tbody.innerHTML =
                   '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">No accounts match the current filter.</td></tr>';
               } else {
-                tbody.innerHTML = accounts.map(rowHtml).join('');
+                tbody.innerHTML = loadedAccounts.map(rowHtml).join('');
               }
             }
             if (footnote) {
-              const more = body.has_more ? ' (more available — refine filter or paginate)' : '';
+              const more = body.has_more
+                ? ' — more available (' + (nextCursor ? 'click Load more' : 'refine filter') + ')'
+                : '';
               footnote.textContent =
                 'Showing ' +
-                accounts.length +
+                loadedAccounts.length +
                 ' account' +
-                (accounts.length === 1 ? '' : 's') +
+                (loadedAccounts.length === 1 ? '' : 's') +
                 more +
                 '.';
+            }
+            if (loadMoreBtn) {
+              loadMoreBtn.classList.toggle('hidden', !(body.has_more && nextCursor));
+              loadMoreBtn.disabled = false;
+              loadMoreBtn.textContent = 'Load more';
             }
             hideBanner();
           })
           .catch((err) => {
             if (myReq !== inFlight) return;
             const msg = err && err.message ? err.message : 'network error';
+            if (loadMoreBtn) loadMoreBtn.disabled = false;
             // W604 — clear the SSG mock rows on ANY load failure so operators
             // never triage a fabricated customer list (3 fake accounts with
             // Open links into mock detail pages) during an API error.
-            if (tbody) {
+            if (!append && tbody) {
               tbody.innerHTML =
                 '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">Could not load accounts. Resolve the error above and retry.</td></tr>';
             }
-            if (footnote) footnote.textContent = '';
+            if (!append && footnote) footnote.textContent = '';
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
               );
             } else {
-              showBanner("Couldn't load accounts (" + msg + ').');
+              showBanner(
+                (append ? "Couldn't load more accounts (" : "Couldn't load accounts (") +
+                  msg +
+                  ').',
+              );
             }
           })
           .finally(() => {
@@ -324,84 +384,107 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
-      if (!token) {
-        // W604 — clear the SSG mock so the unauthenticated state never shows
-        // fabricated customer accounts with Open links into mock detail pages.
-        if (tbody) {
-          tbody.innerHTML =
-            '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">Sign in with a staff admin account to see accounts.</td></tr>';
+      // start() does the token-gated work: reading the token, deciding
+      // sign-in-vs-live, wiring filter/search/live-poll listeners, and
+      // firing the first load(). Deferring the whole thing to
+      // DOMContentLoaded (see the `token` declaration above) is what
+      // actually closes the SSO-bridge race — reading `token` any earlier
+      // re-introduces it.
+      function start() {
+        token = localStorage.getItem('ds_web_session_token');
+
+        if (!token) {
+          // W604 — clear the SSG mock so the unauthenticated state never shows
+          // fabricated customer accounts with Open links into mock detail pages.
+          if (tbody) {
+            tbody.innerHTML =
+              '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">Sign in with a staff admin account to see accounts.</td></tr>';
+          }
+          if (footnote) footnote.textContent = '';
+          showBanner('Sign in with a staff admin account to see live data.');
+          if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
+          return;
         }
-        if (footnote) footnote.textContent = '';
-        showBanner('Sign in with a staff admin account to see live data.');
-        if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
-        return;
-      }
 
-      let debounce = 0;
-      function scheduleLoad() {
-        clearTimeout(debounce);
-        debounce = setTimeout(load, 200);
-      }
-
-      if (statusEl) statusEl.addEventListener('change', scheduleLoad);
-      if (tierEl) tierEl.addEventListener('change', scheduleLoad);
-      if (searchEl) searchEl.addEventListener('input', scheduleLoad);
-
-      // 2026-05-22 — "/" focuses the search (GitHub / Slack / Linear
-      // convention). Skips if the user is already in an input /
-      // textarea so the slash key doesn't hijack legitimate typing.
-      document.addEventListener('keydown', (ev) => {
-        if (ev.key !== '/' || ev.metaKey || ev.ctrlKey || ev.altKey) return;
-        const target = ev.target;
-        if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
-        if (target instanceof HTMLElement && target.isContentEditable) return;
-        ev.preventDefault();
-        if (searchEl instanceof HTMLInputElement) {
-          searchEl.focus();
-          searchEl.select();
+        let debounce = 0;
+        function scheduleLoad() {
+          clearTimeout(debounce);
+          debounce = setTimeout(load, 200);
         }
-      });
 
-      // 2026-05-22 — 30s auto-poll for new sign-ups. Same pattern as
-      // the overview live feed (2c24750f). loadWithLive() wraps the
-      // existing load() to also flip the live-dot color + record
-      // lastFetch. Timer calls it directly (bypasses scheduleLoad's
-      // 200ms debounce which is for input typing only).
-      let lastFetch = Date.now();
-      function loadWithLive() {
-        const liveDot = root.querySelector('[data-live-dot]');
-        if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-amber-500';
-        const p = load();
-        if (p && typeof p.then === 'function') {
-          p.then(
-            () => {
-              lastFetch = Date.now();
-              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-emerald-500';
-            },
-            () => {
-              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-red-500';
-            },
-          );
-        } else {
-          lastFetch = Date.now();
+        if (statusEl) statusEl.addEventListener('change', scheduleLoad);
+        if (tierEl) tierEl.addEventListener('change', scheduleLoad);
+        if (searchEl) searchEl.addEventListener('input', scheduleLoad);
+
+        if (loadMoreBtn) {
+          loadMoreBtn.addEventListener('click', () => {
+            loadMoreBtn.textContent = 'Loading…';
+            load({ append: true });
+          });
         }
-      }
-      const refreshBtn = root.querySelector('[data-live-refresh]');
-      if (refreshBtn) refreshBtn.addEventListener('click', loadWithLive);
-      setInterval(loadWithLive, 30_000);
-      function fmtAge(ms) {
-        const s = Math.floor((Date.now() - ms) / 1000);
-        if (s < 5) return 'just now';
-        if (s < 60) return s.toString() + 's ago';
-        if (s < 3600) return Math.floor(s / 60).toString() + 'm ago';
-        return Math.floor(s / 3600).toString() + 'h ago';
-      }
-      const ageEl = root.querySelector('[data-live-age]');
-      setInterval(() => {
-        if (ageEl) ageEl.textContent = fmtAge(lastFetch);
-      }, 5_000);
 
-      load();
+        // 2026-05-22 — "/" focuses the search (GitHub / Slack / Linear
+        // convention). Skips if the user is already in an input /
+        // textarea so the slash key doesn't hijack legitimate typing.
+        document.addEventListener('keydown', (ev) => {
+          if (ev.key !== '/' || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+          const target = ev.target;
+          if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+          if (target instanceof HTMLElement && target.isContentEditable) return;
+          ev.preventDefault();
+          if (searchEl instanceof HTMLInputElement) {
+            searchEl.focus();
+            searchEl.select();
+          }
+        });
+
+        // 2026-05-22 — 30s auto-poll for new sign-ups. Same pattern as
+        // the overview live feed (2c24750f). loadWithLive() wraps the
+        // existing load() to also flip the live-dot color + record
+        // lastFetch. Timer calls it directly (bypasses scheduleLoad's
+        // 200ms debounce which is for input typing only).
+        let lastFetch = Date.now();
+        function loadWithLive() {
+          const liveDot = root.querySelector('[data-live-dot]');
+          if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-amber-500';
+          const p = load();
+          if (p && typeof p.then === 'function') {
+            p.then(
+              () => {
+                lastFetch = Date.now();
+                if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-emerald-500';
+              },
+              () => {
+                if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-red-500';
+              },
+            );
+          } else {
+            lastFetch = Date.now();
+          }
+        }
+        const refreshBtn = root.querySelector('[data-live-refresh]');
+        if (refreshBtn) refreshBtn.addEventListener('click', loadWithLive);
+        setInterval(loadWithLive, 30_000);
+        function fmtAge(ms) {
+          const s = Math.floor((Date.now() - ms) / 1000);
+          if (s < 5) return 'just now';
+          if (s < 60) return s.toString() + 's ago';
+          if (s < 3600) return Math.floor(s / 60).toString() + 'm ago';
+          return Math.floor(s / 3600).toString() + 'h ago';
+        }
+        const ageEl = root.querySelector('[data-live-age]');
+        setInterval(() => {
+          if (ageEl) ageEl.textContent = fmtAge(lastFetch);
+        }, 5_000);
+
+        load();
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start);
+      } else {
+        start();
+      }
     })();
   </script>
 </AdminLayout>

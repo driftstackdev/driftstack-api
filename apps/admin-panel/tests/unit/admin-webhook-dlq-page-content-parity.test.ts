@@ -93,6 +93,16 @@ describe('W360.C admin-panel /webhook-dlq page content parity', () => {
     expect(body).toMatch(/function requeue\(id\)/);
   });
 
+  it('CRITICAL discard confirm is destructive:true — without it the OK button auto-focuses and a stray Enter fires the irrecoverable hard-delete with no click required (audit waefer6wu)', () => {
+    const discardFn = body.match(/async function discard\(id\)[\s\S]*?\n      \}/);
+    expect(discardFn).not.toBeNull();
+    const fn = discardFn![0]!;
+    expect(fn).toMatch(/window\.driftstackConfirm\(/);
+    const confirmCall = fn.match(/window\.driftstackConfirm\([\s\S]*?\);/);
+    expect(confirmCall).not.toBeNull();
+    expect(confirmCall![0]).toMatch(/destructive:\s*true/);
+  });
+
   it('requeue/discard failures surface the server problem+json detail via mutationError (W151/W152)', () => {
     // Concurrent operators on a shared DLQ can race; a refused
     // requeue/discard ("already requeued", "already discarded") must

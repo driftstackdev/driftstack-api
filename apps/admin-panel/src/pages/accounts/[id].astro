@@ -650,10 +650,14 @@ const accountId = account.id;
         // Destructive — revokes ALL active sessions + API keys until unsuspend. Gate
         // on a real yes/no confirm FIRST; the optional reason prompt alone let an
         // accidental Enter / single-click suspend a live account (adversarial review
-        // wlcfjoxqq #1). Mirrors the panel's other destructive actions.
+        // wlcfjoxqq #1). destructive: true actually mirrors the panel's other
+        // destructive actions (sessions.astro force-destroy) — without it the OK
+        // button auto-focuses and Enter isn't swallowed, so a stray Enter right
+        // after the dialog opens fires the suspend with no click required
+        // (audit waefer6wu).
         const proceed = await window.driftstackConfirm(
           'Suspend this account? This revokes all active sessions and API keys until you unsuspend.',
-          { confirmLabel: 'Suspend' },
+          { confirmLabel: 'Suspend', destructive: true },
         );
         if (!proceed) return;
         const reason =

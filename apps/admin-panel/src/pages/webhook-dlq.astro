@@ -363,12 +363,17 @@ const apiBaseUrl = resolveApiBaseUrl();
       // mis-click doesn't destroy evidence.
       async function discard(id) {
         if (!token) return;
+        // destructive: true — this is the one hard-delete action on this page
+        // (payload is irrecoverable). Without it the Discard button auto-
+        // focuses and Enter isn't swallowed, so a stray Enter right after the
+        // dialog opens fires the delete with no click required, same bug class
+        // as the suspend confirm on accounts/[id].astro (audit waefer6wu).
         if (
           !(await window.driftstackConfirm(
             'Discard webhook delivery ' +
               id +
               '? This is irrecoverable — the payload + retry history are deleted. The action is audit-logged.',
-            { confirmLabel: 'Discard' },
+            { confirmLabel: 'Discard', destructive: true },
           ))
         ) {
           return;

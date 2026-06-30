@@ -31,6 +31,28 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
 
 <AdminLayout title="Incidents">
   <div class="mx-auto max-w-6xl px-6 py-10">
+    {/* audit waefer6wu — fetchAndRender() used to swallow every fetch
+        failure (403 / 5xx / network) into the same rebuild([]) the page
+        renders for a genuine zero-incident state, so a real outage could
+        be invisible behind a calm "All systems operational" message. This
+        banner gives load failures a distinct, retry-capable state, matching
+        the data-banner pattern already used on accounts.astro / sessions.astro
+        / audit-log.astro / cost.astro. */}
+    <div
+      data-banner
+      class="mb-6 hidden items-center justify-between gap-4 rounded-lg border border-tk-border bg-tk-bg px-4 py-3 text-sm text-tk-ink-2"
+      role="status"
+    >
+      <span data-banner-text></span>
+      <button
+        type="button"
+        data-banner-retry
+        class="hidden shrink-0 font-medium text-tk-accent hover:underline"
+      >
+        Retry
+      </button>
+    </div>
+
     <header class="mb-8 flex items-start justify-between gap-6">
       <div>
         <h1 class="text-3xl font-semibold tracking-tight text-tk-ink">Incidents</h1>
@@ -322,6 +344,27 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
           '</div></li>'
         );
       }
+      function showBanner(text, opts) {
+        var banner = document.querySelector('[data-banner]');
+        if (!banner) return;
+        var textEl = banner.querySelector('[data-banner-text]');
+        if (textEl) textEl.textContent = text;
+        else banner.textContent = text;
+        banner.classList.remove('hidden');
+        banner.classList.add('flex');
+        var retryBtn = banner.querySelector('[data-banner-retry]');
+        if (retryBtn) {
+          if (opts && opts.retry) retryBtn.classList.remove('hidden');
+          else retryBtn.classList.add('hidden');
+        }
+      }
+      function hideBanner() {
+        var banner = document.querySelector('[data-banner]');
+        if (!banner) return;
+        banner.classList.add('hidden');
+        banner.classList.remove('flex');
+      }
+
       function rebuild(items) {
         const container = document.querySelector('[data-incidents-list]');
         const openCountEl = document.querySelector('[data-open-count]');
@@ -360,28 +403,50 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
         // No token → clear the SSG mock to the real empty state rather than
         // leaving the fabricated "API server elevated 5xx" major incident on
         // an incidents/status surface (a false ops signal). rebuild([]) renders
-        // "No open incidents. All systems operational."
+        // "No open incidents. All systems operational." This is a real "not
+        // signed in" state, not a load failure, so no retry button — signing
+        // in is the fix, not retrying the same unauthenticated request.
         if (!token) {
           rebuild([]);
+          showBanner('Sign in with a staff admin account to see live data.');
           return;
         }
         fetch(apiBaseUrl + '/v1/admin/incidents?scope=all&limit=100', {
           headers: { authorization: 'Bearer ' + token },
         })
           .then(function (r) {
-            return r.ok ? r.json() : null;
+            if (r.status === 403) return Promise.reject(new Error('forbidden'));
+            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then(function (body) {
-            // Any non-array / non-ok response → clear the fabricated mock to the
-            // real empty state instead of leaving a fake active incident up.
             rebuild(body && Array.isArray(body.data) ? body.data : []);
+            hideBanner();
           })
-          .catch(function () {
-            // Network/fetch error → clear the SSG mock so a transient failure
-            // never leaves a fabricated active incident on screen.
+          .catch(function (err) {
+            // CRITICAL — a failed fetch (expired token, 403 scope mismatch,
+            // transient 5xx, network blip) must NEVER render identically to
+            // "No open incidents. All systems operational." on the one page
+            // whose entire job is surfacing active incidents (audit
+            // waefer6wu). Clear the list to avoid showing stale/fabricated
+            // data, but show a distinct, retry-capable error banner instead
+            // of the calm empty-state message.
             rebuild([]);
+            var msg = err && err.message ? err.message : 'network error';
+            if (msg === 'forbidden') {
+              showBanner(
+                'Access denied — admin scope required. You are signed in as a customer account.',
+                { retry: true },
+              );
+            } else {
+              showBanner("Couldn't load incidents (" + msg + '). The list below may be incomplete.', {
+                retry: true,
+              });
+            }
           });
       }
+
+      const retryBtn = document.querySelector('[data-banner-retry]');
+      if (retryBtn) retryBtn.addEventListener('click', fetchAndRender);
 
       fetchAndRender();
       const form = document.getElementById('new-incident-form');

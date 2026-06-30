@@ -75,13 +75,17 @@ describe('W488.B apps/admin-panel/src/pages/accounts.astro content parity', () =
     );
   });
 
-  it("has_more pagination indicator: body.has_more ? ' (more available — refine filter or paginate)' suffix on footnote — pinned so operators see when there are more accounts than the 50-page-size limit and know to refine filter or paginate (drift to dropping this hint would silently truncate result sets at 50 without warning)", () => {
+  it("has_more pagination: real cursor pagination via a 'Load more' button (audit waefer6wu — the old footnote-only hint advertised pagination the UI never implemented, silently truncating at 50 rows) — pinned so operators see when there are more accounts AND can actually page through them, not just a passive hint", () => {
+    // 2026-06-30 — was a footnote-only " (more available — refine filter or
+    // paginate)" suffix with NO actual pagination. Now wires real cursor
+    // pagination off the server's existing has_more/next_cursor (no server
+    // change) with a visible Load-more button. The "more accounts exist"
+    // signal is preserved (footnote text), strengthened by an action.
+    expect(body).toContain('Load more');
     expect(body).toMatch(
-      /const more = body\.has_more \? ' \(more available — refine filter or paginate\)' : '';/,
+      /const more = body\.has_more\s*\n?\s*\? ' — more available \(' \+ \(nextCursor \? 'click Load more' : 'refine filter'\) \+ '\)'\s*\n?\s*: '';/,
     );
-    expect(body).toMatch(
-      /footnote\.textContent =\s*\n?\s*'Showing ' \+\s*\n?\s*accounts\.length \+\s*\n?\s*' account' \+\s*\n?\s*\(accounts\.length === 1 \? '' : 's'\) \+\s*\n?\s*more \+\s*\n?\s*'\.';/,
-    );
+    expect(body).toMatch(/nextCursor = body\.next_cursor \|\| null;/);
   });
 
   it("Empty-filter-result branch: 'No accounts match the current filter.' colspan=6 cell — pinned so the 6-column table's empty-after-filter state spans full width and the cell count matches the header (Account/Tier/Status/Created/Last updated/Open = 6 columns; drift to colspan=5 would visually misalign)", () => {

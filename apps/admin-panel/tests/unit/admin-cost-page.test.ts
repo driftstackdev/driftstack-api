@@ -153,6 +153,35 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     expect(text(window, '[data-banner]')).toContain('returned 500');
   });
 
+  it('CRITICAL config endpoint error: Rate Card / Tier Thresholds tiles clear out of the perpetual loading-skeleton animation instead of pulsing forever (audit waefer6wu)', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: () => json({ detail: 'boom' }, 500),
+    });
+    win = window;
+    await flush();
+    const rateCard = window.document.querySelector('[data-field="rate-card"]');
+    const tierThresholds = window.document.querySelector('[data-field="tier-thresholds"]');
+    expect(rateCard?.querySelector('.animate-pulse')).toBeNull();
+    expect(tierThresholds?.querySelector('.animate-pulse')).toBeNull();
+    expect(text(window, '[data-field="rate-card"]')).toContain("Couldn't load");
+    expect(text(window, '[data-field="tier-thresholds"]')).toContain("Couldn't load");
+  });
+
+  it('no admin token: tiles also clear the skeleton (the authedFetch throw is the same failure path as a non-ok response)', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      route: () => {
+        throw new Error('must not fetch without an admin token');
+      },
+    });
+    win = window;
+    await flush();
+    const rateCard = window.document.querySelector('[data-field="rate-card"]');
+    const tierThresholds = window.document.querySelector('[data-field="tier-thresholds"]');
+    expect(rateCard?.querySelector('.animate-pulse')).toBeNull();
+    expect(tierThresholds?.querySelector('.animate-pulse')).toBeNull();
+  });
+
   it('account query: strips the acc_ prefix, fetches the breakdown, and renders total + soft/hard at 2-decimals', async () => {
     const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       adminToken: 'admtok',
@@ -193,21 +222,47 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     expect(result).toContain('$50.00'); // hard cap 5000c
   });
 
-  it('account query 404: surfaces the no-usage message', async () => {
+  it('account query 404 + account DOES exist (admin-accounts lookup is 200): "exists but no usage" — distinct from "not found" (audit waefer6wu)', async () => {
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       adminToken: 'admtok',
       route: (call) => {
         if (/\/v1\/admin\/cost\/accounts\//.test(call.url)) return json({ detail: 'none' }, 404);
+        // The existence-check call (GET /v1/admin/accounts/:id) finds a
+        // real account.
+        if (/\/v1\/admin\/accounts\/acc_real123/.test(call.url)) {
+          return json({ id: 'acc_real123', status: 'active' });
+        }
         return json({ rates: {}, tierThresholds: {} });
       },
     });
     win = window;
     await flush();
     const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
-    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value = 'acc_missing';
+    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value = 'acc_real123';
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
-    expect(text(window, '[data-banner]')).toContain('no usage in the requested cycle');
+    expect(text(window, '[data-banner]')).toContain('Account exists but has no usage');
+    expect(text(window, '[data-banner]')).not.toContain('not found');
+  });
+
+  it('CRITICAL account query 404 + account does NOT exist (admin-accounts lookup also 404s): distinct "not found" message — without this an operator fat-fingering a UUID reads it as "confirmed zero usage" (audit waefer6wu)', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: (call) => {
+        if (/\/v1\/admin\/cost\/accounts\//.test(call.url)) return json({ detail: 'none' }, 404);
+        // The existence-check call also 404s — the id is simply wrong.
+        if (/\/v1\/admin\/accounts\/acc_typo99/.test(call.url)) return json({}, 404);
+        return json({ rates: {}, tierThresholds: {} });
+      },
+    });
+    win = window;
+    await flush();
+    const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
+    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value = 'acc_typo99';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(text(window, '[data-banner]')).toContain('not found');
+    expect(text(window, '[data-banner]')).not.toContain('no usage');
   });
 
   it('top accounts: two-step fetch (accounts → overview) renders the money table', async () => {

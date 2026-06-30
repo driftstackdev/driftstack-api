@@ -138,6 +138,16 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
     expect(body).toContain('ds_web_session_token');
   });
 
+  it('CRITICAL suspend confirm is destructive:true — without it the OK button auto-focuses and a stray Enter fires the suspend (revokes ALL sessions + API keys) with no click required (audit waefer6wu)', () => {
+    const suspendFn = body.match(/async function suspend\(\)[\s\S]*?\n      \}/);
+    expect(suspendFn).not.toBeNull();
+    const fn = suspendFn![0]!;
+    expect(fn).toMatch(/window\.driftstackConfirm\(/);
+    const confirmCall = fn.match(/window\.driftstackConfirm\([\s\S]*?\);/);
+    expect(confirmCall).not.toBeNull();
+    expect(confirmCall![0]).toMatch(/destructive:\s*true/);
+  });
+
   it('mutations surface the server problem+json detail via mutationJson (W151/W152), so refusals explain why', () => {
     // tier change / suspend / unsuspend / override / note / refund all
     // route their non-ok response through mutationJson, which reads

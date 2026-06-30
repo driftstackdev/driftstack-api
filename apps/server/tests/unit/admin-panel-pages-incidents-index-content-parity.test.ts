@@ -98,18 +98,24 @@ describe('W490.B apps/admin-panel/src/pages/incidents/index.astro content parity
     );
   });
 
-  it("fetchAndRender: GET /v1/admin/incidents?scope=all&limit=100 + Bearer auth + rebuild on success / clears the SSG mock to the real empty state on every failure path (no-token, non-array/non-ok response, network error) — pinned so a transient failure never leaves the fabricated 'API server elevated 5xx' major incident on this incidents/status surface (a false ops signal); rebuild([]) renders 'No open incidents. All systems operational.'", () => {
+  it("fetchAndRender: GET /v1/admin/incidents?scope=all&limit=100 + Bearer auth + rebuild on success / clears the SSG mock to the real empty state on EVERY failure path (no-token, 403, non-ok response, network error) — pinned so a transient failure never leaves the fabricated 'API server elevated 5xx' major incident on this incidents/status surface (a false ops signal); rebuild([]) ALWAYS fires before any banner logic, on every branch", () => {
     expect(body).toMatch(
       /fetch\(apiBaseUrl \+ '\/v1\/admin\/incidents\?scope=all&limit=100', \{\s*\n?\s*headers: \{ authorization: 'Bearer ' \+ token \},\s*\n?\s*\}\)/,
     );
-    // No-token path clears the mock to the empty state.
-    expect(body).toMatch(/if \(!token\) \{\s*\n?\s*rebuild\(\[\]\);\s*\n?\s*return;\s*\n?\s*\}/);
+    // No-token path clears the mock to the empty state (audit waefer6wu added a
+    // sign-in banner alongside — the safety-critical rebuild([]) is unchanged,
+    // still the first/unconditional action, just no longer the LAST line).
+    expect(body).toMatch(/if \(!token\) \{\s*\n?\s*rebuild\(\[\]\);\s*\n?\s*showBanner\(/);
     // Success/non-ok/non-array response → rebuild with data or [].
     expect(body).toMatch(/rebuild\(body && Array\.isArray\(body\.data\) \? body\.data : \[\]\);/);
-    // Network error → clear the mock too.
+    // 2026-06-30 (audit waefer6wu) — every failure (403/non-ok/network) still
+    // rebuild([])s FIRST (clearing any stale/fabricated incident) before showing
+    // a distinct, retry-capable error banner instead of the old bare empty state.
+    expect(body).toMatch(/\.catch\(function \(err\) \{/);
     expect(body).toMatch(
-      /\.catch\(function \(\) \{\s*\n?\s*\/\/[^\n]*\n?\s*\/\/[^\n]*\n?\s*rebuild\(\[\]\);\s*\n?\s*\}\);/,
+      /rebuild\(\[\]\);\s*\n?\s*var msg = err && err\.message \? err\.message : 'network error';/,
     );
+    expect(body).toMatch(/Access denied — admin scope required\./);
   });
 
   it("Form validation: !title || !description → 'Title + initial update are required.' error banner via showErr + bail — pinned so empty submissions show inline error (drift to letting the request fly with empty body would 422 from the server + operators get a confusing 'invalid request body' instead of a friendly 'title required' message)", () => {

@@ -314,11 +314,26 @@ const apiBaseUrl = resolveApiBaseUrl();
       '</div>';
   }
 
+  // audit waefer6wu — on any config-fetch failure (missing/expired token,
+  // non-2xx, network error) the Rate Card / Tier Thresholds tiles were left
+  // exactly as SSG-rendered: pulsing `animate-pulse` skeleton bars, forever,
+  // since renderRateCard()/renderTierThresholds() were the ONLY code that
+  // ever touched those two elements and neither failure branch called them.
+  // showConfigError() clears the skeleton to an explicit error message so
+  // the tiles don't look perpetually "still loading" when the page is
+  // actually erroring.
+  function showConfigError(msg) {
+    const text = `<p class="text-sm text-red-600">Couldn't load (${escapeHtml(msg)}).</p>`;
+    if (rateCard) rateCard.innerHTML = text;
+    if (tierThresholds) tierThresholds.innerHTML = text;
+  }
+
   async function loadConfig() {
     try {
       const res = await authedFetch('/v1/admin/cost/config');
       if (!res.ok) {
         showBanner(`/v1/admin/cost/config returned ${res.status}`);
+        showConfigError(`HTTP ${res.status}`);
         return;
       }
       const body = await res.json();
@@ -334,6 +349,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     } catch (err) {
       const msg = err && err.message ? err.message : 'network error';
       showBanner('Could not load cost config (' + msg + ').');
+      showConfigError(msg);
     }
   }
 
@@ -470,8 +486,31 @@ const apiBaseUrl = resolveApiBaseUrl();
           `/v1/admin/cost/accounts/${encodeURIComponent(accountId)}${qs}`,
         );
         if (res.status === 404) {
-          showBanner('Account has no usage in the requested cycle.');
+          // audit waefer6wu — GET /v1/admin/cost/accounts/:id 404s for TWO
+          // distinct server-side cases that collapse to the identical
+          // message: a real account with zero usage this cycle, OR an
+          // account id that doesn't exist at all (e.g. an operator
+          // fat-fingering a UUID while triaging a billing dispute). A
+          // typo'd id reading as "confirmed zero usage" can feed a wrong
+          // support conclusion. Disambiguate client-side with the same
+          // existence check accounts/[id].astro already does — GET
+          // /v1/admin/accounts/:id — without touching the cost route.
           accountResult?.classList.add('hidden');
+          try {
+            const existsRes = await authedFetch(
+              `/v1/admin/accounts/${encodeURIComponent('acc_' + accountId)}`,
+            );
+            if (existsRes.status === 404) {
+              showBanner(`Account acc_${accountId} not found — check the id.`);
+            } else {
+              showBanner('Account exists but has no usage in the requested cycle.');
+            }
+          } catch (_existErr) {
+            // Existence check itself failed (e.g. no token) — fall back to
+            // the old ambiguous-but-safe message rather than asserting
+            // either way.
+            showBanner('Account has no usage in the requested cycle (or the id does not exist).');
+          }
           return;
         }
         if (!res.ok) {
