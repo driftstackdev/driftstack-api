@@ -119,11 +119,16 @@ export function installLogCapture(): void {
 
   const levels: LogLevel[] = ['log', 'info', 'warn', 'error', 'debug'];
   for (const level of levels) {
+    /* eslint-disable no-console -- this IS the console-capture installer: it deliberately
+       reads + wraps console[level] (incl. log/info/debug) to mirror output into the buffer,
+       preserving the original console behaviour. The no-console policy targets stray logging,
+       not this opt-in capture utility. */
     const original = console[level].bind(console) as (...a: unknown[]) => void;
     console[level] = (...args: unknown[]): void => {
       record(level, args);
       original(...args);
     };
+    /* eslint-enable no-console */
   }
 
   if (typeof window !== 'undefined') {
