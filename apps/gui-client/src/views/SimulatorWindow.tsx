@@ -3384,6 +3384,14 @@ export function SimulatorWindow(): JSX.Element {
           // video track px (which vary with bandwidth → would corrupt tap coords).
           logicalContentWidth?: number;
           logicalContentHeight?: number;
+          // A3 W3019/#6 — the box emits this on every page_state frame once a text
+          // field on the page gains/loses focus (fork DRIFTSTACK_INPUT_FOCUS token →
+          // harness PageState.inputFocused). Drives the on-screen keyboard exactly like
+          // a real iPhone: appears the instant the user taps into a field, disappears
+          // when focus leaves — no manual toggle needed. Auto-show is ACTIVE BY DEFAULT
+          // (founder 2026-06-30); the manual ⌨ toggle stays available as an override/
+          // fallback (e.g. while a session is on an older box build pre-dating this).
+          inputFocused?: boolean;
           // tabId (doc-150 item 4 → live-state accuracy) — a page_state frame the box
           // attributes to a specific renderer. When present we route url/title to THAT
           // tab; absent → the active tab. Forward-compatible: per-tab routing activates
@@ -3557,6 +3565,17 @@ export function SimulatorWindow(): JSX.Element {
               setInputLogical({ width: lw, height: lh });
             }
           }
+        }
+        // #6 — auto-show/hide the on-screen keyboard from the box's real DOM focus
+        // state (a real iPhone never makes you reach for a toggle). Mirrors the box
+        // signal directly; the manual ⌨ button can still show/hide it at any time
+        // (e.g. before this signal arrives on an older build) and isn't fought by a
+        // frame that doesn't carry the field (absent → no change, not a hide). Gated
+        // OUT in AI mode: the focus event there is the AGENT typing, not the founder
+        // — popping the keyboard for the agent's own input would be confusing chrome
+        // over a read-only view (the ⌨ toggle is already disabled in AI mode).
+        if (typeof msg.inputFocused === 'boolean' && controlModeRef.current !== 'ai') {
+          setKeyboardVisible(msg.inputFocused);
         }
         // Box is the ONLY writer of a tab's stored url/title (live-state accuracy
         // refactor). Route by tabId when the frame carries one, else the active tab;
@@ -4232,6 +4251,14 @@ export function SimulatorWindow(): JSX.Element {
   // SimulatorWindow has no SDK client → lib/agent-session-control raw-fetches
   // (reads {apiKey,baseUrl} via loadSettings). null mode = not loaded yet.
   const [controlMode, setControlMode] = useState<SessionMode | null>(null);
+  // #6 — a fresh-reads mirror for the long-lived onData effect (deps [room, ...], so
+  // it does NOT re-subscribe on every controlMode change): without this the
+  // inputFocused→keyboard handler would close over a STALE mode and could pop the
+  // keyboard for the agent's own typing after a manual↔AI switch mid-session.
+  const controlModeRef = useRef(controlMode);
+  useEffect(() => {
+    controlModeRef.current = controlMode;
+  }, [controlMode]);
   // Distinguishes a CONFIRMED mode (a successful getAgentSession round-trip) from
   // one DEFAULTED to 'manual' because the control HTTP API was unreachable (e.g.
   // the separate Simulator app reopened without its per-session control key). The

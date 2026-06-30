@@ -83,8 +83,15 @@ function makeFakeVideo(): FakeVideo {
 
 // The panel mock surfaces a fake room + driveable connection/publisher state AND a
 // fake <video> via onVideoEl so the freeze detector has a real frame-progress source.
+// #6 — track the LATEST 'dataReceived' registration (not the first): the onData
+// effect can re-subscribe across renders, and a stale early registration would
+// silently swallow state updates a test fires against it. Mirrors the proven
+// capture pattern in simulator-window-ios-chrome.test.tsx.
+let latestDataHandler: ((p: Uint8Array) => void) | null = null;
 const fakeRoom = {
-  on: vi.fn(),
+  on: vi.fn((event: string, cb: (p: Uint8Array) => void) => {
+    if (event === 'dataReceived') latestDataHandler = cb;
+  }),
   off: vi.fn(),
   localParticipant: { publishData: vi.fn(() => Promise.resolve()) },
 };
@@ -680,5 +687,70 @@ describe('SimulatorWindow — AI-mode view-only cues + live pair-state', () => {
     });
     // The AI-driving badge is gone (controlMode is now manual).
     expect(container.querySelector('[data-component="ai-driving-badge"]')).toBeNull();
+  });
+});
+
+// #6 (founder 2026-06-30) — the on-screen keyboard auto-shows/hides from the box's
+// real DOM focus state (page_state.inputFocused), like a real iPhone, and must NOT
+// pop for the AGENT's own typing in AI mode.
+describe('SimulatorWindow — keyboard auto-show from inputFocused (#6)', () => {
+  beforeEach(() => {
+    sessionState.current = {
+      mode: 'manual',
+      pairKind: null,
+      terminal: false,
+      status: 'active',
+      closedReason: null,
+    };
+    sessionState.error = null;
+    getAgentSessionSpy.mockClear();
+  });
+
+  function dataHandler(): ((p: Uint8Array) => void) | null {
+    return latestDataHandler;
+  }
+  function pushPageState(frame: Record<string, unknown>): void {
+    act(() => {
+      dataHandler()?.(new TextEncoder().encode(JSON.stringify(frame)));
+    });
+  }
+  function keyboardToggle(container: HTMLElement): Element | null {
+    return container.querySelector('[data-component="simulator-keyboard-toggle"]');
+  }
+
+  it('shows the keyboard the instant a field is focused (manual mode) and hides it on blur', async () => {
+    const { container } = renderSim();
+    await waitFor(() => expect(dataHandler()).not.toBeNull());
+    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('false');
+    pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: true });
+    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true');
+    pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: false });
+    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('a frame with no inputFocused field leaves the current visibility untouched', async () => {
+    const { container } = renderSim();
+    await waitFor(() => expect(dataHandler()).not.toBeNull());
+    pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: true });
+    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true');
+    pushPageState({ state: 'loading', url: 'https://example.com/next' });
+    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('does NOT auto-show for the agent`s own field focus in AI mode', async () => {
+    sessionState.current = {
+      mode: 'ai',
+      pairKind: null,
+      terminal: false,
+      status: 'active',
+      closedReason: null,
+    };
+    const { container } = renderSim();
+    await waitFor(() => {
+      if (container.querySelector('[data-component="ai-driving-badge"]') === null)
+        throw new Error('not yet');
+    });
+    pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: true });
+    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('false');
   });
 });
