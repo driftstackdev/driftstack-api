@@ -79,6 +79,86 @@ func TestSessions_List_PassesQueryParams(t *testing.T) {
 	}
 }
 
+func TestSessions_Iterate_WalksCursorPages(t *testing.T) {
+	t.Parallel()
+	s1, s2, s3 := sessionFixture(), sessionFixture(), sessionFixture()
+	s1.ID, s2.ID, s3.ID = "ses_1", "ses_2", "ses_3"
+	pageOne := SessionsListPage{
+		Data:       []Session{s1, s2},
+		HasMore:    true,
+		NextCursor: stringPtr("ses_2"),
+	}
+	pageTwo := SessionsListPage{
+		Data:    []Session{s3},
+		HasMore: false,
+	}
+
+	requestN := 0
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		requestN++
+		w.Header().Set("content-type", "application/json")
+		if r.URL.Query().Get("cursor") == "" {
+			_ = json.NewEncoder(w).Encode(pageOne)
+		} else {
+			_ = json.NewEncoder(w).Encode(pageTwo)
+		}
+	})
+
+	var seen []string
+	err := client.Sessions.Iterate(context.Background(), nil, func(s *Session) (bool, error) {
+		seen = append(seen, s.ID)
+		return true, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 3 {
+		t.Errorf("seen %d sessions, expected 3 (got %v)", len(seen), seen)
+	}
+	if requestN != 2 {
+		t.Errorf("requests %d, expected 2 (one per page)", requestN)
+	}
+}
+
+// End-to-end proof that the shared advanceCursor guard (already unit-tested
+// generically in pagination_test.go via Profiles) is wired into Sessions'
+// Iterate too: a server that returns the SAME non-null cursor forever must
+// surface an error rather than spin infinitely and hang the caller.
+func TestSessions_Iterate_NonAdvancingCursorDoesNotHang(t *testing.T) {
+	t.Parallel()
+	requestN := 0
+	_, client := newServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		requestN++
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(SessionsListPage{
+			Data:       []Session{sessionFixture()},
+			HasMore:    true,
+			NextCursor: stringPtr("stuck"),
+		})
+	})
+
+	seen := 0
+	err := client.Sessions.Iterate(context.Background(), nil, func(_ *Session) (bool, error) {
+		seen++
+		return true, nil
+	})
+	if err == nil {
+		t.Fatal("expected an error on a non-advancing cursor, got nil (would have hung)")
+	}
+	var te *TransportError
+	if !errors.As(err, &te) {
+		t.Errorf("error is %T, want *TransportError", err)
+	}
+	// page1 cursor="" → advance to "stuck"; page2 cursor="stuck" → "stuck" again
+	// → guard fires. Exactly 2 requests, not ∞.
+	if requestN != 2 {
+		t.Errorf("requests %d, expected 2 (guard stops the walk)", requestN)
+	}
+	if seen != 2 {
+		t.Errorf("seen %d, expected 2", seen)
+	}
+}
+
 func TestSessions_Navigate_SerializesBody(t *testing.T) {
 	t.Parallel()
 	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {

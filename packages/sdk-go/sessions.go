@@ -52,6 +52,46 @@ func (r *SessionsResource) List(ctx context.Context, query *ListSessionsQuery) (
 	return &out, nil
 }
 
+// Iterate yields every session across cursor pages, newest first. The
+// callback returns false to stop early; an error from the callback is
+// propagated back to the caller. Guards against a non-advancing cursor
+// (a buggy server / proxy / cache returning the same next_cursor twice)
+// via the shared advanceCursor helper, matching every other resource's
+// Iterate (Profiles, AuditLog, Recipes, ProfileSnapshots, CryptoOrders,
+// AgentSessions, Webhooks.IterateDeliveries).
+func (r *SessionsResource) Iterate(ctx context.Context, query *ListSessionsQuery, fn func(*Session) (bool, error)) error {
+	cursor := ""
+	limit := 0
+	if query != nil {
+		limit = query.Limit
+		cursor = query.Cursor
+	}
+	for {
+		q := &ListSessionsQuery{Limit: limit, Cursor: cursor}
+		page, err := r.List(ctx, q)
+		if err != nil {
+			return err
+		}
+		for i := range page.Data {
+			cont, err := fn(&page.Data[i])
+			if err != nil {
+				return err
+			}
+			if !cont {
+				return nil
+			}
+		}
+		next, done, err := advanceCursor(cursor, page.NextCursor)
+		if err != nil {
+			return err
+		}
+		if done {
+			return nil
+		}
+		cursor = next
+	}
+}
+
 // Get fetches a single session by id.
 func (r *SessionsResource) Get(ctx context.Context, sessionID string) (*Session, error) {
 	var out Session

@@ -406,14 +406,9 @@ desktop-style tooling. `button` is `0` (left), `1` (middle), or `2`
 (right). `modifiers` is an optional array of `cmd / ctrl / shift / option`
 strings.
 
-Response (200): a discriminated union on `kind`.
-
-For a straight forward-to-harness dispatch (manual mode, or pair
-mode after takeover-grant):
-
-```json
-{ "kind": "forwarded", "duration_ms": 3 }
-```
+Response (200): a discriminated union on `kind`. Only
+`pair-mode-takeover-fired` is reachable today — see the callout
+below `forwarded`.
 
 When the first input-event in a pair-mode `ai-driving` session fires
 the takeover-request transition instead of forwarding:
@@ -422,9 +417,23 @@ the takeover-request transition instead of forwarding:
 { "kind": "pair-mode-takeover-fired", "pair_mode_state": { "kind": "takeover-pending" } }
 ```
 
-`duration_ms` (on the `forwarded` branch) is server-side dispatch
-latency, NOT round-trip to the harness. Use a separate `ping` event
-to measure end-to-end latency.
+For a straight forward-to-harness dispatch (manual mode, or pair
+mode after takeover-grant), the eventual response shape is:
+
+```json
+{ "kind": "forwarded", "duration_ms": 3 }
+```
+
+**This branch does not exist on any current deployment.** Manual-mode
+and pair-mode-after-takeover input-events always return `503
+feature-unavailable` today, with no exceptions — the route has no
+transport to forward events to the harness until Agent 1's Swift
+harness end-to-end work lands (v1.0 Mac fleet harness rollout). Until
+then, drive manual/pair-mode input through the LiveKit DataChannel
+documented in the [Live video guide](/guides/live-video/)
+(`room.localParticipant.publishData(...)`) instead of this endpoint.
+`duration_ms` (server-side dispatch latency, NOT round-trip to the
+harness) only applies once the `forwarded` branch ships.
 
 Throttle the client side: the route's rate-limit bucket
 (`agent_sessions:input_event`) is sized for ≤120Hz `mouseMove` /
@@ -439,9 +448,10 @@ Errors:
 - `400 validation-failed` — event body fails the discriminated-union
   schema (unknown `type`, out-of-bounds coords, invalid `button`,
   etc.).
-- `503 feature-unavailable` — harness end-to-end not yet wired on
-  this deployment. Pre-launch state today; lands with the v1.0
-  Mac fleet harness rollout.
+- `503 feature-unavailable` — manual-mode / pair-mode-after-takeover
+  dispatch always hits this today (see callout above) — harness
+  end-to-end is not yet wired on this deployment. Pre-launch state;
+  lands with the v1.0 Mac fleet harness rollout.
 
 ## Pair-mode takeover + handback
 
