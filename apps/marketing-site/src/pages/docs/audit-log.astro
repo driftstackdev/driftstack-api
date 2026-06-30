@@ -145,22 +145,18 @@ Authorization: Bearer ds_live_…`}</code></pre>
     </p>
 
     <h2>Retention</h2>
-    <table>
-      <thead><tr><th>Tier</th><th>Audit-log retention</th></tr></thead>
-      <tbody>
-        <tr><td>Free</td><td>30 days</td></tr>
-        <tr><td>Solo / API Starter</td><td>90 days</td></tr>
-        <tr><td>Team / API Builder</td><td>1 year</td></tr>
-        <tr><td>Agency / API Scale</td><td>3 years</td></tr>
-        <tr><td>Enterprise</td><td>Custom (default 7 years for compliance)</td></tr>
-      </tbody>
-    </table>
     <p>
-      Past the retention window, entries are pruned by a nightly
-      sweep. For longer retention, export via the API regularly and
-      store copies on your side — most enterprise customers ship a
-      daily cron that calls the endpoint with
-      <code>from=yesterday&amp;to=today</code> and forwards the
+      Audit log entries are retained <strong>indefinitely</strong>,
+      on every tier — there is no tier-based retention window and no
+      scheduled prune job. An account's entries are removed only when
+      the account itself is deleted (a cascading delete tied to the
+      account record, not a time-based sweep).
+    </p>
+    <p>
+      If you want your own offline copy for a SIEM or an internal
+      retention policy, export via the API regularly — most
+      enterprise customers ship a daily cron that calls the endpoint
+      with <code>from=yesterday&amp;to=today</code> and forwards the
       response into their SIEM.
     </p>
 

@@ -80,9 +80,11 @@ Content-Type: application/json
       <li>Keys are scoped <strong>per account</strong>. Two
         different accounts sending the literal string
         <code>k1</code> get two independent orders.</li>
-      <li>The dedupe window is <strong>24 hours</strong> from the
-        first sighting. After that the key is forgotten; reusing it
-        mints a fresh order.</li>
+      <li>Dedup is <strong>permanent</strong>, not a rolling
+        window: once a key has minted an order, replaying that exact
+        key returns that same order indefinitely — there's no expiry
+        after which reusing it mints a fresh one. Use a new key for
+        a new order.</li>
       <li>Pre-signup checkouts (no account_id) share a single
         anonymous bucket. Don't rely on uniqueness there if your
         client is one of many anonymous callers.</li>

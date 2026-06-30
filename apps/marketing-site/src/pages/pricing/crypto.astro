@@ -82,9 +82,13 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
     </ul>
     <p class="text-sm text-tk-ink-3">
       The price you see at checkout is quoted in USD; the equivalent
-      crypto amount is locked in for 1 hour from order creation. If
-      you pay outside that window, the order auto-cancels and you can
-      mint a new one.
+      crypto amount is fixed when the order is created and doesn't
+      change. There's no fixed 1-hour cutoff — a pending order isn't
+      automatically cancelled on a timer. If you want a fresh quote
+      (you missed your window, or market conditions moved), email
+      <a href="mailto:support@driftstack.dev">support@driftstack.dev</a>
+      and we'll close the stale order so you can check out again at
+      the current price.
     </p>
 
     <h2>Confirmation timing</h2>
