@@ -15,7 +15,7 @@
 
 import { useEffect, useRef } from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, act } from '@testing-library/react';
+import { render, act, fireEvent, waitFor } from '@testing-library/react';
 
 vi.mock('../../src/lib/livekit', () => ({
   createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
@@ -564,5 +564,91 @@ describe('SimulatorWindow — polls stop after the session terminally ends', () 
     });
     expect(getAgentSessionSpy.mock.calls.length).toBeGreaterThan(endCalls);
     expect(getAgentSessionPageStateSpy.mock.calls.length).toBeGreaterThan(pageCalls);
+  });
+});
+
+// AI-mode view-only affordances + live pair-state refresh (GUI-issue batch 2026-06-30).
+// In AI mode input capture is off, so the on-screen cues must say so honestly: no false
+// tap-ripple (it signals "it worked" on a no-op) and a persistent "Agent is driving"
+// badge over the video. The ~5s session-end poll also refreshes the live pair state.
+describe('SimulatorWindow — AI-mode view-only cues + live pair-state', () => {
+  beforeEach(() => {
+    panelCbs.sessionEnded = null;
+    sessionState.current = {
+      mode: 'ai',
+      pairKind: null,
+      terminal: false,
+      status: 'active',
+      closedReason: null,
+    };
+    sessionState.error = null;
+    getAgentSessionSpy.mockClear();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // Finding #7 — with input off in AI mode, a persistent badge over the video tells the
+  // founder the agent has control (the only other cue lives in the collapsed drawer).
+  it('shows the "Agent is driving" badge over the video in AI mode', async () => {
+    const { container } = renderSim();
+    const badge = await waitFor(() => {
+      const b = container.querySelector('[data-component="ai-driving-badge"]');
+      if (b === null) throw new Error('not yet');
+      return b;
+    });
+    expect(badge.textContent).toContain('Agent is driving');
+  });
+
+  // Finding #6 — the tap-ripple must NOT bloom in AI mode (the tap is never sent, so a
+  // "it worked" ripple is a false positive). It DOES bloom in manual mode (covered in the
+  // base suite); here we assert the AI-mode suppression.
+  it('does NOT bloom a tap-ripple on a screen tap in AI mode', async () => {
+    const { container } = renderSim();
+    // Wait for controlMode to settle to 'ai' (the driving badge proves the fetch landed).
+    await waitFor(() => {
+      if (container.querySelector('[data-component="ai-driving-badge"]') === null)
+        throw new Error('not yet');
+    });
+    const host = container.querySelector('[data-component="simulator-screen-host"]');
+    expect(host).not.toBeNull();
+    (host as HTMLElement).getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 300, height: 600 }) as DOMRect;
+    fireEvent.pointerDown(host as Element, { clientX: 120, clientY: 240 });
+    expect(container.querySelector('[data-component="tap-ripple"]')).toBeNull();
+  });
+
+  // Finding #11 — the ~5s session-end poll already carries the live pairKind/mode; apply
+  // them so the "who is driving" indicator + Take/Hand-back action stay truthful when the
+  // agent grabs/releases control server-side. Here the server flips ai → manual.
+  it('refreshes controlMode from the 5s poll when the server mode changes (ai → manual)', async () => {
+    vi.useFakeTimers();
+    const { container } = renderSim();
+    // Initial fetch (mount refreshControl) → AI badge present. Flush the resolved
+    // getAgentSession microtasks (no waitFor — it polls on real timers, which deadlocks
+    // under fake timers).
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[data-component="ai-driving-badge"]')).not.toBeNull();
+    // The server hands control back to manual; the next ~5s session-end poll carries the
+    // fresh mode (finding #11) and must apply it.
+    sessionState.current = {
+      mode: 'manual',
+      pairKind: null,
+      terminal: false,
+      status: 'active',
+      closedReason: null,
+    };
+    await act(async () => {
+      vi.advanceTimersByTime(5_100);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // The AI-driving badge is gone (controlMode is now manual).
+    expect(container.querySelector('[data-component="ai-driving-badge"]')).toBeNull();
   });
 });

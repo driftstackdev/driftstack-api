@@ -138,7 +138,16 @@ export function useConnectionStats(opts: UseConnectionStatsOpts): ConnectionStat
     const poll = (): void => {
       if (cancelled) return;
       const track = firstSubscribedVideoTrack(room);
-      if (track === null || typeof track.getRTCStatsReport !== 'function') return;
+      // No subscribed video track right now (e.g. a freeze-recovery
+      // resubscribe blip where the panel toggles setSubscribed(false) then
+      // re-subscribes). The old stats no longer describe the live
+      // PeerConnection, so reset to EMPTY — the transport pill falls back to
+      // "link…" until a real report lands, instead of showing a stale
+      // udp/tcp + RTT that hides a transport change during recovery.
+      if (track === null || typeof track.getRTCStatsReport !== 'function') {
+        setStats(EMPTY);
+        return;
+      }
       void Promise.resolve(track.getRTCStatsReport())
         .then((report: RTCStatsReport | undefined) => {
           if (cancelled || report === undefined) return;

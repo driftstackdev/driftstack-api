@@ -269,6 +269,18 @@ describe('IOSKeyboard — bottom-row emoji key', () => {
     tap(container, '😀');
     expect(sendInputEventMock).not.toHaveBeenCalled();
   });
+
+  it('is rendered INERT (disabled + dimmed, no press flash) so the dead key does not invite a tap', () => {
+    const { container } = render(<IOSKeyboard room={ROOM} />);
+    const emoji = el(container, '[data-key="😀"]');
+    // Disabled affordance: not interactive, marked for AT, visually dimmed.
+    expect(emoji).toHaveAttribute('data-disabled', 'true');
+    expect(emoji).toHaveAttribute('aria-disabled', 'true');
+    expect((emoji as HTMLButtonElement).disabled).toBe(true);
+    expect(emoji.className).toContain('opacity-40');
+    // No active press-flash on the inert key (it must not look tappable).
+    expect(emoji.className).not.toContain('active:brightness-95');
+  });
 });
 
 describe('IOSKeyboard — return key colour', () => {

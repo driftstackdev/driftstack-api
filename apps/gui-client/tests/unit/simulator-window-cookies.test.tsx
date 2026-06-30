@@ -103,6 +103,10 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
     cookiesMock.mockReset();
     setCookiesMock.mockReset();
     downloadBlobMock.mockReset();
+    // downloadBlob returns Promise<boolean> (true = confirmed write); the cookie-export
+    // handler awaits it (.then) to surface a success/failure note. A bare reset returns
+    // undefined → the .then throws an unhandled rejection. Default it to a resolved write.
+    downloadBlobMock.mockResolvedValue(true);
   });
 
   it('groups cookies by domain with flag chips + a live indicator', async () => {

@@ -580,6 +580,7 @@ export function DeviceToolbar({
   running,
   keyboardVisible,
   onToggleKeyboard,
+  inputEnabled = true,
 }: {
   deviceName: string;
   profileName: string;
@@ -589,6 +590,11 @@ export function DeviceToolbar({
   /** On-screen iOS keyboard visibility + its toggle (founder 2026-06-25). */
   keyboardVisible: boolean;
   onToggleKeyboard: () => void;
+  /** False in AI mode — the agent is driving, so manual input is off. Finding #5:
+   *  the ⌨ toggle is dead in AI mode (both keyboard render sites gate on
+   *  controlMode !== 'ai'), so disable it rather than letting it light up "pressed"
+   *  while nothing appears (and nudge the window for a keyboard that never shows). */
+  inputEnabled?: boolean;
 }): JSX.Element {
   // The activity-bar rail is always docked beside the phone (it lives in the main
   // layout, not this thin toolbar); panes expand on a rail-icon click. There is no
@@ -671,14 +677,29 @@ export function DeviceToolbar({
               A3's box-side focus signal (W2992). */}
           <button
             type="button"
-            aria-label={keyboardVisible ? 'Hide keyboard' : 'Show keyboard'}
-            title={keyboardVisible ? 'Hide the on-screen keyboard' : 'Show the on-screen keyboard'}
-            aria-pressed={keyboardVisible}
+            aria-label={
+              !inputEnabled
+                ? 'Keyboard unavailable while the agent is driving'
+                : keyboardVisible
+                  ? 'Hide keyboard'
+                  : 'Show keyboard'
+            }
+            title={
+              !inputEnabled
+                ? 'The agent is driving — switch to Manual to type'
+                : keyboardVisible
+                  ? 'Hide the on-screen keyboard'
+                  : 'Show the on-screen keyboard'
+            }
+            aria-pressed={inputEnabled && keyboardVisible}
+            disabled={!inputEnabled}
             data-component="simulator-keyboard-toggle"
             className={
-              keyboardVisible
-                ? 'rounded bg-white/10 px-2 py-0.5 text-[18px] leading-none text-accent transition hover:bg-white/15'
-                : 'rounded px-2 py-0.5 text-[18px] leading-none transition hover:bg-white/10 hover:text-ink-primary'
+              !inputEnabled
+                ? 'rounded px-2 py-0.5 text-[18px] leading-none text-white/25 cursor-not-allowed'
+                : keyboardVisible
+                  ? 'rounded bg-white/10 px-2 py-0.5 text-[18px] leading-none text-accent transition hover:bg-white/15'
+                  : 'rounded px-2 py-0.5 text-[18px] leading-none transition hover:bg-white/10 hover:text-ink-primary'
             }
             onClick={onToggleKeyboard}
           >
@@ -2311,7 +2332,20 @@ export function SimulatorWindow(): JSX.Element {
   // #36 store: buildRecordingExport → downloadJson, the proven blob/anchor path).
   function exportRecording(rec: Recording): void {
     const now = new Date();
-    void downloadJson(recordingExportFilename(rec, now), buildRecordingExport(rec, now));
+    // Finding #8 — AWAIT the write + surface a note (mirrors the cookie-export fix,
+    // founder #3): downloadJson returns false when the Tauri fs write fails (e.g. the
+    // $DOWNLOAD scope isn't granted) and true on a confirmed write. The old fire-and-
+    // forget gave NO confirmation on success and silently swallowed a failed write, so
+    // Export read as "does nothing / is broken".
+    const fn = recordingExportFilename(rec, now);
+    void downloadJson(fn, buildRecordingExport(rec, now)).then((ok) => {
+      setNotice(
+        ok
+          ? `Exported recording to your Downloads folder (${fn}).`
+          : "Couldn't save the export — check the app's file-access permission.",
+      );
+      window.setTimeout(() => setNotice(null), 4000);
+    });
   }
   // Stop the capture loop if the window unmounts mid-recording.
   useEffect(() => {
@@ -2357,6 +2391,16 @@ export function SimulatorWindow(): JSX.Element {
   // session swap (a fresh session starts non-terminal). Declared up here (before the
   // freeze-recovery effect that reads it) to avoid a TDZ on the effect's dep array.
   const [sessionEnded, setSessionEnded] = useState<{ reason: string | null } | null>(null);
+  // Live mirror of sessionEnded for the data-channel onData callback (its effect closes
+  // over a stale value and doesn't re-subscribe per session-end). Finding #3 — a late
+  // page_state frame the box pushes as it tears down (or one still buffered in LiveKit)
+  // must NOT re-light the loading bar / re-stamp the stalled badge ABOVE the "Session
+  // ended" overlay (those render as window chrome around the video panel). The poll
+  // already bails on sessionEnded; this lets the data-channel source freeze too.
+  const sessionEndedRef = useRef(sessionEnded);
+  useEffect(() => {
+    sessionEndedRef.current = sessionEnded;
+  }, [sessionEnded]);
   const videoElRef = useRef<HTMLVideoElement | null>(null);
   // fps: rolling 1s counter via requestVideoFrameCallback (browser-native;
   // no LiveKit internals). null until the first full window.
@@ -2473,7 +2517,14 @@ export function SimulatorWindow(): JSX.Element {
       // last progress moment itself, so detection takes exactly FREEZE_AFTER_MS after
       // frames stop (not 2× the window). Any fresh frame clears it immediately.
       freezeSinceRef.current = lastProgressAt;
-      setVideoFrozen(now - lastProgressAt >= FREEZE_AFTER_MS);
+      const frozen = now - lastProgressAt >= FREEZE_AFTER_MS;
+      setVideoFrozen(frozen);
+      // Finding #12 — null the fps reading while frozen. fps is only updated inside the
+      // rVFC chain, which STOPS firing on a true freeze, so it would otherwise hold its
+      // last live value (e.g. 30) and contradict the "Video frozen" badge in the status
+      // strip, the Diagnostics Render tile, AND Copy-diagnostics (all read this state).
+      // The rVFC chain repopulates it the moment frames resume.
+      if (frozen) setFps(null);
     };
     tick();
     const handle = window.setInterval(tick, 1000);
@@ -3282,6 +3333,19 @@ export function SimulatorWindow(): JSX.Element {
       loadWatchdogRef.current = null;
     }
   };
+  // Centralized load-watchdog arming. EVERY transition into loading=true (re)arms the
+  // 6s safety net so the loading bar self-terminates if the box never reports a terminal
+  // frame — not just operator navigates. Box-reported loading (data-channel page_state,
+  // the ~2s poll) is the dominant path in AI mode (agent navigations) + for redirects /
+  // sub-navigations / SPA route changes; without arming here the bar trickles to ~90%
+  // and sticks forever when the box drops a terminal frame or a session ends mid-load.
+  const armLoadWatchdog = (): void => {
+    clearLoadWatchdog();
+    loadWatchdogRef.current = window.setTimeout(() => {
+      setPageLoading(false);
+      loadWatchdogRef.current = null;
+    }, 6000);
+  };
   useEffect(() => () => clearLoadWatchdog(), []);
   // Optimistically reset the per-page chrome (error overlay / loading bar / stalled
   // badge / progress) on a tab switch/open/close. These four pieces of state are
@@ -3470,6 +3534,13 @@ export function SimulatorWindow(): JSX.Element {
           if (msg.type !== 'ping') warnUnrecognizedDataFrame(msg);
           return;
         }
+        // Finding #3 — once the session has terminally ended (one-way latch), freeze the
+        // page-state chrome the same way the poll does (it bails on sessionEnded). A late
+        // 'loading'/'stalled'/'errored' frame the box pushes as it tears down — or one
+        // still buffered in the LiveKit data channel — would otherwise re-light the
+        // loading bar / re-stamp the "page unresponsive" badge ABOVE the "Session ended"
+        // overlay (window chrome around the video panel, not suppressed by it).
+        if (sessionEndedRef.current !== null) return;
         // A3 W3005 — adopt the box's FIXED per-archetype logical content dims as the
         // tap/scroll coordinate space (every page_state frame carries them). The
         // durable fix for SFU-downscale tap drift: the encoded track px vary with
@@ -3540,7 +3611,11 @@ export function SimulatorWindow(): JSX.Element {
         const loading = isHarnessState ? msg.state === 'loading' : msg.loading;
         if (typeof loading === 'boolean') {
           setPageLoading(loading);
-          if (!loading) clearLoadWatchdog();
+          // Finding #1 — a box-reported loading=true arms the watchdog too (not just
+          // operator navigates), so it self-terminates if the box never pushes a
+          // terminal frame (session ends mid-load, renderer wedges, dropped frame).
+          if (loading) armLoadWatchdog();
+          else clearLoadWatchdog();
         }
         setLoadProgress(typeof msg.progress === 'number' ? msg.progress : null);
       } catch {
@@ -3658,7 +3733,11 @@ export function SimulatorWindow(): JSX.Element {
           // a navigate, only ESCALATE to loading; the 6s watchdog still bounds it.
           if (!loading && Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS) return;
           setPageLoading(loading);
-          if (!loading) clearLoadWatchdog();
+          // Finding #1 — arm the watchdog on a box-reported loading=true here too, so a
+          // poll-driven load (the dominant path in AI mode) self-terminates if the box
+          // never reports completion (renderer wedge / dropped terminal frame).
+          if (loading) armLoadWatchdog();
+          else clearLoadWatchdog();
         })
         .catch(() => {
           /* best-effort poll — transient errors are non-fatal */
@@ -3707,7 +3786,22 @@ export function SimulatorWindow(): JSX.Element {
           // One-way: only LATCH terminal — never clear it (a non-terminal read after a
           // real end can't happen for the same id, and we must not let a stale/racing
           // poll un-end a closed session). A fresh session swap resets sessionEnded.
-          if (s.terminal) setSessionEnded({ reason: s.closedReason });
+          if (s.terminal) {
+            setSessionEnded({ reason: s.closedReason });
+            return;
+          }
+          // Finding #11 — this same 5s round-trip already carries the live pair state
+          // (s.pairKind), but it was thrown away. In pair mode the AGENT autonomously
+          // grabs/releases driving control server-side; without this the GUI keeps
+          // showing the stale "who is driving" state + offers the wrong Take/Hand-back
+          // action. Apply it when the session is non-terminal and no mutation is in
+          // flight (guard like refreshControl, so it never clobbers an optimistic
+          // onSetMode/onTakeover/onHandback). Zero extra network cost.
+          if (!controlBusyRef.current) {
+            setPairKind(s.pairKind);
+            setControlMode(s.mode);
+            setControlModeConfirmed(true);
+          }
         })
         .catch((err: unknown) => {
           // Drop a result that resolved after an in-place session swap (mirrors .then).
@@ -3747,6 +3841,16 @@ export function SimulatorWindow(): JSX.Element {
     // (was gated on the whole drawer being open). Switching away tears the
     // interval down via the effect cleanup; switching back re-fires tick().
     if (!cookiesPaneActive || sessionId === '' || room === null) return;
+    // Finding #13 — once the session has terminally ended, stop polling the dead session
+    // (the page-state + terminal-end polls already bail on sessionEnded). Otherwise the
+    // cookies endpoint 404s forever and the catch branch shows "cookies will appear once
+    // a page loads" — framed as if a future load can populate them, which can't happen on
+    // an ended session. Show an honest terminal note instead.
+    if (sessionEnded !== null) {
+      setCookies(null);
+      setCookiesNote('Session ended — cookies are no longer available.');
+      return;
+    }
     // Finding #5 — self-scheduling poll with exponential backoff. The next tick is
     // scheduled ONLY inside .finally (after the prior request settles), so requests can
     // never overlap/stack (this self-scheduling IS the single-flight guard; the server
@@ -3810,7 +3914,7 @@ export function SimulatorWindow(): JSX.Element {
       cancelled = true;
       if (handle !== null) clearTimeout(handle);
     };
-  }, [cookiesPaneActive, sessionId, controlAuth, room]);
+  }, [cookiesPaneActive, sessionId, controlAuth, room, sessionEnded]);
 
   // File-control upload (A3 W2851 / founder "control files"). Upload a file's bytes
   // (base64) into the running session's isolated 0o700 jail → get an OPAQUE handle
@@ -3858,7 +3962,10 @@ export function SimulatorWindow(): JSX.Element {
           const h = res.handle;
           if (res.status === 'ok' && h !== null) {
             setFiles((prev) => [h, ...prev]);
-            setUploadNote(null);
+            // Finding #10 — confirm success instead of clearing the note (every failure
+            // branch sets one; on a fast upload a silently-cleared note read as if the
+            // click didn't register). Matches the cookie-import success copy.
+            setUploadNote(`Uploaded ${file.name} — ready to attach to the page's file picker.`);
           } else if (res.status === 'unavailable') {
             // Honest (#73 twin): the upload path is LIVE; 'unavailable' = the session
             // isn't live on a node right now, not a future feature. `reason` carries
@@ -3905,6 +4012,10 @@ export function SimulatorWindow(): JSX.Element {
     // browser-bar indicator is shown (browser mode); single shared interval. Cleanup
     // tears the interval down on switching away; switching back re-fires tick().
     if (!downloadsPollActive || sessionId === '' || room === null) return;
+    // Finding #13 — stop polling once the session has terminally ended (consistency with
+    // the cookies / page-state / terminal-end polls): the endpoint 404s forever on a dead
+    // session. Keep the last fetched list frozen in view rather than churning the dead id.
+    if (sessionEnded !== null) return;
     // Finding #5 — self-scheduling poll with exponential backoff (twin of the cookies
     // poll). The next tick is scheduled ONLY in .finally, so requests never overlap/
     // stack — the server holds a downloads request up to ~30s, so a fixed 3s interval
@@ -3968,7 +4079,7 @@ export function SimulatorWindow(): JSX.Element {
       cancelled = true;
       if (handle !== null) clearTimeout(handle);
     };
-  }, [downloadsPollActive, sessionId, controlAuth, room]);
+  }, [downloadsPollActive, sessionId, controlAuth, room, sessionEnded]);
 
   const onDownloadFile = (name: string): void => {
     setDownloadingName(name);
@@ -3977,14 +4088,30 @@ export function SimulatorWindow(): JSX.Element {
       .then((res) => {
         if (res.status === 'ok' && res.file !== null) {
           // base64 → bytes → Blob → the shared, Tauri-WKWebView-proven download helper.
+          const f = res.file;
           try {
-            const bin = atob(res.file.dataB64);
+            const bin = atob(f.dataB64);
             const bytes = new Uint8Array(bin.length);
             for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+            // Finding #9 — chain the async write + report BOTH outcomes (consistent with
+            // every other branch here). downloadBlob returns false when the Tauri fs
+            // write fails (e.g. no $DOWNLOAD scope); the old voided promise swallowed it,
+            // so the Save button gave no success confirmation AND no error on a silent
+            // write failure — it read as a dead button.
             void downloadBlob(
-              res.file.name,
-              new Blob([bytes], { type: res.file.mime || 'application/octet-stream' }),
-            );
+              f.name,
+              new Blob([bytes], { type: f.mime || 'application/octet-stream' }),
+            )
+              .then((ok) => {
+                setDownloadsNote(
+                  ok
+                    ? `Saved ${f.name} to your Downloads folder.`
+                    : "Couldn't save the file — check the app's file-access permission.",
+                );
+              })
+              .catch(() => {
+                setDownloadsNote('Could not save the file.');
+              });
           } catch {
             setDownloadsNote('Could not save the file.');
           }
@@ -4038,6 +4165,13 @@ export function SimulatorWindow(): JSX.Element {
     return pointerToViewport(e.nativeEvent, video, deviceLogicalRef.current) === null;
   };
   const showTap = (e: ReactPointerEvent<HTMLDivElement>): void => {
+    // Finding #6 — no tap feedback in AI mode. Input capture is off (the host is
+    // interactive={controlMode !== 'ai'}), so the tap is never sent to the device; a
+    // ripple/fingertip-press there would falsely signal "it worked" on a silent no-op
+    // (the same confusion the off-surface guard below prevents). The taps.map render is
+    // also gated on controlMode !== 'ai', but early-returning here avoids the wasted
+    // touchPoint state churn too. (controlMode is a closure read — safe at call time.)
+    if (controlMode === 'ai') return;
     const host = screenHostRef.current;
     if (host === null) return;
     const r = host.getBoundingClientRect();
@@ -4834,9 +4968,20 @@ export function SimulatorWindow(): JSX.Element {
     setPageError(null);
     pageReachedLoadedRef.current = false;
     lastNavAtRef.current = Date.now();
+    // Finding #2 — back/forward is enabled (BACK_FORWARD_ENABLED) but gave zero loading
+    // feedback, so a click read as a dead button (and a cached/instant step never lit
+    // the bar at all). Mirror onNavigate's optimistic affordance: light the loading bar
+    // immediately + arm the shared watchdog so it self-clears if the box's history step
+    // produces no page_state (e.g. a cached step the box doesn't report as 'loading').
+    setPageLoading(true);
+    setLoadProgress(null);
+    setPageStalled(false);
+    armLoadWatchdog();
     void navigateAgentSessionHistory(sessionId, direction, controlAuth).catch(() => {
       setNotice(`Could not go ${direction}`);
       window.setTimeout(() => setNotice(null), 3000);
+      setPageLoading(false);
+      clearLoadWatchdog();
     });
   };
   const togglePinned = (): void => {
@@ -4971,6 +5116,7 @@ export function SimulatorWindow(): JSX.Element {
             running={sessionId !== ''}
             keyboardVisible={keyboardVisible}
             onToggleKeyboard={toggleKeyboard}
+            inputEnabled={controlMode !== 'ai'}
           />
           {/* Browser-style page TAB strip (doc-150 item 4) — full-width row between
               the toolbar and the address bar, gated on browserMode exactly like the
@@ -5119,6 +5265,26 @@ export function SimulatorWindow(): JSX.Element {
                     {conn.relayed === true ? 'relayed' : `over ${conn.transport?.toUpperCase()}`}{' '}
                     (UDP blocked)
                   </div>
+                )}
+                {/* Finding #7 — persistent "Agent is driving" pill over the video in AI
+                  mode. Input capture is off (interactive=false), so taps/scroll/keys do
+                  nothing on the device — but with the drawer collapsed (the default
+                  minimal chrome) the only cue is the caption inside the Session pane.
+                  Without an on-screen badge a tap reads as a frozen/broken stream rather
+                  than "the agent has control". Tappable → opens the Session pane so the
+                  founder can switch to Manual to take over. Bottom-anchored so it never
+                  collides with the top-center stalled / freeze / transport badges. */}
+                {controlMode === 'ai' && (
+                  <button
+                    type="button"
+                    data-component="ai-driving-badge"
+                    onClick={() => openPane('session')}
+                    title="The agent is driving this session. Open the Session pane to switch to Manual and take control."
+                    className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-black/75 px-4 py-2 text-[11px] font-medium text-white shadow-lg backdrop-blur transition hover:bg-black/85"
+                  >
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+                    Agent is driving — switch to Manual to take control
+                  </button>
                 )}
                 <div
                   ref={screenHostRef}
@@ -5631,23 +5797,27 @@ export function SimulatorWindow(): JSX.Element {
                                   <span className="text-white/50">measuring…</span>
                                 )}
                               </div>
+                              {/* Finding #4 — flex-wrap (was `truncate`) so jitter +
+                                  freezes flow onto a second line instead of clipping
+                                  off-screen at the narrow drawer width (~212px usable);
+                                  freezes>0 in amber is the stall signal an operator
+                                  needs. gap-x-2 supplies the separator spacing the
+                                  dropped ` · ` characters provided. */}
                               {(conn.decodeFps !== null ||
                                 conn.packetLossPct !== null ||
                                 conn.freezeCount !== null) && (
-                                <div className="mt-1 truncate text-white/70">
+                                <div className="mt-1 flex flex-wrap gap-x-2 text-white/70">
                                   {conn.decodeFps !== null && (
-                                    <span>decode {conn.decodeFps} fps · </span>
+                                    <span>decode {conn.decodeFps} fps</span>
                                   )}
                                   {conn.packetLossPct !== null && (
                                     <span
                                       className={conn.packetLossPct > 1 ? 'text-amber-300' : ''}
                                     >
-                                      loss {conn.packetLossPct}% ·{' '}
+                                      loss {conn.packetLossPct}%
                                     </span>
                                   )}
-                                  {conn.jitterMs !== null && (
-                                    <span>jitter {conn.jitterMs}ms · </span>
-                                  )}
+                                  {conn.jitterMs !== null && <span>jitter {conn.jitterMs}ms</span>}
                                   {conn.freezeCount !== null && (
                                     <span className={conn.freezeCount > 0 ? 'text-amber-300' : ''}>
                                       freezes {conn.freezeCount}

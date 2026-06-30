@@ -24,6 +24,11 @@ export const LIVEKIT_PING_INTERVAL_MS = 2000;
  *  number always reflects the "last 6 seconds" of liveness. */
 export const LIVEKIT_PING_FRESH_WINDOW_MS = 6000;
 
+/** How often the staleness sweep runs to expire a stuck RTT once echoes
+ *  stop landing. 1s is tight enough that a frozen/dead link drops the
+ *  badge to "measuring…" within ~a second of the freshness window lapsing. */
+export const LIVEKIT_PING_STALE_SWEEP_MS = 1000;
+
 export interface UseLatencyPingOpts {
   room: Room | null;
   /** Disable the ping loop (e.g. when the room is disconnected
@@ -113,9 +118,28 @@ export function useLatencyPing(opts: UseLatencyPingOpts): LatencyState {
     sendPing();
     const handle = setInterval(sendPing, LIVEKIT_PING_INTERVAL_MS);
 
+    // Staleness sweep: the room object persists through a degraded /
+    // reconnecting / frozen link, so when echoes stop coming back the last
+    // good rttMs would otherwise stay pinned forever — the founder uses this
+    // badge to spot "why did the session freeze", so a stuck healthy number
+    // actively lies (and bakes into Copy-diagnostics). Expire it using the
+    // already-tracked lastSeenAt: once the last echo is older than the
+    // freshness window, null rttMs so the badge reads "measuring…" again.
+    // Keep lastSeenAt so consumers still know WHEN the link last echoed.
+    const sweep = (): void => {
+      if (cancelled) return;
+      setState((prev) => {
+        if (prev.rttMs === null || prev.lastSeenAt === null) return prev;
+        if (Date.now() - prev.lastSeenAt <= LIVEKIT_PING_FRESH_WINDOW_MS) return prev;
+        return { rttMs: null, lastSeenAt: prev.lastSeenAt };
+      });
+    };
+    const sweepHandle = setInterval(sweep, LIVEKIT_PING_STALE_SWEEP_MS);
+
     return () => {
       cancelled = true;
       clearInterval(handle);
+      clearInterval(sweepHandle);
       (room as any).off?.(RoomEvent.DataReceived, onData);
     };
   }, [room, enabled]);

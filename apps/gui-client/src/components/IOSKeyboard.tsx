@@ -219,10 +219,13 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
         )}
         {/* iOS bottom-row emoji key, left of the spacebar. The default single-
             keyboard iPhone shows 😀 here (the 🌐 globe appears only with ≥2
-            keyboards installed). Visual-only no-op — there is no emoji panel, so
-            it sends nothing (zero fingerprint impact); FnKey's active:brightness-95
-            still gives it a real press affordance. */}
-        <FnKey label="😀" ariaLabel="Emoji" flex={1} onPress={() => {}} />
+            keyboards installed). There is no emoji panel and inserting an emoji
+            via a synthetic `key` event isn't how iOS does it (it would be a
+            fingerprint divergence), so this stays a no-op. Rendered `disabled`
+            so it reads as inactive (dimmed, no press flash) instead of a working
+            key that flashes but does nothing — a dead key that invites a tap is
+            worse than an obviously-inert one. */}
+        <FnKey label="😀" ariaLabel="Emoji" flex={1} onPress={() => {}} disabled />
         {onDismiss !== undefined && (
           <FnKey label="⌄" ariaLabel="Hide keyboard" flex={1.2} onPress={onDismiss} />
         )}
@@ -306,6 +309,7 @@ function FnKey({
   accent,
   active,
   locked,
+  disabled,
 }: {
   label: string;
   ariaLabel: string;
@@ -315,6 +319,10 @@ function FnKey({
   accent?: boolean;
   active?: boolean;
   locked?: boolean;
+  /** Render the key inert: dimmed, no press flash, not interactive. Used for
+   *  keys present for iPhone-faithful layout that have no backing action yet
+   *  (the bottom-row emoji key) so they don't invite a tap that does nothing. */
+  disabled?: boolean;
 }): JSX.Element {
   // Grey function keys (#aeb3bd-ish); accent → blue is reserved (return is grey by
   // default like real iOS). Caps-locked shift gets a white highlight (iOS lights
@@ -337,12 +345,20 @@ function FnKey({
       data-key-kind={ariaLabel === 'Return' ? 'return' : accent ? 'return' : 'fn'}
       data-active={active ? 'true' : undefined}
       data-locked={locked ? 'true' : undefined}
+      data-disabled={disabled ? 'true' : undefined}
       aria-label={ariaLabel}
+      aria-disabled={disabled ? 'true' : undefined}
+      disabled={disabled}
       onPointerDown={(e) => {
         e.preventDefault();
+        if (disabled === true) return;
         onPress();
       }}
-      className={`flex h-[42px] min-w-0 items-center justify-center rounded-[5px] text-[15px] leading-none shadow-[0_1px_0_rgba(0,0,0,0.28)] transition-colors active:brightness-95 ${base}`}
+      // A disabled key is dimmed and drops the active:brightness-95 press flash
+      // so it visibly reads as inert rather than a working key that flashes.
+      className={`flex h-[42px] min-w-0 items-center justify-center rounded-[5px] text-[15px] leading-none shadow-[0_1px_0_rgba(0,0,0,0.28)] transition-colors ${
+        disabled === true ? 'cursor-default opacity-40' : 'active:brightness-95'
+      } ${base}`}
       style={{
         flexGrow: flex ?? (wide ? 1.5 : 1),
         flexBasis: 0,
