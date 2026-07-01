@@ -5132,15 +5132,16 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
   // 2026-05-20 — one-shot "launch this profile" verb. Equivalent to
-  // POST /v1/sessions with { profile_id, archetype: <profile.archetype>,
-  // proxy: <optional from body> } but saves a round-trip + name-lookup.
-  // Optional body overrides (proxy / label); everything else comes from
-  // the profile. Returns the created session (201). Requires
-  // write:sessions. The handler lives in routes/sessions.ts.
+  // POST /v1/sessions with { profile_id, archetype: <profile.archetype> }
+  // but saves a round-trip + name-lookup. Optional body override (label);
+  // everything else comes from the profile. Returns the created session
+  // (201). Requires write:sessions. The handler lives in routes/sessions.ts.
+  // 2026-07-01 — dropped `proxy`: it was never wired through (the SDKs'
+  // launch() had the identical dead field, removed the same day) - per-
+  // session customer-configurable egress isn't available on this resource.
   const LaunchProfileRequestOpenApi = z
     .object({
       label: z.string().optional(),
-      proxy: z.record(z.unknown()).optional(),
     })
     .openapi('LaunchProfileRequest');
   registerRoute(r, {

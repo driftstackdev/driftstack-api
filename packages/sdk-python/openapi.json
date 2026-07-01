@@ -3441,10 +3441,6 @@
         "properties": {
           "label": {
             "type": "string"
-          },
-          "proxy": {
-            "type": "object",
-            "additionalProperties": {}
           }
         }
       }
