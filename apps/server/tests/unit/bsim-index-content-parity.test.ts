@@ -69,13 +69,19 @@ describe('W450.B packages/behavioural-simulation/src/index.ts content parity', (
   });
 
   it('Mock + V-530.A touch + V-530.B scroll velocity value exports: MockBehaviouralSimulator + generateTouchEvent + TOUCH_DISTRIBUTIONS + generateScrollVelocityProfile + SCROLL_VELOCITY_DEFAULTS', () => {
-    expect(body).toMatch(/export \{ MockBehaviouralSimulator \} from '\.\/mock\.js';/);
+    // toContain fragments (not closed regexes) so the new samples/tick-rate
+    // bound constants (audit fixes BSIM-1/BSIM-3, 2026-07-01) don't break these.
+    expect(body).toContain('MAX_MOUSE_TRAJECTORY_SAMPLES,');
+    expect(body).toContain('MIN_MOUSE_TRAJECTORY_SAMPLES,');
+    expect(body).toContain('MockBehaviouralSimulator,');
+    expect(body).toContain("} from './mock.js';");
     expect(body).toMatch(
       /export \{ generateTouchEvent, TOUCH_DISTRIBUTIONS \} from '\.\/touch\.js';/,
     );
-    expect(body).toMatch(
-      /export \{ generateScrollVelocityProfile, SCROLL_VELOCITY_DEFAULTS \} from '\.\/scroll\.js';/,
-    );
+    expect(body).toContain('generateScrollVelocityProfile,');
+    expect(body).toContain('MIN_TICK_INTERVAL_MS,');
+    expect(body).toContain('SCROLL_VELOCITY_DEFAULTS,');
+    expect(body).toContain("} from './scroll.js';");
   });
 
   it('V-530.C dwell+region-aware: 4 type re-exports (ClickRegion + DwellShape + GenerateRegionAwareTouchOpts + RegionAwareTouchEvent) + 3 value exports (CLICK_REGIONS + DWELL_SHAPES + generateRegionAwareTouchEvent)', () => {
@@ -102,9 +108,14 @@ describe('W450.B packages/behavioural-simulation/src/index.ts content parity', (
     expect(body).toMatch(
       /export type \{\s*\n?\s*FingerSample,\s*\n?\s*FingerTrack,\s*\n?\s*GestureKind,\s*\n?\s*GeneratePinchOpts,\s*\n?\s*GenerateTwoFingerScrollOpts,\s*\n?\s*GenerateThreeFingerSwipeOpts,\s*\n?\s*MultiTouchGesture,\s*\n?\s*\} from '\.\/multi-touch\.js';/,
     );
-    expect(body).toMatch(
-      /export \{\s*\n?\s*generatePinchGesture,\s*\n?\s*generateTwoFingerScrollGesture,\s*\n?\s*generateThreeFingerSwipeGesture,\s*\n?\s*interleaveGestureStream,\s*\n?\s*\} from '\.\/multi-touch\.js';/,
-    );
+    // toContain fragments so MAX_SAMPLES_PER_FINGER (audit fix BSIM-2,
+    // 2026-07-01) doesn't break the pin.
+    expect(body).toContain('generatePinchGesture,');
+    expect(body).toContain('generateTwoFingerScrollGesture,');
+    expect(body).toContain('generateThreeFingerSwipeGesture,');
+    expect(body).toContain('interleaveGestureStream,');
+    expect(body).toContain('MAX_SAMPLES_PER_FINGER,');
+    expect(body).toContain("} from './multi-touch.js';");
   });
 
   it("V-530.F framing pinned: 'keyboard cadence generator (human-realistic typing rhythm).' + KeyboardCadenceDefaults type + generateKeyboardCadence + KEYBOARD_CADENCE_DEFAULTS value exports", () => {
@@ -112,9 +123,10 @@ describe('W450.B packages/behavioural-simulation/src/index.ts content parity', (
       /\/\/ V-530\.F — keyboard cadence generator \(human-realistic typing rhythm\)\./,
     );
     expect(body).toMatch(/export type \{ KeyboardCadenceDefaults \} from '\.\/keyboard\.js';/);
-    expect(body).toMatch(
-      /export \{ generateKeyboardCadence, KEYBOARD_CADENCE_DEFAULTS \} from '\.\/keyboard\.js';/,
-    );
+    // toContain fragments so MAX_TEXT_LENGTH (audit fix BSIM-4, 2026-07-01)
+    // doesn't break the pin.
+    expect(body).toContain('generateKeyboardCadence, KEYBOARD_CADENCE_DEFAULTS, MAX_TEXT_LENGTH');
+    expect(body).toContain("from './keyboard.js';");
   });
 
   it("V-530.G framing pinned: 'canonical behavioural persona catalogue' + PersonaId type + DEFAULT_PERSONA_ID + getProfile + listProfiles + PROFILE_CATALOGUE value exports", () => {

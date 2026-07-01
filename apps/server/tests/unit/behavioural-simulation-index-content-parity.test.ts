@@ -28,13 +28,22 @@ describe('W595.C packages/behavioural-simulation/src/index.ts content parity', (
     expect(body).toMatch(
       /^export type \{\s*\n\s*ScrollVelocityClassDefaults,\s*\n\s*ScrollVelocityProfile,\s*\n\s*ScrollVelocityTick,\s*\n\} from '\.\/scroll\.js';/m,
     );
-    expect(body).toMatch(/^export \{ MockBehaviouralSimulator \} from '\.\/mock\.js';$/m);
+    // toContain fragments (not a closed single-line regex) so the two new
+    // samples-bound constants (audit fix BSIM-3, 2026-07-01) don't break the pin.
+    expect(body).toContain('export {');
+    expect(body).toContain('MAX_MOUSE_TRAJECTORY_SAMPLES,');
+    expect(body).toContain('MIN_MOUSE_TRAJECTORY_SAMPLES,');
+    expect(body).toContain('MockBehaviouralSimulator,');
+    expect(body).toContain("} from './mock.js';");
     expect(body).toMatch(
       /^export \{ generateTouchEvent, TOUCH_DISTRIBUTIONS \} from '\.\/touch\.js';$/m,
     );
-    expect(body).toMatch(
-      /^export \{ generateScrollVelocityProfile, SCROLL_VELOCITY_DEFAULTS \} from '\.\/scroll\.js';$/m,
-    );
+    // toContain fragments so MIN_TICK_INTERVAL_MS (audit fix BSIM-1,
+    // 2026-07-01) doesn't break the pin.
+    expect(body).toContain('generateScrollVelocityProfile,');
+    expect(body).toContain('MIN_TICK_INTERVAL_MS,');
+    expect(body).toContain('SCROLL_VELOCITY_DEFAULTS,');
+    expect(body).toContain("} from './scroll.js';");
     expect(body).toMatch(
       /^export type \{\s*\n\s*ClickRegion,\s*\n\s*DwellShape,\s*\n\s*GenerateRegionAwareTouchOpts,\s*\n\s*RegionAwareTouchEvent,\s*\n\} from '\.\/dwell\.js';/m,
     );
@@ -52,16 +61,22 @@ describe('W595.C packages/behavioural-simulation/src/index.ts content parity', (
     expect(body).toMatch(
       /^export type \{\s*\n\s*FingerSample,\s*\n\s*FingerTrack,\s*\n\s*GestureKind,\s*\n\s*GeneratePinchOpts,\s*\n\s*GenerateTwoFingerScrollOpts,\s*\n\s*GenerateThreeFingerSwipeOpts,\s*\n\s*MultiTouchGesture,\s*\n\} from '\.\/multi-touch\.js';/m,
     );
-    expect(body).toMatch(
-      /^export \{\s*\n\s*generatePinchGesture,\s*\n\s*generateTwoFingerScrollGesture,\s*\n\s*generateThreeFingerSwipeGesture,\s*\n\s*interleaveGestureStream,\s*\n\} from '\.\/multi-touch\.js';/m,
-    );
+    // toContain fragments so MAX_SAMPLES_PER_FINGER (audit fix BSIM-2,
+    // 2026-07-01) doesn't break the pin.
+    expect(body).toContain('generatePinchGesture,');
+    expect(body).toContain('generateTwoFingerScrollGesture,');
+    expect(body).toContain('generateThreeFingerSwipeGesture,');
+    expect(body).toContain('interleaveGestureStream,');
+    expect(body).toContain('MAX_SAMPLES_PER_FINGER,');
+    expect(body).toContain("} from './multi-touch.js';");
     // V-530.F — keyboard cadence generator (human-realistic typing rhythm).
     expect(body).toMatch(
       /\/\/ V-530\.F — keyboard cadence generator \(human-realistic typing rhythm\)\./,
     );
-    expect(body).toMatch(
-      /^export \{ generateKeyboardCadence, KEYBOARD_CADENCE_DEFAULTS \} from '\.\/keyboard\.js';$/m,
-    );
+    // toContain fragments so MAX_TEXT_LENGTH (audit fix BSIM-4, 2026-07-01)
+    // doesn't break the pin.
+    expect(body).toContain('generateKeyboardCadence, KEYBOARD_CADENCE_DEFAULTS, MAX_TEXT_LENGTH');
+    expect(body).toContain("from './keyboard.js';");
     // V-530.G — canonical behavioural persona catalogue.
     expect(body).toMatch(
       /\/\/ V-530\.G — canonical behavioural persona catalogue \(file 05 §"Persona model"\)\./,
