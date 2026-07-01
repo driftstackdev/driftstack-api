@@ -28,7 +28,11 @@ export function intentResultToCustomer(
   if (parsed.success) {
     return { kind: 'success', intent, summary: summarize(intent, parsed.outputData) };
   }
-  return { kind: 'failure', intent, reason: failureReason(parsed.errorCode, parsed.errorMessage) };
+  return {
+    kind: 'failure',
+    intent,
+    reason: failureReason(intent, parsed.errorCode, parsed.errorMessage),
+  };
 }
 
 // ── success summary ───────────────────────────────────────────────────
@@ -113,10 +117,41 @@ const ERROR_BASE: Record<HarnessErrorCode, string> = {
   // result is a terminal client error (narrow the selector / paginate).
   result_too_large: 'the result was too large to return — narrow the selector or paginate',
 };
+
+// doc-132 §5.3 auto-debug (deterministic slice) — `intent_webdriver_failed` is
+// the one error code whose generic base copy ("the browser failed to perform
+// this action") tells the customer nothing they can act on. But the intent KIND
+// pins the overwhelmingly-likely cause without any guessing about the harness
+// message content (which is A3-controlled and only appended verbatim below):
+// a webdriver failure on an `interact` is almost always a missing/hidden/not-
+// yet-loaded target element; on a `navigate` it's a page that wouldn't load;
+// on a `wait` the condition never became true; etc. Specialize the base copy by
+// kind so the customer gets an actionable "why + what to try" line, while the
+// appended harness message still names the exact selector/url. Only this code is
+// specialized — every other code's base copy is A3-locked / already actionable.
+const WEBDRIVER_FAILED_BY_KIND: Partial<Record<AgentIntent['kind'], string>> = {
+  interact:
+    "the browser couldn't act on the target element — it may be missing, hidden, or the page may still be loading; try a broader selector or wait for it to appear",
+  navigate:
+    "the browser couldn't load the page — the site may be down, blocking automated traffic, or the URL may be invalid",
+  wait: 'the wait condition was never met — the expected state may not occur on this page',
+  scroll: "the browser couldn't scroll as requested",
+  capture: "the browser couldn't capture the page",
+};
+
 const MAX_MESSAGE_LEN = 200;
 
-function failureReason(code: HarnessErrorCode | undefined, message: string | undefined): string {
-  const base = code !== undefined ? ERROR_BASE[code] : 'the action failed';
+function failureReason(
+  intent: AgentIntent,
+  code: HarnessErrorCode | undefined,
+  message: string | undefined,
+): string {
+  const base =
+    code === 'intent_webdriver_failed'
+      ? (WEBDRIVER_FAILED_BY_KIND[intent.kind] ?? ERROR_BASE.intent_webdriver_failed)
+      : code !== undefined
+        ? ERROR_BASE[code]
+        : 'the action failed';
   const msg = message?.trim();
   if (msg !== undefined && msg.length > 0) {
     const capped = msg.length > MAX_MESSAGE_LEN ? `${msg.slice(0, MAX_MESSAGE_LEN)}…` : msg;

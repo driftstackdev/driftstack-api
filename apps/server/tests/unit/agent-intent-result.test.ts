@@ -160,8 +160,60 @@ describe('intentResultToCustomer — failure reasons', () => {
     const long = 'x'.repeat(500);
     const r = intentResultToCustomer(intent, fail('intent_webdriver_failed', long));
     if (r.kind !== 'failure') throw new Error('narrow');
-    expect(r.reason.length).toBeLessThan(250);
+    // The appended harness message is capped (MAX_MESSAGE_LEN=200) so it can't
+    // bloat the row — the full 500-char string must not survive, and the reason
+    // ends in the ellipsis the cap adds. (Total length depends on the — now
+    // intent-kind-specialized — base, so assert the message-cap invariant
+    // directly rather than a fixed total-length bound.)
+    expect(r.reason).not.toContain(long);
+    expect(r.reason).not.toContain('x'.repeat(201));
     expect(r.reason.endsWith('…')).toBe(true);
+    expect(r.reason.length).toBeLessThan(400);
+  });
+
+  it('doc-132 §5.3 — intent_webdriver_failed is specialized by intent kind (actionable "why"), other codes are not', () => {
+    // interact → element-not-found guidance
+    const interactR = intentResultToCustomer(
+      { kind: 'interact', action: 'tap', selector: '#go' },
+      fail('intent_webdriver_failed'),
+    );
+    if (interactR.kind !== 'failure') throw new Error('narrow');
+    expect(interactR.reason).toContain('target element');
+    expect(interactR.reason).toContain('try a broader selector');
+
+    // navigate → page-load guidance (distinct from interact)
+    const navigateR = intentResultToCustomer(
+      { kind: 'navigate', url: 'https://x' },
+      fail('intent_webdriver_failed'),
+    );
+    if (navigateR.kind !== 'failure') throw new Error('narrow');
+    expect(navigateR.reason).toContain("couldn't load the page");
+    expect(navigateR.reason).not.toBe(interactR.reason);
+
+    // wait → condition-never-met guidance
+    const waitR = intentResultToCustomer(
+      { kind: 'wait', condition: 'selector_visible', selector: '.ready' },
+      fail('intent_webdriver_failed'),
+    );
+    if (waitR.kind !== 'failure') throw new Error('narrow');
+    expect(waitR.reason).toContain('wait condition was never met');
+
+    // The appended harness message (naming the exact selector/url) still rides
+    // along after the specialized base.
+    const withMsg = intentResultToCustomer(
+      { kind: 'interact', action: 'tap', selector: '#go' },
+      fail('intent_webdriver_failed', 'no such element: #go'),
+    );
+    if (withMsg.kind !== 'failure') throw new Error('narrow');
+    expect(withMsg.reason).toContain('no such element: #go');
+
+    // A NON-webdriver code is unchanged (still its A3-locked base copy).
+    const paramR = intentResultToCustomer(
+      { kind: 'interact', action: 'tap', selector: '#go' },
+      fail('intent_missing_parameter'),
+    );
+    if (paramR.kind !== 'failure') throw new Error('narrow');
+    expect(paramR.reason).toBe('a required parameter was missing');
   });
 
   it('handles a failure with no code + no message (defensive)', () => {
