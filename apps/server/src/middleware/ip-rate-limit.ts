@@ -147,6 +147,16 @@ export function ipRateLimit(
         `Too many requests from this IP. Retry in ${retryAfterSec.toString()}s.`,
       );
     }
+
+    // Security audit 2026-07-01 — absolute per-IP daily ceiling, layered on
+    // top of (never a substitute for) the token bucket above. See
+    // DAILY_IP_CEILINGS below for the full rationale. This only runs once
+    // the burst bucket above has already allowed the request, so a request
+    // the burst bucket denies never also spends a daily-ceiling token.
+    const dailyCfg = dailyCeilingConfigFor(cfg.bucketPrefix);
+    if (dailyCfg) {
+      await enforceDailyIpCeiling(store, dailyCfg, ip, req, reply, metrics);
+    }
   };
 }
 
@@ -234,3 +244,115 @@ export const AUTH_IP_LIMITS = {
   cliAuthorizeInitiate: { capacity: 5, refillPerSecond: 5 / 60 },
   cliAuthorizeExchange: { capacity: 60, refillPerSecond: 60 / 60 },
 } as const;
+
+// ───────────────────────────────────────────────────────────────────────────
+// Security audit 2026-07-01 — absolute per-IP DAILY ceiling.
+//
+// The AUTH_IP_LIMITS token buckets above bound BURST speed via a
+// continuously-refilling rate (tokens/sec) with NO upper bound on total
+// daily volume: an attacker who paces requests at exactly
+// `refillPerSecond` never trips the bucket denial. E.g. signup's
+// capacity=5 / refillPerSecond=5/60 bucket lets a request through every
+// 12s indefinitely — ~7,200 signups/day from one IP, unattended, since
+// nothing anywhere tracks "total signups from this IP today".
+//
+// DAILY_IP_CEILINGS closes that gap with a SECOND, independent consume
+// against its own bucket key (`${prefix}-daily:${ip}`) — additional to,
+// never a replacement for, the burst bucket above. It's sized so the
+// bucket can only regain its full capacity over a rolling 24h window
+// (capacity == the daily cap; refillPerSecond == capacity / 86400). A
+// rolling window is used instead of a fixed calendar-day counter so
+// there's no reset-boundary doubling gap (N requests at 23:59 + N more
+// at 00:01 would double a fixed-window cap in under 2 minutes; a rolling
+// bucket has no such seam). Reuses the exact same RateLimitStore/token-
+// bucket primitive as the burst bucket above — no new store type, no
+// INCR/TTL bookkeeping needed.
+//
+// Only `signup` is gated for now — the highest-value farming target
+// (mints a usable account + DB row per call). 25/day/IP comfortably
+// covers a small shared-NAT office onboarding a full team in a day,
+// while capping unattended account-farming at ~25 accounts/IP/day
+// instead of the ~7,200/day the burst bucket alone would permit.
+//
+// Keyed on the exact `bucketPrefix` string the caller passes to
+// `ipRateLimit` (see `routes/auth.ts`'s `signupGate`, currently
+// `'auth-ip:signup'`) — NOT the `AUTH_IP_LIMITS` map key above (that
+// object's keys are camelCase config lookups, e.g. `signup`; the
+// bucketPrefix strings callers actually wire up are a separate,
+// per-route-chosen namespace, e.g. `auth-ip:signup`).
+const DAILY_IP_CEILINGS: Partial<Record<string, number>> = {
+  'auth-ip:signup': 25,
+};
+
+const SECONDS_PER_DAY = 24 * 60 * 60;
+
+function dailyCeilingConfigFor(bucketPrefix: string): IpRateLimitConfig | null {
+  const capacity = DAILY_IP_CEILINGS[bucketPrefix];
+  if (capacity === undefined) {
+    return null;
+  }
+  return {
+    bucketPrefix: `${bucketPrefix}-daily`,
+    capacity,
+    refillPerSecond: capacity / SECONDS_PER_DAY,
+  };
+}
+
+async function enforceDailyIpCeiling(
+  store: RateLimitStore,
+  dailyCfg: IpRateLimitConfig,
+  ip: string,
+  req: FastifyRequest,
+  reply: FastifyReply,
+  metrics?: MetricsRegistry,
+): Promise<void> {
+  const consumeArgs = {
+    key: `${dailyCfg.bucketPrefix}:${ip}`,
+    capacity: dailyCfg.capacity,
+    refillPerSecond: dailyCfg.refillPerSecond,
+    cost: 1,
+    now: Date.now(),
+  };
+  let result: ConsumeResult;
+  try {
+    result = await store.consume(consumeArgs);
+  } catch (err) {
+    // Same store-outage posture as the burst bucket above — degrade to the
+    // bounded per-instance fallback rather than fail open or 500.
+    req.log.warn(
+      { component: 'ip-rate-limit', bucket_prefix: dailyCfg.bucketPrefix, err },
+      'ip rate-limit store error — degrading to bounded in-process fallback',
+    );
+    try {
+      metrics?.inc(METRIC_NAMES.rateLimitStoreFallbackTotal, { limiter: 'ip' });
+    } catch {
+      // Swallow; metrics are best-effort.
+    }
+    try {
+      result = await ipFallbackStore.consume(consumeArgs);
+    } catch {
+      // The in-process fallback cannot realistically throw; if it somehow
+      // does, fail open as a last resort rather than 500 the request.
+      return;
+    }
+  }
+
+  if (!result.allowed) {
+    const retryAfterSec = Math.max(1, Math.ceil(result.retryAfterMs / 1000));
+    reply.header('retry-after', retryAfterSec.toString());
+    req.log.warn(
+      {
+        component: 'ip-rate-limit',
+        bucket_prefix: dailyCfg.bucketPrefix,
+        ip,
+        tokens_remaining: Math.floor(result.remaining),
+        retry_after_ms: result.retryAfterMs,
+      },
+      'ip rate-limit exceeded on auth endpoint (daily ceiling)',
+    );
+    throw new RateLimitedError(
+      retryAfterSec,
+      `Too many requests from this IP today. Retry in ${retryAfterSec.toString()}s.`,
+    );
+  }
+}

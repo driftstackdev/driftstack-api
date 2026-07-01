@@ -5,18 +5,25 @@
 //   - per-IP isolation (one IP exhausting doesn't affect another)
 //   - threshold values match founder-direction spec
 //   - signup / login / verify-email / password-reset all gated
+//   - security audit 2026-07-01: signup's absolute per-IP DAILY ceiling
+//     (25/24h) trips even when every individual request is paced slowly
+//     enough that the burst token bucket alone would allow it forever
 //
 // `app.inject` lets us spoof remote-address via the `remoteAddress`
 // option so we can vary the IP per request without spinning up real
 // HTTP listeners.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
 let fx: TestAppFixture;
 
 afterEach(async () => {
   if (fx) await fx.cleanup();
+  // Belt-and-suspenders: the daily-ceiling test below fakes `Date` to pace
+  // requests without real wall-clock sleeps. Always restore real timers
+  // even if that test fails an assertion mid-way.
+  vi.useRealTimers();
 });
 
 const headers = { 'content-type': 'application/json' };
@@ -56,6 +63,60 @@ describe('V-251 — IP rate limit on auth endpoints', () => {
     });
     expect(sixth.statusCode).toBe(429);
     expect(sixth.headers['retry-after']).toBeDefined();
+  });
+
+  it('signup: absolute 25/IP/day ceiling still trips a perfectly-paced attacker the burst bucket alone would allow forever (security audit 2026-07-01)', async () => {
+    // The burst bucket alone (capacity=5, refill=5/60 tokens/sec) never
+    // denies a caller paced at >= 12s/request — that's the exact abuse
+    // this test proves is now closed. We pace every request 60s apart
+    // (via a faked `Date`, so the test itself stays fast) which is MORE
+    // than enough for the burst bucket to fully refill between every
+    // single call, so the burst bucket can never be the thing that denies
+    // request #26 below — only the new daily ceiling can.
+    fx = await buildTestApp();
+    const ip = '203.0.113.70';
+    const PACE_MS = 60_000;
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const start = Date.now();
+      // 25 paced signups from the same IP: none should be 429 — the daily
+      // ceiling (25/day) permits exactly this many, and the burst bucket
+      // was never at risk given the 60s pacing.
+      for (let i = 0; i < 25; i++) {
+        vi.setSystemTime(start + i * PACE_MS);
+        const res = await fx.app.inject({
+          method: 'POST',
+          url: '/v1/auth/signup',
+          headers,
+          remoteAddress: ip,
+          payload: {
+            email: `daily-ceiling-${i.toString()}@example.test`,
+            password: 'correct horse battery staple',
+          },
+        });
+        expect(res.statusCode, `request #${(i + 1).toString()} should not be 429`).not.toBe(429);
+      }
+
+      // The 26th paced signup (still 60s after the previous one — the
+      // burst bucket would happily allow it) is rejected by the daily
+      // ceiling alone.
+      vi.setSystemTime(start + 25 * PACE_MS);
+      const twentySixth = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/auth/signup',
+        headers,
+        remoteAddress: ip,
+        payload: {
+          email: 'daily-ceiling-25@example.test',
+          password: 'correct horse battery staple',
+        },
+      });
+      expect(twentySixth.statusCode).toBe(429);
+      expect(twentySixth.headers['retry-after']).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('login: 10 attempts/IP/min — 11th from same IP returns 429', async () => {
