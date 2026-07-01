@@ -5,7 +5,7 @@
 // removal of a tier / status / tone is caught at the source. The
 // maps are the single source of truth — surfaces across the app
 // (FleetView / LiveSessionView / SettingsAccountCard / BillingCost
-// View / CryptoCheckoutView etc.) render via these helpers.
+// View etc.) render via these helpers.
 //
 //   • TierBadge: 9 AccountTier keys (free / trial_pack / 4 manual
 //     tiers / 3 api tiers / enterprise) with full TIER_LABEL +
