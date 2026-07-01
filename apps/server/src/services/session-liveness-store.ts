@@ -71,13 +71,53 @@ export class SessionLivenessStore {
     }
     // Then (re)write every present session as live from this node.
     for (const [sessionId, state] of Object.entries(states)) {
-      // delete+set moves the key to newest in insertion order, so the size-cap
-      // eviction below drops the genuinely-stalest session.
+      // delete+set moves the key to newest in insertion order, so the
+      // per-node eviction below drops THIS node's genuinely-stalest sessions.
       this.map.delete(sessionId);
       this.map.set(sessionId, { state, nodeId: macNodeId, beatAt });
-      if (this.map.size > this.maxEntries) {
-        const oldest = this.map.keys().next().value;
-        if (oldest !== undefined) this.map.delete(oldest);
+    }
+    // Size-cap eviction — SCOPED PER-NODE (security-audit hardening,
+    // 2026-06-30): a node's beat may ONLY evict its OWN oldest entries, never
+    // another node's. The prior global-oldest eviction here was a SEPARATE
+    // cross-node-poison hole from the per-node absence-evict logic above: one
+    // node fabricating enough session ids in a single heartbeat (bounded by
+    // the schema-level HARNESS_HEARTBEAT_MAX_ACTIVE_SESSION_STATES cap) could
+    // otherwise evict every OTHER node's real liveness entries from this
+    // process-wide shared map. Self-evicts only once THIS node's own share of
+    // the map exceeds its fair allocation (maxEntries split evenly across the
+    // distinct nodes currently present) — a well-behaved fleet with few
+    // sessions per node never trips this; only a node hoarding more than its
+    // fair share self-trims, complementing the schema-level cap.
+    if (this.map.size > this.maxEntries) {
+      this.evictOwnOverflow(macNodeId);
+    }
+  }
+
+  /**
+   * Evict `macNodeId`'s own oldest entries down to its fair share of
+   * `maxEntries` (NEVER another node's) — the per-node-scoped complement to
+   * the size cap. No-ops if this node isn't over its own fair share, so a
+   * single well-behaved (or even a different over-fair-share) node's beat can
+   * never trigger eviction of entries this node doesn't own.
+   */
+  private evictOwnOverflow(macNodeId: string): void {
+    const nodeIds = new Set<string>();
+    let ownCount = 0;
+    for (const entry of this.map.values()) {
+      nodeIds.add(entry.nodeId);
+      if (entry.nodeId === macNodeId) ownCount++;
+    }
+    const fairShare = Math.max(1, Math.floor(this.maxEntries / nodeIds.size));
+    let toEvict = ownCount - fairShare;
+    if (toEvict <= 0) return;
+    // Map iteration order is insertion order, so this walks macNodeId's own
+    // entries oldest-first (recordBeat's delete+set re-inserts a still-live
+    // session at the newest position every beat).
+    for (const [sessionId, entry] of this.map) {
+      if (toEvict <= 0) break;
+      if (entry.nodeId === macNodeId) {
+        this.map.delete(sessionId);
+        toEvict--;
       }
     }
   }
