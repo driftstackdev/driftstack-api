@@ -2051,7 +2051,13 @@ const EMAIL_EVENTS = [
               : r
                   .json()
                   .catch(() => ({}))
-                  .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+                  .then((b) => {
+                    if (b && b.requires_mfa_step_up) {
+                      openStepUp('regenerate');
+                      throw new Error('__step_up__');
+                    }
+                    throw new Error(b.detail || 'HTTP ' + r.status);
+                  }),
           )
           .then((body) => {
             if (mfaRecoveryList) {
@@ -2067,9 +2073,10 @@ const EMAIL_EVENTS = [
             showHidden(mfaRecoverySection, false);
             loadMfa();
           })
-          .catch((err) =>
-            showBanner('Regenerate failed: ' + (err && err.message ? err.message : 'network')),
-          );
+          .catch((err) => {
+            if (err && err.message === '__step_up__') return;
+            showBanner('Regenerate failed: ' + (err && err.message ? err.message : 'network'));
+          });
       }
 
       // Wire MFA buttons.

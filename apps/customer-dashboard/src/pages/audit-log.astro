@@ -518,6 +518,12 @@ const FILTER_OPTIONS = [
         setLoadMoreVisible(false);
       }
 
+      // Monotonic guard — filterSelect/applyFilters/clearFilters/retry can
+      // all fire an overlapping fetchPage(null) before a slower prior call
+      // resolves; without this, a stale response landing last would clobber
+      // the list (and nextCursor, corrupting pagination) with results for a
+      // filter the customer already changed away from.
+      let fetchGeneration = 0;
       function fetchPage(cursor) {
         const token = getToken();
         if (!token) {
@@ -528,6 +534,7 @@ const FILTER_OPTIONS = [
           return Promise.resolve();
         }
         const isFreshLoad = !cursor;
+        const myGeneration = ++fetchGeneration;
         return fetch(buildUrl(cursor), {
           headers: {
             authorization: 'Bearer ' + token,
@@ -541,6 +548,7 @@ const FILTER_OPTIONS = [
             return r.json();
           })
           .then(function (body) {
+            if (myGeneration !== fetchGeneration) return; // superseded by a newer fetchPage
             const entries = body.data || [];
             nextCursor = body.next_cursor || null;
             const isFresh = !cursor;
@@ -566,6 +574,7 @@ const FILTER_OPTIONS = [
             updateCount();
           })
           .catch(function (err) {
+            if (myGeneration !== fetchGeneration) return; // superseded by a newer fetchPage
             if (isFreshLoad) renderLoadError();
             showBanner(
               "Couldn't load audit log (" +

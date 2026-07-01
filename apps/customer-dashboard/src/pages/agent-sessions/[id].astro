@@ -965,7 +965,11 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
     // populated so the customer can resend without retyping.
     const transcript = root.querySelector('[data-component="ChatTranscript"]');
     const emptyHint = transcript?.querySelector('[data-empty]');
-    let pendingTurnEl = null;
+    // sendInFlight guards against the Cmd/Ctrl+Enter keydown handler below
+    // dispatching a second synthetic 'submit' while one is still pending —
+    // composerSubmit.disabled only blocks a mouse click on the button, not
+    // a JS-dispatched submit event.
+    let sendInFlight = false;
 
     function appendTurn(role, body, atIso) {
       if (!transcript) return null;
@@ -1158,9 +1162,10 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
 
     composerForm?.addEventListener('submit', async (ev) => {
       ev.preventDefault();
-      if (!composerTextarea) return;
+      if (!composerTextarea || sendInFlight) return;
       const text = composerTextarea.value.trim();
       if (text.length === 0) return;
+      sendInFlight = true;
       composerTextarea.value = '';
       if (composerSubmit) composerSubmit.disabled = true;
 
@@ -1168,10 +1173,12 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
       // Pending agent bubble — three pulsing dots replace the
       // "thinking…" text when POST resolves. Pulse cadence staggered
       // 200ms per dot via inline animation-delay so it reads as a
-      // live typing indicator.
-      pendingTurnEl = appendTurn('agent', '');
-      if (pendingTurnEl) {
-        const bub = pendingTurnEl.querySelector('[data-turn-bubble]');
+      // live typing indicator. Kept in a local (myTurnEl), not a
+      // handler-shared variable, so this send's own callbacks can only
+      // ever touch its own bubble.
+      const myTurnEl = appendTurn('agent', '');
+      if (myTurnEl) {
+        const bub = myTurnEl.querySelector('[data-turn-bubble]');
         if (bub) {
           bub.innerHTML =
             '<span class="inline-flex items-center gap-1" aria-label="agent is thinking">' +
@@ -1194,8 +1201,8 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
           const detail = body.detail || 'HTTP ' + res.status.toString();
-          if (pendingTurnEl) {
-            const bub = pendingTurnEl.querySelector('[data-turn-bubble]');
+          if (myTurnEl) {
+            const bub = myTurnEl.querySelector('[data-turn-bubble]');
             if (bub) {
               bub.textContent = '⚠ ' + detail + ' — your message above is preserved; click to retry.';
               bub.className = 'rounded-md bg-red-900/30 px-3 py-2 text-sm text-rose-300';
@@ -1228,8 +1235,8 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
             body.transcript[body.transcript.length - 1].content) ||
           null;
 
-        if (pendingTurnEl) {
-          const bub = pendingTurnEl.querySelector('[data-turn-bubble]');
+        if (myTurnEl) {
+          const bub = myTurnEl.querySelector('[data-turn-bubble]');
           if (bub) {
             if (clarifyQ !== null) {
               bub.textContent = '❓ ' + clarifyQ;
@@ -1310,7 +1317,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
         // response carries usage telemetry. "$0.0023 · 145 tokens"
         // shape; pulled from body.usage (V-666.AI cost surfacing).
         // Deterministic decomposers omit usage — badge skipped.
-        if (pendingTurnEl && body.usage && typeof body.usage === 'object') {
+        if (myTurnEl && body.usage && typeof body.usage === 'object') {
           const u = body.usage;
           const cents = typeof u.cost_usd_cents === 'number' ? u.cost_usd_cents : null;
           const inTok = typeof u.anthropic_input_tokens === 'number' ? u.anthropic_input_tokens : 0;
@@ -1324,7 +1331,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
             if (tokTotal > 0) parts.push(tokTotal.toString() + ' tokens');
             if (typeof u.model === 'string' && u.model.length > 0) parts.push(u.model);
             meta.textContent = parts.join(' · ');
-            pendingTurnEl.appendChild(meta);
+            myTurnEl.appendChild(meta);
 
             // 2026-05-22 — running session-cost tally + new header
             // badges (header-cost / header-turns / header-model).
@@ -1369,8 +1376,8 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
         if (headerTurns) headerTurns.textContent = String(window.__driftstackSessionTurns);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        if (pendingTurnEl) {
-          const bub = pendingTurnEl.querySelector('[data-turn-bubble]');
+        if (myTurnEl) {
+          const bub = myTurnEl.querySelector('[data-turn-bubble]');
           if (bub) {
             bub.textContent = '⚠ ' + msg + ' — click to retry.';
             bub.className = 'rounded-md bg-red-900/30 px-3 py-2 text-sm text-rose-300';
@@ -1385,7 +1392,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
         }
       } finally {
         if (composerSubmit) composerSubmit.disabled = false;
-        pendingTurnEl = null;
+        sendInFlight = false;
         // Suppress unused-var warning for customerBubble (used for DOM side-effect).
         void customerBubble;
       }

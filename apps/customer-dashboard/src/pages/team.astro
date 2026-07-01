@@ -284,6 +284,31 @@ const apiBaseUrl = resolveApiBaseUrl();
         );
       }
 
+      // A failed load left the SSR skeleton <li>s pulsing forever — the
+      // success-only .then() below is the only path that ever replaces
+      // them. Clear both lists to an explicit retry row instead.
+      function renderLoadError() {
+        [
+          [membersList, 'members'],
+          [invitesList, 'invites'],
+        ].forEach(function (pair) {
+          const ul = pair[0];
+          const kind = pair[1];
+          if (!ul) return;
+          ul.innerHTML =
+            '<li class="px-6 py-4 text-sm text-tk-ink-3">Couldn\'t load ' +
+            kind +
+            '. <button type="button" data-action="retry-team-' +
+            kind +
+            '" class="text-tk-accent underline">Retry</button></li>';
+          const retryBtn = ul.querySelector('[data-action="retry-team-' + kind + '"]');
+          if (retryBtn)
+            retryBtn.addEventListener('click', function () {
+              refresh();
+            });
+        });
+      }
+
       function refresh() {
         const token = getToken();
         if (!token) {
@@ -335,6 +360,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             }
           })
           .catch(function (err) {
+            renderLoadError();
             showBanner(
               'Failed to load team: ' + (err && err.message ? err.message : 'network error'),
             );

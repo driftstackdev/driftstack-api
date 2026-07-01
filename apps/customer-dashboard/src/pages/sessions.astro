@@ -649,6 +649,28 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       // re-render the list after killing a session, instead of leaving
       // the destroyed row sitting in the "active" list with a stale
       // concurrent meter until the next full page load.
+      // A failed initial fetch left the SSR skeleton <li>s pulsing forever —
+      // renderList() (the only thing that ever replaces them) is only
+      // called on the success path. Clear both lists to an explicit
+      // retry row instead, mirroring audit-log.astro's renderLoadError().
+      function renderLoadError() {
+        ['active', 'recent'].forEach((kind) => {
+          const ul = root.querySelector('[data-list="' + kind + '"]');
+          const empty = root.querySelector('[data-empty="' + kind + '"]');
+          if (ul) ul.classList.add('hidden');
+          if (empty) {
+            empty.classList.remove('hidden');
+            empty.innerHTML =
+              "Couldn't load sessions. " +
+              '<button type="button" data-action="retry-sessions-' +
+              kind +
+              '" class="text-tk-accent underline">Retry</button>';
+            const retryBtn = empty.querySelector('[data-action="retry-sessions-' + kind + '"]');
+            if (retryBtn) retryBtn.addEventListener('click', () => fetchSessions());
+          }
+        });
+      }
+
       function fetchSessions() {
         return fetch(apiBaseUrl + '/v1/sessions', {
           headers: sessionsAuthHeaders(),
@@ -678,6 +700,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             // as whatever /v1/usage resolved to (or the "—" placeholder).
             currentNow = 0;
             updateMeter(0, currentCap);
+            renderLoadError();
             showBanner(
               "Couldn't load live sessions (" +
                 (err && err.message ? err.message : 'network error') +
