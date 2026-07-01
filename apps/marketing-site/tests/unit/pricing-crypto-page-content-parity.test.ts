@@ -16,7 +16,9 @@
 //   • 4-row confirmation timing table: BTC (2 conf, ~20min) /
 //     ETH (12 conf, ~3min) / USDC-USDT-ERC20 (12 conf, ~3min) /
 //     USDC-Polygon (32 conf, ~90s).
-//   • 1-hour pay-window claim pinned + auto-cancel framing.
+//   • No-automatic-expiry quote framing pinned (price is fixed at order
+//     creation; no timer auto-cancels a pending order — corrected 2026-06-30
+//     from a fictional 1-hour auto-cancel claim the backend never implemented).
 //   • "Crypto payments are non-refundable" pinned + /legal/refunds
 //     cross-link (load-bearing commercial-policy claim).
 //   • 4-step checkout flow (dashboard → mint order → broadcast
@@ -87,9 +89,14 @@ describe('W376.C marketing-site /pricing/crypto page content parity', () => {
     expect(body).toMatch(/<tr><td>USDC \(Polygon\)<\/td><td>32<\/td><td>~90 seconds<\/td><\/tr>/);
   });
 
-  it('1-hour pay-window claim + auto-cancel framing pinned', () => {
-    expect(body).toMatch(/equivalent\s+crypto amount is locked in for 1 hour from order creation/);
-    expect(body).toMatch(/If\s+you pay outside that window, the order auto-cancels/);
+  it("No-automatic-expiry quote framing pinned (a fictional '1-hour price-lock + auto-cancel' claim was corrected 2026-06-30: no code path ever automatically transitions a pending crypto order to expired/failed — sweep-expired is admin-manual-only, defaults to 24h not 1h, and no cron is registered)", () => {
+    expect(body).toMatch(
+      /equivalent\s+crypto amount is fixed when the order is created and doesn't\s+change/,
+    );
+    expect(body).toMatch(
+      /There's no fixed 1-hour cutoff — a pending order isn't\s+automatically cancelled on a timer/,
+    );
+    expect(body).not.toMatch(/order auto-cancels/);
   });
 
   it('"Crypto payments are non-refundable" pinned + /legal/refunds cross-link', () => {

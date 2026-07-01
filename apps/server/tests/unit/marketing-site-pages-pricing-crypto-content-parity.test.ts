@@ -81,10 +81,15 @@ describe('W502.B apps/marketing-site/src/pages/pricing/crypto.astro content pari
     expect(body).toMatch(/<tr><td>USDC \(Polygon\)<\/td><td>32<\/td><td>~90 seconds<\/td><\/tr>/);
   });
 
-  it("1-hour quote window pinned: 'the equivalent crypto amount is locked in for 1 hour from order creation. If you pay outside that window, the order auto-cancels and you can mint a new one.' — pinned so the 1-hour-quote-lock + auto-cancel + mint-new fallback survives (drift to changing the window would create marketing↔order-state-machine divergence; drift to dropping 'auto-cancels' would let customers think a late transfer succeeds silently)", () => {
+  it("No-automatic-expiry quote framing pinned: 'the equivalent crypto amount is fixed when the order is created and doesn't change. There's no fixed 1-hour cutoff — a pending order isn't automatically cancelled on a timer.' + support@driftstack.dev stale-order-closure path — pinned so the honest no-auto-cancel statement survives (a fictional '1 hour price-lock + auto-cancel' claim was corrected 2026-06-30: expireOrder()/sweepExpiredOrders() in apps/server/src/services/crypto-orders.ts are never invoked by any route or scheduled job — sweep-expired is admin-manual-only via POST /v1/admin/crypto-orders/sweep-expired with a default 24h window, not 1h, and no cron is registered in apps/server/src/lib/bootstrap.ts. Drift back to claiming an automatic timer would re-create the doc/code mismatch; drift to dropping the support-contact fallback would orphan customers wanting a fresh quote)", () => {
     expect(body).toMatch(
-      /the equivalent\s*\n?\s*crypto amount is locked in for 1 hour from order creation\. If\s*\n?\s*you pay outside that window, the order auto-cancels and you can\s*\n?\s*mint a new one\./,
+      /the equivalent\s*\n?\s*crypto amount is fixed when the order is created and doesn't\s*\n?\s*change\. There's no fixed 1-hour cutoff — a pending order isn't\s*\n?\s*automatically cancelled on a timer\./,
     );
+    expect(body).toMatch(
+      /email\s*\n?\s*<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>\s*\n?\s*and we'll close the stale order so you can check out again at\s*\n?\s*the current price\./,
+    );
+    // The fabricated auto-cancel mechanic must not reappear.
+    expect(body).not.toMatch(/order auto-cancels/);
   });
 
   it("Crypto-non-refundable framing pinned: 'Crypto payments are non-refundable.' (banner) + 'Once a crypto payment settles on-chain, it is committed for the billing period it covers.' + 'If you need a refund mechanism, our card-billing path (Stripe) is the right channel' — pinned so the non-refundable commitment + the Stripe-card-fallback survive (drift to softening 'non-refundable' would invite refund disputes that NowPayments can't honor)", () => {

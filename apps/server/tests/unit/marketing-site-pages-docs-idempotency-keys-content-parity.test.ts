@@ -74,10 +74,10 @@ describe('W507.C apps/marketing-site/src/pages/docs/idempotency-keys.astro conte
     );
   });
 
-  it('Scope + lifetime 3-state pinned: per-account + 24h-dedupe-window + pre-signup anonymous bucket — pinned so the 3-state scope-and-lifetime framing survives (drift to a different dedupe window would create marketing↔server divergence; drift to dropping the per-account scope would orphan customers from cross-account safety; drift to dropping the pre-signup-anonymous-bucket warning would let customers rely on uniqueness in a shared bucket)', () => {
+  it("Scope + lifetime 3-state pinned: per-account + permanent dedup (no expiry) + pre-signup anonymous bucket — pinned so the 3-state scope-and-lifetime framing matches the DB-layer reality (crypto_orders.idempotency_key carries a permanent partial UNIQUE index with no sweep/expiry job; a prior '24h forget window' claim was corrected 2026-06-30 because the DB layer never honored it — the in-memory 24h TTL is a same-process fast-path prune only, not a customer-visible expiry). Drift to re-claiming a forget-window would re-introduce the doc/code mismatch; drift to dropping the per-account scope would orphan customers from cross-account safety; drift to dropping the pre-signup-anonymous-bucket warning would let customers rely on uniqueness in a shared bucket.", () => {
     expect(body).toMatch(/Keys are scoped <strong>per account<\/strong>/);
     expect(body).toMatch(
-      /The dedupe window is <strong>24 hours<\/strong> from the\s*\n?\s*first sighting/,
+      /Dedup is <strong>permanent<\/strong>, not a rolling\s*\n?\s*window: once a key has minted an order, replaying that exact\s*\n?\s*key returns that same order indefinitely — there's no expiry\s*\n?\s*after which reusing it mints a fresh one\. Use a new key for\s*\n?\s*a new order\./,
     );
     expect(body).toMatch(
       /Pre-signup checkouts \(no account_id\) share a single\s*\n?\s*anonymous bucket\. Don't rely on uniqueness there if your\s*\n?\s*client is one of many anonymous callers\./,

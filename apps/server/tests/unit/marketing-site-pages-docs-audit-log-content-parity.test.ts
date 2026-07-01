@@ -140,20 +140,15 @@ describe('W518.B apps/marketing-site/src/pages/docs/audit-log.astro content pari
     expect(body).not.toMatch(/\(V-330b\s/);
   });
 
-  it("5-tier retention table pinned: Free 30 days + Solo / API Starter 90 days + Team / API Builder 1 year + Agency / API Scale 3 years + Enterprise Custom (default 7 years for compliance) + 'Past the retention window, entries are pruned by a nightly sweep.' + SIEM-cron pattern framing — pinned so the 5-tier retention + nightly-prune + daily-cron-into-SIEM canonical-pattern survives (drift to a different retention window would create marketing↔billing-tier-feature divergence)", () => {
-    expect(body).toMatch(/<tr><td>Free<\/td><td>30 days<\/td><\/tr>/);
-    expect(body).toMatch(/<tr><td>Solo \/ API Starter<\/td><td>90 days<\/td><\/tr>/);
-    expect(body).toMatch(/<tr><td>Team \/ API Builder<\/td><td>1 year<\/td><\/tr>/);
-    expect(body).toMatch(/<tr><td>Agency \/ API Scale<\/td><td>3 years<\/td><\/tr>/);
+  it("Indefinite-retention framing pinned: 'Audit log entries are retained indefinitely, on every tier — there is no tier-based retention window and no scheduled prune job. An account's entries are removed only when the account itself is deleted (a cascading delete tied to the account record, not a time-based sweep).' + SIEM-export-cron pattern framing — pinned so the honest no-prune-job/indefinite-retention statement survives (a fictional 5-tier retention table + 'pruned by a nightly sweep' claim was corrected 2026-06-30: account_audit_log has no expires_at/retention column and the only real audit-shaped sweep, AuditArchiveService, explicitly excludes this table — see apps/server/src/services/audit-archive.ts AUDIT_TABLES. Drift back to a fabricated retention promise would re-create a compliance-adjacent doc/code mismatch; drift to dropping the SIEM-export-cron suggestion would orphan customers who want their own offline retention copy)", () => {
     expect(body).toMatch(
-      /<tr><td>Enterprise<\/td><td>Custom \(default 7 years for compliance\)<\/td><\/tr>/,
+      /Audit log entries are retained <strong>indefinitely<\/strong>,\s*\n?\s*on every tier — there is no tier-based retention window and no\s*\n?\s*scheduled prune job\. An account's entries are removed only when\s*\n?\s*the account itself is deleted \(a cascading delete tied to the\s*\n?\s*account record, not a time-based sweep\)\./,
     );
     expect(body).toMatch(
-      /Past the retention window, entries are pruned by a nightly\s*\n?\s*sweep\./,
+      /most\s*\n?\s*enterprise customers ship a daily cron that calls the endpoint\s*\n?\s*with <code>from=yesterday&amp;to=today<\/code> and forwards the\s*\n?\s*response into their SIEM\./,
     );
-    expect(body).toMatch(
-      /most enterprise customers ship a\s*\n?\s*daily cron that calls the endpoint with\s*\n?\s*<code>from=yesterday&amp;to=today<\/code> and forwards the\s*\n?\s*response into their SIEM\./,
-    );
+    // The fabricated tier-retention table must not reappear.
+    expect(body).not.toMatch(/pruned by a nightly\s*\n?\s*sweep/);
   });
 
   it("Immutability + admin.support_note-pointer correction framing pinned: 'Audit entries are append-only. There's no delete or update endpoint; even staff cannot mutate existing entries. If a correction is needed (e.g. a misattributed action), staff append an admin.support_note pointing at the original entry rather than editing it.' — pinned so the append-only + no-delete-or-update + even-staff-cannot-mutate + admin.support_note-pointer-correction commitment survives (drift to allowing staff edit would break the immutable audit-trail commitment)", () => {

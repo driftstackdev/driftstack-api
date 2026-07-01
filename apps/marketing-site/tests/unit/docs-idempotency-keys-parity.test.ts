@@ -1,7 +1,12 @@
 // W268.A — drift-guard for /docs/idempotency-keys. Pins:
 // 1. Endpoint /v1/billing/crypto-checkout matches the live route.
 // 2. Idempotency-Key header + Idempotent-Replayed response header.
-// 3. 24-hour dedupe window.
+// 3. Permanent dedup (no forgetting window) — matches the DB-layer reality.
+//    Corrected 2026-06-30: the page previously claimed a 24h "forget"
+//    window that the DB layer (a permanent partial UNIQUE index on
+//    crypto_orders.idempotency_key, no expiry/sweep) never honored — the
+//    in-memory 24h Map in crypto-orders.ts is a same-process fast-path
+//    prune only, not the customer-visible contract.
 // 4. Length limit 255 ASCII chars / no whitespace.
 // 5. Example product is a real AccountTier slug.
 
@@ -43,10 +48,22 @@ describe('W268.A /docs/idempotency-keys ↔ /v1/billing/crypto-checkout parity',
     expect(route).toMatch(/readIdempotencyKey/);
   });
 
-  it('24-hour dedupe window matches the live service comment', () => {
-    expect(page).toMatch(/24 hours/);
-    const service = read(resolve(REPO_ROOT, 'apps/server/src/services/crypto-orders.ts'));
-    expect(service).toMatch(/24h/);
+  it('Permanent-dedup framing matches the live DB-layer reality (no forgetting window)', () => {
+    expect(page).toMatch(/Dedup is <strong>permanent<\/strong>/);
+    expect(page).not.toMatch(/dedupe window is/i);
+    expect(page).not.toMatch(/the key is forgotten/i);
+    // DB layer: crypto_orders.idempotency_key carries a permanent partial
+    // UNIQUE index with no expiry column and no sweep/prune job — a
+    // replayed key returns the same order forever, exactly as the page
+    // now states. (apps/server/src/lib/bootstrap.ts has no job touching
+    // crypto_orders.idempotency_key.)
+    const migration = read(
+      resolve(REPO_ROOT, 'apps/server/src/db/migrations/0091_crypto_orders_idempotency_key.sql'),
+    );
+    expect(migration).toMatch(/CREATE UNIQUE INDEX[^\n]*"crypto_orders_idempotency_key_unique"/);
+    const repo = read(resolve(REPO_ROOT, 'apps/server/src/db/crypto-orders-repo.ts'));
+    expect(repo).toMatch(/insertWithIdempotencyKey/);
+    expect(repo).toMatch(/onConflictDoNothing/);
   });
 
   it('255 ASCII / no whitespace constraint matches the live route validation', () => {
