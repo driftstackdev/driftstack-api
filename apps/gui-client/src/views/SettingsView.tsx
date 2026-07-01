@@ -12,8 +12,14 @@
 // rewritten to point at the V-268 browser sign-in flow instead of the
 // stale "npm run admin:create-key" instruction.
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type {
+  BundledLlmSettings,
+  BundledLlmStatus,
+  ByokAnthropicKeyMetadata,
+} from '@driftstack/sdk';
 import { ConnectivityView } from './ConnectivityView';
+import { RelativeTime } from '../components/RelativeTime';
 import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { useSettings } from '../lib/SettingsContext';
@@ -27,6 +33,10 @@ import { useToasts } from '../lib/toasts';
 const CLOUD_URL = 'https://api.driftstack.dev';
 const SELF_HOSTED_DEFAULT = 'http://localhost:3000';
 
+function formatCentsAsUsd(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
 type TestState =
   | { kind: 'idle' }
   | { kind: 'testing' }
@@ -36,7 +46,7 @@ type TestState =
 export function SettingsView(): JSX.Element {
   const confirm = useConfirm();
   const { push: pushToast } = useToasts();
-  const { settings, update, loading } = useSettings();
+  const { settings, update, loading, client } = useSettings();
   const [draftKey, setDraftKey] = useState(settings.apiKey ?? '');
   const [draftUrl, setDraftUrl] = useState(settings.baseUrl);
   const [draftMode, setDraftMode] = useState<'cloud' | 'self-hosted'>(
@@ -54,6 +64,132 @@ export function SettingsView(): JSX.Element {
   const [keyCheck, setKeyCheck] = useState<
     { kind: 'idle' } | { kind: 'checking' } | { kind: 'ok' } | { kind: 'fail'; message: string }
   >({ kind: 'idle' });
+
+  // AI & billing — bundled-LLM consent/cap + BYOK Anthropic key. Loaded
+  // straight from the server (not the local settings store) since both are
+  // account-level, not per-install.
+  const [bundledLlm, setBundledLlm] = useState<BundledLlmSettings | null>(null);
+  const [bundledLlmStatus, setBundledLlmStatus] = useState<BundledLlmStatus | null>(null);
+  const [bundledLlmConsentDraft, setBundledLlmConsentDraft] = useState(false);
+  const [bundledLlmCapDraft, setBundledLlmCapDraft] = useState('0.00');
+  const [bundledLlmSaving, setBundledLlmSaving] = useState(false);
+  const [bundledLlmSaveError, setBundledLlmSaveError] = useState<string | null>(null);
+  const [bundledLlmSavedAt, setBundledLlmSavedAt] = useState<number | null>(null);
+
+  const [byok, setByok] = useState<ByokAnthropicKeyMetadata | null>(null);
+  const [byokKeyDraft, setByokKeyDraft] = useState('');
+  const [byokSaving, setByokSaving] = useState(false);
+  const [byokSaveError, setByokSaveError] = useState<string | null>(null);
+  const [byokClearing, setByokClearing] = useState(false);
+  const [byokTestState, setByokTestState] = useState<
+    { kind: 'idle' } | { kind: 'testing' } | { kind: 'ok' } | { kind: 'fail'; reason: string }
+  >({ kind: 'idle' });
+
+  useEffect(() => {
+    if (!client) return;
+    let cancelled = false;
+    void client.account.getBundledLlmSettings().then(
+      (s) => {
+        if (cancelled) return;
+        setBundledLlm(s);
+        setBundledLlmConsentDraft(s.consent);
+        setBundledLlmCapDraft((s.monthly_cap_usd_cents / 100).toFixed(2));
+      },
+      () => undefined,
+    );
+    void client.account.getBundledLlmStatus().then(
+      (s) => {
+        if (!cancelled) setBundledLlmStatus(s);
+      },
+      () => undefined,
+    );
+    void client.account.getByokAnthropicKey().then(
+      (k) => {
+        if (!cancelled) setByok(k);
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  async function handleSaveBundledLlm(): Promise<void> {
+    if (!client) return;
+    const capCents = Math.round(Number.parseFloat(bundledLlmCapDraft) * 100);
+    if (!Number.isFinite(capCents) || capCents < 0) {
+      setBundledLlmSaveError('Enter a valid monthly limit.');
+      return;
+    }
+    setBundledLlmSaving(true);
+    setBundledLlmSaveError(null);
+    try {
+      const updated = await client.account.updateBundledLlmSettings({
+        consent: bundledLlmConsentDraft,
+        monthly_cap_usd_cents: capCents,
+      });
+      setBundledLlm(updated);
+      setBundledLlmConsentDraft(updated.consent);
+      setBundledLlmCapDraft((updated.monthly_cap_usd_cents / 100).toFixed(2));
+      setBundledLlmSavedAt(Date.now());
+      pushToast({ title: 'AI billing settings saved', tone: 'success' });
+    } catch (err) {
+      setBundledLlmSaveError(err instanceof Error ? err.message : 'Save failed — try again.');
+    } finally {
+      setBundledLlmSaving(false);
+    }
+  }
+
+  async function handleSetByokKey(): Promise<void> {
+    if (!client || byokKeyDraft.trim().length === 0) return;
+    setByokSaving(true);
+    setByokSaveError(null);
+    setByokTestState({ kind: 'idle' });
+    try {
+      await client.account.setByokAnthropicKey(byokKeyDraft.trim());
+      const meta = await client.account.getByokAnthropicKey();
+      setByok(meta);
+      setByokKeyDraft('');
+      pushToast({ title: 'Your Anthropic key is saved', tone: 'success' });
+    } catch (err) {
+      setByokSaveError(err instanceof Error ? err.message : 'Save failed — try again.');
+    } finally {
+      setByokSaving(false);
+    }
+  }
+
+  async function handleTestByokKey(): Promise<void> {
+    if (!client) return;
+    setByokTestState({ kind: 'testing' });
+    try {
+      const result = await client.account.testByokAnthropicKey();
+      setByokTestState(result.ok ? { kind: 'ok' } : { kind: 'fail', reason: result.reason });
+    } catch (err) {
+      setByokTestState({
+        kind: 'fail',
+        reason: err instanceof Error ? err.message : 'Test failed — try again.',
+      });
+    }
+  }
+
+  async function handleClearByokKey(): Promise<void> {
+    if (!client) return;
+    setByokClearing(true);
+    try {
+      await client.account.clearByokAnthropicKey();
+      setByok({ has_key: false, set_at: null, last_used_at: null });
+      setByokTestState({ kind: 'idle' });
+      pushToast({ title: 'Key cleared', tone: 'success' });
+    } catch (err) {
+      pushToast({
+        title: 'Could not clear key',
+        body: err instanceof Error ? err.message : undefined,
+        tone: 'error',
+      });
+    } finally {
+      setByokClearing(false);
+    }
+  }
 
   /** Flip mode + auto-fill the URL. Cloud locks the URL; self-hosted
    *  keeps whatever the customer last typed (or the default). W584 — also
@@ -747,6 +883,143 @@ export function SettingsView(): JSX.Element {
         </div>
       </Panel>
 
+      <Panel>
+        <SectionHeader
+          icon={<IconSparkle />}
+          title="AI & billing"
+          description="How the AI chat's Claude usage gets paid for."
+        />
+        <div className="mt-4 flex flex-col gap-5">
+          <Field label="Bundled AI usage">
+            <label className="flex items-start gap-2.5">
+              <input
+                type="checkbox"
+                checked={bundledLlmConsentDraft}
+                onChange={(e) => setBundledLlmConsentDraft(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span className="text-sm text-ink-secondary">
+                Let this deployment bill Claude usage to my account, up to a monthly limit.
+              </span>
+            </label>
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-xs text-ink-muted">Monthly limit</span>
+              <div className="flex items-center gap-1">
+                <span className="text-sm text-ink-muted">$</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={bundledLlmCapDraft}
+                  onChange={(e) => setBundledLlmCapDraft(e.target.value)}
+                  className="form-input mono w-24"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleSaveBundledLlm()}
+                disabled={bundledLlmSaving}
+                aria-label="Save AI billing settings"
+                className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
+              >
+                {bundledLlmSaving ? 'Saving…' : 'Save'}
+              </button>
+              {bundledLlmSaveError === null && bundledLlmSavedAt !== null && (
+                <span className="text-2xs text-status-ready">Saved.</span>
+              )}
+            </div>
+            {bundledLlmSaveError !== null && (
+              <span role="alert" className="mt-1.5 block text-2xs text-status-error">
+                {bundledLlmSaveError}
+              </span>
+            )}
+            {bundledLlmStatus !== null && (
+              <span className="mt-2 block text-2xs text-ink-muted">
+                Used {formatCentsAsUsd(bundledLlmStatus.used_this_month_cents)} of{' '}
+                {formatCentsAsUsd(bundledLlmStatus.cap_cents)} this month (
+                {formatCentsAsUsd(bundledLlmStatus.remaining_cents)} left).
+              </span>
+            )}
+            {bundledLlm === null && (
+              <span className="mt-2 block text-2xs text-ink-muted">
+                Only the account owner can change this — ask them if this control is unavailable.
+              </span>
+            )}
+          </Field>
+
+          <Field label="Bring your own Anthropic key">
+            <span className="mb-2 block text-2xs text-ink-muted">
+              BYOK always wins over bundled usage — set a key here and every AI chat message runs on
+              it instead, billed directly by Anthropic to you.
+            </span>
+            {byok?.has_key === true ? (
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-ink-secondary">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-status-ready/10 px-2.5 py-1 text-status-ready">
+                    ✓ Key set
+                  </span>
+                  {byok.last_used_at !== null && (
+                    <span className="text-2xs text-ink-muted">
+                      Last used <RelativeTime iso={byok.last_used_at} />
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleTestByokKey()}
+                    disabled={byokTestState.kind === 'testing'}
+                    aria-label="Test Anthropic key"
+                    className="btn-secondary px-3 py-1.5 text-xs disabled:opacity-50"
+                  >
+                    {byokTestState.kind === 'testing' ? 'Testing…' : 'Test connection'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleClearByokKey()}
+                    disabled={byokClearing}
+                    className="btn-secondary px-3 py-1.5 text-xs disabled:opacity-50"
+                  >
+                    {byokClearing ? 'Clearing…' : 'Clear'}
+                  </button>
+                  {byokTestState.kind === 'ok' && (
+                    <span className="text-2xs text-status-ready">✓ Working</span>
+                  )}
+                  {byokTestState.kind === 'fail' && (
+                    <span className="text-2xs text-status-error">✗ {byokTestState.reason}</span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={byokKeyDraft}
+                  onChange={(e) => setByokKeyDraft(e.target.value)}
+                  placeholder="sk-ant-…"
+                  className="form-input mono flex-1"
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleSetByokKey()}
+                  disabled={byokSaving || byokKeyDraft.trim().length === 0}
+                  className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
+                >
+                  {byokSaving ? 'Saving…' : 'Set key'}
+                </button>
+              </div>
+            )}
+            {byokSaveError !== null && (
+              <span role="alert" className="mt-1.5 block text-2xs text-status-error">
+                {byokSaveError}
+              </span>
+            )}
+          </Field>
+        </div>
+      </Panel>
+
       {keyCheck.kind === 'fail' && (
         <div
           className="rounded-xl border border-status-error/30 bg-status-error/10 px-4 py-3 text-xs text-status-error"
@@ -944,6 +1217,14 @@ function IconShield(): JSX.Element {
     <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
       <path d="M8 1.75 13 3.5v4c0 3-2.1 5.4-5 6.75C5.1 12.9 3 10.5 3 7.5v-4Z" />
       <path d="M6 8l1.5 1.5L10.5 6.5" />
+    </svg>
+  );
+}
+function IconSparkle(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
+      <path d="M8 1.5c.4 2.4 1.1 3.6 3.5 4.5C9.1 6.9 8.4 8.1 8 10.5c-.4-2.4-1.1-3.6-3.5-4.5C6.9 5.1 7.6 3.9 8 1.5Z" />
+      <path d="M13 9.5c.2 1.1.5 1.6 1.5 2-1 .4-1.3.9-1.5 2-.2-1.1-.5-1.6-1.5-2 1-.4 1.3-.9 1.5-2Z" />
     </svg>
   );
 }

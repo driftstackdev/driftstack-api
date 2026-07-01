@@ -136,12 +136,20 @@ async function resolveProfileProxyId(
   }
 }
 
+function formatUsd(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
 export function AgentChatView({
   initialProfileId,
+  onGoToSettings,
 }: {
   /** F1c — preselect the profile the assistant works on (deep-linked from a
    *  profile card's "Assist"). Locks once a chat starts, like the picker. */
   initialProfileId?: string;
+  /** Founder report (2026-07-01) — the bundled-LLM consent/budget error banner
+   *  needs a real one-click way into the AI & billing settings section. */
+  onGoToSettings?: () => void;
 } = {}): JSX.Element {
   const { client, settings } = useSettings();
   const toasts = useToasts();
@@ -153,6 +161,11 @@ export function AgentChatView({
   const [profileId, setProfileId] = useState<string>(initialProfileId ?? '');
   const [profiles, setProfiles] = useState<ReadonlyArray<{ id: string; name: string }>>([]);
   const [draft, setDraft] = useState('');
+  // Bundled-LLM one-click consent CTA (error banner). Local, not part of the
+  // chat hook — this is a settings mutation, not a chat turn.
+  const [bundledLlmEnabling, setBundledLlmEnabling] = useState(false);
+  const [bundledLlmEnableError, setBundledLlmEnableError] = useState<string | null>(null);
+  const [bundledLlmEnabled, setBundledLlmEnabled] = useState(false);
   // Egress-leak fix — the server proxy_id the selected profile must exit through,
   // resolved from its LOCAL proxy binding the SAME way ProfilesView's manual launch
   // does (resolveProfileProxyId). Threaded into the chat session create so an AI
@@ -366,6 +379,28 @@ export function AgentChatView({
     };
   }, [client]);
 
+  function handleEnableBundledLlm(): void {
+    if (!client || bundledLlmEnabling) return;
+    setBundledLlmEnabling(true);
+    setBundledLlmEnableError(null);
+    client.account
+      .updateBundledLlmSettings({ consent: true })
+      .then(() => {
+        setBundledLlmEnabled(true);
+        toasts.push({
+          tone: 'success',
+          title: 'AI features enabled',
+          body: 'Send your message again to continue.',
+        });
+      })
+      .catch((err: unknown) => {
+        setBundledLlmEnableError(
+          err instanceof Error ? err.message : 'Could not enable — try again.',
+        );
+      })
+      .finally(() => setBundledLlmEnabling(false));
+  }
+
   function submit(): void {
     const text = draft.trim();
     if (text.length === 0 || chat.sending) return;
@@ -577,9 +612,75 @@ export function AgentChatView({
         )}
 
         {/* Error */}
-        {chat.error !== null && (
+        {chat.error !== null && chat.error.kind === 'bundled_llm_consent' && (
+          <div className="border-t border-accent/40 bg-accent-subtle px-4 py-3">
+            <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-ink">{chat.error.message}</p>
+                <p className="mt-0.5 text-2xs text-ink-muted">
+                  {bundledLlmEnabled
+                    ? 'Enabled — send your message again to continue.'
+                    : 'This deployment offers bundled AI usage billed to your account, or you can use your own Anthropic key instead.'}
+                </p>
+                {bundledLlmEnableError !== null && (
+                  <p className="mt-0.5 text-2xs text-status-error">{bundledLlmEnableError}</p>
+                )}
+              </div>
+              {!bundledLlmEnabled && (
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onGoToSettings}
+                    className="btn-secondary px-3 py-1.5 text-xs"
+                  >
+                    Use my own key
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleEnableBundledLlm}
+                    disabled={bundledLlmEnabling}
+                    className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
+                  >
+                    {bundledLlmEnabling ? 'Enabling…' : 'Enable AI features'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {chat.error !== null && chat.error.kind === 'bundled_llm_budget' && (
+          <div className="border-t border-status-error/40 bg-status-error/10 px-4 py-3">
+            <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-ink">{chat.error.message}</p>
+                <p className="mt-0.5 text-2xs text-ink-muted">
+                  {chat.error.spentCents !== undefined && chat.error.capCents !== undefined
+                    ? `You've used ${formatUsd(chat.error.spentCents)} of your ${formatUsd(chat.error.capCents)} monthly limit.`
+                    : 'Raise your monthly limit, or use your own Anthropic key to keep going.'}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onGoToSettings}
+                  className="btn-secondary px-3 py-1.5 text-xs"
+                >
+                  Use my own key
+                </button>
+                <button
+                  type="button"
+                  onClick={onGoToSettings}
+                  className="btn-primary px-3 py-1.5 text-xs"
+                >
+                  Raise my limit
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {chat.error !== null && chat.error.kind === undefined && (
           <div className="border-t border-status-error/40 bg-status-error/10 px-4 py-2">
-            <p className="mx-auto max-w-3xl text-xs text-status-error">{chat.error}</p>
+            <p className="mx-auto max-w-3xl text-sm text-status-error">{chat.error.message}</p>
           </div>
         )}
 

@@ -16,29 +16,64 @@
 // browser ACTIONS are simulated. The hook is agnostic; the view labels it.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type {
-  AgentMessageResponse,
-  AgentSession,
-  ConsequentialActionCategory,
+import {
+  BundledLlmBudgetExhaustedError,
+  BundledLlmConsentRequiredError,
+  type AgentMessageResponse,
+  type AgentSession,
+  type ConsequentialActionCategory,
 } from '@driftstack/sdk';
 import { useSettings } from './SettingsContext';
 import { clearSession as clearProfileSession, markLaunched } from './profile-bindings';
 
+/** Founder report (2026-07-01): the bundled-LLM error landed in the chat
+ *  banner as the raw server detail string — a curl-command-shaped API
+ *  message ("PATCH /v1/account/me/bundled-llm-settings with {...}"), not
+ *  something a customer could act on from inside the app. `ChatError` carries
+ *  a `kind` (+ the budget numbers, for the exhausted case) so the view can
+ *  render a friendly headline AND a button that actually does the fix
+ *  in-app (Settings → AI & billing) instead of dumping API docs into a chat
+ *  bubble. `kind` is undefined for every other error — those still render as
+ *  a plain message, unchanged from before.
+ */
+export interface ChatError {
+  message: string;
+  kind?: 'bundled_llm_consent' | 'bundled_llm_budget';
+  /** Only set when kind === 'bundled_llm_budget'. */
+  spentCents?: number;
+  capCents?: number;
+}
+
 /** Map a raw agent-request error to customer-friendly copy (the chat error
  *  banner showed raw err.message — auth/network jargon a user can't act on). */
-function friendlyChatError(err: unknown): string {
+function friendlyChatError(err: unknown): ChatError {
+  if (err instanceof BundledLlmConsentRequiredError) {
+    return {
+      message:
+        "This deployment's AI features need a quick one-time setup before your first message.",
+      kind: 'bundled_llm_consent',
+    };
+  }
+  if (err instanceof BundledLlmBudgetExhaustedError) {
+    return {
+      message: "You've reached this month's AI spending limit.",
+      kind: 'bundled_llm_budget',
+      spentCents: err.spentCents,
+      capCents: err.capCents,
+    };
+  }
   const status = (err as { status?: number } | null)?.status;
   const msg = err instanceof Error ? err.message : '';
   if (status === 401 || status === 403 || /unauthorized|forbidden|api key|scope/i.test(msg)) {
-    return 'Your API key was rejected — check it in Settings.';
+    return { message: 'Your API key was rejected — check it in Settings.' };
   }
   if (status === 429 || /rate.?limit|too many/i.test(msg)) {
-    return 'Rate limited — wait a moment, then try again.';
+    return { message: 'Rate limited — wait a moment, then try again.' };
   }
   if (/load failed|network|fetch|ECONN|getaddrinfo|timeout|unreachable/i.test(msg)) {
-    return "Couldn't reach the server — check your connection and try again.";
+    return { message: "Couldn't reach the server — check your connection and try again." };
   }
-  return msg.length > 0 ? msg : 'The agent request failed — try again.';
+  return { message: msg.length > 0 ? msg : 'The agent request failed — try again.' };
 }
 
 export type ChatModel =
@@ -99,7 +134,7 @@ export interface UseAgentChatResult {
   turns: ReadonlyArray<ChatTurn>;
   session: AgentSession | null;
   sending: boolean;
-  error: string | null;
+  error: ChatError | null;
   /** The consequential action the last turn halted on (Approve/Deny), or null. */
   pendingConfirmation: PendingConfirmation | null;
   /** Resolves true when the turn succeeded, false on error — lets the caller
@@ -129,7 +164,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [session, setSession] = useState<AgentSession | null>(null);
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ChatError | null>(null);
   // Latest live session id, mirrored into a ref so the close-on-unmount cleanup
   // (which can't depend on `session` without re-subscribing every turn) and the
   // reset/restore handlers can best-effort close the PRIOR server session before
@@ -242,7 +277,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       },
     ): Promise<boolean> => {
       if (!client) {
-        setError('Not connected — set your API key in Settings.');
+        setError({ message: 'Not connected — set your API key in Settings.' });
         return false;
       }
       const approvals = options?.approvals;

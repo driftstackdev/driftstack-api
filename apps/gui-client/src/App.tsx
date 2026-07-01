@@ -595,7 +595,12 @@ function CurrentView({
         />
       );
     case 'ai':
-      return <AgentChatView initialProfileId={view.profileId} />;
+      return (
+        <AgentChatView
+          initialProfileId={view.profileId}
+          onGoToSettings={() => onNavigate({ kind: 'settings' })}
+        />
+      );
     case 'recipes':
       return <RecipesView />;
     case 'sessions':
