@@ -936,14 +936,24 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
     // elsewhere — composer textarea, etc.). Only fire when mode ∈
     // {manual, pair} AND focus is on the workbench page root (not the
     // composer textarea, which already handles its own input).
+    // Never forward keys typed into ANY local form control (the composer, the
+    // Save-recipe name/description inputs, an open dialog, etc.) to the remote
+    // iPhone — only the composer was excluded before, so every character typed
+    // into the always-present Save-recipe fields leaked to /input-event.
+    const isLocalInputTarget = (ev) =>
+      ev.target &&
+      ev.target.closest &&
+      ev.target.closest('input, textarea, select, [contenteditable], dialog[open]');
     document.addEventListener('keydown', (ev) => {
       if (mode === 'ai') return;
       if (composerTextarea && document.activeElement === composerTextarea) return;
+      if (isLocalInputTarget(ev)) return;
       void sendInputEvent({ type: 'keyDown', key: ev.key, modifiers: modifiersFromEvent(ev) });
     });
     document.addEventListener('keyup', (ev) => {
       if (mode === 'ai') return;
       if (composerTextarea && document.activeElement === composerTextarea) return;
+      if (isLocalInputTarget(ev)) return;
       void sendInputEvent({ type: 'keyUp', key: ev.key, modifiers: modifiersFromEvent(ev) });
     });
 

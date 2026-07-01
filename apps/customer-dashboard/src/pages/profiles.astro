@@ -845,7 +845,12 @@ const IMPORT_EXPORT_ENABLED = false;
                     'ring-tk-accent/30',
                   );
                   const label = card.querySelector('p:first-child');
-                  if (label) label.textContent += ' · current';
+                  // refresh() runs on load + after every create/delete/launch/
+                  // trim, so guard the append or the label grows "API Builder ·
+                  // current · current · current".
+                  if (label && !label.textContent.includes(' · current')) {
+                    label.textContent += ' · current';
+                  }
                 }
               }
             }

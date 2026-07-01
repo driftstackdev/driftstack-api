@@ -499,10 +499,30 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
           cryptoRequestInFlight = true;
           btn.disabled = true;
           try {
-            const idempotencyKey =
-              typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-                ? 'crypto-tier-' + crypto.randomUUID()
-                : 'crypto-tier-' + Date.now().toString();
+            // Persist the idempotency key per-tier so a RELOAD (which wipes the
+            // in-page cryptoOrderCache) reuses the SAME key → the server returns
+            // the SAME order instead of minting a second distinct pay-address.
+            // Crypto is non-refundable, so a reload-created duplicate order is a
+            // real double-payment risk. Kept random per browser (not a fixed
+            // 'crypto-tier-<tier>') so it can't collide across accounts.
+            const idemStorageKey = 'ds_crypto_idem_' + tier;
+            let idempotencyKey = null;
+            try {
+              idempotencyKey = localStorage.getItem(idemStorageKey);
+            } catch {
+              /* storage unavailable — fall through to a fresh key */
+            }
+            if (!idempotencyKey) {
+              idempotencyKey =
+                typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                  ? 'crypto-tier-' + crypto.randomUUID()
+                  : 'crypto-tier-' + Date.now().toString();
+              try {
+                localStorage.setItem(idemStorageKey, idempotencyKey);
+              } catch {
+                /* storage unavailable — the key still works for this page load */
+              }
+            }
             const res = await authedFetch('/v1/billing/crypto-checkout', {
               method: 'POST',
               headers: {

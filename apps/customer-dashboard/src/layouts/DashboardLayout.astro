@@ -940,8 +940,6 @@ const navSections: NavSection[] = [
               return r.ok ? r.json() : null;
             })
             .then(function (me) {
-              if (!me) return;
-
               // 2026-05-19 — populate the signed-in-as identity badge
               // above the nav. Avatar from /account/me (R2 upload OR
               // OAuth IDP fallback); name → email → id as label
@@ -949,6 +947,19 @@ const navSections: NavSection[] = [
               const sa = document.querySelector('[data-signed-in-as]');
               const saName = document.querySelector('[data-signed-in-name]');
               const saAvatar = document.querySelector('[data-signed-in-avatar]');
+              // Reveal the identity block (which holds the ONLY Sign-out
+              // control) UNCONDITIONALLY — a non-401 /account/me failure
+              // (500 / network blip / non-JSON) leaves `me` null, and gating the
+              // reveal on success left the block visibility:hidden + out of tab
+              // order, stranding the user with no way to sign out on a shared
+              // machine. Identity name/avatar are populated lazily below only
+              // when `me` is present.
+              if (sa) {
+                sa.classList.remove('invisible');
+                sa.classList.remove('hidden');
+              }
+              if (!me) return;
+
               if (sa && saName && saAvatar) {
                 const displayName = me.name || me.email || me.id;
                 saName.textContent = displayName;

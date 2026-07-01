@@ -664,8 +664,16 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
       }
 
       if (createForm) {
+        let createInFlight = false;
+        const createBtn = createForm.querySelector('button[type="submit"]');
         createForm.addEventListener('submit', (ev) => {
           ev.preventDefault();
+          // Guard against double-submit (impatient second click OR a second
+          // ⌘+Enter): provisioning takes seconds and each POST mints a real,
+          // BILLED server session. Without this a duplicate session was created.
+          if (createInFlight) return;
+          createInFlight = true;
+          if (createBtn) createBtn.disabled = true;
           const fd = new FormData(createForm);
           const mode = fd.get('mode') ?? 'pair';
           // 6.c / #15 — picked Claude model (defaults to Opus 4.8).
@@ -736,6 +744,12 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
               } else {
                 showToast('error', 'Session create failed — network error.');
               }
+            })
+            .finally(() => {
+              // Re-arm on failure (the success path navigates away). Without
+              // this a customer who hit a transient error couldn't retry.
+              createInFlight = false;
+              if (createBtn) createBtn.disabled = false;
             });
         });
       }
