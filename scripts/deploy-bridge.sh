@@ -118,9 +118,15 @@ PREVIOUS_SHA=$(ssh "root@${HOST}" "cat /opt/driftstack/api/.last-good-sha 2>/dev
 # git repo and the build/swap/rollback below are byte-identical to the GitHub
 # path. Default (flag unset) still clones from GitHub.
 if [ "${DEPLOY_VIA_BUNDLE:-0}" = "1" ]; then
-  SHA=$(git rev-parse origin/main)
-  echo "[bridge] GitHub-independent mode: bundling origin/main ($SHA) -> $HOST" >&2
-  git branch -f __deploy_bundle_tmp origin/main >/dev/null 2>&1
+  # Only recompute $SHA when the caller asked for the default ("main") — an
+  # explicit $2 (e.g. revert-bridge.sh's last-good-sha rollback target) must
+  # survive bundle mode, or the bundle silently ships origin/main HEAD (the
+  # bad commit being reverted FROM) instead of the requested rollback SHA.
+  if [ "$SHA" = "main" ]; then
+    SHA=$(git rev-parse origin/main)
+  fi
+  echo "[bridge] GitHub-independent mode: bundling $SHA -> $HOST" >&2
+  git branch -f __deploy_bundle_tmp "$SHA" >/dev/null 2>&1
   BUNDLE=$(mktemp -t ds-deploy.bundle)
   if ! git bundle create "$BUNDLE" __deploy_bundle_tmp >/dev/null 2>&1; then
     echo "[bridge] bundle create failed" >&2; git branch -D __deploy_bundle_tmp >/dev/null 2>&1; rm -f "$BUNDLE"; exit 1
