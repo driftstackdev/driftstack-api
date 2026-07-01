@@ -28,6 +28,7 @@ import { ServerClient as PostmarkClient } from 'postmark';
 import type { Logger } from '../lib/logger.js';
 import type { PostmarkConfig } from '../lib/config.js';
 import { METRIC_NAMES, type MetricsRegistry } from './metrics-registry.js';
+import { maskEmail } from '../lib/redact-url.js';
 
 export interface EmailService {
   /**
@@ -647,7 +648,7 @@ export function createEmailService({
         ReplyTo: config!.replyTo,
         MessageStream: messageStream,
       });
-      logger.info({ component: 'email', template: name, to }, 'email sent');
+      logger.info({ component: 'email', template: name, to: maskEmail(to) }, 'email sent');
       try {
         metrics?.inc(METRIC_NAMES.emailSendTotal, { template: name, outcome: 'ok' });
       } catch {
@@ -664,7 +665,7 @@ export function createEmailService({
         {
           component: 'email',
           template: name,
-          to,
+          to: maskEmail(to),
           category,
           postmarkCode,
           err:

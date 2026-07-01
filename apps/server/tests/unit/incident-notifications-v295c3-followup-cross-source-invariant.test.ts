@@ -159,11 +159,13 @@ describe('W933 V-295c3-followup incident-notifications cross-source invariant', 
 
   // ─── Per-recipient error handling + WARN log ─────────────────
 
-  it("CRITICAL per-recipient error — try/catch around 1 send. Failed: failed += 1 + log warn with component 'incident-notifications' + email + kind + err fields. The fan-out keeps going past a bad address.", () => {
+  it("CRITICAL per-recipient error — try/catch around 1 send. Failed: failed += 1 + log warn with component 'incident-notifications' + email (masked) + kind + err fields. The fan-out keeps going past a bad address.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/incident-notifications.ts'));
     expect(p).toMatch(/this\.logger\.warn\(/);
     expect(p).toMatch(/component: 'incident-notifications',/);
-    expect(p).toMatch(/email: sub\.email,/);
+    // GDPR / data-minimization — the raw address must not sit in plaintext
+    // in logs; maskEmail() keeps just the first local-part char + domain.
+    expect(p).toMatch(/email: maskEmail\(sub\.email\),/);
     expect(p).toMatch(/kind,/);
     expect(p).toMatch(/'incident notification email failed'/);
   });

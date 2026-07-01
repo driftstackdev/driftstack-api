@@ -5,7 +5,7 @@
 // auth-flows debug-token path so the consume endpoints can be
 // exercised without scraping email.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
 import { createTestLogger } from '../../src/lib/logger.js';
@@ -98,6 +98,121 @@ describe('POST /v1/auth/signup', () => {
     expect(res.statusCode).toBe(400);
     const body = res.json<{ type: string }>();
     expect(body.type).toBe(PROBLEM_TYPES.ValidationFailed);
+  });
+
+  // Security fix 2026-06-30 — bundled_llm_consent / bundled_llm_monthly_cap_usd_cents
+  // used to be settable directly on this unauthenticated body, letting a
+  // fresh no-card free-tier account self-declare up to the $10,000/month
+  // company-funded bundled-LLM spend cap. Both fields are now absent from
+  // SignupRequestSchema entirely (see api-types-auth-content-parity.test.ts
+  // + signup-flow-cross-source-invariant.test.ts for the schema-shape pins);
+  // this test proves the end-to-end behavioural consequence: even when an
+  // attacker still sends the fields, they never reach the account-creation
+  // call, so the new account always gets the safe column defaults.
+  it('200 succeeds but IGNORES bundled_llm_consent / bundled_llm_monthly_cap_usd_cents in the body — the fields never reach createAccount', async () => {
+    fx = await buildTestApp();
+    const createAccountSpy = vi.spyOn(fx.authFlowsRepo, 'createAccount');
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: {
+        email: 'attacker@driftstack.local',
+        password: 'correct horse battery staple',
+        bundled_llm_consent: true,
+        bundled_llm_monthly_cap_usd_cents: 1_000_000,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(createAccountSpy).toHaveBeenCalledTimes(1);
+    const callArgs = createAccountSpy.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(callArgs).not.toHaveProperty('bundledLlmConsent');
+    expect(callArgs).not.toHaveProperty('bundledLlmMonthlyCapUsdCents');
+  });
+});
+
+describe('AuthFlowsService.signup — email dedup canonicalization (security fix 2026-06-30)', () => {
+  // A signup using a `+tag` suffix or (Gmail-only) dot-variant of an
+  // address that's ALREADY registered lands in the exact same real inbox
+  // as the existing account — without this canonicalization, one mailbox
+  // could mint unlimited "distinct" verified free-tier accounts.
+
+  it('rejects a Gmail +tag variant of an already-registered address (attacker@gmail.com exists → attacker+1@gmail.com blocked)', async () => {
+    const { service } = makeDirectService();
+    await service.signup({
+      email: 'attacker@gmail.com',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+
+    const err = await service
+      .signup({
+        email: 'attacker+1@gmail.com',
+        password: 'correct horse battery staple',
+        requestedFromIp: null,
+      })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AuthFlowError);
+    expect((err as AuthFlowError).code).toBe('email_already_registered');
+  });
+
+  it('rejects a Gmail dot-variant of an already-registered address (attacker@gmail.com exists → a.ttacker@gmail.com blocked)', async () => {
+    const { service } = makeDirectService();
+    await service.signup({
+      email: 'attacker@gmail.com',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+
+    const err = await service
+      .signup({
+        email: 'a.ttacker@gmail.com',
+        password: 'correct horse battery staple',
+        requestedFromIp: null,
+      })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AuthFlowError);
+    expect((err as AuthFlowError).code).toBe('email_already_registered');
+  });
+
+  it('does NOT dot-strip for a non-Gmail domain — a dotted Outlook address and its dot-stripped form register as DISTINCT accounts (Gmail-only quirk must not generalize)', async () => {
+    const { service, repo } = makeDirectService();
+    await service.signup({
+      email: 'attacker.name@outlook.com',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+
+    // Would collide under Gmail-style dot-stripping — must succeed here.
+    const second = await service.signup({
+      email: 'attackername@outlook.com',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+
+    expect(second.account.email).toBe('attackername@outlook.com');
+    expect(await repo.findAccountByEmail('attacker.name@outlook.com')).not.toBeNull();
+    expect(await repo.findAccountByEmail('attackername@outlook.com')).not.toBeNull();
+  });
+
+  it('DOES strip +tag for a non-Gmail domain (universal RFC 5233 subaddressing, not a Gmail-only rule) — attacker@outlook.com exists → attacker+promo@outlook.com blocked', async () => {
+    const { service } = makeDirectService();
+    await service.signup({
+      email: 'attacker@outlook.com',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+
+    const err = await service
+      .signup({
+        email: 'attacker+promo@outlook.com',
+        password: 'correct horse battery staple',
+        requestedFromIp: null,
+      })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AuthFlowError);
+    expect((err as AuthFlowError).code).toBe('email_already_registered');
   });
 });
 

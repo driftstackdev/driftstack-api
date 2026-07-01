@@ -47,16 +47,17 @@ export const SignupRequestSchema = z.object({
   password: AuthPasswordSchema,
   // Optional display name. Server stores untrimmed-but-bounded.
   name: z.string().min(1).max(120).optional(),
-  /**
-   * Arc 1 sub-slice 6.2 (v2-#6) — bundled-LLM opt-in collected at
-   * signup time. Defaults to false; the customer must explicitly tick
-   * the dashboard checkbox to enable. Pairs with `bundled_llm_monthly_cap_usd_cents`
-   * which sets a soft-cap on per-month spend (default $20, range
-   * [$0, $10,000] enforced server-side). Both fields land on the
-   * `accounts` row via migration 0050.
-   */
-  bundled_llm_consent: z.boolean().optional(),
-  bundled_llm_monthly_cap_usd_cents: z.number().int().min(0).max(1_000_000).optional(),
+  // 2026-06-30 security fix — `bundled_llm_consent` /
+  // `bundled_llm_monthly_cap_usd_cents` USED to be settable here
+  // (Arc 1 sub-slice 6.2, v2-#6). That let an unauthenticated caller
+  // self-declare up to the $10,000/month bundled-LLM cap on a brand
+  // new free-tier account with no payment method, no tier check, and
+  // no manual review — a direct company-funded-spend exposure. Both
+  // fields are intentionally ABSENT now; new accounts always get the
+  // `accounts` table's column defaults (consent=false, cap=$20). The
+  // ONLY way to change either is the authenticated
+  // `PATCH /v1/account/me/bundled-llm-settings` route, which requires
+  // `account_owner` scope.
 });
 export type SignupRequest = z.infer<typeof SignupRequestSchema>;
 

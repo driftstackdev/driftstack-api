@@ -172,11 +172,11 @@ describe('W745 server AuthFlowsService canonical surface parity', () => {
     expect(f).toMatch(/the dashboard origin from `verifyEmailUrl` \(the verify link/);
   });
 
-  it("CRITICAL password-reset-requested-for-unknown-email no-op + structured log pinned. The component='auth-flows' + flow='password-reset' + email field gives observability without leaking the unknown-email to the client.", () => {
+  it("CRITICAL password-reset-requested-for-unknown-email no-op + structured log pinned. The component='auth-flows' + flow='password-reset' + email field (maskEmail'd — GDPR data-minimization) gives observability without leaking the unknown-email to the client.", () => {
     const f = read(FLOWS);
 
     expect(f).toMatch(
-      /\{ component: 'auth-flows', flow: 'password-reset', email \},\s*\n\s+'password-reset requested for unknown email — no-op'/,
+      /\{ component: 'auth-flows', flow: 'password-reset', email: maskEmail\(email\) \},\s*\n\s+'password-reset requested for unknown email — no-op'/,
     );
   });
 

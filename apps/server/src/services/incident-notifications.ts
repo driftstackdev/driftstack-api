@@ -18,6 +18,7 @@
 // with per-subscriber jobs.
 
 import type { Logger } from '../lib/logger.js';
+import { maskEmail } from '../lib/redact-url.js';
 import type { IncidentUpdateNotificationsRepo } from '../db/incident-update-notifications-repo.js';
 import type { EmailService } from './email.js';
 import type { IncidentRow, IncidentUpdateRow } from './incidents.js';
@@ -120,7 +121,7 @@ export class IncidentNotificationsService {
         this.logger.warn(
           {
             component: 'incident-notifications',
-            email: sub.email,
+            email: maskEmail(sub.email),
             kind,
             err:
               err instanceof Error

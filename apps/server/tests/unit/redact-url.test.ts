@@ -2,14 +2,62 @@
 // the OAuth ?code=, etc.) must never reach a log line or Sentry event in
 // plaintext. redactUrlQueryTokens / redactQueryString strip those values
 // while preserving the path + benign params. See lib/redact-url.ts.
+//
+// GDPR/data-minimization follow-up — customer email addresses are personal
+// data and must never reach a log line in plaintext either. maskEmail()
+// covers that (below), plus call-site pins on every service that logs a
+// customer email (email.ts send/failure, auth-flows.ts magic-link/password-
+// reset unknown-email no-ops, incident-notifications.ts fan-out failure) so
+// a future call site that forgets to mask is caught here, not in prod logs.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { Logger } from '../../src/lib/logger.js';
 import {
   redactUrlQueryTokens,
   redactQueryString,
   redactText,
   redactUrlUserinfo,
+  maskEmail,
 } from '../../src/lib/redact-url.js';
+import {
+  createEmailService,
+  type EmailService,
+  type PostmarkSendApi,
+} from '../../src/services/email.js';
+import { AuthFlowsService } from '../../src/services/auth-flows.js';
+import { IncidentNotificationsService } from '../../src/services/incident-notifications.js';
+import type { StatusSubscribersService } from '../../src/services/status-subscribers.js';
+import { InMemoryAuthFlowsRepo } from '../integration/_helpers/in-memory-auth-flows-repo.js';
+
+// Mirrors tests/unit/email.test.ts's makeLogger — a spy-backed Logger so
+// call sites can be asserted against without a real pino instance.
+function makeSpyLogger(): Logger {
+  const fns = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    trace: vi.fn(),
+    fatal: vi.fn(),
+  };
+  return {
+    ...fns,
+    level: 'info',
+    silent: () => {},
+    child: () => makeSpyLogger(),
+  } as unknown as Logger;
+}
+
+/** True iff any argument logged in any spy call contains a raw, unmasked
+ *  occurrence of `email` (i.e. the bug this test suite guards against). */
+function loggedRawEmail(logger: Logger, email: string): boolean {
+  const spies = [logger.info, logger.warn, logger.error] as unknown as ReturnType<typeof vi.fn>[];
+  return spies.some((spy) =>
+    spy.mock.calls.some((call: unknown[]) =>
+      call.some((arg) => JSON.stringify(arg).includes(email)),
+    ),
+  );
+}
 
 describe('redactUrlQueryTokens', () => {
   it('redacts the SSE ds_token while keeping the path', () => {
@@ -166,5 +214,182 @@ describe('userinfo credential redaction (scheme://user:pass@host)', () => {
 
   it('redactUrlQueryTokens redacts userinfo even with no query present', () => {
     expect(redactUrlQueryTokens('https://u:p@host/path')).toBe('https://[redacted]@host/path');
+  });
+});
+
+describe('maskEmail (GDPR/data-minimization — customer email addresses in logs)', () => {
+  it('keeps the first local-part character + full domain, masks the rest', () => {
+    expect(maskEmail('jane@example.com')).toBe('j***@example.com');
+    expect(maskEmail('a@b.com')).toBe('a***@b.com');
+  });
+
+  it('never re-emits the original local part or a raw @-joined address', () => {
+    const out = maskEmail('mike-3-20022001@hotmail.com');
+    expect(out).toBe('m***@hotmail.com');
+    expect(out).not.toContain('mike-3-20022001');
+  });
+
+  it('preserves the domain byte-for-byte (support/ops still need to see which domain)', () => {
+    expect(maskEmail('x@sub.driftstack.dev')).toBe('x***@sub.driftstack.dev');
+  });
+
+  it('masks a single-character local part (still 1 char + ***)', () => {
+    expect(maskEmail('q@example.com')).toBe('q***@example.com');
+  });
+
+  it('falls back to a wholesale redaction for malformed input (no @, empty local/domain)', () => {
+    expect(maskEmail('not-an-email')).toBe('[redacted-email]');
+    expect(maskEmail('@example.com')).toBe('[redacted-email]'); // empty local part
+    expect(maskEmail('user@')).toBe('[redacted-email]'); // empty domain
+  });
+
+  it('handles empty / non-string input defensively', () => {
+    expect(maskEmail('')).toBe('');
+    // @ts-expect-error — defensive runtime guard for a non-string.
+    expect(maskEmail(undefined)).toBe(undefined);
+  });
+});
+
+describe('email.ts call sites never log a raw customer email', () => {
+  const config = {
+    apiToken: 'token',
+    from: 'no-reply@driftstack.dev',
+    replyTo: 'support@driftstack.dev',
+  };
+
+  function makeStubClient(): PostmarkSendApi {
+    return { sendEmail: () => Promise.resolve({}) };
+  }
+
+  it('"email sent" log masks the `to` field on a successful send', async () => {
+    const logger = makeSpyLogger();
+    const svc = createEmailService({ config, logger, client: makeStubClient() });
+    await svc.sendSignupVerification({
+      to: 'victim@example.com',
+      link: 'https://x',
+      expiresAt: new Date('2026-05-03T12:00:00Z'),
+    });
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'v***@example.com' }),
+      'email sent',
+    );
+    expect(loggedRawEmail(logger, 'victim@example.com')).toBe(false);
+  });
+
+  it('"email send failed" log masks the `to` field on a failed send', async () => {
+    const logger = makeSpyLogger();
+    const failingClient: PostmarkSendApi = {
+      sendEmail: () => Promise.reject(new Error('boom')),
+    };
+    const svc = createEmailService({ config, logger, client: failingClient });
+    await svc.sendSignupVerification({
+      to: 'victim@example.com',
+      link: 'https://x',
+      expiresAt: new Date('2026-05-03T12:00:00Z'),
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'v***@example.com' }),
+      'email send failed (fire-and-forget)',
+    );
+    expect(loggedRawEmail(logger, 'victim@example.com')).toBe(false);
+  });
+});
+
+describe('auth-flows.ts call sites never log a raw customer email', () => {
+  function makeService(logger: Logger): AuthFlowsService {
+    const email = createEmailService({ config: null, logger });
+    return new AuthFlowsService(new InMemoryAuthFlowsRepo(), email, logger, {
+      verifyEmailUrl: 'https://app.driftstack.local/auth/verify-email',
+      magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
+      passwordResetUrl: 'https://app.driftstack.local/auth/password-reset',
+      exposeDebugToken: true,
+    });
+  }
+
+  it('magic-link "unknown email" no-op log masks the `email` field', async () => {
+    const logger = makeSpyLogger();
+    const svc = makeService(logger);
+    await svc.requestMagicLink({ email: 'victim@example.com', requestedFromIp: '127.0.0.1' });
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'v***@example.com' }),
+      'magic-link requested for unknown email — no-op',
+    );
+    expect(loggedRawEmail(logger, 'victim@example.com')).toBe(false);
+  });
+
+  it('password-reset "unknown email" no-op log masks the `email` field', async () => {
+    const logger = makeSpyLogger();
+    const svc = makeService(logger);
+    await svc.requestPasswordReset({ email: 'victim@example.com', requestedFromIp: '127.0.0.1' });
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'v***@example.com' }),
+      'password-reset requested for unknown email — no-op',
+    );
+    expect(loggedRawEmail(logger, 'victim@example.com')).toBe(false);
+  });
+});
+
+describe('incident-notifications.ts call site never logs a raw customer email', () => {
+  it('per-recipient send-failure log masks the `email` field', async () => {
+    const logger = makeSpyLogger();
+    const subscribers = {
+      listConfirmed: () =>
+        Promise.resolve([
+          {
+            id: 'sub-1',
+            email: 'victim@example.com',
+            confirmTokenHash: null,
+            confirmExpiresAt: null,
+            confirmedAt: new Date('2026-01-01T00:00:00Z'),
+            unsubscribeTokenHash: 'hash',
+            unsubscribedAt: null,
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+          },
+        ]),
+      rotateUnsubscribeToken: () => Promise.resolve('unsub-plaintext'),
+    } as unknown as StatusSubscribersService;
+    // A no-op EmailService (config: null) satisfies the full interface;
+    // override just the one method under test to reject, to exercise the
+    // fan-out failure branch (logger.warn) in isolation.
+    const noopEmail = createEmailService({ config: null, logger });
+    const failingEmail: EmailService = {
+      ...noopEmail,
+      sendStatusIncidentNotification: () => Promise.reject(new Error('postmark down')),
+    };
+    const svc = new IncidentNotificationsService(subscribers, failingEmail, logger, {
+      statusPageBaseUrl: 'https://status.driftstack.dev',
+    });
+    await svc.notifyCreated(
+      {
+        id: 'inc-1',
+        title: 'API degraded',
+        description: 'desc',
+        severity: 'major',
+        status: 'investigating',
+        affectedComponents: ['api'],
+        public: true,
+        startedAt: new Date('2026-01-02T00:00:00Z'),
+        resolvedAt: null,
+        createdByAdminId: null,
+        createdByAdminKeyId: null,
+        autoProbeTarget: null,
+        createdAt: new Date('2026-01-02T00:00:00Z'),
+        updatedAt: new Date('2026-01-02T00:00:00Z'),
+      },
+      {
+        id: 'upd-1',
+        incidentId: 'inc-1',
+        message: 'investigating',
+        status: 'investigating',
+        postedByAdminId: null,
+        postedByAdminKeyId: null,
+        postedAt: new Date('2026-01-02T00:00:00Z'),
+      },
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'v***@example.com' }),
+      'incident notification email failed',
+    );
+    expect(loggedRawEmail(logger, 'victim@example.com')).toBe(false);
   });
 });

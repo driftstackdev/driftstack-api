@@ -179,7 +179,7 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
 
   it("send(): try logs 'email sent' info; catch classifyEmailError + warn 'email send failed (fire-and-forget)' + bump emailSendTotal metric with category outcome + swallow", () => {
     expect(body).toMatch(
-      /logger\.info\(\{ component: 'email', template: name, to \}, 'email sent'\);/,
+      /logger\.info\(\{ component: 'email', template: name, to: maskEmail\(to\) \}, 'email sent'\);/,
     );
     expect(body).toMatch(/const \{ category, postmarkCode \} = classifyEmailError\(err\);/);
     expect(body).toMatch(/'email send failed \(fire-and-forget\)',/);

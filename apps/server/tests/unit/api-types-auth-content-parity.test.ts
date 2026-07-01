@@ -82,11 +82,16 @@ describe('W435.C packages/api-types/src/auth.ts content parity', () => {
   });
 
   it('SignupRequest: email + password + name 1..120 optional; SignupResponse: verification_email_expires_at + debug_token optional (stub email mode only) describe pinned', () => {
-    // Arc 1 sub-slice 6.2 (v2-#6) added bundled-LLM consent +
-    // monthly-cap fields collected at signup time.
+    // Arc 1 sub-slice 6.2 (v2-#6)'s bundled-LLM consent + monthly-cap
+    // fields were REMOVED from this schema 2026-06-30 (security fix —
+    // an unauthenticated caller could self-declare up to the
+    // $10,000/month cap on a fresh no-card free-tier account; now only
+    // settable via the authenticated PATCH /v1/account/me/bundled-llm-settings).
     expect(body).toMatch(
-      /export const SignupRequestSchema = z\.object\(\{\s*\n?\s*email: AuthEmailSchema,\s*\n?\s*password: AuthPasswordSchema,\s*\n?\s*\/\/ Optional display name\. Server stores untrimmed-but-bounded\.\s*\n?\s*name: z\.string\(\)\.min\(1\)\.max\(120\)\.optional\(\),[\s\S]*?bundled_llm_consent: z\.boolean\(\)\.optional\(\),\s*\n?\s*bundled_llm_monthly_cap_usd_cents: z\.number\(\)\.int\(\)\.min\(0\)\.max\(1_000_000\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const SignupRequestSchema = z\.object\(\{\s*\n?\s*email: AuthEmailSchema,\s*\n?\s*password: AuthPasswordSchema,\s*\n?\s*\/\/ Optional display name\. Server stores untrimmed-but-bounded\.\s*\n?\s*name: z\.string\(\)\.min\(1\)\.max\(120\)\.optional\(\),\s*\n?[\s\S]*?\n\s*\}\);/,
     );
+    expect(body).not.toMatch(/bundled_llm_consent:/);
+    expect(body).not.toMatch(/bundled_llm_monthly_cap_usd_cents:/);
     expect(body).toMatch(
       /export const SignupResponseSchema = z\.object\(\{\s*\n?\s*\/\/ ISO timestamp the email-verify token expires at\. Client renders\s*\n?\s*\/\/ this so the user knows how long they have to click the link\.\s*\n?\s*verification_email_expires_at: Iso8601Schema,/,
     );

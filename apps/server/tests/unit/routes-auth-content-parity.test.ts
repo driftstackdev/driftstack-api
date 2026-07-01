@@ -169,13 +169,12 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
     );
   });
 
-  it('Signup: optional debugToken spread; verification_email_expires_at ISO; clientIp captured as requestedFromIp (+ Arc 1 sub-slice 6.2 v2-#6 conditional bundled-LLM consent + monthly-cap spread)', () => {
+  it('Signup: optional debugToken spread; verification_email_expires_at ISO; clientIp captured as requestedFromIp (bundled-LLM consent/cap spread REMOVED 2026-06-30 — no longer settable at signup, see api-types-auth-content-parity.test.ts)', () => {
     expect(body).toMatch(
       /const result = await service\.signup\(\{\s*\n?\s*email: parsed\.data\.email,\s*\n?\s*password: parsed\.data\.password,\s*\n?\s*name: parsed\.data\.name,\s*\n?\s*requestedFromIp: clientIp\(req\),[\s\S]*?\}\);\s*\n?\s*return \{\s*\n?\s*verification_email_expires_at: result\.verifyExpiresAt\.toISOString\(\),\s*\n?\s*\.\.\.\(result\.debugToken !== null \? \{ debug_token: result\.debugToken \} : \{\}\),\s*\n?\s*\};/,
     );
-    expect(body).toMatch(
-      /\.\.\.\(parsed\.data\.bundled_llm_consent !== undefined\s*\n?\s*\? \{ bundledLlmConsent: parsed\.data\.bundled_llm_consent \}\s*\n?\s*: \{\}\)/,
-    );
+    expect(body).not.toMatch(/parsed\.data\.bundled_llm_consent/);
+    expect(body).not.toMatch(/bundledLlmConsent:/);
   });
 
   it('Verify-email + magic-link-consume + password-reset-confirm + refresh all use sessionResponse(result) shape', () => {

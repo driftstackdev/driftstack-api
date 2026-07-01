@@ -16,6 +16,7 @@
 
 import type { Logger } from '../lib/logger.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
+import { maskEmail } from '../lib/redact-url.js';
 import type { EmailService } from './email.js';
 import type { AuthCache } from './auth-cache.js';
 import type { AccountAuditService } from './account-audit.js';
@@ -200,6 +201,40 @@ export class AuthFlowError extends Error {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Email dedup canonicalization
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Signup-time email dedup canonicalization (security hardening,
+ * 2026-06-30). Two normalizations, applied to the local part only:
+ *
+ *   1. `+tag` subaddressing is stripped for EVERY domain — a
+ *      universal Internet convention (RFC 5233), so
+ *      `foo+anything@example.com` canonicalizes to `foo@example.com`
+ *      regardless of provider.
+ *   2. Dots are ALSO stripped, but ONLY for gmail.com / googlemail.com
+ *      — Gmail specifically treats `f.o.o@gmail.com` as identical to
+ *      `foo@gmail.com`. This is a Gmail-only quirk; dots are
+ *      significant in the local part for other providers, so this
+ *      must NOT generalize to other domains.
+ *
+ * Used ONLY as an additional signup-time duplicate-account pre-check
+ * (see `signup()` below) — it never changes what's stored, displayed,
+ * or emailed; the account row always keeps the customer's literal
+ * entered address.
+ */
+function canonicalizeEmailForDedup(email: string): string {
+  const at = email.lastIndexOf('@');
+  if (at === -1) return email;
+  const localPart = email.slice(0, at);
+  const domain = email.slice(at + 1);
+  const noTag = localPart.split('+')[0] ?? '';
+  const isGmail = domain === 'gmail.com' || domain === 'googlemail.com';
+  const canonicalLocal = isGmail ? noTag.replace(/\./g, '') : noTag;
+  return `${canonicalLocal}@${domain}`;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Service
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -226,14 +261,6 @@ export interface SignupArgs {
   password: string;
   name?: string;
   requestedFromIp: string | null;
-  /**
-   * Arc 1 sub-slice 6.2 (v2-#6) — bundled-LLM opt-in captured at
-   * signup. Both default through to the migration 0050 column defaults
-   * (consent=false, cap=$20). The route layer validates the cap range;
-   * the service forwards verbatim to the repo's createAccount call.
-   */
-  bundledLlmConsent?: boolean;
-  bundledLlmMonthlyCapUsdCents?: number;
 }
 
 export interface SignupResult {
@@ -505,6 +532,24 @@ export class AuthFlowsService {
       throw new AuthFlowError('email_already_registered');
     }
 
+    // 2026-06-30 security fix — Gmail dot/+tag dedup pre-check. A
+    // signup using a `+tag` suffix or (Gmail-only) dot-variant of an
+    // address that's ALREADY registered lands in the exact same real
+    // inbox as the existing account, so letting it through would let
+    // one mailbox mint unlimited "distinct" free-tier accounts. Only
+    // issue the extra lookup when canonicalizing actually changed
+    // something — skips a redundant identical query for the common
+    // already-canonical-address case. This is an ADDITIONAL, STRICTER
+    // pre-check ahead of the `accounts_email_unique` DB constraint
+    // below; it doesn't relax or replace that constraint.
+    const canonicalEmail = canonicalizeEmailForDedup(email);
+    if (canonicalEmail !== email) {
+      const canonicalExisting = await this.repo.findAccountByEmail(canonicalEmail);
+      if (canonicalExisting !== null) {
+        throw new AuthFlowError('email_already_registered');
+      }
+    }
+
     const passwordHash = await hashPassword(args.password);
     let account: Awaited<ReturnType<typeof this.repo.createAccount>>;
     try {
@@ -513,12 +558,6 @@ export class AuthFlowsService {
         name: args.name ?? null,
         passwordHash,
         initialTier: this.config.initialTier ?? 'free',
-        ...(args.bundledLlmConsent !== undefined
-          ? { bundledLlmConsent: args.bundledLlmConsent }
-          : {}),
-        ...(args.bundledLlmMonthlyCapUsdCents !== undefined
-          ? { bundledLlmMonthlyCapUsdCents: args.bundledLlmMonthlyCapUsdCents }
-          : {}),
       });
     } catch (err) {
       // Concurrent same-email signup race (e.g. a double-clicked submit):
@@ -827,7 +866,7 @@ export class AuthFlowsService {
     const expiresAt = new Date(Date.now() + AUTH_TOKEN_TTL_MS.magicLink);
     if (account === null) {
       this.logger.info(
-        { component: 'auth-flows', flow: 'magic-link', email },
+        { component: 'auth-flows', flow: 'magic-link', email: maskEmail(email) },
         'magic-link requested for unknown email — no-op',
       );
       return { sent: false, expiresAt, debugToken: null };
@@ -892,7 +931,7 @@ export class AuthFlowsService {
 
     if (account === null) {
       this.logger.info(
-        { component: 'auth-flows', flow: 'password-reset', email },
+        { component: 'auth-flows', flow: 'password-reset', email: maskEmail(email) },
         'password-reset requested for unknown email — no-op',
       );
       return { sent: false, expiresAt, debugToken: null };

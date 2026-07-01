@@ -222,7 +222,8 @@ describe('createEmailService — configured', () => {
       expect.objectContaining({
         component: 'email',
         template: 'support-ack',
-        to: 'user@example.com',
+        // maskEmail() — the raw address must not sit in plaintext in logs.
+        to: 'u***@example.com',
       }),
       'email sent',
     );

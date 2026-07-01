@@ -115,3 +115,25 @@ export function redactText(s: string): string {
     .replace(FREE_TEXT_BEARER_RE, '$1[redacted]')
     .replace(URL_USERINFO_RE, '$1[redacted]@');
 }
+
+// GDPR / data-minimization — customer email addresses are personal data and
+// must not sit in plaintext in logs (email send/failure logs, magic-link +
+// password-reset request logs, incident-notification fan-out logs). Pino's
+// blanket `redact.paths` denylist can't cover this: the key names those call
+// sites use (`to`, `email`) are too generic and are reused elsewhere for
+// non-sensitive values, so a per-call-site mask is the only safe option —
+// mirrors the surgical, value-level approach the URL/query redactors above
+// take, just for a different shape of value.
+//
+// Keeps the first local-part character + the full domain (e.g.
+// `j***@example.com`) — enough to eyeball-correlate log lines to a support
+// ticket without persisting the full address. Malformed input (no `@`, empty
+// local-part) is masked wholesale rather than risk echoing it verbatim.
+export function maskEmail(email: string): string {
+  if (typeof email !== 'string' || email.length === 0) return email;
+  const atIdx = email.indexOf('@');
+  if (atIdx <= 0 || atIdx === email.length - 1) return '[redacted-email]';
+  const local = email.slice(0, atIdx);
+  const domain = email.slice(atIdx + 1);
+  return `${local[0]}***@${domain}`;
+}
