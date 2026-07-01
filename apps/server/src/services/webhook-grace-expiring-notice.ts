@@ -53,12 +53,36 @@ export interface WebhookGraceExpiringNoticeRepo {
   }): Promise<ReadonlyArray<WebhookEndpointRow & { accountEmail: string | null }>>;
 
   /**
+   * Cheap point-in-time re-read used as a race guard IMMEDIATELY
+   * before sending the grace-expiring email. The eligible set is
+   * snapshotted once at the top of tickOnce; by the time a given
+   * row's turn comes up (the email send is a network call) the
+   * endpoint may have been disabled — or its account deleted — in the
+   * interim. Returns null if the endpoint no longer exists.
+   */
+  findEndpointById(id: string): Promise<WebhookEndpointRow | null>;
+
+  /**
    * Mark `grace_expiring_notified_at = now` on an endpoint id. Callers
    * MUST only invoke this after a successful email send (see module
    * header) — unlike WebhookRotationReminderRepo.markReminderSent,
    * which the reminder service calls unconditionally.
+   *
+   * Atomically re-checks `disabledAt IS NULL` at write time (mirrors
+   * WebhooksRepo.forceRotateSecret's guard) and returns the updated
+   * row, or null if the endpoint was disabled/removed in the race
+   * window between the sweep's initial snapshot and this call.
+   * Callers MUST treat a null return as "don't count this row as
+   * notified" — mirror WebhookSecretForceRotationService.tickOnce's
+   * `updated === null` branch — even though, unlike that sibling, the
+   * notice email has already gone out by the time this runs (the
+   * pre-send re-read above is what guards against sending the email
+   * itself in that window).
    */
-  markGraceExpiringNotified(args: { endpointId: string; now: Date }): Promise<void>;
+  markGraceExpiringNotified(args: {
+    endpointId: string;
+    now: Date;
+  }): Promise<WebhookEndpointRow | null>;
 }
 
 export interface WebhookGraceExpiringNoticeServiceConfig {
@@ -121,6 +145,21 @@ export class WebhookGraceExpiringNoticeService {
         continue;
       }
 
+      // Race guard (pre-send) — `eligible` was snapshotted once at the
+      // top of this tick; by the time this row's turn comes up (prior
+      // rows' email sends are network calls) the endpoint may have been
+      // disabled, or its account deleted, in the interim. A cheap
+      // re-read here avoids sending the notice at all in that window,
+      // rather than only avoiding the mis-mark below.
+      const current = await this.repo.findEndpointById(ep.id);
+      if (current === null || current.disabledAt !== null) {
+        this.logger.warn(
+          { endpointId: ep.id, accountId: ep.accountId },
+          'WebhookGraceExpiringNoticeService endpoint disabled/removed since the sweep snapshot; skipping send (not counted)',
+        );
+        continue;
+      }
+
       try {
         await this.email.sendWebhookSecretGraceExpiring({
           to: ep.accountEmail,
@@ -137,15 +176,31 @@ export class WebhookGraceExpiringNoticeService {
         continue;
       }
 
+      let updated: WebhookEndpointRow | null;
       try {
-        await this.repo.markGraceExpiringNotified({ endpointId: ep.id, now });
-        notified += 1;
+        updated = await this.repo.markGraceExpiringNotified({ endpointId: ep.id, now });
       } catch (err) {
         this.logger.error(
           { err, endpointId: ep.id, accountId: ep.accountId },
           'WebhookGraceExpiringNoticeService markGraceExpiringNotified failed after a successful send; next tick will re-send (accepted duplicate-notice risk over a silently-dropped one)',
         );
+        continue;
       }
+      // markGraceExpiringNotified atomically re-checks disabledAt IS
+      // NULL at write time — mirrors WebhookSecretForceRotationService.
+      // tickOnce's `updated === null` branch. A miss here means the
+      // endpoint was disabled/removed in the (narrower) race window
+      // between the pre-send re-read above and this write; the email
+      // already went out, but it must NOT be counted as notified /
+      // stamp grace_expiring_notified_at on a now-tombstoned row.
+      if (updated === null) {
+        this.logger.warn(
+          { endpointId: ep.id, accountId: ep.accountId },
+          'WebhookGraceExpiringNoticeService markGraceExpiringNotified found the endpoint disabled/removed (raced after send); notice was emailed but NOT counted as notified',
+        );
+        continue;
+      }
+      notified += 1;
     }
 
     if (notified > 0) {

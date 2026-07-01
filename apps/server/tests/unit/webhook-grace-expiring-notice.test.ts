@@ -13,6 +13,14 @@
 //      unlike WebhookRotationReminderService which marks unconditionally.
 //   5. accountEmail null → email skipped + NOT marked (retries next tick).
 //   6. perTickLimit honored — bounds the email burst.
+//   7. Endpoint disabled BEFORE the per-row pre-send re-read (a race
+//      landing after the initial `findEndpointsNeedingGraceExpiringNotice`
+//      snapshot) → email is never sent, not counted as notified.
+//   8. Endpoint disabled DURING the email send (a narrower race landing
+//      after the pre-send re-read but before markGraceExpiringNotified) →
+//      the email still goes out, but markGraceExpiringNotified's atomic
+//      `disabledAt IS NULL` re-check misses → NOT counted as notified and
+//      graceExpiringNotifiedAt is left unset on the row.
 
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -86,11 +94,20 @@ function makeFakeEmail(): { svc: EmailService; calls: Array<Record<string, unkno
 // Mirrors the real Drizzle query's `graceExpiringNotifiedAt IS NULL` filter —
 // an already-notified row is excluded from the eligible set entirely, not
 // returned-then-skipped.
+//
+// Backed by a mutable `store` (keyed by endpoint id) so tests can simulate a
+// concurrent disable/delete landing between the initial
+// findEndpointsNeedingGraceExpiringNotice snapshot and later per-row calls —
+// findEndpointById and markGraceExpiringNotified both read/write the live
+// store, mirroring how the real DrizzleWebhooksRepo re-reads/re-checks
+// against the current row rather than the stale snapshot.
 function makeFakeRepo(eligible: EligibleRow[]): {
   repo: WebhookGraceExpiringNoticeRepo;
   marked: string[];
+  store: Map<string, EligibleRow>;
 } {
   const marked: string[] = [];
+  const store = new Map<string, EligibleRow>(eligible.map((r) => [r.id, { ...r }]));
   const repo = {
     findEndpointsNeedingGraceExpiringNotice: (_args: {
       now: Date;
@@ -100,12 +117,21 @@ function makeFakeRepo(eligible: EligibleRow[]): {
       Promise.resolve(
         eligible.filter((r) => r.graceExpiringNotifiedAt == null).slice(0, _args.limit),
       ),
+    findEndpointById: (id: string) => Promise.resolve(store.get(id) ?? null),
+    // Atomic re-check against the LIVE store row's disabledAt — mirrors
+    // DrizzleWebhooksRepo.markGraceExpiringNotified's `isNull(disabledAt)`
+    // guard. Returns null (and does NOT push to `marked`) when the row is
+    // missing or has been disabled since the initial snapshot.
     markGraceExpiringNotified: (args: { endpointId: string; now: Date }) => {
+      const row = store.get(args.endpointId);
+      if (!row || row.disabledAt !== null) return Promise.resolve(null);
+      const updated: EligibleRow = { ...row, graceExpiringNotifiedAt: args.now };
+      store.set(args.endpointId, updated);
       marked.push(args.endpointId);
-      return Promise.resolve();
+      return Promise.resolve(updated);
     },
   };
-  return { repo, marked };
+  return { repo, marked, store };
 }
 
 describe('Arc 3 sub-slice 28.5 follow-up WebhookGraceExpiringNoticeService.tickOnce', () => {
@@ -194,8 +220,9 @@ describe('Arc 3 sub-slice 28.5 follow-up WebhookGraceExpiringNoticeService.tickO
 
   it('markGraceExpiringNotified failure after a successful send → not counted (send still happened; next tick may re-send)', async () => {
     const { svc: emailSvc, calls } = makeFakeEmail();
-    const repo = {
+    const repo: WebhookGraceExpiringNoticeRepo = {
       findEndpointsNeedingGraceExpiringNotice: () => Promise.resolve([makeRow()]),
+      findEndpointById: () => Promise.resolve(makeRow()),
       markGraceExpiringNotified: () => Promise.reject(new Error('db down')),
     };
     const svc = new WebhookGraceExpiringNoticeService(repo, emailSvc, makeFakeLogger(), {
@@ -204,5 +231,51 @@ describe('Arc 3 sub-slice 28.5 follow-up WebhookGraceExpiringNoticeService.tickO
     const result = await svc.tickOnce(NOW);
     expect(calls).toHaveLength(1);
     expect(result.notified).toBe(0);
+  });
+
+  it('endpoint disabled BEFORE the pre-send re-read (race after the initial snapshot) → email never sent, not counted', async () => {
+    const { svc: emailSvc, calls } = makeFakeEmail();
+    const { repo, marked, store } = makeFakeRepo([makeRow()]);
+    // Simulate the account-deletion / manual-delete race: the endpoint was
+    // live when findEndpointsNeedingGraceExpiringNotice snapshotted it, but
+    // gets disabled before this row's turn in the per-row loop.
+    store.set('whk_1', { ...store.get('whk_1')!, disabledAt: new Date(NOW.getTime() - 1) });
+    const svc = new WebhookGraceExpiringNoticeService(repo, emailSvc, makeFakeLogger(), {
+      dashboardUrl: 'https://app.driftstack.test',
+    });
+    const result = await svc.tickOnce(NOW);
+    expect(calls).toHaveLength(0);
+    expect(marked).toHaveLength(0);
+    expect(result.notified).toBe(0);
+    expect(store.get('whk_1')!.graceExpiringNotifiedAt ?? null).toBeNull();
+  });
+
+  it('endpoint disabled DURING the email send (race between the initial fetch and markGraceExpiringNotified) → notice emailed but NOT counted / notified-at left unset', async () => {
+    const { repo, marked, store } = makeFakeRepo([makeRow()]);
+    const calls: Array<Record<string, unknown>> = [];
+    // The email "send" is where the race window opens in practice (it's the
+    // slow network call); model the concurrent disable as a side effect of
+    // that call so it lands strictly between the pre-send re-read (which
+    // still sees a live row) and the markGraceExpiringNotified write.
+    const raceEmail = {
+      isConfigured: true,
+      sendWebhookSecretGraceExpiring: (args: Record<string, unknown>) => {
+        calls.push(args);
+        store.set('whk_1', { ...store.get('whk_1')!, disabledAt: new Date(NOW.getTime() - 1) });
+        return Promise.resolve();
+      },
+    } as unknown as EmailService;
+    const svc = new WebhookGraceExpiringNoticeService(repo, raceEmail, makeFakeLogger(), {
+      dashboardUrl: 'https://app.driftstack.test',
+    });
+    const result = await svc.tickOnce(NOW);
+    // The notice DID go out (the race lands after the send)...
+    expect(calls).toHaveLength(1);
+    // ...but the account/endpoint disabled mid-flight must not be counted as
+    // notified, and markGraceExpiringNotified's atomic disabledAt re-check
+    // must leave graceExpiringNotifiedAt unset on the row.
+    expect(marked).toHaveLength(0);
+    expect(result.notified).toBe(0);
+    expect(store.get('whk_1')!.graceExpiringNotifiedAt ?? null).toBeNull();
   });
 });

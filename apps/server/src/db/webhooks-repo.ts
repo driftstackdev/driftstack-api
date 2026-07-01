@@ -422,12 +422,27 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
    * very next sweep tick retries it, rather than swallowing the
    * failure until the next ~91-day force-rotation cycle resets the
    * bookkeeping.
+   *
+   * Guarded write (post-launch-day fix): the caller snapshots eligible
+   * endpoints once at the top of the sweep, then emails + marks
+   * per-row — a live race window in which the endpoint gets disabled
+   * (customer deletes it) or its account gets deleted between the
+   * snapshot and this call. Mirrors rotateSecret / forceRotateSecret's
+   * `isNull(disabledAt)` re-check + `.returning()` so the UPDATE only
+   * touches a still-live row and the caller can tell a miss (null)
+   * apart from a real update, instead of silently stamping
+   * grace_expiring_notified_at on a tombstoned endpoint.
    */
-  async markGraceExpiringNotified(args: { endpointId: string; now: Date }): Promise<void> {
-    await this.database.db
+  async markGraceExpiringNotified(args: {
+    endpointId: string;
+    now: Date;
+  }): Promise<WebhookEndpointRow | null> {
+    const [row] = await this.database.db
       .update(webhookEndpoints)
       .set({ graceExpiringNotifiedAt: args.now, updatedAt: args.now })
-      .where(eq(webhookEndpoints.id, args.endpointId));
+      .where(and(eq(webhookEndpoints.id, args.endpointId), isNull(webhookEndpoints.disabledAt)))
+      .returning();
+    return row ? toEndpointRow(row) : null;
   }
 
   async forceRotateSecret(input: {
