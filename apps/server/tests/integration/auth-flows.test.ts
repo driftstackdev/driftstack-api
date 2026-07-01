@@ -461,6 +461,40 @@ describe('POST /v1/auth/login', () => {
     expect(res.statusCode).toBe(403);
     expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.EmailNotVerified);
   });
+
+  // Audit fix 2026-07-01: signup dedup already treats a Gmail dot-variant as
+  // the SAME account (canonicalizeEmailForDedup) — login must recognize that
+  // too, or a customer who signs up with one variant and later types an
+  // equivalent-but-different one (same Gmail inbox) gets locked out with
+  // "invalid credentials" even though they have the right password.
+  it('200 logs in with a Gmail dot-variant of the address used at signup (same inbox, different literal string)', async () => {
+    fx = await buildTestApp();
+    await signupAndVerify(fx, 'log.in@gmail.com', 'correct horse battery staple');
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: { email: 'login@gmail.com', password: 'correct horse battery staple' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json<SessionEnvelope>();
+    expect(body.session.token).toBeDefined();
+  });
+
+  it('401 InvalidCredentials on the Gmail dot-variant path with the WRONG password (canonical fallback still requires the real password)', async () => {
+    fx = await buildTestApp();
+    await signupAndVerify(fx, 'log.in.two@gmail.com', 'correct horse battery staple');
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: { email: 'logintwo@gmail.com', password: 'totally wrong password!!!' },
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.InvalidCredentials);
+  });
 });
 
 // #187 — self-service resend of the signup-verification email.
@@ -542,6 +576,33 @@ describe('POST /v1/auth/resend-verification', () => {
     const body = res.json<SessionEnvelope>();
     expect(body.session.token).toBeDefined();
   });
+
+  // Audit fix 2026-07-01: same canonical-fallback closing the Gmail
+  // dot-variant lockout gap as login (see that describe block).
+  it('mints a usable verify token when requested with a Gmail dot-variant of the signup address', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: { email: 're.send@gmail.com', password: 'correct horse battery staple' },
+    });
+
+    const req = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/resend-verification',
+      payload: { email: 'resend@gmail.com' },
+    });
+    const freshToken = req.json<{ debug_token: string }>().debug_token;
+    expect(freshToken).toBeDefined();
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      payload: { token: freshToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<SessionEnvelope>().session.token).toBeDefined();
+  });
 });
 
 describe('POST /v1/auth/magic-link', () => {
@@ -590,6 +651,33 @@ describe('POST /v1/auth/magic-link', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<SessionEnvelope>();
     expect(body.session.token).toBeDefined();
+  });
+
+  // Audit fix 2026-07-01: same canonical-fallback closing the Gmail
+  // dot-variant lockout gap as login (see that describe block).
+  it('issues a consumable magic link when requested with a Gmail dot-variant of the signup address', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: { email: 'ma.gic@gmail.com', password: 'correct horse battery staple' },
+    });
+
+    const req = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/magic-link/request',
+      payload: { email: 'magic@gmail.com' },
+    });
+    const token = req.json<{ debug_token: string }>().debug_token;
+    expect(token).toBeDefined();
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/magic-link/consume',
+      payload: { token },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<SessionEnvelope>().session.token).toBeDefined();
   });
 });
 
@@ -642,6 +730,33 @@ describe('POST /v1/auth/password-reset', () => {
     // even without prior verification, since clicking the email already
     // demonstrates ownership. Login still requires a verified email
     // though, so this round-trip uses the issued session token instead.)
+  });
+
+  // Audit fix 2026-07-01: same canonical-fallback closing the Gmail
+  // dot-variant lockout gap as login (see that describe block).
+  it('issues a usable reset token when requested with a Gmail dot-variant of the signup address', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: { email: 're.set@gmail.com', password: 'correct horse battery staple' },
+    });
+
+    const req = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/password-reset/request',
+      payload: { email: 'reset@gmail.com' },
+    });
+    const token = req.json<{ debug_token: string }>().debug_token;
+    expect(token).toBeDefined();
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/password-reset/confirm',
+      payload: { token, new_password: 'totally different password!!' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<SessionEnvelope>().session.token).toBeDefined();
   });
 
   it('confirm REVOKES every other web session (compromise-recovery) and keeps the just-issued one', async () => {

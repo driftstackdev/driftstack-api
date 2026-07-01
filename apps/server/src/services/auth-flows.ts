@@ -553,6 +553,40 @@ export class AuthFlowsService {
     }
   }
 
+  /**
+   * Audit fix (2026-07-01) — login/resend-verification/magic-link/password-
+   * reset all used to look up ONLY by the literal (lowercased) email. Since
+   * signup dedup already treats Gmail dot/+tag variants as the SAME account
+   * (canonicalizeEmailForDedup + findAccountByCanonicalEmail, closing the
+   * alias-abuse gap fixed earlier this session), a customer who signed up
+   * with one variant (e.g. `foo.bar@gmail.com`, however their password
+   * manager or memory happened to store it) but later types an
+   * equivalent-but-different variant (`foobar@gmail.com` — the SAME Gmail
+   * inbox) at any of these entry points would get a literal-lookup miss and
+   * be told "invalid credentials" / silently get no reset email, even though
+   * the system's own dedup logic already knows these are the same account
+   * owner. This helper closes that gap consistently across all four flows.
+   *
+   * Deliberately runs BOTH lookups unconditionally (never conditionally
+   * short-circuits on the literal hit) rather than "try literal, then only
+   * if null try canonical": `login()` specifically follows this call with a
+   * constant-time password verify (real or dummy hash) to close a CWE-208
+   * timing side-channel, and a conditional second query would make total
+   * query count (and therefore response time) vary with whether the exact
+   * literal email matched — a new, subtler timing signal. Always doing
+   * both queries keeps this helper's own cost constant-shape regardless of
+   * which case applies, so it introduces no new timing distinction for
+   * login() to worry about.
+   */
+  private async findAccountByEmailOrCanonical(email: string): Promise<AuthFlowAccountRow | null> {
+    const canonicalEmail = canonicalizeEmailForDedup(email);
+    const [byLiteral, byCanonical] = await Promise.all([
+      this.repo.findAccountByEmail(email),
+      this.repo.findAccountByCanonicalEmail(canonicalEmail),
+    ]);
+    return byLiteral ?? byCanonical;
+  }
+
   async signup(args: SignupArgs): Promise<SignupResult> {
     const email = args.email.trim().toLowerCase();
     const existing = await this.repo.findAccountByEmail(email);
@@ -657,7 +691,7 @@ export class AuthFlowsService {
     const email = args.email.trim().toLowerCase();
     const expiresAt = new Date(Date.now() + AUTH_TOKEN_TTL_MS.signupVerification);
 
-    const account = await this.repo.findAccountByEmail(email);
+    const account = await this.findAccountByEmailOrCanonical(email);
     if (account === null || account.emailVerifiedAt !== null) {
       // Don't leak account-existence or verification-state. Return the
       // shape that would have happened on success; no email is sent.
@@ -729,7 +763,7 @@ export class AuthFlowsService {
   }
 
   async login(args: LoginArgs): Promise<LoginResult> {
-    const account = await this.repo.findAccountByEmail(args.email.trim().toLowerCase());
+    const account = await this.findAccountByEmailOrCanonical(args.email.trim().toLowerCase());
 
     // Authenticate BEFORE branching on account state so the response time +
     // error are identical whether the email is unknown, password-less
@@ -909,7 +943,7 @@ export class AuthFlowsService {
 
   async requestMagicLink(args: MagicLinkRequestArgs): Promise<MagicLinkRequestResult> {
     const email = args.email.trim().toLowerCase();
-    const account = await this.repo.findAccountByEmail(email);
+    const account = await this.findAccountByEmailOrCanonical(email);
 
     // Always return the same shape so the response doesn't leak account
     // existence. If no account, no token is issued and no email is sent.
@@ -976,7 +1010,7 @@ export class AuthFlowsService {
 
   async requestPasswordReset(args: PasswordResetRequestArgs): Promise<PasswordResetRequestResult> {
     const email = args.email.trim().toLowerCase();
-    const account = await this.repo.findAccountByEmail(email);
+    const account = await this.findAccountByEmailOrCanonical(email);
     const expiresAt = new Date(Date.now() + AUTH_TOKEN_TTL_MS.passwordReset);
 
     if (account === null) {
