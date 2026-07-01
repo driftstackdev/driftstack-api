@@ -14649,14 +14649,6 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 120
-                  },
-                  "bundled_llm_consent": {
-                    "type": "boolean"
-                  },
-                  "bundled_llm_monthly_cap_usd_cents": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 1000000
                   }
                 },
                 "required": ["email", "password"]

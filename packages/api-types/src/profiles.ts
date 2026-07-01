@@ -74,38 +74,104 @@ export type AccountOrganization = z.infer<typeof AccountOrganizationSchema>;
 // lib/parse-openvpn).
 export const AccountProxySchemeSchema = z.enum(['socks5', 'http', 'openvpn', 'wireguard']);
 
-export const AccountProxyInputSchema = z.object({
+// AccountProxyInputSchema / AccountProxyUpdateSchema are z.discriminatedUnion's
+// on `scheme` — mirroring egress.ts's `ProxyConfigSchema` (discriminated on
+// `type`). Previously these were flat z.object()s with `scheme` a plain enum
+// and BOTH `openvpn`/`wireguard` always `.optional()` — nothing at the TYPE
+// level stopped a caller from constructing `{ scheme: 'wireguard' }` with no
+// `wireguard` block; the route (buildVpnSecretAndConfig in account-me.ts)
+// caught it at runtime with a 400, but the SDK types gave zero compile-time
+// signal. Now `scheme: 'openvpn'` requires the `openvpn` block (and likewise
+// for `wireguard`) at the TYPE level — a caller gets a compile error instead
+// of a runtime 400.
+//
+// Every branch is `.strict()`: a stray `openvpn`/`wireguard` block on the
+// WRONG scheme (e.g. `{ scheme: 'socks5', wireguard: {...} }`) is rejected at
+// the schema layer (previously a route-level runtime check re-inspecting
+// `parsed.data` after the fact — same 400 outcome, caught earlier).
+//
+// `scheme` has NO default here (mirrors `ProxyConfigSchema`'s `type`, which is
+// always explicit in every branch) — the pre-V1 ergonomic default (an omitted
+// `scheme` on CREATE means socks5) is preserved at the WIRE level by the
+// create route, which fills it into the raw body before parsing (see
+// account-me.ts) so existing callers who omit `scheme` are unaffected.
+const AccountProxyCreateCommonShape = {
   label: z.string().min(1).max(80),
-  scheme: AccountProxySchemeSchema.default('socks5'),
   host: z.string().min(1).max(255),
   port: z.number().int().min(1).max(65535),
   username: z.string().max(255).nullable().default(null),
   // Write-only — wrapped server-side, never echoed back.
   password: z.string().max(1024).nullable().default(null),
-  // VPN config blocks — present only for the matching scheme (route-enforced).
-  // The secret-bearing parts (openvpn.config_blob/password, wireguard.private_key)
-  // are write-only — wrapped under the account TMK, NEVER echoed back.
-  openvpn: OpenVpnProxyConfigSchema.optional(),
-  wireguard: WireGuardProxyConfigSchema.optional(),
-});
+};
+
+export const AccountProxyInputSchema = z.discriminatedUnion('scheme', [
+  z.object({ scheme: z.literal('socks5'), ...AccountProxyCreateCommonShape }).strict(),
+  z.object({ scheme: z.literal('http'), ...AccountProxyCreateCommonShape }).strict(),
+  z
+    .object({
+      scheme: z.literal('openvpn'),
+      ...AccountProxyCreateCommonShape,
+      // Secret-bearing (config_blob/password) — write-only, wrapped under the
+      // account TMK, NEVER echoed back.
+      openvpn: OpenVpnProxyConfigSchema,
+    })
+    .strict(),
+  z
+    .object({
+      scheme: z.literal('wireguard'),
+      ...AccountProxyCreateCommonShape,
+      // Secret-bearing (private_key) — write-only, wrapped under the account
+      // TMK, NEVER echoed back.
+      wireguard: WireGuardProxyConfigSchema,
+    })
+    .strict(),
+]);
 export type AccountProxyInput = z.infer<typeof AccountProxyInputSchema>;
 // Create-body shape (the INPUT side of the schema): the defaulted fields
-// (scheme / username / password) are optional for callers. SDKs accept this.
+// (username / password) are optional for callers. SDKs accept this. `scheme`
+// itself is required at the type level (see note above re: the wire-level
+// default living in the route, not the schema).
 export type AccountProxyCreate = z.input<typeof AccountProxyInputSchema>;
 
-// PUT body — every field optional. `password` omitted = keep existing,
-// `password: null` = clear, `password: "..."` = set (no defaults, so the
-// omit-vs-null distinction the handler relies on is preserved).
-export const AccountProxyUpdateSchema = z.object({
+// PUT body. `password` omitted = keep existing, `password: null` = clear,
+// `password: "..."` = set (no defaults, so the omit-vs-null distinction the
+// handler relies on is preserved). Every field besides `scheme` is optional
+// (a partial update); `scheme` is either OMITTED ENTIRELY (the last union
+// branch below — patch non-VPN fields without touching the scheme/VPN
+// config) or present with its matching VPN block required, same as create —
+// a caller can't re-point a proxy at `scheme: 'wireguard'` without supplying
+// a `wireguard` block, even on update.
+const AccountProxyUpdateCommonShape = {
   label: z.string().min(1).max(80).optional(),
-  scheme: AccountProxySchemeSchema.optional(),
   host: z.string().min(1).max(255).optional(),
   port: z.number().int().min(1).max(65535).optional(),
   username: z.string().max(255).nullable().optional(),
   password: z.string().max(1024).nullable().optional(),
-  openvpn: OpenVpnProxyConfigSchema.optional(),
-  wireguard: WireGuardProxyConfigSchema.optional(),
-});
+};
+
+export const AccountProxyUpdateSchema = z.union([
+  z.object({ scheme: z.literal('socks5'), ...AccountProxyUpdateCommonShape }).strict(),
+  z.object({ scheme: z.literal('http'), ...AccountProxyUpdateCommonShape }).strict(),
+  z
+    .object({
+      scheme: z.literal('openvpn'),
+      ...AccountProxyUpdateCommonShape,
+      openvpn: OpenVpnProxyConfigSchema,
+    })
+    .strict(),
+  z
+    .object({
+      scheme: z.literal('wireguard'),
+      ...AccountProxyUpdateCommonShape,
+      wireguard: WireGuardProxyConfigSchema,
+    })
+    .strict(),
+  // scheme UNCHANGED — the common partial-update fields only. `scheme` must
+  // be the literal `undefined` (i.e. the key is omitted) so a request like
+  // `{ scheme: 'wireguard' }` (no matching block) fails closed against THIS
+  // branch too, instead of silently falling through and dropping `scheme`.
+  z.object({ ...AccountProxyUpdateCommonShape, scheme: z.undefined().optional() }).strict(),
+]);
 export type AccountProxyUpdate = z.infer<typeof AccountProxyUpdateSchema>;
 
 export const AccountProxyMetadataSchema = z.object({

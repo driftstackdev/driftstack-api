@@ -499,7 +499,14 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       if (!accountProxiesRepo) throw new FeatureUnavailableError('Proxies are not configured.');
-      const parsed = AccountProxyInputSchema.safeParse(request.body ?? {});
+      // AccountProxyInputSchema is a discriminatedUnion on `scheme` with no
+      // default (mirrors egress.ts's ProxyConfigSchema) — an omitted `scheme`
+      // no longer matches any branch. Fill the pre-V1 ergonomic default
+      // (omitted scheme => socks5) into the RAW body here so the wire
+      // contract for existing callers is unchanged.
+      const rawBody = (request.body ?? {}) as Record<string, unknown>;
+      const bodyWithScheme = 'scheme' in rawBody ? rawBody : { ...rawBody, scheme: 'socks5' };
+      const parsed = AccountProxyInputSchema.safeParse(bodyWithScheme);
       if (!parsed.success) {
         throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid proxy.');
       }
@@ -561,8 +568,22 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         updates.wrappedSecret = vpn.wrappedSecret;
         updates.config = vpn.config;
         updates.wrappedPassword = null;
-      } else if ('password' in body) {
-        updates.wrappedPassword = wrapProxyPassword(ctx.account.id, parsed.data.password ?? null);
+      } else {
+        if ('password' in body) {
+          updates.wrappedPassword = wrapProxyPassword(ctx.account.id, parsed.data.password ?? null);
+        }
+        // Moving AWAY from a VPN scheme (openvpn/wireguard -> socks5/http) must
+        // clear the stale wrapped VPN secret + config — otherwise the old
+        // private_key/config_blob ciphertext (and a misleading has_secret=true)
+        // survive indefinitely under the new non-VPN row.
+        if (
+          parsed.data.scheme !== undefined &&
+          parsed.data.scheme !== 'openvpn' &&
+          parsed.data.scheme !== 'wireguard'
+        ) {
+          updates.wrappedSecret = null;
+          updates.config = {};
+        }
       }
       const row = await accountProxiesRepo.update({ id, accountId: ctx.account.id, updates });
       if (row === null) throw new NotFoundError('Proxy not found.');

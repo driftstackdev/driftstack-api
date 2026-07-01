@@ -12,7 +12,12 @@
 import { describe, expect, it } from 'vitest';
 import { EgressResource } from '../../src/resources/egress.js';
 import type { HttpClient } from '../../src/http.js';
-import type { SessionEgressConfig, AccountProxyInput } from '@driftstack/api-types';
+import type {
+  SessionEgressConfig,
+  AccountProxyInput,
+  AccountProxyCreate,
+  AccountProxyUpdate,
+} from '@driftstack/api-types';
 
 interface RecordedRequest {
   method: string;
@@ -99,6 +104,116 @@ describe('EgressResource', () => {
       username: null,
       has_password: true,
       has_secret: false,
+      created_at: '2026-06-17T00:00:00Z',
+      updated_at: '2026-06-17T00:00:00Z',
+    };
+    const { http, calls } = makeFakeHttp(reply);
+    const res = new EgressResource(http);
+    const result = await res.createProxy(body);
+    expect(calls).toEqual([{ method: 'POST', path: '/v1/account/me/proxies', body }]);
+    expect(result).toEqual(reply);
+  });
+
+  it(
+    'AccountProxyCreate / AccountProxyUpdate reject a scheme/VPN-block mismatch at ' +
+      'COMPILE TIME (regression guard for the flat-optional openvpn/wireguard type gap)',
+    () => {
+      // Before the fix, AccountProxyInputSchema/AccountProxyUpdateSchema were
+      // flat z.object()s with `scheme` a plain enum and BOTH `openvpn`/
+      // `wireguard` unconditionally `.optional()` — nothing at the TYPE level
+      // stopped a caller from constructing `scheme: 'wireguard'` with no
+      // `wireguard` block (the server always 400s it at runtime via
+      // buildVpnSecretAndConfig, but the SDK type gave zero compile-time
+      // signal). They're now `z.discriminatedUnion('scheme', [...])` —
+      // mirroring egress.ts's `ProxyConfigSchema` — so every assignment
+      // below must fail to typecheck. This is a REAL assertion enforced by
+      // `tsc --noEmit`: if the discriminated union regresses back to a flat
+      // shape, these `@ts-expect-error` directives become unused and the
+      // typecheck fails (vitest itself doesn't re-check types, hence the
+      // `.length` assertion below giving the suite something to run too).
+
+      // @ts-expect-error — `wireguard` scheme requires the matching `wireguard` block.
+      const missingWireGuardBlock: AccountProxyCreate = {
+        label: 'no vpn block',
+        scheme: 'wireguard',
+        host: 'vpn.example.com',
+        port: 51820,
+      };
+      // @ts-expect-error — `openvpn` scheme requires the matching `openvpn` block.
+      const missingOpenVpnBlock: AccountProxyCreate = {
+        label: 'no vpn block',
+        scheme: 'openvpn',
+        host: 'vpn.example.com',
+        port: 1194,
+      };
+      const strayBlockOnWrongScheme: AccountProxyCreate = {
+        label: 'stray block',
+        scheme: 'socks5',
+        host: 'x.example',
+        port: 1080,
+        // @ts-expect-error — a `wireguard` block on a mismatched scheme (socks5) must not typecheck.
+        wireguard: {
+          private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
+          peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
+          endpoint: 'x.example:1',
+          allowed_ips: '0.0.0.0/0',
+        },
+      };
+      // Same gap on the UPDATE side — switching an existing proxy's `scheme`
+      // to `wireguard` without the matching block.
+      // @ts-expect-error — `wireguard` scheme requires the matching `wireguard` block on update too.
+      const missingBlockOnUpdate: AccountProxyUpdate = { scheme: 'wireguard', label: 'renamed' };
+
+      // Sanity check: a WELL-FORMED discriminated body of each kind DOES
+      // typecheck — proves the errors above are about the missing/mismatched
+      // block, not some unrelated typo tripping every assignment.
+      const validVpnCreate: AccountProxyCreate = {
+        label: 'ok',
+        scheme: 'wireguard',
+        host: 'vpn.example.com',
+        port: 51820,
+        wireguard: {
+          private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
+          peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
+          endpoint: 'vpn.example.com:51820',
+          allowed_ips: '0.0.0.0/0',
+        },
+      };
+      const validUpdate: AccountProxyUpdate = { label: 'renamed' };
+
+      expect([
+        missingWireGuardBlock,
+        missingOpenVpnBlock,
+        strayBlockOnWrongScheme,
+        missingBlockOnUpdate,
+        validVpnCreate,
+        validUpdate,
+      ]).toHaveLength(6);
+    },
+  );
+
+  it('createProxy POSTs a WireGuard body verbatim (scheme + matching wireguard block travel together)', async () => {
+    const body: AccountProxyCreate = {
+      label: 'wg-home',
+      scheme: 'wireguard',
+      host: 'vpn.example.com',
+      port: 51820,
+      wireguard: {
+        private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
+        peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
+        endpoint: 'vpn.example.com:51820',
+        allowed_ips: '0.0.0.0/0',
+      },
+    };
+    const reply = {
+      id: 'apx_2',
+      label: 'wg-home',
+      scheme: 'wireguard' as const,
+      host: 'vpn.example.com',
+      port: 51820,
+      username: null,
+      has_password: false,
+      has_secret: true,
       created_at: '2026-06-17T00:00:00Z',
       updated_at: '2026-06-17T00:00:00Z',
     };

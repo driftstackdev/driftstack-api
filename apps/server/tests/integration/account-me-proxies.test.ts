@@ -339,6 +339,57 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  // Regression: PUT switching a VPN row AWAY from openvpn/wireguard must wipe
+  // the stale wrapped VPN secret (private_key/config_blob ciphertext) — not
+  // just leave it orphaned under a socks5/http row with a misleading
+  // has_secret=true.
+  it('PUT scheme wireguard -> socks5 clears the stale wrapped secret (has_secret goes false)', async () => {
+    fx = await buildTestApp();
+    const created = (
+      await fx.app.inject({
+        method: 'POST',
+        url: '/v1/account/me/proxies',
+        headers: auth(fx),
+        payload: {
+          label: 'wg-then-socks',
+          scheme: 'wireguard',
+          host: 'vpn.example.com',
+          port: 51820,
+          wireguard: {
+            private_key: WG_PRIV,
+            peer_public_key: WG_PUB,
+            endpoint: 'vpn.example.com:51820',
+            allowed_ips: '0.0.0.0/0',
+          },
+        },
+      })
+    ).json<ProxyMeta>();
+    expect(created.has_secret).toBe(true);
+
+    const switched = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/account/me/proxies/${created.id}`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { scheme: 'socks5', password: 'newpass' },
+    });
+    expect(switched.statusCode).toBe(200);
+    const meta = switched.json<ProxyMeta>();
+    expect(meta.scheme).toBe('socks5');
+    // The new socks5 password DID get wrapped/set...
+    expect(meta.has_password).toBe(true);
+    // ...but the stale WireGuard private_key ciphertext must NOT survive.
+    expect(meta.has_secret).toBe(false);
+
+    // GET (list) reflects the same cleared state, not just the PUT response.
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+    });
+    const listed = list.json<{ data: ProxyMeta[] }>().data.find((p) => p.id === created.id);
+    expect(listed?.has_secret).toBe(false);
+  });
 });
 
 describe('proxy audit emit — egress-config changes land in the account audit log', () => {
