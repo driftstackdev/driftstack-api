@@ -1121,7 +1121,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
   });
   registerAccountAuditRoutes(app, { accountAudit: deps.accountAuditService });
-  registerAdminValidationHarnessRoutes(app, { harness: deps.validationHarnessService });
+  registerAdminValidationHarnessRoutes(app, {
+    harness: deps.validationHarnessService,
+    audit: deps.adminAuditService,
+  });
   registerAccountRateLimitsRoutes(app);
   // 2026-05-20 — GUI panel notification SSE stream. Registers only
   // when deps.notificationEventBus is wired (opt-in deploy-side).
@@ -1314,7 +1317,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         : {}),
     });
     registerCustomerCryptoOrdersRoutes(app, { service: deps.cryptoOrdersService });
-    registerAdminCryptoOrdersRoutes(app, { service: deps.cryptoOrdersService });
+    registerAdminCryptoOrdersRoutes(app, {
+      service: deps.cryptoOrdersService,
+      audit: deps.adminAuditService,
+    });
   }
   registerCryptoQuoteRoutes(app, { pricing: deps.pricingService });
   if (deps.oauthStore !== undefined) {

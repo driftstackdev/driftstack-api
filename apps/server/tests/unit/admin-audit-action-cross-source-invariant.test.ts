@@ -2,8 +2,8 @@
 // hundred-eighty-eighth in the drift-guard series. Pins the
 // admin-audit closed-action roster:
 //
-//   Lifecycle (3): account.tier_changed + account.suspended +
-//                  account.unsuspended.
+//   Lifecycle (4): account.tier_changed + account.suspended +
+//                  account.unsuspended + account.deleted.
 //   Operational (5): webhook_delivery.replayed +
 //                    webhook_delivery.requeued +
 //                    webhook_delivery.discarded +
@@ -17,9 +17,15 @@
 //   V-295c3 status-subscribers (3): status_subscriber.force_
 //                                  unsubscribed + status_subscriber.purged +
 //                                  status_subscriber.force_subscribed.
-//   LK.2 mac-node (1): mac_node.livekit_registered.
+//   LK.2 mac-node (2): mac_node.livekit_registered + mac_node.control.
 //   Pricing (1): pricing.updated.
 //   Secrets (4, migration 0075): secret.created/updated/deleted/revealed.
+//   D-025 audit-gap fix (6, migration 0097): crypto_order.swept +
+//   crypto_order.ipn_applied + crypto_order.note_updated +
+//   validation_schedule.upserted + validation_schedule.removed +
+//   validation_schedule.triggered — admin-crypto-orders.ts and
+//   admin-validation-harness.ts had zero audit wiring on their 6 mutating
+//   endpoints.
 //   GDPR Article 17 (1, migration 0094): account.deleted — admin-triggered
 //   account termination.
 //
@@ -82,13 +88,19 @@ const ADMIN_AUDIT_ACTIONS = [
   'secret.updated',
   'secret.deleted',
   'secret.revealed',
+  'crypto_order.swept',
+  'crypto_order.ipn_applied',
+  'crypto_order.note_updated',
+  'validation_schedule.upserted',
+  'validation_schedule.removed',
+  'validation_schedule.triggered',
   'account.deleted',
 ] as const;
 
 describe('W862 AdminAuditAction cross-source invariant', () => {
   // ─── api-types canonical source ──────────────────────────────
 
-  it('CRITICAL packages/api-types/src/admin.ts AdminAuditActionSchema = z.enum([27 values]). The 27-value closed-roster is the contract every admin audit-log gate pivots on.', () => {
+  it('CRITICAL packages/api-types/src/admin.ts AdminAuditActionSchema = z.enum([33 values]). The 33-value closed-roster is the contract every admin audit-log gate pivots on.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/admin.ts'));
     expect(p).toMatch(/export const AdminAuditActionSchema = z\.enum\(\[/);
     // EXACT canonical pin: .options must EQUAL the 16-value set, not merely
@@ -113,7 +125,7 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
 
   // ─── DB pgEnum lockstep ──────────────────────────────────────
 
-  it("CRITICAL apps/server/src/db/schema.ts adminAuditAction = pgEnum('admin_audit_action', [27 values]). Postgres rejects INSERTs of unknown values — drift would silently DROP the audit row (compliance/forensics gap).", () => {
+  it("CRITICAL apps/server/src/db/schema.ts adminAuditAction = pgEnum('admin_audit_action', [33 values]). Postgres rejects INSERTs of unknown values — drift would silently DROP the audit row (compliance/forensics gap).", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/schema.ts'));
     expect(p).toMatch(/adminAuditAction = pgEnum\('admin_audit_action', \[/);
     const m = p.match(/adminAuditAction = pgEnum\('admin_audit_action', \[([\s\S]+?)\]\);/);
@@ -162,8 +174,8 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
 
   // ─── 16-value cardinality + 6-category split ─────────────────
 
-  it('CRITICAL AdminAuditAction = EXACTLY 27 values across 9 categories — 4 lifecycle + 5 operational + 2 V-100 force + 2 V-281 support + 4 V-295a incident + 3 V-295c3 subscriber + 2 mac-node + 1 pricing + 4 secrets. The 4/5/2/2/4/3/2/1/4 split is what the audit-log filter dropdown groups by. (2026-06-05: +pricing.updated, migration 0068. 2026-06-12: +secret.created/updated/deleted/revealed, migration 0075. 2026-06-18: +mac_node.control for the fleet-admin node-control panel, migration 0084. 2026-07-01: +account.deleted for GDPR Article 17 admin-triggered account termination, migration 0094 — lifecycle grows from 3 to 4.)', () => {
-    expect(ADMIN_AUDIT_ACTIONS.length).toBe(27);
+  it('CRITICAL AdminAuditAction = EXACTLY 33 values across 11 categories — 4 lifecycle + 5 operational + 2 V-100 force + 2 V-281 support + 4 V-295a incident + 3 V-295c3 subscriber + 2 mac-node + 1 pricing + 4 secrets + 3 crypto-order + 3 validation-schedule. The split is what the audit-log filter dropdown groups by. (2026-06-05: +pricing.updated, migration 0068. 2026-06-12: +secret.created/updated/deleted/revealed, migration 0075. 2026-06-18: +mac_node.control for the fleet-admin node-control panel, migration 0084. 2026-07-01: +account.deleted for GDPR Article 17 admin-triggered account termination, migration 0094 — lifecycle grows from 3 to 4. 2026-07-01 D-025 audit-gap fix, migration 0097: +crypto_order.swept/ipn_applied/note_updated + validation_schedule.upserted/removed/triggered — admin-crypto-orders.ts + admin-validation-harness.ts had zero audit wiring on 6 mutating endpoints.)', () => {
+    expect(ADMIN_AUDIT_ACTIONS.length).toBe(33);
     const lifecycle = ADMIN_AUDIT_ACTIONS.filter((a) => a.startsWith('account.'));
     const operational = ADMIN_AUDIT_ACTIONS.filter(
       (a) => a.startsWith('webhook_delivery.') || a.startsWith('rate_limit_override.'),
@@ -176,6 +188,11 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
     const subscriber = ADMIN_AUDIT_ACTIONS.filter((a) => a.startsWith('status_subscriber.'));
     const macNode = ADMIN_AUDIT_ACTIONS.filter((a) => a.startsWith('mac_node.'));
     const pricing = ADMIN_AUDIT_ACTIONS.filter((a) => a.startsWith('pricing.'));
+    const secrets = ADMIN_AUDIT_ACTIONS.filter((a) => a.startsWith('secret.'));
+    const cryptoOrder = ADMIN_AUDIT_ACTIONS.filter((a) => a.startsWith('crypto_order.'));
+    const validationSchedule = ADMIN_AUDIT_ACTIONS.filter((a) =>
+      a.startsWith('validation_schedule.'),
+    );
     expect(lifecycle.length).toBe(4);
     expect(operational.length).toBe(5);
     expect(force.length).toBe(2);
@@ -184,6 +201,9 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
     expect(subscriber.length).toBe(3);
     expect(macNode.length).toBe(2);
     expect(pricing.length).toBe(1);
+    expect(secrets.length).toBe(4);
+    expect(cryptoOrder.length).toBe(3);
+    expect(validationSchedule.length).toBe(3);
   });
 
   // ─── Verb:resource naming convention ─────────────────────────

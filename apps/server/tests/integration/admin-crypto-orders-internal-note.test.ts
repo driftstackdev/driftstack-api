@@ -140,4 +140,60 @@ describe('V-666.AA PATCH /v1/admin/crypto-orders/:id/internal-note', () => {
     expect(body.customer_note).toBe('PO-12345');
     expect(body.internal_note).toBe('looks legit, expedite if needed');
   });
+
+  // D-025 audit-gap fix — internal-note had zero audit wiring; these
+  // prove the new crypto_order.note_updated audit row on both the
+  // success and 404-not-found path.
+  it('D-025 writes a crypto_order.note_updated audit row on success', async () => {
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+    });
+    await seedPending('ord_ia_audit_ok');
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/admin/crypto-orders/ord_ia_audit_ok/internal-note',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { internal_note: 'VIP account' },
+    });
+    expect(res.statusCode).toBe(200);
+    const all = fx.adminAuditRepo.getAll();
+    expect(all).toHaveLength(1);
+    expect(all[0]?.action).toBe('crypto_order.note_updated');
+    expect(all[0]?.adminAccountId).toBe(fx.accountId);
+    expect(all[0]?.adminKeyId).toBe(fx.apiKeyId);
+    expect(all[0]?.targetResourceId).toBe('ord_ia_audit_ok');
+    expect(all[0]?.result).toBe('success');
+    expect(all[0]?.inputPayload).toEqual({ internal_note: 'VIP account' });
+  });
+
+  it('D-025 writes a crypto_order.note_updated audit row with an error: notfound result when the order does not exist', async () => {
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+    });
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/admin/crypto-orders/ord_ia_missing/internal-note',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { internal_note: 'note' },
+    });
+    expect(res.statusCode).toBe(404);
+    const all = fx.adminAuditRepo.getAll();
+    expect(all).toHaveLength(1);
+    expect(all[0]?.action).toBe('crypto_order.note_updated');
+    expect(all[0]?.targetResourceId).toBe('ord_ia_missing');
+    expect(all[0]?.result).toMatch(/^error: notfound/);
+  });
+
+  it('403 for a customer key writes no audit row (preHandler rejection, before the handler runs)', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write'] });
+    await seedPending('ord_ia_403b');
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/admin/crypto-orders/ord_ia_403b/internal-note',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { internal_note: 'support note' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(fx.adminAuditRepo.getAll()).toHaveLength(0);
+  });
 });

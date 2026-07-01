@@ -262,8 +262,12 @@ describe('W422.C apps/server/src/routes/admin-crypto-orders.ts content parity', 
       /\/\/ V-666\.F — manual IPN application\. Used by ops to recover from\s*\n?\s*\/\/ missed NowPayments webhooks\. Routes through the same state\s*\n?\s*\/\/ machine as the public IPN endpoint, so the forward-only \+\s*\n?\s*\/\/ idempotency guarantees still hold\./,
     );
     expect(body).toMatch(/'\/v1\/admin\/crypto-orders\/:order_id\/apply-ipn',/);
+    // D-025 audit-gap fix — apply-ipn is now wrapped in withAudit (success +
+    // failure both audited); the null→NotFoundError check moved inside the
+    // withAudit perform() callback so a not-found attempt is still audited
+    // before the re-throw.
     expect(body).toMatch(
-      /const updated = await deps\.service\.applyIpnStatus\(\{\s*\n?\s*order_id: params\.order_id,\s*\n?\s*payment_id: body\.payment_id,\s*\n?\s*provider_status: body\.provider_status,\s*\n?\s*\}\);/,
+      /const updated = await withAudit\(\s*\n?\s*req,\s*\n?\s*'crypto_order\.ipn_applied',\s*\n?\s*params\.order_id,\s*\n?\s*\{ provider_status: body\.provider_status, payment_id: body\.payment_id \},\s*\n?\s*async \(\) => \{\s*\n?\s*const result = await deps\.service\.applyIpnStatus\(\{\s*\n?\s*order_id: params\.order_id,\s*\n?\s*payment_id: body\.payment_id,\s*\n?\s*provider_status: body\.provider_status,\s*\n?\s*\}\);/,
     );
   });
 
@@ -272,17 +276,38 @@ describe('W422.C apps/server/src/routes/admin-crypto-orders.ts content parity', 
       /\/\/ V-666\.AA — admin sets \/ clears the internal-note field on an\s*\n?\s*\/\/ order\. PATCH semantics: send \{ internal_note: "\.\.\." \} to set,\s*\n?\s*\/\/ \{ internal_note: null \} or \{ internal_note: "" \} to clear\./,
     );
     expect(body).toMatch(/'\/v1\/admin\/crypto-orders\/:order_id\/internal-note',/);
+    // D-025 audit-gap fix — internal-note is now wrapped in withAudit
+    // (success + failure both audited).
     expect(body).toMatch(
-      /const updated = await deps\.service\.setInternalNote\(\{\s*\n?\s*order_id: params\.order_id,\s*\n?\s*internal_note: body\.internal_note,\s*\n?\s*\}\);/,
+      /const updated = await withAudit\(\s*\n?\s*req,\s*\n?\s*'crypto_order\.note_updated',\s*\n?\s*params\.order_id,\s*\n?\s*\{ internal_note: body\.internal_note \},\s*\n?\s*async \(\) => \{\s*\n?\s*const result = await deps\.service\.setInternalNote\(\{\s*\n?\s*order_id: params\.order_id,\s*\n?\s*internal_note: body\.internal_note,\s*\n?\s*\}\);/,
     );
   });
 
-  it('registerAdminCryptoOrdersRoutes signature + deps interface', () => {
+  it('registerAdminCryptoOrdersRoutes signature + deps interface (D-025 audit-gap fix: deps now carries AdminAuditService)', () => {
     expect(body).toMatch(
-      /export interface RegisterAdminCryptoOrdersRoutesDeps \{\s*\n?\s*service: CryptoOrdersService;\s*\n?\s*\}/,
+      /export interface RegisterAdminCryptoOrdersRoutesDeps \{\s*\n?\s*service: CryptoOrdersService;/,
     );
+    expect(body).toMatch(/audit: AdminAuditService;/);
     expect(body).toMatch(
       /export function registerAdminCryptoOrdersRoutes\(\s*\n?\s*app: FastifyInstance,\s*\n?\s*deps: RegisterAdminCryptoOrdersRoutesDeps,\s*\n?\s*\): void \{/,
+    );
+  });
+
+  it('D-025 audit-gap fix: withAudit helper wraps sweep-expired/apply-ipn/internal-note with audit-on-success + audit-on-error, matching admin-accounts.ts withAudit shape', () => {
+    expect(body).toMatch(
+      /async function withAudit<T>\(\s*\n?\s*request: FastifyRequest,\s*\n?\s*action: AdminAuditAction,\s*\n?\s*orderId: string \| null,\s*\n?\s*inputPayload: Record<string, unknown>,\s*\n?\s*perform: \(\) => Promise<T>,\s*\n?\s*\): Promise<T> \{/,
+    );
+    expect(body).toMatch(/result: 'success',/);
+    expect(body).toMatch(/result: `error: \$\{code\}`,/);
+    expect(body).toMatch(
+      /import type \{ AdminAuditService, AdminAuditAction \} from '\.\.\/services\/admin-audit\.js';/,
+    );
+    expect(body).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
+  });
+
+  it('D-025 audit-gap fix: sweep-expired wrapped in withAudit with action crypto_order.swept + targetResourceId null (batch operation, not one order)', () => {
+    expect(body).toMatch(
+      /const result = await withAudit\(\s*\n?\s*req,\s*\n?\s*'crypto_order\.swept',\s*\n?\s*null,/,
     );
   });
 

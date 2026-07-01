@@ -27,9 +27,18 @@ import { z } from 'zod';
 import { buildCsv } from '../lib/csv.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import type { CryptoOrder, CryptoOrdersService } from '../services/crypto-orders.js';
+import type { AdminAuditService, AdminAuditAction } from '../services/admin-audit.js';
+import { readClientIp } from '../lib/client-ip.js';
 
 export interface RegisterAdminCryptoOrdersRoutesDeps {
   service: CryptoOrdersService;
+  /**
+   * D-025 audit-gap fix — sweep-expired / apply-ipn / internal-note are
+   * the 3 mutating endpoints on this route file; each now writes an
+   * admin_audit_log row (success + failure) before responding, matching
+   * every other admin route (see admin-accounts.ts's withAudit shape).
+   */
+  audit: AdminAuditService;
 }
 
 const ListQuery = z.object({
@@ -132,6 +141,49 @@ export function registerAdminCryptoOrdersRoutes(
   app: FastifyInstance,
   deps: RegisterAdminCryptoOrdersRoutesDeps,
 ): void {
+  // D-025 audit-gap fix — wraps a mutation with audit-on-success +
+  // audit-on-error, same shape as admin-accounts.ts's withAudit. Orders
+  // aren't account-scoped the way admin-accounts.ts's targets are, so
+  // this records the order_id as targetResourceId (targetAccountId stays
+  // unset — CryptoOrder.account_id is nullable + not the audit subject).
+  // sweep-expired operates on a batch, not one order, so it passes `null`.
+  async function withAudit<T>(
+    request: FastifyRequest,
+    action: AdminAuditAction,
+    orderId: string | null,
+    inputPayload: Record<string, unknown>,
+    perform: () => Promise<T>,
+  ): Promise<T> {
+    const ctx = request.account;
+    if (!ctx) throw new Error('account context missing after requireAuth');
+    try {
+      const result = await perform();
+      await deps.audit.record({
+        adminAccountId: ctx.account.id,
+        adminKeyId: ctx.apiKey.id,
+        action,
+        targetResourceId: orderId,
+        inputPayload,
+        result: 'success',
+        ipAddress: readClientIp(request),
+      });
+      return result;
+    } catch (err) {
+      const code =
+        err instanceof Error && err.name ? err.name.toLowerCase().replace(/error$/, '') : 'unknown';
+      await deps.audit.record({
+        adminAccountId: ctx.account.id,
+        adminKeyId: ctx.apiKey.id,
+        action,
+        targetResourceId: orderId,
+        inputPayload,
+        result: `error: ${code}`,
+        ipAddress: readClientIp(request),
+      });
+      throw err;
+    }
+  }
+
   // V-666.BE — Cache-Control: no-store, private on admin crypto
   // responses. Used to live as a route-local onSend hook; promoted
   // to an app-level hook on /v1/admin/* in V-666.BT so every admin
@@ -440,10 +492,20 @@ export function registerAdminCryptoOrdersRoutes(
       const body = parseOrThrow(SweepBody, req.body ?? {});
       const olderThanHours = body.older_than_hours ?? 24;
       const olderThanMs = olderThanHours * 60 * 60 * 1000;
-      const result = await deps.service.sweepExpiredOrders({
-        olderThanMs,
-        ...(body.limit !== undefined ? { limit: body.limit } : {}),
-      });
+      const result = await withAudit(
+        req,
+        'crypto_order.swept',
+        null,
+        {
+          older_than_hours: olderThanHours,
+          ...(body.limit !== undefined ? { limit: body.limit } : {}),
+        },
+        () =>
+          deps.service.sweepExpiredOrders({
+            olderThanMs,
+            ...(body.limit !== undefined ? { limit: body.limit } : {}),
+          }),
+      );
       return reply.send({
         expired: result.expired,
         capped: result.capped,
@@ -471,14 +533,23 @@ export function registerAdminCryptoOrdersRoutes(
     ) => {
       const params = parseOrThrow(GetParams, req.params);
       const body = parseOrThrow(ApplyIpnBody, req.body);
-      const updated = await deps.service.applyIpnStatus({
-        order_id: params.order_id,
-        payment_id: body.payment_id,
-        provider_status: body.provider_status,
-      });
-      if (updated === null) {
-        throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
-      }
+      const updated = await withAudit(
+        req,
+        'crypto_order.ipn_applied',
+        params.order_id,
+        { provider_status: body.provider_status, payment_id: body.payment_id },
+        async () => {
+          const result = await deps.service.applyIpnStatus({
+            order_id: params.order_id,
+            payment_id: body.payment_id,
+            provider_status: body.provider_status,
+          });
+          if (result === null) {
+            throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
+          }
+          return result;
+        },
+      );
       return reply.send(toPublic(updated));
     },
   );
@@ -501,13 +572,22 @@ export function registerAdminCryptoOrdersRoutes(
     ) => {
       const params = parseOrThrow(GetParams, req.params);
       const body = parseOrThrow(InternalNoteBody, req.body);
-      const updated = await deps.service.setInternalNote({
-        order_id: params.order_id,
-        internal_note: body.internal_note,
-      });
-      if (updated === null) {
-        throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
-      }
+      const updated = await withAudit(
+        req,
+        'crypto_order.note_updated',
+        params.order_id,
+        { internal_note: body.internal_note },
+        async () => {
+          const result = await deps.service.setInternalNote({
+            order_id: params.order_id,
+            internal_note: body.internal_note,
+          });
+          if (result === null) {
+            throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
+          }
+          return result;
+        },
+      );
       return reply.send(toPublic(updated));
     },
   );

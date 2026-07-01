@@ -1,6 +1,6 @@
 // V-666.L — integration tests for POST /v1/admin/crypto-orders/sweep-expired.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import type { CryptoOrder } from '../../src/services/crypto-orders.js';
 
@@ -139,5 +139,61 @@ describe('V-666.L POST /v1/admin/crypto-orders/sweep-expired', () => {
       payload: { limit: 1.5 },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  // D-025 audit-gap fix — sweep-expired had zero audit wiring; these
+  // prove the new crypto_order.swept audit row on both the success and
+  // failure path.
+  it('D-025 writes a crypto_order.swept audit row on success (targetResourceId null — batch operation, not one order)', async () => {
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+    });
+    await seedStale(fx, 2);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/crypto-orders/sweep-expired',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { older_than_hours: 24, limit: 10 },
+    });
+    expect(res.statusCode).toBe(200);
+    const all = fx.adminAuditRepo.getAll();
+    expect(all).toHaveLength(1);
+    expect(all[0]?.action).toBe('crypto_order.swept');
+    expect(all[0]?.adminAccountId).toBe(fx.accountId);
+    expect(all[0]?.adminKeyId).toBe(fx.apiKeyId);
+    expect(all[0]?.targetResourceId).toBeNull();
+    expect(all[0]?.result).toBe('success');
+    expect(all[0]?.inputPayload).toEqual({ older_than_hours: 24, limit: 10 });
+  });
+
+  it('D-025 writes a crypto_order.swept audit row with an error: result when the sweep throws', async () => {
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+    });
+    await seedStale(fx, 1);
+    vi.spyOn(fx.cryptoOrdersRepo, 'withOrderLock').mockRejectedValueOnce(new Error('boom'));
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/crypto-orders/sweep-expired',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(500);
+    const all = fx.adminAuditRepo.getAll();
+    expect(all).toHaveLength(1);
+    expect(all[0]?.action).toBe('crypto_order.swept');
+    expect(all[0]?.result).toMatch(/^error:/);
+  });
+
+  it('403 for a non-admin caller writes no audit row (preHandler rejection, before the handler runs)', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write'] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/crypto-orders/sweep-expired',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(403);
+    expect(fx.adminAuditRepo.getAll()).toHaveLength(0);
   });
 });

@@ -680,6 +680,13 @@
       "when": 1780350000000,
       "tag": "0096_accounts_canonical_email",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1780353600000,
+      "tag": "0097_admin_audit_crypto_orders_validation_harness",
+      "breakpoints": true
     }
   ]
 }

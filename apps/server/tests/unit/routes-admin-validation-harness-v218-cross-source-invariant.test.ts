@@ -88,9 +88,9 @@ describe('W1032 routes/admin-validation-harness V-218 cross-source invariant', (
     );
   });
 
-  it('CRITICAL DELETE returns 204 No Content + trigger POST validates its body (reason ≤500, no `as` cast) then returns { run_id: out.runId }.', () => {
+  it('CRITICAL DELETE returns 204 No Content + trigger POST validates its body (reason ≤500, no `as` cast) then returns { run_id: out.runId }. D-025 audit-gap fix (migration 0097) wraps both mutations in withAudit.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-validation-harness.ts'));
-    expect(p).toMatch(/await harness\.remove\(ctx, request\.params\.archetype\);/);
+    expect(p).toMatch(/harness\.remove\(ctx, request\.params\.archetype\),/);
     expect(p).toMatch(/return reply\.code\(204\)\.send\(\);/);
     // Trigger body is zod-validated + capped (no unchecked `as` cast).
     expect(p).toMatch(
@@ -98,9 +98,17 @@ describe('W1032 routes/admin-validation-harness V-218 cross-source invariant', (
     );
     expect(p).toMatch(/reason: z\.string\(\)\.min\(1\)\.max\(500\)\.optional\(\),/);
     expect(p).toMatch(
-      /const out = await harness\.triggerNow\(ctx, request\.params\.archetype, parsed\.data\?\.reason\);/,
+      /\(\) => harness\.triggerNow\(ctx, request\.params\.archetype, parsed\.data\?\.reason\),/,
     );
     expect(p).toMatch(/return \{ run_id: out\.runId \};/);
+  });
+
+  it('CRITICAL D-025 audit-gap fix (migration 0097) — withAudit wraps upsert/remove/trigger with action validation_schedule.upserted/removed/triggered; AdminValidationHarnessRoutesOptions carries audit: AdminAuditService.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-validation-harness.ts'));
+    expect(p).toMatch(/audit: AdminAuditService;/);
+    expect(p).toMatch(/'validation_schedule\.upserted',/);
+    expect(p).toMatch(/'validation_schedule\.removed',/);
+    expect(p).toMatch(/'validation_schedule\.triggered',/);
   });
 
   it('CRITICAL publicSchedule 10-field — id + archetype_id + cadence_seconds + enabled + nullable last_run_at + next_run_at + last_run_id + reason + created_at + updated_at.', () => {

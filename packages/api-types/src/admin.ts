@@ -216,6 +216,16 @@ export const AdminAuditActionSchema = z.enum([
   'secret.updated',
   'secret.deleted',
   'secret.revealed',
+  // D-025 audit-gap fix (migration 0097) — admin-crypto-orders.ts +
+  // admin-validation-harness.ts had zero audit wiring. sweep-expired /
+  // apply-ipn / internal-note now audit via crypto_order.*;
+  // validation-schedule upsert / remove / trigger via validation_schedule.*.
+  'crypto_order.swept',
+  'crypto_order.ipn_applied',
+  'crypto_order.note_updated',
+  'validation_schedule.upserted',
+  'validation_schedule.removed',
+  'validation_schedule.triggered',
   // GDPR Article 17 — admin-triggered account termination (migration 0094).
   'account.deleted',
 ]);

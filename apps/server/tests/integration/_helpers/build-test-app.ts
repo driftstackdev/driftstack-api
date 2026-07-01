@@ -547,6 +547,15 @@ export interface TestAppFixture {
   cryptoOrdersService: CryptoOrdersService;
   /** V-666.C — in-memory repo so tests can read back orders by id. */
   cryptoOrdersRepo: InMemoryCryptoOrdersRepo;
+  /** V-218 — in-memory validation-schedules repo backing the admin
+   *  validation-harness routes; exposed so tests can vi.spyOn() it to
+   *  force a mutation failure (D-025 audit-failure-branch coverage). */
+  validationSchedulesRepo: InMemoryValidationSchedulesRepo;
+  /** V-218 — the (mock) recapture bridge the validation-harness service
+   *  dispatches to; exposed so tests can vi.spyOn(triggerRecapture) to
+   *  force a POST .../trigger failure (D-025 audit-failure-branch
+   *  coverage) without a real recapture backend. */
+  recaptureBridge: ValidationHarnessRecaptureBridge;
   /** Pricing-as-data Phase A — exposed so tests can setPrice() and assert
    *  the owner-edited price flows through the quote + charge reads. */
   pricingService: PricingService;
@@ -1614,6 +1623,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     costUsageByAccount,
     cryptoOrdersService,
     cryptoOrdersRepo,
+    validationSchedulesRepo,
+    recaptureBridge,
     pricingService,
     platformSecretsService,
     oauthLinksRepo,

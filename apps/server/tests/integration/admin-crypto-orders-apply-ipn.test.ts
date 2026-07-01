@@ -124,4 +124,71 @@ describe('V-666.F POST /v1/admin/crypto-orders/:id/apply-ipn', () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  // D-025 audit-gap fix — apply-ipn had zero audit wiring; these prove
+  // the new crypto_order.ipn_applied audit row on both the success and
+  // 404-not-found path.
+  it('D-025 writes a crypto_order.ipn_applied audit row on success', async () => {
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+    });
+    await seed(fx, { order_id: 'ord_audit_ok', status: 'pending' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/crypto-orders/ord_audit_ok/apply-ipn',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+      },
+      payload: { provider_status: 'finished', payment_id: 'pay_audit_1' },
+    });
+    expect(res.statusCode).toBe(200);
+    const all = fx.adminAuditRepo.getAll();
+    expect(all).toHaveLength(1);
+    expect(all[0]?.action).toBe('crypto_order.ipn_applied');
+    expect(all[0]?.adminAccountId).toBe(fx.accountId);
+    expect(all[0]?.adminKeyId).toBe(fx.apiKeyId);
+    expect(all[0]?.targetResourceId).toBe('ord_audit_ok');
+    expect(all[0]?.result).toBe('success');
+    expect(all[0]?.inputPayload).toEqual({
+      provider_status: 'finished',
+      payment_id: 'pay_audit_1',
+    });
+  });
+
+  it('D-025 writes a crypto_order.ipn_applied audit row with an error: notfound result when the order does not exist', async () => {
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+    });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/crypto-orders/ord_audit_missing/apply-ipn',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+      },
+      payload: { provider_status: 'finished', payment_id: 'pay_1' },
+    });
+    expect(res.statusCode).toBe(404);
+    const all = fx.adminAuditRepo.getAll();
+    expect(all).toHaveLength(1);
+    expect(all[0]?.action).toBe('crypto_order.ipn_applied');
+    expect(all[0]?.targetResourceId).toBe('ord_audit_missing');
+    expect(all[0]?.result).toMatch(/^error: notfound/);
+  });
+
+  it('403 for a non-admin caller writes no audit row (preHandler rejection, before the handler runs)', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write'] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/crypto-orders/ord_x/apply-ipn',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+      },
+      payload: { provider_status: 'finished', payment_id: 'pay_1' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(fx.adminAuditRepo.getAll()).toHaveLength(0);
+  });
 });

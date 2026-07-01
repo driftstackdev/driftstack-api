@@ -80,24 +80,30 @@ describe('W416.B apps/server/src/routes/admin-validation-harness.ts content pari
     );
   });
 
-  it("PUT upsert: zod safeParse → 400 'Invalid request body.'; snake→camel + spread-conditional reason; returns publicSchedule(row)", () => {
+  it("PUT upsert: zod safeParse → 400 'Invalid request body.'; snake→camel + spread-conditional reason; returns publicSchedule(row); D-025 audit-gap fix wraps the call in withAudit action validation_schedule.upserted", () => {
     expect(body).toMatch(
       /const parsed = UpsertValidationScheduleRequestSchema\.safeParse\(request\.body \?\? \{\}\);\s*\n?\s*if \(!parsed\.success\) throw new BadRequestError\('Invalid request body\.'\);/,
     );
     expect(body).toMatch(
-      /const row = await harness\.upsert\(ctx, \{\s*\n?\s*archetypeId: parsed\.data\.archetype_id,\s*\n?\s*cadenceSeconds: parsed\.data\.cadence_seconds,\s*\n?\s*enabled: parsed\.data\.enabled,\s*\n?\s*\.\.\.\(parsed\.data\.reason !== undefined \? \{ reason: parsed\.data\.reason \} : \{\}\),\s*\n?\s*\}\);\s*\n?\s*return publicSchedule\(row\);/,
+      /const row = await withAudit\(\s*\n?\s*request,\s*\n?\s*'validation_schedule\.upserted',\s*\n?\s*parsed\.data\.archetype_id,/,
     );
+    expect(body).toMatch(
+      /harness\.upsert\(ctx, \{\s*\n?\s*archetypeId: parsed\.data\.archetype_id,\s*\n?\s*cadenceSeconds: parsed\.data\.cadence_seconds,\s*\n?\s*enabled: parsed\.data\.enabled,\s*\n?\s*\.\.\.\(parsed\.data\.reason !== undefined \? \{ reason: parsed\.data\.reason \} : \{\}\),\s*\n?\s*\}\),/,
+    );
+    expect(body).toMatch(/return publicSchedule\(row\);/);
   });
 
-  it('DELETE: typed :archetype Params; harness.remove(ctx, archetype); 204 reply', () => {
+  it('DELETE: typed :archetype Params; harness.remove(ctx, archetype) wrapped in withAudit action validation_schedule.removed; 204 reply', () => {
     expect(body).toMatch(
       /app\.delete<\{ Params: \{ archetype: string \} \}>\(\s*\n?\s*'\/v1\/admin\/validation-schedules\/:archetype',/,
     );
-    expect(body).toMatch(/await harness\.remove\(ctx, request\.params\.archetype\);/);
+    expect(body).toMatch(
+      /await withAudit\(request, 'validation_schedule\.removed', request\.params\.archetype, \{\}, \(\) =>\s*\n?\s*harness\.remove\(ctx, request\.params\.archetype\),\s*\n?\s*\);/,
+    );
     expect(body).toMatch(/return reply\.code\(204\)\.send\(\);/);
   });
 
-  it('POST trigger: body validated (reason optional, capped) → parsed.data?.reason; harness.triggerNow returns runId; reply { run_id }', () => {
+  it('POST trigger: body validated (reason optional, capped) → parsed.data?.reason; harness.triggerNow returns runId wrapped in withAudit action validation_schedule.triggered; reply { run_id }', () => {
     expect(body).toMatch(
       /app\.post<\{ Params: \{ archetype: string \} \}>\(\s*\n?\s*'\/v1\/admin\/validation-schedules\/:archetype\/trigger',/,
     );
@@ -110,29 +116,46 @@ describe('W416.B apps/server/src/routes/admin-validation-harness.ts content pari
       /if \(!parsed\.success\) throw new BadRequestError\('Invalid request body\.'\);/,
     );
     expect(body).toMatch(
-      /const out = await harness\.triggerNow\(ctx, request\.params\.archetype, parsed\.data\?\.reason\);\s*\n?\s*return \{ run_id: out\.runId \};/,
+      /const out = await withAudit\(\s*\n?\s*request,\s*\n?\s*'validation_schedule\.triggered',\s*\n?\s*request\.params\.archetype,/,
     );
+    expect(body).toMatch(
+      /\(\) => harness\.triggerNow\(ctx, request\.params\.archetype, parsed\.data\?\.reason\),/,
+    );
+    expect(body).toMatch(/return \{ run_id: out\.runId \};/);
   });
 
-  it('Account-context invariant: !ctx → "account context missing after requireAuth" in every handler', () => {
+  it('Account-context invariant: !ctx → "account context missing after requireAuth" in every handler + the D-025 withAudit helper (5 total: 4 route handlers + withAudit)', () => {
     const matches = body.match(
       /if \(!ctx\) throw new Error\('account context missing after requireAuth'\);/g,
     );
-    expect(matches?.length).toBe(4);
+    expect(matches?.length).toBe(5);
   });
 
-  it('AdminValidationHarnessRoutesOptions: { harness: ValidationHarnessService }', () => {
+  it('AdminValidationHarnessRoutesOptions: { harness: ValidationHarnessService; audit: AdminAuditService } (D-025 audit-gap fix)', () => {
     expect(body).toMatch(
-      /export interface AdminValidationHarnessRoutesOptions \{\s*\n?\s*harness: ValidationHarnessService;\s*\n?\s*\}/,
+      /export interface AdminValidationHarnessRoutesOptions \{\s*\n?\s*harness: ValidationHarnessService;/,
     );
+    expect(body).toMatch(/audit: AdminAuditService;/);
   });
 
-  it('imports: FastifyInstance + ValidationHarnessService/ValidationScheduleRow + BadRequestError', () => {
-    expect(body).toMatch(/import type \{ FastifyInstance \} from 'fastify';/);
+  it('imports: FastifyInstance + FastifyRequest + ValidationHarnessService/ValidationScheduleRow + BadRequestError + AdminAuditService/AdminAuditAction + readClientIp (D-025 audit-gap fix)', () => {
+    expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
     expect(body).toMatch(
       /import type \{\s*\n?\s*ValidationHarnessService,\s*\n?\s*ValidationScheduleRow,\s*\n?\s*\} from '\.\.\/services\/validation-harness\.js';/,
     );
     expect(body).toMatch(/import \{ BadRequestError \} from '\.\.\/lib\/errors\.js';/);
+    expect(body).toMatch(
+      /import type \{ AdminAuditService, AdminAuditAction \} from '\.\.\/services\/admin-audit\.js';/,
+    );
+    expect(body).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
+  });
+
+  it('D-025 audit-gap fix: withAudit helper wraps upsert/remove/trigger with audit-on-success + audit-on-error, matching admin-accounts.ts withAudit shape', () => {
+    expect(body).toMatch(
+      /async function withAudit<T>\(\s*\n?\s*request: FastifyRequest,\s*\n?\s*action: AdminAuditAction,\s*\n?\s*archetypeId: string,\s*\n?\s*inputPayload: Record<string, unknown>,\s*\n?\s*perform: \(\) => Promise<T>,\s*\n?\s*\): Promise<T> \{/,
+    );
+    expect(body).toMatch(/result: 'success',/);
+    expect(body).toMatch(/result: `error: \$\{code\}`,/);
   });
 
   it('file exists at canonical path', () => {

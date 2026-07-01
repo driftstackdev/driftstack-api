@@ -4,7 +4,7 @@
 //   DELETE /v1/admin/validation-schedules/:archetype — remove one
 //   POST   /v1/admin/validation-schedules/:archetype/trigger — manual fire
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { UpsertValidationScheduleRequestSchema } from '@driftstack/api-types';
 import type {
@@ -12,6 +12,8 @@ import type {
   ValidationScheduleRow,
 } from '../services/validation-harness.js';
 import { BadRequestError } from '../lib/errors.js';
+import type { AdminAuditService, AdminAuditAction } from '../services/admin-audit.js';
+import { readClientIp } from '../lib/client-ip.js';
 
 // Manual-trigger body. `reason` is optional operator free-text persisted
 // on the schedule row, so it is validated + length-capped (matching the
@@ -41,13 +43,61 @@ function publicSchedule(row: ValidationScheduleRow): Record<string, unknown> {
 
 export interface AdminValidationHarnessRoutesOptions {
   harness: ValidationHarnessService;
+  /**
+   * D-025 audit-gap fix — upsert / remove / trigger are the 3 mutating
+   * endpoints on this route file; each now writes an admin_audit_log row
+   * (success + failure) before responding, matching every other admin
+   * route (see admin-accounts.ts's withAudit shape).
+   */
+  audit: AdminAuditService;
 }
 
 export function registerAdminValidationHarnessRoutes(
   app: FastifyInstance,
   opts: AdminValidationHarnessRoutesOptions,
 ): void {
-  const { harness } = opts;
+  const { harness, audit } = opts;
+
+  // D-025 audit-gap fix — wraps a mutation with audit-on-success +
+  // audit-on-error, same shape as admin-accounts.ts's withAudit.
+  // Schedules are archetype-scoped (not account-scoped), so this records
+  // the archetype id as targetResourceId; targetAccountId stays unset.
+  async function withAudit<T>(
+    request: FastifyRequest,
+    action: AdminAuditAction,
+    archetypeId: string,
+    inputPayload: Record<string, unknown>,
+    perform: () => Promise<T>,
+  ): Promise<T> {
+    const ctx = request.account;
+    if (!ctx) throw new Error('account context missing after requireAuth');
+    try {
+      const result = await perform();
+      await audit.record({
+        adminAccountId: ctx.account.id,
+        adminKeyId: ctx.apiKey.id,
+        action,
+        targetResourceId: archetypeId,
+        inputPayload,
+        result: 'success',
+        ipAddress: readClientIp(request),
+      });
+      return result;
+    } catch (err) {
+      const code =
+        err instanceof Error && err.name ? err.name.toLowerCase().replace(/error$/, '') : 'unknown';
+      await audit.record({
+        adminAccountId: ctx.account.id,
+        adminKeyId: ctx.apiKey.id,
+        action,
+        targetResourceId: archetypeId,
+        inputPayload,
+        result: `error: ${code}`,
+        ipAddress: readClientIp(request),
+      });
+      throw err;
+    }
+  }
 
   app.get(
     '/v1/admin/validation-schedules',
@@ -72,12 +122,23 @@ export function registerAdminValidationHarnessRoutes(
       if (!ctx) throw new Error('account context missing after requireAuth');
       const parsed = UpsertValidationScheduleRequestSchema.safeParse(request.body ?? {});
       if (!parsed.success) throw new BadRequestError('Invalid request body.');
-      const row = await harness.upsert(ctx, {
-        archetypeId: parsed.data.archetype_id,
-        cadenceSeconds: parsed.data.cadence_seconds,
-        enabled: parsed.data.enabled,
-        ...(parsed.data.reason !== undefined ? { reason: parsed.data.reason } : {}),
-      });
+      const row = await withAudit(
+        request,
+        'validation_schedule.upserted',
+        parsed.data.archetype_id,
+        {
+          cadence_seconds: parsed.data.cadence_seconds,
+          enabled: parsed.data.enabled,
+          ...(parsed.data.reason !== undefined ? { reason: parsed.data.reason } : {}),
+        },
+        () =>
+          harness.upsert(ctx, {
+            archetypeId: parsed.data.archetype_id,
+            cadenceSeconds: parsed.data.cadence_seconds,
+            enabled: parsed.data.enabled,
+            ...(parsed.data.reason !== undefined ? { reason: parsed.data.reason } : {}),
+          }),
+      );
       return publicSchedule(row);
     },
   );
@@ -90,7 +151,9 @@ export function registerAdminValidationHarnessRoutes(
     async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
-      await harness.remove(ctx, request.params.archetype);
+      await withAudit(request, 'validation_schedule.removed', request.params.archetype, {}, () =>
+        harness.remove(ctx, request.params.archetype),
+      );
       return reply.code(204).send();
     },
   );
@@ -105,7 +168,13 @@ export function registerAdminValidationHarnessRoutes(
       if (!ctx) throw new Error('account context missing after requireAuth');
       const parsed = TriggerValidationScheduleBodySchema.safeParse(request.body ?? {});
       if (!parsed.success) throw new BadRequestError('Invalid request body.');
-      const out = await harness.triggerNow(ctx, request.params.archetype, parsed.data?.reason);
+      const out = await withAudit(
+        request,
+        'validation_schedule.triggered',
+        request.params.archetype,
+        { ...(parsed.data?.reason !== undefined ? { reason: parsed.data.reason } : {}) },
+        () => harness.triggerNow(ctx, request.params.archetype, parsed.data?.reason),
+      );
       return { run_id: out.runId };
     },
   );

@@ -2466,6 +2466,12 @@
               "secret.updated",
               "secret.deleted",
               "secret.revealed",
+              "crypto_order.swept",
+              "crypto_order.ipn_applied",
+              "crypto_order.note_updated",
+              "validation_schedule.upserted",
+              "validation_schedule.removed",
+              "validation_schedule.triggered",
               "account.deleted"
             ]
           },
@@ -8570,6 +8576,12 @@
                 "secret.updated",
                 "secret.deleted",
                 "secret.revealed",
+                "crypto_order.swept",
+                "crypto_order.ipn_applied",
+                "crypto_order.note_updated",
+                "validation_schedule.upserted",
+                "validation_schedule.removed",
+                "validation_schedule.triggered",
                 "account.deleted"
               ]
             },
@@ -8681,6 +8693,12 @@
                               "secret.updated",
                               "secret.deleted",
                               "secret.revealed",
+                              "crypto_order.swept",
+                              "crypto_order.ipn_applied",
+                              "crypto_order.note_updated",
+                              "validation_schedule.upserted",
+                              "validation_schedule.removed",
+                              "validation_schedule.triggered",
                               "account.deleted"
                             ]
                           },
