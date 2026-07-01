@@ -25,10 +25,12 @@ export { MockDlqManager, MockWebhookDeliveryService } from './mock.js';
 export {
   BACKOFF_MS_BY_ATTEMPT,
   DEFAULT_MAX_ATTEMPTS,
+  DEFAULT_MAX_DLQ_ENTRIES,
   DEFAULT_TIMEOUT_MS,
   InMemoryDlqManager,
   InMemoryWebhookDeliveryService,
   createInMemoryWebhookDelivery,
+  isLiteralUnsafeWebhookHost,
   signPayload,
   type InMemoryWebhookDeliveryDeps,
   type InMemoryWebhookDeliveryHandles,

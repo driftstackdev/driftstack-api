@@ -18,6 +18,7 @@
 // retries (6 attempts total including initial); 6th failure → DLQ.
 
 import { createHmac } from 'node:crypto';
+import { isIP } from 'node:net';
 import type {
   DlqManager,
   EnqueueDeliveryOpts,
@@ -48,14 +49,61 @@ export const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = {
 export const DEFAULT_TIMEOUT_MS = 10_000;
 /** Default max attempts before DLQ. */
 export const DEFAULT_MAX_ATTEMPTS = 6; // initial + 5 retries (backoff[5] = 60 min); DLQ on the 6th
+/**
+ * Default cap on `store.dlq`'s size (WD-4, LOW-severity audit finding,
+ * 2026-07). Without a cap, an endpoint that fails forever accumulates one DLQ
+ * row per event, unbounded, for the life of the process. Oldest-evicted (same
+ * convention as `apps/server/src/services/session-page-state-store.ts` /
+ * `session-liveness-store.ts`) once the cap is exceeded. 10,000 is chosen as
+ * "clearly generous for a self-hosted single-process workload" — a
+ * permanently-broken endpoint would need ten thousand distinct failed events
+ * before the oldest postmortem row starts rotating out; that's already a
+ * signal the endpoint should have been disabled long before this cap matters.
+ *
+ * Deliberately NOT a circuit-breaker: this bounds MEMORY only. There is still
+ * no logic that tracks an endpoint's repeated terminal failures across
+ * separate deliveries to auto-disable it — every new event for a
+ * permanently-broken endpoint is independently retried to exhaustion and
+ * DLQ'd. That auto-disable gap is a real, separate feature (a design
+ * decision, not a bug fix) and is intentionally left undone here — tracked as
+ * a known follow-up, not silently dropped.
+ */
+export const DEFAULT_MAX_DLQ_ENTRIES = 10_000;
 
 export interface InMemoryWebhookDeliveryDeps {
-  /** Test seam — defaults to global fetch. */
+  /**
+   * Test seam — defaults to plain `globalThis.fetch`.
+   *
+   * ⚠️ PRODUCTION CALLERS MUST INJECT AN SSRF-GUARDED FETCH. The plain-fetch
+   * default has NO protection against DNS rebinding (a hostname that resolves
+   * to a public address at endpoint-registration time but to a
+   * private/loopback/metadata address by the time a retry fires — up to an
+   * hour-plus later per `BACKOFF_MS_BY_ATTEMPT` — connects straight to it).
+   * This package is a dependency-free library (`packages/*` cannot import
+   * from `apps/server`), so it cannot ship that guard itself. The default
+   * here is for TESTS AND LOCAL DEV ONLY. Production wiring must pass a
+   * connect-time-guarded implementation — e.g. `apps/server`'s
+   * `ssrfGuardedFetch` (`apps/server/src/lib/ssrf-guarded-fetch.ts`), which
+   * classifies/rejects private/reserved resolved addresses via a custom
+   * undici dispatcher at the actual TCP-connect DNS lookup. As cheap
+   * defense-in-depth against the narrower "customer registers a URL with a
+   * literal internal IP" case, every send is also checked against
+   * {@link isLiteralUnsafeWebhookHost} regardless of which `fetch` is
+   * injected — but that check is NOT a DNS-rebind fix; it only catches a
+   * literal IP in the URL itself.
+   */
   fetch?: typeof fetch;
   /** Test seam — defaults to () => Date.now(). */
   now?: () => number;
   /** Lookup an endpoint by id. The delivery service does not own endpoint storage. */
   getEndpoint: (endpointId: string) => DeliveryEndpoint | null;
+  /**
+   * Cap on the number of DLQ entries retained in memory. Defaults to
+   * {@link DEFAULT_MAX_DLQ_ENTRIES}. Oldest entry is evicted once the cap is
+   * exceeded. See {@link DEFAULT_MAX_DLQ_ENTRIES}'s doc comment for the
+   * reasoning + the explicitly-deferred auto-disable/circuit-breaker gap.
+   */
+  maxDlqEntries?: number;
 }
 
 /**
@@ -122,10 +170,11 @@ export function createInMemoryWebhookDelivery(
   };
   const fetchFn = deps.fetch ?? globalThis.fetch.bind(globalThis);
   const now = deps.now ?? (() => Date.now());
+  const maxDlqEntries = deps.maxDlqEntries ?? DEFAULT_MAX_DLQ_ENTRIES;
 
   const deliveries = new InMemoryWebhookDeliveryService(store, deps.getEndpoint, now);
   const dlq = new InMemoryDlqManager(store, deps.getEndpoint, now);
-  const worker = new DeliveryWorker(store, deps.getEndpoint, fetchFn, now);
+  const worker = new DeliveryWorker(store, deps.getEndpoint, fetchFn, now, maxDlqEntries);
 
   return {
     deliveries,
@@ -265,6 +314,26 @@ function replayShared(
 ): DeliveryRecord {
   const entry = store.queue.get(deliveryId);
   if (entry !== undefined) {
+    // WD-1 (HIGH, audit 2026-07) — status guard. Without this, replay()/
+    // requeue() would unconditionally rewrite whatever's currently in the
+    // queue — including a delivery that is `in_flight` RIGHT NOW (a live
+    // outstanding HTTP attempt with an active lease). Clobbering that clears
+    // the lease and re-arms the record as due-now, so the very next
+    // processTick() re-claims it and fires a SECOND concurrent live HTTP POST
+    // to the customer's endpoint (a real double-delivery), with both
+    // concurrent attempts computing the same stale `attempts.length` and both
+    // logging as `attempt: 1` — corrupting the attempt history the backoff/
+    // maxAttempts accounting depends on. Per the WebhookDeliveryService.replay
+    // doc (interfaces.ts), replay is scoped to a 'failed' or 'delivered'
+    // delivery only — reject 'pending' (already queued; nothing to replay)
+    // and 'in_flight' (live lease) outright rather than silently no-op.
+    if (entry.record.status !== 'delivered' && entry.record.status !== 'failed') {
+      throw new Error(
+        `replay: delivery ${deliveryId} has status '${entry.record.status}' — replay is only ` +
+          `allowed for 'failed' or 'delivered' deliveries ('in_flight' has a live attempt lease; ` +
+          `'pending' is already queued)`,
+      );
+    }
     const replayed: DeliveryRecord = {
       ...entry.record,
       status: 'pending',
@@ -320,6 +389,7 @@ class DeliveryWorker {
     private readonly getEndpoint: (endpointId: string) => DeliveryEndpoint | null,
     private readonly fetchFn: typeof fetch,
     private readonly now: () => number,
+    private readonly maxDlqEntries: number,
   ) {}
 
   /**
@@ -386,6 +456,29 @@ class DeliveryWorker {
         durationMs: 0,
         outcome: 'transport_error',
         errorMessage: 'endpoint not found at delivery time',
+      };
+      this.recordAttempt(entry, attempt, true);
+      return 'dlqed';
+    }
+
+    // WD-3 (MEDIUM, audit 2026-07) — `endpoint.active` (types.ts) is documented
+    // "Disabled endpoints skip the queue", but until now nothing here read it:
+    // `deliver()` re-fetches the live endpoint every attempt (to pick up
+    // current config) yet never inspected `.active`, so a disabled endpoint
+    // kept retrying/DLQ'ing on its normal backoff curve like an active one.
+    // Mirrors the endpoint-not-found branch above (same attempt shape,
+    // immediate DLQ) — matches the sibling production worker's treatment
+    // (apps/server/src/services/webhook-worker.ts), which treats
+    // `!endpoint.active` the same as endpoint-not-found.
+    if (!endpoint.active) {
+      const attempt: DeliveryAttempt = {
+        attempt: entry.record.attempts.length + 1,
+        completedAtMs: this.now(),
+        responseStatus: null,
+        responseExcerpt: null,
+        durationMs: 0,
+        outcome: 'transport_error',
+        errorMessage: 'endpoint disabled between enqueue and claim',
       };
       this.recordAttempt(entry, attempt, true);
       return 'dlqed';
@@ -470,6 +563,23 @@ class DeliveryWorker {
         reason: dlqReasonFromAttempts(newAttempts),
       };
       this.store.dlq.set(entry.record.id, dlqEntry);
+      // WD-4 (LOW, audit 2026-07) — size-cap eviction. `store.dlq` is a plain
+      // Map with no cap/TTL/pruning otherwise, so an endpoint that fails
+      // forever would accumulate one row per event, unbounded, for the life
+      // of the process. Oldest-evicted: Map iteration order is insertion
+      // order, and dlq entries are only ever inserted here (never
+      // re-inserted/reordered — requeue() deletes the entry outright rather
+      // than re-adding it), so `.keys().next().value` is genuinely the
+      // oldest-entered row. Same convention as
+      // `apps/server/src/services/session-page-state-store.ts` /
+      // `session-liveness-store.ts`. See DEFAULT_MAX_DLQ_ENTRIES's doc
+      // comment: this bounds MEMORY only — auto-disabling a permanently-
+      // failing endpoint (a circuit breaker) is a separate, intentionally
+      // deferred feature, not addressed here.
+      if (this.store.dlq.size > this.maxDlqEntries) {
+        const oldest = this.store.dlq.keys().next().value;
+        if (oldest !== undefined) this.store.dlq.delete(oldest);
+      }
       entry.record = {
         ...entry.record,
         status: 'dlq',
@@ -498,6 +608,21 @@ class DeliveryWorker {
     payload: DeliveryPayload,
     timeoutMs: number,
   ): Promise<Response> {
+    // WD-2 (MEDIUM, audit 2026-07) — cheap defense-in-depth pre-connect check,
+    // independent of whichever `fetchFn` was injected: reject outright if the
+    // endpoint URL's host is ITSELF a literal private/loopback/link-local IP
+    // (e.g. a customer's registered URL is `https://169.254.169.254/steal`).
+    // This is NOT a DNS-rebind fix — see isLiteralUnsafeWebhookHost's doc
+    // comment + the loud warning on InMemoryWebhookDeliveryDeps.fetch for what
+    // this does and doesn't cover, and why the full fix (connection-time IP
+    // pinning) belongs in the injected fetch implementation, not this
+    // dependency-free package.
+    if (isLiteralUnsafeWebhookHost(endpoint.url)) {
+      throw new Error(
+        `SSRF defense-in-depth: refusing to deliver to ${endpoint.url} — host is a literal ` +
+          `private/loopback/link-local IP address`,
+      );
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -562,4 +687,64 @@ export function signPayload(
 function dlqReasonFromAttempts(attempts: readonly DeliveryAttempt[]): string {
   const last = attempts[attempts.length - 1]!;
   return `${attempts.length.toString()}× ${last.outcome}: ${last.errorMessage ?? '(no message)'}`;
+}
+
+/**
+ * WD-2 (MEDIUM, audit 2026-07) — cheap, dependency-free, defense-in-depth
+ * check: is `url`'s hostname ITSELF a literal private/loopback/link-local IP
+ * address (or `localhost`)? Used by `DeliveryWorker.fetchWithTimeout` to
+ * reject a send before ever calling the injected `fetchFn`, closing the
+ * narrow "customer registers a URL with a literal internal IP" gap cheaply.
+ *
+ * Scope — read this before assuming it's "the" SSRF fix:
+ *   - This is NOT a DNS-rebind defense. A HOSTNAME that resolves to a
+ *     private/reserved address at delivery time (having been public when the
+ *     endpoint was registered) sails straight through, because this never
+ *     performs a DNS lookup — it only inspects the literal string in the URL.
+ *     Closing that gap needs connection-time IP pinning in the actual fetch
+ *     dispatcher (a bigger, dependency-heavier undertaking). Production
+ *     callers close it by injecting a connect-time-guarded fetch — see the
+ *     warning on {@link InMemoryWebhookDeliveryDeps.fetch}.
+ *   - Deliberately minimal compared to the sibling
+ *     `apps/server/src/lib/webhook-target-guard.ts` (which this package
+ *     cannot import — `packages/*` has no dependency on `apps/server`): no
+ *     `node:net` `BlockList`, no numeric/hex/octal IP-encoding detection, no
+ *     IPv4-in-IPv6-embedding canonicalization. This package has no create-time
+ *     endpoint-registration surface of its own (that validation lives in
+ *     apps/server), so it only needs to catch the plain "URL host is a
+ *     dotted-quad / standard IPv6 literal that's private/loopback/link-local"
+ *     case as a cheap belt-and-suspenders check immediately before every send.
+ */
+export function isLiteralUnsafeWebhookHost(url: string): boolean {
+  let hostname: string;
+  try {
+    hostname = new URL(url).hostname;
+  } catch {
+    return false; // Unparseable URL — let the fetch call surface its own error.
+  }
+  let host = hostname.toLowerCase();
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+  if (host === 'localhost') return true;
+
+  const family = isIP(host);
+  if (family === 4) {
+    const octets = host.split('.').map(Number);
+    const [a, b] = octets;
+    if (a === 0) return true; // 0.0.0.0/8 — "this host"
+    if (a === 10) return true; // 10.0.0.0/8 — RFC1918 private
+    if (a === 127) return true; // 127.0.0.0/8 — loopback
+    if (a === 169 && b === 254) return true; // 169.254.0.0/16 — link-local / cloud metadata
+    if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+    if (a === 192 && b === 168) return true; // 192.168.0.0/16 — RFC1918 private
+    if (a === 100 && b !== undefined && b >= 64 && b <= 127) return true; // 100.64.0.0/10 CGNAT
+    return false;
+  }
+  if (family === 6) {
+    if (host === '::1' || host === '::') return true; // loopback / unspecified
+    if (host.startsWith('::ffff:')) return true; // IPv4-mapped (smuggles a private IPv4)
+    if (host.startsWith('fe80:')) return true; // link-local
+    if (host.startsWith('fc') || host.startsWith('fd')) return true; // unique local (fc00::/7)
+    return false;
+  }
+  return false; // A DNS name — resolved at connect time; out of scope here.
 }

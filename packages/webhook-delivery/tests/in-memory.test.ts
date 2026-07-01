@@ -5,16 +5,24 @@
 // transitions, signature signing, and DLQ promotion.
 
 import { createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   BACKOFF_MS_BY_ATTEMPT,
   DEFAULT_MAX_ATTEMPTS,
+  DEFAULT_MAX_DLQ_ENTRIES,
   createInMemoryWebhookDelivery,
+  isLiteralUnsafeWebhookHost,
   signPayload,
   type DeliveryEndpoint,
   type DeliveryPayload,
   type InMemoryWebhookDeliveryHandles,
 } from '../src/index.js';
+import { InMemoryWebhookDeliveryService, type SharedDeliveryStore } from '../src/in-memory.js';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 const ENDPOINT: DeliveryEndpoint = {
   id: 'endpoint_test',
@@ -457,5 +465,350 @@ describe('endpoint-disappeared edge case', () => {
     expect(result.dlqed).toBe(1);
     expect(await handles.deliveries.get(record.id)).toBeNull();
     expect(await handles.dlq.get(record.id)).not.toBeNull();
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WD-1 (HIGH) — replay()/requeue() status guard.
+//
+// Without a guard, replayShared() unconditionally rewrote whatever
+// store.queue held — including a delivery that is 'in_flight' RIGHT NOW (a
+// live outstanding HTTP attempt with an active lease). Clobbering that clears
+// the lease and re-arms the record as due-now, so the very next
+// processTick() re-claims it and fires a SECOND concurrent live HTTP POST —
+// a real double-delivery, with both attempts computing the same stale
+// `attempts.length` and both logging as `attempt: 1`.
+// ──────────────────────────────────────────────────────────────────────────
+describe('WD-1: replay()/requeue() reject an in_flight delivery (no clobbered lease)', () => {
+  /**
+   * Enqueues a delivery and starts a processTick WITHOUT awaiting it, using a
+   * fetchFn whose Promise never resolves until the test calls
+   * `resolveFetch()`. processTick's claim loop (marking due entries
+   * in_flight + setting the lease) runs fully synchronously before it ever
+   * awaits the pending fetch, so by the time this helper returns, the
+   * delivery is durably 'in_flight' in the store — exactly the live-lease
+   * window the audit finding describes.
+   */
+  async function setupInFlightDelivery(): Promise<{
+    handles: InMemoryWebhookDeliveryHandles;
+    record: { id: string };
+    fetchCallCount: () => number;
+    resolveFetch: (status: number) => void;
+    tickPromise: Promise<unknown>;
+  }> {
+    let fetchCallCount = 0;
+    let resolveFetch!: (r: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+    const fn: typeof fetch = () => {
+      fetchCallCount += 1;
+      return pending;
+    };
+    const { handles } = build(fn);
+    const record = await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+
+    // Kick off the tick without awaiting — it suspends on the pending fetch,
+    // but the claim loop (in_flight + lease) has already run synchronously.
+    const tickPromise = handles.processTick();
+    expect((await handles.deliveries.get(record.id))?.status).toBe('in_flight');
+
+    return {
+      handles,
+      record,
+      fetchCallCount: () => fetchCallCount,
+      resolveFetch: (status: number) => {
+        resolveFetch(new Response('', { status }));
+      },
+      tickPromise,
+    };
+  }
+
+  it('deliveries.replay() on an in_flight delivery is REJECTED, not clobbered', async () => {
+    const { handles, record, fetchCallCount, resolveFetch, tickPromise } =
+      await setupInFlightDelivery();
+
+    // Wrapping in an async IIFE normalizes replay()'s synchronous throw (the
+    // guard's error convention, matching the existing not-found throws in
+    // this file) into a proper promise rejection for the matcher.
+    await expect((async () => handles.deliveries.replay(record.id))()).rejects.toThrow(/in_flight/);
+
+    // The live in-flight attempt was NOT clobbered: let it complete normally.
+    resolveFetch(200);
+    await tickPromise;
+    const updated = await handles.deliveries.get(record.id);
+    expect(updated?.status).toBe('delivered');
+    expect(updated?.attempts).toHaveLength(1);
+    expect(updated?.attempts.filter((a) => a.attempt === 1)).toHaveLength(1);
+
+    // A second tick fires no further fetch — only ONE fetch ever happened
+    // for this delivery id.
+    const result2 = await handles.processTick();
+    expect(result2.pulled).toBe(0);
+    expect(fetchCallCount()).toBe(1);
+  });
+
+  it('dlq.requeue() on an in_flight delivery is REJECTED, not clobbered', async () => {
+    const { handles, record, fetchCallCount, resolveFetch, tickPromise } =
+      await setupInFlightDelivery();
+
+    await expect((async () => handles.dlq.requeue({ deliveryId: record.id }))()).rejects.toThrow(
+      /in_flight/,
+    );
+
+    resolveFetch(200);
+    await tickPromise;
+    const updated = await handles.deliveries.get(record.id);
+    expect(updated?.status).toBe('delivered');
+    expect(updated?.attempts).toHaveLength(1);
+    expect(updated?.attempts.filter((a) => a.attempt === 1)).toHaveLength(1);
+
+    const result2 = await handles.processTick();
+    expect(result2.pulled).toBe(0);
+    expect(fetchCallCount()).toBe(1);
+  });
+
+  it('legit path (no regression): replay() on a genuinely delivered delivery still works', async () => {
+    const { fn } = captureFetch(() => ({ status: 200 }));
+    const { handles } = build(fn);
+
+    const record = await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+    await handles.processTick();
+    expect((await handles.deliveries.get(record.id))?.status).toBe('delivered');
+
+    const replayed = await handles.deliveries.replay(record.id);
+    expect(replayed.status).toBe('pending');
+    expect(replayed.attempts).toHaveLength(1); // preserved for postmortem
+    expect(replayed.nextAttemptAtMs).not.toBeNull();
+  });
+
+  it("legit path: the guard's allow-list also covers 'failed' status (per the replay() doc contract), not only 'delivered'", async () => {
+    // This in-memory impl's public state machine only ever produces
+    // 'pending' | 'in_flight' | 'delivered' | 'dlq' — 'failed' is a
+    // DeliveryStatus reserved for a future durable backend that can mark a
+    // non-retryable failure terminal without a DLQ detour. Construct the
+    // store directly (whitebox) to prove the guard allows 'failed' too, per
+    // the WebhookDeliveryService.replay doc ("Replay a 'failed' or
+    // 'delivered' delivery") — not just an accidental in_flight-only check.
+    const store: SharedDeliveryStore = {
+      queue: new Map(),
+      dlq: new Map(),
+      idCounter: { value: 0 },
+    };
+    store.queue.set('wdl_failed_1', {
+      record: {
+        id: 'wdl_failed_1',
+        endpointId: ENDPOINT.id,
+        payload: PAYLOAD,
+        status: 'failed',
+        attempts: [
+          {
+            attempt: 1,
+            completedAtMs: 1_700_000_000_000,
+            responseStatus: 500,
+            responseExcerpt: null,
+            durationMs: 5,
+            outcome: 'http_error',
+            errorMessage: 'HTTP 500',
+          },
+        ],
+        nextAttemptAtMs: null,
+        createdAtMs: 1_700_000_000_000,
+        completedAtMs: 1_700_000_000_000,
+      },
+      endpointId: ENDPOINT.id,
+      accountId: ENDPOINT.accountId,
+      leasedUntilMs: null,
+    });
+    const service = new InMemoryWebhookDeliveryService(
+      store,
+      (id) => (id === ENDPOINT.id ? ENDPOINT : null),
+      () => 1_700_000_100_000,
+    );
+
+    const replayed = await service.replay('wdl_failed_1');
+    expect(replayed.status).toBe('pending');
+    expect(replayed.attempts).toHaveLength(1);
+    expect(replayed.nextAttemptAtMs).toBe(1_700_000_100_000);
+  });
+
+  it("rejects replay() on an already-'pending' delivery too (not just in_flight)", async () => {
+    // The doc contract is narrower than "not in_flight" — it's "only
+    // 'failed' or 'delivered'". A still-'pending' (not yet due) delivery
+    // should also be rejected rather than silently re-armed.
+    const { fn } = captureFetch(() => ({ status: 500 }));
+    const { handles } = build(fn);
+    const record = await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+    // Never ticked — record.status is 'pending'.
+    expect((await handles.deliveries.get(record.id))?.status).toBe('pending');
+    await expect((async () => handles.deliveries.replay(record.id))()).rejects.toThrow(/pending/);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WD-2 (MEDIUM) — SSRF/DNS-rebind defense-in-depth.
+// ──────────────────────────────────────────────────────────────────────────
+describe('WD-2: SSRF defense-in-depth', () => {
+  it('isLiteralUnsafeWebhookHost flags literal private/loopback/link-local IPs + localhost', () => {
+    expect(isLiteralUnsafeWebhookHost('https://169.254.169.254/latest/meta-data')).toBe(true);
+    expect(isLiteralUnsafeWebhookHost('https://127.0.0.1:9200/')).toBe(true);
+    expect(isLiteralUnsafeWebhookHost('https://10.1.2.3/hook')).toBe(true);
+    expect(isLiteralUnsafeWebhookHost('https://172.16.0.5/hook')).toBe(true);
+    expect(isLiteralUnsafeWebhookHost('https://172.31.255.254/hook')).toBe(true);
+    expect(isLiteralUnsafeWebhookHost('https://192.168.1.10/hook')).toBe(true);
+    expect(isLiteralUnsafeWebhookHost('https://100.64.0.1/hook')).toBe(true);
+    expect(isLiteralUnsafeWebhookHost('https://0.0.0.0/hook')).toBe(true);
+    expect(isLiteralUnsafeWebhookHost('https://localhost/hook')).toBe(true);
+    expect(isLiteralUnsafeWebhookHost('https://[::1]/hook')).toBe(true);
+    expect(isLiteralUnsafeWebhookHost('https://[fe80::1]/hook')).toBe(true);
+    expect(isLiteralUnsafeWebhookHost('https://[fc00::1]/hook')).toBe(true);
+    expect(isLiteralUnsafeWebhookHost('https://[::ffff:10.0.0.5]/hook')).toBe(true);
+  });
+
+  it('isLiteralUnsafeWebhookHost passes public IPs + normal hostnames through', () => {
+    expect(isLiteralUnsafeWebhookHost('https://8.8.8.8/hook')).toBe(false);
+    expect(isLiteralUnsafeWebhookHost('https://1.2.3.4/hook')).toBe(false);
+    expect(isLiteralUnsafeWebhookHost('https://customer.example/webhook')).toBe(false);
+    expect(isLiteralUnsafeWebhookHost('not a url at all')).toBe(false);
+  });
+
+  it('processTick refuses to deliver to a literal internal IP WITHOUT ever calling fetchFn', async () => {
+    const { fn, calls } = captureFetch(() => ({ status: 200 }));
+    const metadataEndpoint: DeliveryEndpoint = {
+      ...ENDPOINT,
+      url: 'https://169.254.169.254/steal',
+    };
+    const handles = createInMemoryWebhookDelivery({
+      fetch: fn,
+      now: () => 1_700_000_000_000,
+      getEndpoint: (id) => (id === metadataEndpoint.id ? metadataEndpoint : null),
+    });
+    const record = await handles.deliveries.enqueue({
+      endpoint: metadataEndpoint,
+      payload: PAYLOAD,
+    });
+    const result = await handles.processTick();
+
+    expect(calls).toHaveLength(0); // fetchFn never invoked — blocked pre-connect
+    expect(result.retried).toBe(1); // recorded as a normal failed attempt (retry curve applies)
+    const updated = await handles.deliveries.get(record.id);
+    expect(updated?.attempts).toHaveLength(1);
+    expect(updated?.attempts[0]?.outcome).toBe('transport_error');
+    expect(updated?.attempts[0]?.errorMessage).toMatch(/SSRF/);
+  });
+
+  it('warns loudly, at the fetch-injection point, that the default fetch is not SSRF-safe in production', () => {
+    const src = readFileSync(resolve(HERE, '..', 'src', 'in-memory.ts'), 'utf8');
+    expect(src).toMatch(/PRODUCTION CALLERS MUST INJECT AN SSRF-GUARDED FETCH/);
+    expect(src).toMatch(/for TESTS AND LOCAL DEV ONLY/);
+    expect(src).toMatch(/ssrfGuardedFetch/);
+    expect(src).toMatch(/isLiteralUnsafeWebhookHost/);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WD-3 (MEDIUM) — endpoint.active gates delivery.
+// ──────────────────────────────────────────────────────────────────────────
+describe('WD-3: endpoint.active gates delivery', () => {
+  it('endpoint disabled between enqueue and claim → immediate DLQ, no HTTP attempt', async () => {
+    const { fn, calls } = captureFetch(() => ({ status: 200 }));
+    let currentEndpoint: DeliveryEndpoint = { ...ENDPOINT };
+    const handles = createInMemoryWebhookDelivery({
+      fetch: fn,
+      now: () => 1_700_000_000_000,
+      getEndpoint: (id) => (id === ENDPOINT.id ? currentEndpoint : null),
+    });
+    const record = await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+    // Disable the endpoint AFTER enqueue, before the delivery's next attempt
+    // fires — deliver() re-fetches the live endpoint every attempt.
+    currentEndpoint = { ...ENDPOINT, active: false };
+    const result = await handles.processTick();
+
+    expect(result.pulled).toBe(1);
+    expect(result.dlqed).toBe(1);
+    expect(result.delivered).toBe(0);
+    expect(result.retried).toBe(0);
+    expect(calls).toHaveLength(0); // no HTTP fetch attempted
+
+    expect(await handles.deliveries.get(record.id)).toBeNull();
+    const dlqEntry = await handles.dlq.get(record.id);
+    expect(dlqEntry).not.toBeNull();
+    expect(dlqEntry?.attempts).toHaveLength(1);
+    expect(dlqEntry?.reason).toMatch(/disabled/i);
+  });
+
+  it('legit path (no regression): an active endpoint still delivers normally', async () => {
+    const { fn, calls } = captureFetch(() => ({ status: 200 }));
+    const { handles } = build(fn);
+    const record = await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+    const result = await handles.processTick();
+    expect(result.delivered).toBe(1);
+    expect(calls).toHaveLength(1);
+    expect((await handles.deliveries.get(record.id))?.status).toBe('delivered');
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WD-4 (LOW) — bounded DLQ size cap (oldest-evicted).
+// ──────────────────────────────────────────────────────────────────────────
+describe('WD-4: DLQ size cap', () => {
+  it('DEFAULT_MAX_DLQ_ENTRIES is 10,000 (self-hosted single-process default)', () => {
+    expect(DEFAULT_MAX_DLQ_ENTRIES).toBe(10_000);
+  });
+
+  it('evicts the oldest DLQ entry once the cap is exceeded, and never exceeds the cap under sustained load', async () => {
+    const { fn } = captureFetch(() => ({ status: 500 }));
+    const CAP = 3;
+    let now = 1_700_000_000_000;
+    const handles = createInMemoryWebhookDelivery({
+      fetch: fn,
+      now: () => now,
+      getEndpoint: (id) => (id === ENDPOINT.id ? ENDPOINT : null),
+      maxDlqEntries: CAP,
+    });
+
+    const ids: string[] = [];
+    // Drive CAP + 2 separate deliveries through to DLQ, one at a time (so DLQ
+    // insertion order is deterministic), asserting the cap holds throughout —
+    // not just at the end.
+    for (let n = 0; n < CAP + 2; n += 1) {
+      const record = await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+      ids.push(record.id);
+      for (let i = 1; i <= DEFAULT_MAX_ATTEMPTS; i += 1) {
+        await handles.processTick();
+        now += (BACKOFF_MS_BY_ATTEMPT[i] ?? 60 * 60_000) + 1;
+      }
+      const page = await handles.dlq.list({ limit: 200 });
+      expect(page.data.length).toBeLessThanOrEqual(CAP);
+    }
+
+    const finalPage = await handles.dlq.list({ limit: 200 });
+    expect(finalPage.data).toHaveLength(CAP);
+    const remainingIds = new Set(finalPage.data.map((e) => e.deliveryId));
+    // The oldest (ids.length - CAP) entries were evicted; only the most
+    // recent CAP ids remain.
+    const expectedRemaining = ids.slice(ids.length - CAP);
+    const expectedEvicted = ids.slice(0, ids.length - CAP);
+    for (const id of expectedRemaining) expect(remainingIds.has(id)).toBe(true);
+    for (const id of expectedEvicted) expect(remainingIds.has(id)).toBe(false);
+  });
+
+  it('legit path (no regression): under the default cap, DLQ retains all entries', async () => {
+    const { fn } = captureFetch(() => ({ status: 500 }));
+    let now = 1_700_000_000_000;
+    const handles = createInMemoryWebhookDelivery({
+      fetch: fn,
+      now: () => now,
+      getEndpoint: (id) => (id === ENDPOINT.id ? ENDPOINT : null),
+    });
+    for (let n = 0; n < 3; n += 1) {
+      await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+      for (let i = 1; i <= DEFAULT_MAX_ATTEMPTS; i += 1) {
+        await handles.processTick();
+        now += (BACKOFF_MS_BY_ATTEMPT[i] ?? 60 * 60_000) + 1;
+      }
+    }
+    const page = await handles.dlq.list({ limit: 200 });
+    expect(page.data).toHaveLength(3);
   });
 });
