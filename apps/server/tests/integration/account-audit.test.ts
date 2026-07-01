@@ -49,6 +49,34 @@ describe('GET /v1/account/audit-log', () => {
     expect(body.next_cursor).toBeNull();
   });
 
+  // V-553.B-21 — list() used to hard-require the literal `account_owner`
+  // scope, so a key minted with just the docs-recommended `read:audit`
+  // scope (the "Backup automation: read + read:audit" recipe in
+  // apps/docs/src/pages/reference/scopes.md) got a permanent 403. Now
+  // widened to the granular `read:audit` scope (account_owner still
+  // satisfies it via broad-satisfies-granular).
+  it('403 when the key lacks read:audit (or a satisfying broad scope)', async () => {
+    fx = await buildTestApp({ scopes: ['gui_control'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json<{ detail: string }>();
+    expect(body.detail).toContain('read:audit');
+  });
+
+  it('200 with a granular read:audit key — the docs\' "read + read:audit" backup-automation recipe now actually works', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'read:audit'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
   it('400 on a malformed cursor (not a uuid) rather than a 500 from the uuid keyset lookup', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
@@ -596,5 +624,73 @@ describe('GET /v1/account/audit-log — per-row actor-privacy redaction (cross-a
     const entry = list.json<ListResponse>().data[0]!;
     expect(entry.ip_address).toBeNull();
     expect(list.body).not.toContain('203.0.113.55');
+  });
+
+  // TD-audit-email-prefs-actor-leak — PUT /v1/account/email-preferences
+  // computed `auditedAccountId` (the owner) correctly for the
+  // team-admin-acting-on-owner case, but never passed `actorAccountId`
+  // on the `accountAudit.record(...)` call, so it defaulted to `null`.
+  // A null `actorAccountId` is indistinguishable from a genuine
+  // self-caused row to `rowNeedsActorPrivacyRedaction` (which only
+  // redacts when `actorAccountId !== null && actorAccountId !==
+  // accountId`) — so the admin's real IP still leaked verbatim into
+  // the OWNER's own audit-log self-view/export. This drives the real
+  // PUT route end-to-end (not a direct repo insert) so it would have
+  // caught the gap the direct-insert-based tests above could not.
+  it('REAL end-to-end: a team-admin changing the owner email preferences no longer leaks the admin IP on the owner self-view', async () => {
+    fx = await buildTestApp();
+    const OWNER_ACCOUNT_ID = '00000000-0000-4000-8000-000000000c21';
+    const owner = await seedAdditionalAccount(fx, {
+      accountId: OWNER_ACCOUNT_ID,
+      apiKeyId: '00000000-0000-4000-8000-000000000c22',
+      email: 'owner@driftstack.local',
+    });
+    // The default fixture account (fx) is an admin member of the
+    // owner's team — same shape the earlier cross-view test uses.
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: '00000000-0000-4000-8000-000000000c23',
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'admin',
+      },
+    ]);
+
+    const put = await fx.app.inject({
+      method: 'PUT',
+      url: '/v1/account/email-preferences',
+      headers: {
+        ...auth(fx),
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+        'x-forwarded-for': '203.0.113.77',
+      },
+      payload: { event_type: 'tier-changed', opted_in: false },
+    });
+    expect(put.statusCode).toBe(204);
+
+    // Sanity: the row really is cross-actor (accountId = owner,
+    // actorAccountId = the admin who acted) before asserting redaction.
+    const raw = fx.accountAuditRepo
+      .getAll()
+      .find(
+        (r) => r.action === 'account.email_preferences_changed' && r.accountId === OWNER_ACCOUNT_ID,
+      )!;
+    expect(raw.actorAccountId).toBe(fx.accountId);
+    expect(raw.actorAccountId).not.toBe(raw.accountId);
+    expect(raw.ipAddress).toBe('203.0.113.77');
+
+    // The OWNER self-reads their OWN audit log — no team header, no
+    // cross-account relationship. Prior to the fix this returned the
+    // acting admin's real IP verbatim (actorAccountId was null on the
+    // row, so the per-row redaction check never fired).
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=account.email_preferences_changed',
+      headers: { authorization: `Bearer ${owner.plaintext}` },
+    });
+    expect(list.statusCode).toBe(200);
+    const entry = list.json<ListResponse>().data[0]!;
+    expect(entry.ip_address).toBeNull();
+    expect(entry.user_agent).toBeNull();
+    expect(list.body).not.toContain('203.0.113.77');
   });
 });

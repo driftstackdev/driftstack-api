@@ -89,6 +89,7 @@ export function registerEmailPreferencesRoutes(
           await accountAudit.record({
             accountId: auditedAccountId,
             actorType: 'customer',
+            actorAccountId: ctx.account.id,
             action: 'account.email_preferences_changed',
             targetResourceId: `account_${auditedAccountId}`,
             payload: {
