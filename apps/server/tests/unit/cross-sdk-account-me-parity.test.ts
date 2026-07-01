@@ -131,28 +131,32 @@ describe('W704 cross-SDK V-237/V-352/V-355 account-me parity', () => {
     }
   });
 
-  it('CRITICAL method-verb mix on account/me + adjacents in TS — 3× GET + PATCH + POST + 3× DELETE. The 3-DELETE-and-1-POST mix is what threads the "create-once / clear / revoke-one / revoke-all" semantics.', () => {
+  it("CRITICAL method-verb mix on account/me + adjacents in TS + Go — 6× GET + 2× PATCH + 2× POST + 4× DELETE + 1× PUT. The original 3-DELETE-and-1-POST mix (create-once / clear / revoke-one / revoke-all) is now joined by the bundled-LLM (Arc 1 sub-slice 6.6/6.7) and BYOK-Anthropic (AI-CHAT) verb clusters — BYOK's PUT is the only PUT in the resource, threading the customer-controlled key-replace semantic.", () => {
     const ts = read(TS_ACCT);
 
     const tsGet = (ts.match(/method: 'GET'/g) ?? []).length;
     const tsPatch = (ts.match(/method: 'PATCH'/g) ?? []).length;
     const tsPost = (ts.match(/method: 'POST'/g) ?? []).length;
     const tsDelete = (ts.match(/method: 'DELETE'/g) ?? []).length;
+    const tsPut = (ts.match(/method: 'PUT'/g) ?? []).length;
 
-    expect(tsGet, 'sdk-typescript GET count').toBe(3);
-    expect(tsPatch, 'sdk-typescript PATCH count').toBe(1);
-    expect(tsPost, 'sdk-typescript POST count').toBe(1);
-    expect(tsDelete, 'sdk-typescript DELETE count').toBe(3);
+    expect(tsGet, 'sdk-typescript GET count').toBe(6);
+    expect(tsPatch, 'sdk-typescript PATCH count').toBe(2);
+    expect(tsPost, 'sdk-typescript POST count').toBe(2);
+    expect(tsDelete, 'sdk-typescript DELETE count').toBe(4);
+    expect(tsPut, 'sdk-typescript PUT count').toBe(1);
 
     const go = read(GO_ACCT);
     const goGet = (go.match(/method: "GET"/g) ?? []).length;
     const goPatch = (go.match(/method: "PATCH"/g) ?? []).length;
     const goPost = (go.match(/method: "POST"/g) ?? []).length;
     const goDelete = (go.match(/method: "DELETE"/g) ?? []).length;
-    expect(goGet, 'sdk-go GET count').toBe(3);
-    expect(goPatch, 'sdk-go PATCH count').toBe(1);
-    expect(goPost, 'sdk-go POST count').toBe(1);
-    expect(goDelete, 'sdk-go DELETE count').toBe(3);
+    const goPut = (go.match(/method: "PUT"/g) ?? []).length;
+    expect(goGet, 'sdk-go GET count').toBe(6);
+    expect(goPatch, 'sdk-go PATCH count').toBe(2);
+    expect(goPost, 'sdk-go POST count').toBe(2);
+    expect(goDelete, 'sdk-go DELETE count').toBe(4);
+    expect(goPut, 'sdk-go PUT count').toBe(1);
   });
 
   it("CRITICAL revokeAllOtherWebSessions targets BASE path /v1/account/web-sessions (no :id) pinned in sdk-typescript + sdk-go. Drift to a per-id path would let the call revoke EVERY session including the caller's — silently locking them out.", () => {

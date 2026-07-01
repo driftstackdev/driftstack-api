@@ -199,3 +199,146 @@ func (r *AccountResource) RateLimits(ctx context.Context) (*GetAccountRateLimits
 	}
 	return &out, nil
 }
+
+// BundledLlmSettings — Arc 1 sub-slice 6.6. Bundled-LLM consent + monthly cap
+// lets the GUI give the customer an in-app fix for
+// BundledLlmConsentRequiredError / BundledLlmBudgetExhaustedError instead of
+// pointing at a raw curl command.
+type BundledLlmSettings struct {
+	Consent            bool `json:"consent"`
+	MonthlyCapUsdCents int  `json:"monthly_cap_usd_cents"`
+}
+
+// UpdateBundledLlmSettingsRequest — partial update; at least one field required.
+type UpdateBundledLlmSettingsRequest struct {
+	Consent            *bool `json:"consent,omitempty"`
+	MonthlyCapUsdCents *int  `json:"monthly_cap_usd_cents,omitempty"`
+}
+
+// GetBundledLlmSettings — Arc 1 sub-slice 6.6 read current bundled-LLM consent + monthly cap.
+func (r *AccountResource) GetBundledLlmSettings(ctx context.Context) (*BundledLlmSettings, error) {
+	var out BundledLlmSettings
+	if err := r.client.do(ctx, requestOptions{
+		method: "GET",
+		path:   "/v1/account/me/bundled-llm-settings",
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// UpdateBundledLlmSettings — Arc 1 sub-slice 6.6 flip consent and/or raise/lower
+// the monthly cap. account_owner scope required server-side.
+func (r *AccountResource) UpdateBundledLlmSettings(ctx context.Context, body *UpdateBundledLlmSettingsRequest) (*BundledLlmSettings, error) {
+	var out BundledLlmSettings
+	if err := r.client.do(ctx, requestOptions{
+		method: "PATCH",
+		path:   "/v1/account/me/bundled-llm-settings",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// BundledLlmStatus — Arc 1 sub-slice 6.7. Consent + cap + month-to-date spend +
+// remaining headroom, for the "you've used $X of $Y" dashboard/GUI display.
+type BundledLlmStatus struct {
+	Consent               bool   `json:"consent"`
+	CapCents              int    `json:"cap_cents"`
+	UsedThisMonthCents    int    `json:"used_this_month_cents"`
+	RemainingCents        int    `json:"remaining_cents"`
+	RefusedCountThisMonth int    `json:"refused_count_this_month"`
+	MonthStartedAt        string `json:"month_started_at"`
+}
+
+// GetBundledLlmStatus — Arc 1 sub-slice 6.7 read consent + cap + month-to-date
+// spend + remaining headroom.
+func (r *AccountResource) GetBundledLlmStatus(ctx context.Context) (*BundledLlmStatus, error) {
+	var out BundledLlmStatus
+	if err := r.client.do(ctx, requestOptions{
+		method: "GET",
+		path:   "/v1/account/me/bundled-llm-status",
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ByokAnthropicKeyMetadata — AI-CHAT BYOK Anthropic key metadata; never the
+// plaintext key.
+type ByokAnthropicKeyMetadata struct {
+	HasKey     bool    `json:"has_key"`
+	SetAt      *string `json:"set_at"`
+	LastUsedAt *string `json:"last_used_at"`
+}
+
+// GetByokAnthropicKey — AI-CHAT BYOK read metadata only (has_key/set_at/last_used_at).
+// Any auth context may read.
+func (r *AccountResource) GetByokAnthropicKey(ctx context.Context) (*ByokAnthropicKeyMetadata, error) {
+	var out ByokAnthropicKeyMetadata
+	if err := r.client.do(ctx, requestOptions{
+		method: "GET",
+		path:   "/v1/account/me/byok-anthropic-key",
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SetByokAnthropicKeyRequest — body for SetByokAnthropicKey.
+type SetByokAnthropicKeyRequest struct {
+	ApiKey string `json:"api_key"`
+}
+
+type SetByokAnthropicKeyResponse struct {
+	SetAt string `json:"set_at"`
+}
+
+// SetByokAnthropicKey — AI-CHAT BYOK set or rotate the account's own Anthropic
+// key. account_owner scope required server-side.
+func (r *AccountResource) SetByokAnthropicKey(ctx context.Context, apiKey string) (*SetByokAnthropicKeyResponse, error) {
+	var out SetByokAnthropicKeyResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "PUT",
+		path:   "/v1/account/me/byok-anthropic-key",
+		body:   &SetByokAnthropicKeyRequest{ApiKey: apiKey},
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ClearByokAnthropicKey — AI-CHAT BYOK clear the stored key. Idempotent.
+// account_owner scope required server-side.
+func (r *AccountResource) ClearByokAnthropicKey(ctx context.Context) error {
+	return r.client.do(ctx, requestOptions{
+		method: "DELETE",
+		path:   "/v1/account/me/byok-anthropic-key",
+	})
+}
+
+// TestByokAnthropicKeyResult — connection test result. Reason is empty when Ok is true.
+type TestByokAnthropicKeyResult struct {
+	Ok     bool   `json:"ok"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// TestByokAnthropicKey — AI-CHAT BYOK connection test against the stored key,
+// without ever echoing it back. account_owner scope required server-side.
+func (r *AccountResource) TestByokAnthropicKey(ctx context.Context) (*TestByokAnthropicKeyResult, error) {
+	var out TestByokAnthropicKeyResult
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/account/me/byok-anthropic-key/test",
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

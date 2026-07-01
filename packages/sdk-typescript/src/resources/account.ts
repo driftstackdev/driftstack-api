@@ -96,6 +96,41 @@ export interface GetAccountRateLimitsResponse {
   buckets: RateLimitBucket[];
 }
 
+// Arc 1 sub-slice 6.6/6.7 — bundled-LLM settings + spend status. Lets the GUI
+// give the customer an in-app fix for BundledLlmConsentRequiredError /
+// BundledLlmBudgetExhaustedError instead of pointing at a raw curl command.
+export interface BundledLlmSettings {
+  consent: boolean;
+  monthly_cap_usd_cents: number;
+}
+
+export interface BundledLlmStatus {
+  consent: boolean;
+  cap_cents: number;
+  used_this_month_cents: number;
+  remaining_cents: number;
+  refused_count_this_month: number;
+  month_started_at: string;
+}
+
+export interface UpdateBundledLlmSettingsRequest {
+  consent?: boolean;
+  monthly_cap_usd_cents?: number;
+}
+
+// AI-CHAT BYOK Anthropic — customer key metadata (never plaintext) + set/test.
+export interface ByokAnthropicKeyMetadata {
+  has_key: boolean;
+  set_at: string | null;
+  last_used_at: string | null;
+}
+
+export interface SetByokAnthropicKeyResponse {
+  set_at: string;
+}
+
+export type TestByokAnthropicKeyResult = { ok: true } | { ok: false; reason: string };
+
 export class AccountResource {
   constructor(private readonly http: HttpClient) {}
 
@@ -165,6 +200,70 @@ export class AccountResource {
     return this.http.request<GetAccountRateLimitsResponse>({
       method: 'GET',
       path: '/v1/account/rate-limits',
+    });
+  }
+
+  /** Arc 1 sub-slice 6.6 — read current bundled-LLM consent + monthly cap. */
+  getBundledLlmSettings(): Promise<BundledLlmSettings> {
+    return this.http.request<BundledLlmSettings>({
+      method: 'GET',
+      path: '/v1/account/me/bundled-llm-settings',
+    });
+  }
+
+  /** Arc 1 sub-slice 6.6 — flip consent and/or raise/lower the monthly cap.
+   *  account_owner scope required server-side. */
+  updateBundledLlmSettings(body: UpdateBundledLlmSettingsRequest): Promise<BundledLlmSettings> {
+    return this.http.request<BundledLlmSettings>({
+      method: 'PATCH',
+      path: '/v1/account/me/bundled-llm-settings',
+      body,
+    });
+  }
+
+  /** Arc 1 sub-slice 6.7 — consent + cap + month-to-date spend + remaining
+   *  headroom, for the "you've used $X of $Y" dashboard/GUI display. */
+  getBundledLlmStatus(): Promise<BundledLlmStatus> {
+    return this.http.request<BundledLlmStatus>({
+      method: 'GET',
+      path: '/v1/account/me/bundled-llm-status',
+    });
+  }
+
+  /** AI-CHAT BYOK — metadata only (has_key/set_at/last_used_at); never the
+   *  plaintext key. Any auth context may read. */
+  getByokAnthropicKey(): Promise<ByokAnthropicKeyMetadata> {
+    return this.http.request<ByokAnthropicKeyMetadata>({
+      method: 'GET',
+      path: '/v1/account/me/byok-anthropic-key',
+    });
+  }
+
+  /** AI-CHAT BYOK — set or rotate the account's own Anthropic key.
+   *  account_owner scope required server-side. */
+  setByokAnthropicKey(apiKey: string): Promise<SetByokAnthropicKeyResponse> {
+    return this.http.request<SetByokAnthropicKeyResponse>({
+      method: 'PUT',
+      path: '/v1/account/me/byok-anthropic-key',
+      body: { api_key: apiKey },
+    });
+  }
+
+  /** AI-CHAT BYOK — clear the stored key. Idempotent.
+   *  account_owner scope required server-side. */
+  clearByokAnthropicKey(): Promise<void> {
+    return this.http.request<void>({
+      method: 'DELETE',
+      path: '/v1/account/me/byok-anthropic-key',
+    });
+  }
+
+  /** AI-CHAT BYOK — connection test against the stored key, without ever
+   *  echoing it back. account_owner scope required server-side. */
+  testByokAnthropicKey(): Promise<TestByokAnthropicKeyResult> {
+    return this.http.request<TestByokAnthropicKeyResult>({
+      method: 'POST',
+      path: '/v1/account/me/byok-anthropic-key/test',
     });
   }
 }

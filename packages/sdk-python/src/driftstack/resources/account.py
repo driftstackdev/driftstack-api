@@ -72,6 +72,44 @@ class AccountResource:
         """V-258 — read effective rate-limit config."""
         return self._http.request("GET", "/v1/account/rate-limits")
 
+    def get_bundled_llm_settings(self) -> dict[str, Any]:
+        """Arc 1 sub-slice 6.6 — read current bundled-LLM consent + monthly cap."""
+        return self._http.request("GET", "/v1/account/me/bundled-llm-settings")
+
+    def update_bundled_llm_settings(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Arc 1 sub-slice 6.6 — flip consent and/or raise/lower the monthly
+        cap. account_owner scope required server-side."""
+        return self._http.request(
+            "PATCH", "/v1/account/me/bundled-llm-settings", json_body=coerce_body(body)
+        )
+
+    def get_bundled_llm_status(self) -> dict[str, Any]:
+        """Arc 1 sub-slice 6.7 — consent + cap + month-to-date spend +
+        remaining headroom, for the "you've used $X of $Y" display."""
+        return self._http.request("GET", "/v1/account/me/bundled-llm-status")
+
+    def get_byok_anthropic_key(self) -> dict[str, Any]:
+        """AI-CHAT BYOK — metadata only (has_key/set_at/last_used_at); never
+        the plaintext key. Any auth context may read."""
+        return self._http.request("GET", "/v1/account/me/byok-anthropic-key")
+
+    def set_byok_anthropic_key(self, api_key: str) -> dict[str, Any]:
+        """AI-CHAT BYOK — set or rotate the account's own Anthropic key.
+        account_owner scope required server-side."""
+        return self._http.request(
+            "PUT", "/v1/account/me/byok-anthropic-key", json_body={"api_key": api_key}
+        )
+
+    def clear_byok_anthropic_key(self) -> None:
+        """AI-CHAT BYOK — clear the stored key. Idempotent.
+        account_owner scope required server-side."""
+        self._http.request("DELETE", "/v1/account/me/byok-anthropic-key")
+
+    def test_byok_anthropic_key(self) -> dict[str, Any]:
+        """AI-CHAT BYOK — connection test against the stored key, without
+        ever echoing it back. account_owner scope required server-side."""
+        return self._http.request("POST", "/v1/account/me/byok-anthropic-key/test")
+
 
 class AsyncAccountResource:
     """Async account resource."""
@@ -104,3 +142,28 @@ class AsyncAccountResource:
 
     async def rate_limits(self) -> dict[str, Any]:
         return await self._http.request("GET", "/v1/account/rate-limits")
+
+    async def get_bundled_llm_settings(self) -> dict[str, Any]:
+        return await self._http.request("GET", "/v1/account/me/bundled-llm-settings")
+
+    async def update_bundled_llm_settings(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._http.request(
+            "PATCH", "/v1/account/me/bundled-llm-settings", json_body=coerce_body(body)
+        )
+
+    async def get_bundled_llm_status(self) -> dict[str, Any]:
+        return await self._http.request("GET", "/v1/account/me/bundled-llm-status")
+
+    async def get_byok_anthropic_key(self) -> dict[str, Any]:
+        return await self._http.request("GET", "/v1/account/me/byok-anthropic-key")
+
+    async def set_byok_anthropic_key(self, api_key: str) -> dict[str, Any]:
+        return await self._http.request(
+            "PUT", "/v1/account/me/byok-anthropic-key", json_body={"api_key": api_key}
+        )
+
+    async def clear_byok_anthropic_key(self) -> None:
+        await self._http.request("DELETE", "/v1/account/me/byok-anthropic-key")
+
+    async def test_byok_anthropic_key(self) -> dict[str, Any]:
+        return await self._http.request("POST", "/v1/account/me/byok-anthropic-key/test")

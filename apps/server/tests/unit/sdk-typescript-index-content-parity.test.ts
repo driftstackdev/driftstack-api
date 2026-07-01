@@ -71,9 +71,9 @@ describe('W424.A packages/sdk-typescript/src/index.ts content parity', () => {
     );
   });
 
-  it('Account types re-export (AccountSelfProfile / WebSessionEntry / ListWebSessionsResponse / UploadAvatarResponse / RateLimitBucket / GetAccountRateLimitsResponse)', () => {
+  it('Account types re-export (AccountSelfProfile / WebSessionEntry / ListWebSessionsResponse / UploadAvatarResponse / RateLimitBucket / GetAccountRateLimitsResponse / BundledLlmSettings / BundledLlmStatus / UpdateBundledLlmSettingsRequest / ByokAnthropicKeyMetadata / SetByokAnthropicKeyResponse / TestByokAnthropicKeyResult)', () => {
     expect(body).toMatch(
-      /export type \{\s*\n?\s*AccountSelfProfile,\s*\n?\s*WebSessionEntry,\s*\n?\s*ListWebSessionsResponse,\s*\n?\s*UploadAvatarResponse,\s*\n?\s*RateLimitBucket,\s*\n?\s*GetAccountRateLimitsResponse,\s*\n?\s*\} from '\.\/resources\/account\.js';/,
+      /export type \{\s*\n?\s*AccountSelfProfile,\s*\n?\s*WebSessionEntry,\s*\n?\s*ListWebSessionsResponse,\s*\n?\s*UploadAvatarResponse,\s*\n?\s*RateLimitBucket,\s*\n?\s*GetAccountRateLimitsResponse,\s*\n?\s*BundledLlmSettings,\s*\n?\s*BundledLlmStatus,\s*\n?\s*UpdateBundledLlmSettingsRequest,\s*\n?\s*ByokAnthropicKeyMetadata,\s*\n?\s*SetByokAnthropicKeyResponse,\s*\n?\s*TestByokAnthropicKeyResult,\s*\n?\s*\} from '\.\/resources\/account\.js';/,
     );
   });
 

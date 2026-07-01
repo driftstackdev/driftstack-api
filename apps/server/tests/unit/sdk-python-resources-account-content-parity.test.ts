@@ -150,7 +150,35 @@ describe('W581.C packages/sdk-python/src/driftstack/resources/account.py content
     );
   });
 
-  it('AsyncAccountResource — class declaration + __init__(http: AsyncHttpClient) + 8-verb async mirror. All sync docstrings re-used (no async-specific framing needed — semantics are identical, only the await keyword differs).', () => {
+  it('CRITICAL sync bundled-LLM + BYOK Anthropic methods — get_bundled_llm_settings (GET) + update_bundled_llm_settings (PATCH) + get_bundled_llm_status (GET) + get_byok_anthropic_key (GET) + set_byok_anthropic_key (PUT) + clear_byok_anthropic_key (DELETE) + test_byok_anthropic_key (POST). Lets the GUI/CLI give the customer an in-app fix for BundledLlmConsentRequiredError / BundledLlmBudgetExhaustedError, and BYOK ("always wins" — locked verdict) is the customer-controlled billing override; drift to dropping any of these 7 would strand Python customers on an unreadable raw-API-error path the TS/Go SDKs already fixed.', () => {
+    expect(body).toMatch(
+      /def get_bundled_llm_settings\(self\) -> dict\[str, Any\]:\s*\n\s*""".*\s*\n\s*return self\._http\.request\("GET", "\/v1\/account\/me\/bundled-llm-settings"\)/,
+    );
+    expect(body).toMatch(
+      /def update_bundled_llm_settings\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/,
+    );
+    expect(body).toMatch(
+      /return self\._http\.request\(\s*\n\s*"PATCH", "\/v1\/account\/me\/bundled-llm-settings", json_body=coerce_body\(body\)\s*\n\s*\)/,
+    );
+    expect(body).toMatch(
+      /def get_bundled_llm_status\(self\) -> dict\[str, Any\]:\s*\n\s*"""[\s\S]*?"""\s*\n\s*return self\._http\.request\("GET", "\/v1\/account\/me\/bundled-llm-status"\)/,
+    );
+    expect(body).toMatch(
+      /def get_byok_anthropic_key\(self\) -> dict\[str, Any\]:\s*\n\s*"""[\s\S]*?"""\s*\n\s*return self\._http\.request\("GET", "\/v1\/account\/me\/byok-anthropic-key"\)/,
+    );
+    expect(body).toMatch(/def set_byok_anthropic_key\(self, api_key: str\) -> dict\[str, Any\]:/);
+    expect(body).toMatch(
+      /return self\._http\.request\(\s*\n\s*"PUT", "\/v1\/account\/me\/byok-anthropic-key", json_body=\{"api_key": api_key\}\s*\n\s*\)/,
+    );
+    expect(body).toMatch(
+      /def clear_byok_anthropic_key\(self\) -> None:\s*\n\s*"""[\s\S]*?"""\s*\n\s*self\._http\.request\("DELETE", "\/v1\/account\/me\/byok-anthropic-key"\)/,
+    );
+    expect(body).toMatch(
+      /def test_byok_anthropic_key\(self\) -> dict\[str, Any\]:\s*\n\s*"""[\s\S]*?"""\s*\n\s*return self\._http\.request\("POST", "\/v1\/account\/me\/byok-anthropic-key\/test"\)/,
+    );
+  });
+
+  it('AsyncAccountResource — class declaration + __init__(http: AsyncHttpClient) + 15-verb async mirror (the original 8 + the 7 bundled-LLM/BYOK additions). All sync docstrings re-used (no async-specific framing needed — semantics are identical, only the await keyword differs).', () => {
     expect(body).toMatch(/^class AsyncAccountResource:$/m);
     expect(body).toMatch(/^ {4}"""Async account resource\."""$/m);
     expect(body).toMatch(
@@ -180,9 +208,30 @@ describe('W581.C packages/sdk-python/src/driftstack/resources/account.py content
     expect(body).toMatch(
       /async def rate_limits\(self\) -> dict\[str, Any\]:\s*\n\s*return await self\._http\.request\("GET", "\/v1\/account\/rate-limits"\)/,
     );
+    expect(body).toMatch(
+      /async def get_bundled_llm_settings\(self\) -> dict\[str, Any\]:\s*\n\s*return await self\._http\.request\("GET", "\/v1\/account\/me\/bundled-llm-settings"\)/,
+    );
+    expect(body).toMatch(
+      /async def update_bundled_llm_settings\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/,
+    );
+    expect(body).toMatch(
+      /async def get_bundled_llm_status\(self\) -> dict\[str, Any\]:\s*\n\s*return await self\._http\.request\("GET", "\/v1\/account\/me\/bundled-llm-status"\)/,
+    );
+    expect(body).toMatch(
+      /async def get_byok_anthropic_key\(self\) -> dict\[str, Any\]:\s*\n\s*return await self\._http\.request\("GET", "\/v1\/account\/me\/byok-anthropic-key"\)/,
+    );
+    expect(body).toMatch(
+      /async def set_byok_anthropic_key\(self, api_key: str\) -> dict\[str, Any\]:/,
+    );
+    expect(body).toMatch(
+      /async def clear_byok_anthropic_key\(self\) -> None:\s*\n\s*await self\._http\.request\("DELETE", "\/v1\/account\/me\/byok-anthropic-key"\)/,
+    );
+    expect(body).toMatch(
+      /async def test_byok_anthropic_key\(self\) -> dict\[str, Any\]:\s*\n\s*return await self\._http\.request\("POST", "\/v1\/account\/me\/byok-anthropic-key\/test"\)/,
+    );
   });
 
-  it('8-verb inventory drift guard — sync defines exactly 9 method defs (8 verbs + __init__); async defines the same 9. Verb-mix invariants — GETs (3 × 2): me + list_web_sessions + rate_limits. PATCH (1 × 2): update_me only. POST (1 × 2): upload_avatar. DELETEs (3 × 2): clear_avatar + revoke_web_session + revoke_all_other_web_sessions. Drift to a 9th verb without doubling test coverage would let an untested code path ship.', () => {
+  it('15-verb inventory drift guard — sync defines exactly 16 method defs (15 verbs + __init__); async defines the same 16. Verb-mix invariants — GETs (6 × 2): me + list_web_sessions + rate_limits + get_bundled_llm_settings + get_bundled_llm_status + get_byok_anthropic_key. PATCH (2 × 2): update_me + update_bundled_llm_settings. POST (2 × 2): upload_avatar + test_byok_anthropic_key. PUT (1 × 2): set_byok_anthropic_key — the only PUT in the resource, threading the customer-controlled key-replace semantic. DELETEs (4 × 2): clear_avatar + revoke_web_session + revoke_all_other_web_sessions + clear_byok_anthropic_key. Drift to a 16th verb without doubling test coverage would let an untested code path ship.', () => {
     const syncStart = body.indexOf('class AccountResource:');
     const asyncStart = body.indexOf('class AsyncAccountResource:');
     expect(syncStart, 'expected sync class to come first').toBeGreaterThan(0);
@@ -190,16 +239,18 @@ describe('W581.C packages/sdk-python/src/driftstack/resources/account.py content
     const syncBody = body.slice(syncStart, asyncStart);
     const asyncBody = body.slice(asyncStart);
     const syncDefs = (syncBody.match(/^ {4}(?:async )?def [a-z_]+\(/gm) ?? []).length;
-    expect(syncDefs, 'expected 9 sync method defs (8 verbs + __init__)').toBe(9);
+    expect(syncDefs, 'expected 16 sync method defs (15 verbs + __init__)').toBe(16);
     const asyncDefs = (asyncBody.match(/^ {4}(?:async )?def [a-z_]+\(/gm) ?? []).length;
-    expect(asyncDefs, 'expected 9 async method defs (8 verbs + __init__)').toBe(9);
+    expect(asyncDefs, 'expected 16 async method defs (15 verbs + __init__)').toBe(16);
     const gets = (body.match(/"GET", "\/v1\/account/g) ?? []).length;
-    expect(gets, 'expected 6 GETs (3 verbs × sync+async)').toBe(6);
+    expect(gets, 'expected 12 GETs (6 verbs × sync+async)').toBe(12);
     const patches = (body.match(/"PATCH", "\/v1\/account/g) ?? []).length;
-    expect(patches, 'expected 2 PATCHes (update_me × sync+async)').toBe(2);
+    expect(patches, 'expected 4 PATCHes (2 verbs × sync+async)').toBe(4);
     const posts = (body.match(/"POST", "\/v1\/account/g) ?? []).length;
-    expect(posts, 'expected 2 POSTs (upload_avatar × sync+async)').toBe(2);
+    expect(posts, 'expected 4 POSTs (2 verbs × sync+async)').toBe(4);
+    const puts = (body.match(/"PUT", "\/v1\/account/g) ?? []).length;
+    expect(puts, 'expected 2 PUTs (set_byok_anthropic_key × sync+async)').toBe(2);
     const deletes = (body.match(/"DELETE", /g) ?? []).length;
-    expect(deletes, 'expected 6 DELETEs (3 verbs × sync+async)').toBe(6);
+    expect(deletes, 'expected 8 DELETEs (4 verbs × sync+async)').toBe(8);
   });
 });

@@ -20,6 +20,12 @@ export type {
   UploadAvatarResponse,
   RateLimitBucket,
   GetAccountRateLimitsResponse,
+  BundledLlmSettings,
+  BundledLlmStatus,
+  UpdateBundledLlmSettingsRequest,
+  ByokAnthropicKeyMetadata,
+  SetByokAnthropicKeyResponse,
+  TestByokAnthropicKeyResult,
 } from './resources/account.js';
 export type {
   MfaStatusResponse,

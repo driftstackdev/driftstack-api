@@ -223,17 +223,63 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
     );
   });
 
-  it('8-verb inventory + verb-mix invariants — exactly 8 method declarations (me + updateMe + uploadAvatar + clearAvatar + listWebSessions + revokeWebSession + revokeAllOtherWebSessions + rateLimits). Verb mix: 3 GETs (me + listWebSessions + rateLimits) + 1 PATCH (updateMe) + 1 POST (uploadAvatar) + 3 DELETEs (clearAvatar + revokeWebSession + revokeAllOtherWebSessions). Drift to a 9th verb without test coverage would let an untested code path ship.', () => {
+  it('CRITICAL bundled-LLM settings/status verbs (Arc 1 sub-slice 6.6/6.7) — GET+PATCH /v1/account/me/bundled-llm-settings and GET /v1/account/me/bundled-llm-status. Lets the GUI give the customer an in-app fix for BundledLlmConsentRequiredError / BundledLlmBudgetExhaustedError instead of pointing at a raw curl command — drift to dropping any of these 3 verbs would strand the customer on the unreadable API-error path.', () => {
+    expect(body).toMatch(
+      /\/\/ Arc 1 sub-slice 6\.6\/6\.7 — bundled-LLM settings \+ spend status\./,
+    );
+    expect(body).toMatch(
+      /export interface BundledLlmSettings \{\s*\n?\s*consent: boolean;\s*\n?\s*monthly_cap_usd_cents: number;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /export interface BundledLlmStatus \{\s*\n?\s*consent: boolean;\s*\n?\s*cap_cents: number;\s*\n?\s*used_this_month_cents: number;\s*\n?\s*remaining_cents: number;\s*\n?\s*refused_count_this_month: number;\s*\n?\s*month_started_at: string;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /getBundledLlmSettings\(\): Promise<BundledLlmSettings> \{\s*\n?\s*return this\.http\.request<BundledLlmSettings>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/account\/me\/bundled-llm-settings',\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /updateBundledLlmSettings\(\s*\n?\s*body: UpdateBundledLlmSettingsRequest,\s*\n?\s*\): Promise<BundledLlmSettings> \{\s*\n?\s*return this\.http\.request<BundledLlmSettings>\(\{\s*\n?\s*method: 'PATCH',\s*\n?\s*path: '\/v1\/account\/me\/bundled-llm-settings',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /getBundledLlmStatus\(\): Promise<BundledLlmStatus> \{\s*\n?\s*return this\.http\.request<BundledLlmStatus>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/account\/me\/bundled-llm-status',\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('CRITICAL BYOK Anthropic key verbs (AI-CHAT) — GET/PUT/DELETE /v1/account/me/byok-anthropic-key + POST .../test. "BYOK always wins" (locked verdict) — the key is a customer-controlled billing override; drift to dropping the PUT/DELETE pair would strand a customer unable to rotate or remove their own key.', () => {
+    expect(body).toMatch(
+      /\/\/ AI-CHAT BYOK Anthropic — customer key metadata \(never plaintext\) \+ set\/test\./,
+    );
+    expect(body).toMatch(
+      /export interface ByokAnthropicKeyMetadata \{\s*\n?\s*has_key: boolean;\s*\n?\s*set_at: string \| null;\s*\n?\s*last_used_at: string \| null;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /export type TestByokAnthropicKeyResult = \{ ok: true \} \| \{ ok: false; reason: string \};/,
+    );
+    expect(body).toMatch(
+      /getByokAnthropicKey\(\): Promise<ByokAnthropicKeyMetadata> \{\s*\n?\s*return this\.http\.request<ByokAnthropicKeyMetadata>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/account\/me\/byok-anthropic-key',\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /setByokAnthropicKey\(apiKey: string\): Promise<SetByokAnthropicKeyResponse> \{\s*\n?\s*return this\.http\.request<SetByokAnthropicKeyResponse>\(\{\s*\n?\s*method: 'PUT',\s*\n?\s*path: '\/v1\/account\/me\/byok-anthropic-key',\s*\n?\s*body: \{ api_key: apiKey \},\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /clearByokAnthropicKey\(\): Promise<void> \{\s*\n?\s*return this\.http\.request<void>\(\{\s*\n?\s*method: 'DELETE',\s*\n?\s*path: '\/v1\/account\/me\/byok-anthropic-key',\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /testByokAnthropicKey\(\): Promise<TestByokAnthropicKeyResult> \{\s*\n?\s*return this\.http\.request<TestByokAnthropicKeyResult>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/account\/me\/byok-anthropic-key\/test',\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('15-verb inventory + verb-mix invariants — exactly 15 method declarations (the original 8 + bundled-LLM getBundledLlmSettings/updateBundledLlmSettings/getBundledLlmStatus + BYOK getByokAnthropicKey/setByokAnthropicKey/clearByokAnthropicKey/testByokAnthropicKey). Verb mix: 6 GETs (me + listWebSessions + rateLimits + getBundledLlmSettings + getBundledLlmStatus + getByokAnthropicKey) + 2 PATCH (updateMe + updateBundledLlmSettings) + 2 POST (uploadAvatar + testByokAnthropicKey) + 4 DELETEs (clearAvatar + revokeWebSession + revokeAllOtherWebSessions + clearByokAnthropicKey) + 1 PUT (setByokAnthropicKey — the only PUT in the resource; CRITICAL because PUT is the customer-controlled-key-replace semantic, distinct from every other verb here). Drift to a 16th verb without test coverage would let an untested code path ship.', () => {
     const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
-    expect(methods.length, 'expected 8 verb declarations').toBe(8);
+    expect(methods.length, 'expected 15 verb declarations').toBe(15);
     const gets = (body.match(/method: 'GET'/g) ?? []).length;
-    expect(gets, 'expected 3 GETs').toBe(3);
+    expect(gets, 'expected 6 GETs').toBe(6);
     const patches = (body.match(/method: 'PATCH'/g) ?? []).length;
-    expect(patches, 'expected 1 PATCH (updateMe)').toBe(1);
+    expect(patches, 'expected 2 PATCHes (updateMe + updateBundledLlmSettings)').toBe(2);
     const posts = (body.match(/method: 'POST'/g) ?? []).length;
-    expect(posts, 'expected 1 POST (uploadAvatar)').toBe(1);
+    expect(posts, 'expected 2 POSTs (uploadAvatar + testByokAnthropicKey)').toBe(2);
     const deletes = (body.match(/method: 'DELETE'/g) ?? []).length;
-    expect(deletes, 'expected 3 DELETEs').toBe(3);
-    expect(body).not.toMatch(/method: 'PUT'/);
+    expect(deletes, 'expected 4 DELETEs').toBe(4);
+    const puts = (body.match(/method: 'PUT'/g) ?? []).length;
+    expect(puts, 'expected 1 PUT (setByokAnthropicKey)').toBe(1);
   });
 });
