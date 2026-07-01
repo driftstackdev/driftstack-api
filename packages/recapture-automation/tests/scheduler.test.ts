@@ -204,6 +204,11 @@ describe('V-533.C scheduleRecaptureBatch — skip behaviour', () => {
     const result = scheduleRecaptureBatch({
       transition: TRANSITION,
       targetSafariVersion: '26.4',
+      // makeRun()'s startedAtMs/createdAtMs are tiny sentinel values (100/50),
+      // not real epoch ms — pin `now` nearby so the Fix 3 staleness check
+      // (which measures nowMs - startedAtMs) doesn't spuriously treat this
+      // fixture as an abandoned run under the real Date.now() default.
+      now: () => 1_000,
       archetypeHistory: [
         {
           archetypeId: 'arch1',
@@ -224,6 +229,7 @@ describe('V-533.C scheduleRecaptureBatch — skip behaviour', () => {
     const result = scheduleRecaptureBatch({
       transition: TRANSITION,
       targetSafariVersion: '26.4',
+      now: () => 1_000,
       archetypeHistory: [
         {
           archetypeId: 'arch1',
@@ -251,6 +257,7 @@ describe('V-533.C scheduleRecaptureBatch — skip behaviour', () => {
     const result = scheduleRecaptureBatch({
       transition: TRANSITION,
       targetSafariVersion: '26.5', // run's targetVersion.safariVersion is 26.4
+      now: () => 1_000,
       archetypeHistory: [{ archetypeId: 'arch1', latestRun: run }],
     });
     expect(result.entries).toHaveLength(0);
@@ -263,7 +270,176 @@ describe('V-533.C scheduleRecaptureBatch — skip behaviour', () => {
     const result = scheduleRecaptureBatch({
       transition: TRANSITION,
       targetSafariVersion: '26.6',
+      now: () => 1_000,
       archetypeHistory: [{ archetypeId: 'arch1', latestRun: run }],
+    });
+    expect(result.entries).toHaveLength(0);
+    expect(result.skipped).toHaveLength(1);
+  });
+});
+
+describe('V-533.C scheduleRecaptureBatch — Fix 1 (2026-07-01 audit): total includes new/missing surface counts', () => {
+  it('a completed run dominated by missing_surface is NOT classified healthy/medium — severe surface loss must show up as LOW drift, not MEDIUM smoke-check', () => {
+    // Repro from the audit: 10 matches, 0 diff, 0 error, but 90 missing_surface
+    // (e.g. an iOS bump wiped out most of the archetype's fingerprint
+    // surfaces). Pre-fix, total = 10+0+0 = 10 → matchRate 100% → healthy/MEDIUM,
+    // silently hiding the massive surface loss.
+    const result = scheduleRecaptureBatch({
+      transition: TRANSITION,
+      targetSafariVersion: '26.4',
+      archetypeHistory: [
+        {
+          archetypeId: 'arch1',
+          latestRun: {
+            ...makeRun({ archetypeId: 'arch1', targetIos: '18.8', matchCount: 10 }),
+            missingSurfaceCount: 90,
+          },
+        },
+      ],
+    });
+    expect(result.entries[0]?.priority).not.toBe('medium');
+    expect(result.entries[0]?.priority).toBe('low');
+    expect(result.entries[0]?.reason).toContain('match rate 10%');
+  });
+
+  it('a completed run dominated by new_surface is also NOT classified healthy/medium', () => {
+    const result = scheduleRecaptureBatch({
+      transition: TRANSITION,
+      targetSafariVersion: '26.4',
+      archetypeHistory: [
+        {
+          archetypeId: 'arch1',
+          latestRun: {
+            ...makeRun({ archetypeId: 'arch1', targetIos: '18.8', matchCount: 5 }),
+            newSurfaceCount: 95,
+          },
+        },
+      ],
+    });
+    expect(result.entries[0]?.priority).not.toBe('medium');
+    expect(result.entries[0]?.priority).toBe('low');
+  });
+
+  it('no-regression: zero new/missing surface counts classify byte-identically to before the fix (healthy → MEDIUM smoke-check)', () => {
+    const result = scheduleRecaptureBatch({
+      transition: TRANSITION,
+      targetSafariVersion: '26.4',
+      archetypeHistory: [
+        {
+          archetypeId: 'arch1',
+          latestRun: makeRun({ archetypeId: 'arch1', targetIos: '18.8', matchCount: 100 }),
+        },
+      ],
+    });
+    expect(result.entries[0]?.priority).toBe('medium');
+    expect(result.entries[0]?.reason).toBe('prior run healthy; smoke-check pass');
+  });
+
+  it('no-regression: zero new/missing surface counts on a drifting run still classify byte-identically (LOW drift suspected)', () => {
+    const result = scheduleRecaptureBatch({
+      transition: TRANSITION,
+      targetSafariVersion: '26.4',
+      archetypeHistory: [
+        {
+          archetypeId: 'arch1',
+          latestRun: makeRun({
+            archetypeId: 'arch1',
+            targetIos: '18.8',
+            matchCount: 60,
+            diffCount: 40,
+          }),
+        },
+      ],
+    });
+    expect(result.entries[0]?.priority).toBe('low');
+    expect(result.entries[0]?.reason).toBe('prior run match rate 60%; drift suspected');
+  });
+});
+
+describe('V-533.C scheduleRecaptureBatch — Fix 3 (2026-07-01 audit): stale in-flight lease expiry', () => {
+  const NOW = 100_000_000;
+
+  it('a stale in_progress run (startedAtMs far in the past) is NOT skipped — rescheduled HIGH', () => {
+    const staleRun: RecaptureRun = {
+      ...makeRun({ archetypeId: 'arch1', targetIos: '18.8', status: 'in_progress' }),
+      startedAtMs: NOW - 7 * 60 * 60 * 1000, // 7h ago > 6h threshold
+      createdAtMs: NOW - 7 * 60 * 60 * 1000 - 1_000,
+    };
+    const result = scheduleRecaptureBatch({
+      transition: TRANSITION,
+      targetSafariVersion: '26.4',
+      now: () => NOW,
+      archetypeHistory: [{ archetypeId: 'arch1', latestRun: staleRun }],
+    });
+    expect(result.skipped).toHaveLength(0);
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]?.priority).toBe('high');
+    expect(result.entries[0]?.reason).toContain('stale in-flight run');
+    expect(result.entries[0]?.reason).toContain('rescheduling');
+  });
+
+  it('a stale queued run (never started, createdAtMs far in the past) is NOT skipped — rescheduled HIGH using the createdAtMs fallback', () => {
+    const staleQueued: RecaptureRun = {
+      ...makeRun({ archetypeId: 'arch1', targetIos: '18.8', status: 'queued' }),
+      startedAtMs: null,
+      createdAtMs: NOW - 8 * 60 * 60 * 1000, // 8h ago, never started
+    };
+    const result = scheduleRecaptureBatch({
+      transition: TRANSITION,
+      targetSafariVersion: '26.4',
+      now: () => NOW,
+      archetypeHistory: [{ archetypeId: 'arch1', latestRun: staleQueued }],
+    });
+    expect(result.skipped).toHaveLength(0);
+    expect(result.entries[0]?.priority).toBe('high');
+    expect(result.entries[0]?.reason).toContain('stale in-flight run');
+  });
+
+  it('no-regression: a genuinely-recent in_progress run is still correctly SKIP-ped', () => {
+    const recentRun: RecaptureRun = {
+      ...makeRun({ archetypeId: 'arch1', targetIos: '18.8', status: 'in_progress' }),
+      startedAtMs: NOW - 5 * 60 * 1000, // 5 minutes ago
+      createdAtMs: NOW - 6 * 60 * 1000,
+    };
+    const result = scheduleRecaptureBatch({
+      transition: TRANSITION,
+      targetSafariVersion: '26.4',
+      now: () => NOW,
+      archetypeHistory: [{ archetypeId: 'arch1', latestRun: recentRun }],
+    });
+    expect(result.entries).toHaveLength(0);
+    expect(result.skipped).toHaveLength(1);
+    expect(result.skipped[0]?.reason).toContain('in_progress');
+  });
+
+  it('no-regression: a genuinely-recent queued run is still correctly SKIP-ped', () => {
+    const recentQueued: RecaptureRun = {
+      ...makeRun({ archetypeId: 'arch1', targetIos: '18.8', status: 'queued' }),
+      startedAtMs: null,
+      createdAtMs: NOW - 60 * 1000, // 1 minute ago
+    };
+    const result = scheduleRecaptureBatch({
+      transition: TRANSITION,
+      targetSafariVersion: '26.4',
+      now: () => NOW,
+      archetypeHistory: [{ archetypeId: 'arch1', latestRun: recentQueued }],
+    });
+    expect(result.entries).toHaveLength(0);
+    expect(result.skipped).toHaveLength(1);
+  });
+
+  it('defaults `now` to Date.now when not supplied (real-clock smoke test)', () => {
+    // A run that just started "now" (real epoch ms) must not be treated as
+    // stale under the real Date.now() default.
+    const freshRun: RecaptureRun = {
+      ...makeRun({ archetypeId: 'arch1', targetIos: '18.8', status: 'in_progress' }),
+      startedAtMs: Date.now(),
+      createdAtMs: Date.now(),
+    };
+    const result = scheduleRecaptureBatch({
+      transition: TRANSITION,
+      targetSafariVersion: '26.4',
+      archetypeHistory: [{ archetypeId: 'arch1', latestRun: freshRun }],
     });
     expect(result.entries).toHaveLength(0);
     expect(result.skipped).toHaveLength(1);

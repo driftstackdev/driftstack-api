@@ -18,6 +18,7 @@ import type {
 } from './interfaces.js';
 import type {
   FingerprintComparison,
+  IosArchetypeVersion,
   IosVersionTransition,
   RecaptureRun,
   TriggerRecaptureOpts,
@@ -28,16 +29,74 @@ export interface MockRecaptureServiceDeps {
   now?: () => number;
 }
 
+/**
+ * Default cap on `MockRecaptureService`'s in-memory `runs` map before the
+ * oldest entry (by insertion order) is evicted (Fix 5, 2026-07-01 audit).
+ * Recapture runs are a low-frequency event — one per archetype per iOS
+ * version bump, not a per-request/per-session thing — but the class is
+ * documented as usable for GUI-client integration (see the class doc
+ * above), not purely disposable test scaffolding, and each run retains its
+ * full `comparisons` array, so it isn't safe to grow unbounded forever.
+ * 2,000 is generously above any realistic archetype-matrix × version-bump
+ * volume this package's docs describe (dozens of archetypes, occasional
+ * bumps) while still bounding worst-case memory.
+ */
+const DEFAULT_MAX_RUNS = 2_000;
+
 export class MockRecaptureService implements RecaptureService {
   private readonly runs = new Map<string, RecaptureRun>();
   private idCounter = 0;
   private readonly now: () => number;
 
-  constructor(deps: MockRecaptureServiceDeps = {}) {
+  constructor(
+    deps: MockRecaptureServiceDeps = {},
+    /** Cap on `runs` before the oldest (by insertion order) is evicted. */
+    private readonly maxEntries: number = DEFAULT_MAX_RUNS,
+  ) {
     this.now = deps.now ?? (() => Date.now());
   }
 
+  /**
+   * Fix 2 (2026-07-01 audit) dedup lookup: an existing `'queued'` or
+   * `'in_progress'` run for the same (archetypeId, targetVersion) that
+   * `triggerRecapture()` should return instead of inserting a duplicate.
+   * Without this, two concurrent `triggerRecapture()` calls with identical
+   * opts (or a scheduled batch racing a human "trigger now" action) each
+   * see no run yet exists and both insert independent `'queued'` runs.
+   *
+   * NOTE for whoever wires the scheduler (scheduler.ts) driver to this
+   * service: this dedup does NOT know about scheduler.ts's stale
+   * in-flight-lease-expiry check (STALE_IN_FLIGHT_MS) — if a driver
+   * reschedules an archetype because the scheduler decided its prior run
+   * is abandoned, but that prior run is still `'in_progress'` here (never
+   * finalized), this lookup will hand back the SAME stale run rather than
+   * inserting the fresh one the scheduler intended. That's out of scope
+   * for this fix (mock.ts has no knowledge of scheduler.ts's staleness
+   * policy) — a production driver would need to finalize/cancel the stale
+   * run (or otherwise make it non-'in_progress') before re-triggering.
+   */
+  private findInFlightRun(
+    archetypeId: string,
+    targetVersion: IosArchetypeVersion,
+  ): RecaptureRun | null {
+    for (const run of this.runs.values()) {
+      if (
+        run.archetypeId === archetypeId &&
+        run.targetVersion.iosVersion === targetVersion.iosVersion &&
+        run.targetVersion.safariVersion === targetVersion.safariVersion &&
+        (run.status === 'queued' || run.status === 'in_progress')
+      ) {
+        return run;
+      }
+    }
+    return null;
+  }
+
   triggerRecapture(opts: TriggerRecaptureOpts): Promise<RecaptureRun> {
+    const existing = this.findInFlightRun(opts.archetypeId, opts.targetVersion);
+    if (existing) {
+      return Promise.resolve(existing);
+    }
     this.idCounter += 1;
     const id = `rcap_${this.idCounter.toString().padStart(8, '0')}`;
     const run: RecaptureRun = {
@@ -58,6 +117,14 @@ export class MockRecaptureService implements RecaptureService {
       createdAtMs: this.now(),
     };
     this.runs.set(id, run);
+    // Fix 5 (2026-07-01 audit): oldest-evicted size cap, mirroring the
+    // established bounded-Map pattern used elsewhere in this codebase (e.g.
+    // apps/server's session-page-state-store.ts) — insert first, then drop
+    // the oldest entry if that pushed the map over the cap.
+    if (this.runs.size > this.maxEntries) {
+      const oldest = this.runs.keys().next().value;
+      if (oldest !== undefined) this.runs.delete(oldest);
+    }
     return Promise.resolve(run);
   }
 

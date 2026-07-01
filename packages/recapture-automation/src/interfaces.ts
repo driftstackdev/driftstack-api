@@ -35,6 +35,15 @@ export interface RecaptureService {
    * Queue a new recapture run. Returns the run record with status
    * `'queued'`; the worker picks it up + transitions through
    * `'in_progress'` → `'completed'` / `'failed'`.
+   *
+   * Idempotency contract (Fix 2, 2026-07-01 audit): if a run already
+   * exists for the same `(archetypeId, targetVersion)` pair whose status
+   * is `'queued'` or `'in_progress'`, implementations MUST return that
+   * existing run rather than inserting a duplicate. Callers (including
+   * concurrent/racing callers — e.g. a scheduled batch racing a human
+   * "trigger now" action) can rely on `triggerRecapture()` never
+   * double-dispatching a capture that's already in flight for the same
+   * target.
    */
   triggerRecapture(opts: TriggerRecaptureOpts): Promise<RecaptureRun>;
 

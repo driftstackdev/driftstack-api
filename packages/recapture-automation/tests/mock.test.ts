@@ -177,6 +177,115 @@ describe('MockRecaptureService', () => {
   });
 });
 
+describe('MockRecaptureService — triggerRecapture idempotency (Fix 2, 2026-07-01 audit)', () => {
+  it('two concurrent triggerRecapture calls with identical archetypeId+targetVersion produce only ONE run', async () => {
+    const svc = new MockRecaptureService();
+    const opts = {
+      trigger: 'ios_version_bump' as const,
+      archetypeId: 'iphone16pro_ios18_7_safari26_4',
+      baselineVersion: BASELINE,
+      targetVersion: TARGET,
+    };
+    const [first, second] = await Promise.all([
+      svc.triggerRecapture(opts),
+      svc.triggerRecapture(opts),
+    ]);
+    expect(second.id).toBe(first.id);
+    const all = await svc.listRuns();
+    expect(all.data).toHaveLength(1);
+  });
+
+  it('a second sequential trigger for the same target while the first is still queued returns the SAME existing run (no duplicate insert)', async () => {
+    const svc = new MockRecaptureService();
+    const opts = {
+      trigger: 'manual_request' as const,
+      archetypeId: 'arch1',
+      baselineVersion: BASELINE,
+      targetVersion: TARGET,
+    };
+    const first = await svc.triggerRecapture(opts);
+    const second = await svc.triggerRecapture(opts);
+    expect(second.id).toBe(first.id);
+    expect((await svc.listRuns()).data).toHaveLength(1);
+  });
+
+  it('a fresh trigger for the same target AFTER the prior run completed is NOT deduped — a new run is queued', async () => {
+    const svc = new MockRecaptureService();
+    const opts = {
+      trigger: 'manual_request' as const,
+      archetypeId: 'arch1',
+      baselineVersion: BASELINE,
+      targetVersion: TARGET,
+    };
+    const first = await svc.triggerRecapture(opts);
+    await svc.finalizeRun(first.id, 'completed');
+    const second = await svc.triggerRecapture(opts);
+    expect(second.id).not.toBe(first.id);
+    expect((await svc.listRuns()).data).toHaveLength(2);
+  });
+
+  it('no-regression: different archetypeId/targetVersion combos each get their own independent run', async () => {
+    const svc = new MockRecaptureService();
+    const a = await svc.triggerRecapture({
+      trigger: 'manual_request',
+      archetypeId: 'arch_a',
+      baselineVersion: BASELINE,
+      targetVersion: TARGET,
+    });
+    const b = await svc.triggerRecapture({
+      trigger: 'manual_request',
+      archetypeId: 'arch_b',
+      baselineVersion: BASELINE,
+      targetVersion: TARGET,
+    });
+    const c = await svc.triggerRecapture({
+      trigger: 'manual_request',
+      archetypeId: 'arch_a',
+      baselineVersion: BASELINE,
+      targetVersion: { iosVersion: '19.0', safariVersion: '27.0' },
+    });
+    expect(new Set([a.id, b.id, c.id]).size).toBe(3);
+    expect((await svc.listRuns()).data).toHaveLength(3);
+  });
+});
+
+describe('MockRecaptureService — runs map cap (Fix 5, 2026-07-01 audit)', () => {
+  it('exceeding maxEntries evicts the oldest run (insertion order)', async () => {
+    const svc = new MockRecaptureService({}, 3);
+    const ids: string[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      const r = await svc.triggerRecapture({
+        trigger: 'manual_request',
+        archetypeId: `arch_${i.toString()}`,
+        baselineVersion: BASELINE,
+        targetVersion: TARGET,
+      });
+      ids.push(r.id);
+    }
+    const all = await svc.listRuns({ limit: 200 });
+    expect(all.data).toHaveLength(3);
+    // Oldest (first-inserted) run was evicted.
+    expect(all.data.some((r) => r.id === ids[0])).toBe(false);
+    for (const id of ids.slice(1)) {
+      expect(all.data.some((r) => r.id === id)).toBe(true);
+    }
+  });
+
+  it('no-regression: usage well under the (default) cap keeps every run', async () => {
+    const svc = new MockRecaptureService();
+    for (let i = 0; i < 5; i += 1) {
+      await svc.triggerRecapture({
+        trigger: 'manual_request',
+        archetypeId: `arch_${i.toString()}`,
+        baselineVersion: BASELINE,
+        targetVersion: TARGET,
+      });
+    }
+    const all = await svc.listRuns({ limit: 200 });
+    expect(all.data).toHaveLength(5);
+  });
+});
+
 describe('MockIosVersionWatcher', () => {
   it('returns null when no pending transitions', async () => {
     const w = new MockIosVersionWatcher();
