@@ -70,10 +70,15 @@ describe('W456.B packages/recipe-library/src/types.ts content parity', () => {
     );
   });
 
-  it("RecipeContext: 2-field (sessionId 'Session ID the recipe runs against' + optional metadata Record<string, unknown> 'Optional per-run metadata surfaced into result/log')", () => {
-    expect(body).toMatch(
-      /\/\*\* Context the runner needs to execute against a session\. \*\/\s*\n?\s*export interface RecipeContext \{\s*\n?\s*\/\*\* Session ID the recipe runs against\. \*\/\s*\n?\s*sessionId: string;\s*\n?\s*\/\*\* Optional per-run metadata surfaced into result\/log\. \*\/\s*\n?\s*metadata\?: Record<string, unknown>;\s*\n?\s*\}/,
-    );
+  it("RecipeContext: 2-field (sessionId 'Session ID the recipe runs against' + optional metadata Record<string, unknown>, documented to route through redactMetadata before surfacing)", () => {
+    // toContain fragments (not a closed multi-line regex) so the expanded
+    // metadata doc comment (pointing at redactMetadata) doesn't break the pin.
+    expect(body).toContain('/** Context the runner needs to execute against a session. */');
+    expect(body).toContain('export interface RecipeContext {');
+    expect(body).toContain('/** Session ID the recipe runs against. */');
+    expect(body).toContain('sessionId: string;');
+    expect(body).toContain('metadata?: Record<string, unknown>;');
+    expect(body).toContain('route through `redactMetadata` (redact.ts) before surfacing');
   });
 
   it('file exists at canonical path', () => {
