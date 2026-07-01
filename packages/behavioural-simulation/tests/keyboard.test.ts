@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   generateKeyboardCadence,
   KEYBOARD_CADENCE_DEFAULTS,
+  MAX_TEXT_LENGTH,
   type BehaviouralProfile,
 } from '../src/index.js';
 
@@ -174,6 +175,29 @@ describe('generateKeyboardCadence', () => {
     const c = generateKeyboardCadence({ text: '', profile: PROFILE, seed: 'e' });
     expect(c.delaysMs).toEqual([]);
     expect(c.durationMs).toBe(0);
+  });
+
+  it('BSIM-4: rejects text over MAX_TEXT_LENGTH', () => {
+    const overLong = 'x'.repeat(MAX_TEXT_LENGTH + 1);
+    expect(() =>
+      generateKeyboardCadence({ text: overLong, profile: PROFILE, seed: 'long' }),
+    ).toThrow(/text must be <= 20000 characters/);
+  });
+
+  it('BSIM-4: accepts text exactly at MAX_TEXT_LENGTH', () => {
+    const atLimit = 'x'.repeat(MAX_TEXT_LENGTH);
+    expect(() =>
+      generateKeyboardCadence({ text: atLimit, profile: PROFILE, seed: 'at-limit' }),
+    ).not.toThrow();
+  });
+
+  it('BSIM-4: a normal-length paragraph of text still works exactly as before', () => {
+    const paragraph =
+      'The quick brown fox jumps over the lazy dog. '.repeat(20) + 'End of paragraph.';
+    expect(paragraph.length).toBeLessThan(MAX_TEXT_LENGTH);
+    const c = generateKeyboardCadence({ text: paragraph, profile: PROFILE, seed: 'paragraph' });
+    expect(c.delaysMs).toHaveLength(paragraph.length);
+    expect(c.durationMs).toBe(c.delaysMs.reduce((a, b) => a + b, 0));
   });
 
   it('is NOT a flat constant (real jitter, unlike the mock)', () => {

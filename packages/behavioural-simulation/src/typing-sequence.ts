@@ -19,7 +19,7 @@
 // v1; delayed-notice (the typo caught 1-2 keystrokes later) is a future
 // refinement. Deterministic given a seed, matching the package.
 
-import { generateKeyboardCadence } from './keyboard.js';
+import { generateKeyboardCadence, MAX_TEXT_LENGTH } from './keyboard.js';
 import type { GenerateKeyboardCadenceOpts } from './interfaces.js';
 
 export interface GenerateTypingSequenceOpts extends GenerateKeyboardCadenceOpts {
@@ -107,6 +107,16 @@ const QWERTY_NEIGHBOURS: Readonly<Record<string, readonly string[]>> = {
  */
 export function generateTypingSequence(opts: GenerateTypingSequenceOpts): TypingSequence {
   const { text, profile } = opts;
+  // Checked directly here (not just relying on the delegated
+  // generateKeyboardCadence call below) so this function's own validation
+  // convention + error message hold even if the internal delegation ever
+  // changes. Shares MAX_TEXT_LENGTH with generateKeyboardCadence so the two
+  // stay in lockstep.
+  if (text.length > MAX_TEXT_LENGTH) {
+    throw new Error(
+      `generateTypingSequence: text must be <= ${MAX_TEXT_LENGTH} characters (got ${text.length})`,
+    );
+  }
   // ⚠️ DETERMINISTIC FALLBACK SEED — reference/testing only. Derived purely from
   // (profile.id, text), so the same args produce byte-identical sequences.
   // Intentional for reproducible tests; production callers MUST pass a

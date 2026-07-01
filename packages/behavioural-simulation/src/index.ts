@@ -27,9 +27,17 @@ export type {
   ScrollVelocityTick,
 } from './scroll.js';
 
-export { MockBehaviouralSimulator } from './mock.js';
+export {
+  MAX_MOUSE_TRAJECTORY_SAMPLES,
+  MIN_MOUSE_TRAJECTORY_SAMPLES,
+  MockBehaviouralSimulator,
+} from './mock.js';
 export { generateTouchEvent, TOUCH_DISTRIBUTIONS } from './touch.js';
-export { generateScrollVelocityProfile, SCROLL_VELOCITY_DEFAULTS } from './scroll.js';
+export {
+  generateScrollVelocityProfile,
+  MIN_TICK_INTERVAL_MS,
+  SCROLL_VELOCITY_DEFAULTS,
+} from './scroll.js';
 
 export type {
   ClickRegion,
@@ -53,7 +61,7 @@ export { generateIdlePeriod, generateIdleSequence, IDLE_DEFAULTS } from './idle.
 
 // V-530.F — keyboard cadence generator (human-realistic typing rhythm).
 export type { KeyboardCadenceDefaults } from './keyboard.js';
-export { generateKeyboardCadence, KEYBOARD_CADENCE_DEFAULTS } from './keyboard.js';
+export { generateKeyboardCadence, KEYBOARD_CADENCE_DEFAULTS, MAX_TEXT_LENGTH } from './keyboard.js';
 
 // V-530.G — canonical behavioural persona catalogue (file 05 §"Persona model").
 export type { PersonaId } from './profiles.js';
@@ -86,4 +94,5 @@ export {
   generateTwoFingerScrollGesture,
   generateThreeFingerSwipeGesture,
   interleaveGestureStream,
+  MAX_SAMPLES_PER_FINGER,
 } from './multi-touch.js';

@@ -50,6 +50,20 @@ export interface KeyboardCadenceDefaults {
   minDelayMs: number;
 }
 
+/**
+ * Maximum allowed `text` length (characters), shared with
+ * `generateTypingSequence` (typing-sequence.ts imports this constant rather
+ * than redefining its own value, keeping the two in lockstep). Unlike
+ * BSIM-1/2's unbounded-loop shapes, iterating `text.length` here scales only
+ * LINEARLY — but customer-controlled form-fill `text` is exactly the kind of
+ * value this package will eventually receive from the recipe/session runner
+ * with zero length validation today. A real "type into a form field" step
+ * never plausibly needs more than a few thousand characters — even a full
+ * pasted page of prose sits comfortably under five figures — so 20,000 is a
+ * generous-but-bounded cap.
+ */
+export const MAX_TEXT_LENGTH = 20_000;
+
 export const KEYBOARD_CADENCE_DEFAULTS: KeyboardCadenceDefaults = {
   jitterFraction: 0.22,
   firstKeyLatencyMult: 2.0,
@@ -116,6 +130,12 @@ const SYMBOLIC = /[0-9\p{P}\p{S}]/u;
  */
 export function generateKeyboardCadence(opts: GenerateKeyboardCadenceOpts): KeyboardCadence {
   const { text, profile } = opts;
+  if (text.length > MAX_TEXT_LENGTH) {
+    throw new Error(
+      `generateKeyboardCadence: text must be <= ${MAX_TEXT_LENGTH} characters ` +
+        `(got ${text.length})`,
+    );
+  }
   // ⚠️ DETERMINISTIC FALLBACK SEED — reference/testing only. The default below
   // is derived purely from (profile.id, text), so two default-seed calls with
   // the same args produce byte-identical cadences. Intentional for reproducible

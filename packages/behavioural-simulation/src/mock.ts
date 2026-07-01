@@ -42,6 +42,22 @@ const DEFAULT_PROFILES: readonly BehaviouralProfile[] = [
   },
 ];
 
+/**
+ * Bounds on `generateMouseTrajectory`'s `samples` option. There is no non-mock
+ * mouse-trajectory implementation in this package — this IS the shipped
+ * generator — so it gets the same validation as the other generators here.
+ * Lower bound: `samples: 0` divides-by-zero in the `t = i / samples`
+ * interpolation below (NaN points), so at least 1 is required. Upper bound:
+ * a mouse trajectory realistically never needs more than a few hundred to a
+ * low few thousand points (the default is 32; even a very deliberate, slow
+ * mouse move sampled at a generous 1 kHz over a couple of seconds is still
+ * only ~1-2k points), so 1,000 is a generous-but-bounded ceiling — matching
+ * MAX_SAMPLES_PER_FINGER in multi-touch.ts for consistency across the
+ * package's `samples`-shaped options.
+ */
+export const MIN_MOUSE_TRAJECTORY_SAMPLES = 1;
+export const MAX_MOUSE_TRAJECTORY_SAMPLES = 1000;
+
 function defaultSeed(label: string, opts: unknown): string {
   // Deterministic seed = label + JSON-stringified opts. Stable across
   // calls with identical args; differs when args differ.
@@ -52,6 +68,15 @@ export class MockBehaviouralSimulator implements BehaviouralSimulator {
   constructor(private readonly profiles: readonly BehaviouralProfile[] = DEFAULT_PROFILES) {}
 
   generateMouseTrajectory(opts: GenerateMouseTrajectoryOpts): MouseTrajectory {
+    if (
+      opts.samples !== undefined &&
+      (opts.samples < MIN_MOUSE_TRAJECTORY_SAMPLES || opts.samples > MAX_MOUSE_TRAJECTORY_SAMPLES)
+    ) {
+      throw new Error(
+        `generateMouseTrajectory: samples must be between ${MIN_MOUSE_TRAJECTORY_SAMPLES} and ` +
+          `${MAX_MOUSE_TRAJECTORY_SAMPLES} (got ${opts.samples})`,
+      );
+    }
     const samples = opts.samples ?? 32;
     const seed = opts.seed ?? defaultSeed('mouse', opts);
     const dx = opts.to.x - opts.from.x;

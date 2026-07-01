@@ -3,6 +3,7 @@ import {
   DEFAULT_TYPO_PROBABILITY,
   generateTypingSequence,
   getProfile,
+  MAX_TEXT_LENGTH,
   replayTypingSequence,
   type BehaviouralProfile,
 } from '../src/index.js';
@@ -98,6 +99,45 @@ describe('generateTypingSequence', () => {
     });
     expect(seq.typoCount).toBe(0);
     expect(replayTypingSequence(seq.events)).toBe('12 34 56');
+  });
+
+  it('BSIM-4: rejects text over MAX_TEXT_LENGTH with its OWN check (not just via the delegated generateKeyboardCadence call)', () => {
+    // Regression-proofing: generateTypingSequence delegates to
+    // generateKeyboardCadence internally, which has its own identical check —
+    // so a naive test could pass even if generateTypingSequence's OWN check
+    // were removed (the delegate's error would still surface). Assert the
+    // message is specifically generateTypingSequence's to prove ITS check
+    // fires, matching the finding's "fix both, don't assume fixing one
+    // covers the other" requirement.
+    const overLong = 'a'.repeat(MAX_TEXT_LENGTH + 1);
+    expect(() =>
+      generateTypingSequence({ text: overLong, profile: PROFILE, seed: 'long' }),
+    ).toThrow(/^generateTypingSequence: text must be <= 20000 characters/);
+  });
+
+  it('BSIM-4: accepts text exactly at MAX_TEXT_LENGTH', () => {
+    const atLimit = 'a'.repeat(MAX_TEXT_LENGTH);
+    expect(() =>
+      generateTypingSequence({
+        text: atLimit,
+        profile: PROFILE,
+        seed: 'at-limit',
+        typoProbability: 0,
+      }),
+    ).not.toThrow();
+  });
+
+  it('BSIM-4: a normal-length paragraph of text still works exactly as before', () => {
+    const paragraph =
+      'the quick brown fox jumps over the lazy dog. '.repeat(20) + 'end of paragraph.';
+    expect(paragraph.length).toBeLessThan(MAX_TEXT_LENGTH);
+    const seq = generateTypingSequence({
+      text: paragraph,
+      profile: PROFILE,
+      seed: 'paragraph',
+      typoProbability: 0,
+    });
+    expect(replayTypingSequence(seq.events)).toBe(paragraph);
   });
 
   it('handles empty text', () => {

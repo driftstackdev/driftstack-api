@@ -146,6 +146,18 @@ function fingerStartLagMs(rng: () => number): number {
   return Math.round(MIN_FINGER_LAG_MS + rng() * (MAX_FINGER_LAG_MS - MIN_FINGER_LAG_MS));
 }
 
+/**
+ * Hard ceiling on `samples` (per finger). `buildLinearTrack`'s loop below is
+ * bounded only by `samples` — a caller-supplied absurd value (e.g. 50,000,000)
+ * synchronously allocates tens of millions of objects per finger with zero
+ * validation. A real multi-touch gesture lasts a few hundred ms (the
+ * generators here default to 220-320ms); even sampled at a generous 1 kHz
+ * that is only ~300-400 samples per finger, so 1,000 leaves comfortable
+ * headroom for any realistic gesture while still bounding worst-case
+ * allocation to a low thousands-element array per finger.
+ */
+export const MAX_SAMPLES_PER_FINGER = 1000;
+
 /** Gesture duration = the latest sample tMs across all fingers (per the
  *  MultiTouchGesture.durationMs contract), with `floor` as a lower bound. */
 function gestureDurationMs(fingers: readonly FingerTrack[], floor: number): number {
@@ -191,6 +203,11 @@ function buildLinearTrack(opts: {
   samples: number;
   rng: () => number;
 }): FingerTrack {
+  if (opts.samples > MAX_SAMPLES_PER_FINGER) {
+    throw new Error(
+      `buildLinearTrack: samples must be <= ${MAX_SAMPLES_PER_FINGER} (got ${opts.samples})`,
+    );
+  }
   const samples: FingerSample[] = [];
   // Ensure samples >= 2 so start + end are both present.
   const n = Math.max(2, opts.samples);

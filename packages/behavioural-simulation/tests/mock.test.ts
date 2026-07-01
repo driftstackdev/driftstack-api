@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { MockBehaviouralSimulator, type BehaviouralProfile } from '../src/index.js';
+import {
+  MAX_MOUSE_TRAJECTORY_SAMPLES,
+  MockBehaviouralSimulator,
+  type BehaviouralProfile,
+} from '../src/index.js';
 
 const PROFILE: BehaviouralProfile = {
   id: 'test_profile',
@@ -30,6 +34,61 @@ describe('MockBehaviouralSimulator — determinism', () => {
     expect(traj.points[16]).toEqual({ x: 200, y: 100, tMs: 250 });
     // Midpoint check (linear interpolation in mock).
     expect(traj.points[8]).toEqual({ x: 100, y: 50, tMs: 125 });
+  });
+
+  it('BSIM-3: rejects an absurd samples value on generateMouseTrajectory', () => {
+    const sim = new MockBehaviouralSimulator();
+    expect(() =>
+      sim.generateMouseTrajectory({
+        from: { x: 0, y: 0 },
+        to: { x: 100, y: 50 },
+        samples: 50_000_000,
+      }),
+    ).toThrow(/samples must be between/);
+  });
+
+  it('BSIM-3: rejects a zero/negative samples value on generateMouseTrajectory', () => {
+    const sim = new MockBehaviouralSimulator();
+    expect(() =>
+      sim.generateMouseTrajectory({ from: { x: 0, y: 0 }, to: { x: 100, y: 50 }, samples: 0 }),
+    ).toThrow(/samples must be between/);
+    expect(() =>
+      sim.generateMouseTrajectory({ from: { x: 0, y: 0 }, to: { x: 100, y: 50 }, samples: -5 }),
+    ).toThrow(/samples must be between/);
+  });
+
+  it('BSIM-3: the ceiling value itself is accepted, one above it is rejected', () => {
+    const sim = new MockBehaviouralSimulator();
+    expect(() =>
+      sim.generateMouseTrajectory({
+        from: { x: 0, y: 0 },
+        to: { x: 100, y: 50 },
+        samples: MAX_MOUSE_TRAJECTORY_SAMPLES,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      sim.generateMouseTrajectory({
+        from: { x: 0, y: 0 },
+        to: { x: 100, y: 50 },
+        samples: MAX_MOUSE_TRAJECTORY_SAMPLES + 1,
+      }),
+    ).toThrow(/samples must be between/);
+  });
+
+  it('BSIM-3: the default (unspecified, 32) and a reasonable explicit value still work as before', () => {
+    const sim = new MockBehaviouralSimulator();
+    const defaultTraj = sim.generateMouseTrajectory({
+      from: { x: 0, y: 0 },
+      to: { x: 100, y: 50 },
+    });
+    expect(defaultTraj.points).toHaveLength(33); // 0..32 inclusive
+
+    const explicitTraj = sim.generateMouseTrajectory({
+      from: { x: 0, y: 0 },
+      to: { x: 200, y: 100 },
+      samples: 16,
+    });
+    expect(explicitTraj.points).toHaveLength(17);
   });
 
   it('different inputs produce different seeds', () => {

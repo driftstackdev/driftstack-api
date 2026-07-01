@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   generateScrollVelocityProfile,
+  MIN_TICK_INTERVAL_MS,
   MockBehaviouralSimulator,
   SCROLL_VELOCITY_DEFAULTS,
   type ElementClass,
@@ -254,6 +255,68 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
         tickIntervalMs: -10,
       }),
     ).toThrow(/tickIntervalMs/);
+  });
+
+  it('BSIM-1: rejects a tickIntervalMs below MIN_TICK_INTERVAL_MS (unbounded-loop OOM guard)', () => {
+    // Exact repro values from the finding: 0.001 synchronously builds a
+    // 3.1M-element array in 166ms; 0.00001 OOM-crashes the process. Both
+    // must now be rejected with a clear validation error instead of running.
+    expect(() =>
+      generateScrollVelocityProfile({
+        direction: 'down',
+        elementClass: 'scroll-container',
+        tickIntervalMs: 0.001,
+      }),
+    ).toThrow(/tickIntervalMs must be >= 1/);
+    expect(() =>
+      generateScrollVelocityProfile({
+        direction: 'down',
+        elementClass: 'scroll-container',
+        tickIntervalMs: 0.00001,
+      }),
+    ).toThrow(/tickIntervalMs must be >= 1/);
+  });
+
+  it('BSIM-1: a value just below MIN_TICK_INTERVAL_MS is rejected, the floor itself is accepted', () => {
+    expect(() =>
+      generateScrollVelocityProfile({
+        direction: 'down',
+        elementClass: 'scroll-container',
+        tickIntervalMs: MIN_TICK_INTERVAL_MS - 0.5,
+      }),
+    ).toThrow(/tickIntervalMs/);
+    // The floor value itself is a valid, working tickIntervalMs (boundary
+    // inclusive — the check is `< MIN_TICK_INTERVAL_MS`, not `<=`).
+    expect(() =>
+      generateScrollVelocityProfile({
+        direction: 'down',
+        elementClass: 'scroll-container',
+        tickIntervalMs: MIN_TICK_INTERVAL_MS,
+      }),
+    ).not.toThrow();
+  });
+
+  it('BSIM-1: a reasonable tickIntervalMs (10ms, realistic scroll tick rate) still works exactly as before', () => {
+    const profile = generateScrollVelocityProfile({
+      direction: 'down',
+      elementClass: 'scroll-container',
+      tickIntervalMs: 10,
+      initialVelocityPxPerSec: 1000,
+      decayRate: 2,
+      seed: 'bsim1-regression',
+    });
+    expect(profile.ticks.length).toBeGreaterThan(0);
+    expect(profile.ticks[1]?.tMs).toBe(10);
+  });
+
+  it('BSIM-1: MIN_TICK_INTERVAL_MS stays small enough that MAX_DURATION_MS / floor is bounded to a sane tick count', () => {
+    // Documents + pins the relationship the module-level self-check in
+    // scroll.ts enforces, so a future change to either constant can't
+    // silently reopen the unbounded-loop gap: the worst-case iteration
+    // count must stay in the "a few thousand ticks" range, not millions.
+    const MAX_DURATION_MS = 5000; // mirrors scroll.ts's private constant
+    expect(MIN_TICK_INTERVAL_MS).toBeGreaterThanOrEqual(1);
+    expect(MAX_DURATION_MS / MIN_TICK_INTERVAL_MS).toBeLessThanOrEqual(10_000);
   });
 
   it('rejects a non-positive initialVelocityPxPerSec override', () => {

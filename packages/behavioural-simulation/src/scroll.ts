@@ -124,6 +124,33 @@ const REST_VELOCITY_THRESHOLD_PX_PER_SEC = 5;
 /** Hard cap on duration to bound test runtime. ~5 seconds is generous. */
 const MAX_DURATION_MS = 5000;
 
+/**
+ * Hard floor on `tickIntervalMs`. The generation loop below is bounded by
+ * WALL-CLOCK duration (`tMs <= MAX_DURATION_MS`), not by iteration count, so
+ * the number of loop iterations is `~MAX_DURATION_MS / tickIntervalMs` —
+ * unbounded as `tickIntervalMs` shrinks toward 0. VERIFIED: tickIntervalMs
+ * 0.001 synchronously builds a 3.1-million-element array; 0.00001 OOM-crashes
+ * the process. No real touch/display samples faster than ~1 kHz (a
+ * best-effort upper bound — typical touch scroll ticks run at 60 Hz / 16 ms;
+ * even a 120 Hz ProMotion-class display is only ~8.3 ms), so 1 ms is already
+ * a generous floor with headroom to spare, and it caps the worst case at
+ * MAX_DURATION_MS / MIN_TICK_INTERVAL_MS = 5000 iterations for the full 5 s
+ * window — bounded, sane, and nowhere near OOM territory.
+ */
+export const MIN_TICK_INTERVAL_MS = 1;
+
+// Self-check: keep the worst-case iteration count sane so a future change to
+// either constant can't silently reopen the unbounded-loop gap. 10,000 is a
+// generous ceiling (2x the current 5,000 worst case) — well short of anything
+// that risks the OOM behaviour this floor exists to prevent.
+if (MAX_DURATION_MS / MIN_TICK_INTERVAL_MS > 10_000) {
+  throw new Error(
+    `scroll.ts: MAX_DURATION_MS / MIN_TICK_INTERVAL_MS must stay <= 10000 ` +
+      `(got ${MAX_DURATION_MS / MIN_TICK_INTERVAL_MS}); this bounds the worst-case ` +
+      `iteration count of generateScrollVelocityProfile's generation loop`,
+  );
+}
+
 export interface GenerateScrollVelocityProfileOpts {
   /** Direction of the scroll. */
   direction: 'up' | 'down' | 'left' | 'right';
@@ -190,6 +217,17 @@ export function generateScrollVelocityProfile(
   if (tickIntervalMs <= 0) {
     throw new Error(
       `generateScrollVelocityProfile: tickIntervalMs must be > 0 (got ${tickIntervalMs})`,
+    );
+  }
+  // Floor on top of the > 0 check above: the generation loop below is bounded
+  // by wall-clock duration, not iteration count, so a tiny-but-positive
+  // tickIntervalMs (e.g. 0.001, 0.00001) makes the loop run millions of times
+  // and can OOM the process. See MIN_TICK_INTERVAL_MS for the full reasoning.
+  if (tickIntervalMs < MIN_TICK_INTERVAL_MS) {
+    throw new Error(
+      `generateScrollVelocityProfile: tickIntervalMs must be >= ${MIN_TICK_INTERVAL_MS} ` +
+        `(got ${tickIntervalMs}); values below this floor make the generation loop's ` +
+        `iteration count (MAX_DURATION_MS / tickIntervalMs) unbounded`,
     );
   }
   // Override inputs bypass the default-branch clamps (Math.max(1, v0) /

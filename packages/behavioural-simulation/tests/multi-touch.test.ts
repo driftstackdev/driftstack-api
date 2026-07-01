@@ -4,6 +4,7 @@ import {
   generateTwoFingerScrollGesture,
   generateThreeFingerSwipeGesture,
   interleaveGestureStream,
+  MAX_SAMPLES_PER_FINGER,
 } from '../src/multi-touch.js';
 
 describe('V-530.E generatePinchGesture', () => {
@@ -146,6 +147,91 @@ describe('V-530.E generateThreeFingerSwipeGesture', () => {
       seed: 'sw3',
     });
     expect(g.fingers.map((f) => f.fingerId)).toEqual([1, 2, 3]);
+  });
+});
+
+describe('BSIM-2 — samples ceiling on the multi-touch gesture generators', () => {
+  it('generatePinchGesture rejects an absurd samples value (the exact repro: 50,000,000)', () => {
+    expect(() =>
+      generatePinchGesture({
+        startCentre: { x: 0, y: 0 },
+        startSpanPx: 100,
+        endSpanPx: 200,
+        samples: 50_000_000,
+        seed: 'huge-pinch',
+      }),
+    ).toThrow(/samples must be <= 1000/);
+  });
+
+  it('generateTwoFingerScrollGesture rejects an absurd samples value (the exact repro: 50,000,000)', () => {
+    expect(() =>
+      generateTwoFingerScrollGesture({
+        start: { x: 0, y: 0 },
+        direction: 'down',
+        distancePx: 100,
+        samples: 50_000_000,
+        seed: 'huge-scroll',
+      }),
+    ).toThrow(/samples must be <= 1000/);
+  });
+
+  it('generateThreeFingerSwipeGesture rejects an absurd samples value (the exact repro: 50,000,000)', () => {
+    expect(() =>
+      generateThreeFingerSwipeGesture({
+        start: { x: 0, y: 0 },
+        direction: 'right',
+        distancePx: 100,
+        samples: 50_000_000,
+        seed: 'huge-swipe',
+      }),
+    ).toThrow(/samples must be <= 1000/);
+  });
+
+  it('rejects samples one above MAX_SAMPLES_PER_FINGER, accepts the ceiling value itself', () => {
+    expect(() =>
+      generatePinchGesture({
+        startCentre: { x: 0, y: 0 },
+        startSpanPx: 100,
+        endSpanPx: 200,
+        samples: MAX_SAMPLES_PER_FINGER + 1,
+        seed: 'over-by-one',
+      }),
+    ).toThrow(/samples/);
+    expect(() =>
+      generatePinchGesture({
+        startCentre: { x: 0, y: 0 },
+        startSpanPx: 100,
+        endSpanPx: 200,
+        samples: MAX_SAMPLES_PER_FINGER,
+        seed: 'at-ceiling',
+      }),
+    ).not.toThrow();
+  });
+
+  it('a reasonable/default samples count still works exactly as before for all 3 generators', () => {
+    const pinch = generatePinchGesture({
+      startCentre: { x: 200, y: 300 },
+      startSpanPx: 100,
+      endSpanPx: 200,
+      seed: 'default-pinch',
+    });
+    expect(pinch.fingers[0]?.samples).toHaveLength(12); // documented default
+
+    const scroll = generateTwoFingerScrollGesture({
+      start: { x: 100, y: 100 },
+      direction: 'down',
+      distancePx: 200,
+      seed: 'default-scroll',
+    });
+    expect(scroll.fingers[0]?.samples).toHaveLength(10); // documented default
+
+    const swipe = generateThreeFingerSwipeGesture({
+      start: { x: 200, y: 300 },
+      direction: 'right',
+      distancePx: 150,
+      seed: 'default-swipe',
+    });
+    expect(swipe.fingers[0]?.samples).toHaveLength(10); // documented default
   });
 });
 
