@@ -23,10 +23,37 @@
 //   - session-failed-first        (V-202; first-failure-only, V-090)
 //   - tier-changed                (V-202)
 //   - oauth-pending-verification  (V-667.C; verdict-1 merge confirm)
+//
+// 2026-07-01 security fix — the fire-and-forget posture above is a
+// deliberate, correct tradeoff for MOST templates, but three of them
+// (signup-verification — also backs the magic-link + resend-
+// verification flows; password-reset; oauth-pending-verification)
+// gate a customer OUT of their account entirely if the send silently
+// fails: a Postmark permanent-suppression state (one prior hard
+// bounce/spam complaint) or a transient outage otherwise leaves the
+// customer stuck with no signal anything is wrong. For those three
+// templates ONLY, `send()` now additionally: (a) bounds-retries
+// transient failure categories (`rate-limited` / `transport`) with a
+// short exponential backoff before giving up; (b) persists a per-
+// account `accounts.email_delivery_failed_at` marker when Postmark
+// reports its permanent `inactive-recipient` suppression state,
+// cleared automatically the next time any of the 3 templates sends
+// successfully to that account; (c) emits an error-level log + a
+// dedicated Sentry capture (in ADDITION to the existing warn-level
+// log + metric below, which fire for every template exactly as
+// before) so ops can see "customer X's password-reset email failed"
+// instead of it being buried in the aggregate warn-level counter.
+// Every other template's behaviour is completely unchanged — still
+// exactly one attempt, still warn-level only, still no per-account
+// state.
 
+import { eq } from 'drizzle-orm';
 import { ServerClient as PostmarkClient } from 'postmark';
 import type { Logger } from '../lib/logger.js';
 import type { PostmarkConfig } from '../lib/config.js';
+import type { SentryClient } from '../lib/sentry.js';
+import type { Database } from '../db/client.js';
+import { accounts } from '../db/schema.js';
 import { METRIC_NAMES, type MetricsRegistry } from './metrics-registry.js';
 import { maskEmail } from '../lib/redact-url.js';
 
@@ -571,6 +598,120 @@ const TEMPLATES = {
 
 type TemplateName = keyof typeof TEMPLATES;
 
+// ───────────────────────────────────────────────────────────────────────────
+// 2026-07-01 security fix — security-critical template retry + tracking
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * The 3 templates that block account access if undeliverable. Scoped
+ * deliberately narrow — retry/tracking here multiplies Postmark API
+ * calls, so it's reserved for templates where a silent failure is
+ * actually security-critical. `signup-verification` also backs the
+ * magic-link-request and resend-verification flows (both call
+ * `sendSignupVerification` under the hood; see auth-flows.ts), so
+ * this one entry covers all three of those call sites.
+ */
+const SECURITY_CRITICAL_TEMPLATES = new Set<TemplateName>([
+  'signup-verification',
+  'password-reset',
+  'oauth-pending-verification',
+]);
+
+/**
+ * `EmailErrorCategory` values worth an immediate bounded retry:
+ * genuinely transient conditions where a few hundred ms might see the
+ * transport recover or the rate-limit window roll over. The other 5
+ * categories are effectively permanent for the lifetime of one logical
+ * send, so retrying immediately would burn Postmark calls for nothing:
+ *   - `pending-approval` / `account-inactive` — account-wide Postmark
+ *     states that persist for hours-to-days; a 1s retry window can't
+ *     resolve them.
+ *   - `invalid-request` — a deterministic malformed-body rejection;
+ *     retrying the identical payload fails identically.
+ *   - `inactive-recipient` — Postmark's PERMANENT suppression-list
+ *     state (prior hard bounce / spam complaint). Retrying is pointless
+ *     by definition; this is the category that instead sets the
+ *     per-account `email_delivery_failed_at` marker (see below).
+ *   - `unknown` — unclassified; treated conservatively as non-
+ *     retryable absent evidence it's transient.
+ */
+const TRANSIENT_RETRY_CATEGORIES = new Set<EmailErrorCategory>(['rate-limited', 'transport']);
+
+/** Backoff delay (ms) BEFORE attempt 2 and attempt 3 respectively — 3
+ *  attempts total (1 initial + 2 retries), security-critical templates
+ *  + transient categories only. */
+const RETRY_BACKOFF_MS: readonly number[] = [200, 800];
+
+function defaultRetryDelay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Per-account email-delivery-failure tracking (security-critical
+ * templates only). Backs `accounts.email_delivery_failed_at`: set when
+ * Postmark reports permanent `inactive-recipient` suppression for a
+ * KNOWN, active account; cleared the next time any of the 3 security-
+ * critical templates sends successfully to that account.
+ *
+ * `send()` only ever has the raw `to` (recipient email) address — the
+ * public `sendSignupVerification` / `sendPasswordReset` method
+ * signatures are pinned character-for-character by the W914 /
+ * W405.A content-parity guards (`{ to: string; link: string;
+ * expiresAt: Date }`) and can't grow an `accountId` parameter without
+ * breaking them — so `findAccountIdByEmail` re-resolves the account
+ * from the address instead of a call site threading an id through.
+ * Every current call site for these 3 templates only ever sends to a
+ * KNOWN, active account (the anti-enumeration "unknown email" / "not
+ * active" cases in AuthFlowsService return before ever calling
+ * `EmailService`), so this lookup is expected to always resolve.
+ */
+export interface AccountEmailDeliveryTracker {
+  /** Resolve a recipient email to its account id (case-insensitive
+   *  match on the canonical lowercased address), or null if no
+   *  account matches. */
+  findAccountIdByEmail(email: string): Promise<string | null>;
+  /** Persist that this account's email delivery is currently broken. */
+  markDeliveryFailed(accountId: string, at: Date): Promise<void>;
+  /** Clear the marker — called after ANY successful send of a
+   *  security-critical template to this account. */
+  clearDeliveryFailed(accountId: string): Promise<void>;
+}
+
+/**
+ * Ready-to-use Drizzle-backed `AccountEmailDeliveryTracker`, reading
+ * and writing `accounts.email_delivery_failed_at` (migration 0095).
+ * Not wired by default — pass via `createEmailService`'s
+ * `accountEmailDeliveryTracker` option, e.g.
+ * `createDrizzleAccountEmailDeliveryTracker(dbHandle)` at bootstrap
+ * time, alongside the existing Postmark config.
+ */
+export function createDrizzleAccountEmailDeliveryTracker(
+  database: Database,
+): AccountEmailDeliveryTracker {
+  return {
+    async findAccountIdByEmail(email) {
+      const [row] = await database.db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(eq(accounts.email, email.trim().toLowerCase()))
+        .limit(1);
+      return row ? row.id : null;
+    },
+    async markDeliveryFailed(accountId, at) {
+      await database.db
+        .update(accounts)
+        .set({ emailDeliveryFailedAt: at })
+        .where(eq(accounts.id, accountId));
+    },
+    async clearDeliveryFailed(accountId) {
+      await database.db
+        .update(accounts)
+        .set({ emailDeliveryFailedAt: null })
+        .where(eq(accounts.id, accountId));
+    },
+  };
+}
+
 export interface PostmarkSendApi {
   sendEmail(input: {
     From: string;
@@ -595,6 +736,24 @@ export interface CreateEmailServiceArgs {
    *  where outcome is one of: ok / postmark_pending_approval /
    *  recipient_inactive / transport_error / config_error. */
   metrics?: MetricsRegistry;
+  /**
+   * 2026-07-01 security fix — optional per-account email-delivery-
+   * failure tracker (security-critical templates only; see
+   * `AccountEmailDeliveryTracker`). Omitted in tests / local dev; a
+   * ready Drizzle-backed implementation is exported as
+   * `createDrizzleAccountEmailDeliveryTracker`.
+   */
+  accountEmailDeliveryTracker?: AccountEmailDeliveryTracker;
+  /**
+   * 2026-07-01 security fix — optional Sentry client, used ONLY for
+   * elevated alerting on the 3 security-critical templates (point 3
+   * of the fix). Every other template's failure stays warn-level +
+   * metrics-only, exactly as before this change.
+   */
+  sentry?: SentryClient;
+  /** Test seam — injectable retry-backoff delay. Defaults to a real
+   *  setTimeout-based sleep. */
+  retryDelayFn?: (ms: number) => Promise<void>;
 }
 
 export function createEmailService({
@@ -603,6 +762,9 @@ export function createEmailService({
   client,
   messageStream = 'outbound',
   metrics,
+  accountEmailDeliveryTracker,
+  sentry,
+  retryDelayFn = defaultRetryDelay,
 }: CreateEmailServiceArgs): EmailService {
   if (config === null) {
     logger.warn(
@@ -636,51 +798,170 @@ export function createEmailService({
 
   const postmark: PostmarkSendApi = client ?? new PostmarkClient(config.apiToken);
 
+  // 2026-07-01 security fix — best-effort account-lookup + tracker
+  // read/write helpers for the 3 security-critical templates. Every
+  // failure here is independently caught + logged at warn (never
+  // thrown) so a tracker outage never turns email delivery into a hard
+  // failure — same best-effort posture as the metrics blocks below.
+  async function resolveAccountId(to: string): Promise<string | null> {
+    if (!accountEmailDeliveryTracker) return null;
+    try {
+      return await accountEmailDeliveryTracker.findAccountIdByEmail(to);
+    } catch (lookupErr) {
+      logger.warn(
+        { component: 'email', to: maskEmail(to), err: lookupErr },
+        'email-delivery-failure account lookup failed (best-effort, swallowed)',
+      );
+      return null;
+    }
+  }
+
+  async function clearAccountDeliveryFailure(to: string): Promise<void> {
+    if (!accountEmailDeliveryTracker) return;
+    const accountId = await resolveAccountId(to);
+    if (accountId === null) return;
+    try {
+      await accountEmailDeliveryTracker.clearDeliveryFailed(accountId);
+    } catch (trackerErr) {
+      logger.warn(
+        { component: 'email', accountId, err: trackerErr },
+        'email-delivery-failed marker clear failed (best-effort, swallowed)',
+      );
+    }
+  }
+
+  // Point 3 — elevated, error-level alerting + a dedicated Sentry
+  // capture for the 3 security-critical templates, IN ADDITION to the
+  // warn-level log + metric that fire for every template below
+  // (unchanged). Point 2 — persist the per-account marker ONLY for
+  // Postmark's PERMANENT `inactive-recipient` suppression state; every
+  // other category is either transient (already retried before this
+  // runs) or an account-wide/config-level Postmark state that isn't
+  // specific to this recipient, so persisting a per-ACCOUNT flag for
+  // those would mislabel "Postmark itself is misconfigured/down" as
+  // "this customer's mailbox is broken".
+  async function reportSecurityCriticalFailure(args: {
+    name: TemplateName;
+    to: string;
+    category: EmailErrorCategory;
+    postmarkCode: number | null;
+    err: unknown;
+  }): Promise<void> {
+    const { name, to, category, postmarkCode, err } = args;
+    const accountId = await resolveAccountId(to);
+
+    logger.error(
+      {
+        component: 'email',
+        template: name,
+        to: maskEmail(to),
+        accountId,
+        category,
+        postmarkCode,
+      },
+      'security-critical email send failed after exhausting retries',
+    );
+    try {
+      sentry?.captureException(err, {
+        component: 'email',
+        template: name,
+        to: maskEmail(to),
+        accountId,
+        category,
+        postmarkCode,
+      });
+    } catch (sentryErr) {
+      logger.warn(
+        { component: 'email', err: sentryErr },
+        'Sentry captureException failed (fire-and-forget)',
+      );
+    }
+
+    if (category === 'inactive-recipient' && accountId !== null && accountEmailDeliveryTracker) {
+      try {
+        await accountEmailDeliveryTracker.markDeliveryFailed(accountId, new Date());
+      } catch (trackerErr) {
+        logger.warn(
+          { component: 'email', accountId, err: trackerErr },
+          'email-delivery-failed marker persist failed (best-effort, swallowed)',
+        );
+      }
+    }
+  }
+
   async function send(name: TemplateName, to: string, vars: Record<string, string>): Promise<void> {
     const tpl = TEMPLATES[name];
+    const securityCritical = SECURITY_CRITICAL_TEMPLATES.has(name);
+    let err: unknown = null;
+
+    // 2026-07-01 security fix — bounded retry for transient failure
+    // categories, security-critical templates only. Every other
+    // template — and every non-transient category even on a security-
+    // critical template — sends exactly once, same as before this
+    // change. `maxAttempts` is 1 (non-retry path) worth of headroom
+    // plus RETRY_BACKOFF_MS.length retries = 3 attempts total.
+    const maxAttempts = RETRY_BACKOFF_MS.length + 1;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        await postmark.sendEmail({
+          From: config!.from,
+          To: to,
+          Subject: tpl.subject,
+          TextBody: tpl.text(vars),
+          HtmlBody: wrapHtmlDocument(tpl.html(escapeVarsForHtml(vars)), tpl.subject),
+          ReplyTo: config!.replyTo,
+          MessageStream: messageStream,
+        });
+        logger.info({ component: 'email', template: name, to: maskEmail(to) }, 'email sent');
+        try {
+          metrics?.inc(METRIC_NAMES.emailSendTotal, { template: name, outcome: 'ok' });
+        } catch {
+          // Swallow; metrics are best-effort.
+        }
+        if (securityCritical) {
+          await clearAccountDeliveryFailure(to);
+        }
+        return;
+      } catch (attemptErr) {
+        err = attemptErr;
+        const attemptCategory = classifyEmailError(attemptErr).category;
+        const isLastAttempt = attempt === maxAttempts - 1;
+        const canRetry =
+          securityCritical && TRANSIENT_RETRY_CATEGORIES.has(attemptCategory) && !isLastAttempt;
+        if (!canRetry) break;
+        await retryDelayFn(RETRY_BACKOFF_MS[attempt]!);
+      }
+    }
+
+    // V-665 — categorise the failure so dashboards / alerts can
+    // distinguish "Postmark account still pending approval" (the
+    // expected pre-approval state — submitted 2026-05-09, see
+    // status.md) from genuine transport / recipient / config
+    // failures that need ops attention.
+    const { category, postmarkCode } = classifyEmailError(err);
+    logger.warn(
+      {
+        component: 'email',
+        template: name,
+        to: maskEmail(to),
+        category,
+        postmarkCode,
+        err:
+          err instanceof Error
+            ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+            : { value: err },
+      },
+      'email send failed (fire-and-forget)',
+    );
     try {
-      await postmark.sendEmail({
-        From: config!.from,
-        To: to,
-        Subject: tpl.subject,
-        TextBody: tpl.text(vars),
-        HtmlBody: wrapHtmlDocument(tpl.html(escapeVarsForHtml(vars)), tpl.subject),
-        ReplyTo: config!.replyTo,
-        MessageStream: messageStream,
-      });
-      logger.info({ component: 'email', template: name, to: maskEmail(to) }, 'email sent');
-      try {
-        metrics?.inc(METRIC_NAMES.emailSendTotal, { template: name, outcome: 'ok' });
-      } catch {
-        // Swallow; metrics are best-effort.
-      }
-    } catch (err) {
-      // V-665 — categorise the failure so dashboards / alerts can
-      // distinguish "Postmark account still pending approval" (the
-      // expected pre-approval state — submitted 2026-05-09, see
-      // status.md) from genuine transport / recipient / config
-      // failures that need ops attention.
-      const { category, postmarkCode } = classifyEmailError(err);
-      logger.warn(
-        {
-          component: 'email',
-          template: name,
-          to: maskEmail(to),
-          category,
-          postmarkCode,
-          err:
-            err instanceof Error
-              ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
-              : { value: err },
-        },
-        'email send failed (fire-and-forget)',
-      );
-      try {
-        metrics?.inc(METRIC_NAMES.emailSendTotal, { template: name, outcome: category });
-      } catch {
-        // Swallow; metrics are best-effort.
-      }
-      // Deliberately swallow — email is never on a request critical path.
+      metrics?.inc(METRIC_NAMES.emailSendTotal, { template: name, outcome: category });
+    } catch {
+      // Swallow; metrics are best-effort.
+    }
+    // Deliberately swallow — email is never on a request critical path.
+
+    if (securityCritical) {
+      await reportSecurityCriticalFailure({ name, to, category, postmarkCode, err });
     }
   }
 

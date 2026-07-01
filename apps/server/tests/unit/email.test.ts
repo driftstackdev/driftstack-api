@@ -578,7 +578,7 @@ describe('createEmailService — V-665 categorised failure logging', () => {
   it('logs category=transport on ECONNRESET', async () => {
     const logger = makeLogger();
     const err = Object.assign(new Error('connection reset'), { name: 'ECONNRESET' });
-    const failing: PostmarkSendApi = { sendEmail: vi.fn().mockRejectedValue(err) };
+    const sendEmail = vi.fn().mockRejectedValue(err);
     const svc = createEmailService({
       config: {
         apiToken: 't',
@@ -586,13 +586,20 @@ describe('createEmailService — V-665 categorised failure logging', () => {
         replyTo: 'support@driftstack.dev',
       },
       logger,
-      client: failing,
+      client: { sendEmail },
+      // 'transport' is a retryable category for this security-critical
+      // template (signup-verification) — inject a no-delay retry seam
+      // so this test doesn't burn the real 200ms/800ms backoff.
+      retryDelayFn: async () => {},
     });
     await svc.sendSignupVerification({
       to: 'user@example.com',
       link: 'https://x',
       expiresAt: new Date(),
     });
+    // Every attempt fails, so sendEmail is called 3 times (1 initial +
+    // 2 retries) before the final warn-level log fires.
+    expect(sendEmail).toHaveBeenCalledTimes(3);
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ category: 'transport' }),
       expect.anything(),
@@ -622,5 +629,223 @@ describe('createEmailService — V-665 categorised failure logging', () => {
       expect.objectContaining({ category: 'unknown' }),
       expect.anything(),
     );
+  });
+});
+
+// 2026-07-01 security fix — retry + per-account failure tracking +
+// elevated alerting, scoped to the 3 security-critical templates
+// (signup-verification / password-reset / oauth-pending-verification).
+describe('createEmailService — security-critical retry + per-account tracking (2026-07-01)', () => {
+  function makeLogger(): Logger {
+    const fns = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      fatal: vi.fn(),
+    };
+    return {
+      ...fns,
+      level: 'info',
+      silent: () => {},
+      child: () => makeLogger(),
+    } as unknown as Logger;
+  }
+
+  const config = {
+    apiToken: 'token',
+    from: 'no-reply@driftstack.dev',
+    replyTo: 'support@driftstack.dev',
+  };
+
+  /** In-memory fake AccountEmailDeliveryTracker keyed by lowercased email. */
+  function makeFakeTracker(seed: Record<string, string>) {
+    const emailToAccountId = new Map(
+      Object.entries(seed).map(([email, accountId]) => [email.toLowerCase(), accountId]),
+    );
+    const failedAt = new Map<string, Date | null>();
+    return {
+      findAccountIdByEmail: vi.fn((email: string) => {
+        return Promise.resolve(emailToAccountId.get(email.toLowerCase()) ?? null);
+      }),
+      markDeliveryFailed: vi.fn((accountId: string, at: Date) => {
+        failedAt.set(accountId, at);
+        return Promise.resolve();
+      }),
+      clearDeliveryFailed: vi.fn((accountId: string) => {
+        failedAt.set(accountId, null);
+        return Promise.resolve();
+      }),
+      // test-only inspection helper, not part of the real interface
+      _failedAt: failedAt,
+    };
+  }
+
+  // No explicit `: SentryClient` return-type annotation — the interface
+  // declares its methods with shorthand syntax (`captureException(...)`),
+  // which trips @typescript-eslint/unbound-method the moment a caller
+  // reads `sentry.captureException` as a value (e.g. inside `expect(...)`).
+  // Letting TS infer this object's type instead (still structurally
+  // assignable to SentryClient) sidesteps that without an `as` cast.
+  function makeFakeSentry() {
+    return {
+      captureException: vi.fn(),
+      addBreadcrumb: vi.fn(),
+      flush: vi.fn(() => Promise.resolve(true)),
+      close: vi.fn(() => Promise.resolve(true)),
+      isInitialized: true,
+    };
+  }
+
+  it('retries a transient failure (rate-limited) and eventually succeeds', async () => {
+    const logger = makeLogger();
+    const rateLimited = Object.assign(new Error('too many requests'), { code: 429 });
+    const sendEmail = vi
+      .fn()
+      .mockRejectedValueOnce(rateLimited)
+      .mockRejectedValueOnce(rateLimited)
+      .mockResolvedValueOnce({});
+    const svc = createEmailService({
+      config,
+      logger,
+      client: { sendEmail },
+      retryDelayFn: async () => {},
+    });
+    await svc.sendPasswordReset({
+      to: 'user@example.com',
+      link: 'https://x',
+      expiresAt: new Date(),
+    });
+    expect(sendEmail).toHaveBeenCalledTimes(3);
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ component: 'email', template: 'password-reset' }),
+      'email sent',
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('a transient failure that exhausts all retries logs error + captures Sentry, but does NOT set email_delivery_failed_at (reserved for the permanent inactive-recipient case)', async () => {
+    const logger = makeLogger();
+    const sentry = makeFakeSentry();
+    const tracker = makeFakeTracker({ 'user@example.com': 'acc_1' });
+    const transportErr = Object.assign(new Error('timed out'), { name: 'ETIMEDOUT' });
+    const sendEmail = vi.fn().mockRejectedValue(transportErr);
+    const svc = createEmailService({
+      config,
+      logger,
+      client: { sendEmail },
+      retryDelayFn: async () => {},
+      accountEmailDeliveryTracker: tracker,
+      sentry,
+    });
+    await svc.sendSignupVerification({
+      to: 'user@example.com',
+      link: 'https://x',
+      expiresAt: new Date(),
+    });
+
+    // 1 initial + 2 retries = 3 attempts, all fail.
+    expect(sendEmail).toHaveBeenCalledTimes(3);
+    // Existing warn-level log + metric path is unchanged...
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ category: 'transport' }),
+      expect.stringContaining('email send failed'),
+    );
+    // ...PLUS the new elevated error-level log + Sentry capture.
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        component: 'email',
+        template: 'signup-verification',
+        accountId: 'acc_1',
+        category: 'transport',
+      }),
+      expect.stringContaining('security-critical email send failed'),
+    );
+    expect(sentry.captureException).toHaveBeenCalledWith(
+      transportErr,
+      expect.objectContaining({ accountId: 'acc_1', category: 'transport' }),
+    );
+    // Transient failure — reserved for 'inactive-recipient' only.
+    expect(tracker.markDeliveryFailed).not.toHaveBeenCalled();
+  });
+
+  it('an inactive-recipient failure on a known active account sets email_delivery_failed_at without retrying', async () => {
+    const logger = makeLogger();
+    const sentry = makeFakeSentry();
+    const tracker = makeFakeTracker({ 'bounced@example.com': 'acc_2' });
+    const suppressedErr = Object.assign(new Error('inactive recipient'), { code: 405 });
+    const sendEmail = vi.fn().mockRejectedValue(suppressedErr);
+    const svc = createEmailService({
+      config,
+      logger,
+      client: { sendEmail },
+      retryDelayFn: async () => {},
+      accountEmailDeliveryTracker: tracker,
+      sentry,
+    });
+    await svc.sendPasswordReset({
+      to: 'bounced@example.com',
+      link: 'https://x',
+      expiresAt: new Date(),
+    });
+
+    // inactive-recipient is Postmark's PERMANENT suppression state —
+    // retrying it is pointless, so exactly 1 attempt, not 3.
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(tracker.markDeliveryFailed).toHaveBeenCalledWith('acc_2', expect.any(Date));
+    expect(tracker._failedAt.get('acc_2')).toBeInstanceOf(Date);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ accountId: 'acc_2', category: 'inactive-recipient' }),
+      expect.stringContaining('security-critical email send failed'),
+    );
+    expect(sentry.captureException).toHaveBeenCalled();
+  });
+
+  it('a subsequent successful send to that same account clears the flag back to null', async () => {
+    const logger = makeLogger();
+    const tracker = makeFakeTracker({ 'recovered@example.com': 'acc_3' });
+    // Pre-seed the account as already-failed, as if a prior send had
+    // set the marker.
+    tracker._failedAt.set('acc_3', new Date('2026-06-01T00:00:00Z'));
+
+    const svc = createEmailService({
+      config,
+      logger,
+      client: { sendEmail: vi.fn().mockResolvedValue({}) },
+      accountEmailDeliveryTracker: tracker,
+    });
+    await svc.sendPasswordReset({
+      to: 'recovered@example.com',
+      link: 'https://x',
+      expiresAt: new Date(),
+    });
+
+    expect(tracker.clearDeliveryFailed).toHaveBeenCalledWith('acc_3');
+    expect(tracker._failedAt.get('acc_3')).toBeNull();
+  });
+
+  it('does NOT retry or track a non-security-critical template (billing-receipt) even on a transient/inactive-recipient category', async () => {
+    const logger = makeLogger();
+    const tracker = makeFakeTracker({ 'user@example.com': 'acc_4' });
+    const rateLimited = Object.assign(new Error('too many requests'), { code: 429 });
+    const sendEmail = vi.fn().mockRejectedValue(rateLimited);
+    const svc = createEmailService({
+      config,
+      logger,
+      client: { sendEmail },
+      retryDelayFn: async () => {},
+      accountEmailDeliveryTracker: tracker,
+    });
+    await svc.sendBillingReceipt({
+      to: 'user@example.com',
+      amountFormatted: '$1.00',
+      period: '2026-06',
+      invoiceUrl: 'https://x',
+    });
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(tracker.findAccountIdByEmail).not.toHaveBeenCalled();
   });
 });

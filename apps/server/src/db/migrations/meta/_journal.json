@@ -666,6 +666,13 @@
       "when": 1780342800000,
       "tag": "0094_account_deletion",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1780346400000,
+      "tag": "0095_account_email_delivery_failed",
+      "breakpoints": true
     }
   ]
 }

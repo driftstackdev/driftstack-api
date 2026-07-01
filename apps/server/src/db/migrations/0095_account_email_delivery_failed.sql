@@ -1,0 +1,19 @@
+-- 2026-07-01 security fix — per-account email-delivery-failure marker.
+--
+-- Security-critical transactional emails (signup-verification / magic-
+-- link — both served by the same template; password-reset; oauth-
+-- pending-verification) were fire-and-forget with no way to tell which
+-- specific account's mailbox is undeliverable. Postmark's permanent
+-- `inactive-recipient` suppression state (405 — one prior hard bounce
+-- or spam complaint) silently and permanently stopped those emails
+-- with only an unlabeled aggregate counter as a signal.
+--
+-- `email_delivery_failed_at` is set by EmailService's
+-- AccountEmailDeliveryTracker (services/email.ts) when Postmark reports
+-- `inactive-recipient` for one of the 3 security-critical templates
+-- sent to a KNOWN, active account. Cleared back to NULL the next time
+-- ANY of those 3 templates sends successfully to that account — no
+-- separate manual-reset path needed. NULL = delivery believed healthy
+-- (the default / common case); nullable + additive, no backfill needed
+-- (existing rows have no known failure at migration time).
+ALTER TABLE "accounts" ADD COLUMN IF NOT EXISTS "email_delivery_failed_at" timestamptz;

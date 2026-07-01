@@ -105,7 +105,7 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
       /\/\/ Postmark email — optional\. No-op if not configured\. Constructed\s*\n?\s*\/\/ lazily AFTER the metrics registry below/,
     );
     expect(body).toMatch(
-      /const email: EmailService = createEmailService\(\{\s*\n?\s*config: config\.postmark,\s*\n?\s*logger,\s*\n?\s*\.\.\.\(metricsRegistry !== undefined \? \{ metrics: metricsRegistry \} : \{\}\),\s*\n?\s*\}\);/,
+      /const email: EmailService = createEmailService\(\{\s*\n?\s*config: config\.postmark,\s*\n?\s*logger,\s*\n?\s*\.\.\.\(metricsRegistry !== undefined \? \{ metrics: metricsRegistry \} : \{\}\),\s*\n?\s*accountEmailDeliveryTracker: createDrizzleAccountEmailDeliveryTracker\(dbHandle\),\s*\n?\s*sentry,\s*\n?\s*\}\);/,
     );
   });
 

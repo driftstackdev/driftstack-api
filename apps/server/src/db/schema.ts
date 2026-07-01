@@ -251,6 +251,19 @@ export const accounts = pgTable(
     // the customer's first successful session completes. One-shot
     // (subsequent sessions don't email; the dashboard takes over).
     firstSuccessEmailSentAt: timestamp('first_success_email_sent_at', { withTimezone: true }),
+    // 2026-07-01 security fix — set when Postmark reports its
+    // PERMANENT `inactive-recipient` suppression state (prior hard
+    // bounce / spam complaint) for one of the 3 security-critical
+    // templates (signup-verification / password-reset / oauth-
+    // pending-verification) sent to this account. Cleared back to
+    // null the next time ANY of those 3 templates sends successfully
+    // to this account — see EmailService's AccountEmailDeliveryTracker
+    // (services/email.ts). Null = delivery believed healthy (the
+    // common case). Powers a support/ops-visible "this customer can't
+    // receive password-reset/signup/oauth emails" signal that was
+    // previously invisible (only an unlabeled aggregate warn-level
+    // counter existed).
+    emailDeliveryFailedAt: timestamp('email_delivery_failed_at', { withTimezone: true }),
     // V-352 — IANA timezone name (e.g. "Europe/Amsterdam", "America/Los_Angeles").
     // Used by the dashboard + outbound emails to render timestamps in
     // the customer's local TZ. Optional; falls back to UTC display.

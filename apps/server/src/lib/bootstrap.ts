@@ -189,7 +189,11 @@ import { InProcessNegativeAuthCache } from '../services/negative-auth-cache.js';
 import { RedisRateLimitStore } from '../lib/redis-rate-limit-store.js';
 import { createDriver } from '../drivers/index.js';
 import { createR2Client, createR2PublicClient, r2ReadinessCheck, type R2 } from './r2.js';
-import { createEmailService, type EmailService } from '../services/email.js';
+import {
+  createEmailService,
+  createDrizzleAccountEmailDeliveryTracker,
+  type EmailService,
+} from '../services/email.js';
 import { initSentry, type SentryClient } from './sentry.js';
 import type { AppDeps, ReadinessCheck } from './app.js';
 import type { Config } from './config.js';
@@ -506,10 +510,17 @@ export async function createProductionDeps(
   // Arc 7 obs.13 — construct the email service after the metrics
   // registry so send() emits the email_send_total counter when
   // wired. No-op service when Postmark is unconfigured.
+  //
+  // 2026-07-01 security fix — accountEmailDeliveryTracker + sentry wire
+  // up the 3 security-critical templates' retry/failure-tracking/
+  // alerting (see services/email.ts). Both optional; email.ts is fully
+  // backward-compatible without them (the feature was built additive).
   const email: EmailService = createEmailService({
     config: config.postmark,
     logger,
     ...(metricsRegistry !== undefined ? { metrics: metricsRegistry } : {}),
+    accountEmailDeliveryTracker: createDrizzleAccountEmailDeliveryTracker(dbHandle),
+    sentry,
   });
 
   // Driver — mock or real WebKit per config. The Playwright dev
