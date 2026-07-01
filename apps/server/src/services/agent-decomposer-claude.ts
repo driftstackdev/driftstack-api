@@ -32,6 +32,7 @@ import type {
   DecomposeResult,
   DecomposeUsage,
 } from './agent-decomposer.js';
+import { AUP_REFUSAL_PATTERNS } from './agent-decomposer-deterministic.js';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION_HEADER = '2023-06-01';
@@ -56,35 +57,13 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 // historical rows keep their recorded cost (we don't recompute), so the
 // audit trail stays internally consistent even when the rate-table drifts.
 
-// AUP pre-filter — identical to the deterministic decomposer's corpus
-// so the same obvious-abuse short-circuit applies before any LLM call.
-// The model itself acts as a second filter via the system prompt; this
+// AUP pre-filter — imported from DeterministicAgentDecomposer (audit fix
+// 2026-07-01: was a hand-copied duplicate array here, at risk of silently
+// drifting from the source it's supposed to match — see that file's export
+// comment) so the same obvious-abuse short-circuit applies before any LLM
+// call. The model itself acts as a second filter via the system prompt; this
 // layer exists so a known-abusive task can never bill the API or appear
 // in Anthropic logs.
-const AUP_REFUSAL_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string }> = [
-  {
-    pattern: /\b(child sexual abuse material|csam|child pornography)\b/i,
-    reason: 'This task involves content categorically prohibited by our AUP.',
-  },
-  {
-    pattern: /\b(create|generate|make).{0,30}(deepfake|synthetic media of a real person)\b/i,
-    reason: 'Creating non-consensual synthetic media of real people is prohibited.',
-  },
-  {
-    pattern: /\b(swat|swatting|fake .{0,15}emergency call)\b/i,
-    reason: 'Tasks that endanger people in the physical world are prohibited.',
-  },
-  {
-    pattern: /\b(bypass|circumvent|evade).{0,30}(captcha|rate limit|account ban|moderation)\b/i,
-    reason:
-      'Driftstack does not orchestrate captcha bypass or evasion of platform safety controls. ' +
-      'See https://driftstack.dev/legal/aup/',
-  },
-  {
-    pattern: /\b(brute.?force|credential.?stuff|password spray)\b/i,
-    reason: 'Credential-attack tasks are prohibited by our AUP.',
-  },
-];
 
 // System prompt is a locked constant — drift here = silent product
 // behavior change. Any edit MUST come with a prompt-template parity

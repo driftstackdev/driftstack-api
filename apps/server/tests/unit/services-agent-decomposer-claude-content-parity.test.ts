@@ -79,9 +79,22 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toMatch(/historical rows keep their recorded cost \(we don't recompute\)/);
   });
 
-  it("AUP pre-filter shared-corpus framing pinned: 'identical to the deterministic decomposer's corpus so the same obvious-abuse short-circuit applies before any LLM call. The model itself acts as a second filter via the system prompt; this layer exists so a known-abusive task can never bill the API or appear in Anthropic logs.' — pinned so the dual-filter (pre-API + system-prompt) + never-billed-never-logged-in-Anthropic contract all stay documented", () => {
-    expect(body).toMatch(
-      /\/\/ AUP pre-filter — identical to the deterministic decomposer's corpus\s*\n?\s*\/\/ so the same obvious-abuse short-circuit applies before any LLM call\.\s*\n?\s*\/\/ The model itself acts as a second filter via the system prompt; this\s*\n?\s*\/\/ layer exists so a known-abusive task can never bill the API or appear\s*\n?\s*\/\/ in Anthropic logs\./,
+  it("AUP pre-filter shared-corpus framing pinned (audit fix 2026-07-01: now IMPORTED from DeterministicAgentDecomposer, not a hand-copied duplicate) — 'so the same obvious-abuse short-circuit applies before any LLM call. The model itself acts as a second filter via the system prompt; this layer exists so a known-abusive task can never bill the API or appear in Anthropic logs.' — pinned so the dual-filter (pre-API + system-prompt) + never-billed-never-logged-in-Anthropic contract all stay documented, AND the shared-import (not a local copy) stays in place", () => {
+    expect(body).toContain(
+      "import { AUP_REFUSAL_PATTERNS } from './agent-decomposer-deterministic.js';",
+    );
+    expect(body).toContain('// AUP pre-filter — imported from DeterministicAgentDecomposer');
+    expect(body).toContain('so the same obvious-abuse short-circuit applies before any LLM');
+    expect(body).toContain(
+      '// call. The model itself acts as a second filter via the system prompt; this',
+    );
+    expect(body).toContain(
+      '// layer exists so a known-abusive task can never bill the API or appear',
+    );
+    expect(body).toContain('// in Anthropic logs.');
+    // The old shape (a local duplicate array) must not reappear.
+    expect(body).not.toMatch(
+      /const AUP_REFUSAL_PATTERNS: ReadonlyArray<\{ pattern: RegExp; reason: string \}> = \[/,
     );
   });
 

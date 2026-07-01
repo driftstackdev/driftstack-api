@@ -33,7 +33,18 @@ import type {
 // must reject — full corpus per the design doc lives outside this
 // repo (legal handles the AUP wording per CLAUDE.md "Business and
 // legal/compliance content lives outside any repo").
-const AUP_REFUSAL_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string }> = [
+//
+// Exported (audit fix 2026-07-01) — ClaudeAgentDecomposer imports this SAME
+// array as its own pre-filter rather than keeping a hand-copied duplicate.
+// Two independently-maintained-but-supposed-to-be-identical arrays is exactly
+// the shape of bug this session found elsewhere (packages/webhook-delivery's
+// reference impl vs apps/server's real forward-path service had the same
+// race independently, because nobody was forced to touch both when fixing
+// one) — a single shared source can't silently drift. When AI-B1.b's fuller
+// corpus work lands, give ClaudeAgentDecomposer its OWN local array at that
+// point (a deliberate fork, not a silent one) rather than continuing to
+// import this reduced subset.
+export const AUP_REFUSAL_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string }> = [
   {
     pattern: /\b(child sexual abuse material|csam|child pornography)\b/i,
     reason: 'This task involves content categorically prohibited by our AUP.',
