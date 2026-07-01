@@ -317,25 +317,57 @@ async function enforceDailyIpCeiling(
   try {
     result = await store.consume(consumeArgs);
   } catch (err) {
-    // Same store-outage posture as the burst bucket above — degrade to the
-    // bounded per-instance fallback rather than fail open or 500.
+    // Security audit 2026-07-01 fix — deliberately DIVERGES from the burst
+    // bucket's posture above. The burst bucket degrades to the bounded
+    // `ipFallbackStore` on a primary-store error because it's the ONLY
+    // gate on the request; failing closed there would 500/lock out every
+    // caller platform-wide on a Redis blip. The daily ceiling is a coarser
+    // SECOND gate layered on top of an already-enforced burst bucket (which
+    // ran first, allowed this request, and keeps its own fallback
+    // protection independent of this code path) — so failing CLOSED here
+    // doesn't remove rate-limiting during an outage, it only makes the
+    // 24h-scale daily cap temporarily unenforced-but-safe.
+    //
+    // Falling back to `ipFallbackStore` here (as W384 originally did,
+    // uniformly, for every ip-rate-limit gate) would be actively wrong for
+    // THIS gate specifically: `ipFallbackStore` starts a key at FULL
+    // capacity on first touch, so every Redis outage or instance restart
+    // would silently hand a fresh IP a full bonus 25/day allotment,
+    // un-reconciled once Redis recovers — reintroducing, via outage
+    // boundaries, the exact "absolute ceiling" gap this feature exists to
+    // close (see the fixed-window reset-boundary rationale above).
     req.log.warn(
       { component: 'ip-rate-limit', bucket_prefix: dailyCfg.bucketPrefix, err },
-      'ip rate-limit store error — degrading to bounded in-process fallback',
+      'daily ip-rate-limit ceiling store error — failing CLOSED (denying request) rather than granting fallback capacity',
     );
     try {
-      metrics?.inc(METRIC_NAMES.rateLimitStoreFallbackTotal, { limiter: 'ip' });
+      metrics?.inc(METRIC_NAMES.rateLimitStoreFallbackTotal, { limiter: 'ip-daily-fail-closed' });
     } catch {
       // Swallow; metrics are best-effort.
     }
-    try {
-      result = await ipFallbackStore.consume(consumeArgs);
-    } catch {
-      // The in-process fallback cannot realistically throw; if it somehow
-      // does, fail open as a last resort rather than 500 the request.
-      return;
-    }
+    const retryAfterSec = 60;
+    reply.header('retry-after', retryAfterSec.toString());
+    throw new RateLimitedError(
+      retryAfterSec,
+      'Too many requests from this IP today. Retry shortly.',
+    );
   }
+
+  // Security audit 2026-07-01 — surface the daily ceiling's OWN
+  // remaining/reset state on every request once a daily cap is configured
+  // for this route, using this bucket's own consume result (not the burst
+  // bucket's, whose headers above only describe the fast-refilling
+  // per-minute gate). Without this, a high-volume-IP customer got zero
+  // advance warning before the abrupt 429 on request #(capacity + 1) —
+  // only the terminal denial set `retry-after`.
+  const dailyNowSec = Math.floor(Date.now() / 1000);
+  const dailyTokensNeededForFull = dailyCfg.capacity - result.remaining;
+  const dailySecondsToFull =
+    dailyTokensNeededForFull > 0 && dailyCfg.refillPerSecond > 0
+      ? Math.ceil(dailyTokensNeededForFull / dailyCfg.refillPerSecond)
+      : 0;
+  reply.header('x-ratelimit-daily-remaining', Math.floor(result.remaining).toString());
+  reply.header('x-ratelimit-daily-reset', (dailyNowSec + dailySecondsToFull).toString());
 
   if (!result.allowed) {
     const retryAfterSec = Math.max(1, Math.ceil(result.retryAfterMs / 1000));

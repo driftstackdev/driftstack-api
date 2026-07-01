@@ -119,6 +119,98 @@ describe('V-251 — IP rate limit on auth endpoints', () => {
     }
   });
 
+  it('signup: daily-ceiling headers surface remaining/reset independently of the burst-bucket headers, decrementing across 25 requests (security audit 2026-07-01 fix #2)', async () => {
+    fx = await buildTestApp();
+    const ip = '203.0.113.71';
+    const PACE_MS = 60_000;
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const start = Date.now();
+      let previousDailyRemaining = Infinity;
+      for (let i = 0; i < 25; i++) {
+        vi.setSystemTime(start + i * PACE_MS);
+        const res = await fx.app.inject({
+          method: 'POST',
+          url: '/v1/auth/signup',
+          headers,
+          remoteAddress: ip,
+          payload: {
+            email: `daily-headers-${i.toString()}@example.test`,
+            password: 'correct horse battery staple',
+          },
+        });
+        expect(res.statusCode).not.toBe(429);
+        // The daily ceiling's own headers must be present on every request
+        // once a daily ceiling is configured for the route — distinct from
+        // the burst bucket's `x-ratelimit-*` headers (which reset every
+        // ~60s and would misleadingly read "plenty left" at this pace).
+        const dailyRemaining = Number(res.headers['x-ratelimit-daily-remaining']);
+        const dailyReset = Number(res.headers['x-ratelimit-daily-reset']);
+        expect(res.headers['x-ratelimit-daily-remaining']).toBeDefined();
+        expect(res.headers['x-ratelimit-daily-reset']).toBeDefined();
+        expect(Number.isNaN(dailyRemaining)).toBe(false);
+        expect(Number.isNaN(dailyReset)).toBe(false);
+        // Strictly decrementing request-over-request (paced 60s apart, far
+        // slower than the daily bucket's ~1-token/57.6min refill, so it
+        // never has time to refill a whole token between calls).
+        expect(dailyRemaining).toBeLessThan(previousDailyRemaining);
+        previousDailyRemaining = dailyRemaining;
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('signup: daily-ceiling store error fails CLOSED (denies the request) instead of silently granting a fresh fallback allotment (security audit 2026-07-01 fix #1)', async () => {
+    fx = await buildTestApp();
+    const ip = '203.0.113.72';
+    const originalConsume = fx.rateLimitStore.consume.bind(fx.rateLimitStore);
+    // Simulate a Redis-store error, but ONLY for the daily-ceiling bucket
+    // key — the burst bucket (a distinct key, `auth-ip:signup:<ip>`) keeps
+    // working normally, isolating exactly the behavior under test: what
+    // happens when the DAILY check's own store call throws.
+    fx.rateLimitStore.consume = (opts) => {
+      if (opts.key.includes('-daily:')) {
+        return Promise.reject(new Error('simulated redis outage'));
+      }
+      return originalConsume(opts);
+    };
+
+    // A brand-new IP's very first signup ever — the burst bucket has full
+    // capacity and would allow it, and the (buggy, pre-fix) fallback store
+    // would ALSO allow it by silently minting a fresh 25-token daily
+    // allotment for this key. The fix must deny it instead.
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      headers,
+      remoteAddress: ip,
+      payload: {
+        email: 'daily-outage-1@example.test',
+        password: 'correct horse battery staple',
+      },
+    });
+    expect(res.statusCode).toBe(429);
+    expect(res.headers['retry-after']).toBeDefined();
+
+    // Prove it's a durable fail-CLOSED posture, not a one-off: a second
+    // attempt (which a fallback store with 25 capacity would still have
+    // budget for) is denied too, since the daily check never got to
+    // consume from — or grant — any fallback bucket at all.
+    const res2 = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      headers,
+      remoteAddress: ip,
+      payload: {
+        email: 'daily-outage-2@example.test',
+        password: 'correct horse battery staple',
+      },
+    });
+    expect(res2.statusCode).toBe(429);
+  });
+
   it('login: 10 attempts/IP/min — 11th from same IP returns 429', async () => {
     fx = await buildTestApp();
     const ip = '203.0.113.20';
