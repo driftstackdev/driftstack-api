@@ -602,6 +602,24 @@ describe('FleetControlConnection', () => {
     expect(r.success).toBe(false);
     expect(r.errorMessage).toBe('socket closed');
   });
+
+  it('close() marks the connection stale — handleInbound no-ops any frame delivered afterward (reconnect-race guard)', () => {
+    const seen: unknown[] = [];
+    const conn = new FleetControlConnection(
+      'node-1',
+      () => {},
+      (f) => seen.push(f), // onProfileSaved
+    );
+    conn.close('socket closed');
+    expect(() =>
+      conn.handleInbound(
+        JSON.stringify({ type: 'profileSaved', sessionId: 's', profile_id: 'p', stored: true }),
+      ),
+    ).not.toThrow();
+    // The frame would normally route straight to onProfileSaved — it must NOT
+    // once this connection object has been closed (superseded or torn down).
+    expect(seen).toHaveLength(0);
+  });
 });
 
 describe('FleetControlRegistry', () => {
@@ -815,5 +833,72 @@ describe('FleetControlRegistry', () => {
     reg.unregister('node-1', second, 'closed');
     expect(reg.get('node-1')).toBeUndefined();
     expect(reg.size()).toBe(0);
+  });
+
+  it('reconnect race: a frame delivered on the STALE (superseded) connection is a no-op, not processed as if it came from the current connection', () => {
+    // CONFIRMED audit finding: two independent TCP connections give no
+    // cross-connection ordering guarantee, so a harness crash+fast-respawn can
+    // land one more frame on the OLD physical socket AFTER register() has
+    // already installed a NEW FleetControlConnection for the same nodeId. The
+    // WS route binds `socket.on('message', …)` to the specific connection
+    // object captured at upgrade time, so without an "am I still current"
+    // check, handleInbound would process it as if it came from the CURRENT
+    // connection — e.g. a stale heartbeat, or (concretely) a stale terminal
+    // sessionStatus mass-closing sessions that are actually healthy under the
+    // new connection. Assert BOTH consumer callbacks are no-ops on the first
+    // (now-superseded) connection.
+    const heartbeats: Heartbeat[] = [];
+    const statuses: SessionStatus[] = [];
+    const reg = new FleetControlRegistry(
+      undefined, // onProfileSaved
+      undefined, // onChallengeDetected
+      undefined, // onPageState
+      undefined, // onProfileSaveFailed
+      (f) => heartbeats.push(f), // onHeartbeat
+      undefined, // onNodeRegistered
+      undefined, // onNodeDisconnected
+      (f) => statuses.push(f), // onSessionStatus
+    );
+    const first = reg.register('node-1', () => {});
+    // Simulated harness crash+fast-respawn: a second physical connection opens
+    // for the SAME nodeId — register() replaces + closes `first`.
+    const second = reg.register('node-1', () => {});
+    expect(reg.get('node-1')).toBe(second);
+    // The OLD (now-superseded) connection object receives one more frame — the
+    // reconnect race. Call handleInbound DIRECTLY on `first`, exactly as the WS
+    // route would if the dying socket's lagging message event fired.
+    first.handleInbound(
+      JSON.stringify({
+        type: 'heartbeat',
+        macNodeId: 'node-1',
+        timestamp: 't',
+        cpuPercent: 1,
+        memoryPercent: 1,
+        activeSessionCount: 0,
+      }),
+    );
+    first.handleInbound(
+      JSON.stringify({
+        type: 'sessionStatus',
+        sessionId: 'agt_a',
+        status: 'ended',
+        timestamp: 't',
+        reason: 'worker-restarted',
+      }),
+    );
+    expect(heartbeats).toHaveLength(0);
+    expect(statuses).toHaveLength(0);
+    // The CURRENT connection is unaffected and still routes normally.
+    second.handleInbound(
+      JSON.stringify({
+        type: 'heartbeat',
+        macNodeId: 'node-1',
+        timestamp: 't',
+        cpuPercent: 2,
+        memoryPercent: 2,
+        activeSessionCount: 1,
+      }),
+    );
+    expect(heartbeats).toHaveLength(1);
   });
 });

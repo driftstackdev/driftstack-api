@@ -126,6 +126,22 @@ export class FleetControlConnection {
   ) => void;
   private readonly onHeartbeat?: (frame: Heartbeat) => void;
   private readonly onSessionStatus?: (frame: SessionStatus, reportingNodeId: string) => void;
+  private readonly logger: Logger | null;
+  // Reconnect/replace race guard (CONFIRMED audit finding): a physical socket has
+  // NO cross-connection ordering guarantee against its successor — a harness
+  // crash+fast-respawn can open a brand-new TCP connection (→ a brand-new
+  // FleetControlConnection via FleetControlRegistry.register) while the OLD
+  // socket's already-in-flight frame is still travelling and lands AFTER the
+  // registry has moved on. The WS route (fleet-events.ts) binds
+  // `socket.on('message', …)` to the SPECIFIC connection object captured at
+  // upgrade time, so that stale frame would otherwise be processed as if it came
+  // from the CURRENT connection — e.g. a stale heartbeat/bootId re-triggering a
+  // mass session close. `close()` is called exactly once a connection is done
+  // (replaced by register(), or torn down by unregister()); flip this so every
+  // handleInbound call after that point is a guaranteed no-op, mirroring the
+  // identity check unregister() already does for registry *removal* — this is
+  // the same guarantee for frame *processing*.
+  private stale = false;
 
   constructor(
     readonly nodeId: string,
@@ -150,6 +166,7 @@ export class FleetControlConnection {
     this.onHeartbeat = onHeartbeat;
     this.onSessionStatus = onSessionStatus;
     const log = logger ?? null;
+    this.logger = log;
     const transport: DispatchTransport = { send: (d) => send(JSON.stringify(d)) };
     this.correlator = new IntentDispatchCorrelator(transport);
     const cookiesTransport: CookiesTransport = { send: (r) => send(JSON.stringify(r)) };
@@ -358,6 +375,19 @@ export class FleetControlConnection {
    * consumed variants drive the correlator; the rest are accepted + ignored.
    */
   handleInbound(raw: string): void {
+    // Reconnect/replace race guard — see the `stale` field's doc comment above.
+    // A frame delivered by a physical socket AFTER this connection object has
+    // been superseded/closed must NEVER be dispatched: it could be an old
+    // bootId re-triggering a mass session-close, a stale heartbeat, etc. No-op
+    // it before even parsing — this connection is no longer "current" for its
+    // nodeId regardless of what the frame contains.
+    if (this.stale) {
+      this.logger?.warn(
+        { component: 'fleet-control-registry', nodeId: this.nodeId },
+        'dropping inbound frame on a stale/superseded FleetControlConnection (reconnect race)',
+      );
+      return;
+    }
     let json: unknown;
     try {
       json = JSON.parse(raw);
@@ -526,6 +556,10 @@ export class FleetControlConnection {
    *  cookie-import + history-step + upload + download + profile-trim on this node
    *  (so an awaiting request resolves immediately, not at timeout). */
   close(reason: string): void {
+    // Flip FIRST: once a connection is closing (replaced by a reconnect, or torn
+    // down on socket close/error), it must never process another inbound frame —
+    // see handleInbound's stale-guard + the field's doc comment above.
+    this.stale = true;
     this.correlator.failAll(reason);
     this.cookiesCorrelator.failAll(reason);
     this.setCookiesCorrelator.failAll(reason);
