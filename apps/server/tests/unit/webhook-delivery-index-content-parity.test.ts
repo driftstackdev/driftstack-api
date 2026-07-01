@@ -59,10 +59,23 @@ describe('W450.A packages/webhook-delivery/src/index.ts content parity', () => {
     );
   });
 
-  it('in-memory barrel: BACKOFF_MS_BY_ATTEMPT + DEFAULT_MAX_ATTEMPTS + DEFAULT_TIMEOUT_MS constants + InMemoryDlqManager + InMemoryWebhookDeliveryService + createInMemoryWebhookDelivery + signPayload value exports + 3 type-only InMemoryWebhookDelivery{Deps,Handles} + ProcessTickResult', () => {
-    expect(body).toMatch(
-      /export \{\s*\n?\s*BACKOFF_MS_BY_ATTEMPT,\s*\n?\s*DEFAULT_MAX_ATTEMPTS,\s*\n?\s*DEFAULT_TIMEOUT_MS,\s*\n?\s*InMemoryDlqManager,\s*\n?\s*InMemoryWebhookDeliveryService,\s*\n?\s*createInMemoryWebhookDelivery,\s*\n?\s*signPayload,\s*\n?\s*type InMemoryWebhookDeliveryDeps,\s*\n?\s*type InMemoryWebhookDeliveryHandles,\s*\n?\s*type ProcessTickResult,\s*\n?\s*\} from '\.\/in-memory\.js';/,
-    );
+  it('in-memory barrel: BACKOFF_MS_BY_ATTEMPT + DEFAULT_MAX_ATTEMPTS + DEFAULT_MAX_DLQ_ENTRIES + DEFAULT_TIMEOUT_MS constants + InMemoryDlqManager + InMemoryWebhookDeliveryService + createInMemoryWebhookDelivery + isLiteralUnsafeWebhookHost + signPayload value exports + 3 type-only InMemoryWebhookDelivery{Deps,Handles} + ProcessTickResult', () => {
+    // toContain fragments (not a closed multi-line regex) so the two new
+    // exports (audit fix WD-2/WD-4, 2026-07) don't break the pin.
+    expect(body).toContain('export {');
+    expect(body).toContain('BACKOFF_MS_BY_ATTEMPT,');
+    expect(body).toContain('DEFAULT_MAX_ATTEMPTS,');
+    expect(body).toContain('DEFAULT_MAX_DLQ_ENTRIES,');
+    expect(body).toContain('DEFAULT_TIMEOUT_MS,');
+    expect(body).toContain('InMemoryDlqManager,');
+    expect(body).toContain('InMemoryWebhookDeliveryService,');
+    expect(body).toContain('createInMemoryWebhookDelivery,');
+    expect(body).toContain('isLiteralUnsafeWebhookHost,');
+    expect(body).toContain('signPayload,');
+    expect(body).toContain('type InMemoryWebhookDeliveryDeps,');
+    expect(body).toContain('type InMemoryWebhookDeliveryHandles,');
+    expect(body).toContain('type ProcessTickResult,');
+    expect(body).toContain("} from './in-memory.js';");
   });
 
   it('file exists at canonical path', () => {

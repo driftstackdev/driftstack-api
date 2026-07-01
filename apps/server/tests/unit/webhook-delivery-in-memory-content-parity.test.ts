@@ -94,10 +94,17 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
     expect(body).toMatch(/export const DEFAULT_MAX_ATTEMPTS = 6;/);
   });
 
-  it("InMemoryWebhookDeliveryDeps: 3-field (fetch test seam 'defaults to global fetch' + now test seam 'defaults to () => Date.now()' + getEndpoint required); 'The delivery service does not own endpoint storage' framing pinned", () => {
-    expect(body).toMatch(
-      /export interface InMemoryWebhookDeliveryDeps \{[\s\S]*?\/\*\* Test seam — defaults to global fetch\. \*\/\s*\n?\s*fetch\?: typeof fetch;[\s\S]*?\/\*\* Test seam — defaults to \(\) => Date\.now\(\)\. \*\/\s*\n?\s*now\?: \(\) => number;[\s\S]*?\/\*\* Lookup an endpoint by id\. The delivery service does not own endpoint storage\. \*\/\s*\n?\s*getEndpoint: \(endpointId: string\) => DeliveryEndpoint \| null;/,
+  it("InMemoryWebhookDeliveryDeps: 4-field (fetch test seam, now a loud production SSRF-guard warning (audit fix WD-2) + now test seam 'defaults to () => Date.now()' + getEndpoint required + maxDlqEntries (audit fix WD-4)); 'The delivery service does not own endpoint storage' framing pinned", () => {
+    expect(body).toContain('export interface InMemoryWebhookDeliveryDeps {');
+    expect(body).toContain('fetch?: typeof fetch;');
+    expect(body).toContain('PRODUCTION CALLERS MUST INJECT AN SSRF-GUARDED FETCH');
+    expect(body).toContain('/** Test seam — defaults to () => Date.now(). */');
+    expect(body).toContain('now?: () => number;');
+    expect(body).toContain(
+      '/** Lookup an endpoint by id. The delivery service does not own endpoint storage. */',
     );
+    expect(body).toContain('getEndpoint: (endpointId: string) => DeliveryEndpoint | null;');
+    expect(body).toContain('maxDlqEntries?: number;');
   });
 
   it("ProcessTickResult: 4-field (pulled + delivered + retried + dlqed); SharedDeliveryStore framing pinned 'The two services hold the same maps so that DLQ promotion in delivery is visible to the DLQ admin surface, and replay() / requeue() can round-trip between them.'", () => {
