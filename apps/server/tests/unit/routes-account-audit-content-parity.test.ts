@@ -75,9 +75,18 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
     );
   });
 
-  it('publicEntry: 10-field shape with account_id=acc_ + actor_account_id/actor_key_id nullable prefixed + ISO timestamp; payload/ip/ua conditionally scrubbed for cross-actor (team-member) views', () => {
+  it('publicEntry: 10-field shape with account_id=acc_ + actor_account_id/actor_key_id nullable prefixed + ISO timestamp; payload/ip/ua conditionally scrubbed for cross-actor (team-member) views UNIONED with the per-row actor-differs check', () => {
     expect(body).toMatch(
       /function publicEntry\(\s*\n?\s*row: AccountAuditEntryRow,\s*\n?\s*redactActorPrivacy = false,?\s*\n?\s*\): Record<string, unknown> \{/,
+    );
+    // Union: request-level team-header redaction OR the row's own actor
+    // differing from the account it belongs to (e.g. a staff support-note
+    // row a customer later self-reads) — both must redact.
+    expect(body).toMatch(
+      /const redact = redactActorPrivacy \|\| rowNeedsActorPrivacyRedaction\(row\);/,
+    );
+    expect(body).toMatch(
+      /function rowNeedsActorPrivacyRedaction\(row: AccountAuditEntryRow\): boolean \{\s*\n?\s*return row\.actorAccountId !== null && row\.actorAccountId !== row\.accountId;\s*\n?\s*\}/,
     );
     expect(body).toMatch(/id: row\.id,/);
     expect(body).toMatch(/account_id: `acc_\$\{row\.accountId\}`,/);
@@ -88,15 +97,15 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
     expect(body).toMatch(/actor_key_id: row\.actorKeyId \? `key_\$\{row\.actorKeyId\}` : null,/);
     expect(body).toMatch(/action: row\.action,/);
     expect(body).toMatch(/target_resource_id: row\.targetResourceId,/);
-    // Privacy scrub: a team-member cross-actor view nulls ip/ua + strips the
-    // IP/UA payload keys; the owner's own view keeps them (GDPR Art-15).
-    expect(body).toMatch(
-      /payload: redactActorPrivacy \? scrubActorPrivacy\(row\.payload\) : row\.payload,/,
-    );
-    expect(body).toMatch(/ip_address: redactActorPrivacy \? null : row\.ipAddress,/);
-    expect(body).toMatch(/user_agent: redactActorPrivacy \? null : row\.userAgent,/);
+    // Privacy scrub: a team-member cross-actor view OR a per-row actor
+    // mismatch nulls ip/ua + strips the IP/UA payload keys; the owner's
+    // own view of their own rows keeps them (GDPR Art-15).
+    expect(body).toMatch(/payload: redact \? scrubActorPrivacy\(row\.payload\) : row\.payload,/);
+    expect(body).toMatch(/ip_address: redact \? null : row\.ipAddress,/);
+    expect(body).toMatch(/user_agent: redact \? null : row\.userAgent,/);
     expect(body).toMatch(/timestamp: row\.timestamp\.toISOString\(\),/);
-    // The scrub fires on the team (cross-actor) read + export paths only.
+    // The request-level half of the redaction fires on the team
+    // (cross-actor) read + export paths only.
     expect(body).toMatch(/const redactActorPrivacy = effective\.kind === 'team';/);
     expect(body).toMatch(/const ACTOR_PRIVACY_PAYLOAD_KEYS = new Set\(\[/);
   });
@@ -154,10 +163,14 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
     );
     expect(body).toMatch(/row\.actorAccountId \? `acc_\$\{row\.actorAccountId\}` : '',/);
     expect(body).toMatch(/row\.actorKeyId \? `key_\$\{row\.actorKeyId\}` : '',/);
-    // ip/ua + payload conditionally scrubbed for a cross-actor (team) export.
-    expect(body).toMatch(/redactActorPrivacy \? '' : \(row\.ipAddress \?\? ''\)/);
+    // ip/ua + payload conditionally scrubbed for a cross-actor (team) export
+    // UNIONED with the per-row actor-differs check (same as publicEntry).
     expect(body).toMatch(
-      /const payload = redactActorPrivacy \? scrubActorPrivacy\(row\.payload\) : row\.payload;/,
+      /const redact = redactActorPrivacy \|\| rowNeedsActorPrivacyRedaction\(row\);/,
+    );
+    expect(body).toMatch(/redact \? '' : \(row\.ipAddress \?\? ''\)/);
+    expect(body).toMatch(
+      /const payload = redact \? scrubActorPrivacy\(row\.payload\) : row\.payload;/,
     );
     expect(body).toMatch(/const csv = buildCsv\(\{ header, rows \}\);/);
   });

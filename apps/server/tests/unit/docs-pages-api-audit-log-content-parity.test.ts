@@ -81,22 +81,27 @@ describe('W768 docs /api/audit-log content parity', () => {
     expect(p).not.toMatch(/synthetic `wsk_<session-uuid>`/);
   });
 
-  it("CRITICAL ip_address + user_agent deliberately-null-in-customer-responses framing pinned. The 'deliberately null in production customer-facing responses for privacy' wording is the load-bearing customer-comms privacy contract.", () => {
+  it("CRITICAL ip_address + user_agent conditional-redaction framing pinned (corrected 2026-07-01 from a false blanket 'deliberately null' claim — a team member acting on an owner's account via X-Driftstack-Account left the real actor IP in row.ip_address, visible on the owner's own self-view/export; the docs now accurately describe the per-row actor-vs-account redaction rule instead of promising an always-null field).", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`ip_address` and `user_agent` \(top-level fields on the entry\) are\s*\n?surfaced in the schema but deliberately null in production\s*\n?customer-facing responses for privacy/,
+      /`ip_address` and `user_agent` \(top-level fields on the entry\) are\s*\n?populated with the real caller network identity ONLY on rows that\s*\n?are \*\*self-caused\*\*/,
+    );
+    expect(p).toMatch(
+      /Both fields are redacted to `null` — regardless of who is\s*\n?reading — whenever the row is \*\*cross-account-caused\*\*/,
     );
   });
 
-  it('CRITICAL caveat pinned — auth-flow events store issued_from_ip+user_agent in payload as a deliberate exception. The "Caveat:" + TD-audit-payload-scrub queued framing explains the known asymmetry. The previous skip pinned `Caveat (V-413)` with the inline V-anchor; the V-413 internal anchor was removed from the customer-rendered copy as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.dev pages); the substantive caveat framing survives without it.', () => {
+  it('CRITICAL caveat pinned — auth-flow events store issued_from_ip+user_agent in payload as a deliberate exception, with the scrub now IMPLEMENTED (corrected 2026-07-01 from a "TD-audit-payload-scrub queued" framing — the scrub runs at read/export serialization time, no backfill needed). The previous skip pinned `Caveat (V-413)` with the inline V-anchor; the V-413 internal anchor was removed from the customer-rendered copy as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.dev pages); the substantive caveat framing survives without it.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/\*\*Caveat:\*\* the auth-flow audit events/);
     expect(p).toMatch(
       /`account\.email_verified`, `account\.login`, `account\.logout`,\s*\n?`account\.password_changed`\) currently store `issued_from_ip` \+\s*\n?`user_agent` inside `payload`/,
     );
-    expect(p).toMatch(/TD-audit-payload-scrub/);
+    expect(p).toMatch(
+      /no data backfill\s*\n?needed since the scrub runs at read\/export serialization time\./,
+    );
     // Drift-guard: the internal V-413 anchor MUST NOT bleed back
     // into the customer-rendered Caveat line.
     expect(p).not.toMatch(/\*\*Caveat \(V-413\):\*\*/);

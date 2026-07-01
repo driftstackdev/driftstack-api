@@ -1,7 +1,11 @@
 // V-216 — integration tests for /v1/account/audit-log + emit wiring.
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import {
+  buildTestApp,
+  seedAdditionalAccount,
+  type TestAppFixture,
+} from './_helpers/build-test-app.js';
 
 let fx: TestAppFixture;
 
@@ -17,9 +21,12 @@ interface AuditEntry {
   id: string;
   account_id: string;
   actor_type: string;
+  actor_account_id: string | null;
   action: string;
   target_resource_id: string | null;
   payload: Record<string, unknown> | null;
+  ip_address: string | null;
+  user_agent: string | null;
   timestamp: string;
 }
 
@@ -481,5 +488,113 @@ describe('GET /v1/account/audit-log — actor-privacy scrub (TD-audit-payload-sc
     expect(entry.payload).not.toHaveProperty('issued_from_ip'); // scrubbed
     expect(entry.payload).not.toHaveProperty('user_agent');
     expect(res.body).not.toContain('203.0.113.7');
+  });
+});
+
+// GDPR-adjacent fix: `redactActorPrivacy` used to be computed ONLY from
+// `effective.kind === 'team'` (the READER's relationship to the account) —
+// it never looked at whether the ROW's own recorded actor differs from the
+// account being read. A cross-actor row (accountId = the account whose log
+// this is, actorAccountId = a DIFFERENT account that actually performed the
+// action) leaked that other account's real `ip_address`/`user_agent`
+// verbatim to the account owner on an ordinary SELF read/export, because
+// self-view always had `redactActorPrivacy = false`.
+describe('GET /v1/account/audit-log — per-row actor-privacy redaction (cross-actor rows leak IP on self-view)', () => {
+  const TEAM_MEMBER_ACCOUNT_ID = '00000000-0000-4000-8000-000000000c11';
+
+  it('owner self-view REDACTS ip_address/user_agent for a cross-actor row on their OWN account (list + export)', async () => {
+    fx = await buildTestApp();
+    // Row lives on the default fixture account's own log (accountId =
+    // fx.accountId) but was recorded with a DIFFERENT actorAccountId —
+    // exactly the shape a cross-actor write produces (see
+    // rowNeedsActorPrivacyRedaction in routes/account-audit.ts).
+    await fx.accountAuditRepo.insert({
+      accountId: fx.accountId,
+      actorType: 'customer',
+      actorAccountId: TEAM_MEMBER_ACCOUNT_ID,
+      action: 'account.email_preferences_changed',
+      targetResourceId: `account_${fx.accountId}`,
+      payload: { event_type: 'tier-changed', opted_in: false },
+      ipAddress: '198.51.100.42',
+      userAgent: 'TeamMemberAgent/1.0',
+    });
+
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=account.email_preferences_changed',
+      headers: auth(fx),
+    });
+    expect(list.statusCode).toBe(200);
+    const entry = list.json<ListResponse>().data[0]!;
+    expect(entry.ip_address).toBeNull();
+    expect(entry.user_agent).toBeNull();
+    expect(list.body).not.toContain('198.51.100.42');
+
+    const exported = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log/export?format=json',
+      headers: auth(fx),
+    });
+    expect(exported.statusCode).toBe(200);
+    const exportBody = exported.json<{ data: AuditEntry[] }>();
+    const exportedEntry = exportBody.data.find(
+      (e) => e.action === 'account.email_preferences_changed',
+    )!;
+    expect(exportedEntry.ip_address).toBeNull();
+    expect(exportedEntry.user_agent).toBeNull();
+    expect(exported.body).not.toContain('198.51.100.42');
+
+    const csv = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log/export?format=csv',
+      headers: auth(fx),
+    });
+    expect(csv.statusCode).toBe(200);
+    expect(csv.body).not.toContain('198.51.100.42');
+  });
+
+  it('REAL end-to-end: a driftstack-staff admin-note on a customer account no longer leaks the staff IP on the customer self-view', async () => {
+    fx = await buildTestApp();
+    // A distinct account plays the "staff" side of admin.support_note —
+    // POST /v1/admin/accounts/:id/audit-note writes accountId = the
+    // CUSTOMER (fx.accountId) but actorAccountId = ctx.account.id (the
+    // caller, i.e. the staff account below) + the staff caller's real IP.
+    const staff = await seedAdditionalAccount(fx, {
+      accountId: '00000000-0000-4000-8000-000000000c12',
+      apiKeyId: '00000000-0000-4000-8000-000000000c13',
+      email: 'staff@driftstack.local',
+    });
+
+    const note = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/admin/accounts/acc_${fx.accountId}/audit-note`,
+      headers: {
+        authorization: `Bearer ${staff.plaintext}`,
+        'x-forwarded-for': '203.0.113.55',
+      },
+      payload: { note: 'Investigated a billing question.' },
+    });
+    expect(note.statusCode).toBe(201);
+
+    // Sanity: the row really is cross-actor before we assert redaction.
+    const raw = fx.accountAuditRepo
+      .getAll()
+      .find((r) => r.action === 'admin.support_note' && r.accountId === fx.accountId)!;
+    expect(raw.actorAccountId).toBe(staff.accountId);
+    expect(raw.actorAccountId).not.toBe(raw.accountId);
+    expect(raw.ipAddress).toBe('203.0.113.55');
+
+    // The CUSTOMER (fx, the default fixture account) self-reads their OWN
+    // audit log — no team header, no cross-account relationship. Prior to
+    // the fix this returned the staff member's real IP verbatim.
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=admin.support_note',
+      headers: auth(fx),
+    });
+    expect(list.statusCode).toBe(200);
+    const entry = list.json<ListResponse>().data[0]!;
+    expect(entry.ip_address).toBeNull();
+    expect(list.body).not.toContain('203.0.113.55');
   });
 });

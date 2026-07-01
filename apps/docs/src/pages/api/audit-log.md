@@ -80,24 +80,37 @@ web-session calls (the dashboard audit emitters record no key id). It
 is also `null` for `system` and `staff` events.
 
 `ip_address` and `user_agent` (top-level fields on the entry) are
-surfaced in the schema but deliberately null in production
-customer-facing responses for privacy: the dashboard rendering
-doesn't display them, and the admin tooling reads them out of a
-separate internal store.
+populated with the real caller network identity ONLY on rows that
+are **self-caused** — i.e. the row's `actor_account_id` is either
+`null` or equal to `account_id` (a customer acting directly on
+their own account: profile/API-key/BYOK-key/web-session/email-
+preference actions, etc.). GDPR Article 15 (right of access to own
+data) covers a customer seeing their own login/device IPs this way.
+
+Both fields are redacted to `null` — regardless of who is
+reading — whenever the row is **cross-account-caused**: its
+`actor_account_id` records an account DIFFERENT from `account_id`.
+This covers a Driftstack staff member's `admin.support_note` /
+`admin.refund_recorded` note (landed on the _customer's_ log with
+the _staff_ member's IP), and any future action a team member
+performs on an owner's account via `X-Driftstack-Account` once
+that write path records `actor_account_id`. The redaction is
+per-row and independent of the reader: an owner self-reading their
+OWN log still gets `null` on a cross-account-caused row, exactly
+as a team member reading the owner's log does.
 
 **Caveat:** the auth-flow audit events
 (`account.email_verified`, `account.login`, `account.logout`,
 `account.password_changed`) currently store `issued_from_ip` +
-`user_agent` inside `payload` — contrary to the intent at
-the row-level columns. The fields appear in the customer's own
-audit log (acceptable under GDPR Article 15 right of access to
-own data) AND in a team member's view of the owner's audit log
-when the member uses the X-Driftstack-Account header
-to read the owner's account. Team owners aware of this caveat
-can mitigate by limiting team-member access to admins-only or by
-filing a privacy request; a server-side payload scrub is queued
-as a separate slice (TD-audit-payload-scrub) since it touches
-both new emit paths AND historical row backfill.
+`user_agent` inside `payload` in addition to (not instead of) the
+row-level columns above. On a self-caused row those payload fields
+are visible to the owner (same Article-15 rationale). On a
+cross-account-caused OR cross-account-READ row (a team member
+using `X-Driftstack-Account` to view the owner's log) the server
+scrubs `issued_from_ip` / `source_ip` / `ip_address` / `user_agent`
+/ `issued_user_agent` out of `payload` in addition to nulling the
+top-level `ip_address` / `user_agent` fields — no data backfill
+needed since the scrub runs at read/export serialization time.
 
 ## Action catalog
 

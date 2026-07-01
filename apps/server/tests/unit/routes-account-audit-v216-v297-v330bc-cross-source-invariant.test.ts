@@ -121,12 +121,18 @@ describe('W1037 routes/account-audit V-216 + V-297 + V-330b/c + V-484 cross-sour
     expect(p).toMatch(/action: row\.action,/);
     expect(p).toMatch(/target_resource_id: row\.targetResourceId,/);
     // ip/ua + payload conditionally scrubbed for cross-actor (team-member)
-    // reads; the owner's own view keeps them (GDPR Art-15 self-access).
+    // reads UNIONED with the per-row actor-differs check (a staff support-
+    // note row must redact even on the owner's own self-view); the owner's
+    // own view of their own rows keeps them (GDPR Art-15 self-access).
     expect(p).toMatch(
-      /payload: redactActorPrivacy \? scrubActorPrivacy\(row\.payload\) : row\.payload,/,
+      /const redact = redactActorPrivacy \|\| rowNeedsActorPrivacyRedaction\(row\);/,
     );
-    expect(p).toMatch(/ip_address: redactActorPrivacy \? null : row\.ipAddress,/);
-    expect(p).toMatch(/user_agent: redactActorPrivacy \? null : row\.userAgent,/);
+    expect(p).toMatch(
+      /function rowNeedsActorPrivacyRedaction\(row: AccountAuditEntryRow\): boolean \{\s*\n?\s*return row\.actorAccountId !== null && row\.actorAccountId !== row\.accountId;\s*\n?\s*\}/,
+    );
+    expect(p).toMatch(/payload: redact \? scrubActorPrivacy\(row\.payload\) : row\.payload,/);
+    expect(p).toMatch(/ip_address: redact \? null : row\.ipAddress,/);
+    expect(p).toMatch(/user_agent: redact \? null : row\.userAgent,/);
     expect(p).toMatch(/timestamp: row\.timestamp\.toISOString\(\),/);
     expect(p).toMatch(/const redactActorPrivacy = effective\.kind === 'team';/);
   });

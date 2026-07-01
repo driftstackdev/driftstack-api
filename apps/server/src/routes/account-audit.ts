@@ -49,10 +49,33 @@ function scrubActorPrivacy(payload: unknown): unknown {
   return out;
 }
 
+/**
+ * Whether a given ROW's IP/UA/payload-network-fields must be redacted,
+ * independent of who is reading it.
+ *
+ * The request-level `effective.kind === 'team'` check only covers a
+ * cross-account TEAM MEMBER reading the OWNER's log. It says nothing
+ * about rows where the acting principal recorded on the row itself
+ * differs from the account whose log this is — e.g. a Driftstack
+ * staff member's `admin.support_note` / `admin.refund_recorded` note
+ * lands on the CUSTOMER's own account_audit_log (accountId = customer)
+ * with `actorAccountId` = the staff member's internal account and
+ * `ipAddress` = the staff member's real IP. When that customer later
+ * self-reads/exports their OWN log (effective.kind === 'self'), the
+ * old request-level-only check let the staff member's IP leak
+ * verbatim. Union both signals: redact when EITHER the reader is a
+ * cross-account team member, OR the row's own actor differs from the
+ * account the row belongs to.
+ */
+function rowNeedsActorPrivacyRedaction(row: AccountAuditEntryRow): boolean {
+  return row.actorAccountId !== null && row.actorAccountId !== row.accountId;
+}
+
 function publicEntry(
   row: AccountAuditEntryRow,
   redactActorPrivacy = false,
 ): Record<string, unknown> {
+  const redact = redactActorPrivacy || rowNeedsActorPrivacyRedaction(row);
   return {
     id: row.id,
     account_id: `acc_${row.accountId}`,
@@ -61,9 +84,9 @@ function publicEntry(
     actor_key_id: row.actorKeyId ? `key_${row.actorKeyId}` : null,
     action: row.action,
     target_resource_id: row.targetResourceId,
-    payload: redactActorPrivacy ? scrubActorPrivacy(row.payload) : row.payload,
-    ip_address: redactActorPrivacy ? null : row.ipAddress,
-    user_agent: redactActorPrivacy ? null : row.userAgent,
+    payload: redact ? scrubActorPrivacy(row.payload) : row.payload,
+    ip_address: redact ? null : row.ipAddress,
+    user_agent: redact ? null : row.userAgent,
     timestamp: row.timestamp.toISOString(),
   };
 }
@@ -111,6 +134,10 @@ export function registerAccountAuditRoutes(
 
       // Cross-actor read (team member viewing the owner's log) → scrub the
       // owner's IP/UA from auth-flow payloads; self-view keeps them (Art-15).
+      // This is only the REQUEST-level half of the redaction decision —
+      // publicEntry() unions it with the per-ROW check (rowNeedsActorPrivacyRedaction)
+      // so a self-view still scrubs any individual row whose own recorded
+      // actor differs from the account (e.g. a staff support-note row).
       const redactActorPrivacy = effective.kind === 'team';
       return {
         data: page.items.map((row) => publicEntry(row, redactActorPrivacy)),
@@ -157,7 +184,9 @@ export function registerAccountAuditRoutes(
       }
       const truncated = all.length >= EXPORT_MAX_ROWS;
       // Same cross-actor scrub as the read endpoint (a team member exporting
-      // the owner's log must not receive the owner's IP/UA).
+      // the owner's log must not receive the owner's IP/UA). Request-level
+      // only — see rowNeedsActorPrivacyRedaction for the per-row half that
+      // publicEntry() (JSON branch below) and the CSV branch both union in.
       const redactActorPrivacy = effective.kind === 'team';
 
       const filenameBase = `driftstack-audit-log-${new Date().toISOString().slice(0, 10)}`;
@@ -175,7 +204,11 @@ export function registerAccountAuditRoutes(
           'payload',
         ];
         const rows = all.map((row) => {
-          const payload = redactActorPrivacy ? scrubActorPrivacy(row.payload) : row.payload;
+          // Same union as publicEntry: a cross-account team-header export
+          // OR a row whose own recorded actor differs from the account
+          // (e.g. a staff support-note on a customer's log) both redact.
+          const redact = redactActorPrivacy || rowNeedsActorPrivacyRedaction(row);
+          const payload = redact ? scrubActorPrivacy(row.payload) : row.payload;
           return [
             row.timestamp.toISOString(),
             row.action,
@@ -183,8 +216,8 @@ export function registerAccountAuditRoutes(
             row.actorAccountId ? `acc_${row.actorAccountId}` : '',
             row.actorKeyId ? `key_${row.actorKeyId}` : '',
             row.targetResourceId ?? '',
-            redactActorPrivacy ? '' : (row.ipAddress ?? ''),
-            redactActorPrivacy ? '' : (row.userAgent ?? ''),
+            redact ? '' : (row.ipAddress ?? ''),
+            redact ? '' : (row.userAgent ?? ''),
             payload === null || payload === undefined ? '' : JSON.stringify(payload),
           ];
         });
