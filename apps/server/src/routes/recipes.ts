@@ -14,7 +14,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { PaginationQuerySchema } from '@driftstack/api-types';
 import { FeatureUnavailableError, NotFoundError, ValidationError } from '../lib/errors.js';
-import type { RecipesRepo, RecipeRecord } from '../services/recipes.js';
+import { suggestRecipeMetadata, type RecipesRepo, type RecipeRecord } from '../services/recipes.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { AgentIntent } from '../services/agent-decomposer.js';
 
@@ -76,6 +76,31 @@ export interface RecipesRoutesDeps {
 
 export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesDeps): void {
   const { recipes, agentSessions } = deps;
+
+  // Doc-132 §5.2 (recipe auto-generation) v1.0 slice — a deterministic
+  // label/description suggestion derived from the session's OWN
+  // intent_log, so the "Save recipe" dialog can prefill something
+  // useful instead of a blank form. Same ownership check + intent_log
+  // assembly as POST /v1/recipes below; read-only (`read` scope), so
+  // it's safe to call speculatively before the customer decides to save.
+  app.get<{ Params: { id: string } }>(
+    '/v1/agent-sessions/:id/recipe-suggestion',
+    { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },
+    async (req) => {
+      const ctx = requireCtx(req);
+      const source = await agentSessions.get(req.params.id);
+      if (source === null || source.accountId !== ctx.account.id) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      const intentLog: AgentIntent[] = source.transcript.flatMap((entry) => entry.intents ?? []);
+      const suggestion = suggestRecipeMetadata(intentLog);
+      return {
+        suggested_label: suggestion.suggestedLabel,
+        suggested_description: suggestion.suggestedDescription,
+        intent_count: intentLog.length,
+      };
+    },
+  );
 
   app.post(
     '/v1/recipes',
@@ -183,6 +208,7 @@ export function registerRecipesDisabledRoutes(app: FastifyInstance): void {
   const stub = (): never => {
     throw new FeatureUnavailableError(detail);
   };
+  app.get('/v1/agent-sessions/:id/recipe-suggestion', stub);
   app.post('/v1/recipes', stub);
   app.get('/v1/recipes', stub);
   app.get('/v1/recipes/:id', stub);

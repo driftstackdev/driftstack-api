@@ -3600,6 +3600,48 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // Doc-132 §5.2 (recipe auto-generation) v1.0 slice — GET
+  // /v1/agent-sessions/{id}/recipe-suggestion derives a label +
+  // description from the session's OWN intent_log so the customer's
+  // "Save recipe" dialog can prefill something useful. Deliberately
+  // NOT a cross-customer ML/training pipeline (Tier-3 customer-data-
+  // handling call, founder-gated) — read-only, single-account, same
+  // gate as the rest of the recipe library.
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/agent-sessions/{id}/recipe-suggestion',
+    summary: "Suggest a recipe label/description for an agent session's intent_log",
+    tags: ['agent-chat'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      200: {
+        description:
+          'Deterministic suggestion derived from the flattened intent_log (same assembly POST /v1/recipes uses). Safe to call speculatively before deciding to save.',
+        content: {
+          'application/json': {
+            schema: z.object({
+              suggested_label: z.string(),
+              suggested_description: z.string(),
+              intent_count: z.number().int().nonnegative(),
+            }),
+          },
+        },
+      },
+      404: {
+        description:
+          'Agent session not found (also returned for cross-account access — existence is not leaked).',
+        content: problemContent,
+      },
+      ...errors4xx,
+      503: {
+        description:
+          'Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.',
+        content: problemContent,
+      },
+    },
+  });
+
   // ── AI-B4 recipe library (write-only at v1.0) ──
   //
   // POST /v1/recipes snapshots a finished agent_session's intent_log

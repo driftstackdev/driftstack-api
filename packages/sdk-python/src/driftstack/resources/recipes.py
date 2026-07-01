@@ -85,6 +85,19 @@ class RecipesResource:
         """Delete a recipe. 404 if missing or owned by another account."""
         self._http.request("DELETE", f"/v1/recipes/{quote(recipe_id, safe='')}")
 
+    def suggest(self, agent_session_id: str) -> dict[str, Any]:
+        """Doc-132 §5.2 (recipe auto-generation) v1.0 slice.
+
+        Fetch a deterministic label/description suggestion derived from
+        the session's own intent_log (same assembly ``create`` uses).
+        Read-only; safe to call speculatively before deciding to save.
+        Returns ``suggested_label`` / ``suggested_description`` /
+        ``intent_count``.
+        """
+        return self._http.request(
+            "GET", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/recipe-suggestion"
+        )
+
 
 class AsyncRecipesResource:
     """Async AI-B4 recipe library."""
@@ -125,3 +138,9 @@ class AsyncRecipesResource:
 
     async def delete(self, recipe_id: str) -> None:
         await self._http.request("DELETE", f"/v1/recipes/{quote(recipe_id, safe='')}")
+
+    async def suggest(self, agent_session_id: str) -> dict[str, Any]:
+        """Async variant of :meth:`RecipesResource.suggest`."""
+        return await self._http.request(
+            "GET", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/recipe-suggestion"
+        )

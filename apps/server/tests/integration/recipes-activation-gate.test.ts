@@ -58,4 +58,15 @@ describe('AI-B4 POST /v1/recipes activation gate (disabled-stub variant)', () =>
     // Disabled-stub returns 503 regardless of auth state
     expect(res.statusCode).toBe(503);
   });
+
+  it('GET /v1/agent-sessions/:id/recipe-suggestion → 503 FeatureUnavailable (same gate)', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions/agt_x/recipe-suggestion',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.headers['content-type']).toMatch(/application\/problem\+json/);
+  });
 });

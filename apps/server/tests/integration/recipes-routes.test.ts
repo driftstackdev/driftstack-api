@@ -121,6 +121,40 @@ describe('AI-B4 POST /v1/recipes — wired', () => {
     expect(res.statusCode).toBe(404);
   });
 
+  it('GET /v1/agent-sessions/:id/recipe-suggestion — real wired path: derives a label/description from a real plan-executed turn', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const agentSessionId = await createAgentSession();
+    await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${agentSessionId}/message`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { user_message: 'open https://example.com and capture' },
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${agentSessionId}/recipe-suggestion`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{
+      suggested_label: string;
+      suggested_description: string;
+      intent_count: number;
+    }>();
+    expect(body.suggested_label).toContain('example.com');
+    expect(body.intent_count).toBeGreaterThan(0);
+  });
+
+  it('GET recipe-suggestion cross-account → 404 (no existence disclosure)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions/agt_not_owned/recipe-suggestion',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
   it('validation: missing label → 400', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const agentSessionId = await createAgentSession();

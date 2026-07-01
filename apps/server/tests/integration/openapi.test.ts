@@ -221,6 +221,7 @@ describe('OpenAPI spec generation', () => {
         '/v1/agent-sessions/{id}/livekit-token',
         '/v1/agent-sessions/{id}/message',
         '/v1/agent-sessions/{id}/mode',
+        '/v1/agent-sessions/{id}/recipe-suggestion',
         '/v1/agent-sessions/{id}/resume',
         '/v1/agent-sessions/{id}/takeover',
         // LK arc — per-Mac LiveKit credentials registration

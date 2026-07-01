@@ -193,3 +193,66 @@ function validateLabelAndDescription(
     description: description === undefined || description === '' ? null : description,
   };
 }
+
+export interface RecipeSuggestion {
+  suggestedLabel: string;
+  suggestedDescription: string;
+}
+
+/**
+ * Doc-132 §5.2 (recipe auto-generation) — v1.0 slice. A real
+ * cross-customer ML pipeline ("observes patterns, trains a model,
+ * feeds published recipes back into training") is out of scope here:
+ * it's a genuine customer-data-handling design (Tier 3 per
+ * docs/planning/21-agent-autonomy.md) that needs a founder call, not
+ * a unilateral A2 build. This slice auto-derives a sensible label +
+ * description from the CUSTOMER'S OWN intent_log (same data the
+ * manual "Save recipe" flow already snapshots for them) so the save
+ * dialog prefills something useful instead of a blank form — safe,
+ * single-account, no data leaves the account, no training involved.
+ *
+ * Deterministic (not a model call): scans the ordered intents for the
+ * first distinct navigate hostnames + counts interact actions, and
+ * composes a short label + one-line description. Never throws —
+ * empty/unrecognized logs fall back to a generic label so the caller
+ * always gets a usable suggestion.
+ */
+export function suggestRecipeMetadata(intentLog: ReadonlyArray<AgentIntent>): RecipeSuggestion {
+  const hosts: string[] = [];
+  for (const intent of intentLog) {
+    if (intent.kind !== 'navigate') continue;
+    let host: string;
+    try {
+      host = new URL(intent.url).hostname.replace(/^www\./, '');
+    } catch {
+      continue; // malformed URL — skip rather than throw
+    }
+    if (hosts[hosts.length - 1] !== host) hosts.push(host);
+  }
+  const primaryHost = hosts[0];
+
+  const typeCount = intentLog.filter((i) => i.kind === 'interact' && i.action === 'type').length;
+  const tapCount = intentLog.filter((i) => i.kind === 'interact' && i.action === 'tap').length;
+  const hasSubmit = intentLog.some((i) => i.kind === 'interact' && i.action === 'press');
+
+  const label = primaryHost
+    ? typeCount > 0
+      ? `Fill form on ${primaryHost}`
+      : `Automation on ${primaryHost}`
+    : 'Untitled automation';
+
+  const descriptionParts: string[] = [];
+  if (primaryHost) descriptionParts.push(`Navigates to ${primaryHost}`);
+  if (typeCount > 0) descriptionParts.push(`fills ${typeCount} field${typeCount === 1 ? '' : 's'}`);
+  if (tapCount > 0) descriptionParts.push(`taps ${tapCount} element${tapCount === 1 ? '' : 's'}`);
+  if (hasSubmit) descriptionParts.push('submits');
+  const description =
+    descriptionParts.length > 0
+      ? `${descriptionParts.join(', ')}.`
+      : `Replays ${intentLog.length} recorded step${intentLog.length === 1 ? '' : 's'}.`;
+
+  return {
+    suggestedLabel: label.slice(0, 120),
+    suggestedDescription: description.slice(0, 2000),
+  };
+}

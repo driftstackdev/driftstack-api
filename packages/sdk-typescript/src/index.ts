@@ -76,7 +76,7 @@ export {
 // @driftstack/api-types. TIER_STORAGE_BYTES_CAP is keyed by AccountTier (bytes);
 // STORAGE_SOFT_WARN_FRACTION is the soft (80%) warn threshold.
 export { TIER_STORAGE_BYTES_CAP, STORAGE_SOFT_WARN_FRACTION } from '@driftstack/api-types';
-export type { Recipe, CreateRecipeRequest } from './resources/recipes.js';
+export type { Recipe, CreateRecipeRequest, RecipeSuggestion } from './resources/recipes.js';
 export type {
   TeamRole,
   TeamMember,

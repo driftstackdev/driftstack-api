@@ -95,3 +95,38 @@ func TestRecipes_Create_NullableAgentSessionIDInResponse(t *testing.T) {
 		t.Errorf("agent_session_id should decode as nil pointer when server returns null; got %v", *got.AgentSessionID)
 	}
 }
+
+func TestRecipes_Suggest_URLEncodesTheSessionID(t *testing.T) {
+	t.Parallel()
+	suggestionEnvelope := map[string]any{
+		"suggested_label":       "Fill form on example.com",
+		"suggested_description": "Navigates to example.com, fills 1 field.",
+		"intent_count":          4,
+	}
+	var gotPath string
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		// r.URL.Path is the DECODED path (%2F would show as a literal
+		// slash); EscapedPath() preserves the wire encoding — the same
+		// pattern client_test.go / crypto_orders_test.go use to assert
+		// url.PathEscape actually encoded '/' and ' '.
+		gotPath = r.URL.EscapedPath()
+		if r.Method != "GET" {
+			t.Errorf("unexpected method: %s", r.Method)
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(suggestionEnvelope)
+	})
+	got, err := client.Recipes.Suggest(context.Background(), "agt/with space")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/v1/agent-sessions/agt%2Fwith%20space/recipe-suggestion" {
+		t.Errorf("path=%q", gotPath)
+	}
+	if got.SuggestedLabel != "Fill form on example.com" {
+		t.Errorf("suggested_label=%q", got.SuggestedLabel)
+	}
+	if got.IntentCount != 4 {
+		t.Errorf("intent_count=%d", got.IntentCount)
+	}
+}

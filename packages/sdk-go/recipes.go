@@ -162,3 +162,28 @@ func (r *RecipesResource) Delete(ctx context.Context, recipeID string) error {
 		path:   "/v1/recipes/" + url.PathEscape(recipeID),
 	})
 }
+
+// RecipeSuggestion is the doc-132 §5.2 (recipe auto-generation) v1.0
+// slice response: a deterministic label/description suggestion derived
+// from a session's own intent_log (same assembly Create uses).
+type RecipeSuggestion struct {
+	SuggestedLabel       string `json:"suggested_label"`
+	SuggestedDescription string `json:"suggested_description"`
+	IntentCount          int    `json:"intent_count"`
+}
+
+// Suggest fetches a label/description suggestion for agentSessionID's
+// own intent_log. Read-only; safe to call speculatively before the
+// customer decides to save. A missing or cross-account id returns 404
+// (existence not leaked) — propagated as an error.
+func (r *RecipesResource) Suggest(ctx context.Context, agentSessionID string) (*RecipeSuggestion, error) {
+	var out RecipeSuggestion
+	if err := r.client.do(ctx, requestOptions{
+		method: "GET",
+		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/recipe-suggestion",
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

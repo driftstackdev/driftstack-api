@@ -44,6 +44,17 @@ export interface RecipesListPage {
   next_cursor: string | null;
 }
 
+/** Doc-132 §5.2 (recipe auto-generation) v1.0 slice — a deterministic
+ *  label/description suggestion derived from a session's own
+ *  intent_log (same assembly `create()` uses), so callers can prefill
+ *  a "Save as recipe" form before the customer decides to save. */
+export interface RecipeSuggestion {
+  suggested_label: string;
+  suggested_description: string;
+  /** Length of the flattened intent_log the suggestion was derived from. */
+  intent_count: number;
+}
+
 export interface CreateRecipeRequest {
   /** Source agent_session id to snapshot. The session must
    *  belong to the caller's account; cross-account ids return
@@ -116,6 +127,19 @@ export class RecipesResource {
     return this.http.request<void>({
       method: 'DELETE',
       path: `/v1/recipes/${encodeURIComponent(id)}`,
+    });
+  }
+
+  /**
+   * Doc-132 §5.2 (recipe auto-generation) v1.0 slice — fetch a
+   * deterministic label/description suggestion for an agent session,
+   * derived from its own intent_log. Safe to call speculatively before
+   * the customer decides to save (read-only, no side effects).
+   */
+  suggest(agentSessionId: string): Promise<RecipeSuggestion> {
+    return this.http.request<RecipeSuggestion>({
+      method: 'GET',
+      path: `/v1/agent-sessions/${encodeURIComponent(agentSessionId)}/recipe-suggestion`,
     });
   }
 }

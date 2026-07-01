@@ -85,6 +85,32 @@ Each `data` entry is the resource shape above **without** the
 payload weight. Fetch a single recipe to get the replayable
 intents. `next_cursor` is `null` on the last page.
 
+## Suggest a label/description
+
+`GET /v1/agent-sessions/{id}/recipe-suggestion`
+
+Before deciding whether to save a session as a recipe, fetch a
+deterministic label + description suggestion derived from that
+session's own intent_log — the same data `POST /v1/recipes` would
+capture. Read-only; safe to call speculatively (no recipe is created).
+
+Response `200 OK`:
+
+```json
+{
+  "suggested_label": "Fill form on example.com",
+  "suggested_description": "Navigates to example.com, fills 2 fields, taps 1 element, submits.",
+  "intent_count": 5
+}
+```
+
+The suggestion is a heuristic over the session's own intents (distinct
+navigate hostnames, interact-action counts) — not a cross-customer ML
+model. It never inspects or trains on any other account's data. A
+session with no navigate/interact intents still returns a usable
+generic suggestion rather than an error. `id` uses the same cross-account
+404 contract as the rest of this surface (existence not leaked).
+
 ## Get one
 
 `GET /v1/recipes/{id}`

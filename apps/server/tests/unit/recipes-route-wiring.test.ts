@@ -26,7 +26,7 @@ const RECIPE = {
   updatedAt: new Date('2026-05-20T10:00:00.000Z'),
 } as unknown as RecipeRecord;
 
-async function harness(): Promise<{
+async function harness(sessionSource: unknown = null): Promise<{
   app: FastifyInstance;
   getByIdAccounts: string[];
   deleteAccounts: string[];
@@ -50,7 +50,9 @@ async function harness(): Promise<{
     },
     create: () => Promise.resolve(RECIPE),
   } as unknown as RecipesRepo;
-  const agentSessions = { get: () => Promise.resolve(null) } as unknown as AgentSessionsRepo;
+  const agentSessions = {
+    get: () => Promise.resolve(sessionSource),
+  } as unknown as AgentSessionsRepo;
 
   const app = Fastify({ logger: false });
   registerErrorHandler(app);
@@ -109,6 +111,71 @@ describe('recipes route — read/management wiring (app.inject)', () => {
     const { app } = await harness();
     const res = await app.inject({ method: 'DELETE', url: '/v1/recipes/rec_missing' });
     expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+});
+
+describe('GET /v1/agent-sessions/:id/recipe-suggestion (doc-132 §5.2 v1.0 slice)', () => {
+  it('derives a suggestion from the authed-owner session intent_log', async () => {
+    const { app } = await harness({
+      id: 'agt_1',
+      accountId: ACC,
+      transcript: [
+        {
+          intents: [
+            { kind: 'navigate', url: 'https://shop.example.com/checkout' },
+            { kind: 'interact', action: 'type', selector: '#email', value: 'x' },
+            { kind: 'interact', action: 'tap', selector: '#submit' },
+          ],
+        },
+      ],
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions/agt_1/recipe-suggestion',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{
+      suggested_label: string;
+      suggested_description: string;
+      intent_count: number;
+    }>();
+    expect(body.suggested_label).toContain('shop.example.com');
+    expect(body.suggested_description).toContain('shop.example.com');
+    expect(body.intent_count).toBe(3);
+    await app.close();
+  });
+
+  it('→ 404 for a session owned by a different account (existence not leaked)', async () => {
+    const { app } = await harness({ id: 'agt_1', accountId: 'someone-else', transcript: [] });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions/agt_1/recipe-suggestion',
+    });
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('→ 404 for a missing session id', async () => {
+    const { app } = await harness(null);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions/agt_missing/recipe-suggestion',
+    });
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('an empty intent_log still returns a usable (generic) suggestion, not an error', async () => {
+    const { app } = await harness({ id: 'agt_1', accountId: ACC, transcript: [] });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions/agt_1/recipe-suggestion',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ suggested_label: string; intent_count: number }>();
+    expect(body.suggested_label.length).toBeGreaterThan(0);
+    expect(body.intent_count).toBe(0);
     await app.close();
   });
 });

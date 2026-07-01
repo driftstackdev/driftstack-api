@@ -1530,6 +1530,32 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
         if (statusEl) statusEl.classList.add('hidden');
         dialog.showModal();
         if (labelInput) labelInput.focus();
+        // Doc-132 §5.2 — best-effort prefill from a deterministic
+        // suggestion derived from this session's own intent_log. Never
+        // blocks opening the dialog; only fills fields the customer
+        // hasn't already typed into (so a reopened dialog with edits
+        // in flight is never clobbered), and any failure is silent —
+        // a blank form is the same experience as before this existed.
+        fetch(apiBaseUrl + '/v1/agent-sessions/' + encodeURIComponent(sessionId) + '/recipe-suggestion', {
+          headers: authHeaders(),
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((body) => {
+            if (!body) return;
+            if (labelInput && !labelInput.value.trim() && typeof body.suggested_label === 'string') {
+              labelInput.value = body.suggested_label;
+            }
+            if (
+              descInput &&
+              !descInput.value.trim() &&
+              typeof body.suggested_description === 'string'
+            ) {
+              descInput.value = body.suggested_description;
+            }
+          })
+          .catch(() => {
+            /* best-effort — leave the form blank on any failure */
+          });
       });
       cancelBtn?.addEventListener('click', () => dialog.close());
 

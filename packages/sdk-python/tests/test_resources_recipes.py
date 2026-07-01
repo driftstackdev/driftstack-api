@@ -113,3 +113,33 @@ async def test_async_create_with_description() -> None:
             "label": "x",
             "description": "d",
         }
+
+
+SUGGESTION_ENVELOPE = {
+    "suggested_label": "Fill form on example.com",
+    "suggested_description": "Navigates to example.com, fills 1 field.",
+    "intent_count": 4,
+}
+
+
+def test_sync_suggest_url_encodes_the_session_id() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.get(
+            "/v1/agent-sessions/agt%2Fwith%20space/recipe-suggestion",
+        ).mock(return_value=httpx.Response(200, json=SUGGESTION_ENVELOPE))
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = client.recipes.suggest("agt/with space")
+        assert route.called
+        assert out == SUGGESTION_ENVELOPE
+
+
+@pytest.mark.asyncio
+async def test_async_suggest_url_encodes_the_session_id() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.get(
+            "/v1/agent-sessions/agt%2Fwith%20space/recipe-suggestion",
+        ).mock(return_value=httpx.Response(200, json=SUGGESTION_ENVELOPE))
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = await client.recipes.suggest("agt/with space")
+        assert route.called
+        assert out == SUGGESTION_ENVELOPE

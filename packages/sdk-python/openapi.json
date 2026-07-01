@@ -18604,6 +18604,112 @@
         }
       }
     },
+    "/v1/agent-sessions/{id}/recipe-suggestion": {
+      "get": {
+        "summary": "Suggest a recipe label/description for an agent session's intent_log",
+        "tags": ["agent-chat"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deterministic suggestion derived from the flattened intent_log (same assembly POST /v1/recipes uses). Safe to call speculatively before deciding to save.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "suggested_label": {
+                      "type": "string"
+                    },
+                    "suggested_description": {
+                      "type": "string"
+                    },
+                    "intent_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": ["suggested_label", "suggested_description", "intent_count"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent session not found (also returned for cross-account access — existence is not leaked).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/recipes": {
       "post": {
         "summary": "Snapshot an agent session as a replayable recipe",
