@@ -199,5 +199,77 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const [row] = await client`SELECT status FROM webhook_deliveries WHERE id = ${stale}`;
       expect(row?.status).toBe('pending');
     });
+
+    it('replay() rejects an in_flight delivery instead of clobbering its lease (audit fix 2026-07-01)', async () => {
+      if (!dbReachable || !client) return;
+      const { webhookId, database } = await seedEndpoint();
+      const now = new Date();
+      const inFlight = await insertDelivery(webhookId, 'in_flight', now, now);
+
+      const handles = createDurableWebhookDelivery({
+        database,
+        fetch: () => Promise.resolve(new Response('ok', { status: 200 })),
+        now: () => now.getTime(),
+      });
+
+      await expect(handles.deliveries.replay(inFlight)).rejects.toThrow(/in_flight/);
+
+      // The row is untouched — still in_flight, not reset to pending.
+      const [row] = await client`SELECT status FROM webhook_deliveries WHERE id = ${inFlight}`;
+      expect(row?.status).toBe('in_flight');
+    });
+
+    it("replay() succeeds on 'failed' and 'delivered' deliveries (the documented-eligible statuses, no regression)", async () => {
+      if (!dbReachable || !client) return;
+      const { webhookId, database } = await seedEndpoint();
+      const now = new Date();
+      const failed = await insertDelivery(webhookId, 'failed', now, now);
+      const delivered = await insertDelivery(webhookId, 'delivered', now, now);
+
+      const handles = createDurableWebhookDelivery({
+        database,
+        fetch: () => Promise.resolve(new Response('ok', { status: 200 })),
+        now: () => now.getTime(),
+      });
+
+      const r1 = await handles.deliveries.replay(failed);
+      expect(r1.status).toBe('pending');
+      const r2 = await handles.deliveries.replay(delivered);
+      expect(r2.status).toBe('pending');
+    });
+
+    it("requeue() rejects a non-'dlq' delivery instead of clobbering it (audit fix 2026-07-01)", async () => {
+      if (!dbReachable || !client) return;
+      const { webhookId, database } = await seedEndpoint();
+      const now = new Date();
+      const inFlight = await insertDelivery(webhookId, 'in_flight', now, now);
+
+      const handles = createDurableWebhookDelivery({
+        database,
+        fetch: () => Promise.resolve(new Response('ok', { status: 200 })),
+        now: () => now.getTime(),
+      });
+
+      await expect(handles.dlq.requeue({ deliveryId: inFlight })).rejects.toThrow(/dlq/);
+
+      const [row] = await client`SELECT status FROM webhook_deliveries WHERE id = ${inFlight}`;
+      expect(row?.status).toBe('in_flight');
+    });
+
+    it("requeue() succeeds on a genuinely 'dlq' delivery (no regression)", async () => {
+      if (!dbReachable || !client) return;
+      const { webhookId, database } = await seedEndpoint();
+      const now = new Date();
+      const dlqRow = await insertDelivery(webhookId, 'dlq', now, now);
+
+      const handles = createDurableWebhookDelivery({
+        database,
+        fetch: () => Promise.resolve(new Response('ok', { status: 200 })),
+        now: () => now.getTime(),
+      });
+
+      const requeued = await handles.dlq.requeue({ deliveryId: dlqRow });
+      expect(requeued.status).toBe('pending');
+    });
   },
 );

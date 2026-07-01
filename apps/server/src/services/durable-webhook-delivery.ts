@@ -210,25 +210,53 @@ export class DurableWebhookDeliveryService implements WebhookDeliveryService {
     return { data, nextCursor };
   }
 
+  // Audit fix (2026-07-01) — TOCTOU race: this used to be a plain
+  // read-then-write (SELECT to confirm existence, then an UNCONDITIONAL
+  // UPDATE ... SET status='pending'). That let replay() land on a delivery
+  // that's CURRENTLY 'in_flight' — a live worker (processTick, which claims
+  // rows transactionally with FOR UPDATE SKIP LOCKED) may be mid-attempt on
+  // it right now. Clobbering the row to 'pending'/nextAttemptAt=now while
+  // that attempt is still running means the very next processTick() claims
+  // it again (its `status = 'pending' AND next_attempt_at <= now` predicate
+  // matches) and fires a SECOND concurrent POST to the customer's real
+  // endpoint — a genuine double-delivery, exactly the race this package's
+  // own in-memory reference implementation had (see in-memory.ts's WD-1 fix,
+  // same audit). Fixed the same way: a single guarded UPDATE ... WHERE
+  // status IN ('delivered','failed') RETURNING *, matching this interface's
+  // documented contract ("Replay a 'failed' or 'delivered' delivery").
+  // A 0-row result means the row wasn't in an eligible status (or never
+  // existed) — re-fetch to tell those two cases apart for the error message.
   async replay(deliveryId: string): Promise<DeliveryRecord> {
-    const [row] = await this.database.db
-      .select()
-      .from(webhookDeliveries)
-      .where(eq(webhookDeliveries.id, deliveryId))
-      .limit(1);
-    if (!row) throw new Error(`replay: delivery ${deliveryId} not found`);
     const nowMs = this.now();
-    await this.database.db
+    const [updatedRow] = await this.database.db
       .update(webhookDeliveries)
       .set({
         status: 'pending',
         nextAttemptAt: new Date(nowMs),
         deliveredAt: null,
       })
-      .where(eq(webhookDeliveries.id, deliveryId));
-    const updated = await this.get(deliveryId);
-    if (!updated) throw new Error(`replay: re-fetch failed for ${deliveryId}`);
-    return updated;
+      .where(
+        and(
+          eq(webhookDeliveries.id, deliveryId),
+          inArray(webhookDeliveries.status, ['delivered', 'failed']),
+        ),
+      )
+      .returning();
+    if (updatedRow) {
+      const attempts = await loadAttempts(this.database, deliveryId);
+      return rowToDeliveryRecord(updatedRow, attempts);
+    }
+    const [existing] = await this.database.db
+      .select({ status: webhookDeliveries.status })
+      .from(webhookDeliveries)
+      .where(eq(webhookDeliveries.id, deliveryId))
+      .limit(1);
+    if (!existing) throw new Error(`replay: delivery ${deliveryId} not found`);
+    throw new Error(
+      `replay: delivery ${deliveryId} has status '${existing.status}' — replay is only ` +
+        `allowed for 'delivered' or 'failed' deliveries ('in_flight' has a live attempt lease; ` +
+        `'pending' is already queued)`,
+    );
   }
 }
 
@@ -314,6 +342,13 @@ export class DurableDlqManager implements DlqManager {
     return rowToDlqEntry(row.delivery, row.endpoint.accountId, attempts);
   }
 
+  // Audit fix (2026-07-01) — same TOCTOU race as
+  // DurableWebhookDeliveryService.replay (see that method's comment for the
+  // full mechanism): this had NO status guard at all — it would clobber a
+  // row regardless of whether it was 'in_flight', 'pending', or anything
+  // else, not just 'dlq' entries. Fixed with a guarded UPDATE ... WHERE
+  // status = 'dlq' RETURNING *, matching this interface's documented
+  // contract ("Move a DLQ entry back into the active queue").
   async requeue(opts: RequeueDlqOpts): Promise<DeliveryRecord> {
     const nowMs = this.now();
     const [row] = await this.database.db
@@ -323,9 +358,20 @@ export class DurableDlqManager implements DlqManager {
         nextAttemptAt: new Date(nowMs),
         deliveredAt: null,
       })
-      .where(eq(webhookDeliveries.id, opts.deliveryId))
+      .where(and(eq(webhookDeliveries.id, opts.deliveryId), eq(webhookDeliveries.status, 'dlq')))
       .returning();
-    if (!row) throw new Error(`requeue: delivery ${opts.deliveryId} not found`);
+    if (!row) {
+      const [existing] = await this.database.db
+        .select({ status: webhookDeliveries.status })
+        .from(webhookDeliveries)
+        .where(eq(webhookDeliveries.id, opts.deliveryId))
+        .limit(1);
+      if (!existing) throw new Error(`requeue: delivery ${opts.deliveryId} not found`);
+      throw new Error(
+        `requeue: delivery ${opts.deliveryId} has status '${existing.status}' — requeue is ` +
+          `only allowed for 'dlq' deliveries; use replay() for a 'delivered' or 'failed' one`,
+      );
+    }
     const attempts = await loadAttempts(this.database, opts.deliveryId);
     return rowToDeliveryRecord(row, attempts);
   }
