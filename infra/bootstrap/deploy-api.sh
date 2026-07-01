@@ -108,6 +108,15 @@ ssh "root@$HOST" "
 echo "→ remote: install systemd unit + nginx vhost"
 scp -q infra/systemd/driftstack-api.service \
   "root@$HOST:/etc/systemd/system/driftstack-api.service"
+# Security fix (2026-07-01) — Cloudflare-only real-IP trust, both prod + staging
+# (both are Cloudflare-proxied and both had the 0.0.0.0/0 origin-spoof gap; see
+# infra/nginx/cloudflare-real-ip.conf for the full rationale). Installed BEFORE
+# `nginx -t` runs below so the vhost's removal of its own set_real_ip_from is
+# validated against the final config — conf.d/*.conf is auto-loaded at
+# http-context (no explicit `include` needed in the vhost), same mechanism as
+# ws_upgrade_map.conf below for the fleet vhost.
+scp -q infra/nginx/cloudflare-real-ip.conf \
+  "root@$HOST:/etc/nginx/conf.d/cloudflare-real-ip.conf"
 scp -q "$NGINX_VHOST" \
   "root@$HOST:/etc/nginx/sites-available/$NGINX_VHOST_NAME.conf"
 ssh "root@$HOST" "
