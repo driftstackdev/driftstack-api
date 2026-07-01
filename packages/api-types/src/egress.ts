@@ -110,7 +110,7 @@ export type SocksProxyConfig = z.infer<typeof SocksProxyConfigSchema>;
  * tolerates surrounding whitespace + comment lines starting with `#`
  * or `;`.
  */
-const OVPN_CLIENT_DIRECTIVE_RE = /^[ \t]*client\b/m;
+const OVPN_CLIENT_DIRECTIVE_RE = /^[ \t]*client[ \t]*(?:[#;].*)?$/m;
 const OVPN_REMOTE_DIRECTIVE_RE = /^[ \t]*remote\s+\S+/m;
 export const OpenVpnProxyConfigSchema = z.object({
   config_blob: z
@@ -140,6 +140,12 @@ export type OpenVpnProxyConfig = z.infer<typeof OpenVpnProxyConfigSchema>;
  * `private_key` + `peer_public_key` are base64-encoded WireGuard 32-byte
  * curve25519 keys (44 chars after b64 with padding).
  */
+// Host part intentionally allows `:` (see planning 133 discussion) so this
+// pattern only anchors the overall host:port *shape*; the trailing numeric
+// group is separately bounded to the valid TCP/UDP port range (1-65535)
+// below — `[0-9]{1,5}` alone also matches syntactically-invalid ports like
+// `0` or `99999`.
+const WG_ENDPOINT_RE = /^([A-Za-z0-9.\-:_]+):([0-9]{1,5})$/;
 export const WireGuardProxyConfigSchema = z.object({
   private_key: z.string().regex(/^[A-Za-z0-9+/]{43}=$/, {
     message: 'private_key must be a 44-char base64 curve25519 key',
@@ -147,9 +153,20 @@ export const WireGuardProxyConfigSchema = z.object({
   peer_public_key: z.string().regex(/^[A-Za-z0-9+/]{43}=$/, {
     message: 'peer_public_key must be a 44-char base64 curve25519 key',
   }),
-  endpoint: z.string().regex(/^[A-Za-z0-9.\-:_]+:[0-9]{1,5}$/, {
-    message: 'endpoint must be host:port (port 1-65535)',
-  }),
+  endpoint: z
+    .string()
+    .regex(WG_ENDPOINT_RE, {
+      message: 'endpoint must be host:port (port 1-65535)',
+    })
+    .refine(
+      (val) => {
+        const match = WG_ENDPOINT_RE.exec(val);
+        if (!match) return false;
+        const port = Number(match[2]);
+        return port >= 1 && port <= 65535;
+      },
+      { message: 'endpoint must be host:port (port 1-65535)' },
+    ),
   allowed_ips: z.string().default('0.0.0.0/0'),
   // [Interface] Address (e.g. 10.7.0.2/32) — the harness userspace WireGuard
   // ifconfig needs it to bring up the tunnel (A3 W2109). Optional in the schema

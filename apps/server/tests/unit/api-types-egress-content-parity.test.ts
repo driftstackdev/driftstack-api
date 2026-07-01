@@ -124,6 +124,32 @@ describe('EG-API-1.1 packages/api-types/src/egress.ts content parity', () => {
     expect(OpenVpnProxyConfigSchema.safeParse({ config_blob: clientOnlyInComment }).success).toBe(
       false,
     );
+
+    // A `client-*`/`client_*` prefixed directive (real OpenVPN
+    // directives like `client-nat`/`client-to-client`/
+    // `client-config-dir`/`client-cert-not-required`) MUST NOT satisfy
+    // the bare `client` requirement — a word-boundary-only regex
+    // incorrectly matched these, letting a non-client .ovpn through
+    // the API boundary (regression guard).
+    const clientPrefixedDirectiveOnly =
+      'client-nat snat 192.168.1.0/24 10.8.0.0/24 255.255.255.0\nremote vpn.example.com 1194\n';
+    expect(
+      OpenVpnProxyConfigSchema.safeParse({ config_blob: clientPrefixedDirectiveOnly }).success,
+    ).toBe(false);
+
+    // A bare `client` line with trailing whitespace or an inline
+    // comment must still pass (real .ovpn files sometimes have
+    // trailing whitespace/comments after a directive).
+    expect(
+      OpenVpnProxyConfigSchema.safeParse({
+        config_blob: 'client \nremote vpn.example.com 1194\n',
+      }).success,
+    ).toBe(true);
+    expect(
+      OpenVpnProxyConfigSchema.safeParse({
+        config_blob: 'client # we are the client\nremote vpn.example.com 1194\n',
+      }).success,
+    ).toBe(true);
   });
 
   it('WireGuardProxyConfig fields: private_key + peer_public_key 44-char base64 curve25519 / endpoint host:port / allowed_ips default 0.0.0.0/0 / dns optional', () => {
@@ -151,6 +177,32 @@ describe('EG-API-1.1 packages/api-types/src/egress.ts content parity', () => {
         endpoint: 'no-port',
       }).success,
     ).toBe(false);
+  });
+
+  it('WireGuardProxyConfig.endpoint port bound: regression guard — a 1-5 digit port regex alone accepts out-of-range ports (0, 65536, 99999); the schema must numerically bound the port to 1-65535 like every other port field in this file', () => {
+    const validKey = 'A'.repeat(43) + '=';
+    const base = { private_key: validKey, peer_public_key: validKey };
+    // Out-of-range ports that a bare `[0-9]{1,5}` regex would wrongly
+    // accept — MUST reject.
+    expect(
+      WireGuardProxyConfigSchema.safeParse({ ...base, endpoint: 'vpn.example.com:0' }).success,
+    ).toBe(false);
+    expect(
+      WireGuardProxyConfigSchema.safeParse({ ...base, endpoint: 'vpn.example.com:99999' }).success,
+    ).toBe(false);
+    expect(
+      WireGuardProxyConfigSchema.safeParse({ ...base, endpoint: 'vpn.example.com:65536' }).success,
+    ).toBe(false);
+    // Boundary values of the valid range must still pass.
+    expect(
+      WireGuardProxyConfigSchema.safeParse({ ...base, endpoint: 'vpn.example.com:1' }).success,
+    ).toBe(true);
+    expect(
+      WireGuardProxyConfigSchema.safeParse({ ...base, endpoint: 'vpn.example.com:65535' }).success,
+    ).toBe(true);
+    // Ordinary valid endpoint still passes end-to-end.
+    const parsed = WireGuardProxyConfigSchema.parse({ ...base, endpoint: 'wg.example.com:51820' });
+    expect(parsed.endpoint).toBe('wg.example.com:51820');
   });
 
   it('ProxyConfig discriminated union by type: passing sibling fields for non-matching type rejects (zod discriminatedUnion enforcement)', () => {

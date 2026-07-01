@@ -38,6 +38,9 @@ function decodeKey(keyBase64: string): Buffer {
 /** Encrypt a platform secret for at-rest storage. Returns the single
  *  `[IV | tag | ciphertext]` blob for the bytea column. */
 export function encryptPlatformSecret(plaintext: string, keyBase64: string): Buffer {
+  if (plaintext.length === 0) {
+    throw new Error('platform-secret plaintext is empty; refusing to encrypt');
+  }
   const key = decodeKey(keyBase64);
   const iv = randomBytes(GCM_IV_BYTES);
   const cipher = createCipheriv('aes-256-gcm', key, iv);
@@ -50,8 +53,10 @@ export function encryptPlatformSecret(plaintext: string, keyBase64: string): Buf
  *  (GCM auth failure) or a wrong key. */
 export function decryptPlatformSecret(blob: Buffer, keyBase64: string): PlatformSecretPlaintext {
   const key = decodeKey(keyBase64);
-  if (blob.length < GCM_IV_BYTES + GCM_TAG_BYTES) {
-    throw new Error('platform-secret blob too short to contain IV + auth tag');
+  if (blob.length < GCM_IV_BYTES + GCM_TAG_BYTES + 1) {
+    throw new Error(
+      'platform-secret blob too short to contain IV + auth tag + >=1 ciphertext byte',
+    );
   }
   const iv = blob.subarray(0, GCM_IV_BYTES);
   const tag = blob.subarray(GCM_IV_BYTES, GCM_IV_BYTES + GCM_TAG_BYTES);

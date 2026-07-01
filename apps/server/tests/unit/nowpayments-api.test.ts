@@ -1,0 +1,183 @@
+// V-666: unit tests for the hand-rolled NowPayments API HTTP client.
+//
+// We don't hit real NowPayments — fetch is stubbed. Tests verify request
+// shape (URL, headers, body), response mapping (success), 4xx error
+// handling, and — the regression this file exists for — that a malformed
+// 200 OK (missing/invalid required field) throws instead of silently
+// coercing into a plausible-looking result (e.g. payment_id -> "undefined").
+
+import { describe, expect, it } from 'vitest';
+import { NowPaymentsApiClient } from '../../src/lib/nowpayments-api.js';
+import { createTestLogger } from '../../src/lib/logger.js';
+
+interface FetchCall {
+  url: string;
+  init: RequestInit;
+}
+
+function makeStubFetch(
+  responses: Array<{ status: number; body: unknown } | { throwError: Error }>,
+): { fetchImpl: typeof fetch; calls: FetchCall[] } {
+  const calls: FetchCall[] = [];
+  let i = 0;
+  const fetchImpl: typeof fetch = (input, init) => {
+    const url = typeof input === 'string' ? input : (input as Request).url;
+    calls.push({ url, init: init ?? {} });
+    const r = responses[i++];
+    if (!r) throw new Error('stub fetch ran out of responses');
+    if ('throwError' in r) return Promise.reject(r.throwError);
+    return Promise.resolve(
+      new Response(JSON.stringify(r.body), {
+        status: r.status,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+  };
+  return { fetchImpl, calls };
+}
+
+function makeClient(
+  fetchImpl: typeof fetch,
+  overrides: Partial<ConstructorParameters<typeof NowPaymentsApiClient>[0]> = {},
+): NowPaymentsApiClient {
+  return new NowPaymentsApiClient({
+    apiKey: 'np_test_dummy',
+    logger: createTestLogger(),
+    fetchImpl,
+    ...overrides,
+  });
+}
+
+const VALID_CREATE_PAYMENT_ARGS = {
+  priceAmount: 49.99,
+  priceCurrency: 'USD',
+  orderId: 'order-abc-123',
+  ipnCallbackUrl: 'https://api.driftstack.dev/webhooks/nowpayments',
+};
+
+const VALID_CREATE_PAYMENT_BODY = {
+  payment_id: 5077125051,
+  pay_address: 'bc1qxyz...',
+  pay_currency: 'btc',
+  pay_amount: 0.00085,
+  price_amount: 49.99,
+  price_currency: 'usd',
+  payment_status: 'waiting',
+};
+
+describe('NowPaymentsApiClient.createPayment', () => {
+  it('POSTs to /v1/payment with x-api-key auth and maps the response (happy path)', async () => {
+    const { fetchImpl, calls } = makeStubFetch([{ status: 200, body: VALID_CREATE_PAYMENT_BODY }]);
+    const client = makeClient(fetchImpl);
+
+    const result = await client.createPayment(VALID_CREATE_PAYMENT_ARGS);
+
+    expect(result).toEqual({
+      paymentId: '5077125051',
+      payAddress: 'bc1qxyz...',
+      payCurrency: 'btc',
+      payAmount: 0.00085,
+      priceAmount: 49.99,
+      priceCurrency: 'usd',
+      paymentStatus: 'waiting',
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe('https://api.nowpayments.io/v1/payment');
+    const init = calls[0]!.init;
+    expect(init.method).toBe('POST');
+    const headers = init.headers as Record<string, string>;
+    expect(headers['x-api-key']).toBe('np_test_dummy');
+    expect(headers['content-type']).toBe('application/json');
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(body.price_amount).toBe(49.99);
+    expect(body.price_currency).toBe('usd'); // lowercased
+    expect(body.order_id).toBe('order-abc-123');
+    expect(body.ipn_callback_url).toBe(VALID_CREATE_PAYMENT_ARGS.ipnCallbackUrl);
+  });
+
+  it('accepts a numeric-string payment_id (NowPayments sometimes returns digits as a string)', async () => {
+    const { fetchImpl } = makeStubFetch([
+      { status: 200, body: { ...VALID_CREATE_PAYMENT_BODY, payment_id: '5077125051' } },
+    ]);
+    const client = makeClient(fetchImpl);
+    const result = await client.createPayment(VALID_CREATE_PAYMENT_ARGS);
+    expect(result.paymentId).toBe('5077125051');
+  });
+
+  it('includes optional order_description and pay_currency when provided', async () => {
+    const { fetchImpl, calls } = makeStubFetch([{ status: 200, body: VALID_CREATE_PAYMENT_BODY }]);
+    const client = makeClient(fetchImpl);
+    await client.createPayment({
+      ...VALID_CREATE_PAYMENT_ARGS,
+      orderDescription: 'API Builder plan',
+      payCurrency: 'ETH',
+    });
+    const body = JSON.parse(calls[0]!.init.body as string) as Record<string, unknown>;
+    expect(body.order_description).toBe('API Builder plan');
+    expect(body.pay_currency).toBe('eth'); // lowercased
+  });
+
+  it('throws StripeApiError-shaped error on 4xx/5xx (unchanged upstream-error path)', async () => {
+    const { fetchImpl } = makeStubFetch([
+      { status: 400, body: { message: 'invalid price_currency' } },
+    ]);
+    const client = makeClient(fetchImpl);
+    await expect(client.createPayment(VALID_CREATE_PAYMENT_ARGS)).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  // Regression: a malformed 200 OK (missing payment_id) used to silently
+  // produce paymentId: "undefined" via String(res.payment_id) instead of
+  // throwing. That poisoned value then gets persisted as the order's
+  // payment_id, permanently breaking IPN matching for the customer's real
+  // callback. This must now throw instead of returning a coerced result.
+  it('throws when the upstream 200 OK response is missing payment_id, instead of coercing to the string "undefined"', async () => {
+    const malformedBody = { ...VALID_CREATE_PAYMENT_BODY } as Record<string, unknown>;
+    delete malformedBody.payment_id;
+    const { fetchImpl } = makeStubFetch([{ status: 200, body: malformedBody }]);
+    const client = makeClient(fetchImpl);
+
+    await expect(client.createPayment(VALID_CREATE_PAYMENT_ARGS)).rejects.toThrow(/payment_id/);
+  });
+
+  it('throws when payment_id is null in an otherwise-well-formed 200 OK response', async () => {
+    const { fetchImpl } = makeStubFetch([
+      { status: 200, body: { ...VALID_CREATE_PAYMENT_BODY, payment_id: null } },
+    ]);
+    const client = makeClient(fetchImpl);
+    await expect(client.createPayment(VALID_CREATE_PAYMENT_ARGS)).rejects.toThrow(/payment_id/);
+  });
+
+  it('throws when pay_address is missing from an otherwise-well-formed 200 OK response', async () => {
+    const malformedBody = { ...VALID_CREATE_PAYMENT_BODY } as Record<string, unknown>;
+    delete malformedBody.pay_address;
+    const { fetchImpl } = makeStubFetch([{ status: 200, body: malformedBody }]);
+    const client = makeClient(fetchImpl);
+    await expect(client.createPayment(VALID_CREATE_PAYMENT_ARGS)).rejects.toThrow(/pay_address/);
+  });
+});
+
+describe('NowPaymentsApiClient.getPayment', () => {
+  it('GETs /v1/payment/:id and maps payment_status', async () => {
+    const { fetchImpl, calls } = makeStubFetch([
+      { status: 200, body: { payment_status: 'confirmed' } },
+    ]);
+    const client = makeClient(fetchImpl);
+    const result = await client.getPayment('5077125051');
+    expect(result).toEqual({ paymentStatus: 'confirmed' });
+    expect(calls[0]!.url).toBe('https://api.nowpayments.io/v1/payment/5077125051');
+    expect(calls[0]!.init.method).toBe('GET');
+  });
+
+  it('URL-encodes the payment id path segment', async () => {
+    const { fetchImpl, calls } = makeStubFetch([
+      { status: 200, body: { payment_status: 'waiting' } },
+    ]);
+    const client = makeClient(fetchImpl);
+    await client.getPayment('some id/with?chars');
+    expect(calls[0]!.url).toBe(
+      `https://api.nowpayments.io/v1/payment/${encodeURIComponent('some id/with?chars')}`,
+    );
+  });
+});

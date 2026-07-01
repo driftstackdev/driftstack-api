@@ -67,6 +67,61 @@ export interface CreatePaymentResult {
   paymentStatus: string;
 }
 
+interface RawCreatePaymentResponse {
+  payment_id: string | number;
+  pay_address: string;
+  pay_currency: string;
+  pay_amount: number;
+  price_amount: number;
+  price_currency: string;
+  payment_status: string;
+}
+
+/**
+ * Guards against a malformed/degraded 200 OK from NowPayments (partial body
+ * during an upstream incident, a proxy truncating the response, or a future
+ * API contract change). Without this, `String(res.payment_id)` on an
+ * undefined/null field silently produces the literal string "undefined",
+ * which then gets persisted as the order's payment_id — permanently
+ * breaking IPN matching for the customer's real callback (see
+ * CryptoOrdersService.applyIpnStatus's exact-match reject). Fail loud
+ * instead of coercing a missing field into a plausible-looking value.
+ */
+function assertValidCreatePaymentResponse(res: unknown): asserts res is RawCreatePaymentResponse {
+  const r = res as Partial<RawCreatePaymentResponse> | null | undefined;
+  const missing: string[] = [];
+  if (
+    r == null ||
+    (typeof r.payment_id !== 'string' && typeof r.payment_id !== 'number') ||
+    r.payment_id === ''
+  ) {
+    missing.push('payment_id');
+  }
+  if (r != null && (typeof r.pay_address !== 'string' || r.pay_address === '')) {
+    missing.push('pay_address');
+  }
+  if (r != null && (typeof r.pay_currency !== 'string' || r.pay_currency === '')) {
+    missing.push('pay_currency');
+  }
+  if (r != null && typeof r.pay_amount !== 'number') {
+    missing.push('pay_amount');
+  }
+  if (r != null && typeof r.price_amount !== 'number') {
+    missing.push('price_amount');
+  }
+  if (r != null && typeof r.price_currency !== 'string') {
+    missing.push('price_currency');
+  }
+  if (r != null && typeof r.payment_status !== 'string') {
+    missing.push('payment_status');
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      `NowPayments createPayment response missing/invalid field(s): ${missing.join(', ')}`,
+    );
+  }
+}
+
 export class NowPaymentsApiClient {
   private readonly apiKey: string;
   private readonly timeoutMs: number;
@@ -101,6 +156,7 @@ export class NowPaymentsApiClient {
       price_currency: string;
       payment_status: string;
     }>('POST', '/v1/payment', payload);
+    assertValidCreatePaymentResponse(res);
 
     return {
       paymentId: String(res.payment_id),
