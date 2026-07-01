@@ -145,6 +145,16 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
       const initiate = (await initiateRes.json()) as InitiateResponse;
       await openInBrowser(initiate.browser_url);
 
+      // If the user cancelled (Cancel / "paste a key instead") during the
+      // awaits above, stop() already ran (settledRef=true, refs nulled). Bail
+      // BEFORE re-arming the poll/timeout/deep-link listener + flipping the UI
+      // back to 'waiting' — otherwise we'd leak timers + a listener nothing
+      // clears until the 5-min backstop (and compound on a restart).
+      if (settledRef.current) {
+        deepLinkUnlistenRef.current?.();
+        return;
+      }
+
       const expiresAt = new Date(initiate.expires_at).getTime();
       setState({ kind: 'waiting', code: initiate.code, state: stateToken, expiresAt });
 

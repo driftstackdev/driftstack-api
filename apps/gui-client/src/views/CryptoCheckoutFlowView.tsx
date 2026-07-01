@@ -100,7 +100,7 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
             type="button"
             onClick={onStart}
             disabled={quote.state.kind !== 'ready'}
-            className="rounded-md bg-status-info px-3 py-1 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-md bg-accent px-3 py-1 text-sm font-medium text-white disabled:opacity-50"
           >
             Start checkout
           </button>

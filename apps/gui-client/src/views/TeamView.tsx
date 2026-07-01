@@ -132,6 +132,21 @@ export function TeamView(): JSX.Element {
     [client, confirm, refresh],
   );
 
+  // Signed out (no API key) → `refresh` bails before flipping `loading` off, so
+  // the skeleton (initialized true) would spin forever. Show an honest
+  // connect-first state instead — mirrors the other client-consuming views'
+  // empty-connect prompt (TeamView was the only one without one).
+  if (!client) {
+    return (
+      <div className="mx-auto flex h-full w-full max-w-3xl min-w-0 flex-col gap-6 overflow-y-auto p-6">
+        <EmptyState
+          title="Connect to manage your team"
+          description="Add your API key in Settings to invite teammates and manage member roles."
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl min-w-0 flex-col gap-6 overflow-y-auto p-6">
       {/* Page hero: gradient card + identity glow with an accent icon chip —

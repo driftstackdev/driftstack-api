@@ -35,12 +35,12 @@ export function UpdateBanner({ update, onDismiss }: UpdateBannerProps): JSX.Elem
   return (
     <div
       role="status"
-      className="flex items-center justify-between gap-4 border-b border-glow-red/30 bg-surface-raised px-4 py-2 text-sm"
+      className="flex items-center justify-between gap-4 border-b border-status-error/30 bg-surface-raised px-4 py-2 text-sm"
     >
       <div className="min-w-0">
         {phase === 'error' ? (
           <span className="text-ink-secondary">
-            Update to {update.version} failed: <span className="text-glow-red">{error}</span>
+            Update to {update.version} failed: <span className="text-status-error">{error}</span>
           </span>
         ) : (
           <span className="text-ink-secondary">

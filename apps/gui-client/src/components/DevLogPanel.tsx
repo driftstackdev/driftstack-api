@@ -68,9 +68,16 @@ export function DevLogPanel(): JSX.Element {
           <button
             type="button"
             onClick={() => {
-              void navigator.clipboard.writeText(formatLogEntries());
-              setCopied(true);
-              window.setTimeout(() => setCopied(false), 1200);
+              // Only flip to "Copied" if the write actually succeeds — a
+              // rejected clipboard write (locked-down WKWebView / denied
+              // permission) otherwise falsely claimed success.
+              navigator.clipboard.writeText(formatLogEntries()).then(
+                () => {
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 1200);
+                },
+                () => undefined,
+              );
             }}
             className="rounded border border-white/15 px-2 py-0.5 text-white/70 hover:text-white"
           >

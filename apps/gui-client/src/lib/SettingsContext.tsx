@@ -197,6 +197,17 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
     prevIdentityRef.current = identity;
   }, [loading, settings.apiKey, settings.baseUrl]);
 
+  // Track the latest client so a slow in-flight /account/me from a PREVIOUS
+  // identity (apiKey/baseUrl switch A→B) can't resolve after B's and pin
+  // account A's email/tier/caps in the shell — the same stale-render race the
+  // clear-on-identity-change guard above defends against, but on the async
+  // resolution side. (Siblings useConnectionStats/useLatencyPing guard with a
+  // cancelled flag; this is the manual-call-safe equivalent.)
+  const latestClientRef = useRef(client);
+  useEffect(() => {
+    latestClientRef.current = client;
+  }, [client]);
+
   const refreshAccountMe = useCallback(async (): Promise<void> => {
     if (!client) {
       setAccountMe(null);
@@ -204,6 +215,7 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
     }
     try {
       const raw = await client.account.me();
+      if (client !== latestClientRef.current) return; // superseded by a newer identity
       // Normalize at the SOURCE: the SDK's account.me() does NO shape validation
       // (it casts the JSON), so a partial/legacy/malformed /v1/account/me that
       // omits `teams` would leave every consumer (Sidebar, App shell, the

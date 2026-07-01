@@ -632,6 +632,11 @@ export function ProfilesView({
           profiles: profilesPage,
           refreshedAt: Date.now(),
           loading: false,
+          // Preserve the existing error: unlike SessionsView, ProfilesView's
+          // `error` also carries LAUNCH errors (e.g. "didn't get a video
+          // channel — try again"), which must survive the background 15s poll
+          // that races right after a failed launch. Clearing it here wiped a
+          // legitimate launch error (caught by profiles-launch-stream tests).
           error: s.error,
         }));
         // Organization sync Phase 2 — seed-down: profiles organized on

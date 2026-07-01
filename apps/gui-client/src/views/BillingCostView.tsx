@@ -59,7 +59,7 @@ export function BillingCostView(props: BillingCostViewProps = {}): JSX.Element {
             id="billing-cycle-picker"
             value={selectedCycle}
             onChange={(e) => setSelectedCycle(e.target.value)}
-            className="rounded border border-surface-divider bg-surface-input px-2 py-1 text-sm text-ink-primary"
+            className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-sm text-ink-primary"
           >
             {cycles.map((c) => (
               <option key={c} value={c}>

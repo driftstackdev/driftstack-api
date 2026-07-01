@@ -58,6 +58,13 @@ export function useNotifications(opts: UseNotificationsOpts = {}): UseNotificati
   // deps below so a change tears down the dead source and opens a fresh one.
   const [reconnectNonce, setReconnectNonce] = useState(0);
   const closeRef = useRef<(() => void) | null>(null);
+  // Mirror `connection` into a ref so the stable online/visibility listeners can
+  // read it without re-subscribing: only bump the reconnect nonce when the
+  // stream is actually DOWN. Bumping unconditionally tore down a HEALTHY 'open'
+  // stream on every tab refocus / `online` event (flicker + a gap that drops
+  // events).
+  const connectionRef = useRef(connection);
+  connectionRef.current = connection;
   const ringSize = opts.ringSize ?? DEFAULT_RING_SIZE;
 
   useEffect(() => {
@@ -107,12 +114,17 @@ export function useNotifications(opts: UseNotificationsOpts = {}): UseNotificati
   useEffect(() => {
     if (opts.disabled === true) return;
     if (typeof window === 'undefined') return;
+    const reconnectIfDown = (): void => {
+      // Only re-subscribe when the stream has actually latched 'closed' —
+      // never tear down a live 'open'/'connecting'/'idle' one.
+      if (connectionRef.current === 'closed') setReconnectNonce((n) => n + 1);
+    };
     const onOnline = (): void => {
-      setReconnectNonce((n) => n + 1);
+      reconnectIfDown();
     };
     const onVisible = (): void => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        setReconnectNonce((n) => n + 1);
+        reconnectIfDown();
       }
     };
     window.addEventListener('online', onOnline);

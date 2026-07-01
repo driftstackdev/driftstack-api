@@ -790,7 +790,7 @@ export function AgentSessionPanel({
               strokeWidth="1.6"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="text-glow-red"
+              className="text-status-error"
               aria-hidden="true"
             >
               <rect x="2" y="3" width="20" height="14" rx="2" />

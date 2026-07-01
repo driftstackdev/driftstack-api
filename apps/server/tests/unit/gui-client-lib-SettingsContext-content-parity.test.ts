@@ -145,7 +145,17 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
     expect(body).toMatch(/Soft-fail, but FAIL CLOSED: KEEP the last-known accountMe/);
     expect(body).toMatch(/evaporated the at-cap New-session gate/);
     expect(body).toMatch(/\}, \[client, activeWorkspace, setActiveWorkspace\]\);/);
-    expect(body).not.toMatch(/\}, \[client\]\);/);
+    // Stale-response guard: a `latestClientRef` (updated by a [client] effect)
+    // lets refreshAccountMe skip setAccountMe when a slow /account/me from a
+    // PREVIOUS identity resolves after a newer one. Pin the guard + the
+    // client-tracking effect so a refactor can't quietly drop the fix.
+    expect(body).toMatch(/const latestClientRef = useRef\(client\);/);
+    expect(body).toMatch(
+      /useEffect\(\(\) => \{\s*\n\s*latestClientRef\.current = client;\s*\n\s*\}, \[client\]\);/,
+    );
+    expect(body).toMatch(
+      /if \(client !== latestClientRef\.current\) return; \/\/ superseded by a newer identity/,
+    );
     expect(body).toMatch(
       /useEffect\(\(\) => \{\s*\n\s*void refreshAccountMe\(\);\s*\n\s*\}, \[refreshAccountMe\]\);/,
     );

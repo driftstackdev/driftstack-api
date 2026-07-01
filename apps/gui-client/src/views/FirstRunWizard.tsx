@@ -698,7 +698,7 @@ export function ProfileStep({
               className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 transition ${
                 archetype === opt.value
                   ? 'border-accent bg-accent-subtle'
-                  : 'border-surface-divider bg-surface-raised hover:border-surface-strong'
+                  : 'border-surface-divider bg-surface-raised hover:border-ink-muted/50'
               }`}
             >
               <input

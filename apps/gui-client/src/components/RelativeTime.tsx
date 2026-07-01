@@ -41,6 +41,13 @@ const SLICES: ReadonlyArray<Slice> = [
 export function RelativeTime({ iso, nowMs, tooltipPrefix }: RelativeTimeProps): JSX.Element {
   const { label, absolute } = useMemo(() => {
     const targetMs = new Date(iso).getTime();
+    // An empty/unparseable `iso` yields NaN; Intl.RelativeTimeFormat.format(NaN)
+    // THROWS a RangeError, which would crash the whole row's render (callers
+    // guard only `!== null`, so an empty string reaches here, and the SDK does
+    // no shape validation). Degrade to an em dash instead.
+    if (Number.isNaN(targetMs)) {
+      return { label: '—', absolute: '' };
+    }
     const now = nowMs ?? Date.now();
     const diff = targetMs - now; // negative = past, positive = future
     const absDiff = Math.abs(diff);

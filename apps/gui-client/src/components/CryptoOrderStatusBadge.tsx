@@ -16,6 +16,7 @@ const STATUS_LABEL: Record<string, string> = {
   paid: 'Paid',
   failed: 'Failed',
   partial: 'Partial — contact support',
+  cancelled: 'Cancelled',
 };
 
 type Tone = 'neutral' | 'success' | 'busy' | 'warning' | 'error';
@@ -26,12 +27,13 @@ const STATUS_TONE: Record<string, Tone> = {
   paid: 'success',
   failed: 'error',
   partial: 'warning',
+  cancelled: 'neutral',
 };
 
 const TONE_CLASSES: Record<Tone, string> = {
   neutral: 'bg-surface-inset text-ink-secondary border-surface-divider',
   success: 'bg-status-success/15 text-status-success border-status-success/30',
-  busy: 'bg-status-info/15 text-status-info border-status-info/30',
+  busy: 'bg-status-busy/15 text-status-busy border-status-busy/30',
   warning: 'bg-status-warning/15 text-status-warning border-status-warning/30',
   error: 'bg-status-error/15 text-status-error border-status-error/30',
 };
@@ -69,7 +71,7 @@ export function CryptoOrderStatusBadge(props: CryptoOrderStatusBadgeProps): JSX.
           tone === 'success'
             ? 'bg-status-success'
             : tone === 'busy'
-              ? 'bg-status-info animate-pulse'
+              ? 'bg-status-busy animate-pulse'
               : tone === 'warning'
                 ? 'bg-status-warning'
                 : tone === 'error'

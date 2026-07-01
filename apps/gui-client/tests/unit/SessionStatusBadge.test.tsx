@@ -52,7 +52,9 @@ describe('V-534.N SessionStatusBadge rendering', () => {
     const { container: erroredEl } = render(<SessionStatusBadge status="errored" />);
     expect(erroredEl.querySelector('span')?.className).toContain('status-error');
     const { container: busyEl } = render(<SessionStatusBadge status="busy" />);
-    expect(busyEl.querySelector('span')?.className).toContain('status-info');
+    // status-busy (a DEFINED token) — was status-info, which the theme never
+    // defined, so the busy badge rendered with no bg/text/border color.
+    expect(busyEl.querySelector('span')?.className).toContain('status-busy');
   });
 
   it('busy state includes an animated pulse dot', () => {

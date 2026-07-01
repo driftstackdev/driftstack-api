@@ -120,7 +120,7 @@ export function NotificationToastStack(): JSX.Element | null {
             key={`${event.kind}-${event.at}-${idx.toString()}`}
             data-testid="notification-toast"
             data-notification-kind={event.kind}
-            className="pointer-events-auto rounded border border-glow-red/40 bg-surface-base/95 p-3 shadow-lg"
+            className="pointer-events-auto rounded border border-status-error/40 bg-surface-base/95 p-3 shadow-lg"
           >
             <header className="flex items-start justify-between gap-2">
               <h3 className="text-sm font-medium text-ink-primary">{title}</h3>

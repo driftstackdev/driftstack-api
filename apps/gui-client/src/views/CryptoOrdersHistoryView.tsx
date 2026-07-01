@@ -315,7 +315,11 @@ export function CryptoOrdersHistoryView(props: CryptoOrdersHistoryViewProps = {}
             </div>
 
             <aside aria-label="Order detail" className="min-w-0">
-              <CryptoOrderDetailView orderId={selectedOrderId} />
+              {/* key on the order id → React remounts the detail view (and its
+                  useCryptoOrder poll refs) when the selected row changes, so a
+                  previous order's late response / latched terminal-poll state
+                  can't bleed into the newly-selected order. */}
+              <CryptoOrderDetailView key={selectedOrderId} orderId={selectedOrderId} />
             </aside>
           </div>
         )}

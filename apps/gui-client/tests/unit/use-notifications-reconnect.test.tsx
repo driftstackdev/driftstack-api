@@ -20,12 +20,16 @@ vi.mock('../../src/lib/SettingsContext', () => ({
   useSettings: () => ({ settings: settingsState }),
 }));
 
-// Capture each subscribe call so we can assert open/close counts.
-const subscribeCalls: Array<{ close: ReturnType<typeof vi.fn> }> = [];
+// Capture each subscribe call so we can assert open/close counts + drive the
+// connection state (via the onState callback) the same way the real stream does.
+const subscribeCalls: Array<{
+  close: ReturnType<typeof vi.fn>;
+  onState?: (s: string) => void;
+}> = [];
 vi.mock('../../src/lib/notifications', () => ({
-  subscribeNotifications: vi.fn(() => {
+  subscribeNotifications: vi.fn((opts: { onState?: (s: string) => void }) => {
     const close = vi.fn();
-    subscribeCalls.push({ close });
+    subscribeCalls.push({ close, onState: opts.onState });
     return close;
   }),
 }));
@@ -60,23 +64,39 @@ describe('useNotifications recovery', () => {
     expect(subscribeCalls).toHaveLength(2);
   });
 
-  it("a network 'online' event self-heals the stream", () => {
+  it("a network 'online' event self-heals a CLOSED stream", () => {
     renderHook(() => useNotifications());
     expect(subscribeCalls).toHaveLength(1);
+    // Drive the stream to the terminal 'closed' state (as the bounded
+    // subscriber does after a run of errors), THEN come back online.
+    act(() => subscribeCalls[0]?.onState?.('closed'));
     act(() => {
       window.dispatchEvent(new Event('online'));
     });
     expect(subscribeCalls).toHaveLength(2);
   });
 
-  it('a tab becoming visible self-heals the stream', () => {
+  it('a tab becoming visible self-heals a CLOSED stream', () => {
     renderHook(() => useNotifications());
     expect(subscribeCalls).toHaveLength(1);
-    // jsdom defaults visibilityState to 'visible', so the handler re-subscribes.
+    act(() => subscribeCalls[0]?.onState?.('closed'));
     act(() => {
       document.dispatchEvent(new Event('visibilitychange'));
     });
     expect(subscribeCalls).toHaveLength(2);
+  });
+
+  it('does NOT tear down a HEALTHY (open) stream on online / visibility', () => {
+    renderHook(() => useNotifications());
+    expect(subscribeCalls).toHaveLength(1);
+    act(() => subscribeCalls[0]?.onState?.('open'));
+    act(() => {
+      window.dispatchEvent(new Event('online'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    // Still one subscription — a live stream is not needlessly reopened
+    // (which flickered + dropped events on every tab refocus).
+    expect(subscribeCalls).toHaveLength(1);
   });
 
   it('does not subscribe when signed out (no api key)', () => {

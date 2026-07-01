@@ -69,7 +69,7 @@ describe('W476.B apps/gui-client/src/components/SessionStatusBadge.tsx content p
 
   it('TONE_CLASSES 5-entry (neutral/success/busy/warning/error) with bg-status-{success,info,warning,error}/15 + text-status-{success,info,warning,error} + border-status-{success,info,warning,error}/30 (info for busy tone); SIZE_CLASSES sm (px-1.5 py-0.5 text-xs) + md (px-2 py-0.5 text-sm)', () => {
     expect(body).toMatch(
-      /const TONE_CLASSES: Record<Tone, string> = \{\s*\n?\s*neutral: 'bg-surface-inset text-ink-secondary border-surface-divider',\s*\n?\s*success: 'bg-status-success\/15 text-status-success border-status-success\/30',\s*\n?\s*busy: 'bg-status-info\/15 text-status-info border-status-info\/30',\s*\n?\s*warning: 'bg-status-warning\/15 text-status-warning border-status-warning\/30',\s*\n?\s*error: 'bg-status-error\/15 text-status-error border-status-error\/30',\s*\n?\s*\};/,
+      /const TONE_CLASSES: Record<Tone, string> = \{\s*\n?\s*neutral: 'bg-surface-inset text-ink-secondary border-surface-divider',\s*\n?\s*success: 'bg-status-success\/15 text-status-success border-status-success\/30',\s*\n?\s*busy: 'bg-status-busy\/15 text-status-busy border-status-busy\/30',\s*\n?\s*warning: 'bg-status-warning\/15 text-status-warning border-status-warning\/30',\s*\n?\s*error: 'bg-status-error\/15 text-status-error border-status-error\/30',\s*\n?\s*\};/,
     );
     expect(body).toMatch(
       /const SIZE_CLASSES: Record<NonNullable<SessionStatusBadgeProps\['size'\]>, string> = \{\s*\n?\s*sm: 'px-1\.5 py-0\.5 text-xs',\s*\n?\s*md: 'px-2 py-0\.5 text-sm',\s*\n?\s*\};/,
@@ -89,7 +89,7 @@ describe('W476.B apps/gui-client/src/components/SessionStatusBadge.tsx content p
     expect(body).toMatch(/role="status"\s*\n?\s*aria-label=\{`Session status: \$\{label\}`\}/);
     expect(body).toMatch(/const size = props\.size \?\? 'md';/);
     expect(body).toMatch(
-      /tone === 'success'\s*\n?\s*\? 'bg-status-success'\s*\n?\s*: tone === 'busy'\s*\n?\s*\? 'bg-status-info animate-pulse'\s*\n?\s*: tone === 'warning'\s*\n?\s*\? 'bg-status-warning'\s*\n?\s*: tone === 'error'\s*\n?\s*\? 'bg-status-error'\s*\n?\s*: 'bg-ink-muted'/,
+      /tone === 'success'\s*\n?\s*\? 'bg-status-success'\s*\n?\s*: tone === 'busy'\s*\n?\s*\? 'bg-status-busy animate-pulse'\s*\n?\s*: tone === 'warning'\s*\n?\s*\? 'bg-status-warning'\s*\n?\s*: tone === 'error'\s*\n?\s*\? 'bg-status-error'\s*\n?\s*: 'bg-ink-muted'/,
     );
   });
 
