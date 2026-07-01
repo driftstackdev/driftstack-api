@@ -240,11 +240,25 @@ const R2_FALLBACK_URL =
     }
   }
 
+  // Guards against an in-flight fetch overwriting a newer one's render.
+  // fetchAndRender() is triggered from three independent places (initial
+  // load, the SSE incident.created/incident.resolved handlers, and the
+  // 60s safety-net poll) that can overlap — e.g. an SSE push fires while
+  // the 60s poll is still mid-flight (or stuck in the R2 fallback path).
+  // Without a token, whichever response lands LAST wins the DOM write
+  // even if it was the OLDER request, which can re-show a since-resolved
+  // incident as still open. Each call takes a token; a call only writes
+  // to the DOM if it's still the most recently-started call once its
+  // response lands.
+  let latestFetchToken = 0;
+
   async function fetchAndRender() {
     const list = document.getElementById('incidents-list');
     if (!list) return;
+    const fetchToken = ++latestFetchToken;
     try {
       const { source, body } = await fetchSource();
+      if (fetchToken !== latestFetchToken) return; // superseded by a newer call
       const incidents = Array.isArray(body.data) ? body.data : [];
 
       // Hydrate updates for each open incident in parallel. Resolved
@@ -312,6 +326,7 @@ const R2_FALLBACK_URL =
       }
       list.innerHTML = sections.join('');
     } catch (err) {
+      if (fetchToken !== latestFetchToken) return; // superseded by a newer call
       renderOverall('unknown', 0);
       const message = err instanceof Error ? err.message : String(err);
       list.innerHTML = `

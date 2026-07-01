@@ -146,6 +146,22 @@ describe('W357.C status-site /index page parity', () => {
     expect(existsSync(resolve(REPO_ROOT, 'apps/status-site/src/pages/history.astro'))).toBe(true);
   });
 
+  it('fetchAndRender() guards against a stale in-flight response overwriting a newer render', () => {
+    // fetchAndRender() is triggered from three independent places
+    // (initial load, the SSE incident.created/incident.resolved
+    // handlers, and the 60s safety-net poll) that can overlap. Without
+    // a per-call token, an older call's response landing after a
+    // newer call's response would clobber the fresher DOM state (e.g.
+    // re-showing a since-resolved incident as still open). Pin the
+    // token-guard so it can't be silently dropped in a future edit.
+    expect(body).toMatch(/let\s+latestFetchToken\s*=\s*0;/);
+    expect(body).toMatch(/const\s+fetchToken\s*=\s*\+\+latestFetchToken;/);
+    // Guarded on both the success path and the catch path — a stale
+    // failure must not clobber a newer successful render either.
+    const guardOccurrences = body.match(/if \(fetchToken !== latestFetchToken\) return;/g) ?? [];
+    expect(guardOccurrences.length).toBe(2);
+  });
+
   it('privacy posture pinned: no cookies, no visitor logging, 30d probe history (no PII)', () => {
     // V-295 privacy stance — the page itself is anonymous; the 30d
     // probe history Driftstack keeps doesn't reference any Customer
