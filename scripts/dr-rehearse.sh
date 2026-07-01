@@ -122,7 +122,10 @@ scenario_8() {
   echo "── scenario 8: cert renewal (local rehearsal) ──"
   echo "  Verifies the certbot renewal command shape (no actual renewal)."
   if [[ -f docs/deployment/dr-runbook.md ]]; then
-    grep -A 1 "certbot renew" docs/deployment/dr-runbook.md | head -5 || true
+    if ! grep -A 1 "certbot renew" docs/deployment/dr-runbook.md | head -5; then
+      echo "✗ 'certbot renew' not found in dr-runbook.md — renewal procedure may have changed"
+      exit 1
+    fi
     echo "✓ scenario 8 local check complete (real renewal needs SSH to Hetzner)"
   else
     echo "✗ dr-runbook.md missing"

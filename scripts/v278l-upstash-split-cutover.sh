@@ -73,6 +73,15 @@ dry_or_run() {
   fi
 }
 
+# Escape sed replacement-text metacharacters (backslash, ampersand, and
+# the `|` delimiter used below) so a REDIS_URL/token containing one of
+# these can't be misread by sed as a backreference/delimiter — which
+# would splice the OLD REDIS_URL into the new one instead of a clean
+# swap.
+escape_sed_replacement() {
+  printf '%s' "$1" | sed -e 's/[\&|]/\\&/g'
+}
+
 # ─── phase 1: pre-flight discovery ───────────────────────────────
 step 1 "Confirm both new Upstash databases exist + capture endpoints"
 dry_or_run "echo 'Visit https://console.upstash.com/redis, copy the rediss:// endpoint for each new db into NEW_PROD_REDIS_URL + NEW_STAGING_REDIS_URL'"
@@ -91,9 +100,11 @@ dry_or_run "redis-cli -u \"\$NEW_STAGING_REDIS_URL\" PING"
 # self-heal: empty buckets = full allowance, expired cli codes
 # restart cleanly (5-min TTL), cache misses fall through to PG.
 step 4 "SSH-swap REDIS_URL on prod (128.140.37.74)"
-dry_or_run "ssh root@128.140.37.74 \"sed -i.bak 's|^REDIS_URL=.*|REDIS_URL=$NEW_PROD_REDIS_URL|' /opt/driftstack/api/.env && chmod 600 /opt/driftstack/api/.env && systemctl restart driftstack-api && sleep 3 && systemctl is-active driftstack-api\""
+NEW_PROD_REDIS_URL_ESCAPED=$(escape_sed_replacement "$NEW_PROD_REDIS_URL")
+dry_or_run "ssh root@128.140.37.74 \"sed -i.bak 's|^REDIS_URL=.*|REDIS_URL=$NEW_PROD_REDIS_URL_ESCAPED|' /opt/driftstack/api/.env && chmod 600 /opt/driftstack/api/.env && systemctl restart driftstack-api && sleep 3 && systemctl is-active driftstack-api\""
 step 5 "SSH-swap REDIS_URL on staging (116.203.22.197)"
-dry_or_run "ssh root@116.203.22.197 \"sed -i.bak 's|^REDIS_URL=.*|REDIS_URL=$NEW_STAGING_REDIS_URL|' /opt/driftstack/api/.env && chmod 600 /opt/driftstack/api/.env && systemctl restart driftstack-api && sleep 3 && systemctl is-active driftstack-api\""
+NEW_STAGING_REDIS_URL_ESCAPED=$(escape_sed_replacement "$NEW_STAGING_REDIS_URL")
+dry_or_run "ssh root@116.203.22.197 \"sed -i.bak 's|^REDIS_URL=.*|REDIS_URL=$NEW_STAGING_REDIS_URL_ESCAPED|' /opt/driftstack/api/.env && chmod 600 /opt/driftstack/api/.env && systemctl restart driftstack-api && sleep 3 && systemctl is-active driftstack-api\""
 
 # ─── phase 4: smoke ──────────────────────────────────────────────
 step 6 "Smoke test prod /health + /v1/status — Redis-touching paths"

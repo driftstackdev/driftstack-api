@@ -85,10 +85,21 @@ step 6 "Restore /tmp/v278k-snapshot.sql into the new staging project"
 dry_or_run "psql \"\$NEW_STAGING_DATABASE_URL\" < /tmp/v278k-snapshot.sql"
 
 # ─── phase 4: SSH-swap DATABASE_URL ──────────────────────────────
+# NOTE: the new URL is interpolated into a `sed 's|...|...|'` replacement
+# below. sed treats an unescaped `&` in the replacement as "insert the
+# whole matched line" — and Neon's standard connection strings commonly
+# append `&channel_binding=require`, which would silently corrupt the
+# written DATABASE_URL. Escape sed's replacement-special chars (\, &,
+# and the `|` delimiter) before interpolating, and fail loudly instead
+# of writing an empty DATABASE_URL= if the var was never set.
 step 7 "SSH-swap DATABASE_URL on prod (128.140.37.74)"
-dry_or_run "ssh root@128.140.37.74 \"sed -i.bak 's|^DATABASE_URL=.*|DATABASE_URL=$NEW_PROD_DATABASE_URL|' /opt/driftstack/api/.env && chmod 600 /opt/driftstack/api/.env && systemctl restart driftstack-api && sleep 3 && systemctl is-active driftstack-api\""
+dry_or_run "test -n \"\$NEW_PROD_DATABASE_URL\" || (echo 'error: NEW_PROD_DATABASE_URL unset' >&2; exit 1)"
+ESCAPED_PROD_DATABASE_URL=$(printf '%s' "$NEW_PROD_DATABASE_URL" | sed -e 's/[\&|]/\\&/g')
+dry_or_run "ssh root@128.140.37.74 \"sed -i.bak 's|^DATABASE_URL=.*|DATABASE_URL=$ESCAPED_PROD_DATABASE_URL|' /opt/driftstack/api/.env && chmod 600 /opt/driftstack/api/.env && systemctl restart driftstack-api && sleep 3 && systemctl is-active driftstack-api\""
 step 8 "SSH-swap DATABASE_URL on staging (116.203.22.197)"
-dry_or_run "ssh root@116.203.22.197 \"sed -i.bak 's|^DATABASE_URL=.*|DATABASE_URL=$NEW_STAGING_DATABASE_URL|' /opt/driftstack/api/.env && chmod 600 /opt/driftstack/api/.env && systemctl restart driftstack-api && sleep 3 && systemctl is-active driftstack-api\""
+dry_or_run "test -n \"\$NEW_STAGING_DATABASE_URL\" || (echo 'error: NEW_STAGING_DATABASE_URL unset' >&2; exit 1)"
+ESCAPED_STAGING_DATABASE_URL=$(printf '%s' "$NEW_STAGING_DATABASE_URL" | sed -e 's/[\&|]/\\&/g')
+dry_or_run "ssh root@116.203.22.197 \"sed -i.bak 's|^DATABASE_URL=.*|DATABASE_URL=$ESCAPED_STAGING_DATABASE_URL|' /opt/driftstack/api/.env && chmod 600 /opt/driftstack/api/.env && systemctl restart driftstack-api && sleep 3 && systemctl is-active driftstack-api\""
 
 # ─── phase 5: smoke ──────────────────────────────────────────────
 step 9 "Smoke test prod /health + /v1/status"
