@@ -140,7 +140,7 @@ describe('W384.B gui-client SessionStatusBadge content parity', () => {
   });
 
   it('busy tone dot uses animate-pulse (load-bearing UX: in-progress visual signal)', () => {
-    expect(body).toMatch(/tone === 'busy'\s*\n?\s*\?\s*'bg-status-info animate-pulse'/);
+    expect(body).toMatch(/tone === 'busy'\s*\n?\s*\?\s*'bg-status-busy animate-pulse'/);
   });
 
   it('SessionStatusBadge component: role="status" + aria-label="Session status: ${label}"', () => {

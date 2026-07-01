@@ -26,6 +26,7 @@ import { AgentChatView } from './views/AgentChatView';
 import { CommandCenterView } from './views/CommandCenterView';
 import { RecipesView } from './views/RecipesView';
 import { ProfilesView } from './views/ProfilesView';
+import { MarketplaceView } from './views/MarketplaceView';
 import { ProxiesView } from './views/ProxiesView';
 import { RecordingPlayerView } from './views/RecordingPlayerView';
 import { RecordingsView } from './views/RecordingsView';
@@ -49,6 +50,7 @@ export type View =
   | { kind: 'sessions' }
   | { kind: 'sessions-history' }
   | { kind: 'profiles'; profileId?: string }
+  | { kind: 'marketplace' }
   | { kind: 'recordings' }
   | { kind: 'recording-player'; recordingId: string }
   | { kind: 'proxies' }
@@ -111,6 +113,14 @@ export function buildPaletteActions(opts: {
       glyph: '◎',
       keywords: ['nav'],
       run: () => setView({ kind: 'profiles' }),
+    },
+    {
+      id: 'nav-marketplace',
+      label: 'Go to Marketplace',
+      kind: 'view',
+      glyph: '⛛',
+      keywords: ['nav', 'marketplace', 'buy', 'shop', 'warmed', 'store'],
+      run: () => setView({ kind: 'marketplace' }),
     },
     {
       id: 'nav-sessions',
@@ -638,6 +648,8 @@ function CurrentView({
           onAssist={(profileId) => onNavigate({ kind: 'ai', profileId })}
         />
       );
+    case 'marketplace':
+      return <MarketplaceView />;
     case 'sessions-history':
       return <SessionsHistoryView />;
     case 'fleet':
