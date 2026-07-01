@@ -1,10 +1,10 @@
 # 2026-05-31 — SSE `?ds_token=` (and OAuth `?code=`) leaking into logs (Agent 2)
 
-**Status: app-log + ALL Sentry sinks FIXED this wave; nginx access log + the
-token-in-URL design SURFACED.** Found by a fresh credential-hygiene audit of the
-logging path. The SSE/EventSource auth pattern carries the bearer token in the URL
-query string (`?ds_token=`), and the OAuth callback carries `?code=` — both were
-reaching logs in plaintext.
+**Status: app-log + ALL Sentry sinks + nginx access log now FIXED (2026-07-01);
+the token-in-URL design itself (REMAINING item 2 below) is unchanged.** Found by a
+fresh credential-hygiene audit of the logging path. The SSE/EventSource auth
+pattern carries the bearer token in the URL query string (`?ds_token=`), and the
+OAuth callback carries `?code=` — both were reaching logs in plaintext.
 
 ## The leak (confirmed by reading the sinks)
 
@@ -50,16 +50,33 @@ Tests: `redact-url.test.ts` (helper boundaries + case-insensitivity), an extende
 updated `lib-sentry-content-parity` + `sentry-v494-scrub-cross-source-invariant`
 pins.
 
-## REMAINING (surfaced)
+## FIXED 2026-07-01
 
-1. **nginx access log** — infra. Use a custom `log_format` that logs `$uri`
-   (path only) instead of `$request`, or a `map` that strips `ds_token`/`code` from
-   `$query_string`. Update the `infra-*-content-parity` pins with the change.
-2. **Better long-term design** — don't put the real bearer in the URL at all. Mint a
+1. **nginx access log** — a fresh customer-dashboard audit re-surfaced this exact
+   gap independently (both routes carrying `?ds_token=`: `/v1/agent-sessions/:id/
+transcript` and `/v1/account/me/notifications`). Rather than a custom
+   `log_format`/`map` (more nginx-config surface to get subtly wrong, unverifiable
+   locally since this box has no nginx binary to `nginx -t` against), applied the
+   SAME `access_log off;` precedent this codebase already uses for the identical
+   problem on `/v1/fleet/events` (fleet.driftstack.dev.conf): a per-location
+   `access_log off;` for both paths in both `api.driftstack.dev.conf` and
+   `staging.driftstack.dev.conf`. Sufficient because the app-level structured log
+   (already redacted per the FIXED section above) remains the source of truth for
+   IP/timing/status on these routes — nginx's raw `combined` log was a redundant,
+   unredacted second copy. `infra-content-parity` + `infra-bootstrap-deploy-nginx-
+systemd-content-parity` pins still pass unchanged (regex `.toMatch`, not exact-
+   length, so new location blocks don't break them). Deployed + `nginx -t`-verified
+   on both prod + staging.
+
+## REMAINING (surfaced, not yet built)
+
+1. **Better long-term design** — don't put the real bearer in the URL at all. Mint a
    **short-lived, single-use SSE ticket** at connection time (exchange the bearer for
    a one-time ticket via a normal `Authorization`-header request, then open the
    EventSource with `?ticket=`). A leaked ticket is then near-worthless (single-use,
-   seconds-long TTL). This is the proper fix for the class; the redaction above is
-   the immediate mitigation. Founder/architecture call.
+   seconds-long TTL). This is the proper fix for the class; the redaction + nginx
+   fixes above close every currently-known log-leak vector, so this is a genuine
+   architecture upgrade (new auth contract for 2 routes) rather than a live gap —
+   Founder/architecture call, not a unilateral A2 change.
 
 Recorded in memory `project_sse_token_in_logs`.
