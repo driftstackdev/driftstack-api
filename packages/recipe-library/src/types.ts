@@ -51,6 +51,11 @@ export interface RecipeResult {
 export interface RecipeContext {
   /** Session ID the recipe runs against. */
   sessionId: string;
-  /** Optional per-run metadata surfaced into result/log. */
+  /**
+   * Optional per-run metadata surfaced into result/log. Can carry credentials
+   * (e.g. an auth token or a credential-bearing URL stashed by the caller) —
+   * route through `redactMetadata` (redact.ts) before surfacing, same as
+   * `RecipeStepResult.step` is routed through `redactStepForResult`.
+   */
   metadata?: Record<string, unknown>;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { redactStepForResult, REDACTED, MockRecipeRunner } from '../src/index.js';
+import { redactStepForResult, redactMetadata, REDACTED, MockRecipeRunner } from '../src/index.js';
 import type { RecipeStep } from '../src/types.js';
 
 describe('redactStepForResult', () => {
@@ -133,6 +133,125 @@ describe('redactStepForResult', () => {
     };
     expect(redactStepForResult(route)).toBe(route);
   });
+
+  // RECIPE-1: path-embedded credentials (Devise/Rails password-reset +
+  // confirmation links, magic-link/passwordless-login JWTs) — the URL has no
+  // query-param KEY to match against, so `redactUrlCredentials` never
+  // inspected `parsed.pathname` at all and the secret leaked in full.
+  describe('path-embedded credentials (RECIPE-1)', () => {
+    it('redacts a Devise-style reset-password token embedded as a path segment', () => {
+      const nav: RecipeStep = {
+        kind: 'navigate',
+        url: 'https://example.com/reset-password/abc123SECRETTOKEN',
+      };
+      const out = redactStepForResult(nav) as { kind: 'navigate'; url: string };
+      expect(out.url).not.toContain('abc123SECRETTOKEN');
+      expect(out.url).toContain('/reset-password/');
+      expect(out.url).toContain(encodeURIComponent(REDACTED));
+    });
+
+    it('redacts a JWT-shaped path segment (magic-link / passwordless-login) anywhere in the path', () => {
+      const jwt =
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
+      const nav: RecipeStep = { kind: 'navigate', url: `https://example.com/magic/${jwt}` };
+      const out = redactStepForResult(nav) as { kind: 'navigate'; url: string };
+      expect(out.url).not.toContain(jwt);
+      expect(out.url).toContain(encodeURIComponent(REDACTED));
+    });
+
+    it('redacts a confirm/verify-prefixed path token too (extended sensitive-segment list)', () => {
+      const nav: RecipeStep = {
+        kind: 'navigate',
+        url: 'https://example.com/confirm/aVeryLongOpaqueConfirmationToken123',
+      };
+      const out = redactStepForResult(nav) as { kind: 'navigate'; url: string };
+      expect(out.url).not.toContain('aVeryLongOpaqueConfirmationToken123');
+    });
+
+    it('does NOT redact a bare short numeric id in a normal path (no false positive)', () => {
+      const nav: RecipeStep = { kind: 'navigate', url: 'https://example.com/users/123/profile' };
+      expect(redactStepForResult(nav)).toBe(nav);
+    });
+
+    it('does NOT redact a normal slug-style path segment (no false positive)', () => {
+      const nav: RecipeStep = { kind: 'navigate', url: 'https://example.com/products/blue-shirt' };
+      expect(redactStepForResult(nav)).toBe(nav);
+    });
+
+    it('does NOT redact a long token-looking segment when NOT preceded by a sensitive segment name', () => {
+      // Same shape as the Devise example, but the preceding segment isn't
+      // credential-suggestive — should be left alone (context, not just shape).
+      const nav: RecipeStep = {
+        kind: 'navigate',
+        url: 'https://example.com/articles/abc123NotASecretSlug',
+      };
+      expect(redactStepForResult(nav)).toBe(nav);
+    });
+
+    it('does not false-positive on a segment that merely CONTAINS a sensitive word (e.g. "authentic-leather")', () => {
+      const nav: RecipeStep = {
+        kind: 'navigate',
+        url: 'https://example.com/products/authentic-leather/wallet',
+      };
+      expect(redactStepForResult(nav)).toBe(nav);
+    });
+
+    it('applies the same path redaction to a wait url-condition value', () => {
+      const waitUrl: RecipeStep = {
+        kind: 'wait',
+        condition: 'url',
+        value: 'https://example.com/reset-password/abc123SECRETTOKEN',
+      };
+      const out = redactStepForResult(waitUrl) as { kind: 'wait'; value: string };
+      expect(out.value).not.toContain('abc123SECRETTOKEN');
+    });
+  });
+
+  // RECIPE-2: SECRET_QUERY_PARAMS missed common real-world credential param
+  // names, and matched keys by exact string only (bypassable via a PHP/Rails
+  // array-suffix like `token[]`).
+  describe('expanded secret query-param names + array-suffix bypass (RECIPE-2)', () => {
+    it.each(['reset_token', 'confirmation_token', 'jwt', 'otp'])(
+      'redacts the previously-missing %s query param',
+      (paramName) => {
+        const nav: RecipeStep = {
+          kind: 'navigate',
+          url: `https://host.example/cb?${paramName}=leakvalue`,
+        };
+        const out = redactStepForResult(nav) as { kind: 'navigate'; url: string };
+        expect(out.url).not.toContain('leakvalue');
+        expect(out.url).toContain(encodeURIComponent(REDACTED));
+      },
+    );
+
+    it('redacts an array-suffixed secret param (`token[]=…`) — was bypassed by exact-string matching', () => {
+      const nav: RecipeStep = {
+        kind: 'navigate',
+        url: 'https://host.example/cb?token[]=leak1&token[]=leak2',
+      };
+      const out = redactStepForResult(nav) as { kind: 'navigate'; url: string };
+      expect(out.url).not.toContain('leak1');
+      expect(out.url).not.toContain('leak2');
+    });
+
+    it('redacts an indexed array-suffixed secret param (`token[0]=…`)', () => {
+      const nav: RecipeStep = {
+        kind: 'navigate',
+        url: 'https://host.example/cb?token[0]=leak1&token[1]=leak2',
+      };
+      const out = redactStepForResult(nav) as { kind: 'navigate'; url: string };
+      expect(out.url).not.toContain('leak1');
+      expect(out.url).not.toContain('leak2');
+    });
+
+    it('does NOT redact ordinary benign query params (no regression / over-redaction)', () => {
+      const nav: RecipeStep = {
+        kind: 'navigate',
+        url: 'https://host.example/search?page=2&sort=asc&q=shoes',
+      };
+      expect(redactStepForResult(nav)).toBe(nav);
+    });
+  });
 });
 
 describe('MockRecipeRunner result never carries plaintext type-step text', () => {
@@ -150,5 +269,36 @@ describe('MockRecipeRunner result never carries plaintext type-step text', () =>
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('demo_user');
     expect(serialized).not.toContain('demo_pass');
+  });
+});
+
+// RECIPE-3: RecipeContext.metadata sits entirely outside redactStepForResult
+// (which only ever sees a RecipeStep) — redactMetadata is the parallel
+// chokepoint the module header now documents alongside it.
+describe('redactMetadata', () => {
+  it('redacts the value of a credential-suggestively-named key regardless of shape', () => {
+    const out = redactMetadata({ authToken: 'plaintext-secret', apiKey: 12345 });
+    expect(out).toEqual({ authToken: REDACTED, apiKey: REDACTED });
+  });
+
+  it('leaves ordinary per-run tags unchanged (no over-redaction)', () => {
+    const meta = { retries: 2, region: 'us' };
+    expect(redactMetadata(meta)).toBe(meta); // same reference — nothing to redact
+  });
+
+  it('redacts a metadata value that is itself a credential-bearing URL via the shared URL redactor', () => {
+    const out = redactMetadata({
+      lastRedirect: 'https://app.example/callback?access_token=leaktok&state=xyz',
+    });
+    expect(out.lastRedirect).not.toContain('leaktok');
+    expect(out.lastRedirect).toContain('state=xyz');
+  });
+
+  it('does not mutate the input bag and returns a fresh object when something changed', () => {
+    const meta = { authToken: 'hunter2', tag: 'ok' };
+    const out = redactMetadata(meta);
+    expect(meta.authToken).toBe('hunter2'); // original untouched
+    expect(out).not.toBe(meta);
+    expect(out).toEqual({ authToken: REDACTED, tag: 'ok' });
   });
 });

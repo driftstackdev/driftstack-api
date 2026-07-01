@@ -6,9 +6,11 @@ export type { RecipeRegistry, RecipeRunner } from './interfaces.js';
 
 export { MockRecipeRegistry, MockRecipeRunner } from './mock.js';
 
-// Credential redaction for step results (forward-leak guard; real Phase-3
-// runner must route RecipeStepResult.step through redactStepForResult).
-export { redactStepForResult, REDACTED } from './redact.js';
+// Credential redaction for step results + per-run metadata (forward-leak
+// guard; real Phase-3 runner must route RecipeStepResult.step through
+// redactStepForResult AND any surfaced RecipeContext.metadata through
+// redactMetadata — the two are independent chokepoints, see redact.ts).
+export { redactStepForResult, redactMetadata, REDACTED } from './redact.js';
 
 // V-532.A — navigation flow recipes + builder helpers.
 export {

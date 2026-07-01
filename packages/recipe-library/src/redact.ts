@@ -6,22 +6,37 @@
 // token-in-log leak (V-494 redact posture). The result is for reporting, NOT
 // re-execution, so the plaintext is never needed there.
 //
-// Two credential vectors:
+// Three credential vectors:
 //   - `type`-step `text` — the inlined password/secret typed into a field
 //     (e.g. buildLoginRecipe). Fully redacted.
 //   - URL credentials in a `navigate` `url` or a `wait` url-condition `value`:
 //     basic-auth userinfo (`https://user:pass@host`), secret-bearing query
-//     params (`?token=…`, `?password=…`), AND secret-bearing fragment params
-//     (`#access_token=…` — the OAuth implicit/hybrid post-auth redirect vector).
-//     Stripped/redacted in place so the
-//     host + path stay legible for debugging but the secret never lands in the
-//     result. A clean URL (no userinfo, no sensitive params) is returned
+//     params (`?token=…`, `?password=…`), secret-bearing fragment params
+//     (`#access_token=…` — the OAuth implicit/hybrid post-auth redirect vector),
+//     AND secret-shaped PATH segments (`/reset-password/<token>`,
+//     `/confirm/<jwt>` — the Devise/Rails password-reset+confirmation and
+//     magic-link/passwordless-login vector: the secret has no query-param key
+//     to match against, so it's flagged by shape/context instead — see
+//     `redactPathCredentials`). Stripped/redacted in place so the host + path
+//     stay legible for debugging but the secret never lands in the result. A
+//     clean URL (no userinfo, no sensitive params/segments) is returned
 //     byte-for-byte unchanged — no URL normalization — so non-secret steps keep
 //     their exact original value (and reference).
+//   - `RecipeContext.metadata` — free-form per-run metadata the caller attaches
+//     (types.ts). It sits OUTSIDE `RecipeStep`, so `redactStepForResult` can't
+//     see it; `redactMetadata` is the parallel chokepoint for it (same
+//     redact-the-known-secrets posture: credential-suggestive KEY names are
+//     redacted regardless of value shape, and string values that are
+//     themselves credential-bearing URLs are run through the same URL
+//     redaction as above).
 //
-// `redactStepForResult` is the single chokepoint: the mock runner uses it, and
-// the real Phase-3 runner MUST build its RecipeStepResult.step through it too,
-// so redaction holds by construction regardless of the runner.
+// `redactStepForResult` (for `RecipeStep`) and `redactMetadata` (for
+// `RecipeContext.metadata`) are the TWO required chokepoints: the mock runner
+// uses both, and the real Phase-3 runner MUST build its RecipeStepResult.step
+// AND any surfaced metadata through them too, so redaction holds by
+// construction regardless of the runner. Neither call covers the other's
+// input — a runner that only calls one of the two still leaks the other
+// vector.
 
 import type { RecipeStep } from './types.js';
 
@@ -32,6 +47,10 @@ export const REDACTED = '[redacted]';
 // for case-insensitive matching. Conservative, well-known set — a param not
 // listed is left visible (observability), so this is a redact-the-known-secrets
 // posture, not a fail-closed allowlist.
+//
+// Includes common password-reset / email-confirmation / passwordless-login /
+// MFA param names (`reset_token`, `confirmation_token`, `jwt`, `otp`, …) in
+// addition to the original OAuth/basic-secret set.
 const SECRET_QUERY_PARAMS = new Set([
   'token',
   'access_token',
@@ -52,14 +71,133 @@ const SECRET_QUERY_PARAMS = new Set([
   'signature',
   'session',
   'sid',
+  'reset_token',
+  'confirmation_token',
+  'verification_token',
+  'verification_code',
+  'magic_token',
+  'jwt',
+  'otp',
 ]);
 
 /**
- * Strip credentials from a URL string: remove basic-auth userinfo and redact
- * the values of known secret-bearing query params. Returns the ORIGINAL string
- * unchanged (no normalization) when there's nothing to redact, and also when
- * the value isn't a parseable absolute URL (a non-URL string can't carry
- * structured URL credentials, and we don't want to corrupt it).
+ * Normalize a query/fragment param key for matching against
+ * `SECRET_QUERY_PARAMS`: lowercase, and strip a trailing PHP/Rails-style
+ * array-index suffix (`token[]`, `token[0]`, `token[12]` all normalize to
+ * `token`). Without this, `?token[]=leak1&token[]=leak2` bypasses the
+ * denylist entirely because the literal key `token[]` never exact-matches
+ * the listed `token` — the values still leak even though the base name is
+ * a known secret.
+ *
+ * A broader substring/contains match (key CONTAINS "token"/"secret"/…) was
+ * considered instead of a hardcoded list, but rejected: it would sweep up
+ * benign params that merely contain one of these words as a substring (e.g.
+ * `tokenizer_version`, `auth_time_zone`), which this module's stated
+ * "redact-the-known-secrets, not fail-closed" posture (see the comment on
+ * `SECRET_QUERY_PARAMS` above) argues against. Suffix-stripped exact match
+ * against a maintained list keeps the same conservative posture while
+ * closing the array-suffix bypass.
+ */
+function normalizeQueryParamKey(key: string): string {
+  return key.toLowerCase().replace(/\[\d*\]$/, '');
+}
+
+// Path segments whose PRECEDING segment name signals a credential-delivery
+// context: password-reset / email-confirmation / magic-link / passwordless-
+// login flows commonly embed the secret as the NEXT raw path segment, not a
+// query param — e.g. Rails/Devise `/reset-password/:token` and
+// `/confirmation/:token`, Firebase Dynamic Links, and various magic-link
+// providers. Normalized (lowercased, non-alphanumeric characters stripped)
+// before comparison so `reset-password`, `reset_password`, and
+// `ResetPassword` all match the same entry.
+//
+// Deliberately an EXACT match against this small well-known set — same
+// conservative "redact-the-known-secrets" posture as `SECRET_QUERY_PARAMS`
+// above — rather than a substring/contains check, so an unrelated segment
+// that merely CONTAINS one of these words (e.g. `authentic-leather`,
+// `session-replay-demo`) is not mistaken for a credential-context marker and
+// doesn't cause the NEXT segment to be redacted.
+const SENSITIVE_PRECEDING_PATH_SEGMENTS = new Set([
+  'reset',
+  'resetpassword',
+  'passwordreset',
+  'confirm',
+  'confirmation',
+  'confirmemail',
+  'verify',
+  'verification',
+  'verifyemail',
+  'magic',
+  'magiclink',
+  'token',
+  'auth',
+  'activate',
+  'activation',
+  'unsubscribe',
+  'invite',
+  'invitation',
+  'session',
+]);
+
+/**
+ * JWT shape: three base64url segments separated by `.`
+ * (header.payload.signature). Header and payload each require a real minimum
+ * length so a short dotted string that only superficially LOOKS like three
+ * dot-separated tokens (e.g. a `1.2.3` semver path segment) doesn't
+ * false-positive; the signature part may be empty (`alg: none`).
+ */
+const JWT_SHAPE_RE = /^[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]*$/;
+
+/**
+ * A long, opaque-looking, base64url-ish path segment — the shape a
+ * reset/confirmation/magic-link token takes when embedded directly in the
+ * path (there's no query-param KEY to match against there, unlike
+ * `SECRET_QUERY_PARAMS`, so shape + preceding-segment context stand in for
+ * it). Requires at least one letter so a long PURELY NUMERIC segment (e.g.
+ * an order or confirmation reference number) isn't swept up.
+ */
+const TOKEN_LIKE_PATH_SEGMENT_RE = /^(?=.*[A-Za-z])[A-Za-z0-9_-]{16,}$/;
+
+function normalizePathSegment(segment: string): string {
+  return segment.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Redact path segments that look like embedded credentials: a JWT-shaped
+ * segment anywhere in the path (unambiguous by shape alone), OR a long
+ * token-looking segment immediately following a credential-suggestive
+ * segment name (see `SENSITIVE_PRECEDING_PATH_SEGMENTS`). A bare short
+ * segment like `123` in `/users/123/profile`, or a normal word like
+ * `blue-shirt`, matches neither rule and is left untouched. Returns the
+ * ORIGINAL pathname (same reference) when nothing matches.
+ */
+function redactPathCredentials(pathname: string): { pathname: string; changed: boolean } {
+  const segments = pathname.split('/');
+  let changed = false;
+  const redactedSegments = segments.map((segment, i) => {
+    if (segment === '') return segment; // leading/trailing slash artifact
+    if (JWT_SHAPE_RE.test(segment)) {
+      changed = true;
+      return encodeURIComponent(REDACTED);
+    }
+    const prev = i > 0 ? normalizePathSegment(segments[i - 1] ?? '') : '';
+    if (TOKEN_LIKE_PATH_SEGMENT_RE.test(segment) && SENSITIVE_PRECEDING_PATH_SEGMENTS.has(prev)) {
+      changed = true;
+      return encodeURIComponent(REDACTED);
+    }
+    return segment;
+  });
+  return { pathname: changed ? redactedSegments.join('/') : pathname, changed };
+}
+
+/**
+ * Strip credentials from a URL string: remove basic-auth userinfo, redact
+ * secret-shaped path segments, and redact the values of known secret-bearing
+ * query params (+ the same in the fragment's query suffix, see below).
+ * Returns the ORIGINAL string unchanged (no normalization) when there's
+ * nothing to redact, and also when the value isn't a parseable absolute URL
+ * (a non-URL string can't carry structured URL credentials, and we don't want
+ * to corrupt it).
  */
 function redactUrlCredentials(url: string): string {
   let parsed: URL;
@@ -75,10 +213,15 @@ function redactUrlCredentials(url: string): string {
     changed = true;
   }
   for (const key of [...parsed.searchParams.keys()]) {
-    if (SECRET_QUERY_PARAMS.has(key.toLowerCase())) {
+    if (SECRET_QUERY_PARAMS.has(normalizeQueryParamKey(key))) {
       parsed.searchParams.set(key, REDACTED);
       changed = true;
     }
+  }
+  const pathResult = redactPathCredentials(parsed.pathname);
+  if (pathResult.changed) {
+    parsed.pathname = pathResult.pathname;
+    changed = true;
   }
   // OAuth implicit/hybrid flows return tokens in the URL FRAGMENT, which
   // `searchParams` does NOT cover — the same post-auth-redirect token vector
@@ -111,7 +254,7 @@ function redactUrlCredentials(url: string): string {
     const frag = new URLSearchParams(queryPart);
     let fragChanged = false;
     for (const key of [...frag.keys()]) {
-      if (SECRET_QUERY_PARAMS.has(key.toLowerCase())) {
+      if (SECRET_QUERY_PARAMS.has(normalizeQueryParamKey(key))) {
         frag.set(key, REDACTED);
         fragChanged = true;
       }
@@ -148,4 +291,70 @@ export function redactStepForResult(step: RecipeStep): RecipeStep {
     return safe === step.value ? step : { ...step, value: safe };
   }
   return step;
+}
+
+/**
+ * Metadata key names (normalized: lowercased, non-alphanumeric stripped)
+ * treated as credential-bearing regardless of the value's shape — the
+ * `RecipeContext.metadata` analogue of `SECRET_QUERY_PARAMS`. Derived from
+ * `SECRET_QUERY_PARAMS` (so the two lists don't drift apart) plus a couple of
+ * combined-word variants that are common METADATA key names in their own
+ * right but don't literally appear as a single query-param name (e.g.
+ * `auth_token` isn't in `SECRET_QUERY_PARAMS` — it has `auth` and `token`
+ * as separate entries — but `authToken`/`auth_token` is a very common
+ * metadata key).
+ */
+const SECRET_METADATA_KEY_STEMS = new Set([
+  ...[...SECRET_QUERY_PARAMS].map(normalizeMetadataKey),
+  'authtoken',
+]);
+
+function normalizeMetadataKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Redact a `RecipeContext.metadata` bag for safe embedding in a surfaced
+ * result/log — the parallel chokepoint to {@link redactStepForResult}, which
+ * only ever sees a `RecipeStep` and never `RecipeContext.metadata` (see the
+ * module header). Two independent checks, either of which redacts a value:
+ *
+ *   - the KEY looks credential-suggestive by name (same denylist posture as
+ *     `SECRET_QUERY_PARAMS`, see `SECRET_METADATA_KEY_STEMS`) — the value is
+ *     replaced with {@link REDACTED} regardless of its shape/type, since an
+ *     opaque secret could be a string, number-like token, etc.
+ *   - the VALUE is itself a string that carries structured URL credentials
+ *     (userinfo / secret query-param / secret fragment-param / secret path
+ *     segment) — redacted via the same {@link redactUrlCredentials} used for
+ *     `navigate`/`wait` steps, so a metadata value that happens to be a
+ *     credential-bearing URL (e.g. a stashed post-auth redirect) is covered
+ *     too.
+ *
+ * Non-secret keys/values are returned unchanged. Bags with nothing to redact
+ * are returned unchanged (same reference), matching `redactStepForResult`'s
+ * contract. Only top-level keys/values are inspected — no recursion into
+ * nested objects/arrays, consistent with this module's conservative
+ * redact-what-you-can-confidently-flag posture (a nested-object heuristic
+ * risks over-redacting arbitrary caller-shaped data).
+ */
+export function redactMetadata(metadata: Record<string, unknown>): Record<string, unknown> {
+  let changed = false;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    if (SECRET_METADATA_KEY_STEMS.has(normalizeMetadataKey(key))) {
+      out[key] = REDACTED;
+      changed = true;
+      continue;
+    }
+    if (typeof value === 'string') {
+      const safe = redactUrlCredentials(value);
+      if (safe !== value) {
+        out[key] = safe;
+        changed = true;
+        continue;
+      }
+    }
+    out[key] = value;
+  }
+  return changed ? out : metadata;
 }
