@@ -842,6 +842,29 @@
               },
               "reason": {
                 "type": "string"
+              },
+              "diagnosis": {
+                "type": "object",
+                "properties": {
+                  "category": {
+                    "type": "string",
+                    "enum": [
+                      "element_not_found",
+                      "page_load_failed",
+                      "condition_not_met",
+                      "capture_failed",
+                      "scroll_failed",
+                      "session_error",
+                      "invalid_request",
+                      "result_too_large",
+                      "unknown"
+                    ]
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["category", "retryable"]
               }
             },
             "required": ["kind", "intent", "reason"]
@@ -17383,6 +17406,29 @@
                                   },
                                   "reason": {
                                     "type": "string"
+                                  },
+                                  "diagnosis": {
+                                    "type": "object",
+                                    "properties": {
+                                      "category": {
+                                        "type": "string",
+                                        "enum": [
+                                          "element_not_found",
+                                          "page_load_failed",
+                                          "condition_not_met",
+                                          "capture_failed",
+                                          "scroll_failed",
+                                          "session_error",
+                                          "invalid_request",
+                                          "result_too_large",
+                                          "unknown"
+                                        ]
+                                      },
+                                      "retryable": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "required": ["category", "retryable"]
                                   }
                                 },
                                 "required": ["kind", "intent", "reason"]

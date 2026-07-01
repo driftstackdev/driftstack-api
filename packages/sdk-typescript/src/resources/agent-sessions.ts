@@ -229,9 +229,28 @@ export interface AgentUsage {
   model?: string;
 }
 
+/** doc-132 §5.3 — machine-readable failure diagnosis. `reason` is the
+ *  human-facing copy; `diagnosis` is the structured companion an automation can
+ *  branch on without string-matching prose. `retryable: true` = re-running the
+ *  same step may succeed (transient/timing cause); false = the request must
+ *  change first. Optional: older servers omit it. */
+export interface AgentFailureDiagnosis {
+  category:
+    | 'element_not_found'
+    | 'page_load_failed'
+    | 'condition_not_met'
+    | 'capture_failed'
+    | 'scroll_failed'
+    | 'session_error'
+    | 'invalid_request'
+    | 'result_too_large'
+    | 'unknown';
+  retryable: boolean;
+}
+
 export type AgentIntentResult =
   | { kind: 'success'; intent: AgentIntent; summary: string; captureId?: string }
-  | { kind: 'failure'; intent: AgentIntent; reason: string }
+  | { kind: 'failure'; intent: AgentIntent; reason: string; diagnosis?: AgentFailureDiagnosis }
   // The executor halted BEFORE dispatching a consequential action (purchase /
   // payment / account-deletion) that needs human confirmation. The plan is
   // paused; approve by re-sending the turn with this {category, matchedText}

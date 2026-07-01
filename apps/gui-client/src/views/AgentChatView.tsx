@@ -1266,12 +1266,24 @@ function AgentResponseBody({ response }: { response: AgentMessageResponse }): JS
 
 function PlanStep({ result }: { result: AgentIntentResult }): JSX.Element {
   const { glyph, cls, text } = describeResult(result);
+  // doc-132 §5.3 — the server's structured diagnosis (optional; older servers
+  // omit it). Only the retryable hint is surfaced as a chip: the category's
+  // human framing already lives in the reason text, but "worth retrying" vs
+  // "change the request" is a real decision the customer makes per failed step.
+  const retryable = result.kind === 'failure' && result.diagnosis?.retryable === true;
   return (
     <li className="flex items-start gap-1.5 text-xs">
       <span className={`mt-px shrink-0 ${cls}`} aria-hidden="true">
         {glyph}
       </span>
-      <span className="text-ink-secondary">{text}</span>
+      <span className="text-ink-secondary">
+        {text}
+        {retryable && (
+          <span className="ml-1.5 rounded-full bg-status-busy/10 px-1.5 py-px text-2xs text-status-busy">
+            retryable
+          </span>
+        )}
+      </span>
     </li>
   );
 }

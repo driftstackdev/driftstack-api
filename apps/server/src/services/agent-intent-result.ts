@@ -16,7 +16,12 @@
 // (later) storage-side concern, not a pure mapping — success still carries a
 // descriptive summary.
 
-import type { AgentIntent, IntentResult } from '@driftstack/api-types';
+import type {
+  AgentIntent,
+  FailureDiagnosis,
+  FailureDiagnosisCategory,
+  IntentResult,
+} from '@driftstack/api-types';
 import type { ParsedIntentResult } from './harness-control-codec.js';
 import type { HarnessErrorCode } from '../schemas/harness-control-protocol.js';
 
@@ -32,6 +37,7 @@ export function intentResultToCustomer(
     kind: 'failure',
     intent,
     reason: failureReason(intent, parsed.errorCode, parsed.errorMessage),
+    diagnosis: diagnose(intent, parsed.errorCode),
   };
 }
 
@@ -138,6 +144,38 @@ const WEBDRIVER_FAILED_BY_KIND: Partial<Record<AgentIntent['kind'], string>> = {
   scroll: "the browser couldn't scroll as requested",
   capture: "the browser couldn't capture the page",
 };
+
+// doc-132 §5.3 — the machine-readable companion to the prose `reason`. Same
+// deterministic inputs (error code + intent kind), so the two can never
+// disagree. `retryable` is the automation-facing hint: true when re-running the
+// SAME step may succeed (transient/timing causes — element not loaded yet,
+// flaky page load, session hiccup), false when the request itself must change
+// first (bad params, unsupported action, over-cap result).
+const WEBDRIVER_CATEGORY_BY_KIND: Partial<Record<AgentIntent['kind'], FailureDiagnosisCategory>> = {
+  interact: 'element_not_found',
+  navigate: 'page_load_failed',
+  wait: 'condition_not_met',
+  capture: 'capture_failed',
+  scroll: 'scroll_failed',
+};
+
+function diagnose(intent: AgentIntent, code: HarnessErrorCode | undefined): FailureDiagnosis {
+  switch (code) {
+    case 'intent_webdriver_failed':
+      return { category: WEBDRIVER_CATEGORY_BY_KIND[intent.kind] ?? 'unknown', retryable: true };
+    case 'intent_session_not_established':
+    case 'intent_dispatch_error':
+      return { category: 'session_error', retryable: true };
+    case 'intent_missing_parameter':
+    case 'intent_invalid_parameter':
+    case 'intent_not_implemented':
+      return { category: 'invalid_request', retryable: false };
+    case 'result_too_large':
+      return { category: 'result_too_large', retryable: false };
+    case undefined:
+      return { category: 'unknown', retryable: false };
+  }
+}
 
 const MAX_MESSAGE_LEN = 200;
 

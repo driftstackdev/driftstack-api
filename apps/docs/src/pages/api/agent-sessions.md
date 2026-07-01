@@ -182,7 +182,28 @@ Response (200) is a discriminated union by `kind`:
   ],
   "ok": true
 }
+```
 
+A failed step (`"kind": "failure"`) carries a human-readable `reason`
+plus a structured `diagnosis` your automation can branch on without
+string-matching the prose:
+
+```json
+{
+  "kind": "failure",
+  "intent": { "kind": "interact", "action": "tap", "selector": "#buy" },
+  "reason": "the browser couldn't act on the target element — it may be missing, hidden, or the page may still be loading; try a broader selector or wait for it to appear: no such element: #buy",
+  "diagnosis": { "category": "element_not_found", "retryable": true }
+}
+```
+
+`diagnosis.category` is one of `element_not_found`, `page_load_failed`,
+`condition_not_met`, `capture_failed`, `scroll_failed`, `session_error`,
+`invalid_request`, `result_too_large`, `unknown`. `retryable: true`
+means re-running the same step may succeed (transient/timing cause);
+`false` means the request must change first.
+
+```json
 // "clarify" — decomposer needs more info
 {
   "kind": "clarify",

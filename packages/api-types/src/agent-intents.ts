@@ -72,6 +72,42 @@ export const ConsequentialActionCategorySchema = z.enum([
 ]);
 export type ConsequentialActionCategory = z.infer<typeof ConsequentialActionCategorySchema>;
 
+// doc-132 §5.3 auto-debug — machine-readable failure diagnosis. `reason` stays
+// the human-facing copy; `diagnosis` is the structured companion an automation
+// (or the GUI) can branch on without string-matching the prose. Derived
+// DETERMINISTICALLY control-plane-side from the harness error code + intent
+// kind — never from parsing the harness message text. Optional + additive so
+// older SDK consumers and stored rows are unaffected.
+export const FailureDiagnosisCategorySchema = z.enum([
+  /** interact failed — target element missing/hidden/not yet loaded. */
+  'element_not_found',
+  /** navigate failed — page didn't load (site down / blocking / bad URL). */
+  'page_load_failed',
+  /** wait failed — the awaited condition never became true. */
+  'condition_not_met',
+  /** capture failed — screenshot/DOM/PDF could not be produced. */
+  'capture_failed',
+  /** scroll failed. */
+  'scroll_failed',
+  /** session-level fault (not established / dispatch error) — not this intent's fault. */
+  'session_error',
+  /** the request itself was malformed (missing/invalid param, unsupported action). */
+  'invalid_request',
+  /** result exceeded the inline size cap — narrow the selector or paginate. */
+  'result_too_large',
+  /** no more-specific category applies. */
+  'unknown',
+]);
+export type FailureDiagnosisCategory = z.infer<typeof FailureDiagnosisCategorySchema>;
+
+export const FailureDiagnosisSchema = z.object({
+  category: FailureDiagnosisCategorySchema,
+  /** True when re-running the same step may succeed (transient/timing causes);
+   *  false when the request must change first (invalid params, over-cap result). */
+  retryable: z.boolean(),
+});
+export type FailureDiagnosis = z.infer<typeof FailureDiagnosisSchema>;
+
 export const IntentResultSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('success'),
@@ -83,6 +119,7 @@ export const IntentResultSchema = z.discriminatedUnion('kind', [
     kind: z.literal('failure'),
     intent: AgentIntentSchema,
     reason: z.string(),
+    diagnosis: FailureDiagnosisSchema.optional(),
   }),
   // W443/W445 — the executor halted before dispatching a consequential action
   // (purchase / payment / account-deletion) that needs human confirmation.

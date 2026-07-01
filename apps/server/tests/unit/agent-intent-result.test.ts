@@ -216,6 +216,67 @@ describe('intentResultToCustomer — failure reasons', () => {
     expect(paramR.reason).toBe('a required parameter was missing');
   });
 
+  it('doc-132 §5.3 slice 2 — every failure carries a structured diagnosis {category, retryable} consistent with the prose reason', () => {
+    const cases: Array<[AgentIntent, Parameters<typeof fail>[0], string, boolean]> = [
+      [
+        { kind: 'interact', action: 'tap', selector: '#a' },
+        'intent_webdriver_failed',
+        'element_not_found',
+        true,
+      ],
+      [{ kind: 'navigate', url: 'https://x' }, 'intent_webdriver_failed', 'page_load_failed', true],
+      [
+        { kind: 'wait', condition: 'selector_visible', selector: '.r' },
+        'intent_webdriver_failed',
+        'condition_not_met',
+        true,
+      ],
+      [
+        { kind: 'capture', capture: 'screenshot' },
+        'intent_webdriver_failed',
+        'capture_failed',
+        true,
+      ],
+      [{ kind: 'scroll', direction: 'down' }, 'intent_webdriver_failed', 'scroll_failed', true],
+      [{ kind: 'behavioral_pause' }, 'intent_webdriver_failed', 'unknown', true],
+      [
+        { kind: 'navigate', url: 'https://x' },
+        'intent_session_not_established',
+        'session_error',
+        true,
+      ],
+      [{ kind: 'navigate', url: 'https://x' }, 'intent_dispatch_error', 'session_error', true],
+      [
+        { kind: 'navigate', url: 'https://x' },
+        'intent_missing_parameter',
+        'invalid_request',
+        false,
+      ],
+      [
+        { kind: 'navigate', url: 'https://x' },
+        'intent_invalid_parameter',
+        'invalid_request',
+        false,
+      ],
+      [{ kind: 'navigate', url: 'https://x' }, 'intent_not_implemented', 'invalid_request', false],
+      [{ kind: 'capture', capture: 'dom_snapshot' }, 'result_too_large', 'result_too_large', false],
+    ];
+    for (const [caseIntent, code, category, retryable] of cases) {
+      const r = intentResultToCustomer(caseIntent, fail(code));
+      if (r.kind !== 'failure') throw new Error('narrow');
+      expect(r.diagnosis).toEqual({ category, retryable });
+    }
+    // No error code at all → unknown / not retryable (defensive).
+    const noCode = intentResultToCustomer(intent, {
+      sessionId: 'ses_x',
+      intentId: 'int_1',
+      success: false,
+      durationMs: 0,
+    });
+    if (noCode.kind !== 'failure') throw new Error('narrow');
+    expect(noCode.diagnosis).toEqual({ category: 'unknown', retryable: false });
+  });
+
   it('handles a failure with no code + no message (defensive)', () => {
     const r = intentResultToCustomer(intent, {
       sessionId: 'ses_x',

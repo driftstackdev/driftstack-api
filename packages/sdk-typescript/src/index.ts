@@ -47,6 +47,7 @@ export type {
   CreateAgentSessionRequest,
   AgentIntent,
   AgentIntentResult,
+  AgentFailureDiagnosis,
   ConsequentialActionCategory,
   AgentUsage,
   AgentMessageResponse,
