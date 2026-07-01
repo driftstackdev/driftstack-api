@@ -53,20 +53,21 @@ pins.
 ## FIXED 2026-07-01
 
 1. **nginx access log** — a fresh customer-dashboard audit re-surfaced this exact
-   gap independently (both routes carrying `?ds_token=`: `/v1/agent-sessions/:id/
-transcript` and `/v1/account/me/notifications`). Rather than a custom
-   `log_format`/`map` (more nginx-config surface to get subtly wrong, unverifiable
-   locally since this box has no nginx binary to `nginx -t` against), applied the
-   SAME `access_log off;` precedent this codebase already uses for the identical
-   problem on `/v1/fleet/events` (fleet.driftstack.dev.conf): a per-location
-   `access_log off;` for both paths in both `api.driftstack.dev.conf` and
-   `staging.driftstack.dev.conf`. Sufficient because the app-level structured log
-   (already redacted per the FIXED section above) remains the source of truth for
-   IP/timing/status on these routes — nginx's raw `combined` log was a redundant,
-   unredacted second copy. `infra-content-parity` + `infra-bootstrap-deploy-nginx-
-systemd-content-parity` pins still pass unchanged (regex `.toMatch`, not exact-
-   length, so new location blocks don't break them). Deployed + `nginx -t`-verified
-   on both prod + staging.
+   gap independently (both routes carrying `?ds_token=`:
+   `/v1/agent-sessions/:id/transcript` and `/v1/account/me/notifications`).
+   Rather than a custom `log_format`/`map` (more nginx-config surface to get
+   subtly wrong, unverifiable locally since this box has no nginx binary to
+   `nginx -t` against), applied the SAME `access_log off;` precedent this
+   codebase already uses for the identical problem on `/v1/fleet/events`
+   (fleet.driftstack.dev.conf): a per-location `access_log off;` for both
+   paths in both `api.driftstack.dev.conf` and `staging.driftstack.dev.conf`.
+   Sufficient because the app-level structured log (already redacted per the
+   FIXED section above) remains the source of truth for IP/timing/status on
+   these routes — nginx's raw `combined` log was a redundant, unredacted
+   second copy. `infra-content-parity` +
+   `infra-bootstrap-deploy-nginx-systemd-content-parity` pins still pass
+   unchanged (regex `.toMatch`, not exact-length, so new location blocks
+   don't break them). Deployed + `nginx -t`-verified on both prod + staging.
 
 ## REMAINING (surfaced, not yet built)
 
