@@ -141,9 +141,9 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
     );
   });
 
-  it("Danger-zone framing pinned: 'Account deletion is irreversible. All sessions, profiles, API keys, and webhook endpoints are immediately revoked. Recordings are hard-deleted from R2 within 14 days. Invoice history retained per EU tax law (10 years) — not deletable on request.' + 'Pre-launch: deletion is processed by emailing support@driftstack.dev. Self-service deletion endpoint lands post-launch.' — pinned so the irreversibility + 14d R2 hard-delete + 10y EU tax retention + the pre-launch-via-email path all survive", () => {
+  it("Danger-zone framing pinned: 'Account deletion is irreversible. All sessions, profiles, API keys, and webhook endpoints are immediately revoked. Recordings are hard-deleted from R2 within your configured retention window (default 30 days). Invoice history retained per Dutch tax law (7 years) — not deletable on request.' + the support@driftstack.dev deletion-request mailto — pinned so the irreversibility + accurate 30d-default R2 retention + accurate 7y Dutch-tax retention (corrected 2026-07-01 from a stale 14-day/10-year mismatch vs docs/legal/privacy-policy.md's actual retention table) + the current email-request path all survive", () => {
     expect(body).toMatch(
-      /All sessions, profiles, API keys,\s*\n?\s*and webhook endpoints are immediately revoked\. Recordings are hard-\s*\n?\s*deleted from R2 within 14 days\. Invoice history retained per EU tax\s*\n?\s*law \(10 years\) — not deletable on request\./,
+      /All sessions, profiles, API keys,\s*\n?\s*and webhook endpoints are immediately revoked\. Recordings are hard-\s*\n?\s*deleted from R2 within your configured retention window \(default 30\s*\n?\s*days\)\. Invoice history retained per Dutch tax law \(7 years\) — not\s*\n?\s*deletable on request\./,
     );
     expect(body).toMatch(
       /href="mailto:support@driftstack\.dev\?subject=Account%20deletion%20request"/,
