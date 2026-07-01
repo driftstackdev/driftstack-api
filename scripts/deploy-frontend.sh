@@ -45,7 +45,12 @@ PUBLIC_API_BASE_URL="$API_BASE" npm run build
 
 if [ "$NEEDS_API" = "1" ]; then
   # ABORT if the build still embeds a localhost API base (the W586 footgun).
-  if grep -rqE 'apiBaseUrl = "https?://localhost' dist/ 2>/dev/null; then
+  # Two variable-name patterns: customer-dashboard/admin-panel embed it as
+  # `apiBaseUrl`; status-site's Astro pages define:vars it as `API_BASE`
+  # (grepped — status-site never contains the literal token `apiBaseUrl`, so
+  # the original single-pattern check was structurally blind to a localhost
+  # leak on that one app).
+  if grep -rqE 'apiBaseUrl = "https?://localhost' dist/ 2>/dev/null || grep -rqE 'API_BASE = "https?://localhost' dist/ 2>/dev/null; then
     echo "[deploy-frontend] ABORT: $APP build still points at localhost -- PUBLIC_API_BASE_URL was not applied. NOT deploying." >&2
     exit 1
   fi

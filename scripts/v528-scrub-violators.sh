@@ -129,10 +129,15 @@ if [[ "$REPLY" != "scrub-violators" ]]; then
   exit 1
 fi
 
-# Tag the pre-scrub HEAD so a careful operator can recover if needed.
-BACKUP_TAG="pre-v528-scrub-$(date +%s)"
-git tag "$BACKUP_TAG"
-printf 'Backup tag created: %s\n' "$BACKUP_TAG"
+# Back up pre-scrub history to an OUT-OF-REPO bundle, not an in-repo tag.
+# git-filter-repo rewrites every ref it finds reachable in THIS repo
+# (branches AND tags) and then runs its default gc, which prunes the
+# original objects entirely — an in-repo tag would get remapped right
+# along with main and end up pointing at the NEW rewritten commit, not
+# the pre-scrub state it's meant to preserve.
+BACKUP_BUNDLE="/tmp/pre-v528-scrub-$(date +%s).bundle"
+git bundle create "$BACKUP_BUNDLE" --all
+printf 'Out-of-repo backup bundle created: %s\n' "$BACKUP_BUNDLE"
 
 git filter-repo --commit-callback "$(cat "$CALLBACK_FILE")" --force
 
@@ -140,5 +145,6 @@ printf '\nHistory rewritten. New HEAD: %s\n' "$(git rev-parse HEAD)"
 printf 'To complete, run:\n'
 printf '  git push --force origin main\n'
 printf '  git push --force origin --tags  # if any tags carried violator messages\n'
-printf '\nLocal backup remains at tag %s; delete with:\n' "$BACKUP_TAG"
-printf '  git tag -d %s\n' "$BACKUP_TAG"
+printf '\nPre-scrub backup remains at %s; recover via:\n' "$BACKUP_BUNDLE"
+printf '  git clone %s <dir>\n' "$BACKUP_BUNDLE"
+printf "  # or: git fetch %s 'refs/*:refs/*'\n" "$BACKUP_BUNDLE"

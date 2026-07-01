@@ -128,9 +128,9 @@ describe('W569.A /docs/internal/v528-repo-privatization-runbook.md content parit
     expect(body).toMatch(/scripts\/v528-scrub-violators\.sh/);
     expect(body).toMatch(/scripts\/v528-scrub-violators\.sh --confirm/);
     expect(body).toMatch(/git push --force origin main/);
-    expect(body).toMatch(/A pre-scrub backup tag is created automatically/);
-    expect(body).toMatch(/\(`pre-v528-scrub-<timestamp>`\) so a careful operator can recover via/);
-    expect(body).toMatch(/`git reset --hard <tag>` if the rewrite is wrong; delete the tag/);
+    expect(body).toMatch(/A pre-scrub backup bundle is created automatically at/);
+    expect(body).toMatch(/`\/tmp\/pre-v528-scrub-<timestamp>\.bundle`/);
+    expect(body).toMatch(/`git clone <bundle> <dir>` if the rewrite is wrong; delete the bundle/);
     expect(body).toMatch(/⚠️ \*\*Run Step 5 ONLY AFTER Step 3\*\*/);
     expect(body).toMatch(/### Step 6 — redirect external links/);
     expect(body).toMatch(

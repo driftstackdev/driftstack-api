@@ -210,15 +210,15 @@ describe('W804 V-528 extraction scripts content parity', () => {
     expect(p).toMatch(/\("founder", "team"\),/);
   });
 
-  it("CRITICAL scrub-violators.sh --confirm gate + 'scrub-violators' interactive confirmation + pre-scrub-backup-tag pinned. The 3-layer safety (--confirm flag + interactive prompt + backup tag) is the load-bearing destructive-action protection.", () => {
+  it("CRITICAL scrub-violators.sh --confirm gate + 'scrub-violators' interactive confirmation + pre-scrub-backup-bundle pinned. The 3-layer safety (--confirm flag + interactive prompt + out-of-repo backup bundle) is the load-bearing destructive-action protection. The backup is a bundle (not an in-repo tag) because git-filter-repo remaps every reachable ref including tags, then gc's the originals away — an in-repo tag provides zero actual recovery once filter-repo runs.", () => {
     const p = read(SCRUB);
     expect(p).toMatch(/CONFIRM=0\s*\nif \[\[ \$\{1:-\} == "--confirm" \]\]; then/);
     expect(p).toMatch(/Type EXACTLY: scrub-violators/);
     expect(p).toMatch(
       /if \[\[ "\$REPLY" != "scrub-violators" \]\]; then\s*\n\s+printf 'Aborted\.\\n' >&2/,
     );
-    expect(p).toMatch(/BACKUP_TAG="pre-v528-scrub-\$\(date \+%s\)"/);
-    expect(p).toMatch(/git tag "\$BACKUP_TAG"/);
+    expect(p).toMatch(/BACKUP_BUNDLE="\/tmp\/pre-v528-scrub-\$\(date \+%s\)\.bundle"/);
+    expect(p).toMatch(/git bundle create "\$BACKUP_BUNDLE" --all/);
   });
 
   it('CRITICAL scrub-violators.sh git-filter-repo invocation pinned. The `--commit-callback "$(cat ...)" --force` pattern passes the Python callback as a string argument; drift would either lose --force (preventing rewrite) or break the callback delivery.', () => {

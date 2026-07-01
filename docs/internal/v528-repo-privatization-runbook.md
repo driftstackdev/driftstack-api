@@ -203,9 +203,11 @@ The script applies plain-text message replacements via filter-repo:
 Replacements are minimal and surgical — code trees, author identity,
 and pre-violator commit SHAs all preserved.
 
-A pre-scrub backup tag is created automatically
-(`pre-v528-scrub-<timestamp>`) so a careful operator can recover via
-`git reset --hard <tag>` if the rewrite is wrong; delete the tag
+A pre-scrub backup bundle is created automatically at
+`/tmp/pre-v528-scrub-<timestamp>.bundle` (an out-of-repo snapshot — an
+in-repo tag would get remapped by filter-repo's own rewrite + gc, so it
+can't be used for recovery) so a careful operator can recover via
+`git clone <bundle> <dir>` if the rewrite is wrong; delete the bundle
 after verification.
 
 ⚠️ **Run Step 5 ONLY AFTER Step 3** — if SDK extraction branches were

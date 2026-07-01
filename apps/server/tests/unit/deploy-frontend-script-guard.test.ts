@@ -30,6 +30,11 @@ describe('W587 deploy-frontend.sh safe-deploy wrapper', () => {
 
   it('ABORTS the deploy if the built output still embeds a localhost API base', () => {
     expect(src).toMatch(/grep -rqE 'apiBaseUrl = "https\?:\/\/localhost' dist\//);
+    // CRITICAL: status-site's Astro pages embed the API base as `API_BASE`,
+    // not `apiBaseUrl` (customer-dashboard/admin-panel's identifier) — the
+    // apiBaseUrl-only check was structurally blind to a localhost leak on
+    // status-site specifically. Both patterns must be checked.
+    expect(src).toMatch(/grep -rqE 'API_BASE = "https\?:\/\/localhost' dist\//);
     expect(src).toMatch(/ABORT.*localhost/);
     // The abort must happen BEFORE the actual deploy command (not the
     // `wrangler pages deploy` mention in the header comment).
