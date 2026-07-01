@@ -82,7 +82,9 @@ describe('ControlPlaneAgentExecutor', () => {
     const { got, dispatcher } = mockDispatcher((d, i) =>
       i === 1 ? failResult(d.intentId, 'intent_webdriver_failed') : okResult(d.intentId),
     );
-    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    // maxRetries:0 — this test isolates halt-on-failure; auto-retry is covered
+    // in its own describe block below.
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), { maxRetries: 0 });
     const res = await exec.execute(
       planArgs([
         { kind: 'navigate', url: 'https://x' },
@@ -118,7 +120,7 @@ describe('ControlPlaneAgentExecutor', () => {
     const { dispatcher } = mockDispatcher((d) =>
       failResult(d.intentId, 'intent_session_not_established'),
     );
-    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), { maxRetries: 0 });
     const res = await exec.execute(planArgs([{ kind: 'navigate', url: 'https://x' }]));
     expect(res.ok).toBe(false);
     expect(res.results[0]!.kind).toBe('failure');
@@ -144,5 +146,115 @@ describe('ControlPlaneAgentExecutor', () => {
     expect(res.results[0]!.kind).toBe('success');
     if (res.results[0]!.kind !== 'success') throw new Error('narrow');
     expect(res.results[0]!.summary).toBe('navigated to https://final');
+  });
+});
+
+describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient failures', () => {
+  // Instant sleep + records backoff calls, so tests never actually wait.
+  function instantSleep(): { sleep: (ms: number) => Promise<void>; calls: number[] } {
+    const calls: number[] = [];
+    return {
+      calls,
+      sleep: (ms) => {
+        calls.push(ms);
+        return Promise.resolve();
+      },
+    };
+  }
+
+  it('retries a RETRYABLE failure and succeeds on a later attempt → overall success', async () => {
+    // Fail (webdriver → element_not_found, retryable) on attempts 0-1, succeed on attempt 2.
+    const { got, dispatcher } = mockDispatcher((d, i) =>
+      i < 2 ? failResult(d.intentId, 'intent_webdriver_failed') : okResult(d.intentId),
+    );
+    const { sleep, calls } = instantSleep();
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
+      maxRetries: 2,
+      retryDelayMs: 400,
+      sleep,
+    });
+    const res = await exec.execute(
+      planArgs([{ kind: 'interact', action: 'tap', selector: '#go' }]),
+    );
+    expect(res.ok).toBe(true);
+    expect(res.results).toHaveLength(1);
+    expect(res.results[0]!.kind).toBe('success');
+    expect(got).toHaveLength(3); // attempt 0 + 2 retries, last one succeeded
+    // Each retry got a fresh intentId (a distinct dispatch to correlate).
+    expect(new Set(got.map((d) => d.intentId)).size).toBe(3);
+    expect(calls).toEqual([400, 400]); // backoff before each of the 2 retries
+  });
+
+  it('a RETRYABLE failure exhausting all attempts → failure after 1 + maxRetries dispatches', async () => {
+    const { got, dispatcher } = mockDispatcher((d) =>
+      failResult(d.intentId, 'intent_webdriver_failed'),
+    );
+    const { sleep, calls } = instantSleep();
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
+      maxRetries: 2,
+      retryDelayMs: 0,
+      sleep,
+    });
+    const res = await exec.execute(
+      planArgs([{ kind: 'interact', action: 'tap', selector: '#go' }]),
+    );
+    expect(res.ok).toBe(false);
+    expect(res.results[0]!.kind).toBe('failure');
+    expect(got).toHaveLength(3); // 1 + 2 retries
+    expect(calls).toHaveLength(2); // slept before each retry, not after the final failure
+  });
+
+  it('a NON-retryable failure (invalid_request) is surfaced on the first attempt — never retried', async () => {
+    const { got, dispatcher } = mockDispatcher((d) =>
+      failResult(d.intentId, 'intent_missing_parameter'),
+    );
+    const { sleep, calls } = instantSleep();
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), { maxRetries: 2, sleep });
+    const res = await exec.execute(planArgs([{ kind: 'navigate', url: 'https://x' }]));
+    expect(res.ok).toBe(false);
+    expect(res.results[0]!.kind).toBe('failure');
+    expect(got).toHaveLength(1); // not retried
+    expect(calls).toHaveLength(0);
+  });
+
+  it('maxRetries:0 disables retry entirely (a retryable failure is dispatched once)', async () => {
+    const { got, dispatcher } = mockDispatcher((d) =>
+      failResult(d.intentId, 'intent_webdriver_failed'),
+    );
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), { maxRetries: 0 });
+    const res = await exec.execute(
+      planArgs([{ kind: 'interact', action: 'tap', selector: '#go' }]),
+    );
+    expect(res.ok).toBe(false);
+    expect(got).toHaveLength(1);
+  });
+
+  it('retries only the FAILING step, not the whole plan — earlier successes are not re-dispatched', async () => {
+    // intent 0 (navigate) succeeds once; intent 1 (interact) fails-retryable twice then succeeds.
+    const { got, dispatcher } = mockDispatcher((d) => {
+      if (d.intentName === 'navigate')
+        return okResult(d.intentId, d.sessionId, { url: 'https://x' });
+      // `got` already includes this dispatch, so clickCount is 1-based: fail
+      // the first 3 clicks (counts 1-3), succeed on the 4th.
+      const clickCount = got.filter((g) => g.intentName === 'click').length;
+      return clickCount <= 3
+        ? failResult(d.intentId, 'intent_webdriver_failed')
+        : okResult(d.intentId);
+    });
+    const { sleep } = instantSleep();
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
+      maxRetries: 3,
+      retryDelayMs: 0,
+      sleep,
+    });
+    const res = await exec.execute(
+      planArgs([
+        { kind: 'navigate', url: 'https://x' },
+        { kind: 'interact', action: 'tap', selector: '#go' },
+      ]),
+    );
+    expect(res.ok).toBe(true);
+    expect(got.filter((g) => g.intentName === 'navigate')).toHaveLength(1); // not re-run
+    expect(got.filter((g) => g.intentName === 'click')).toHaveLength(4); // 3 fails + 1 success
   });
 });

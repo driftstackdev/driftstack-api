@@ -18,7 +18,12 @@
 
 import type { AgentIntent, DecomposeResult, TranscriptEntry } from './agent-decomposer.js';
 import type { AccountContext } from './auth.js';
-import type { CaptureKind, InteractAction, WaitCondition } from '@driftstack/api-types';
+import type {
+  CaptureKind,
+  FailureDiagnosis,
+  InteractAction,
+  WaitCondition,
+} from '@driftstack/api-types';
 import {
   classifyConsequentialAction,
   type ConsequentialActionCategory,
@@ -48,6 +53,11 @@ export type IntentResult =
       /** Customer-facing failure reason. Comes from the SessionsService
        *  problem-type response in the wired variant. */
       reason: string;
+      /** doc-132 §5.3 — machine-readable failure diagnosis (mirrors the
+       *  api-types IntentResult failure variant). Optional: only the
+       *  control-plane executor populates it today (via intentResultToCustomer);
+       *  the driver-path variants omit it. */
+      diagnosis?: FailureDiagnosis;
     }
   | {
       // W443/W445 — the executor halted BEFORE dispatching a consequential

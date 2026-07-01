@@ -34,7 +34,7 @@ import type {
 import { agentIntentToDispatch } from './agent-intent-to-dispatch.js';
 import { intentResultToCustomer } from './agent-intent-result.js';
 import { serializeIntentDispatch, type ParsedIntentResult } from './harness-control-codec.js';
-import type { IntentDispatch } from '../schemas/harness-control-protocol.js';
+import type { IntentDispatch, HarnessIntentName } from '../schemas/harness-control-protocol.js';
 
 /** The dispatch port the executor needs — IntentDispatchCorrelator implements
  *  it. dispatch() must never reject (resolve with a failure ParsedIntentResult
@@ -43,12 +43,35 @@ export interface IntentDispatcher {
   dispatch(dispatch: IntentDispatch): Promise<ParsedIntentResult>;
 }
 
+/** doc-132 §5.3 slice 3 — bounded auto-retry of transient failures. */
+export interface AutoRetryOptions {
+  /** Extra attempts AFTER the first, for a step whose failure diagnosis is
+   *  `retryable`. Default 2 → up to 3 total attempts per intent. 0 disables. */
+  maxRetries?: number;
+  /** Backoff between attempts (ms). Default 400. */
+  retryDelayMs?: number;
+  /** Injectable sleep so tests run instantly. Default: real setTimeout. */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+const DEFAULT_MAX_RETRIES = 2;
+const DEFAULT_RETRY_DELAY_MS = 400;
+
 export class ControlPlaneAgentExecutor implements AgentExecutor {
+  private readonly maxRetries: number;
+  private readonly retryDelayMs: number;
+  private readonly sleep: (ms: number) => Promise<void>;
+
   constructor(
     private readonly dispatcher: IntentDispatcher,
     /** intentId generator — injectable for deterministic tests. */
     private readonly genIntentId: () => string = () => `int_${randomUUID()}`,
-  ) {}
+    opts: AutoRetryOptions = {},
+  ) {
+    this.maxRetries = Math.max(0, opts.maxRetries ?? DEFAULT_MAX_RETRIES);
+    this.retryDelayMs = Math.max(0, opts.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS);
+    this.sleep = opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  }
 
   async execute(args: ExecuteArgs): Promise<ExecutorRunResult> {
     const results: IntentResult[] = [];
@@ -60,34 +83,65 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         break;
       }
 
-      // 2. Serialize to the base64 wire envelope. Re-validates params; should
-      //    not fail (agentIntentToDispatch already validated), but the executor
-      //    must never throw, so a guard converts any encode error to a failure.
-      let dispatch: IntentDispatch;
-      try {
-        dispatch = serializeIntentDispatch({
-          sessionId: args.sessionId,
-          intentId: this.genIntentId(),
-          intentName: mapped.intentName,
-          params: mapped.params,
-        });
-      } catch (err) {
-        results.push({
-          kind: 'failure',
-          intent,
-          reason: err instanceof Error ? err.message : 'failed to encode intent dispatch',
-        });
-        break;
-      }
-
-      // 3. Dispatch over the control plane + 4. map the result back. The
-      //    dispatcher never rejects (failure → a failure ParsedIntentResult).
-      const parsed = await this.dispatcher.dispatch(dispatch);
-      const result = intentResultToCustomer(intent, parsed);
+      // 2-4. Dispatch (with bounded auto-retry) + map the result back.
+      const result = await this.runIntent(args.sessionId, intent, mapped.intentName, mapped.params);
       results.push(result);
       if (result.kind === 'failure') break; // halt-on-first-failure
     }
 
     return { results, ok: results.every((r) => r.kind === 'success') };
+  }
+
+  /**
+   * One intent, with bounded auto-retry of RETRYABLE transient failures
+   * (doc-132 §5.3). A `retryable` diagnosis (element not found / page didn't
+   * load / condition unmet / session hiccup) means the intent did NOT complete
+   * its effect, so re-dispatching cannot double-apply a side effect — safe even
+   * for an already-approved consequential action (the confirmation gate ran
+   * before dispatch). Non-retryable failures (invalid request, over-cap result)
+   * and encode errors are deterministic — surfaced on the first attempt, never
+   * retried. Each attempt gets a fresh intentId (a new dispatch to correlate).
+   */
+  private async runIntent(
+    sessionId: string,
+    intent: ExecuteArgs['plan']['intents'][number],
+    intentName: HarnessIntentName,
+    params: Record<string, unknown>,
+  ): Promise<IntentResult> {
+    let result: IntentResult = { kind: 'failure', intent, reason: 'no dispatch attempt made' };
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      // Serialize to the base64 wire envelope (fresh intentId per attempt).
+      // Re-validates params; should not fail (agentIntentToDispatch already
+      // validated), but the executor must never throw — a guard converts any
+      // encode error to a (non-retried) failure.
+      let dispatch: IntentDispatch;
+      try {
+        dispatch = serializeIntentDispatch({
+          sessionId,
+          intentId: this.genIntentId(),
+          intentName,
+          params,
+        });
+      } catch (err) {
+        return {
+          kind: 'failure',
+          intent,
+          reason: err instanceof Error ? err.message : 'failed to encode intent dispatch',
+        };
+      }
+
+      // Dispatch over the control plane; the dispatcher never rejects (failure
+      // → a failure ParsedIntentResult).
+      const parsed = await this.dispatcher.dispatch(dispatch);
+      result = intentResultToCustomer(intent, parsed);
+
+      const shouldRetry =
+        result.kind === 'failure' &&
+        result.diagnosis?.retryable === true &&
+        attempt < this.maxRetries;
+      if (!shouldRetry) return result;
+      await this.sleep(this.retryDelayMs);
+    }
+    return result;
   }
 }
