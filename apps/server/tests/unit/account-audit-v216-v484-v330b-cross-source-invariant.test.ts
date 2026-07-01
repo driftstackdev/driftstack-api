@@ -7,6 +7,9 @@
 //   Mirrors admin-audit service shape but customer-scoped:
 //     - 'list(accountId) returns only the calling account's own
 //       entries, gated on account_owner scope'.
+//     - list() itself is gated on the granular read:audit scope
+//       (V-553.B-21; account_owner still satisfies it via V-481
+//       broad-satisfies-granular).
 //     - Append-only contract: insert + list, no update / delete.
 //     - 'Same posture as admin_audit_log per D-025'.
 //
@@ -26,7 +29,7 @@
 //   V-330b effectiveAccountId framing — when route layer resolved
 //   X-Driftstack-Account to a team owner the caller is a member of,
 //   list returns OWNER's audit. Scope check stays on caller's
-//   apiKey (being a team member doesn't waive account_owner).
+//   apiKey (being a team member doesn't waive the read:audit gate).
 //
 //   record() service-internal fire-and-forget intent — 'Call sites
 //   swallow errors so audit failures never break the underlying
@@ -147,23 +150,26 @@ describe('W937 V-216 + V-484 + V-330b account-audit cross-source invariant', () 
     expect(repoBlock).not.toMatch(/delete\s*\(/);
   });
 
-  // ─── list() account_owner scope check ────────────────────────
+  // ─── list() read:audit scope check ───────────────────────────
+  // V-553.B-21 — widened from a hard account_owner-only gate to the
+  // granular read:audit scope (account_owner still satisfies it via
+  // V-481 broad-satisfies-granular, so this is a strict widening).
 
-  it('CRITICAL list() requires account_owner scope via throwIfMissingScope. The scope gate prevents un-scoped API keys reading the audit log.', () => {
+  it('CRITICAL list() requires read:audit scope (or a satisfying broad scope) via throwIfMissingScope. The scope gate prevents un-scoped API keys reading the audit log.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/account-audit.ts'));
-    expect(p).toMatch(/throwIfMissingScope\(ctx, 'account_owner'\);/);
+    expect(p).toMatch(/throwIfMissingScope\(ctx, 'read:audit'\);/);
   });
 
   // ─── V-330b effectiveAccountId team-RBAC framing ─────────────
 
-  it("CRITICAL V-330b framing — 'when opts.effectiveAccountId is set (route layer resolved X-Driftstack-Account to a team owner the caller is a member of), the audit entries returned are the OWNER's, not the caller's. The scope check stays on the caller's apiKey — being a team member doesn't waive the account_owner scope requirement on the calling principal'. The team-member-doesn't-waive-scope is the V-330b principal-vs-target distinction.", () => {
+  it("CRITICAL V-330b framing — 'when opts.effectiveAccountId is set (route layer resolved X-Driftstack-Account to a team owner the caller is a member of), the audit entries returned are the OWNER's, not the caller's. The scope check stays on the caller's apiKey — being a team member doesn't waive the scope requirement on the calling principal'. The team-member-doesn't-waive-scope is the V-330b principal-vs-target distinction.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/account-audit.ts'));
     expect(p).toMatch(/V-330b — when `opts\.effectiveAccountId` is set \(route layer/);
     expect(p).toMatch(/resolved X-Driftstack-Account to a team owner the caller is a/);
     expect(p).toMatch(/member of\), the audit entries returned are the OWNER's, not the/);
     expect(p).toMatch(/caller's\. The scope check stays on the caller's apiKey — being a/);
-    expect(p).toMatch(/team member doesn't waive the account_owner scope requirement on/);
-    expect(p).toMatch(/the calling principal\./);
+    expect(p).toMatch(/team member doesn't waive the scope requirement on the calling/);
+    expect(p).toMatch(/principal\./);
   });
 
   it("CRITICAL effectiveAccountId resolution — 'opts.effectiveAccountId ?? ctx.account.id'. The fallback-to-caller is what makes effectiveAccountId an optional team-RBAC override.", () => {
@@ -218,10 +224,10 @@ describe('W937 V-216 + V-484 + V-330b account-audit cross-source invariant', () 
 
   // ─── Newest-first read order ─────────────────────────────────
 
-  it("CRITICAL list() framing — 'Returns the calling account's own audit entries in newest-first order. account_owner scope required'. The newest-first ordering is the customer-dashboard read expectation.", () => {
+  it("CRITICAL list() framing — 'Returns the calling account's own audit entries in newest-first order. Requires the granular `read:audit` scope (or a satisfying broad scope)'. The newest-first ordering is the customer-dashboard read expectation.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/account-audit.ts'));
     expect(p).toMatch(/Returns the calling account's own audit/);
-    expect(p).toMatch(/entries in newest-first order\. account_owner scope required\./);
+    expect(p).toMatch(/entries in newest-first order\. Requires the granular `read:audit`/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

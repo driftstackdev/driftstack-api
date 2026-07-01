@@ -953,6 +953,11 @@ export class SessionsService {
     ctx: AccountContext,
     opts: { limit: number; cursor?: string; effectiveAccountId?: string },
   ): Promise<SessionListPage> {
+    // V-553.B-21 — read:sessions (or a satisfying broad scope) gate.
+    // Independent of the effectiveAccountId team redirection below —
+    // team-scoping decides WHICH account's rows come back, not
+    // whether this key may read sessions at all.
+    throwIfMissingScope(ctx, 'read:sessions');
     // V-326d — when effectiveAccountId is set (route layer resolved
     // X-Driftstack-Account to a team owner the caller is a member of),
     // list the owner's sessions instead of the caller's. Otherwise

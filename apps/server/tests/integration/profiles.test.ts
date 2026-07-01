@@ -263,6 +263,32 @@ describe('GET /v1/profiles', () => {
     const firstIds = new Set(firstBody.data.map((p) => p.id));
     for (const p of secondBody.data) expect(firstIds.has(p.id)).toBe(false);
   });
+
+  // V-553.B-21 — GET /v1/profiles had ZERO scope check (any authenticated
+  // key, regardless of scope, could enumerate every profile on the
+  // account). 'gui_control' is a real, narrow scope that satisfies
+  // neither bare 'read' nor the broad-satisfies-granular rule.
+  it('403 when the key lacks read:profiles (or a satisfying broad scope)', async () => {
+    fx = await buildTestApp({ scopes: ['gui_control'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json<{ detail: string }>();
+    expect(body.detail).toContain('read:profiles');
+  });
+
+  it('200 with a granular read:profiles key (granular satisfies the route)', async () => {
+    fx = await buildTestApp({ scopes: ['read:profiles'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+  });
 });
 
 describe('GET /v1/profiles/:id', () => {
@@ -309,6 +335,19 @@ describe('GET /v1/profiles/:id', () => {
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  // V-553.B-21 — GET /v1/profiles/:id had ZERO scope check.
+  it('403 when the key lacks read:profiles (or a satisfying broad scope)', async () => {
+    fx = await buildTestApp({ scopes: ['gui_control'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/profiles/prof_00000000-0000-4000-8000-000000000099',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json<{ detail: string }>();
+    expect(body.detail).toContain('read:profiles');
   });
 });
 
@@ -779,6 +818,29 @@ describe('L4b recycle bin — GET /v1/profiles/trash + POST /v1/profiles/:id/res
       true,
     );
     expect(live.statusCode).toBe(200);
+  });
+
+  // V-553.B-21 — GET /v1/profiles/trash had ZERO scope check.
+  it('403 when the key lacks read:profiles (or a satisfying broad scope)', async () => {
+    fx = await buildTestApp({ scopes: ['gui_control'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/profiles/trash',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json<{ detail: string }>();
+    expect(body.detail).toContain('read:profiles');
+  });
+
+  it('200 with a granular read:profiles key (granular satisfies the route)', async () => {
+    fx = await buildTestApp({ scopes: ['read:profiles'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/profiles/trash',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
   });
 
   it('restore un-trashes a profile: it leaves trash, returns to the list, and GET resolves again', async () => {

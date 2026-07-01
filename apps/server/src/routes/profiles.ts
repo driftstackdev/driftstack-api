@@ -160,9 +160,18 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   // V-330 — honors X-Driftstack-Account: a team member with a valid
   // membership lists the owner's profiles. Read-only routes treat all
   // roles equivalently — both 'member' and 'admin' can read.
+  // V-553.B-21 — read:profiles gate. ProfilesService's list/get/listTrash
+  // don't take an AccountContext (they're also called internally by
+  // sessions.ts/agent-sessions.ts to resolve a session's bound profile,
+  // which must NOT require read:profiles — a write:sessions-only CI key
+  // creating a profile-bound session shouldn't need profile read access).
+  // So the gate lives here, at the route layer, mirroring exactly how
+  // the write routes below gate on write:profiles via app.requireScope.
   app.get(
     '/v1/profiles',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    {
+      preHandler: [app.requireAuth, app.requireScope('read:profiles'), app.rateLimit('global')],
+    },
     async (req) => {
       const ctx = requireCtx(req);
       const parsed = PaginationQuerySchema.safeParse(req.query);
@@ -187,9 +196,12 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
 
   // ── GET /v1/profiles/:id ─────────────────────────────────────────────
   // V-330 — same effective-account scoping as the list endpoint above.
+  // V-553.B-21 — read:profiles gate; see the GET /v1/profiles comment above.
   app.get<{ Params: { id: string } }>(
     '/v1/profiles/:id',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    {
+      preHandler: [app.requireAuth, app.requireScope('read:profiles'), app.rateLimit('global')],
+    },
     async (req) => {
       const ctx = requireCtx(req);
       const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));
@@ -251,9 +263,12 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   // Lists the account's TRASHED profiles (deleted_at set), newest first.
   // Read-only → both team roles, same effective-account scoping as the list
   // endpoint. Static path → Fastify matches it ahead of /v1/profiles/:id.
+  // V-553.B-21 — read:profiles gate; see the GET /v1/profiles comment above.
   app.get(
     '/v1/profiles/trash',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    {
+      preHandler: [app.requireAuth, app.requireScope('read:profiles'), app.rateLimit('global')],
+    },
     async (req) => {
       const ctx = requireCtx(req);
       const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));

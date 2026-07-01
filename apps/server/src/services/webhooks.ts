@@ -418,7 +418,13 @@ export class WebhooksService {
     return { row, plaintextSecret };
   }
 
-  list(ctx: AccountContext): Promise<WebhookEndpointRow[]> {
+  async list(ctx: AccountContext): Promise<WebhookEndpointRow[]> {
+    // V-553.B-21 — declared `async` (not a plain function returning a
+    // Promise) so the scope check's throw becomes a rejected Promise
+    // rather than a synchronous exception raised while the caller is
+    // still constructing the call expression — matches every other
+    // scope-gated method on this service (create/get/update/delete/…).
+    throwIfMissingScope(ctx, 'read:webhooks');
     return this.repo.listEndpoints(ctx.account.id);
   }
 
@@ -431,6 +437,11 @@ export class WebhooksService {
     ctx: AccountContext,
     opts: { effectiveAccountId?: string } = {},
   ): Promise<Array<{ endpoint: WebhookEndpointRow; counts: EndpointDeliveryCounts }>> {
+    // V-553.B-21 — read:webhooks (or a satisfying broad scope) gate.
+    // Independent of the effectiveAccountId team redirection below —
+    // team-scoping decides WHICH account's rows come back, not
+    // whether this key may read webhooks at all.
+    throwIfMissingScope(ctx, 'read:webhooks');
     // V-330f — when effectiveAccountId is set, lists the OWNER's
     // endpoints. Read-only; both 'member' and 'admin' roles allowed.
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
@@ -449,6 +460,7 @@ export class WebhooksService {
     id: string,
     opts: { effectiveAccountId?: string } = {},
   ): Promise<WebhookEndpointRow> {
+    throwIfMissingScope(ctx, 'read:webhooks');
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const row = await this.repo.findEndpoint(id, accountId);
     if (!row) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);

@@ -15,7 +15,8 @@
 //     + 6 optional fields.
 //   • ListAccountAuditOpts: base (limit/cursor/action) + V-484 filters
 //     (from/to/actorType/targetResourceId).
-//   • account_owner scope required for list (route gate).
+//   • read:audit scope (or a satisfying broad scope) required for list
+//     (V-553.B-21 widened from a hard account_owner-only gate).
 //   • V-330b effectiveAccountId: team-member case — entries returned
 //     are OWNER's, not caller's; scope check stays on calling apiKey.
 //   • record: service-internal fire-and-forget; call sites swallow
@@ -112,18 +113,22 @@ describe('W399.A apps/server/src/services/account-audit.ts content parity', () =
     );
   });
 
-  it('list: requires account_owner scope; effectiveAccountId fallback to ctx.account.id', () => {
+  // V-553.B-21 — list() was widened from a hard `account_owner`-only
+  // gate to the granular `read:audit` scope (account_owner still
+  // satisfies it via broad-satisfies-granular, so this is a strict
+  // widening, not a behavior change for existing account_owner callers).
+  it('list: requires read:audit scope (or a satisfying broad scope); effectiveAccountId fallback to ctx.account.id', () => {
     expect(body).toMatch(
-      /Customer-facing read\. Returns the calling account's own audit\s*\n?\s*\*\s*entries in newest-first order\. account_owner scope required\./,
+      /Customer-facing read\. Returns the calling account's own audit\s*\n?\s*\*\s*entries in newest-first order\. Requires the granular `read:audit`\s*\n?\s*\*\s*scope \(or a satisfying broad scope — `read` \/ `account_owner`; see\s*\n?\s*\*\s*V-481 broad-satisfies-granular in `lib\/errors-helpers\.ts`\)\./,
     );
-    expect(body).toMatch(/throwIfMissingScope\(ctx, 'account_owner'\);/);
+    expect(body).toMatch(/throwIfMissingScope\(ctx, 'read:audit'\);/);
     expect(body).toMatch(/const accountId = opts\.effectiveAccountId \?\? ctx\.account\.id;/);
     expect(body).toMatch(/return this\.repo\.list\(accountId, opts\);/);
   });
 
   it("V-330b effectiveAccountId framing: team-member case → entries are OWNER's; scope check stays on caller apiKey", () => {
     expect(body).toMatch(
-      /V-330b — when `opts\.effectiveAccountId` is set \(route layer\s*\n?\s*\*\s*resolved X-Driftstack-Account to a team owner the caller is a\s*\n?\s*\*\s*member of\), the audit entries returned are the OWNER's, not the\s*\n?\s*\*\s*caller's\. The scope check stays on the caller's apiKey — being a\s*\n?\s*\*\s*team member doesn't waive the account_owner scope requirement on\s*\n?\s*\*\s*the calling principal\./,
+      /V-330b — when `opts\.effectiveAccountId` is set \(route layer\s*\n?\s*\*\s*resolved X-Driftstack-Account to a team owner the caller is a\s*\n?\s*\*\s*member of\), the audit entries returned are the OWNER's, not the\s*\n?\s*\*\s*caller's\. The scope check stays on the caller's apiKey — being a\s*\n?\s*\*\s*team member doesn't waive the scope requirement on the calling\s*\n?\s*\*\s*principal\./,
     );
   });
 

@@ -254,6 +254,56 @@ describe('V-553.B-14 WebhooksService.get', () => {
     const svc = new WebhooksService(repo);
     await expect(svc.get(ctxWith(['read']), 'wh_1')).rejects.toThrow(/not found/);
   });
+
+  // V-553.B-21 — read:webhooks was completely unchecked (any authenticated
+  // key, regardless of scope, could read a single endpoint's URL +
+  // secretPrefix + delivery config). 'gui_control' is a real, narrow scope
+  // that satisfies neither bare 'read' nor the broad-satisfies-granular
+  // rule, so it must not be able to read webhook endpoints.
+  it('rejects callers without read:webhooks (or a satisfying broad scope)', async () => {
+    const { repo } = makeRepo([baseRow()]);
+    const svc = new WebhooksService(repo);
+    await expect(svc.get(ctxWith(['gui_control']), 'wh_1')).rejects.toThrow(/read:webhooks/);
+  });
+
+  it('allows a caller holding the granular read:webhooks scope', async () => {
+    const { repo } = makeRepo([baseRow()]);
+    const svc = new WebhooksService(repo);
+    const result = await svc.get(ctxWith(['read:webhooks']), 'wh_1');
+    expect(result.id).toBe('wh_1');
+  });
+
+  it('still allows an account_owner caller (broad-satisfies-granular, no regression)', async () => {
+    const { repo } = makeRepo([baseRow()]);
+    const svc = new WebhooksService(repo);
+    const result = await svc.get(ctxWith(['account_owner']), 'wh_1');
+    expect(result.id).toBe('wh_1');
+  });
+});
+
+describe('V-553.B-21 WebhooksService.list', () => {
+  it('rejects callers without read:webhooks (or a satisfying broad scope)', async () => {
+    const { repo } = makeRepo([baseRow()]);
+    const svc = new WebhooksService(repo);
+    await expect(svc.list(ctxWith(['gui_control']))).rejects.toThrow(/read:webhooks/);
+  });
+
+  it('allows a caller holding the granular read:webhooks scope + scopes rows to the caller account', async () => {
+    const { repo } = makeRepo([
+      baseRow({ id: 'wh_1', accountId: 'acc_1' }),
+      baseRow({ id: 'wh_2', accountId: 'acc_other' }),
+    ]);
+    const svc = new WebhooksService(repo);
+    const rows = await svc.list(ctxWith(['read:webhooks']));
+    expect(rows.map((r) => r.id)).toEqual(['wh_1']);
+  });
+
+  it('still allows an account_owner caller (broad-satisfies-granular, no regression)', async () => {
+    const { repo } = makeRepo([baseRow()]);
+    const svc = new WebhooksService(repo);
+    const rows = await svc.list(ctxWith(['account_owner']));
+    expect(rows).toHaveLength(1);
+  });
 });
 
 describe('V-553.B-14 WebhooksService.update', () => {
@@ -425,5 +475,29 @@ describe('V-553.B-14 WebhooksService.listWithCounts', () => {
     expect(result).toHaveLength(2);
     expect(result[0]?.counts).toEqual({ delivered: 5, failed: 1, dlq: 0 });
     expect(result[1]?.counts).toEqual({ delivered: 0, failed: 0, dlq: 0 });
+  });
+
+  // V-553.B-21 — listWithCounts backs GET /v1/webhooks (the dashboard's
+  // main webhooks page) and had ZERO scope check, unlike every sibling
+  // CRUD method on this service. 'gui_control' satisfies neither bare
+  // 'read' nor the broad-satisfies-granular rule.
+  it('rejects callers without read:webhooks (or a satisfying broad scope)', async () => {
+    const { repo } = makeRepo([baseRow()]);
+    const svc = new WebhooksService(repo);
+    await expect(svc.listWithCounts(ctxWith(['gui_control']))).rejects.toThrow(/read:webhooks/);
+  });
+
+  it('allows a caller holding the granular read:webhooks scope', async () => {
+    const { repo } = makeRepo([baseRow()]);
+    const svc = new WebhooksService(repo);
+    const result = await svc.listWithCounts(ctxWith(['read:webhooks']));
+    expect(result).toHaveLength(1);
+  });
+
+  it('still allows an account_owner caller (broad-satisfies-granular, no regression)', async () => {
+    const { repo } = makeRepo([baseRow()]);
+    const svc = new WebhooksService(repo);
+    const result = await svc.listWithCounts(ctxWith(['account_owner']));
+    expect(result).toHaveLength(1);
   });
 });

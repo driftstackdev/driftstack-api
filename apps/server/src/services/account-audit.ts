@@ -123,20 +123,29 @@ export class AccountAuditService {
 
   /**
    * Customer-facing read. Returns the calling account's own audit
-   * entries in newest-first order. account_owner scope required.
+   * entries in newest-first order. Requires the granular `read:audit`
+   * scope (or a satisfying broad scope — `read` / `account_owner`; see
+   * V-481 broad-satisfies-granular in `lib/errors-helpers.ts`).
+   *
+   * V-553.B-21 — this used to hard-require the literal `account_owner`
+   * scope, which permanently 403'd any key minted with just
+   * `read:audit` (the docs' own "Backup automation: read + read:audit"
+   * recipe never actually worked end-to-end). `account_owner` still
+   * satisfies the granular check via the broad-satisfies-granular rule,
+   * so this is a strict widening — no existing caller loses access.
    *
    * V-330b — when `opts.effectiveAccountId` is set (route layer
    * resolved X-Driftstack-Account to a team owner the caller is a
    * member of), the audit entries returned are the OWNER's, not the
    * caller's. The scope check stays on the caller's apiKey — being a
-   * team member doesn't waive the account_owner scope requirement on
-   * the calling principal.
+   * team member doesn't waive the scope requirement on the calling
+   * principal.
    */
   async list(
     ctx: AccountContext,
     opts: ListAccountAuditOpts & { effectiveAccountId?: string },
   ): Promise<ListAccountAuditPage> {
-    throwIfMissingScope(ctx, 'account_owner');
+    throwIfMissingScope(ctx, 'read:audit');
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     return this.repo.list(accountId, opts);
   }

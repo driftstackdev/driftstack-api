@@ -75,10 +75,30 @@ const SAMPLE_ACTION: AccountAuditAction = 'api_key.created' as AccountAuditActio
 const CUSTOMER_ACTOR: AccountAuditActorType = 'customer';
 
 describe('V-553.B-16 AccountAuditService.list', () => {
-  it('rejects callers missing the account_owner scope', async () => {
+  // V-553.B-21 — list() was widened from a hard `account_owner`-only
+  // gate to the granular `read:audit` scope (account_owner AND the
+  // bare `read` broad scope both still satisfy it via V-481
+  // broad-satisfies-granular). 'gui_control' is a real, narrow scope
+  // that satisfies neither, so it must still be rejected.
+  it('rejects callers missing read:audit (or a satisfying broad scope)', async () => {
     const { repo } = makeRepo();
     const svc = new AccountAuditService(repo);
-    await expect(svc.list(ctxWith(['read']), { limit: 10 })).rejects.toThrow(/account_owner/);
+    await expect(svc.list(ctxWith(['gui_control']), { limit: 10 })).rejects.toThrow(/read:audit/);
+  });
+
+  it('allows a caller holding the granular read:audit scope (the docs\' "read + read:audit" backup-automation recipe)', async () => {
+    const { repo, state } = makeRepo();
+    const svc = new AccountAuditService(repo);
+    await svc.list(ctxWith(['read:audit'], 'acc_self'), { limit: 10 });
+    expect(state.listCalls).toHaveLength(1);
+    expect(state.listCalls[0]?.accountId).toBe('acc_self');
+  });
+
+  it('still allows a bare-read-scope caller (broad-satisfies-granular, no regression)', async () => {
+    const { repo, state } = makeRepo();
+    const svc = new AccountAuditService(repo);
+    await svc.list(ctxWith(['read'], 'acc_self'), { limit: 10 });
+    expect(state.listCalls).toHaveLength(1);
   });
 
   it('passes opts through to the repo and scopes to the caller account by default', async () => {
@@ -104,15 +124,15 @@ describe('V-553.B-16 AccountAuditService.list', () => {
     expect(state.listCalls[0]?.accountId).toBe('acc_owner');
   });
 
-  it('V-330b — a caller without account_owner is still rejected even when effectiveAccountId is set', async () => {
+  it('V-330b — a caller without a satisfying scope is still rejected even when effectiveAccountId is set', async () => {
     const { repo } = makeRepo();
     const svc = new AccountAuditService(repo);
     await expect(
-      svc.list(ctxWith(['read'], 'acc_member'), {
+      svc.list(ctxWith(['gui_control'], 'acc_member'), {
         limit: 10,
         effectiveAccountId: 'acc_owner',
       }),
-    ).rejects.toThrow(/account_owner/);
+    ).rejects.toThrow(/read:audit/);
   });
 
   it('forwards V-484 advanced filters (from/to/actorType/targetResourceId) verbatim', async () => {

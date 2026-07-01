@@ -181,6 +181,34 @@ describe('GET /v1/sessions', () => {
     expect(body.data).toHaveLength(3);
     expect(body.data.map((s) => s.label)).toEqual(['c', 'b', 'a']);
   });
+
+  // V-553.B-21 — SessionsService.list() had ZERO scope check (any
+  // authenticated key, regardless of scope, could enumerate every
+  // session on the account). 'gui_control' is a real, narrow scope
+  // that satisfies neither bare 'read' nor the broad-satisfies-granular
+  // rule.
+  it('403 when the key lacks read:sessions (or a satisfying broad scope)', async () => {
+    fx = await buildTestApp({ scopes: ['gui_control'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/sessions',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.type).toBe(PROBLEM_TYPES.Forbidden);
+    expect(body.detail).toContain('read:sessions');
+  });
+
+  it('200 with a granular read:sessions key (granular satisfies the route)', async () => {
+    fx = await buildTestApp({ scopes: ['read:sessions'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/sessions',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+  });
 });
 
 describe('POST /v1/sessions/:id/navigate', () => {
