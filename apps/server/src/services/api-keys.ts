@@ -221,6 +221,8 @@ export class ApiKeysService {
     ctx: AccountContext,
     opts: { effectiveAccountId?: string } = {},
   ): Promise<ApiKeyRow[]> {
+    throwIfMissingScope(ctx, 'read:api-keys');
+
     // V-326e6 — read role-agnostic; both 'member' and 'admin' can
     // list the OWNER's keys when team-scoped.
     const accountId = opts.effectiveAccountId ?? ctx.account.id;

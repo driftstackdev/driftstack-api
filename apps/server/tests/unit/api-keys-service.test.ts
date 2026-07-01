@@ -275,6 +275,22 @@ describe('V-553.B-20 ApiKeysService.create', () => {
 });
 
 describe('V-553.B-20 ApiKeysService.list', () => {
+  it('rejects callers without read:api-keys (or a satisfying broad scope)', async () => {
+    const { repo } = makeRepo([makeKey({ id: 'a1', accountId: 'acc_1' })]);
+    const svc = new ApiKeysService(repo);
+    // 'gui_control' is a real, narrow scope that satisfies neither the
+    // bare 'read' nor 'account_owner' broad-satisfies-granular rule, so
+    // it must not be able to read the account's api-keys list.
+    await expect(svc.list(ctxWith(['gui_control']))).rejects.toThrow(/read:api-keys/);
+  });
+
+  it('allows a caller holding the granular read:api-keys scope', async () => {
+    const { repo } = makeRepo([makeKey({ id: 'a1', accountId: 'acc_1' })]);
+    const svc = new ApiKeysService(repo);
+    const rows = await svc.list(ctxWith(['read:api-keys']));
+    expect(rows.map((r) => r.id)).toEqual(['a1']);
+  });
+
   it('returns rows scoped to the caller account', async () => {
     const { repo } = makeRepo([
       makeKey({ id: 'a1', accountId: 'acc_1' }),

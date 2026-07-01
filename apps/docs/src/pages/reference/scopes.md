@@ -47,7 +47,7 @@ There are three categories of scopes, in order of breadth:
 | `write:webhooks`            | granular        | Read webhook endpoints. Endpoint management (create / update / delete / rotate-secret / send-test) requires `account_owner` — see note. |
 | `admin:webhooks`            | granular        | Reserved. Webhook endpoint management is account-control-level and requires `account_owner`, not this granular scope.                   |
 | `read:api-keys`             | granular        | Read API keys list / metadata only.                                                                                                     |
-| `admin:api-keys`            | granular        | All admin operations on API keys (mint + revoke). Implies `account_owner` for the keys subtree.                                         |
+| `admin:api-keys`            | granular        | Reserved. API-key management (mint / rotate / revoke) is account-control-level and requires `account_owner`, not this granular scope.   |
 | `read:billing`              | granular        | Read billing state + invoice / subscription metadata only.                                                                              |
 | `admin:billing`             | granular        | All admin operations on billing (start trial, change subscription, manage portal).                                                      |
 | `read:audit`                | granular        | Read account audit log only.                                                                                                            |
