@@ -773,7 +773,9 @@ const accountId = account.id;
           (action === 'change-tier' ||
             action === 'suspend' ||
             action === 'unsuspend' ||
-            action === 'set-override')
+            action === 'set-override' ||
+            action === 'add-note' ||
+            action === 'record-refund')
         ) {
           showBanner('Sign in with a staff admin account to perform this action.');
           return;

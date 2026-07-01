@@ -310,7 +310,8 @@ const apiBaseUrl = resolveApiBaseUrl();
           })
           .then((body) => {
             if (myReq !== inFlight) return;
-            let entries = body.data || [];
+            const fetched = body.data || [];
+            let entries = fetched;
             const resultFilter = resultEl ? resultEl.value : '';
             if (resultFilter) {
               // Failures are audited as `error: <code>` (every admin route's
@@ -320,10 +321,22 @@ const apiBaseUrl = resolveApiBaseUrl();
               // every `error: <code>` variant.
               entries = entries.filter((e) => String(e.result).startsWith(resultFilter));
             }
+            // The result filter is applied CLIENT-side over only the fetched
+            // page (server takes no `result` param), so an empty filtered view
+            // means "none in the 50 most-recent" — NOT "no such entries exist".
+            // Say so, or a forensic reviewer reads a false all-clear. (Only the
+            // page window is qualified; without a filter the count is exact.)
+            const filteredPage = resultFilter && fetched.length >= 50;
             if (tbody) {
               if (entries.length === 0) {
                 tbody.innerHTML =
-                  '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">No audit entries match the current filter.</td></tr>';
+                  '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">' +
+                  (filteredPage
+                    ? 'No ' +
+                      resultFilter +
+                      ' entries in the 50 most-recent — older entries are not loaded on this view.'
+                    : 'No audit entries match the current filter.') +
+                  '</td></tr>';
               } else {
                 tbody.innerHTML = entries.map(rowHtml).join('');
               }
@@ -334,6 +347,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 entries.length +
                 ' entr' +
                 (entries.length === 1 ? 'y' : 'ies') +
+                (filteredPage ? ' (of the 50 most-recent — filter is client-side)' : '') +
                 '. Retention 90 days hot in Postgres + R2 archive thereafter (ADR-006).';
             }
             hideBanner();

@@ -86,16 +86,20 @@ describe('W488.A apps/admin-panel/src/pages/audit-log.astro content parity', () 
 
   it("Retention framing pinned: '90 days hot in Postgres + R2 archive thereafter (ADR-006)' + footnote dynamic 'Showing N entr(y|ies)' (singular when length===1) — pinned so the retention contract + grammatical accuracy survive (drift to '90 days' without the R2-archive caveat would imply data is permanently lost, weakening the compliance posture)", () => {
     expect(body).toMatch(
-      /'Showing ' \+\s*\n?\s*entries\.length \+\s*\n?\s*' entr' \+\s*\n?\s*\(entries\.length === 1 \? 'y' : 'ies'\) \+\s*\n?\s*'\. Retention 90 days hot in Postgres \+ R2 archive thereafter \(ADR-006\)\.';/,
+      /'Showing ' \+\s*\n?\s*entries\.length \+\s*\n?\s*' entr' \+\s*\n?\s*\(entries\.length === 1 \? 'y' : 'ies'\) \+\s*\n?\s*\(filteredPage \? ' \(of the 50 most-recent — filter is client-side\)' : ''\) \+\s*\n?\s*'\. Retention 90 days hot in Postgres \+ R2 archive thereafter \(ADR-006\)\.';/,
     );
     expect(body).toMatch(
       /Retention 90 days hot in Postgres \+ R2 archive thereafter \(ADR-006\)\. The\s*\n?\s*read endpoint paginates by timestamp DESC; bulk export is not yet\s*\n?\s*exposed from <code class="font-mono">\/v1\/admin\/audit-log<\/code>/,
     );
   });
 
-  it("Empty-filter-result branch: 'No audit entries match the current filter.' colspan=5 cell — pinned so the empty-after-filter state is visually distinct (centered + slate-500 muted) from the no-data-yet state and operators can tell their filter is the cause", () => {
+  it("Empty-filter-result branch: 'No audit entries match the current filter.' colspan=5 cell — pinned so the empty-after-filter state is visually distinct (centered + slate-500 muted) from the no-data-yet state and operators can tell their filter is the cause. The client-side result filter also qualifies its empty-state + count honestly (a filtered empty page over the 50-row window means 'none in the most-recent', NOT 'none exist').", () => {
     expect(body).toMatch(
-      /<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">No audit entries match the current filter\.<\/td><\/tr>/,
+      /class="px-4 py-8 text-center text-sm text-tk-ink-3">'\s*\+\s*\n?\s*\(filteredPage/,
+    );
+    expect(body).toMatch(/No audit entries match the current filter\./);
+    expect(body).toMatch(
+      /No ' \+\s*\n?\s*resultFilter \+\s*\n?\s*' entries in the 50 most-recent — older entries are not loaded on this view\.'/,
     );
   });
 

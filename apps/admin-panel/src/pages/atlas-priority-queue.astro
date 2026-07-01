@@ -214,8 +214,33 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (!s) return '';
       return s.length > n ? s.slice(0, n) + '…' : s;
     }
+    // These rows render customer-INFLUENCED strings (customer_id / page_url are
+    // free-form per POST /v1/internal/atlas-priority/probe-signature, min(1),
+    // no .url() / sanitization) into innerHTML in the PRIVILEGED admin DOM.
+    // Escape every interpolated value — matches the escapeHtml every sibling
+    // admin page already applies (this was the one that didn't).
+    function escapeHtml(s) {
+      return String(s).replace(
+        /[&<>"']/g,
+        (c) =>
+          ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;',
+          })[c],
+      );
+    }
+
+    // Stale-response guard — fetchQueue fires from init + refresh + every filter
+    // change + a debounced text input + a 30s poll, so a slow earlier response
+    // could otherwise overwrite a newer filtered render. Each call takes a token;
+    // it only writes to the DOM if it's still the most-recently-started call.
+    let inFlight = 0;
 
     async function fetchQueue() {
+      const myReq = ++inFlight;
       const params = new URLSearchParams();
       if (filters.status.value) params.set('status', filters.status.value);
       if (filters.customer.value) params.set('customer_id', filters.customer.value);
@@ -235,17 +260,29 @@ const apiBaseUrl = resolveApiBaseUrl();
           headers: token ? { Authorization: 'Bearer ' + token } : {},
           credentials: 'include',
         });
+        if (myReq !== inFlight) return; // superseded by a newer call
         if (!res.ok) {
+          // Clear the "Loading…" placeholder so a first-load failure (e.g. a
+          // 401 with no token) doesn't leave a stuck loading row under the
+          // error banner.
+          tbody.innerHTML =
+            '<tr><td colspan="7" class="px-4 py-6 text-center text-tk-ink-3">Could not load the queue — ' +
+            escapeHtml(res.status + ' ' + res.statusText) +
+            '</td></tr>';
           showError('Queue endpoint returned ' + res.status + ' ' + res.statusText);
           return;
         }
         const data = await res.json();
+        if (myReq !== inFlight) return; // superseded by a newer call
         renderStats(data.stats || {});
         renderRows(filterClientSide(data.events || []));
         errorBanner.classList.add('hidden');
         statusLine.textContent =
           'Showing ' + (data.events?.length ?? 0) + ' events · ' + new Date().toISOString();
       } catch (err) {
+        if (myReq !== inFlight) return; // superseded by a newer call
+        tbody.innerHTML =
+          '<tr><td colspan="7" class="px-4 py-6 text-center text-tk-ink-3">Could not load the queue.</td></tr>';
         showError('Fetch failed: ' + (err.message || String(err)));
       } finally {
         // 2026-05-21 — AdminLayout opacity-gate signal.
@@ -294,21 +331,21 @@ const apiBaseUrl = resolveApiBaseUrl();
             fmtIso(e.emitted_at) +
             '</td>' +
             '<td class="px-4 py-2 text-tk-ink-2 font-mono text-xs">' +
-            truncate(e.customer_id || '', 18) +
+            escapeHtml(truncate(e.customer_id || '', 18)) +
             '</td>' +
             '<td class="px-4 py-2 text-tk-ink-2">' +
-            truncate(e.page_url || '', 48) +
+            escapeHtml(truncate(e.page_url || '', 48)) +
             '</td>' +
             '<td class="px-4 py-2"><span class="px-2 py-0.5 rounded ' +
             badge +
             ' text-xs font-mono">' +
-            e.status +
+            escapeHtml(e.status || '') +
             '</span></td>' +
             '<td class="px-4 py-2 text-tk-ink-2 font-mono text-xs">' +
-            (e.bs_automate_session_id || '—') +
+            escapeHtml(e.bs_automate_session_id || '—') +
             '</td>' +
             '<td class="px-4 py-2 text-tk-ink-2 font-mono text-xs">' +
-            (e.atlas_entry_hash ? truncate(e.atlas_entry_hash, 16) : '—') +
+            (e.atlas_entry_hash ? escapeHtml(truncate(e.atlas_entry_hash, 16)) : '—') +
             '</td>' +
             '<td class="px-4 py-2 text-right text-tk-ink-2 tabular-nums">' +
             fmtDuration(e.duration_emit_to_append_ms) +
