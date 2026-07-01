@@ -2148,15 +2148,22 @@ export function registerAgentSessionsRoutes(
       // concurrent cookie-GET requests, each pinning a correlator entry + open
       // connection + live WSS frame for up to 10s. Reserve before the await,
       // release in the finally (any outcome) — mirroring the sibling routes.
-      // MUTATION-TEST-TEMP: reserveRelaySlot wrap removed to verify the new test fails.
-      const outcome = await conn.requestCookies(randomUUID(), rec.id);
-      if (outcome.status === 'ok') {
-        return { cookies: outcome.cookies, status: 'ok' as const };
+      const releaseRelay = reserveRelaySlot(rec.accountId);
+      if (releaseRelay === null) {
+        return { cookies: null, status: 'error' as const, reason: RELAY_BUSY_REASON };
       }
-      if (outcome.status === 'error') {
-        return { cookies: null, status: 'error' as const, reason: outcome.message };
+      try {
+        const outcome = await conn.requestCookies(randomUUID(), rec.id);
+        if (outcome.status === 'ok') {
+          return { cookies: outcome.cookies, status: 'ok' as const };
+        }
+        if (outcome.status === 'error') {
+          return { cookies: null, status: 'error' as const, reason: outcome.message };
+        }
+        return { cookies: null, status: 'timeout' as const };
+      } finally {
+        releaseRelay();
       }
-      return { cookies: null, status: 'timeout' as const };
     },
   );
 
