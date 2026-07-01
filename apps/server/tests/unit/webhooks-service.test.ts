@@ -119,10 +119,23 @@ function makeRepo(initial: WebhookEndpointRow[] = []): {
     rotateSecret: ({ id, accountId, newSecret, newPrefix, graceExpiresAt, now }) => {
       const row = rows.find((r) => r.id === id && r.accountId === accountId);
       if (!row) return Promise.resolve(null);
+      // V-359.G guard, mirrored from the real DrizzleWebhooksRepo: a
+      // still-live *customer* grace window (force-rotation windows are
+      // exempt) makes this call a no-op — return the row UNCHANGED,
+      // exactly like the real guarded UPDATE falling back to its plain
+      // SELECT. An unconditional mutation here is what let the service's
+      // fabricated-secret bug ship untested.
+      const guardBlocks =
+        row.secretPrevExpiresAt !== null &&
+        row.secretPrevExpiresAt.getTime() > now.getTime() &&
+        row.forceRotatedAt === null;
+      if (guardBlocks) return Promise.resolve(row);
       row.secretPrev = row.secret;
       row.secretPrevExpiresAt = graceExpiresAt;
       row.secret = newSecret;
       row.secretPrefix = newPrefix;
+      row.forceRotatedAt = null;
+      row.graceWindowEndsAt = null;
       row.updatedAt = now;
       return Promise.resolve(row);
     },
@@ -355,6 +368,41 @@ describe('V-553.B-14 WebhooksService.rotateSecret', () => {
     const diff = expiresAt.getTime() - before;
     expect(diff).toBeGreaterThan(59 * 60 * 1000);
     expect(diff).toBeLessThan(61 * 60 * 1000);
+  });
+
+  // Reproduces the fabricated-secret bug end-to-end at the SERVICE layer
+  // (not just the repo-level V-359.G no-op-vs-not-found distinction that
+  // tests/unit/webhooks-repo-rotate-secret-grace-guard.test.ts covers).
+  // Before the fix: the service handed back { row, plaintextSecret:
+  // newSecret } unconditionally whenever repo.rotateSecret returned a
+  // non-null row — including when that row was the UNCHANGED result of a
+  // guard-blocked no-op. The customer would be told rotation succeeded
+  // and shown a secret that was never persisted anywhere, permanently
+  // breaking inbound HMAC verification once they installed it.
+  it('throws instead of returning a fabricated secret when a second rotation lands inside the still-active grace window', async () => {
+    const { repo, rows } = makeRepo([baseRow()]);
+    const { audit, calls } = makeAudit();
+    const svc = new WebhooksService(repo, audit);
+
+    const first = await svc.rotateSecret(ctxWith(['admin']), 'wh_1');
+    const persistedPrefixAfterFirst = rows[0]?.secretPrefix;
+    expect(persistedPrefixAfterFirst).toBe(first.row.secretPrefix);
+
+    // Second rotation immediately after — the first rotation's 24h grace
+    // window is still fully open, so the repo-level guard (V-359.G) makes
+    // this call a no-op. The service must detect that and throw a
+    // ConflictError rather than resolve 200 with a secret nothing will
+    // ever verify against.
+    await expect(svc.rotateSecret(ctxWith(['admin']), 'wh_1')).rejects.toThrow(/grace window/i);
+
+    // The row is untouched by the blocked second call: still holding the
+    // FIRST rotation's actual persisted prefix, not a fabricated second one.
+    expect(rows[0]?.secretPrefix).toBe(persistedPrefixAfterFirst);
+    expect(rows[0]?.secret).toBe(first.plaintextSecret);
+
+    // Only ONE audit entry — the blocked call must not emit a
+    // secret_rotated audit event for a mutation that never happened.
+    expect(calls.map((c) => c.action)).toEqual(['webhook_endpoint.secret_rotated']);
   });
 });
 

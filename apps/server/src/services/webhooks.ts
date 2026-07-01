@@ -521,6 +521,13 @@ export class WebhooksService {
    * Same gate as create / update / delete: `account_owner` scope
    * when self-account (V-174); route-side team-admin gate when
    * targeting a team owner via `effectiveAccountId`.
+   *
+   * Throws ConflictError (409) instead of resolving when a PRIOR
+   * rotation's 24h grace window is still active — the repo's guarded
+   * UPDATE (V-359.G) is a no-op in that case and hands back the
+   * unchanged existing row rather than applying this call, so there is
+   * nothing to safely reveal here (see the `row.secret !== newSecret`
+   * check below).
    */
   async rotateSecret(
     ctx: AccountContext,
@@ -552,6 +559,26 @@ export class WebhooksService {
       now,
     });
     if (!row) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
+
+    // V-359.G's guarded UPDATE is a no-op while a prior rotation's grace
+    // window is still live: it matches 0 rows and the repo falls back to
+    // a plain SELECT that returns the UNCHANGED existing row — NOT null.
+    // Detect that here by checking whether the row we got back actually
+    // reflects THIS call's mutation (its secret is the one we just
+    // generated). If it doesn't, the guard blocked the write: `newSecret`
+    // was never persisted anywhere, so returning it would hand the
+    // customer a plaintext that nothing will ever verify against —
+    // permanently breaking inbound HMAC verification until they notice
+    // and retry after the original grace window elapses. Surface a 409
+    // instead of silently "succeeding" with a fabricated secret.
+    if (row.secret !== newSecret) {
+      const retryAt = row.secretPrevExpiresAt ? row.secretPrevExpiresAt.toISOString() : 'unknown';
+      throw new ConflictError(
+        `A secret rotation is already in its grace window for this endpoint (active until ${retryAt}). ` +
+          'Wait for the current grace window to elapse before rotating again.',
+        { grace_expires_at: retryAt },
+      );
+    }
 
     await this.emitAuditBestEffort(
       ctx,
