@@ -115,5 +115,56 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const bodies = (after?.transcript ?? []).map((e) => e.body).sort();
       expect(bodies).toEqual(['msg-A', 'msg-B']);
     });
+
+    // Audit fix 2026-07-01 — closeWithReason TOCTOU race. Before the fix it was
+    // a bare read-then-write (a get() for closedAt-preservation, then an
+    // UNCONDITIONAL `UPDATE … WHERE id=$id`): two concurrent closeWithReason
+    // calls for the SAME session (e.g. the worker-terminal-close service racing
+    // this node's own bootId sweep, or a customer DELETE racing a
+    // budget-exhausted close) would BOTH succeed, and whichever UPDATE
+    // committed LAST always won — silently overwriting the earlier closer's
+    // true closed_reason. The fix makes the UPDATE atomic + conditional
+    // (`WHERE id=$id AND status='active'`), so only the FIRST of two
+    // concurrent closers actually writes; the second's WHERE no longer
+    // matches and it safely no-ops (returns the winner's row unchanged).
+    it('concurrent closeWithReason calls never both win: exactly one reason is persisted, never overwritten by the loser (real Postgres, distinct connections)', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAgentSessionsRepo({ client, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`agt-close-race-${accountId}@test.local`})`;
+      const session = await repo.create({ accountId, tokenBudgetTotal: 1000 });
+
+      // A pre-fix bare read-then-write would let BOTH calls read status='active'
+      // and BOTH unconditionally UPDATE — the later commit clobbers the
+      // earlier's closed_reason (a non-deterministic 'reason-A' or 'reason-B'
+      // depending purely on commit order, with NO guarantee the row reflects
+      // the call that "really" tore the session down first). The atomic
+      // `WHERE status='active'` fix guarantees exactly ONE of the two writes
+      // actually lands; the other's WHERE no longer matches once the first
+      // commits, so it reads back and returns the winner's row untouched
+      // rather than re-writing over it.
+      const [a, b] = await Promise.all([
+        repo.closeWithReason(session.id, 'reason-A'),
+        repo.closeWithReason(session.id, 'reason-B'),
+      ]);
+
+      const after = await repo.get(session.id);
+      expect(after?.status).toBe('closed');
+      // Exactly one of the two reasons persisted — never both applied, never
+      // some third/corrupted value.
+      expect(['reason-A', 'reason-B']).toContain(after?.closedReason);
+      // Both calls' return values agree with the row's ACTUAL persisted
+      // reason (the loser's closeWithReason reads back the winner's row
+      // rather than reporting its own attempted reason as if it won).
+      expect(a.closedReason).toBe(after?.closedReason);
+      expect(b.closedReason).toBe(after?.closedReason);
+      // closedAt is set exactly once (the winner's close), not re-stamped by
+      // the loser.
+      expect(a.closedAt?.getTime()).toBe(after?.closedAt?.getTime());
+      expect(b.closedAt?.getTime()).toBe(after?.closedAt?.getTime());
+    });
   },
 );

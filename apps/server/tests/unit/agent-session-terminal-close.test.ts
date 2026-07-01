@@ -10,9 +10,10 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js';
 import { SessionLivenessStore } from '../../src/services/session-liveness-store.js';
+import { SessionPageStateStore } from '../../src/services/session-page-state-store.js';
 import { closeAgentSessionOnTerminalStatus } from '../../src/services/agent-session-terminal-close.js';
 import type { AgentSessionsRepo } from '../../src/services/agent-sessions.js';
-import type { SessionStatus } from '../../src/schemas/harness-control-protocol.js';
+import type { SessionStatus, PageStateFrame } from '../../src/schemas/harness-control-protocol.js';
 import type { Logger } from '../../src/lib/logger.js';
 
 const noopLogger = { info: () => {}, warn: () => {} } as unknown as Logger;
@@ -23,6 +24,10 @@ function terminalFrame(
   reason?: string,
 ): SessionStatus {
   return { type: 'sessionStatus', sessionId, status, timestamp: 't', ...(reason && { reason }) };
+}
+
+function pageStateFrame(sessionId: string, state: PageStateFrame['state']): PageStateFrame {
+  return { type: 'pageState', sessionId, state, url: 'https://example.com', error: null };
 }
 
 describe('closeAgentSessionOnTerminalStatus (A3 W2682)', () => {
@@ -140,6 +145,148 @@ describe('closeAgentSessionOnTerminalStatus (A3 W2682)', () => {
     });
 
     expect(liveness.get(created.id)).toBeNull();
+  });
+
+  // Audit 2026-07-01 (MEDIUM) — the exact gap the audit flagged: this
+  // worker-CONNECTED terminal close is a session-termination path that is NOT
+  // the customer DELETE route, and it never evicted sessionPageStateStore —
+  // so a session ending this way (crash / idle_timeout / browser_crashed)
+  // could leave its LAST reported pageState (possibly 'stalled', the exact
+  // frozen-renderer signal the feature exists to detect) cached and served by
+  // GET /:id/page-state indefinitely. Mirrors the liveness-store tests above.
+  it('evicts the sessionPageStateStore entry for the ended session (dead-session-serves-stale-cache gap)', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const created = await repo.create({ accountId: 'acct_1', tokenBudgetTotal: 1000 });
+    const pageStates = new SessionPageStateStore();
+    pageStates.set(pageStateFrame(created.id, 'stalled'));
+    expect(pageStates.get(created.id)).not.toBeNull();
+
+    await closeAgentSessionOnTerminalStatus({
+      agentSessions: repo,
+      frame: terminalFrame(created.id, 'errored', 'browser_crashed'),
+      logger: noopLogger,
+      sessionPageStateStore: pageStates,
+    });
+
+    expect(pageStates.get(created.id)).toBeNull();
+  });
+
+  it('evicts the sessionPageStateStore entry even when the row was already closed (worker says it is gone)', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const created = await repo.create({ accountId: 'acct_1', tokenBudgetTotal: 1000 });
+    await repo.closeWithReason(created.id, 'customer-deleted');
+    const pageStates = new SessionPageStateStore();
+    pageStates.set(pageStateFrame(created.id, 'stalled'));
+
+    await closeAgentSessionOnTerminalStatus({
+      agentSessions: repo,
+      frame: terminalFrame(created.id, 'ended', 'idle_timeout'),
+      logger: noopLogger,
+      sessionPageStateStore: pageStates,
+    });
+
+    expect(pageStates.get(created.id)).toBeNull();
+  });
+
+  it('sessionPageStateStore absent (not wired) is a harmless no-op — never throws', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const created = await repo.create({ accountId: 'acct_1', tokenBudgetTotal: 1000 });
+
+    await expect(
+      closeAgentSessionOnTerminalStatus({
+        agentSessions: repo,
+        frame: terminalFrame(created.id, 'ended', 'idle_timeout'),
+        logger: noopLogger,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('does NOT evict sessionPageStateStore when the terminal frame is dropped by the cross-node spoof guard', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const created = await repo.create({ accountId: 'acct_1', tokenBudgetTotal: 1000 });
+    await repo.setNodeId(created.id, 'node-A'); // owned by node-A
+    const pageStates = new SessionPageStateStore();
+    pageStates.set(pageStateFrame(created.id, 'loaded'));
+
+    await closeAgentSessionOnTerminalStatus({
+      agentSessions: repo,
+      frame: terminalFrame(created.id, 'ended', 'idle_timeout'),
+      reportingNodeId: 'node-B', // a DIFFERENT node — dropped before reaching the eviction
+      logger: noopLogger,
+      sessionPageStateStore: pageStates,
+    });
+
+    // The session stays active AND its live pageState must NOT be wiped by a
+    // rogue node's dropped frame.
+    expect((await repo.get(created.id))?.status).toBe('active');
+    expect(pageStates.get(created.id)).not.toBeNull();
+  });
+
+  it("audit fix 2026-07-01: a genuine TOCTOU race — another closer wins the atomic closeWithReason UPDATE between this call's stale get() read and its own close attempt — is a safe no-op that does NOT clobber the race-winner's closed_reason", async () => {
+    // Simulates the exact race the audit flagged: `get()` returns a STALE
+    // 'active' snapshot (as it would mid-race against another closer), but
+    // the REAL DrizzleAgentSessionsRepo.closeWithReason is atomic (a single
+    // `UPDATE … WHERE id=$id AND status='active' RETURNING *`) — so by the
+    // time THIS call's closeWithReason actually runs, another closer (e.g.
+    // this node's own bootId sweep, or a concurrent customer DELETE) has
+    // already landed first with a DIFFERENT reason, and the atomic WHERE no
+    // longer matches. A faithful stand-in for that atomic no-op: it must
+    // hand back the OTHER closer's row completely UNCHANGED, never writing
+    // our attempted reason.
+    const winningReason = 'browser_crashed';
+    const winningClosedAt = new Date('2026-06-30T12:00:00Z');
+    let closeWithReasonCalls = 0;
+    const racyRepo: Pick<AgentSessionsRepo, 'get' | 'closeWithReason'> = {
+      get: () =>
+        Promise.resolve({
+          id: 'agt_race',
+          status: 'active', // STALE — another closer already won underneath.
+          nodeId: null,
+        } as Awaited<ReturnType<AgentSessionsRepo['get']>>),
+      closeWithReason: (_id, _reason) => {
+        closeWithReasonCalls += 1;
+        // The atomic WHERE status='active' guard already lost the race —
+        // a real closeWithReason no-ops and returns the WINNER's row,
+        // regardless of what reason THIS caller asked for.
+        return Promise.resolve({
+          id: 'agt_race',
+          status: 'closed',
+          closedReason: winningReason,
+          closedAt: winningClosedAt,
+        } as Awaited<ReturnType<AgentSessionsRepo['closeWithReason']>>);
+      },
+    };
+
+    const infoLogs: Record<string, unknown>[] = [];
+    const logger = {
+      info: (obj: unknown) => infoLogs.push(obj as Record<string, unknown>),
+      warn: () => {},
+    } as unknown as Logger;
+
+    await closeAgentSessionOnTerminalStatus({
+      agentSessions: racyRepo as AgentSessionsRepo,
+      frame: terminalFrame('agt_race', 'ended', 'idle_timeout'), // the LOSING reason
+      logger,
+    });
+
+    // closeWithReason still gets called once (the stale pre-check said
+    // 'active') — its atomic guard is what actually loses the race, not the
+    // service's pre-check.
+    expect(closeWithReasonCalls).toBe(1);
+    // The service must NOT claim ITS reason won when the atomic close
+    // reports a DIFFERENT one actually landed.
+    const closedLog = infoLogs.find(
+      (l) => (l as { attemptedReason?: string }).attemptedReason === 'idle_timeout',
+    );
+    expect(closedLog).toBeDefined();
+    expect((closedLog as { actualClosedReason?: string })?.actualClosedReason).toBe(winningReason);
+    // No log line falsely claims 'idle_timeout' (the LOSING reason) as the
+    // session's closed reason.
+    expect(
+      infoLogs.some(
+        (l) => (l as { reason?: string }).reason === 'idle_timeout' && !('actualClosedReason' in l),
+      ),
+    ).toBe(false);
   });
 
   it('swallows a repo failure (never throws into the WS receive loop)', async () => {

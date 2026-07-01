@@ -370,23 +370,48 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
   }
 
   async closeWithReason(id: string, reason: string): Promise<AgentSessionRecord> {
+    // TOCTOU-race fix (audit 2026-07-01) — this used to be a plain
+    // read-then-write: a `get()` (only to preserve closedAt on a re-close),
+    // then an UNCONDITIONAL `UPDATE … WHERE id=$id`. That left a real race
+    // against any OTHER closer of the same session (e.g. the worker-
+    // terminal-close service racing this node's own bootId sweep, or a
+    // customer DELETE racing a budget-exhausted close): whichever call's
+    // UPDATE landed LAST always won, silently overwriting an earlier
+    // closer's true closed_reason with a stale/wrong one — closed_at was
+    // safe (read-before-write), but closed_reason was not — surfaced to
+    // customers via GET /v1/agent-sessions/:id's closed_reason field.
+    //
+    // Fixed: a single UPDATE … WHERE id=$id AND status='active' RETURNING *,
+    // mirroring closeActiveByNodeExcept's atomic-sweep pattern below. The
+    // WHERE requires status='active', so a matching row is ALWAYS mid its
+    // FIRST close transition (a closed row never flips back to active) —
+    // closed_at is therefore always "now" here; no read-before-write needed.
+    //
+    // A 0-row result means another closer's UPDATE already won the race (the
+    // row is no longer 'active') — or, rarely, the id is genuinely unknown.
+    // Treated as a safe no-op: re-fetch and return the CURRENT row (whatever
+    // its real closed_reason is) instead of throwing/re-writing, so none of
+    // this method's call sites (grepped: the never-dispatched egress-close in
+    // routes/agent-sessions.ts, the customer DELETE route, the worker-
+    // terminal-close service, and the budget-exhausted runtime close — none
+    // of which inspect the returned closed_reason) regress; a genuinely-
+    // unknown id still throws, matching every call site's not-found
+    // expectation.
     const now = this.clock();
-    // v2-#19 — closedAt is set ONLY on the first close transition. We
-    // do a read-before-write so re-closing an already-closed row leaves
-    // the original closedAt intact (Stripe-style timestamp; the first
-    // close wins). The row-level UPDATE is still atomic per id.
-    const existing = await this.get(id);
-    const closedAt = existing?.closedAt ?? now;
     const updated = await this.database.db
       .update(agentSessions)
-      .set({ status: 'closed', closedReason: reason, closedAt, updatedAt: now })
-      .where(eq(agentSessions.id, id))
+      .set({ status: 'closed', closedReason: reason, closedAt: now, updatedAt: now })
+      .where(and(eq(agentSessions.id, id), eq(agentSessions.status, 'active')))
       .returning();
     const row = updated[0];
-    if (!row) {
+    if (row) {
+      return rowToRecord(row);
+    }
+    const existing = await this.get(id);
+    if (!existing) {
       throw new Error(`AgentSession ${id} not found`);
     }
-    return rowToRecord(row);
+    return existing;
   }
 
   async reapOrphanedActiveBefore(cutoff: Date): Promise<number> {
