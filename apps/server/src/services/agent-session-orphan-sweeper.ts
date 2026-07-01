@@ -69,6 +69,16 @@ export class AgentSessionOrphanSweeperService {
 
   async tickOnce(now: Date): Promise<AgentSessionOrphanReapResult> {
     const cutoff = new Date(now.getTime() - this.maxLifetimeMs);
+    // Audit 2026-07-01 (MEDIUM) — like worker-disconnect-reaper.ts's bulk
+    // close, this backstop does NOT evict the reaped sessions' entries from
+    // session-page-state-store.ts: reapOrphanedActiveBefore only returns a row
+    // COUNT, not the affected ids, and there's no cheap id here to call
+    // store.delete() with (a repo signature change to return them is out of
+    // scope for this fix). Safe regardless: GET /:id/page-state cross-checks
+    // the session's live `status` — flipped to 'closed' by this same
+    // statement — before it ever reads the page-state store, so a reaped
+    // session can't serve a stale cached pageState even though this store
+    // entry lingers (until its own age bound / LRU cap evicts it).
     const reaped = await this.deps.repo.reapOrphanedActiveBefore(cutoff);
     return { reaped };
   }

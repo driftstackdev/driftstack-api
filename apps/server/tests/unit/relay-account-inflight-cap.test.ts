@@ -1,7 +1,9 @@
-// Hardening (2026-06-24, LOW defense-in-depth) — integration tests for the
-// per-ACCOUNT CONCURRENT-RELAY COUNT cap shared across the four control-relay
-// routes that carry only the `global` RATE limiter (which bounds requests/window,
-// NOT how many handlers can be awaiting a 10–30s relay at once):
+// Hardening (2026-06-24, LOW defense-in-depth; widened 2026-06-30 to a 5th
+// route) — integration tests for the per-ACCOUNT CONCURRENT-RELAY COUNT cap
+// shared across the control-relay routes that carry only the `global` RATE
+// limiter (which bounds requests/window, NOT how many handlers can be awaiting
+// a 10–30s relay at once):
+//   GET  /v1/agent-sessions/:id/cookies
 //   POST /v1/agent-sessions/:id/cookies/set
 //   POST /v1/agent-sessions/:id/history
 //   GET  /v1/agent-sessions/:id/downloads
@@ -72,6 +74,14 @@ function registerHangNode(fx: TestAppFixture, nodeId: string, relayed: string[])
   });
 }
 
+// GET cookies (pull) — hang frame type 'cookiesRequest'.
+function getCookies(fx: TestAppFixture, id: string, plaintext: string) {
+  return fx.app.inject({
+    method: 'GET',
+    url: `/v1/agent-sessions/${id}/cookies`,
+    headers: { authorization: `Bearer ${plaintext}` },
+  });
+}
 // POST cookies/set — hang frame type 'setCookies'.
 function postCookiesSet(fx: TestAppFixture, id: string, plaintext: string) {
   return fx.app.inject({
@@ -114,6 +124,7 @@ describe('per-account concurrent-relay cap (shared across cookies/set, history, 
   });
 
   it.each([
+    ['cookies pull', 'cookiesRequest', getCookies],
     ['cookies/set', 'setCookies', postCookiesSet],
     ['history', 'navigateHistory', postHistory],
     ['downloads list', 'listDownloads', getDownloads],

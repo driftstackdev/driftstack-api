@@ -35,6 +35,11 @@ import {
   seedAdditionalAccount,
   type TestAppFixture,
 } from '../integration/_helpers/build-test-app.js';
+import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
+import { registerAgentSessionsRoutes } from '../../src/routes/agent-sessions.js';
+import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js';
+import type { AgentRuntime } from '../../src/services/agent-runtime.js';
+import type { FleetControlRegistry } from '../../src/services/fleet-control-registry.js';
 
 interface FilesBody {
   status: 'ok' | 'unavailable' | 'timeout' | 'error';
@@ -407,6 +412,275 @@ describe('POST /v1/agent-sessions/:id/files — per-account concurrent-upload CO
     for (let i = 0; i < COUNT_CAP * 4; i += 1) {
       const res = await postUpload(fx, id, fx.plaintext, `seq-${i}.bin`, CHUNK_B64);
       expect(res.statusCode).toBe(200);
+      expect(res.json<FilesBody>().status).toBe('ok');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Security-audit hardening (2026-06-30, MEDIUM) — SESSION-LIFETIME upload cap.
+//
+// The CONCURRENT in-flight caps above (both describe blocks) bound in-flight
+// volume/count at any instant, but RELEASE in the `finally` the moment EACH
+// individual upload settles. That means a caller issuing uploads ONE AT A TIME
+// — sequentially, never overlapping, never crossing the concurrent ceiling —
+// could push UNBOUNDED total volume through a single session, bounded only by
+// the generic 'global' rate limiter (as low as 1 req/s on free tier, still
+// ~225 GB/hour at the 64 MiB per-file cap). Since multiple customers' sessions
+// share one box's disk, this is a real cross-tenant disk-exhaustion vector.
+//
+// The route now also tracks a SEPARATE, NEVER-released, per-SESSION (not
+// per-account — distinct from the cross-session per-account profile-storage
+// quota in profile-storage-quota.ts) lifetime total, incremented only on a
+// successful relay and checked before every upload. These tests pin that:
+//   1. sequential (never-concurrent) uploads that individually clear the
+//      concurrent cap still trip the LIFETIME BYTE cap,
+//   2. many tiny sequential uploads trip the LIFETIME COUNT cap even while
+//      nowhere near the byte cap,
+//   3. the cap is scoped PER SESSION, not per account — a second session on
+//      the SAME account has its own independent lifetime total,
+//   4. a FAILED relay does not consume the lifetime total (only a successful
+//      upload counts against it).
+//
+// The new cap is injected directly via AgentSessionsRoutesDeps
+// (sessionUploadMaxLifetimeBytes/Count) — it isn't yet threaded through the
+// app-level config/env chain, so these tests register the routes DIRECTLY
+// (registerAgentSessionsRoutes + a real InMemoryAgentSessionsRepo + a minimal
+// hand-rolled FleetControlRegistry-shaped stub) rather than the full
+// buildTestApp() HTTP/DB harness — mirroring the same lightweight
+// direct-registration pattern already used by
+// tests/unit/agent-sessions-idempotency-race.test.ts.
+// ---------------------------------------------------------------------------
+
+const LIFETIME_ACC = 'acc_upload_lifetime';
+
+interface LifetimeCapDeps {
+  fleetControlRegistry?: FleetControlRegistry;
+  sessionUploadMaxLifetimeBytes?: number;
+  sessionUploadMaxLifetimeCount?: number;
+  uploadMaxAccountInFlightBytes?: number;
+  uploadMaxAccountInFlightCount?: number;
+}
+
+/** A minimal FleetControlRegistry-shaped stub: `get(nodeId)` resolves to a conn
+ *  whose `requestUpload` either succeeds (echoing a fresh handle) or fails with
+ *  a fixed message, and records every relayed file name — just enough surface
+ *  for the upload route, cast `as unknown as FleetControlRegistry` the same way
+ *  the idempotency-race test casts its repo mock (the real class has private
+ *  fields, so a plain object can't structurally satisfy it). */
+function makeUploadRegistry(
+  nodeId: string,
+  opts: { relayed?: string[]; fail?: boolean } = {},
+): FleetControlRegistry {
+  const conn = {
+    requestUpload: (
+      _requestId: string,
+      _sessionId: string,
+      name: string,
+      mime: string,
+      dataB64: string,
+    ) => {
+      opts.relayed?.push(name);
+      if (opts.fail === true) {
+        return Promise.resolve({ status: 'error' as const, message: 'upload write failed' });
+      }
+      return Promise.resolve({
+        status: 'ok' as const,
+        handle: { id: 'up_test', name, mime, size: Buffer.from(dataB64, 'base64').length },
+      });
+    },
+  };
+  return {
+    get: (id: string) => (id === nodeId ? conn : undefined),
+  } as unknown as FleetControlRegistry;
+}
+
+/** Registers the agent-sessions routes directly on a bare Fastify instance: a
+ *  real InMemoryAgentSessionsRepo (so session create/get/setNodeId behave
+ *  exactly as the driver repo does) + a no-op auth chain that stamps every
+ *  request as LIFETIME_ACC (mirrors agent-sessions-idempotency-race.test.ts). */
+async function buildDirectApp(extra: LifetimeCapDeps = {}) {
+  const sessions = new InMemoryAgentSessionsRepo();
+  const app = Fastify({ logger: false });
+  app.decorateRequest('account', null);
+  app.addHook('onRequest', (req: FastifyRequest, _reply: FastifyReply, done) => {
+    (req as { account: unknown }).account = {
+      account: { id: LIFETIME_ACC, tier: 'starter' },
+      apiKey: { id: 'key_lifetime', scopes: ['read', 'write'] },
+    };
+    done();
+  });
+  app.decorate('requireAuth', () => Promise.resolve());
+  app.decorate('requireScope', (_scope: string) => () => Promise.resolve());
+  app.decorate('rateLimit', (_bucket: string) => () => Promise.resolve());
+  registerAgentSessionsRoutes(app, {
+    runtime: {} as unknown as AgentRuntime,
+    sessions,
+    ...extra,
+  });
+  await app.ready();
+  return { app, sessions };
+}
+
+// Inferred from buildDirectApp's own return (mirrors TestAppFixture's
+// `Awaited<ReturnType<typeof buildApp>>` pattern in build-test-app.ts) rather
+// than a hand-annotated `ReturnType<typeof Fastify>`, which resolves through
+// Fastify's overloaded factory signature to a shape whose `inject(...).json()`
+// isn't generic (TS2347 "untyped function calls may not accept type
+// arguments") — inference from the actual call site keeps the real type.
+type DirectFixture = Awaited<ReturnType<typeof buildDirectApp>>;
+
+function postDirectUpload(fx: DirectFixture, sessionId: string, name: string, dataB64: string) {
+  return fx.app.inject({
+    method: 'POST',
+    url: `/v1/agent-sessions/${sessionId}/files`,
+    payload: { name, mime: 'application/octet-stream', dataB64 },
+  });
+}
+
+describe('POST /v1/agent-sessions/:id/files — per-SESSION LIFETIME cap (independent of the concurrent caps)', () => {
+  const LIFETIME_CHUNK_BYTES = 4 * 1024;
+  const LIFETIME_CHUNK_B64 = Buffer.alloc(LIFETIME_CHUNK_BYTES, 0x42).toString('base64');
+  const CHUNKS_TO_FILL = 3;
+  const LIFETIME_CAP_BYTES = LIFETIME_CHUNK_B64.length * CHUNKS_TO_FILL;
+  // Generous enough that the CONCURRENT byte/count caps never trip in these
+  // tests — only the lifetime cap is under test.
+  const HUGE_CONCURRENT_CAP_BYTES = 1024 * 1024 * 1024;
+  const HUGE_CONCURRENT_CAP_COUNT = 10_000;
+
+  let fx: DirectFixture;
+  afterEach(async () => {
+    if (fx) await fx.app.close();
+  });
+
+  it('rejects an upload that would cross the LIFETIME BYTE cap even though every upload is SEQUENTIAL and never approaches the concurrent cap', async () => {
+    const nodeId = 'node-lifetime-bytes';
+    const relayed: string[] = [];
+    fx = await buildDirectApp({
+      fleetControlRegistry: makeUploadRegistry(nodeId, { relayed }),
+      sessionUploadMaxLifetimeBytes: LIFETIME_CAP_BYTES,
+      uploadMaxAccountInFlightBytes: HUGE_CONCURRENT_CAP_BYTES,
+      uploadMaxAccountInFlightCount: HUGE_CONCURRENT_CAP_COUNT,
+    });
+    const rec = await fx.sessions.create({ accountId: LIFETIME_ACC, tokenBudgetTotal: 50_000 });
+    await fx.sessions.setNodeId(rec.id, nodeId);
+
+    // Fill to EXACTLY the lifetime cap with CHUNKS_TO_FILL SEQUENTIAL uploads
+    // (awaited one at a time — never concurrent, so the per-account concurrent
+    // cap is never even approached). Every one must succeed.
+    for (let i = 0; i < CHUNKS_TO_FILL; i += 1) {
+      const res = await postDirectUpload(fx, rec.id, `fill-${i}.bin`, LIFETIME_CHUNK_B64);
+      expect(res.statusCode).toBe(200);
+      expect(res.json<FilesBody>().status).toBe('ok');
+    }
+    expect(relayed.length).toBe(CHUNKS_TO_FILL);
+
+    // The NEXT upload crosses the session's lifetime total → rejected WITHOUT
+    // relay, even though it's identical in shape to the ones that just succeeded
+    // (proving this is a cumulative/lifetime check, not a concurrent one).
+    const relayedBefore = relayed.length;
+    const res = await postDirectUpload(fx, rec.id, 'overflow.bin', LIFETIME_CHUNK_B64);
+    expect(res.statusCode).toBe(200);
+    const body = res.json<FilesBody>();
+    expect(body.status).toBe('error');
+    expect(body.handle).toBeNull();
+    expect(body.reason).toMatch(/session upload limit reached/i);
+    expect(relayed.length).toBe(relayedBefore); // never relayed
+    expect(relayed).not.toContain('overflow.bin');
+  });
+
+  it('rejects an upload that would cross the LIFETIME COUNT cap even though every upload is far under the byte cap', async () => {
+    const nodeId = 'node-lifetime-count';
+    const relayed: string[] = [];
+    const COUNT_CAP = 3;
+    const SMALL_B64 = Buffer.from('hi').toString('base64');
+    fx = await buildDirectApp({
+      fleetControlRegistry: makeUploadRegistry(nodeId, { relayed }),
+      sessionUploadMaxLifetimeBytes: HUGE_CONCURRENT_CAP_BYTES,
+      sessionUploadMaxLifetimeCount: COUNT_CAP,
+      uploadMaxAccountInFlightBytes: HUGE_CONCURRENT_CAP_BYTES,
+      uploadMaxAccountInFlightCount: HUGE_CONCURRENT_CAP_COUNT,
+    });
+    const rec = await fx.sessions.create({ accountId: LIFETIME_ACC, tokenBudgetTotal: 50_000 });
+    await fx.sessions.setNodeId(rec.id, nodeId);
+
+    for (let i = 0; i < COUNT_CAP; i += 1) {
+      const res = await postDirectUpload(fx, rec.id, `tiny-${i}.bin`, SMALL_B64);
+      expect(res.statusCode).toBe(200);
+      expect(res.json<FilesBody>().status).toBe('ok');
+    }
+    const relayedBefore = relayed.length;
+    const res = await postDirectUpload(fx, rec.id, 'tiny-overflow.bin', SMALL_B64);
+    expect(res.statusCode).toBe(200);
+    const body = res.json<FilesBody>();
+    expect(body.status).toBe('error');
+    expect(body.reason).toMatch(/too many files uploaded in this session/i);
+    expect(relayed.length).toBe(relayedBefore); // never relayed
+  });
+
+  it('scopes the lifetime cap PER SESSION — a second session on the SAME account has its own independent total', async () => {
+    const nodeId = 'node-lifetime-iso';
+    const relayed: string[] = [];
+    fx = await buildDirectApp({
+      fleetControlRegistry: makeUploadRegistry(nodeId, { relayed }),
+      sessionUploadMaxLifetimeBytes: LIFETIME_CAP_BYTES,
+      uploadMaxAccountInFlightBytes: HUGE_CONCURRENT_CAP_BYTES,
+      uploadMaxAccountInFlightCount: HUGE_CONCURRENT_CAP_COUNT,
+    });
+    const rec1 = await fx.sessions.create({ accountId: LIFETIME_ACC, tokenBudgetTotal: 50_000 });
+    const rec2 = await fx.sessions.create({ accountId: LIFETIME_ACC, tokenBudgetTotal: 50_000 });
+    await fx.sessions.setNodeId(rec1.id, nodeId);
+    await fx.sessions.setNodeId(rec2.id, nodeId);
+
+    // Saturate session 1 to exactly its lifetime cap.
+    for (let i = 0; i < CHUNKS_TO_FILL; i += 1) {
+      const res = await postDirectUpload(fx, rec1.id, `s1-${i}.bin`, LIFETIME_CHUNK_B64);
+      expect(res.json<FilesBody>().status).toBe('ok');
+    }
+    // Session 1 is now at cap…
+    const blocked = await postDirectUpload(fx, rec1.id, 's1-overflow.bin', LIFETIME_CHUNK_B64);
+    expect(blocked.json<FilesBody>().status).toBe('error');
+
+    // …but session 2 (SAME account) uploads the exact same volume fine — its
+    // lifetime total is tracked independently of session 1's.
+    const other = await postDirectUpload(fx, rec2.id, 's2-0.bin', LIFETIME_CHUNK_B64);
+    expect(other.statusCode).toBe(200);
+    expect(other.json<FilesBody>().status).toBe('ok');
+  });
+
+  it('a FAILED relay does not consume the lifetime total (only a SUCCESSFUL upload counts against it)', async () => {
+    const nodeId = 'node-lifetime-fail';
+    // `opts` is passed BY REFERENCE into the registry closure, so flipping
+    // `opts.fail` after construction changes behaviour for subsequent calls on
+    // the SAME registry/session — letting this test prove the failed uploads
+    // below don't poison the SAME session's lifetime total for the successful
+    // ones that follow (rather than merely asserting on a fresh session).
+    const opts: { relayed: string[]; fail: boolean } = { relayed: [], fail: true };
+    fx = await buildDirectApp({
+      fleetControlRegistry: makeUploadRegistry(nodeId, opts),
+      sessionUploadMaxLifetimeBytes: LIFETIME_CAP_BYTES,
+      uploadMaxAccountInFlightBytes: HUGE_CONCURRENT_CAP_BYTES,
+      uploadMaxAccountInFlightCount: HUGE_CONCURRENT_CAP_COUNT,
+    });
+    const rec = await fx.sessions.create({ accountId: LIFETIME_ACC, tokenBudgetTotal: 50_000 });
+    await fx.sessions.setNodeId(rec.id, nodeId);
+
+    // More FAILING cap-sized uploads than the lifetime cap would allow if a
+    // failed relay consumed it.
+    for (let i = 0; i < CHUNKS_TO_FILL + 2; i += 1) {
+      const res = await postDirectUpload(fx, rec.id, 'fail.bin', LIFETIME_CHUNK_B64);
+      expect(res.statusCode).toBe(200);
+      const body = res.json<FilesBody>();
+      expect(body.status).toBe('error');
+      expect(body.reason).toMatch(/write failed/);
+    }
+    expect(opts.relayed.length).toBe(CHUNKS_TO_FILL + 2); // every failing attempt WAS relayed
+
+    // The lifetime total is still 0 (nothing succeeded) → THIS SAME session can
+    // still take a full cap-filling batch of REAL (succeeding) uploads.
+    opts.fail = false;
+    for (let i = 0; i < CHUNKS_TO_FILL; i += 1) {
+      const res = await postDirectUpload(fx, rec.id, `ok-${i}.bin`, LIFETIME_CHUNK_B64);
       expect(res.json<FilesBody>().status).toBe('ok');
     }
   });

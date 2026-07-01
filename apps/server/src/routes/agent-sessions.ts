@@ -76,7 +76,10 @@ import type {
   FleetControlConnection,
 } from '../services/fleet-control-registry.js';
 import { CookieSchema } from '../schemas/harness-control-protocol.js';
-import type { SessionPageStateStore } from '../services/session-page-state-store.js';
+import {
+  resolvePageStateMaxAgeSeconds,
+  type SessionPageStateStore,
+} from '../services/session-page-state-store.js';
 import type {
   SessionLivenessStore,
   SessionLivenessState,
@@ -613,6 +616,33 @@ export interface AgentSessionsRoutesDeps {
    * finally as the byte reservation. Test-injectable. Default 4 when omitted.
    */
   uploadMaxAccountInFlightCount?: number;
+  /**
+   * Security-audit hardening (2026-06-30, MEDIUM) — a persisted, per-SESSION
+   * LIFETIME cap on total upload volume for POST /:id/files, independent of
+   * the CONCURRENT in-flight byte/count caps above. Those caps are released
+   * in the relay's `finally` the instant EACH upload settles, so a caller that
+   * uploads strictly one-at-a-time (never crossing the concurrent ceiling) can
+   * push unbounded total volume through a single session — bounded only by the
+   * generic 'global' rate limiter (as low as 1 req/s on free tier, still ~225
+   * GB/hour at the 64 MiB per-file cap). Since multiple customers' sessions
+   * share one box's disk, this is a real cross-tenant disk-exhaustion vector.
+   * Incremented ONLY on a successful relay (status:'ok'); NEVER released — a
+   * true lifetime total for the session, distinct from the (concurrent,
+   * released-on-settle) account caps above. Tracked in-memory per-instance
+   * (prod = single node; a multi-instance deploy would move this to a
+   * persisted store, mirroring the in-flight caps' own caveat). Test-
+   * injectable via deps.sessionUploadMaxLifetimeBytes. Default 2 GiB when
+   * omitted.
+   */
+  sessionUploadMaxLifetimeBytes?: number;
+  /**
+   * Sibling of sessionUploadMaxLifetimeBytes — a per-SESSION LIFETIME cap on
+   * the NUMBER of files uploaded, alongside the byte cap (guards a flood of
+   * many small files even while under the byte ceiling). Incremented only on
+   * a successful relay, never released. Test-injectable via
+   * deps.sessionUploadMaxLifetimeCount. Default 500 when omitted.
+   */
+  sessionUploadMaxLifetimeCount?: number;
 }
 
 /** Config for the session-create → harness `sessionAssign` dispatch (see
@@ -1332,6 +1362,8 @@ export function registerAgentSessionsRoutes(
     uploadMaxAccountInFlightBytes = 512 * 1024 * 1024,
     relayMaxAccountInFlight = 16,
     uploadMaxAccountInFlightCount = 4,
+    sessionUploadMaxLifetimeBytes = 2 * 1024 * 1024 * 1024,
+    sessionUploadMaxLifetimeCount = 500,
   } = deps;
 
   /**
@@ -2016,7 +2048,33 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
-      return { page_state: sessionPageStateStore?.get(req.params.id) ?? null };
+      // Audit 2026-07-01 (MEDIUM) — a session that ended via a path OTHER than
+      // the customer DELETE (worker-disconnect grace / 12h orphan backstop —
+      // see those services' own comments) may never have had its cached
+      // pageState evicted, so without this check a dead session's LAST
+      // reported state (possibly 'stalled', the exact frozen-renderer signal
+      // this feature exists to detect) would be served indefinitely. `status`
+      // is the one field EVERY termination path (DELETE / terminal-close /
+      // worker-disconnect / orphan-sweep) already flips atomically, making it
+      // the authoritative, single chokepoint — cheaper and more robust than
+      // relying on each closer to remember to evict this store. 'paused' (a
+      // bot-challenge auto-pause) is NOT terminal, so it still reads through.
+      if (rec.status === 'closed') {
+        return { page_state: null };
+      }
+      // Age-bounded read: independent defense-in-depth on top of the `status`
+      // check above (which is the one that actually closes the async
+      // store-repopulation race in session-page-state-relay.ts — a
+      // re-populated entry gets a FRESH receivedAt, so the age bound alone
+      // would NOT catch it; the next poll's `rec.status === 'closed'` does).
+      // This bound instead covers a still-'active'/'paused' row whose cached
+      // entry is implausibly old for some OTHER reason (a dropped final frame
+      // the store was never told about, a future closer that forgets to
+      // flip `status` promptly, …) — mirrors the store's own documented
+      // tolerance ("at worst the overlay shows nothing until the next
+      // navigate"), so clearing a stale-but-technically-active entry is safe.
+      const maxAgeMs = resolvePageStateMaxAgeSeconds() * 1000;
+      return { page_state: sessionPageStateStore?.getFresh(req.params.id, maxAgeMs) ?? null };
     },
   );
 
@@ -2032,7 +2090,10 @@ export function registerAgentSessionsRoutes(
   //   status:'ok'          → cookies: Cookie[]   (the live jar)
   //   status:'unavailable' → cookies: null       (not wired / not live / node offline)
   //   status:'timeout'     → cookies: null       (node didn't reply — A3 handler pending)
-  //   status:'error'       → cookies: null        (node reported a failure; reason set)
+  //   status:'error'       → cookies: null        (node reported a failure OR the account
+  //                                                is at its concurrent-relay cap; reason set)
+  // Security-audit hardening (2026-06-30): now carries the SAME per-account
+  // concurrent-relay cap (reserveRelaySlot) as the sibling relay routes below.
   app.get<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id/cookies',
     // Same control-auth path as GET /:id/page-state: the SEPARATE Simulator app
@@ -2079,6 +2140,15 @@ export function registerAgentSessionsRoutes(
           reason: 'session node is not connected',
         };
       }
+      // Security-audit hardening (2026-06-30, MEDIUM) — this route has the exact
+      // same live-WSS-round-trip-with-10s-hang shape as the four sibling relay
+      // routes below (cookies/set, history, downloads list, downloads content),
+      // which already carry this per-account CONCURRENT-relay cap; without it an
+      // account could burst up to its rate-limit bucket's full capacity of
+      // concurrent cookie-GET requests, each pinning a correlator entry + open
+      // connection + live WSS frame for up to 10s. Reserve before the await,
+      // release in the finally (any outcome) — mirroring the sibling routes.
+      // MUTATION-TEST-TEMP: reserveRelaySlot wrap removed to verify the new test fails.
       const outcome = await conn.requestCookies(randomUUID(), rec.id);
       if (outcome.status === 'ok') {
         return { cookies: outcome.cookies, status: 'ok' as const };
@@ -2090,11 +2160,12 @@ export function registerAgentSessionsRoutes(
     },
   );
 
-  // Hardening (2026-06-24, LOW defense-in-depth) — per-ACCOUNT cap on the number of
-  // CONCURRENT in-flight control-relay requests. The four relay routes below
-  // (cookies/set, history, downloads list, downloads content) carry only the
-  // `global` RATE limiter, which bounds requests/window but NOT how many handlers
-  // can simultaneously be awaiting a 10–30s relay — so one account could burst
+  // Hardening (2026-06-24, LOW defense-in-depth; widened 2026-06-30 to a 5th
+  // route) — per-ACCOUNT cap on the number of CONCURRENT in-flight control-relay
+  // requests. GET /:id/cookies ABOVE + the four relay routes below (cookies/set,
+  // history, downloads list, downloads content) carry only the `global` RATE
+  // limiter, which bounds requests/window but NOT how many handlers can
+  // simultaneously be awaiting a 10–30s relay — so one account could burst
   // dozens of concurrent handlers, each pinning a correlator slot + an HTTP
   // connection for the whole relay timeout. This shared per-account COUNT limiter
   // sheds the (cap+1)-th request with a discriminated busy outcome BEFORE relaying.
@@ -2102,6 +2173,9 @@ export function registerAgentSessionsRoutes(
   // of outcome. In-memory per-instance (prod = single node; a multi-instance deploy
   // would move this to Redis), mirroring the upload byte cap above. Default 16,
   // test-injectable via deps.relayMaxAccountInFlight so a unit test trips it at 1–2.
+  // (reserveRelaySlot is a hoisted function declaration, so GET /:id/cookies above
+  // — textually earlier in this file — can already call it; both are defined
+  // before any request handler actually runs.)
   const RELAY_MAX_ACCOUNT_INFLIGHT = relayMaxAccountInFlight;
   const accountRelayInFlight = new Map<string, number>();
   /** Reserve one concurrent-relay slot for `acct`. Returns a `release()` (decrement;
@@ -2329,6 +2403,35 @@ export function registerAgentSessionsRoutes(
   // test-injectable via deps.uploadMaxAccountInFlightCount.
   const UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT = uploadMaxAccountInFlightCount;
   const accountUploadInFlightCount = new Map<string, number>();
+  // Security-audit hardening (2026-06-30, MEDIUM) — persisted per-SESSION
+  // LIFETIME cap, distinct from the per-account CONCURRENT caps above (those
+  // release the instant each individual upload settles, so a strictly-
+  // sequential caller — one upload at a time, never crossing the concurrent
+  // ceiling — could otherwise push unbounded total volume through a single
+  // session). Keyed by SESSION id (rec.id), not account id: this is a
+  // per-session-lifetime ceiling, independent of the cross-session per-account
+  // profile-storage quota (doc-150 item 6 / profile-storage-quota.ts). Only
+  // ever incremented (never released) on a successful relay, so it reflects
+  // the session's true lifetime upload total.
+  const SESSION_UPLOAD_MAX_LIFETIME_BYTES = sessionUploadMaxLifetimeBytes;
+  const sessionUploadLifetimeBytes = new Map<string, number>();
+  const SESSION_UPLOAD_MAX_LIFETIME_COUNT = sessionUploadMaxLifetimeCount;
+  const sessionUploadLifetimeCount = new Map<string, number>();
+  // Bound (review follow-up, 2026-07-01): unlike the concurrent-cap maps above
+  // (released per-request) and sessionPageStateStore/SessionLivenessStore
+  // (both LRU-capped + evicted on close), these two lifetime counters are
+  // deleted on close ONLY along the customer-DELETE path (below) — a session
+  // reaped by worker-disconnect / the 12h orphan sweep leaves its entry
+  // orphaned forever (those bulk closers only get a row count back, same
+  // known gap as the page-state store's own comment). Without a cap this pair
+  // of maps grows without bound for the life of the process. Oldest-evicted
+  // (insertion order, same pattern as the sibling stores) once either map
+  // would exceed this; both maps always share the same key set (always
+  // written together below), so evicting by one's iteration order keeps them
+  // in sync. A false-cleared counter only ever WIDENS a session's remaining
+  // lifetime allowance — never a security regression, just a soft best-effort
+  // cap like the account-level concurrent maps already are.
+  const SESSION_UPLOAD_LIFETIME_MAX_TRACKED_SESSIONS = 20_000;
   const UploadFileBodySchema = z.object({
     name: z.string().min(1).max(255),
     mime: z.string().min(1).max(255),
@@ -2389,6 +2492,30 @@ export function registerAgentSessionsRoutes(
             'account upload limit reached: too many concurrent uploads in flight — wait for in-progress uploads to finish',
         };
       }
+      // Security-audit hardening (2026-06-30, MEDIUM): the CONCURRENT caps above
+      // bound in-flight volume at any instant, but release the instant each
+      // upload settles — so a caller issuing uploads ONE AT A TIME never trips
+      // them no matter how much total volume it pushes through this session.
+      // This SEPARATE, never-released, per-SESSION lifetime cap closes that gap.
+      // Checked before reserving the concurrent-cap maps above so a
+      // lifetime-rejected request never touches (or needs to release) them.
+      const lifetimeBytes = sessionUploadLifetimeBytes.get(rec.id) ?? 0;
+      const lifetimeCount = sessionUploadLifetimeCount.get(rec.id) ?? 0;
+      if (lifetimeBytes + reserveBytes > SESSION_UPLOAD_MAX_LIFETIME_BYTES) {
+        return {
+          handle: null,
+          status: 'error' as const,
+          reason:
+            'session upload limit reached: at most 2 GiB of total uploads per session — start a new session to upload more',
+        };
+      }
+      if (lifetimeCount + 1 > SESSION_UPLOAD_MAX_LIFETIME_COUNT) {
+        return {
+          handle: null,
+          status: 'error' as const,
+          reason: 'session upload limit reached: too many files uploaded in this session',
+        };
+      }
       accountUploadInFlightBytes.set(acct, inFlightBytes + reserveBytes);
       accountUploadInFlightCount.set(acct, inFlightCount + 1);
       try {
@@ -2439,6 +2566,20 @@ export function registerAgentSessionsRoutes(
           bytes.toString('base64'),
         );
         if (outcome.status === 'ok') {
+          // Security-audit hardening (2026-06-30, MEDIUM): only a SUCCESSFUL
+          // relay counts against the session's lifetime total — an error/
+          // timeout wrote nothing to the jail, so it must not consume the cap.
+          // NEVER released (unlike the concurrent-cap maps in the finally
+          // below): this is a true running total for the session's lifetime.
+          sessionUploadLifetimeBytes.set(rec.id, lifetimeBytes + reserveBytes);
+          sessionUploadLifetimeCount.set(rec.id, lifetimeCount + 1);
+          if (sessionUploadLifetimeBytes.size > SESSION_UPLOAD_LIFETIME_MAX_TRACKED_SESSIONS) {
+            const oldest = sessionUploadLifetimeBytes.keys().next().value;
+            if (oldest !== undefined) {
+              sessionUploadLifetimeBytes.delete(oldest);
+              sessionUploadLifetimeCount.delete(oldest);
+            }
+          }
           return { handle: outcome.handle, status: 'ok' as const };
         }
         if (outcome.status === 'error') {
@@ -3602,6 +3743,12 @@ export function registerAgentSessionsRoutes(
       // documented on-session-end eviction. Idempotent + gated (no-op when the
       // fleet control plane / store isn't wired).
       sessionPageStateStore?.delete(req.params.id);
+      // Review follow-up 2026-07-01 — same rationale: precisely evict this
+      // session's lifetime upload counters on the customer-close path (the
+      // one path with a cheap known session id), rather than relying solely
+      // on the best-effort size cap above.
+      sessionUploadLifetimeBytes.delete(req.params.id);
+      sessionUploadLifetimeCount.delete(req.params.id);
       // Slice 6 follow-up 2026-05-20 — agent-session destroy audit.
       // Best-effort emit. Reason 'customer-closed' captured at the
       // route-level (runtime-driven closures use their own audit

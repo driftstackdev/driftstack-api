@@ -4,7 +4,10 @@
 
 import { describe, expect, it } from 'vitest';
 import { AgentPageStateSchema } from '@driftstack/api-types';
-import { SessionPageStateStore } from '../../src/services/session-page-state-store.js';
+import {
+  SessionPageStateStore,
+  resolvePageStateMaxAgeSeconds,
+} from '../../src/services/session-page-state-store.js';
 import type { PageStateFrame } from '../../src/schemas/harness-control-protocol.js';
 
 function frame(sessionId: string, over: Partial<PageStateFrame> = {}): PageStateFrame {
@@ -118,5 +121,94 @@ describe('SessionPageStateStore', () => {
     // and the null-normalized empty case (no title/tabId/url/error reported yet).
     store.set(frame('agt_b', { state: 'loading', url: null }));
     expect(AgentPageStateSchema.safeParse(store.get('agt_b')).success).toBe(true);
+  });
+});
+
+// Audit 2026-07-01 (MEDIUM) — GET /:id/page-state has no way to distinguish
+// "still genuinely stalled" from "dead session, stale cache" without a bound
+// on how long a cached entry may outlive the harness that reported it.
+// `getFresh` is that bound (paired with the `rec.status` check the route
+// itself owns). A manual clock (like the deterministic-timer seam used by
+// worker-disconnect-reaper.test.ts) makes the age math exact, no real
+// wall-clock / fake-timer flakiness.
+function manualClock(startMs = 0) {
+  let now = startMs;
+  return { now: () => now, advance: (ms: number) => (now += ms) };
+}
+
+describe('SessionPageStateStore.getFresh (age-bounded read, audit 2026-07-01)', () => {
+  it('returns the entry when it is within maxAgeMs', () => {
+    const clock = manualClock();
+    const store = new SessionPageStateStore(5_000, clock.now);
+    store.set(frame('agt_a', { state: 'stalled', url: null }));
+    clock.advance(60_000); // 60s old
+    expect(store.getFresh('agt_a', 120_000)).toEqual({
+      state: 'stalled',
+      url: null,
+      title: null,
+      tabId: null,
+      error: null,
+    });
+  });
+
+  it("treats a 'stalled' entry older than maxAgeMs as stale/cleared — evicts it and returns null, exactly the dead-session-serves-stale-cache gap the audit flagged", () => {
+    const clock = manualClock();
+    const store = new SessionPageStateStore(5_000, clock.now);
+    store.set(frame('agt_a', { state: 'stalled', url: 'https://x.test' }));
+    clock.advance(120_001); // 1ms past a 120s bound
+    expect(store.getFresh('agt_a', 120_000)).toBeNull();
+    // AND it evicted the entry (not just masked this one read) — a later
+    // unbounded `get()` no longer sees it either.
+    expect(store.get('agt_a')).toBeNull();
+    expect(store.size).toBe(0);
+  });
+
+  it('the plain unbounded get() still serves an entry regardless of age — getFresh and get() are independent reads', () => {
+    const clock = manualClock();
+    const store = new SessionPageStateStore(5_000, clock.now);
+    store.set(frame('agt_a', { state: 'loaded' }));
+    clock.advance(10 * 60_000); // 10 minutes — way past any sane bound
+    expect(store.get('agt_a')).not.toBeNull();
+  });
+
+  it('returns null for an unknown session (no throw)', () => {
+    const store = new SessionPageStateStore();
+    expect(store.getFresh('agt_unknown', 120_000)).toBeNull();
+  });
+
+  it('an entry exactly AT maxAgeMs is still fresh (strictly-greater-than eviction)', () => {
+    const clock = manualClock();
+    const store = new SessionPageStateStore(5_000, clock.now);
+    store.set(frame('agt_a'));
+    clock.advance(120_000);
+    expect(store.getFresh('agt_a', 120_000)).not.toBeNull();
+  });
+});
+
+describe('resolvePageStateMaxAgeSeconds', () => {
+  it('defaults to 120 when the env var is unset', () => {
+    expect(resolvePageStateMaxAgeSeconds({})).toBe(120);
+  });
+
+  it('honors a valid positive override', () => {
+    expect(
+      resolvePageStateMaxAgeSeconds({
+        DRIFTSTACK_AGENT_SESSION_PAGE_STATE_MAX_AGE_SECONDS: '300',
+      }),
+    ).toBe(300);
+  });
+
+  it('falls back to 120 for a non-finite / non-positive value (never disables the bound)', () => {
+    expect(
+      resolvePageStateMaxAgeSeconds({
+        DRIFTSTACK_AGENT_SESSION_PAGE_STATE_MAX_AGE_SECONDS: 'nope',
+      }),
+    ).toBe(120);
+    expect(
+      resolvePageStateMaxAgeSeconds({ DRIFTSTACK_AGENT_SESSION_PAGE_STATE_MAX_AGE_SECONDS: '0' }),
+    ).toBe(120);
+    expect(
+      resolvePageStateMaxAgeSeconds({ DRIFTSTACK_AGENT_SESSION_PAGE_STATE_MAX_AGE_SECONDS: '-5' }),
+    ).toBe(120);
   });
 });

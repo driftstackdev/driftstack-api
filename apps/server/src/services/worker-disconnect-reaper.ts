@@ -130,6 +130,19 @@ export class WorkerDisconnectReaperService {
 
   private async closeNode(nodeId: string): Promise<void> {
     try {
+      // Audit 2026-07-01 (MEDIUM) — this bulk close does NOT evict the closed
+      // sessions' entries from session-page-state-store.ts (unlike the
+      // customer DELETE route and agent-session-terminal-close.ts, which both
+      // know the exact session id being closed). closeActiveByNode only
+      // returns a row COUNT, not the affected session ids, so there is no
+      // cheap id to call store.delete() with here — getting one would need an
+      // AgentSessionsRepo signature change (agent-sessions.ts /
+      // agent-sessions-repo.ts), out of scope for this fix. This is safe: GET
+      // /:id/page-state (routes/agent-sessions.ts) cross-checks the session's
+      // live `status` — which THIS call flips to 'closed' in the same
+      // statement — before ever reading the page-state store, so a session
+      // closed here can never serve a stale cached pageState regardless of
+      // whether this store entry is proactively evicted.
       const closed = await this.deps.repo.closeActiveByNode(
         nodeId,
         WORKER_DISCONNECTED_CLOSE_REASON,
