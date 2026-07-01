@@ -105,12 +105,28 @@ describe('W460.B packages/recapture-automation/src/scheduler.ts content parity',
 
   it('SKIP branch (in-flight dedup): latest !== null && (queued || in_progress) && same iosVersion against target — keyed on iosVersion ALONE (NOT iosVersion+safariVersion, which let a same-target/different-Safari in-flight run slip past into a HIGH-retry double-capture); skipped.push with reason `already ${latest.status} against ${targetVersion.iosVersion}`', () => {
     expect(body).toMatch(
-      /if \(\s*\n?\s*latest !== null &&\s*\n?\s*\(latest\.status === 'queued' \|\| latest\.status === 'in_progress'\) &&\s*\n?\s*latest\.targetVersion\.iosVersion === targetVersion\.iosVersion\s*\n?\s*\) \{\s*\n?\s*skipped\.push\(\{\s*\n?\s*archetypeId: history\.archetypeId,\s*\n?\s*reason: `already \$\{latest\.status\} against \$\{targetVersion\.iosVersion\}`,\s*\n?\s*\}\);/,
+      /if \(\s*\n?\s*latest !== null &&\s*\n?\s*\(latest\.status === 'queued' \|\| latest\.status === 'in_progress'\) &&\s*\n?\s*latest\.targetVersion\.iosVersion === targetVersion\.iosVersion\s*\n?\s*\) \{/,
+    );
+    // toContain (not a single closed regex spanning the if-block) so the
+    // staleness check (audit fix 3, 2026-07-01) inserted between the `if (`
+    // and the `skipped.push` doesn't break this pin.
+    expect(body).toContain('skipped.push({');
+    expect(body).toContain('archetypeId: history.archetypeId,');
+    expect(body).toContain(
+      'reason: `already ${latest.status} against ${targetVersion.iosVersion}`,',
     );
     // The Safari-version equality must NOT be part of the SKIP key (the bug).
     expect(body).not.toMatch(
       /\(latest\.status === 'queued' \|\| latest\.status === 'in_progress'\) &&\s*\n?\s*latest\.targetVersion\.iosVersion === targetVersion\.iosVersion &&\s*\n?\s*latest\.targetVersion\.safariVersion === targetVersion\.safariVersion/,
     );
+  });
+
+  it('SKIP branch staleness check (audit fix 3, 2026-07-01): an in-flight run older than STALE_IN_FLIGHT_MS is NOT skipped — rescheduled HIGH instead, distinct reason text from the normal SKIP/retry messages', () => {
+    expect(body).toContain('const STALE_IN_FLIGHT_MS =');
+    expect(body).toContain('const inFlightSinceMs = latest.startedAtMs ?? latest.createdAtMs;');
+    expect(body).toContain('const inFlightAgeMs = nowMs - inFlightSinceMs;');
+    expect(body).toContain('if (inFlightAgeMs > STALE_IN_FLIGHT_MS) {');
+    expect(body).toContain('stale in-flight run (status=');
   });
 
   it("HIGH branch: latest === null || target mismatch with reason ternary ('never captured against any version' | `not yet captured against ${targetVersion.iosVersion}`)", () => {
@@ -140,9 +156,9 @@ describe('W460.B packages/recapture-automation/src/scheduler.ts content parity',
     expect(body).not.toMatch(/if \(latest\.status === 'completed'\) \{/);
   });
 
-  it("Health calc: total = matchCount + diffCount + errorCount; matchRate + errorRate guarded by total === 0; Stable sort by priorityRank (high:0, medium:1, low:2, skip:3) 'Preserves input ordering within a priority tier'", () => {
+  it("Health calc: total sums all FIVE outcome buckets (match+diff+error+newSurface+missingSurface, audit fix 1, 2026-07-01 — mirrors atlas.ts's classifyOutcomes so a missing/new-surface-dominated run isn't misclassified healthy); matchRate + errorRate guarded by total === 0; Stable sort by priorityRank (high:0, medium:1, low:2, skip:3) 'Preserves input ordering within a priority tier'", () => {
     expect(body).toMatch(
-      /const total = latest\.matchCount \+ latest\.diffCount \+ latest\.errorCount;\s*\n?\s*const matchRate = total === 0 \? 0 : latest\.matchCount \/ total;\s*\n?\s*const errorRate = total === 0 \? 0 : latest\.errorCount \/ total;/,
+      /const total =\s*\n?\s*latest\.matchCount \+\s*\n?\s*latest\.diffCount \+\s*\n?\s*latest\.errorCount \+\s*\n?\s*latest\.newSurfaceCount \+\s*\n?\s*latest\.missingSurfaceCount;\s*\n?\s*const matchRate = total === 0 \? 0 : latest\.matchCount \/ total;\s*\n?\s*const errorRate = total === 0 \? 0 : latest\.errorCount \/ total;/,
     );
     expect(body).toMatch(
       /\/\/ Stable sort by priority: high → medium → low\. Preserves input\s*\n?\s*\/\/ ordering within a priority tier\.\s*\n?\s*const priorityRank: Record<SchedulePriority, number> = \{\s*\n?\s*high: 0,\s*\n?\s*medium: 1,\s*\n?\s*low: 2,\s*\n?\s*skip: 3,\s*\n?\s*\};\s*\n?\s*entries\.sort\(\(a, b\) => priorityRank\[a\.priority\] - priorityRank\[b\.priority\]\);/,
