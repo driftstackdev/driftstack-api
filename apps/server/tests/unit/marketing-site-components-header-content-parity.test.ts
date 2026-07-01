@@ -69,11 +69,11 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     );
   });
 
-  it("Desktop nav 2-CTA framing pinned: 'Sign in' → https://app.driftstack.dev/login + 'Get started' btn-primary → /pricing#free — pinned so the 2-CTA target (dashboard login URL + #free pricing anchor) commitment survives (drift to a different login URL would create marketing↔dashboard divergence)", () => {
+  it("Desktop nav 2-CTA framing pinned: 'Sign in' → https://app.driftstack.dev/login + 'Start free' btn-primary → /pricing#free — pinned so the 2-CTA target (dashboard login URL + #free pricing anchor) commitment survives (drift to a different login URL would create marketing↔dashboard divergence)", () => {
     expect(body).toMatch(
       /<a href="https:\/\/app\.driftstack\.dev\/login" class="nav-link">Sign in<\/a>/,
     );
-    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Get started<\/a>/);
+    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Start free<\/a>/);
   });
 
   it('External-docs noopener-noreferrer framing pinned: \'target={item.external ? "_blank" : undefined}\' + \'rel={item.external ? "noopener noreferrer" : undefined}\' — pinned so the external-link safety pattern (noopener + noreferrer + target=_blank) survives', () => {
@@ -81,8 +81,8 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     expect(body).toMatch(/rel=\{item\.external \? 'noopener noreferrer' : undefined\}/);
   });
 
-  it('Mobile CTA visible-at-all-widths + Start-button framing pinned: \'<a href="/pricing#free" class="btn-primary text-sm">Start</a>\' — pinned so the mobile CTA always-visible + \'Start\' short-label + same /pricing#free anchor commitment survives (drift to hiding CTA on mobile would lose the conversion path)', () => {
-    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary text-sm">Start<\/a>/);
+  it('Mobile CTA visible-at-all-widths + Start-button framing pinned: \'<a href="/pricing#free" class="btn-primary text-sm">Start free</a>\' — pinned so the mobile CTA always-visible + \'Start free\' short-label + same /pricing#free anchor commitment survives (drift to hiding CTA on mobile would lose the conversion path)', () => {
+    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary text-sm">Start free<\/a>/);
   });
 
   it("Mobile hamburger <details>+<summary> framing pinned: 'flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border border-slate-200 text-slate-700 [&::-webkit-details-marker]:hidden' + aria-label 'Open navigation menu' + 3-line SVG icon (3 <line> elements at y=6/12/18) — pinned so the <details> hamburger + 3-line-icon + aria-label commitment survives (drift to a JS-based menu would break the no-JS-bundle pure-static commitment)", () => {

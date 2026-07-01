@@ -54,11 +54,11 @@ describe('V-293 — signup/login link parity (marketing-site + docs)', () => {
     expect(src).not.toMatch(RELATIVE_DASHBOARD_LINK_RE);
   });
 
-  it('marketing Header.astro surfaces both Sign in (returning) + Get started (new) CTAs', () => {
+  it('marketing Header.astro surfaces both Sign in (returning) + Start free (new) CTAs', () => {
     const src = readFileSync(resolve(MARKETING_SRC, 'components/Header.astro'), 'utf8');
     expect(src).toMatch(/https:\/\/app\.driftstack\.dev\/login/);
     expect(src).toContain('Sign in');
-    expect(src).toContain('Get started'); // existing trial-pack CTA
+    expect(src).toContain('Start free'); // existing trial-pack CTA
   });
 
   it('marketing Footer.astro lists Sign up + Sign in under Product', () => {

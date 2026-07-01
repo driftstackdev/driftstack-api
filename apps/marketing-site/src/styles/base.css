@@ -352,7 +352,7 @@
   --hover-rgb: 34 35 44;
   --ink-rgb: 245 245 247;
   --ink-2-rgb: 176 176 187;
-  --ink-3-rgb: 115 115 127;
+  --ink-3-rgb: 140 140 150;
   --border-rgb: 30 30 38;
   --ready-rgb: 47 227 154;
   --busy-rgb: 255 194 77;
@@ -363,7 +363,7 @@
   --hover: #22232c;
   --ink: #f5f5f7;
   --ink-2: #b0b0bb;
-  --ink-3: #73737f;
+  --ink-3: #8c8c96;
   --border: #1e1e26;
   --ready: #2fe39a;
   --busy: #ffc24d;
