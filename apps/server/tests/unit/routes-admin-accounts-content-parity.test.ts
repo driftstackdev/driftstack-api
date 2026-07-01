@@ -54,7 +54,7 @@ describe('W438.A apps/server/src/routes/admin-accounts.ts content parity', () =>
 
   it('imports: 9 Zod schemas from api-types + ListAdminAccountsQuerySchema inline (limit coerce 1..100 default 50 + cursor + status + tier + email_contains 1..254); AccountsAdminService + AccountAuditService + AdminAuditService/Action + AccountRow + RateLimitOverridesService + UsageService + BadRequestError', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*AccountStatusSchema,\s*\n?\s*AccountTierSchema,\s*\n?\s*AddSupportNoteRequestSchema,\s*\n?\s*ChangeTierRequestSchema,\s*\n?\s*ClearQuotaOverrideQuerySchema,\s*\n?\s*RecordRefundRequestSchema,\s*\n?\s*SetQuotaOverrideRequestSchema,\s*\n?\s*SuspendAccountRequestSchema,\s*\n?\s*UnsuspendAccountRequestSchema,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*\n?\s*AccountStatusSchema,\s*\n?\s*AccountTierSchema,\s*\n?\s*AddSupportNoteRequestSchema,\s*\n?\s*ChangeTierRequestSchema,\s*\n?\s*ClearQuotaOverrideQuerySchema,\s*\n?\s*DeleteAccountRequestSchema,\s*\n?\s*RecordRefundRequestSchema,\s*\n?\s*SetQuotaOverrideRequestSchema,\s*\n?\s*SuspendAccountRequestSchema,\s*\n?\s*UnsuspendAccountRequestSchema,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
       /const ListAdminAccountsQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*\n?\s*status: AccountStatusSchema\.optional\(\),\s*\n?\s*tier: AccountTierSchema\.optional\(\),\s*\n?\s*email_contains: z\.string\(\)\.min\(1\)\.max\(254\)\.optional\(\),\s*\n?\s*\}\);/,

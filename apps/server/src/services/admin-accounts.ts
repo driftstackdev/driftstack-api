@@ -63,11 +63,34 @@ export interface SuspendSessionReclaimer {
   destroyAllForAccount(accountId: string): Promise<number>;
 }
 
+/**
+ * GDPR Article 17 — minimal auth-flows-service surface the delete-
+ * reclaim path depends on. Bulk-revokes every dashboard web session
+ * for the account (no exclusion — contrast with the customer "sign
+ * out everywhere else" flow, which keeps the calling session alive).
+ */
+export interface DeleteWebSessionReclaimer {
+  revokeAllWebSessionsForAccount(accountId: string, now: Date): Promise<number>;
+}
+
+/** GDPR Article 17 — minimal api-keys-service surface the delete-reclaim path depends on. */
+export interface DeleteApiKeyReclaimer {
+  revokeAllForAccount(ctx: AccountContext, accountId: string): Promise<number>;
+}
+
+/** GDPR Article 17 — minimal webhooks-service surface the delete-reclaim path depends on. */
+export interface DeleteWebhookReclaimer {
+  deleteAllForAccount(ctx: AccountContext, accountId: string): Promise<number>;
+}
+
 export class AccountsAdminService {
   constructor(
     private readonly repo: AccountsAdminRepo,
     private readonly authCache: AuthCache | null = null,
     private readonly sessions: SuspendSessionReclaimer | null = null,
+    private readonly webSessions: DeleteWebSessionReclaimer | null = null,
+    private readonly apiKeys: DeleteApiKeyReclaimer | null = null,
+    private readonly webhooks: DeleteWebhookReclaimer | null = null,
   ) {}
 
   async getAccount(ctx: AccountContext, accountId: string): Promise<AccountRow> {
@@ -149,6 +172,61 @@ export class AccountsAdminService {
     throwIfMissingScope(ctx, 'driftstack_internal_admin');
     const updated = await this.repo.setStatus(accountId, 'active', new Date());
     if (!updated) throw new NotFoundError(`Account "${accountId}" not found.`);
+    await this.invalidateCache(accountId);
+    return updated;
+  }
+
+  /**
+   * GDPR Article 17 — admin-triggered account termination. Mirrors
+   * suspend()'s shape: set status, then best-effort reclaim every
+   * live surface tied to the account. Each reclaim step is
+   * independently try/caught exactly like suspend()'s session
+   * reclaim — the status mutation is already committed by the time
+   * any reclaim runs, and the auth-path 'deleted' checks (auth.ts
+   * slowPathApiKey / slowPathWebSession) already block every new
+   * request regardless of whether a given reclaim step fully lands.
+   * No distributed transaction: same best-effort consistency
+   * guarantee as suspend(), just extended to more surfaces.
+   *
+   * Order: sessions → web sessions → API keys → webhooks →
+   * cache invalidation (last, so the cache is only dropped once the
+   * full reclaim sweep has been attempted).
+   */
+  async deleteAccount(ctx: AccountContext, accountId: string): Promise<AccountRow> {
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
+    const now = new Date();
+    const updated = await this.repo.setStatus(accountId, 'deleted', now);
+    if (!updated) throw new NotFoundError(`Account "${accountId}" not found.`);
+
+    if (this.sessions) {
+      try {
+        await this.sessions.destroyAllForAccount(accountId);
+      } catch {
+        // Never fail delete on a reclaim error.
+      }
+    }
+    if (this.webSessions) {
+      try {
+        await this.webSessions.revokeAllWebSessionsForAccount(accountId, now);
+      } catch {
+        // Never fail delete on a reclaim error.
+      }
+    }
+    if (this.apiKeys) {
+      try {
+        await this.apiKeys.revokeAllForAccount(ctx, accountId);
+      } catch {
+        // Never fail delete on a reclaim error.
+      }
+    }
+    if (this.webhooks) {
+      try {
+        await this.webhooks.deleteAllForAccount(ctx, accountId);
+      } catch {
+        // Never fail delete on a reclaim error.
+      }
+    }
+
     await this.invalidateCache(accountId);
     return updated;
   }

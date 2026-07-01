@@ -20,6 +20,7 @@ import {
   AddSupportNoteRequestSchema,
   ChangeTierRequestSchema,
   ClearQuotaOverrideQuerySchema,
+  DeleteAccountRequestSchema,
   RecordRefundRequestSchema,
   SetQuotaOverrideRequestSchema,
   SuspendAccountRequestSchema,
@@ -219,6 +220,35 @@ export function registerAdminAccountsRoutes(
         accountId,
         { ...(body.reason ? { reason: body.reason } : {}) },
         () => accountsAdmin.unsuspend(ctx, accountId),
+      );
+      return publicAccount(updated);
+    },
+  );
+
+  // ── POST /v1/admin/accounts/:id/delete ─────────────────────────────────
+  // GDPR Article 17 — admin-triggered account termination. Sets
+  // status='deleted' + best-effort reclaims sessions/web-sessions/API-keys/
+  // webhooks (AccountsAdminService.deleteAccount). Same shape as
+  // suspend/unsuspend above; the BYOK Anthropic key purge happens later via
+  // the account-deletion-purge-sweeper (30-day retention per privacy-
+  // policy.md §3.5/§9), not synchronously here.
+  app.post<{ Params: { id: string } }>(
+    '/v1/admin/accounts/:id/delete',
+    {
+      preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
+    },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const accountId = uuidFromPrefixedId(request.params.id, 'acc');
+      const body = DeleteAccountRequestSchema.parse(request.body ?? {});
+
+      const updated = await withAudit(
+        request,
+        'account.deleted',
+        accountId,
+        { ...(body.reason ? { reason: body.reason } : {}) },
+        () => accountsAdmin.deleteAccount(ctx, accountId),
       );
       return publicAccount(updated);
     },

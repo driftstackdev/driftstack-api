@@ -236,6 +236,17 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
     return Promise.resolve(n);
   }
 
+  revokeAllWebSessionsForAccount(accountId: string, at: Date): Promise<number> {
+    let n = 0;
+    for (const row of this.webSessions.values()) {
+      if (row.accountId !== accountId) continue;
+      if (row.revokedAt !== null) continue;
+      this.webSessions.set(row.id, { ...row, revokedAt: at });
+      n++;
+    }
+    return Promise.resolve(n);
+  }
+
   markWebSessionMfaSatisfied(id: string, at: Date): Promise<void> {
     const row = this.webSessions.get(id);
     if (row) this.webSessions.set(id, { ...row, mfaSatisfiedAt: at });

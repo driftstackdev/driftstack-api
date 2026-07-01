@@ -10,7 +10,8 @@
 //   • Module-comment framing pinned: audit ownership stays on routes,
 //     service stays focused on the mutation.
 //   • D-020 + D-025 cache-invalidation framing pinned.
-//   • All 8 methods require driftstack_internal_admin scope.
+//   • All 9 methods require driftstack_internal_admin scope (GDPR
+//     Article 17 deleteAccount added 2026-07-01).
 //   • Read methods (getAccount / list / countByStatus / countByTier /
 //     signupCounts) don't invalidate cache.
 //   • Mutate methods (changeTier / suspend / unsuspend): repo update
@@ -114,21 +115,41 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
     );
   });
 
-  it('AccountsAdminService: constructor takes repo + optional authCache + optional sessions reclaimer', () => {
+  it('AccountsAdminService: constructor takes repo + optional authCache + optional sessions reclaimer + optional GDPR Article 17 delete-reclaim trio (web sessions / API keys / webhooks)', () => {
     expect(body).toMatch(/export class AccountsAdminService \{/);
     expect(body).toMatch(
-      /constructor\(\s*\n?\s*private readonly repo: AccountsAdminRepo,\s*\n?\s*private readonly authCache: AuthCache \| null = null,\s*\n?\s*private readonly sessions: SuspendSessionReclaimer \| null = null,\s*\n?\s*\) \{\}/,
+      /constructor\(\s*\n?\s*private readonly repo: AccountsAdminRepo,\s*\n?\s*private readonly authCache: AuthCache \| null = null,\s*\n?\s*private readonly sessions: SuspendSessionReclaimer \| null = null,\s*\n?\s*private readonly webSessions: DeleteWebSessionReclaimer \| null = null,\s*\n?\s*private readonly apiKeys: DeleteApiKeyReclaimer \| null = null,\s*\n?\s*private readonly webhooks: DeleteWebhookReclaimer \| null = null,\s*\n?\s*\) \{\}/,
     );
     expect(body).toMatch(
       /export interface SuspendSessionReclaimer \{\s*\n?\s*destroyAllForAccount\(accountId: string\): Promise<number>;\s*\n?\s*\}/,
     );
+    expect(body).toMatch(
+      /export interface DeleteWebSessionReclaimer \{\s*\n?\s*revokeAllWebSessionsForAccount\(accountId: string, now: Date\): Promise<number>;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /export interface DeleteApiKeyReclaimer \{\s*\n?\s*revokeAllForAccount\(ctx: AccountContext, accountId: string\): Promise<number>;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /export interface DeleteWebhookReclaimer \{\s*\n?\s*deleteAllForAccount\(ctx: AccountContext, accountId: string\): Promise<number>;\s*\n?\s*\}/,
+    );
   });
 
-  it('All 8 methods require driftstack_internal_admin scope (throwIfMissingScope first)', () => {
-    // Count occurrences — should be 8 (one per method: getAccount, list,
-    // countByStatus, countByTier, signupCounts, changeTier, suspend, unsuspend).
+  it('All 9 methods require driftstack_internal_admin scope (throwIfMissingScope first)', () => {
+    // Count occurrences — should be 9 (one per method: getAccount, list,
+    // countByStatus, countByTier, signupCounts, changeTier, suspend,
+    // unsuspend, deleteAccount).
     const scopeChecks = body.match(/throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/g);
-    expect(scopeChecks?.length).toBe(8);
+    expect(scopeChecks?.length).toBe(9);
+  });
+
+  it('deleteAccount (GDPR Article 17): scope check → setStatus(deleted) → NotFoundError on null → 4 best-effort reclaim steps (sessions/webSessions/apiKeys/webhooks) → invalidateCache', () => {
+    expect(body).toMatch(
+      /async deleteAccount\(ctx: AccountContext, accountId: string\): Promise<AccountRow> \{\s*\n?\s*throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);\s*\n?\s*const now = new Date\(\);\s*\n?\s*const updated = await this\.repo\.setStatus\(accountId, 'deleted', now\);\s*\n?\s*if \(!updated\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);/,
+    );
+    expect(body).toMatch(/if \(this\.sessions\) \{/);
+    expect(body).toMatch(/if \(this\.webSessions\) \{/);
+    expect(body).toMatch(/if \(this\.apiKeys\) \{/);
+    expect(body).toMatch(/if \(this\.webhooks\) \{/);
   });
 
   it('getAccount: scope check → repo.findById → NotFoundError-or-row', () => {

@@ -67,6 +67,15 @@ export const UnsuspendAccountRequestSchema = z.object({
 });
 export type UnsuspendAccountRequest = z.infer<typeof UnsuspendAccountRequestSchema>;
 
+// GDPR Article 17 — admin-triggered account termination. Same shape as
+// SuspendAccountRequestSchema/UnsuspendAccountRequestSchema; the route
+// mirrors those two exactly (POST /v1/admin/accounts/:id/delete).
+export const DeleteAccountRequestSchema = z.object({
+  /** Optional reason recorded in the audit row. */
+  reason: z.string().max(500).optional(),
+});
+export type DeleteAccountRequest = z.infer<typeof DeleteAccountRequestSchema>;
+
 // ───────────────────────────────────────────────────────────────────────────
 // V-281 — admin audit-note + refund-record (audit-only)
 // ───────────────────────────────────────────────────────────────────────────
@@ -207,6 +216,8 @@ export const AdminAuditActionSchema = z.enum([
   'secret.updated',
   'secret.deleted',
   'secret.revealed',
+  // GDPR Article 17 — admin-triggered account termination (migration 0094).
+  'account.deleted',
 ]);
 export type AdminAuditAction = z.infer<typeof AdminAuditActionSchema>;
 

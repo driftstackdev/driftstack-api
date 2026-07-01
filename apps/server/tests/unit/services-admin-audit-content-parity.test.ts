@@ -86,15 +86,17 @@ describe('W399.B apps/server/src/services/admin-audit.ts content parity', () => 
     expect(body).toMatch(/\| 'incident\.resolved'/);
   });
 
-  it('AdminAuditAction: V-295c3-tombstone status-subscriber cluster (force_unsubscribed / purged) + LK.2 mac_node.livekit_registered + pricing.updated (0068) + secret.revealed terminator (0075)', () => {
+  it('AdminAuditAction: V-295c3-tombstone status-subscriber cluster (force_unsubscribed / purged) + LK.2 mac_node.livekit_registered + pricing.updated (0068) + secret.revealed (0075) + account.deleted terminator (GDPR Article 17, migration 0094)', () => {
     expect(body).toMatch(/\/\/ V-295c3-tombstone: status-page email subscriber admin actions\./);
     expect(body).toMatch(/\| 'status_subscriber\.force_unsubscribed'/);
     expect(body).toMatch(/\| 'status_subscriber\.purged'/);
     expect(body).toMatch(/\| 'mac_node\.livekit_registered'/);
     expect(body).toMatch(/\| 'pricing\.updated'/);
-    // Secrets Phase A slice 2: the secrets-manager lifecycle terminates the
-    // union; secret.revealed audits every decrypt.
-    expect(body).toMatch(/\| 'secret\.revealed';/);
+    // Secrets Phase A slice 2: secret.revealed audits every decrypt.
+    expect(body).toMatch(/\| 'secret\.revealed'/);
+    // GDPR Article 17 admin-triggered account termination now terminates
+    // the union (migration 0094).
+    expect(body).toMatch(/\| 'account\.deleted';/);
   });
 
   it('AdminAuditLogRow: 9 camelCased fields (id, adminAccountId, adminKeyId, action, targetAccountId?, targetResourceId?, inputPayload?, result, ipAddress?, timestamp)', () => {

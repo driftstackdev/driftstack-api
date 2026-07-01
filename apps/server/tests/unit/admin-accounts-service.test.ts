@@ -324,3 +324,104 @@ describe('V-553.B-15 AccountsAdminService.suspend / unsuspend', () => {
     expect(destroyed).toEqual(['drv-1']);
   });
 });
+
+describe('GDPR Article 17 AccountsAdminService.deleteAccount', () => {
+  it('requires driftstack_internal_admin', async () => {
+    const { repo } = makeRepo([baseAccount()]);
+    const svc = new AccountsAdminService(repo);
+    await expect(svc.deleteAccount(ctxWith(['account_owner']), 'acc_1')).rejects.toThrow(
+      /driftstack_internal_admin/,
+    );
+  });
+
+  it('flips status to deleted + invalidates cache', async () => {
+    const { repo, rows } = makeRepo([baseAccount()]);
+    const { cache, spy } = makeCache();
+    const svc = new AccountsAdminService(repo, cache);
+    const updated = await svc.deleteAccount(ctxWith(['driftstack_internal_admin']), 'acc_1');
+    expect(updated.status).toBe('deleted');
+    expect((rows[0] as AccountRow & { status: string }).status).toBe('deleted');
+    expect(spy).toHaveBeenCalledWith('acc_1');
+  });
+
+  it('NotFound on missing account', async () => {
+    const { repo } = makeRepo();
+    const svc = new AccountsAdminService(repo);
+    await expect(
+      svc.deleteAccount(ctxWith(['driftstack_internal_admin']), 'acc_missing'),
+    ).rejects.toThrow(/not found/);
+  });
+
+  // Mutation-check surface: each of the 4 reclaim steps below is
+  // independently asserted. Temporarily commenting out any ONE of the
+  // corresponding `if (this.x) { ... }` blocks in
+  // AccountsAdminService.deleteAccount would fail exactly the matching
+  // test here (verified manually — see the task's mutation-test report).
+
+  it('reclaims running sessions via the injected sessions reclaimer', async () => {
+    const { repo } = makeRepo([baseAccount()]);
+    const calls: string[] = [];
+    const svc = new AccountsAdminService(repo, null, {
+      destroyAllForAccount: (id: string) => {
+        calls.push(id);
+        return Promise.resolve(2);
+      },
+    });
+    await svc.deleteAccount(ctxWith(['driftstack_internal_admin']), 'acc_1');
+    expect(calls).toEqual(['acc_1']);
+  });
+
+  it('reclaims web sessions via the injected web-session reclaimer', async () => {
+    const { repo } = makeRepo([baseAccount()]);
+    const calls: string[] = [];
+    const svc = new AccountsAdminService(repo, null, null, {
+      revokeAllWebSessionsForAccount: (id: string) => {
+        calls.push(id);
+        return Promise.resolve(3);
+      },
+    });
+    await svc.deleteAccount(ctxWith(['driftstack_internal_admin']), 'acc_1');
+    expect(calls).toEqual(['acc_1']);
+  });
+
+  it('reclaims API keys via the injected api-key reclaimer', async () => {
+    const { repo } = makeRepo([baseAccount()]);
+    const calls: string[] = [];
+    const svc = new AccountsAdminService(repo, null, null, null, {
+      revokeAllForAccount: (_ctx, id: string) => {
+        calls.push(id);
+        return Promise.resolve(1);
+      },
+    });
+    await svc.deleteAccount(ctxWith(['driftstack_internal_admin']), 'acc_1');
+    expect(calls).toEqual(['acc_1']);
+  });
+
+  it('reclaims webhook endpoints via the injected webhook reclaimer', async () => {
+    const { repo } = makeRepo([baseAccount()]);
+    const calls: string[] = [];
+    const svc = new AccountsAdminService(repo, null, null, null, null, {
+      deleteAllForAccount: (_ctx, id: string) => {
+        calls.push(id);
+        return Promise.resolve(1);
+      },
+    });
+    await svc.deleteAccount(ctxWith(['driftstack_internal_admin']), 'acc_1');
+    expect(calls).toEqual(['acc_1']);
+  });
+
+  it('succeeds even when every reclaim step throws (best-effort — status mutation already committed)', async () => {
+    const { repo, rows } = makeRepo([baseAccount()]);
+    const svc = new AccountsAdminService(
+      repo,
+      null,
+      { destroyAllForAccount: () => Promise.reject(new Error('sessions boom')) },
+      { revokeAllWebSessionsForAccount: () => Promise.reject(new Error('web sessions boom')) },
+      { revokeAllForAccount: () => Promise.reject(new Error('api keys boom')) },
+      { deleteAllForAccount: () => Promise.reject(new Error('webhooks boom')) },
+    );
+    const result = await svc.deleteAccount(ctxWith(['driftstack_internal_admin']), 'acc_1');
+    expect(result.status).toBe('deleted');
+    expect((rows[0] as AccountRow & { status: string }).status).toBe('deleted');
+  });
+});

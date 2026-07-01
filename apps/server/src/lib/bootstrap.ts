@@ -141,6 +141,12 @@ import {
   registerProfileTrashPurgeJob,
 } from '../services/profile-trash-purge-sweeper.js';
 import {
+  AccountDeletionPurgeSweeperService,
+  enqueueNextAccountDeletionPurge,
+  registerAccountDeletionPurgeJob,
+} from '../services/account-deletion-purge-sweeper.js';
+import { DrizzleAccountDeletionPurgeRepo } from '../db/account-deletion-purge-repo.js';
+import {
   AgentSessionOrphanSweeperService,
   enqueueNextAgentSessionOrphanReap,
   registerAgentSessionOrphanReapJob,
@@ -592,11 +598,9 @@ export async function createProductionDeps(
 
   // Admin services.
   const adminAuditService = new AdminAuditService(adminAuditRepo, metricsRegistry);
-  const accountsAdminService = new AccountsAdminService(
-    accountsAdminRepo,
-    authCache,
-    sessionsService,
-  );
+  // accountsAdminService itself is constructed further below (after
+  // apiKeysService / authFlowsService / webhooksService all exist — its
+  // GDPR Article 17 deleteAccount() reclaim path depends on all three).
   const adminBillingService = new AdminBillingService(adminBillingRepo);
   const pricingService = new PricingService(new DrizzlePricingRepo(dbHandle));
   // Secrets Phase A (migration 0074): owner platform-secret store, encrypted
@@ -973,6 +977,21 @@ export async function createProductionDeps(
     mfaChallengeStore, // V-353d — short-lived challenge store
   );
 
+  // accountsAdminService — constructed here (not up near adminAuditService)
+  // because its GDPR Article 17 deleteAccount() reclaim path depends on
+  // apiKeysService / authFlowsService / webhooksService, all of which are
+  // defined by this point. suspend()/unsuspend() only ever needed
+  // sessionsService, which was available earlier, but delete() extends the
+  // reclaim to web sessions + API keys + webhooks too.
+  const accountsAdminService = new AccountsAdminService(
+    accountsAdminRepo,
+    authCache,
+    sessionsService,
+    authFlowsService,
+    apiKeysService,
+    webhooksService,
+  );
+
   // 2026-05-20 — auth-tokens sweeper. Periodic DELETE of stale rows
   // across email_verify_tokens / magic_link_tokens / password_reset_
   // tokens. Closes the audit follow-up from docs/internal/2026-05-20-
@@ -1074,6 +1093,25 @@ export async function createProductionDeps(
     logger,
   });
   await enqueueNextProfileTrashPurge({ scheduledJobs: scheduledJobsService });
+  // 2026-07-01 — account-deletion retention purge (GDPR Article 17 close-out).
+  // Daily 05:00 UTC sweep (staggered an hour after the 04:00 profile-trash
+  // sweep) that clears a deleted account's BYOK Anthropic key once its
+  // deleted_at is more than 30 days old (privacy-policy.md §3.5/§9). Gated
+  // on byokAnthropicService being wired (MFA_ENCRYPTION_KEY configured) —
+  // without it there's no BYOK key storage to purge in the first place.
+  if (byokAnthropicService) {
+    const accountDeletionPurgeSweeper = new AccountDeletionPurgeSweeperService({
+      repo: new DrizzleAccountDeletionPurgeRepo(dbHandle),
+      byok: byokAnthropicService,
+      logger,
+    });
+    registerAccountDeletionPurgeJob({
+      scheduledJobs: scheduledJobsService,
+      sweeper: accountDeletionPurgeSweeper,
+      logger,
+    });
+    await enqueueNextAccountDeletionPurge({ scheduledJobs: scheduledJobsService });
+  }
   // Orphaned agent-session backstop (2026-06-19) — agent sessions only flip to
   // 'closed' on explicit DELETE or budget exhaustion, so a session orphaned by
   // a dead worker would linger status='active' forever. Hourly wall-clock sweep

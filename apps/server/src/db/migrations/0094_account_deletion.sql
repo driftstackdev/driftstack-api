@@ -1,0 +1,24 @@
+-- 2026-07-01 — GDPR Article 17 account-deletion admin action + deletedAt marker.
+--
+-- AccountsAdminService previously only implemented suspend()/unsuspend() —
+-- nothing ever set accounts.status = 'deleted', even though the
+-- account_status enum has carried the value since day one
+-- (0000_gray_northstar.sql) and auth.ts already defends against it (dead
+-- code in slowPathApiKey / slowPathWebSession). This migration adds the two
+-- pieces AccountsAdminService.deleteAccount() needs:
+--
+--   1. 'account.deleted' on admin_audit_action — same ALTER TYPE ... ADD
+--      VALUE shape as 0068/0075/0084; the admin route's withAudit() records
+--      this action before responding (D-025).
+--   2. accounts.deleted_at — nullable timestamptz, stamped at deletion
+--      time. Powers the account-deletion-purge-sweeper's 30-day-post-
+--      termination purge of the account's BYOK Anthropic key
+--      (privacy-policy.md §3.5 Customer-Provided Secrets + §9 retention
+--      table: "Deleted within 30 days of Customer Account termination").
+--
+-- Same mixed enum-add + column-add shape as 0027/0046. Runs outside a
+-- transaction (ALTER TYPE ADD VALUE requirement); idempotent via IF NOT
+-- EXISTS on both statements.
+ALTER TYPE "admin_audit_action" ADD VALUE IF NOT EXISTS 'account.deleted';
+--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN IF NOT EXISTS "deleted_at" timestamptz;

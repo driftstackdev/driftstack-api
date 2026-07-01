@@ -298,6 +298,15 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
     return rows.length;
   }
 
+  async revokeAllWebSessionsForAccount(accountId: string, at: Date): Promise<number> {
+    const rows = await this.database.db
+      .update(webSessions)
+      .set({ revokedAt: at })
+      .where(and(eq(webSessions.accountId, accountId), isNull(webSessions.revokedAt)))
+      .returning({ id: webSessions.id });
+    return rows.length;
+  }
+
   async markWebSessionMfaSatisfied(id: string, at: Date): Promise<void> {
     await this.database.db
       .update(webSessions)

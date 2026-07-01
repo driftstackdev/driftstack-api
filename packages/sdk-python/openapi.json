@@ -2465,7 +2465,8 @@
               "secret.created",
               "secret.updated",
               "secret.deleted",
-              "secret.revealed"
+              "secret.revealed",
+              "account.deleted"
             ]
           },
           "target_account_id": {
@@ -7131,6 +7132,145 @@
         }
       }
     },
+    "/v1/admin/accounts/{id}/delete": {
+      "post": {
+        "summary": "Delete an account (admin, GDPR Article 17)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Account deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    "email": {
+                      "type": "string",
+                      "format": "email"
+                    },
+                    "name": {
+                      "type": ["string", "null"]
+                    },
+                    "tier": {
+                      "type": "string",
+                      "enum": [
+                        "free",
+                        "solo_manual",
+                        "team_manual",
+                        "agency_manual",
+                        "api_starter",
+                        "api_builder",
+                        "api_scale",
+                        "enterprise"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["active", "suspended", "deleted"]
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    }
+                  },
+                  "required": ["id", "email", "name", "tier", "status", "created_at", "updated_at"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Account not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/accounts/{id}/usage": {
       "get": {
         "summary": "Usage period summary for any account (admin)",
@@ -8429,7 +8569,8 @@
                 "secret.created",
                 "secret.updated",
                 "secret.deleted",
-                "secret.revealed"
+                "secret.revealed",
+                "account.deleted"
               ]
             },
             "required": false,
@@ -8539,7 +8680,8 @@
                               "secret.created",
                               "secret.updated",
                               "secret.deleted",
-                              "secret.revealed"
+                              "secret.revealed",
+                              "account.deleted"
                             ]
                           },
                           "target_account_id": {

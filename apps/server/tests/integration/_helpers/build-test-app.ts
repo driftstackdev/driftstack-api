@@ -1042,13 +1042,10 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     accountAudit: accountAuditService,
     accountLifecycle: accountLifecycleService,
   });
-  // Wired with the sessions reclaimer (constructed after sessionsService, like
-  // bootstrap) so the suspend() path tears down the account's running sessions.
-  const accountsAdminService = new AccountsAdminService(
-    accountsAdminRepo,
-    authCache,
-    sessionsService,
-  );
+  // accountsAdminService is constructed further down (after apiKeysService /
+  // authFlowsService exist — its GDPR Article 17 deleteAccount() reclaim
+  // path depends on both, plus webhooksService already built above), mirroring
+  // bootstrap.ts's construction order.
   const adminBillingService = new AdminBillingService(new InMemoryAdminBillingRepo());
   const pricingService = new PricingService(new InMemoryPricingRepo());
   // Secrets Phase A — enabled with a fixed test key so route tests can
@@ -1156,6 +1153,17 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     accountAuditService, // V-224 — emit account.{email_verified,login,logout,password_changed}
     mfaService, // V-353d — branch login() on MFA enrollment
     mfaChallengeStore, // V-353d — short-lived challenge store
+  );
+
+  // Wired with the sessions reclaimer + the GDPR Article 17 delete-reclaim
+  // trio (web sessions / API keys / webhooks), mirroring bootstrap.ts.
+  const accountsAdminService = new AccountsAdminService(
+    accountsAdminRepo,
+    authCache,
+    sessionsService,
+    authFlowsService,
+    apiKeysService,
+    webhooksService,
   );
 
   // V-266 — browser-OAuth flow with in-memory store for tests.

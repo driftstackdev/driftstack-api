@@ -87,10 +87,12 @@ describe('W1005 db/admin-accounts-repo cross-source invariant', () => {
 
   // ─── setTier + setStatus 2-field touch ───────────────────────
 
-  it('CRITICAL setTier + setStatus each set the field + updatedAt + returning() + null on missing. The 2-field touch keeps updatedAt fresh and exposes the post-update row to callers.', () => {
+  it("CRITICAL setTier + setStatus each set the field + updatedAt + returning() + null on missing. The 2-field touch keeps updatedAt fresh and exposes the post-update row to callers. setStatus ALSO stamps deletedAt when transitioning to 'deleted' (GDPR Article 17, migration 0094) — powers the account-deletion-purge-sweeper's retention cutoff.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/admin-accounts-repo.ts'));
     expect(p).toMatch(/\.set\(\{ tier, updatedAt: at \}\)/);
-    expect(p).toMatch(/\.set\(\{ status, updatedAt: at \}\)/);
+    expect(p).toMatch(
+      /\.set\(\{ status, updatedAt: at, \.\.\.\(status === 'deleted' \? \{ deletedAt: at \} : \{\}\) \}\)/,
+    );
     expect(p).toMatch(/\.where\(eq\(accounts\.id, id\)\)/);
     expect(p).toMatch(/return row \? toRow\(row\) : null;/);
   });

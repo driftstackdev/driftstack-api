@@ -615,6 +615,27 @@ export class WebhooksService {
     });
   }
 
+  /**
+   * GDPR Article 17 — bulk-disable every non-disabled webhook endpoint
+   * for the account. Backs AccountsAdminService.deleteAccount(); reuses
+   * delete() per-endpoint rather than duplicating its audit-emit logic.
+   * effectiveAccountId bypasses delete()'s account_owner check the same
+   * way the V-326e5 team-admin gate does (trusts the caller) — the
+   * caller here is always the admin account-deletion flow, which has
+   * already checked driftstack_internal_admin.
+   */
+  async deleteAllForAccount(ctx: AccountContext, accountId: string): Promise<number> {
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
+    const endpoints = await this.repo.listEndpoints(accountId);
+    let n = 0;
+    for (const endpoint of endpoints) {
+      if (endpoint.disabledAt !== null) continue;
+      await this.delete(ctx, endpoint.id, { effectiveAccountId: accountId });
+      n++;
+    }
+    return n;
+  }
+
   listDeliveries(
     ctx: AccountContext,
     endpointId: string,

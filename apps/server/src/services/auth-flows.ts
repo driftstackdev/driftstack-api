@@ -174,6 +174,15 @@ export interface AuthFlowsRepo {
    */
   revokeAllWebSessionsExcept(accountId: string, exceptId: string, at: Date): Promise<number>;
   /**
+   * GDPR Article 17 — bulk-revoke EVERY active web session for the
+   * account, no exclusion. Sibling of revokeAllWebSessionsExcept
+   * (customer "sign out everywhere else" — which keeps the calling
+   * device alive); this one backs the admin account-deletion flow,
+   * where there is no "current session" to keep. Returns count of
+   * rows updated.
+   */
+  revokeAllWebSessionsForAccount(accountId: string, at: Date): Promise<number>;
+  /**
    * V-353d — set web_sessions.mfa_satisfied_at on a session id. Used
    * by completeMfaChallenge so step-up gates pass.
    */
@@ -1172,6 +1181,32 @@ export class AuthFlowsService {
         revoked_via: 'self_dashboard_revoke_all',
         revoked_count: n,
         kept_session_id: currentSessionId,
+      });
+    }
+    return n;
+  }
+
+  /**
+   * GDPR Article 17 — bulk-revoke EVERY web session for the account,
+   * no exclusion. Backs AccountsAdminService.deleteAccount(); unlike
+   * revokeAllWebSessionsExceptCurrent (customer "sign out everywhere
+   * else"), there is no session to keep alive during an admin-
+   * triggered account termination. Same cache-invalidate + audit-
+   * emit shape as its sibling above.
+   */
+  async revokeAllWebSessionsForAccount(accountId: string, now = new Date()): Promise<number> {
+    const n = await this.repo.revokeAllWebSessionsForAccount(accountId, now);
+    if (n > 0 && this.authCache) {
+      try {
+        await this.authCache.invalidateAccount(accountId);
+      } catch {
+        /* cache TTLs out within 30s */
+      }
+    }
+    if (n > 0) {
+      await this.emitAuditBestEffort(accountId, 'account.logout', {
+        revoked_via: 'admin_account_deletion',
+        revoked_count: n,
       });
     }
     return n;

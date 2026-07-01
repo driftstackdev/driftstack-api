@@ -48,7 +48,12 @@ export type AdminAuditAction =
   | 'secret.created'
   | 'secret.updated'
   | 'secret.deleted'
-  | 'secret.revealed';
+  | 'secret.revealed'
+  // GDPR Article 17 admin-triggered account termination (migration 0094).
+  // AccountsAdminService.deleteAccount() sets status='deleted' + reclaims
+  // sessions/web-sessions/API-keys/webhooks; the admin route records this
+  // action before returning (same D-025 shape as account.suspended).
+  | 'account.deleted';
 
 export interface AdminAuditLogRow {
   id: string;

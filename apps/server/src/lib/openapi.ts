@@ -103,6 +103,7 @@ import {
   CreateSessionResponseSchema,
   CreateWebhookRequestSchema,
   CreateWebhookResponseSchema,
+  DeleteAccountRequestSchema,
   InteractRequestSchema,
   InteractResponseSchema,
   ListAuditLogQuerySchema,
@@ -1079,6 +1080,26 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description: 'Account active.',
+        content: { 'application/json': { schema: AdminAccountResponseSchema } },
+      },
+      404: { description: 'Account not found.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/accounts/{id}/delete',
+    summary: 'Delete an account (admin, GDPR Article 17)',
+    tags: ['admin'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: { content: { 'application/json': { schema: DeleteAccountRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Account deleted.',
         content: { 'application/json': { schema: AdminAccountResponseSchema } },
       },
       404: { description: 'Account not found.', content: problemContent },

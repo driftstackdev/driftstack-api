@@ -427,4 +427,26 @@ export class ApiKeysService {
       }
     }
   }
+
+  /**
+   * GDPR Article 17 — bulk-revoke every non-revoked API key for the
+   * account. Backs AccountsAdminService.deleteAccount(); reuses
+   * revoke() per-key rather than duplicating its cache-invalidate /
+   * webhook-emit / customer-audit-emit logic. Requires
+   * driftstack_internal_admin — only the admin account-deletion flow
+   * calls this (staff web sessions also carry account_owner, so the
+   * per-key revoke()'s own scope check passes too; see
+   * services/auth.ts's baseScopes).
+   */
+  async revokeAllForAccount(ctx: AccountContext, accountId: string): Promise<number> {
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
+    const keys = await this.repo.listApiKeys(accountId);
+    let n = 0;
+    for (const key of keys) {
+      if (key.revokedAt !== null) continue;
+      await this.revoke(ctx, key.id, { effectiveAccountId: accountId });
+      n++;
+    }
+    return n;
+  }
 }

@@ -205,6 +205,10 @@ export const adminAuditAction = pgEnum('admin_audit_action', [
   'secret.updated',
   'secret.deleted',
   'secret.revealed',
+  // GDPR Article 17 admin-triggered account termination (migration 0094).
+  // AccountsAdminService.deleteAccount() records this before returning;
+  // mirrors the account.suspended / account.unsuspended audit shape.
+  'account.deleted',
 ]);
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -229,6 +233,12 @@ export const accounts = pgTable(
     emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
     tier: accountTier('tier').notNull().default('free'),
     status: accountStatus('status').notNull().default('active'),
+    // GDPR Article 17 (migration 0094) — set at admin-triggered deletion
+    // time (AccountsAdminService.deleteAccount). Nullable: null for every
+    // active/suspended account. Powers the account-deletion-purge-
+    // sweeper's 30-day-post-termination BYOK Anthropic key purge
+    // (privacy-policy.md §3.5 Customer-Provided Secrets + §9 retention).
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
     // V-082 / Workstream D — Stripe customer link. Set at first
     // checkout-session create; remains pinned across tier changes
     // (Stripe customer ID is stable for the lifetime of the account).

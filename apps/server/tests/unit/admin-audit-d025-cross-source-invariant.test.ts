@@ -131,11 +131,12 @@ describe('W936 D-025 admin-audit cross-source invariant', () => {
     expect(p).toMatch(/\| 'mac_node\.livekit_registered'/);
   });
 
-  it('CRITICAL pricing + secrets anchors — pricing.updated (migration 0068) covers the master-owner price editor; secret.revealed is the union terminator (migration 0075, the secrets-manager lifecycle incl. the audited decrypt).', () => {
+  it('CRITICAL pricing + secrets anchors — pricing.updated (migration 0068) covers the master-owner price editor; secret.revealed (migration 0075, the secrets-manager lifecycle incl. the audited decrypt); account.deleted is now the union terminator (GDPR Article 17, migration 0094).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/admin-audit.ts'));
     expect(p).toMatch(/\| 'pricing\.updated'/);
     expect(p).toMatch(/\| 'secret\.created'/);
-    expect(p).toMatch(/\| 'secret\.revealed';/);
+    expect(p).toMatch(/\| 'secret\.revealed'/);
+    expect(p).toMatch(/\| 'account\.deleted';/);
   });
 
   // ─── AdminAuditLogRow 10-field shape ─────────────────────────

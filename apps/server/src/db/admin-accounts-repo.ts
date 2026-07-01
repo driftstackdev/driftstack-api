@@ -38,9 +38,13 @@ export class DrizzleAccountsAdminRepo implements AccountsAdminRepo {
     status: 'active' | 'suspended' | 'deleted',
     at: Date,
   ): Promise<AccountRow | null> {
+    // GDPR Article 17 — stamp deleted_at when transitioning to 'deleted' so
+    // the account-deletion-purge-sweeper can compute a 30-day retention
+    // cutoff. There is no "undelete" flow, so deleted_at is never cleared
+    // once set; active/suspended transitions never touch it.
     const [row] = await this.database.db
       .update(accounts)
-      .set({ status, updatedAt: at })
+      .set({ status, updatedAt: at, ...(status === 'deleted' ? { deletedAt: at } : {}) })
       .where(eq(accounts.id, id))
       .returning();
     return row ? toRow(row) : null;
