@@ -15812,7 +15812,7 @@
                               },
                               "endpoint": {
                                 "type": "string",
-                                "pattern": "^[A-Za-z0-9.\\-:_]+:[0-9]{1,5}$"
+                                "pattern": "^([A-Za-z0-9.\\-:_]+):([0-9]{1,5})$"
                               },
                               "allowed_ips": {
                                 "type": "string",
