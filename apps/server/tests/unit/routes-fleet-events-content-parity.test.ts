@@ -49,9 +49,10 @@ describe('routes/fleet-events content parity', () => {
     expect(body).toMatch(
       /export async function registerFleetEventsRoutes\(\s*\n?\s*app: FastifyInstance,\s*\n?\s*deps: FleetEventsRoutesDeps,\s*\n?\s*\): Promise<void> \{/,
     );
-    // Registers the plugin with a maxPayload bound on inbound frames (A3 W227:
-    // harness caps inline outputData at 8 MiB → ~10.7 MiB base64 wire; 16 MiB headroom).
-    expect(body).toMatch(/const FLEET_WS_MAX_PAYLOAD_BYTES = 16 \* 1024 \* 1024;/);
+    // Registers the plugin with a maxPayload bound on inbound frames, sized to the
+    // largest legit frame — the file-download reply (A3 W2856): a 64 MiB per-file
+    // cap → ~85.3 MiB base64 wire; 96 MiB headroom (mirrors UPLOAD_MAX_BODY_BYTES).
+    expect(body).toMatch(/const FLEET_WS_MAX_PAYLOAD_BYTES = 96 \* 1024 \* 1024;/);
     expect(body).toMatch(
       /await app\.register\(websocketPlugin, \{\s*options: \{ maxPayload: FLEET_WS_MAX_PAYLOAD_BYTES \},\s*\}\);/,
     );

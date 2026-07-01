@@ -75,11 +75,25 @@ export async function registerFleetEventsRoutes(
   // The plugin must be registered before the websocket:true route is defined.
   // maxPayload bounds INBOUND frames (handleInbound JSON.parses each raw frame,
   // so an oversized frame = a huge string + parse = memory DoS from a buggy/
-  // compromised fleet node). The largest legit frame is an intentResult whose
-  // inline outputData the harness caps at 8 MiB (A3 W227 / harness f711840f) —
-  // base64-encoded on the wire (~×1.33 → ~10.7 MiB) + a small JSON envelope.
-  // 16 MiB clears that with headroom while cutting the ws default (100 MiB) ~6×.
-  const FLEET_WS_MAX_PAYLOAD_BYTES = 16 * 1024 * 1024;
+  // compromised fleet node). ws (v8.18.0) enforces maxPayload by throwing +
+  // forcibly closing the WHOLE socket on the offending frame (receiver.js →
+  // websocket.js receiverOnError) — NOT a per-message reject — and this is the
+  // single SHARED control socket carrying dispatch/cookies/uploads/downloads/
+  // trims for EVERY session dispatched to that node, so an oversized frame
+  // fails every in-flight correlator for the node (FleetControlRegistry's
+  // close/unregister → failAll()), not just the one request that overflowed.
+  // The largest legit frame is now the file-DOWNLOAD reply (A3 W2856 /
+  // DownloadDataResultSchema): `downloadData.dataB64` carries up to the 64 MiB
+  // per-file cap (harness-enforced, same ceiling as the upload path's
+  // UPLOAD_MAX_FILE_BYTES) — base64-encoded on the wire (~×4/3 → ~85.3 MiB) plus
+  // the JSON envelope. That supersedes the OLD sizing rationale (an intentResult
+  // whose inline outputData the harness caps at 8 MiB / A3 W227 / harness
+  // f711840f → ~10.7 MiB base64), which is now the SMALLER of the two caps.
+  // 96 MiB clears the 64 MiB download cap's ~85.3 MiB base64 inflation with real
+  // headroom (mirrors UPLOAD_MAX_BODY_BYTES in agent-sessions.ts, which sizes
+  // the equivalent HTTP body the same way) while still cutting the ws default
+  // (100 MiB).
+  const FLEET_WS_MAX_PAYLOAD_BYTES = 96 * 1024 * 1024;
   // Rely on ws's default auto-pong (autoPong defaults true) to answer the node's
   // keepalive ping; the explicit socket.on('ping')->pong below is a logged backup.
   // (autoPong is a ws *WebSocket* option, not a WebSocketServer option, so it

@@ -186,6 +186,75 @@ describe('V-820 — /v1/fleet/events live WebSocket', () => {
     expect(result.sessionId).toBe('sess-1');
   });
 
+  it('an inbound frame bigger than the OLD 16 MiB cap (e.g. a large file-download reply) does not close the shared control socket or fail other in-flight correlator state', async () => {
+    const ws = await connect({
+      authorization: `Bearer ${await freshJwt()}`,
+      [FLEET_NODE_ID_HEADER]: NODE_ID,
+    });
+    const conn = fx.fleetControlRegistry.get(NODE_ID);
+    expect(conn).toBeDefined();
+
+    // An UNRELATED in-flight dispatch already outstanding on this SAME shared
+    // socket — stands in for another customer session's request that the bug's
+    // registry-wide failAll() would wrongly kill when the socket got force-closed.
+    ws.on('message', (data: WebSocket.RawData) => {
+      const frame = JSON.parse(rawToString(data)) as {
+        type: string;
+        sessionId: string;
+        intentId: string;
+      };
+      if (frame.type !== 'intentDispatch') return;
+      ws.send(
+        JSON.stringify({
+          type: 'intentResult',
+          sessionId: frame.sessionId,
+          intentId: frame.intentId,
+          success: true,
+          durationMs: 3,
+          outputData: base64Json({ ok: true }),
+        }),
+      );
+    });
+    const otherDispatch = conn!.correlator.dispatch({
+      type: 'intentDispatch',
+      sessionId: 'other-session',
+      intentId: 'other-intent',
+      intentName: 'navigate',
+      inputParams: base64Json({ url: 'https://example.test' }),
+    });
+
+    // Simulate the node replying to a fetchDownload with an ordinary moderately
+    // large file (well under the 64 MiB per-file cap, but its dataB64 alone —
+    // ~20 MiB — already exceeds the OLD 16 MiB maxPayload).
+    const bigDataB64 = 'A'.repeat(20 * 1024 * 1024);
+    ws.send(
+      JSON.stringify({
+        type: 'downloadData',
+        requestId: 'req-big',
+        sessionId: 'sess-1',
+        name: 'big-file.bin',
+        mime: 'application/octet-stream',
+        dataB64: bigDataB64,
+      }),
+    );
+
+    // Give the server a moment to receive + route (or, pre-fix, choke on) the
+    // oversized frame before asserting on connection survival.
+    await new Promise((r) => setTimeout(r, 300));
+
+    // The shared control socket must survive: still open, still registered —
+    // NOT torn down + unregistered the way an over-maxPayload frame forces ws to.
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+    expect(fx.fleetControlRegistry.size()).toBe(1);
+    expect(fx.fleetControlRegistry.get(NODE_ID)).toBe(conn);
+
+    // The unrelated in-flight dispatch must resolve normally — proof the
+    // registry's close/unregister failAll() never ran on this connection.
+    const result = await otherDispatch;
+    expect(result.success).toBe(true);
+    expect(result.intentId).toBe('other-intent');
+  });
+
   it('unknown-node JWT → upgrade refused with 401 (socket never opens)', async () => {
     const unknownId = '00000000-0000-4000-8000-0000deadbeef';
     const jwt = await freshJwt(unknownId); // signed by our key, but unregistered
