@@ -70,6 +70,19 @@ export const HARNESS_SCROLL_DEFAULT_DISTANCE_PX = 600;
 export const HARNESS_SCROLL_DEFAULT_DIRECTION = 'down' as const;
 export const HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_SECONDS = 30;
 
+// Security-audit hardening (2026-06-30) — hard cap on Heartbeat.
+// activeSessionStates' key count. This map feeds the process-wide
+// SessionLivenessStore (session-liveness-store.ts), a SINGLE Map shared by
+// every fleet node and hard-capped at maxEntries=5_000. Without a schema-level
+// bound, one node's oversized beat (still well within the 16 MiB frame cap)
+// could declare 5000+ fabricated session ids and, via the store's size-cap
+// eviction, threaten every OTHER node's real liveness entries. A node
+// legitimately drives at most a handful of concurrent sessions (maxConcurrent
+// is small — see the agent-sessions.ts / worker-disconnect-reaper.ts
+// comments), so a few hundred is already generous headroom for spiky
+// reconnect/migration windows.
+export const HARNESS_HEARTBEAT_MAX_ACTIVE_SESSION_STATES = 500;
+
 // ── Per-intent param schemas (the `inputParams` JSON object) ──────────
 // snake_case field names: these are the dict the Swift IntentExecutor case
 // reads, not the camelCase envelope below.
@@ -504,7 +517,15 @@ export const HeartbeatSchema = z.object({
    */
   activeSessionStates: z
     .record(z.string(), z.enum(['active', 'provisioning', 'idle', 'terminating']))
-    .optional(),
+    .optional()
+    .refine(
+      (states) =>
+        states === undefined ||
+        Object.keys(states).length <= HARNESS_HEARTBEAT_MAX_ACTIVE_SESSION_STATES,
+      {
+        message: `activeSessionStates must not exceed ${HARNESS_HEARTBEAT_MAX_ACTIVE_SESSION_STATES} entries`,
+      },
+    ),
   // Host-health (A3-4) — proactive-placement signals; gated on the worker via
   // DRIFTSTACK_HEARTBEAT_HOST_HEALTH (flipped on, W2197).
   /** nominal | fair | serious | critical. */
@@ -598,9 +619,14 @@ export const ChallengeDetectedSchema = z.object({
   sessionId: z.string().min(1),
   challengeId: z.string().min(1),
   challenge: z.object({
-    type: z.string(),
+    // Security-audit hardening (2026-06-30) — bounded like the sibling
+    // hardened fields in this file (bootId 256, ControlCommand.reason 512):
+    // this flows unfiltered into WebhooksService.enqueueEvent (challenge-
+    // relay.ts) with no truncation, so an unbounded value becomes a stored
+    // webhook-delivery row fanned out (with retries) to every subscriber.
+    type: z.string().max(256),
     confidence: z.number(),
-    detail: z.string().optional(),
+    detail: z.string().max(4096).optional(),
   }),
 });
 export type ChallengeDetected = z.infer<typeof ChallengeDetectedSchema>;
@@ -633,7 +659,12 @@ export const ProfileSaveFailedSchema = z.object({
   reason: z
     .enum(['serialize_failed', 'seal_failed', 'too_large', 'upload_failed', 'degenerate_dump'])
     .catch('upload_failed'),
-  detail: z.string().optional(),
+  // Security-audit hardening (2026-06-30) — bounded like the sibling hardened
+  // fields in this file (bootId 256, ControlCommand.reason 512): this flows
+  // unfiltered into WebhooksService.enqueueEvent (profile-save-failed-relay.ts)
+  // with no truncation, so an unbounded value becomes a stored webhook-delivery
+  // row fanned out (with retries) to every subscriber.
+  detail: z.string().max(4096).optional(),
 });
 export type ProfileSaveFailed = z.infer<typeof ProfileSaveFailedSchema>;
 
@@ -713,11 +744,17 @@ export type CookiesRequest = z.infer<typeof CookiesRequestSchema>;
 // One cookie from the session's WKWebsiteDataStore.httpCookieStore (incl. httpOnly).
 // Exported so the cookie-import route can validate the customer's uploaded jar
 // against the SAME shape the read/Export emits (no divergent Cookie definition).
+// Security-audit hardening (2026-06-30) — real cookies are bounded to ~4KB
+// total per RFC 6265; without a bound here a single cookie object (reused by
+// the customer-facing write-path SetCookiesBodySchema, agent-sessions.ts,
+// still under its own array .max(2000) + the 8 MiB body limit) could carry an
+// ~8MB domain/name/value/path string. Bounds below are realistic per RFC 6265
+// (domain/name/path ~512 bytes, value ~4096 bytes) with headroom.
 export const CookieSchema = z.object({
-  domain: z.string(),
-  name: z.string(),
-  value: z.string(),
-  path: z.string().optional(),
+  domain: z.string().max(512),
+  name: z.string().max(512),
+  value: z.string().max(4096),
+  path: z.string().max(512).optional(),
   expires: z.number().nullable().optional(),
   httpOnly: z.boolean().optional(),
   secure: z.boolean().optional(),
@@ -732,7 +769,12 @@ export const CookiesResultSchema = z.object({
   type: z.literal('cookiesResult'),
   requestId: z.string().min(1),
   sessionId: z.string().min(1),
-  cookies: z.array(CookieSchema).optional(),
+  // Security-audit hardening (2026-06-30) — matches the customer-facing
+  // write-path's explicit z.array(CookieSchema).min(1).max(2000)
+  // (SetCookiesBodySchema, agent-sessions.ts). Without this a compromised/
+  // malformed harness node could return tens of thousands of cookies (up to
+  // the 16 MiB frame cap), forwarded verbatim to any polling GUI/API client.
+  cookies: z.array(CookieSchema).max(2000).optional(),
   error: z.string().optional(),
 });
 export type CookiesResult = z.infer<typeof CookiesResultSchema>;

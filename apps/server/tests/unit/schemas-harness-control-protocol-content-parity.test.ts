@@ -33,6 +33,7 @@ import {
   HARNESS_WAIT_FOR_CAP_SECONDS,
   HARNESS_SCROLL_DEFAULT_DISTANCE_PX,
   HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_SECONDS,
+  HARNESS_HEARTBEAT_MAX_ACTIVE_SESSION_STATES,
   HARNESS_INTENT_PARAM_SCHEMAS,
   TERMINAL_SESSION_STATUSES,
   HarnessIntentNameSchema,
@@ -52,6 +53,8 @@ import {
   TrimProfileRequestSchema,
   HarnessErrorCodeSchema,
   HarnessOutboundSchema,
+  CookieSchema,
+  CookiesResultSchema,
 } from '../../src/schemas/harness-control-protocol.js';
 import { serializeTrimProfile } from '../../src/services/harness-control-codec.js';
 
@@ -339,9 +342,16 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       /export const ResumeSessionSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('resumeSession'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*challengeId: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
     );
     // HarnessOutbound.challengeDetected (harness → server) — shape pinned.
-    expect(body).toMatch(
-      /export const ChallengeDetectedSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('challengeDetected'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*challengeId: z\.string\(\)\.min\(1\),\s*\n?\s*challenge: z\.object\(\{\s*\n?\s*type: z\.string\(\),\s*\n?\s*confidence: z\.number\(\),\s*\n?\s*detail: z\.string\(\)\.optional\(\),\s*\n?\s*\}\),\s*\n?\s*\}\);/,
-    );
+    // toContain fragments (not a closed multi-line regex) so the security-audit
+    // hardening comment (2026-06-30, .max() bounds on type/detail) doesn't
+    // break the pin.
+    expect(body).toContain('export const ChallengeDetectedSchema = z.object({');
+    expect(body).toContain("type: z.literal('challengeDetected'),");
+    expect(body).toContain('sessionId: z.string().min(1),');
+    expect(body).toContain('challengeId: z.string().min(1),');
+    expect(body).toContain('challenge: z.object({');
+    expect(body).toContain('type: z.string().max(256),');
+    expect(body).toContain('detail: z.string().max(4096).optional(),');
     // challengeDetected parses through the outbound union; challengeId required.
     expect(
       HarnessOutboundSchema.safeParse({
@@ -1141,5 +1151,125 @@ describe('harness-control-protocol behavioral contract', () => {
     expect(err.success).toBe(true);
     // Unknown error code rejected.
     expect(HarnessErrorCodeSchema.safeParse('boom').success).toBe(false);
+  });
+
+  // Security-audit hardening (2026-06-30) — 4 missing-length-bound findings.
+  it('Heartbeat.activeSessionStates is capped at HARNESS_HEARTBEAT_MAX_ACTIVE_SESSION_STATES entries — a node fabricating more can no longer poison the process-wide SessionLivenessStore via an oversized single beat', () => {
+    const withinCap: Record<string, 'active'> = {};
+    for (let i = 0; i < HARNESS_HEARTBEAT_MAX_ACTIVE_SESSION_STATES; i++) {
+      withinCap[`agt_${i}`] = 'active';
+    }
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'heartbeat',
+        macNodeId: 'n1',
+        timestamp: 't',
+        cpuPercent: 1,
+        memoryPercent: 1,
+        activeSessionCount: HARNESS_HEARTBEAT_MAX_ACTIVE_SESSION_STATES,
+        activeSessionStates: withinCap,
+      }).success,
+    ).toBe(true);
+    const overCap: Record<string, 'active'> = { ...withinCap, agt_over: 'active' };
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'heartbeat',
+        macNodeId: 'n1',
+        timestamp: 't',
+        cpuPercent: 1,
+        memoryPercent: 1,
+        activeSessionCount: HARNESS_HEARTBEAT_MAX_ACTIVE_SESSION_STATES + 1,
+        activeSessionStates: overCap,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('ChallengeDetectedSchema.challenge.type/.detail are bounded — an oversized value (webhook storage/bandwidth amplification via challenge-relay.ts) is rejected', () => {
+    const base = {
+      type: 'challengeDetected' as const,
+      sessionId: 'agt_1',
+      challengeId: 'chl_1',
+    };
+    expect(
+      HarnessOutboundSchema.safeParse({
+        ...base,
+        challenge: { type: 'datadome', confidence: 0.9, detail: 'x'.repeat(4096) },
+      }).success,
+    ).toBe(true);
+    expect(
+      HarnessOutboundSchema.safeParse({
+        ...base,
+        challenge: { type: 'datadome', confidence: 0.9, detail: 'x'.repeat(4097) },
+      }).success,
+    ).toBe(false);
+    expect(
+      HarnessOutboundSchema.safeParse({
+        ...base,
+        challenge: { type: 'x'.repeat(257), confidence: 0.9 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('ProfileSaveFailedSchema.detail is bounded — an oversized value (webhook storage/bandwidth amplification via profile-save-failed-relay.ts) is rejected', () => {
+    const base = {
+      type: 'profileSaveFailed' as const,
+      sessionId: 'agt_1',
+      profile_id: 'p1',
+      reason: 'upload_failed' as const,
+    };
+    expect(HarnessOutboundSchema.safeParse({ ...base, detail: 'x'.repeat(4096) }).success).toBe(
+      true,
+    );
+    expect(HarnessOutboundSchema.safeParse({ ...base, detail: 'x'.repeat(4097) }).success).toBe(
+      false,
+    );
+  });
+
+  it('CookieSchema domain/name/value/path are bounded (RFC 6265-realistic) — reused by both the customer write-path (SetCookiesRequestSchema) and the harness read-path (CookiesResultSchema); an ~oversized field on either is rejected', () => {
+    const okCookie = {
+      domain: 'x'.repeat(512),
+      name: 'y'.repeat(512),
+      value: 'z'.repeat(4096),
+      path: '/'.repeat(512),
+    };
+    expect(CookieSchema.safeParse(okCookie).success).toBe(true);
+    expect(CookieSchema.safeParse({ ...okCookie, domain: 'x'.repeat(513) }).success).toBe(false);
+    expect(CookieSchema.safeParse({ ...okCookie, name: 'y'.repeat(513) }).success).toBe(false);
+    expect(CookieSchema.safeParse({ ...okCookie, value: 'z'.repeat(4097) }).success).toBe(false);
+    expect(CookieSchema.safeParse({ ...okCookie, path: '/'.repeat(513) }).success).toBe(false);
+    // Write path (SetCookiesRequestSchema) rejects an oversized cookie value too.
+    expect(
+      SetCookiesRequestSchema.safeParse({
+        type: 'setCookies',
+        requestId: 'rq_1',
+        sessionId: 'agt_1',
+        cookies: [{ domain: 'd', name: 'n', value: 'z'.repeat(4097) }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('CookiesResultSchema.cookies is capped at 2000 (matches the customer-facing write-path SetCookiesBodySchema) — a compromised/malformed harness node returning more is rejected', () => {
+    const jar2000 = Array.from({ length: 2000 }, (_, i) => ({
+      domain: 'x.com',
+      name: `c${i}`,
+      value: 'v',
+    }));
+    expect(
+      CookiesResultSchema.safeParse({
+        type: 'cookiesResult',
+        requestId: 'rq_1',
+        sessionId: 'agt_1',
+        cookies: jar2000,
+      }).success,
+    ).toBe(true);
+    const jar2001 = [...jar2000, { domain: 'x.com', name: 'over', value: 'v' }];
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'cookiesResult',
+        requestId: 'rq_1',
+        sessionId: 'agt_1',
+        cookies: jar2001,
+      }).success,
+    ).toBe(false);
   });
 });
