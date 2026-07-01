@@ -673,6 +673,13 @@
       "when": 1780346400000,
       "tag": "0095_account_email_delivery_failed",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1780350000000,
+      "tag": "0096_accounts_canonical_email",
+      "breakpoints": true
     }
   ]
 }

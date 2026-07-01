@@ -18,9 +18,15 @@ import type {
   AuthFlowsRepo,
   WebSessionRow,
 } from '../../../src/services/auth-flows.js';
+import { canonicalizeEmailForDedup } from '../../../src/services/auth-flows.js';
 
 interface Storage {
   account: AuthFlowAccountRow;
+  // 2026-07-01 security fix — mirrors accounts.canonical_email (migration
+  // 0096). Computed the same way the Drizzle repo computes it at insert
+  // time (canonicalizeEmailForDedup), so findAccountByCanonicalEmail
+  // behaves identically against both repo implementations.
+  canonicalEmail: string;
 }
 
 export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
@@ -34,16 +40,32 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
 
   /**
    * Test-only seam for seeding existing accounts (e.g. legacy migration
-   * scenarios where accounts pre-date the password column).
+   * scenarios where accounts pre-date the password column). Computes
+   * canonicalEmail off row.email the same way createAccount does, so a
+   * seeded account is findable via findAccountByCanonicalEmail too.
    */
   seedAccount(row: AuthFlowAccountRow): void {
-    this.accounts.set(row.id, { account: row });
+    this.accounts.set(row.id, {
+      account: row,
+      canonicalEmail: canonicalizeEmailForDedup(row.email),
+    });
   }
 
   findAccountByEmail(email: string): Promise<AuthFlowAccountRow | null> {
     const wanted = email.trim().toLowerCase();
     for (const { account } of this.accounts.values()) {
       if (account.email === wanted) return Promise.resolve(account);
+    }
+    return Promise.resolve(null);
+  }
+
+  // 2026-07-01 security fix — mirrors DrizzleAuthFlowsRepo.findAccountByCanonicalEmail
+  // (accounts_canonical_email_unique, migration 0096): matches ANY stored
+  // account whose canonical form equals the given one, regardless of which
+  // literal variant was registered first.
+  findAccountByCanonicalEmail(canonicalEmail: string): Promise<AuthFlowAccountRow | null> {
+    for (const slot of this.accounts.values()) {
+      if (slot.canonicalEmail === canonicalEmail) return Promise.resolve(slot.account);
     }
     return Promise.resolve(null);
   }
@@ -66,9 +88,10 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
     bundledLlmMonthlyCapUsdCents?: number;
   }): Promise<AuthFlowAccountRow> {
     const now = new Date();
+    const normalizedEmail = args.email.trim().toLowerCase();
     const row: AuthFlowAccountRow = {
       id: randomUUID(),
-      email: args.email.trim().toLowerCase(),
+      email: normalizedEmail,
       name: args.name,
       passwordHash: args.passwordHash,
       emailVerifiedAt: null,
@@ -76,7 +99,10 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
       status: 'active',
       createdAt: now,
     };
-    this.accounts.set(row.id, { account: row });
+    this.accounts.set(row.id, {
+      account: row,
+      canonicalEmail: canonicalizeEmailForDedup(normalizedEmail),
+    });
     return Promise.resolve(row);
   }
 

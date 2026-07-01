@@ -214,6 +214,101 @@ describe('AuthFlowsService.signup — email dedup canonicalization (security fix
     expect(err).toBeInstanceOf(AuthFlowError);
     expect((err as AuthFlowError).code).toBe('email_already_registered');
   });
+
+  // ── REVERSE-ordering regression tests (2026-07-01 fix) ──────────────
+  //
+  // The original 2026-06-30 fix only re-canonicalized the INCOMING signup
+  // email and looked it up against the literal accounts.email column, via
+  // `if (canonicalEmail !== email) findAccountByEmail(canonicalEmail)`.
+  // That ONLY catches the ordering where the bare/canonical address was
+  // registered FIRST and a variant signs up second — because the second
+  // lookup searches for the LITERAL canonical string in the email column,
+  // which is only present if that exact string was what got stored.
+  //
+  // The realistic abuse ordering is the opposite: a variant registers
+  // FIRST (e.g. attacker+1@gmail.com — note this is already its OWN
+  // canonical form once its +tag is stripped, i.e. canonicalizing it
+  // yields 'attacker@gmail.com', a string that was NEVER stored), then a
+  // second variant or the bare address signs up — sailing through
+  // completely untouched under the old logic. These tests pin that this
+  // ordering is now ALSO rejected (via accounts.canonical_email +
+  // findAccountByCanonicalEmail, migration 0096).
+
+  it('REVERSE ORDER — rejects the bare address when a Gmail +tag variant was registered FIRST (attacker+1@gmail.com exists → attacker@gmail.com blocked)', async () => {
+    const { service } = makeDirectService();
+    await service.signup({
+      email: 'attacker+1@gmail.com',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+
+    const err = await service
+      .signup({
+        email: 'attacker@gmail.com',
+        password: 'correct horse battery staple',
+        requestedFromIp: null,
+      })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AuthFlowError);
+    expect((err as AuthFlowError).code).toBe('email_already_registered');
+  });
+
+  it('REVERSE ORDER — rejects a SECOND, DIFFERENT +tag variant when a first +tag variant was registered FIRST and neither is the bare canonical form (attacker+1@gmail.com exists → attacker+2@gmail.com blocked) — the realistic abuse ordering', async () => {
+    const { service } = makeDirectService();
+    await service.signup({
+      email: 'attacker+1@gmail.com',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+
+    const err = await service
+      .signup({
+        email: 'attacker+2@gmail.com',
+        password: 'correct horse battery staple',
+        requestedFromIp: null,
+      })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AuthFlowError);
+    expect((err as AuthFlowError).code).toBe('email_already_registered');
+  });
+
+  it('REVERSE ORDER — rejects the bare address when a Gmail dot-variant was registered FIRST (a.ttacker@gmail.com exists → attacker@gmail.com blocked)', async () => {
+    const { service } = makeDirectService();
+    await service.signup({
+      email: 'a.ttacker@gmail.com',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+
+    const err = await service
+      .signup({
+        email: 'attacker@gmail.com',
+        password: 'correct horse battery staple',
+        requestedFromIp: null,
+      })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AuthFlowError);
+    expect((err as AuthFlowError).code).toBe('email_already_registered');
+  });
+
+  it('REVERSE ORDER — rejects a Gmail dot-variant when a DIFFERENT dot-variant was registered FIRST, neither is the bare form (a.ttacker@gmail.com exists → att.acker@gmail.com blocked)', async () => {
+    const { service } = makeDirectService();
+    await service.signup({
+      email: 'a.ttacker@gmail.com',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+
+    const err = await service
+      .signup({
+        email: 'att.acker@gmail.com',
+        password: 'correct horse battery staple',
+        requestedFromIp: null,
+      })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AuthFlowError);
+    expect((err as AuthFlowError).code).toBe('email_already_registered');
+  });
 });
 
 describe('POST /v1/auth/verify-email', () => {

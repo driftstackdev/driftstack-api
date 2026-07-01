@@ -13,6 +13,7 @@ import type {
   AuthFlowsRepo,
   WebSessionRow,
 } from '../services/auth-flows.js';
+import { canonicalizeEmailForDedup } from '../services/auth-flows.js';
 import type { Database } from './client.js';
 import {
   accounts,
@@ -85,6 +86,21 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
     return row ? toAccountRow(row) : null;
   }
 
+  // 2026-07-01 security fix — looks up by the accounts_canonical_email_unique
+  // index (migration 0096) instead of the literal accounts_email_unique one,
+  // so a signup collides with ANY existing account whose Gmail dot/+tag
+  // canonical form matches — regardless of which literal variant was stored
+  // first. Caller is expected to pass an already-canonicalized value (see
+  // canonicalizeEmailForDedup).
+  async findAccountByCanonicalEmail(canonicalEmail: string): Promise<AuthFlowAccountRow | null> {
+    const [row] = await this.database.db
+      .select()
+      .from(accounts)
+      .where(eq(accounts.canonicalEmail, canonicalEmail))
+      .limit(1);
+    return row ? toAccountRow(row) : null;
+  }
+
   async findAccountById(id: string): Promise<AuthFlowAccountRow | null> {
     const [row] = await this.database.db
       .select()
@@ -116,6 +132,13 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
         ...(args.bundledLlmMonthlyCapUsdCents !== undefined
           ? { bundledLlmMonthlyCapUsdCents: args.bundledLlmMonthlyCapUsdCents }
           : {}),
+        // 2026-07-01 security fix — computed from the SAME
+        // trim+lowercase normalization every account-creation caller
+        // uses (password signup, OAuth IDP signup), not a separately-
+        // passed argument, so every row's canonical form is always in
+        // lockstep with its literal email. See migration 0096 +
+        // canonicalizeEmailForDedup.
+        canonicalEmail: canonicalizeEmailForDedup(args.email.trim().toLowerCase()),
       })
       .returning();
     if (!row) throw new Error('createAccount: insert returned no row');

@@ -86,6 +86,19 @@ export type AuthFlowKind = 'email_verify' | 'magic_link' | 'password_reset';
 export interface AuthFlowsRepo {
   /** Look up account by canonical (lowercased) email; null if absent. */
   findAccountByEmail(email: string): Promise<AuthFlowAccountRow | null>;
+  /**
+   * 2026-07-01 security fix — look up account by its DEDUP-canonical
+   * email (see `canonicalizeEmailForDedup` below), backed by the
+   * `accounts.canonical_email` unique index. This is what actually
+   * closes the Gmail dot/+tag alias-abuse gap: `createAccount` stores
+   * every account's canonical form at insert time (regardless of which
+   * literal variant the customer typed), so this single lookup finds a
+   * collision REGARDLESS of which literal variant was registered
+   * first — the earlier per-request re-canonicalize-and-look-up-by-
+   * literal-email approach only caught the "canonical form registered
+   * first" ordering. Null if no account's canonical form matches.
+   */
+  findAccountByCanonicalEmail(canonicalEmail: string): Promise<AuthFlowAccountRow | null>;
   /** Look up account by id; null if absent. */
   findAccountById(id: string): Promise<AuthFlowAccountRow | null>;
   /** Create a new account + return its row. Caller has already validated uniqueness. */
@@ -215,7 +228,8 @@ export class AuthFlowError extends Error {
 
 /**
  * Signup-time email dedup canonicalization (security hardening,
- * 2026-06-30). Two normalizations, applied to the local part only:
+ * 2026-06-30; storage-backed 2026-07-01). Two normalizations, applied
+ * to the local part only:
  *
  *   1. `+tag` subaddressing is stripped for EVERY domain — a
  *      universal Internet convention (RFC 5233), so
@@ -227,12 +241,17 @@ export class AuthFlowError extends Error {
  *      significant in the local part for other providers, so this
  *      must NOT generalize to other domains.
  *
- * Used ONLY as an additional signup-time duplicate-account pre-check
- * (see `signup()` below) — it never changes what's stored, displayed,
- * or emailed; the account row always keeps the customer's literal
- * entered address.
+ * The result is stored verbatim in `accounts.canonical_email` (unique-
+ * indexed) at account-creation time — see `AuthFlowsRepo.createAccount`
+ * — and is what `findAccountByCanonicalEmail` looks up against for the
+ * signup dedup pre-check below. It never changes what's stored,
+ * displayed, or emailed as the account's real address; the account
+ * row's `email` column always keeps the customer's literal entered
+ * address. Exported so both repo implementations (Drizzle + the
+ * in-memory test fixture) compute it identically — never re-derive
+ * this logic elsewhere.
  */
-function canonicalizeEmailForDedup(email: string): string {
+export function canonicalizeEmailForDedup(email: string): string {
   const at = email.lastIndexOf('@');
   if (at === -1) return email;
   const localPart = email.slice(0, at);
@@ -541,22 +560,34 @@ export class AuthFlowsService {
       throw new AuthFlowError('email_already_registered');
     }
 
-    // 2026-06-30 security fix — Gmail dot/+tag dedup pre-check. A
-    // signup using a `+tag` suffix or (Gmail-only) dot-variant of an
-    // address that's ALREADY registered lands in the exact same real
-    // inbox as the existing account, so letting it through would let
-    // one mailbox mint unlimited "distinct" free-tier accounts. Only
-    // issue the extra lookup when canonicalizing actually changed
-    // something — skips a redundant identical query for the common
-    // already-canonical-address case. This is an ADDITIONAL, STRICTER
-    // pre-check ahead of the `accounts_email_unique` DB constraint
-    // below; it doesn't relax or replace that constraint.
+    // 2026-06-30 security fix, made race-free + order-independent
+    // 2026-07-01 — Gmail dot/+tag dedup pre-check. A signup using a
+    // `+tag` suffix or (Gmail-only) dot-variant of an address that's
+    // ALREADY registered lands in the exact same real inbox as the
+    // existing account, so letting it through would let one mailbox
+    // mint unlimited "distinct" free-tier accounts.
+    //
+    // This MUST look up by canonical form UNCONDITIONALLY (not only
+    // when `canonicalEmail !== email`) and MUST hit the dedicated
+    // `accounts.canonical_email` unique index (via
+    // `findAccountByCanonicalEmail`), not the literal `email` column —
+    // otherwise it only catches the "canonical form registered first"
+    // ordering. The realistic abuse ordering is the opposite: a
+    // variant registers FIRST (e.g. attacker+1@gmail.com, which is
+    // ALSO its own canonical form, so the `canonicalEmail !== email`
+    // gate used to skip the extra lookup entirely for it), then a
+    // second variant or the bare address signs up — and a literal-
+    // column lookup against the first variant's literal email would
+    // never match. Every account's canonical form is stored at
+    // creation time (`AuthFlowsRepo.createAccount`), so this single
+    // lookup catches a collision regardless of registration order —
+    // this is an ADDITIONAL, STRICTER pre-check ahead of the
+    // `accounts_email_unique` DB constraint below; it doesn't relax or
+    // replace that constraint.
     const canonicalEmail = canonicalizeEmailForDedup(email);
-    if (canonicalEmail !== email) {
-      const canonicalExisting = await this.repo.findAccountByEmail(canonicalEmail);
-      if (canonicalExisting !== null) {
-        throw new AuthFlowError('email_already_registered');
-      }
+    const canonicalExisting = await this.repo.findAccountByCanonicalEmail(canonicalEmail);
+    if (canonicalExisting !== null) {
+      throw new AuthFlowError('email_already_registered');
     }
 
     const passwordHash = await hashPassword(args.password);
@@ -576,6 +607,16 @@ export class AuthFlowsService {
       // email_already_registered (409) the pre-check throws — not an
       // uncaught 500. Any other error re-throws untouched.
       if (isUniqueViolation(err, 'accounts_email_unique')) {
+        throw new AuthFlowError('email_already_registered');
+      }
+      // 2026-07-01 — the canonical-email sibling of the race above: two
+      // concurrent signups for DIFFERENT literal alias variants of the
+      // same mailbox (e.g. attacker+1@gmail.com / attacker+2@gmail.com)
+      // both pass the findAccountByCanonicalEmail pre-check above before
+      // either commits, then both insert; accounts_canonical_email_unique
+      // lets one win and raises 23505 on the loser. Same translation as
+      // the literal-email race — not an uncaught 500.
+      if (isUniqueViolation(err, 'accounts_canonical_email_unique')) {
         throw new AuthFlowError('email_already_registered');
       }
       throw err;

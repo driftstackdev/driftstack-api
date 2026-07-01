@@ -222,6 +222,29 @@ export const accounts = pgTable(
       .primaryKey()
       .default(sql`gen_random_uuid()`),
     email: text('email').notNull(),
+    // 2026-07-01 security fix (migration 0096) — the DEDUP-canonical
+    // form of `email` (see canonicalizeEmailForDedup in
+    // services/auth-flows.ts): `+tag` subaddressing stripped for every
+    // domain + dots ALSO stripped for gmail.com/googlemail.com only.
+    // Computed + stored at INSERT time by both real account-creation
+    // paths that go through AuthFlowsRepo.createAccount (password
+    // signup + OAuth IDP signup); unique-indexed below (when set) so
+    // signup's dedup pre-check is a single race-free lookup that finds
+    // a Gmail dot/+tag alias collision regardless of which literal
+    // variant was registered first (the earlier per-request
+    // literal-column re-lookup only caught "canonical form registered
+    // first"). Never displayed/emailed — `email` stays the customer's
+    // literal entered address.
+    //
+    // Nullable (not NOT NULL): a couple of narrow dev/test-only direct-
+    // insert paths (db/seed.ts's local dev seed; tests/e2e/helpers/
+    // seed.ts's e2e account fixture) insert `accounts` rows without
+    // going through AuthFlowsRepo.createAccount and so never populate
+    // this column — those rows simply don't participate in canonical-
+    // email dedup (harmless: they're not customer signups). See the
+    // accounts_slug_unique precedent below for the same nullable-
+    // unique-when-set pattern.
+    canonicalEmail: text('canonical_email'),
     name: text('name'),
     // scrypt-kdf encoded hash of the account password. Nullable: accounts
     // created via magic-link-only flow have no password set until the user
@@ -357,6 +380,11 @@ export const accounts = pgTable(
   },
   (t) => [
     uniqueIndex('accounts_email_unique').on(t.email),
+    // 2026-07-01 (migration 0096) — the real race-free backstop behind
+    // the signup canonical-email dedup pre-check; see canonicalEmail
+    // column comment above. Unique-when-set, same NULLs-are-distinct
+    // pattern as accounts_slug_unique just below.
+    uniqueIndex('accounts_canonical_email_unique').on(t.canonicalEmail),
     // V-298a — unique-when-set. Postgres treats NULLs as distinct in
     // unique indexes by default, so multiple unset slugs coexist;
     // the constraint only fires once a slug is set.
