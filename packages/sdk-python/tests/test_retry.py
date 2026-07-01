@@ -1,4 +1,13 @@
-"""Retry policy unit tests. Sync only — async path uses identical logic."""
+"""Retry policy unit tests.
+
+Mostly sync — the async path (`with_retry_async`) shares the same
+`_backoff_delay_ms` computation, so most cases only need sync coverage.
+A couple of cases (e.g. negative Retry-After) get an explicit async
+counterpart too: `time.sleep(-N)` and `asyncio.sleep(-N)` differ in
+behaviour (the former raises, the latter silently no-ops), so a fix that
+only touches the shared delay computation is worth locking in on both
+call sites.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +22,7 @@ from driftstack.errors import (
     RateLimitError,
     TransportError,
 )
-from driftstack.retry import RetryConfig, with_retry
+from driftstack.retry import RetryConfig, with_retry, with_retry_async
 
 
 def test_returns_immediately_when_fn_succeeds() -> None:
@@ -110,6 +119,49 @@ def test_rate_limit_honours_retry_after_header() -> None:
         assert with_retry(fn, RetryConfig(max_retries=2)) == "ok"
     # The sleep was 2 seconds (per Retry-After), not exponential math.
     assert sleeps == [2.0]
+
+
+def test_rate_limit_negative_retry_after_does_not_crash_sync_loop() -> None:
+    """A malformed/negative Retry-After (bad server header, or a
+    problem-body `retry_after_seconds` that slipped through negative)
+    must be floored at 0, not passed straight to `time.sleep()` — a
+    negative sleep duration raises `ValueError`, which would crash the
+    retry loop with an unrelated error instead of just retrying sooner."""
+    sleeps: list[float] = []
+
+    def fn() -> str:
+        if len(sleeps) == 0:
+            raise RateLimitError("slow", retry_after_seconds=-5, status=429)
+        return "ok"
+
+    def fake_sleep(secs: float) -> None:
+        sleeps.append(secs)
+
+    with patch("time.sleep", side_effect=fake_sleep):
+        assert with_retry(fn, RetryConfig(max_retries=2)) == "ok"
+    # Floored at 0 — never a negative sleep.
+    assert sleeps == [0.0]
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_negative_retry_after_does_not_crash_async_loop() -> None:
+    """Async mirror of the sync test above. Before the fix, negative
+    `retry_after_seconds` silently no-op'd `asyncio.sleep()` instead of
+    raising — this test locks in the SAME floor-at-0 behaviour on both
+    paths (rather than one path masking the bug the other would crash on)."""
+    sleeps: list[float] = []
+
+    async def fn() -> str:
+        if len(sleeps) == 0:
+            raise RateLimitError("slow", retry_after_seconds=-5, status=429)
+        return "ok"
+
+    async def fake_sleep(secs: float) -> None:
+        sleeps.append(secs)
+
+    with patch("asyncio.sleep", side_effect=fake_sleep):
+        assert await with_retry_async(fn, RetryConfig(max_retries=2)) == "ok"
+    assert sleeps == [0.0]
 
 
 def test_propagates_unexpected_exceptions_unchanged() -> None:

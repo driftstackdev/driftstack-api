@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 from pydantic import BaseModel
 
-from driftstack.http import AsyncHttpClient, HttpClient
+from driftstack.http import AsyncHttpClient, HttpClient, parse_model
 
 TeamRole = Literal["member", "admin"]
 
@@ -66,15 +66,15 @@ class TeamResource:
 
     def list_members(self) -> TeamMembersList:
         data = self._http.request("GET", "/v1/team/members")
-        return TeamMembersList.model_validate(data)
+        return parse_model(TeamMembersList, data)
 
     def list_invites(self) -> TeamInvitesList:
         data = self._http.request("GET", "/v1/team/invites")
-        return TeamInvitesList.model_validate(data)
+        return parse_model(TeamInvitesList, data)
 
     def accept_invite(self, token: str) -> AcceptInviteResponse:
         data = self._http.request("POST", "/v1/team/invites/accept", json_body={"token": token})
-        return AcceptInviteResponse.model_validate(data)
+        return parse_model(AcceptInviteResponse, data)
 
     def remove_member(self, membership_id: str) -> None:
         self._http.request("DELETE", f"/v1/team/members/{quote(membership_id, safe='')}")
@@ -95,17 +95,17 @@ class AsyncTeamResource:
 
     async def list_members(self) -> TeamMembersList:
         data = await self._http.request("GET", "/v1/team/members")
-        return TeamMembersList.model_validate(data)
+        return parse_model(TeamMembersList, data)
 
     async def list_invites(self) -> TeamInvitesList:
         data = await self._http.request("GET", "/v1/team/invites")
-        return TeamInvitesList.model_validate(data)
+        return parse_model(TeamInvitesList, data)
 
     async def accept_invite(self, token: str) -> AcceptInviteResponse:
         data = await self._http.request(
             "POST", "/v1/team/invites/accept", json_body={"token": token}
         )
-        return AcceptInviteResponse.model_validate(data)
+        return parse_model(AcceptInviteResponse, data)
 
     async def remove_member(self, membership_id: str) -> None:
         await self._http.request("DELETE", f"/v1/team/members/{quote(membership_id, safe='')}")

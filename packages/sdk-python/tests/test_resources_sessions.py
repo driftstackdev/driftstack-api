@@ -8,6 +8,7 @@ that breaks either side trips here before reaching real customers.
 from __future__ import annotations
 
 import httpx
+import pydantic
 import pytest
 import respx
 
@@ -21,6 +22,7 @@ from driftstack._generated.models import (
     SessionState,
     WaitResponse,
 )
+from driftstack.errors import DriftstackError, TransportError
 from driftstack.resources.sessions import SessionsListPage
 
 API_KEY = "ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -96,6 +98,23 @@ def test_sync_get_session() -> None:
         with Driftstack(api_key=API_KEY, base_url=BASE) as client:
             result = client.sessions.get("ses_xx")
         assert isinstance(result, Session)
+
+
+def test_sync_get_session_schema_mismatch_raises_transport_error() -> None:
+    """A 2xx body that doesn't match the generated ``Session`` schema (a
+    stale codegen / server contract drift) must surface as a typed
+    :class:`TransportError` — NOT a raw ``pydantic.ValidationError`` escaping
+    past the SDK's documented "catch DriftstackError" contract."""
+    malformed = {"id": "ses_xx"}  # missing every other required Session field
+    with respx.mock(base_url=BASE) as mock:
+        mock.get("/v1/sessions/ses_xx").mock(return_value=httpx.Response(200, json=malformed))
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            with pytest.raises(TransportError) as exc_info:
+                client.sessions.get("ses_xx")
+    # It's catchable via the SDK's own base class...
+    assert isinstance(exc_info.value, DriftstackError)
+    # ...and the original pydantic error is preserved for diagnosis.
+    assert isinstance(exc_info.value.__cause__, pydantic.ValidationError)
 
 
 def test_sync_navigate() -> None:
@@ -233,3 +252,17 @@ async def test_async_list_returns_paginated_page() -> None:
         assert len(result.data) == 2
         assert result.has_more is True
         assert result.next_cursor == "abc"
+
+
+@pytest.mark.asyncio
+async def test_async_get_session_schema_mismatch_raises_transport_error() -> None:
+    """Async mirror of the sync schema-mismatch test above — the async
+    client must wrap the escaping ``pydantic.ValidationError`` the same way."""
+    malformed = {"id": "ses_xx"}
+    with respx.mock(base_url=BASE) as mock:
+        mock.get("/v1/sessions/ses_xx").mock(return_value=httpx.Response(200, json=malformed))
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            with pytest.raises(TransportError) as exc_info:
+                await client.sessions.get("ses_xx")
+    assert isinstance(exc_info.value, DriftstackError)
+    assert isinstance(exc_info.value.__cause__, pydantic.ValidationError)

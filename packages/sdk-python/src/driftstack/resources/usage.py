@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from driftstack._generated.models import UsagePeriodSummary
-from driftstack.http import AsyncHttpClient, HttpClient
+from driftstack.http import AsyncHttpClient, HttpClient, parse_model
 
 
 class UsageResource:
@@ -18,7 +18,7 @@ class UsageResource:
     def current_period(self) -> UsagePeriodSummary:
         """Current calendar-month UTC totals + tier quotas."""
         data = self._http.request("GET", "/v1/usage")
-        return UsagePeriodSummary.model_validate(data)
+        return parse_model(UsagePeriodSummary, data)
 
     def series(self, *, days: int | None = None) -> dict[str, Any]:
         """V-452 — daily-bucketed usage time series. ``days`` is 1-90;
@@ -38,7 +38,7 @@ class AsyncUsageResource:
 
     async def current_period(self) -> UsagePeriodSummary:
         data = await self._http.request("GET", "/v1/usage")
-        return UsagePeriodSummary.model_validate(data)
+        return parse_model(UsagePeriodSummary, data)
 
     async def series(self, *, days: int | None = None) -> dict[str, Any]:
         path = "/v1/usage/series"

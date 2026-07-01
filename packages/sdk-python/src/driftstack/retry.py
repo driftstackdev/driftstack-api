@@ -52,7 +52,12 @@ def _backoff_delay_ms(attempt: int, cfg: RetryConfig, retry_after_seconds: int |
     and the next exponential value).
     """
     if retry_after_seconds is not None:
-        return min(retry_after_seconds * 1000, cfg.max_delay_ms)
+        # Floor at 0 — a malformed/negative Retry-After (header parse or
+        # problem-body field) must never turn into a negative sleep. The
+        # sync path's `time.sleep(-N)` raises ValueError; the async path's
+        # `asyncio.sleep(-N)` silently no-ops — clamp here so both behave
+        # the same (immediate retry), matching the TS/Go SDKs.
+        return max(0, min(retry_after_seconds * 1000, cfg.max_delay_ms))
     capped = min(cfg.initial_delay_ms * (cfg.backoff_multiplier**attempt), cfg.max_delay_ms)
     return int(random.uniform(0, capped))
 

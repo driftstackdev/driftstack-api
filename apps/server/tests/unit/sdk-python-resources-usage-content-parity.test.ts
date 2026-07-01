@@ -49,7 +49,9 @@ describe('W580.B packages/sdk-python/src/driftstack/resources/usage.py content p
     expect(body).toMatch(/^from typing import Any$/m);
     expect(body).toMatch(/^from urllib\.parse import urlencode$/m);
     expect(body).toMatch(/^from driftstack\._generated\.models import UsagePeriodSummary$/m);
-    expect(body).toMatch(/^from driftstack\.http import AsyncHttpClient, HttpClient$/m);
+    expect(body).toMatch(
+      /^from driftstack\.http import AsyncHttpClient, HttpClient, parse_model$/m,
+    );
   });
 
   it('UsageResource sync class with HttpClient injection', () => {
@@ -62,7 +64,7 @@ describe('W580.B packages/sdk-python/src/driftstack/resources/usage.py content p
 
   it('current_period (sync) — GET /v1/usage + pydantic-validates the response via UsagePeriodSummary.model_validate(data). Drift to returning bare dict (or to a different pydantic class) would break customers using attribute access (`summary.tier`) instead of dict-key access (`summary["tier"]`).', () => {
     expect(body).toMatch(
-      /def current_period\(self\) -> UsagePeriodSummary:\s*\n\s*"""Current calendar-month UTC totals \+ tier quotas\."""\s*\n\s*data = self\._http\.request\("GET", "\/v1\/usage"\)\s*\n\s*return UsagePeriodSummary\.model_validate\(data\)/,
+      /def current_period\(self\) -> UsagePeriodSummary:\s*\n\s*"""Current calendar-month UTC totals \+ tier quotas\."""\s*\n\s*data = self\._http\.request\("GET", "\/v1\/usage"\)\s*\n\s*return parse_model\(UsagePeriodSummary, data\)/,
     );
   });
 
@@ -85,7 +87,7 @@ describe('W580.B packages/sdk-python/src/driftstack/resources/usage.py content p
 
   it('async current_period — awaited GET twin. CRITICAL: UsagePeriodSummary.model_validate stays SYNCHRONOUS even in the async path (pure CPU pydantic validation; only the HTTP request is awaited). Drift to `await UsagePeriodSummary.model_validate(...)` would not even compile, but a drift to a different validation order (validate-before-await) would break test fakes.', () => {
     expect(body).toMatch(
-      /async def current_period\(self\) -> UsagePeriodSummary:\s*\n\s*data = await self\._http\.request\("GET", "\/v1\/usage"\)\s*\n\s*return UsagePeriodSummary\.model_validate\(data\)/,
+      /async def current_period\(self\) -> UsagePeriodSummary:\s*\n\s*data = await self\._http\.request\("GET", "\/v1\/usage"\)\s*\n\s*return parse_model\(UsagePeriodSummary, data\)/,
     );
   });
 

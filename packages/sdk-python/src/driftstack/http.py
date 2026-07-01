@@ -17,9 +17,11 @@ server's error envelope updates both paths in one place.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, TypeVar
 
 import httpx
+import pydantic
+from pydantic import BaseModel
 
 from driftstack._version import __version__
 from driftstack.errors import (
@@ -38,6 +40,8 @@ from driftstack.retry import RetryConfig, with_retry, with_retry_async
 
 DEFAULT_TIMEOUT_S = 30.0
 USER_AGENT = f"driftstack-sdk-python/{__version__}"
+
+_ModelT = TypeVar("_ModelT", bound=BaseModel)
 
 # Headroom added on top of a body-declared long-running operation timeout when
 # deriving the per-request transport timeout — covers network round-trip + the
@@ -446,6 +450,31 @@ class AsyncHttpClient:
 # ──────────────────────────────────────────────────────────────────────────
 # Shared response handling
 # ──────────────────────────────────────────────────────────────────────────
+
+
+def parse_model(model_cls: type[_ModelT], data: Any) -> _ModelT:
+    """Validate a decoded 2xx JSON response body into a generated model.
+
+    Every resource method calls this instead of a raw
+    ``Model.model_validate(data)`` so the SDK's documented contract holds:
+    "catch :class:`~driftstack.errors.DriftstackError` for any other typed
+    problem" (see the module docstring on :mod:`driftstack.errors`). Without
+    this chokepoint, a 2xx response that doesn't match the generated schema
+    (stale codegen, a server contract drift) would let a raw
+    ``pydantic.ValidationError`` escape uncaught, bypassing that contract.
+
+    Re-raises as :class:`TransportError` — a schema mismatch is a transport/
+    contract-level failure, not a server-declared problem — while chaining
+    the original ``ValidationError`` via ``from err`` so the root cause is
+    still inspectable (``err.__cause__``).
+    """
+    try:
+        return model_cls.model_validate(data)
+    except pydantic.ValidationError as err:
+        raise TransportError(
+            "response did not match expected schema",
+            status=None,
+        ) from err
 
 
 def _decode_or_raise(response: httpx.Response) -> Any:

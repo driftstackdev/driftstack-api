@@ -96,18 +96,18 @@ describe('W584.A packages/sdk-python/src/driftstack/resources/webhooks.py conten
     expect(body).toMatch(
       /data = self\._http\.request\("POST", "\/v1\/webhooks", json_body=coerce_body\(body\)\)/,
     );
-    expect(body).toMatch(/return CreateWebhookResponse\.model_validate\(data\)/);
+    expect(body).toMatch(/return parse_model\(CreateWebhookResponse, data\)/);
   });
 
   it("Sync list — GET /v1/webhooks returns WebhookEndpointList (no pagination). No params; no body; bearer-token scopes to the calling account so listings can never leak another account's endpoints.", () => {
     expect(body).toMatch(
-      /def list\(self\) -> WebhookEndpointList:\s*\n\s*data = self\._http\.request\("GET", "\/v1\/webhooks"\)\s*\n\s*return WebhookEndpointList\.model_validate\(data\)/,
+      /def list\(self\) -> WebhookEndpointList:\s*\n\s*data = self\._http\.request\("GET", "\/v1\/webhooks"\)\s*\n\s*return parse_model\(WebhookEndpointList, data\)/,
     );
   });
 
   it('Sync get — GET /v1/webhooks/{quoted_id} returns single WebhookEndpoint. Single-line implementation; the URL-escape is the only complexity.', () => {
     expect(body).toMatch(
-      /def get\(self, webhook_id: str\) -> WebhookEndpoint:\s*\n\s*data = self\._http\.request\("GET", _webhook_path\(webhook_id\)\)\s*\n\s*return WebhookEndpoint\.model_validate\(data\)/,
+      /def get\(self, webhook_id: str\) -> WebhookEndpoint:\s*\n\s*data = self\._http\.request\("GET", _webhook_path\(webhook_id\)\)\s*\n\s*return parse_model\(WebhookEndpoint, data\)/,
     );
   });
 
@@ -142,7 +142,7 @@ describe('W584.A packages/sdk-python/src/driftstack/resources/webhooks.py conten
     expect(body).toMatch(
       /data = self\._http\.request\(\s*\n\s*"POST",\s*\n\s*f"\/v1\/webhook-deliveries\/\{quote\(delivery_id, safe=''\)\}\/replay",\s*\n\s*json_body=\{\},\s*\n\s*\)/,
     );
-    expect(body).toMatch(/return WebhookDelivery\.model_validate\(data\)/);
+    expect(body).toMatch(/return parse_model\(WebhookDelivery, data\)/);
   });
 
   it('Sync rotate_secret — V-359 POST /v1/webhooks/{id}/rotate-secret. CRITICAL grace-window claim, each line pinned: fresh plaintext ONCE + 24h grace + grace_expires_at field + Driftstack-dual-signs-during-window + customer rolls verifier infra inside the window. Drift to 12h or 48h or dropping the dual-sign-during-grace would silently change rotation semantics.', () => {
@@ -175,7 +175,7 @@ describe('W584.A packages/sdk-python/src/driftstack/resources/webhooks.py conten
     expect(body).toMatch(
       /data = self\._http\.request\("PATCH", _webhook_path\(webhook_id\), json_body=coerce_body\(body\)\)/,
     );
-    expect(body).toMatch(/return WebhookEndpoint\.model_validate\(data\)/);
+    expect(body).toMatch(/return parse_model\(WebhookEndpoint, data\)/);
   });
 
   it('AsyncWebhooksResource — class declaration + __init__(http: AsyncHttpClient) + 10-verb mirror of sync surface. Every non-trivial verb (replay/rotate/send_test/update) carries a :meth: cross-ref docstring back to its sync twin so users searching for the sync semantics can find the async variant.', () => {

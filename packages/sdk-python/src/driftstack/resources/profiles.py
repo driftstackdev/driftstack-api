@@ -91,8 +91,17 @@ class ProfilesResource:
     def launch(self, profile_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         """2026-05-20 — antidetect-browser-style one-shot launch. Creates a
         session bound to this profile (archetype + metadata inherited).
-        ``body`` accepts optional ``proxy`` + ``label`` overrides; everything
-        else flows from the profile. Returns the freshly-minted Session.
+        ``body`` accepts an optional ``label`` override; everything else
+        flows from the profile. Returns the freshly-minted Session.
+
+        Per-session customer-configurable egress is NOT available on this
+        resource yet -- ``/v1/sessions``'s execution backend has no
+        driver-layer proxy plumbing today, so a ``proxy`` key in ``body``
+        would silently do nothing (the server drops it after a presence
+        check). If you need customer-controlled egress today, use
+        :meth:`AgentSessionsResource.create` with ``proxy_id`` instead --
+        that resource dispatches to the real device fleet and routes
+        traffic through one of your saved account proxies.
         """
         return self._http.request(
             "POST",

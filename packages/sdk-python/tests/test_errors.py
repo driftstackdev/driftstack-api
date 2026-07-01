@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pydantic
 import pytest
 
 from driftstack import is_retryable
@@ -35,7 +36,7 @@ from driftstack.errors import (
     TransportError,
     ValidationError,
 )
-from driftstack.http import _error_from_response_data
+from driftstack.http import _error_from_response_data, parse_model
 
 
 def test_subclass_relationships() -> None:
@@ -377,3 +378,41 @@ def test_is_retryable_false_for_non_driftstack_values() -> None:
     assert is_retryable("string") is False
     assert is_retryable(None) is False
     assert is_retryable(42) is False
+
+
+# ── parse_model — the resource-layer schema-validation chokepoint ─────────
+#
+# Every ``resources/*.py`` method calls ``parse_model`` instead of a raw
+# ``Model.model_validate(data)`` so a 2xx response that doesn't match the
+# generated schema raises a typed DriftstackError instead of letting a
+# bare ``pydantic.ValidationError`` escape past the SDK's documented
+# "catch DriftstackError for any other typed problem" contract.
+
+
+class _Widget(pydantic.BaseModel):
+    name: str
+    count: int
+
+
+def test_parse_model_returns_validated_instance_on_success() -> None:
+    result = parse_model(_Widget, {"name": "gizmo", "count": 3})
+    assert isinstance(result, _Widget)
+    assert result.name == "gizmo"
+    assert result.count == 3
+
+
+def test_parse_model_wraps_validation_error_as_transport_error() -> None:
+    """A schema mismatch must raise TransportError (catchable via
+    DriftstackError), NOT let pydantic.ValidationError escape raw."""
+    with pytest.raises(TransportError) as exc_info:
+        parse_model(_Widget, {"name": "gizmo"})  # missing required `count`
+    assert isinstance(exc_info.value, DriftstackError)
+    assert "schema" in exc_info.value.message
+
+
+def test_parse_model_chains_original_validation_error_as_cause() -> None:
+    """The raw pydantic.ValidationError must still be inspectable via
+    ``__cause__`` (raised with ``from err``) so diagnosis isn't lost."""
+    with pytest.raises(TransportError) as exc_info:
+        parse_model(_Widget, {"name": "gizmo"})
+    assert isinstance(exc_info.value.__cause__, pydantic.ValidationError)

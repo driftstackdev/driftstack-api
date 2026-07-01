@@ -50,7 +50,9 @@ describe('W581.A packages/sdk-python/src/driftstack/resources/api_keys.py conten
     expect(body).toMatch(
       /^from driftstack\._generated\.models import ApiKey, CreateApiKeyRequest, CreateApiKeyResponse$/m,
     );
-    expect(body).toMatch(/^from driftstack\.http import AsyncHttpClient, HttpClient$/m);
+    expect(body).toMatch(
+      /^from driftstack\.http import AsyncHttpClient, HttpClient, parse_model$/m,
+    );
     expect(body).toMatch(/^from driftstack\.resources\._common import coerce_body$/m);
   });
 
@@ -88,7 +90,7 @@ describe('W581.A packages/sdk-python/src/driftstack/resources/api_keys.py conten
       /retrieved later\. Requires the ``account_owner`` scope on the calling key\./,
     );
     expect(body).toMatch(
-      /data = self\._http\.request\("POST", "\/v1\/api-keys", json_body=coerce_body\(body\)\)\s*\n\s*return CreateApiKeyResponse\.model_validate\(data\)/,
+      /data = self\._http\.request\("POST", "\/v1\/api-keys", json_body=coerce_body\(body\)\)\s*\n\s*return parse_model\(CreateApiKeyResponse, data\)/,
     );
   });
 
@@ -98,7 +100,7 @@ describe('W581.A packages/sdk-python/src/driftstack/resources/api_keys.py conten
       /"""List API keys for the current account\. Plaintext never included\."""/,
     );
     expect(body).toMatch(
-      /data = self\._http\.request\("GET", "\/v1\/api-keys"\)\s*\n\s*return ApiKeyList\.model_validate\(data\)/,
+      /data = self\._http\.request\("GET", "\/v1\/api-keys"\)\s*\n\s*return parse_model\(ApiKeyList, data\)/,
     );
   });
 
@@ -124,7 +126,7 @@ describe('W581.A packages/sdk-python/src/driftstack/resources/api_keys.py conten
       /body: dict\[str, Any\] = \{\}\s*\n\s*if name is not None:\s*\n\s*body\["name"\] = name/,
     );
     expect(body).toMatch(
-      /data = self\._http\.request\(\s*\n\s*"POST",\s*\n\s*f"\/v1\/api-keys\/\{quote\(key_id, safe=''\)\}\/rotate",\s*\n\s*json_body=body,\s*\n\s*\)\s*\n\s*return RotateApiKeyResponse\.model_validate\(data\)/,
+      /data = self\._http\.request\(\s*\n\s*"POST",\s*\n\s*f"\/v1\/api-keys\/\{quote\(key_id, safe=''\)\}\/rotate",\s*\n\s*json_body=body,\s*\n\s*\)\s*\n\s*return parse_model\(RotateApiKeyResponse, data\)/,
     );
   });
 
@@ -138,10 +140,10 @@ describe('W581.A packages/sdk-python/src/driftstack/resources/api_keys.py conten
 
   it('async create + list + revoke — awaited verb twins. Same wire paths + same coerce_body wrapping + same quote-escaped key_id + same model_validate at boundary. async revoke returns None (matches sync).', () => {
     expect(body).toMatch(
-      /async def create\(self, body: CreateApiKeyRequest \| dict\[str, Any\]\) -> CreateApiKeyResponse:\s*\n\s*data = await self\._http\.request\("POST", "\/v1\/api-keys", json_body=coerce_body\(body\)\)\s*\n\s*return CreateApiKeyResponse\.model_validate\(data\)/,
+      /async def create\(self, body: CreateApiKeyRequest \| dict\[str, Any\]\) -> CreateApiKeyResponse:\s*\n\s*data = await self\._http\.request\("POST", "\/v1\/api-keys", json_body=coerce_body\(body\)\)\s*\n\s*return parse_model\(CreateApiKeyResponse, data\)/,
     );
     expect(body).toMatch(
-      /async def list\(self\) -> ApiKeyList:\s*\n\s*data = await self\._http\.request\("GET", "\/v1\/api-keys"\)\s*\n\s*return ApiKeyList\.model_validate\(data\)/,
+      /async def list\(self\) -> ApiKeyList:\s*\n\s*data = await self\._http\.request\("GET", "\/v1\/api-keys"\)\s*\n\s*return parse_model\(ApiKeyList, data\)/,
     );
     expect(body).toMatch(
       /async def revoke\(self, key_id: str\) -> None:\s*\n\s*await self\._http\.request\("DELETE", f"\/v1\/api-keys\/\{quote\(key_id, safe=''\)\}"\)/,
@@ -153,7 +155,7 @@ describe('W581.A packages/sdk-python/src/driftstack/resources/api_keys.py conten
       /async def rotate\(self, key_id: str, \*, name: str \| None = None\) -> RotateApiKeyResponse:\s*\n\s*"""V-296 — async rotate\. See :meth:`ApiKeysResource\.rotate`\."""/,
     );
     expect(body).toMatch(
-      /body: dict\[str, Any\] = \{\}\s*\n\s*if name is not None:\s*\n\s*body\["name"\] = name\s*\n\s*data = await self\._http\.request\(\s*\n\s*"POST",\s*\n\s*f"\/v1\/api-keys\/\{quote\(key_id, safe=''\)\}\/rotate",\s*\n\s*json_body=body,\s*\n\s*\)\s*\n\s*return RotateApiKeyResponse\.model_validate\(data\)/,
+      /body: dict\[str, Any\] = \{\}\s*\n\s*if name is not None:\s*\n\s*body\["name"\] = name\s*\n\s*data = await self\._http\.request\(\s*\n\s*"POST",\s*\n\s*f"\/v1\/api-keys\/\{quote\(key_id, safe=''\)\}\/rotate",\s*\n\s*json_body=body,\s*\n\s*\)\s*\n\s*return parse_model\(RotateApiKeyResponse, data\)/,
     );
   });
 });

@@ -93,13 +93,13 @@ describe('W583.B packages/sdk-python/src/driftstack/resources/sessions.py conten
 
   it('Sync create — POST /v1/sessions with `body=None` DEFAULT-OPTIONAL parameter + `coerce_body(body) or {}` substitution so the wire body is "{}" not "null" when callers write `client.sessions.create()` for the no-options case. Returns CreateSessionResponse.model_validate(data) — pydantic-validated.', () => {
     expect(body).toMatch(
-      /def create\(\s*\n\s*self, body: CreateSessionRequest \| dict\[str, Any\] \| None = None\s*\n\s*\) -> CreateSessionResponse:\s*\n\s*"""Create a new session\. Returns the new ``Session`` row\."""\s*\n\s*data = self\._http\.request\("POST", "\/v1\/sessions", json_body=coerce_body\(body\) or \{\}\)\s*\n\s*return CreateSessionResponse\.model_validate\(data\)/,
+      /def create\(\s*\n\s*self, body: CreateSessionRequest \| dict\[str, Any\] \| None = None\s*\n\s*\) -> CreateSessionResponse:\s*\n\s*"""Create a new session\. Returns the new ``Session`` row\."""\s*\n\s*data = self\._http\.request\("POST", "\/v1\/sessions", json_body=coerce_body\(body\) or \{\}\)\s*\n\s*return parse_model\(CreateSessionResponse, data\)/,
     );
   });
 
   it('Sync list — GET /v1/sessions with PaginationQuery → SessionsListPage. "newest first" ordering pinned in docstring (drift to oldest-first would silently invert pagination semantics and confuse callers who rely on cursor-walking the recent end).', () => {
     expect(body).toMatch(
-      /def list\(self, query: PaginationQuery \| dict\[str, Any\] \| None = None\) -> SessionsListPage:\s*\n\s*"""List sessions for the current account, newest first\."""\s*\n\s*data = self\._http\.request\("GET", "\/v1\/sessions", params=coerce_query\(query\)\)\s*\n\s*return SessionsListPage\.model_validate\(data\)/,
+      /def list\(self, query: PaginationQuery \| dict\[str, Any\] \| None = None\) -> SessionsListPage:\s*\n\s*"""List sessions for the current account, newest first\."""\s*\n\s*data = self\._http\.request\("GET", "\/v1\/sessions", params=coerce_query\(query\)\)\s*\n\s*return parse_model\(SessionsListPage, data\)/,
     );
   });
 
@@ -115,37 +115,37 @@ describe('W583.B packages/sdk-python/src/driftstack/resources/sessions.py conten
 
   it('Sync get — GET /v1/sessions/{quoted_id} returns single Session. Single-line implementation; URL-escape via _session_path is the only complexity.', () => {
     expect(body).toMatch(
-      /def get\(self, session_id: str\) -> Session:\s*\n\s*data = self\._http\.request\("GET", _session_path\(session_id\)\)\s*\n\s*return Session\.model_validate\(data\)/,
+      /def get\(self, session_id: str\) -> Session:\s*\n\s*data = self\._http\.request\("GET", _session_path\(session_id\)\)\s*\n\s*return parse_model\(Session, data\)/,
     );
   });
 
   it('Sync navigate — POST /v1/sessions/{id}/navigate with NavigateRequest body. First of the 4 workhorse action verbs (navigate/interact/wait/capture) — each takes a typed Request body and returns a typed Response. NavigateRequest carries the URL to load + optional wait conditions.', () => {
     expect(body).toMatch(
-      /def navigate\(self, session_id: str, body: NavigateRequest \| dict\[str, Any\]\) -> NavigateResponse:\s*\n\s*data = self\._http\.request\(\s*\n\s*"POST", _session_path\(session_id, "\/navigate"\), json_body=coerce_body\(body\)\s*\n\s*\)\s*\n\s*return NavigateResponse\.model_validate\(data\)/,
+      /def navigate\(self, session_id: str, body: NavigateRequest \| dict\[str, Any\]\) -> NavigateResponse:\s*\n\s*data = self\._http\.request\(\s*\n\s*"POST", _session_path\(session_id, "\/navigate"\), json_body=coerce_body\(body\)\s*\n\s*\)\s*\n\s*return parse_model\(NavigateResponse, data\)/,
     );
   });
 
   it('Sync interact — POST /v1/sessions/{id}/interact with InteractRequest body. Click / type / scroll / hover semantics; InteractResponse carries post-action page state. Critical for any browser-automation flow — drift to dropping the typed body would lose static type-checking on the interaction kind discriminator.', () => {
     expect(body).toMatch(
-      /def interact\(self, session_id: str, body: InteractRequest \| dict\[str, Any\]\) -> InteractResponse:\s*\n\s*data = self\._http\.request\(\s*\n\s*"POST", _session_path\(session_id, "\/interact"\), json_body=coerce_body\(body\)\s*\n\s*\)\s*\n\s*return InteractResponse\.model_validate\(data\)/,
+      /def interact\(self, session_id: str, body: InteractRequest \| dict\[str, Any\]\) -> InteractResponse:\s*\n\s*data = self\._http\.request\(\s*\n\s*"POST", _session_path\(session_id, "\/interact"\), json_body=coerce_body\(body\)\s*\n\s*\)\s*\n\s*return parse_model\(InteractResponse, data\)/,
     );
   });
 
   it('Sync wait — POST /v1/sessions/{id}/wait with WaitRequest body. Synchronizes against page-state predicates (selector visibility, network idle, timeout) before returning. Distinct from interact because wait observes without acting.', () => {
     expect(body).toMatch(
-      /def wait\(self, session_id: str, body: WaitRequest \| dict\[str, Any\]\) -> WaitResponse:\s*\n\s*data = self\._http\.request\(\s*\n\s*"POST", _session_path\(session_id, "\/wait"\), json_body=coerce_body\(body\)\s*\n\s*\)\s*\n\s*return WaitResponse\.model_validate\(data\)/,
+      /def wait\(self, session_id: str, body: WaitRequest \| dict\[str, Any\]\) -> WaitResponse:\s*\n\s*data = self\._http\.request\(\s*\n\s*"POST", _session_path\(session_id, "\/wait"\), json_body=coerce_body\(body\)\s*\n\s*\)\s*\n\s*return parse_model\(WaitResponse, data\)/,
     );
   });
 
   it('Sync get_state — GET /v1/sessions/{id}/state returns SessionState (NOT Session). Distinct shape: SessionState carries live state (URL, viewport, cookies, DOM hash) whereas Session carries identity + lifecycle. Drift to returning Session would lose the live-state fields.', () => {
     expect(body).toMatch(
-      /def get_state\(self, session_id: str\) -> SessionState:\s*\n\s*data = self\._http\.request\("GET", _session_path\(session_id, "\/state"\)\)\s*\n\s*return SessionState\.model_validate\(data\)/,
+      /def get_state\(self, session_id: str\) -> SessionState:\s*\n\s*data = self\._http\.request\("GET", _session_path\(session_id, "\/state"\)\)\s*\n\s*return parse_model\(SessionState, data\)/,
     );
   });
 
   it('Sync capture — POST /v1/sessions/{id}/capture with CaptureRequest body. Screenshot / DOM snapshot / PDF export; the 4th workhorse action verb. CaptureResponse carries the captured artifact reference.', () => {
     expect(body).toMatch(
-      /def capture\(self, session_id: str, body: CaptureRequest \| dict\[str, Any\]\) -> CaptureResponse:\s*\n\s*data = self\._http\.request\(\s*\n\s*"POST", _session_path\(session_id, "\/capture"\), json_body=coerce_body\(body\)\s*\n\s*\)\s*\n\s*return CaptureResponse\.model_validate\(data\)/,
+      /def capture\(self, session_id: str, body: CaptureRequest \| dict\[str, Any\]\) -> CaptureResponse:\s*\n\s*data = self\._http\.request\(\s*\n\s*"POST", _session_path\(session_id, "\/capture"\), json_body=coerce_body\(body\)\s*\n\s*\)\s*\n\s*return parse_model\(CaptureResponse, data\)/,
     );
   });
 

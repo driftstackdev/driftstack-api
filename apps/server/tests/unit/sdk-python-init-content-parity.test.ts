@@ -32,7 +32,9 @@ describe('W587.A packages/sdk-python/src/driftstack/__init__.py content parity',
     expect(body).toMatch(/Resource accessors live on the client instance::/);
     expect(body).toMatch(/client = Driftstack\(api_key="ds_live_\.\.\."\)/);
     expect(body).toMatch(/session = client\.sessions\.create\(\)/);
-    expect(body).toMatch(/client\.sessions\.navigate\(session\.id, url="https:\/\/example\.com"\)/);
+    expect(body).toMatch(
+      /client\.sessions\.navigate\(session\.id, \{"url": "https:\/\/example\.com"\}\)/,
+    );
     expect(body).toMatch(/client\.sessions\.destroy\(session\.id\)/);
   });
 

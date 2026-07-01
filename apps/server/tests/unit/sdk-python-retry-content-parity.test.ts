@@ -72,7 +72,7 @@ describe('W586.A packages/sdk-python/src/driftstack/retry.py content parity', ()
     expect(body).toMatch(/exponential-backoff with full jitter \(random uniform between 0/);
     expect(body).toMatch(/and the next exponential value\)\./);
     expect(body).toMatch(
-      /if retry_after_seconds is not None:\s*\n\s*return min\(retry_after_seconds \* 1000, cfg\.max_delay_ms\)/,
+      /if retry_after_seconds is not None:\s*\n(?:\s*#.*\n)*\s*return max\(0, min\(retry_after_seconds \* 1000, cfg\.max_delay_ms\)\)/,
     );
     expect(body).toMatch(
       /capped = min\(cfg\.initial_delay_ms \* \(cfg\.backoff_multiplier\*\*attempt\), cfg\.max_delay_ms\)\s*\n\s*return int\(random\.uniform\(0, capped\)\)/,

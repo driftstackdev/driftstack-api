@@ -8,7 +8,7 @@ from urllib.parse import quote
 from pydantic import BaseModel
 
 from driftstack._generated.models import ApiKey, CreateApiKeyRequest, CreateApiKeyResponse
-from driftstack.http import AsyncHttpClient, HttpClient
+from driftstack.http import AsyncHttpClient, HttpClient, parse_model
 from driftstack.resources._common import coerce_body
 
 
@@ -43,12 +43,12 @@ class ApiKeysResource:
         retrieved later. Requires the ``account_owner`` scope on the calling key.
         """
         data = self._http.request("POST", "/v1/api-keys", json_body=coerce_body(body))
-        return CreateApiKeyResponse.model_validate(data)
+        return parse_model(CreateApiKeyResponse, data)
 
     def list(self) -> ApiKeyList:
         """List API keys for the current account. Plaintext never included."""
         data = self._http.request("GET", "/v1/api-keys")
-        return ApiKeyList.model_validate(data)
+        return parse_model(ApiKeyList, data)
 
     def revoke(self, key_id: str) -> None:
         """Revoke an API key. Idempotent — revoking an already-revoked key is a no-op."""
@@ -70,7 +70,7 @@ class ApiKeysResource:
             f"/v1/api-keys/{quote(key_id, safe='')}/rotate",
             json_body=body,
         )
-        return RotateApiKeyResponse.model_validate(data)
+        return parse_model(RotateApiKeyResponse, data)
 
 
 class AsyncApiKeysResource:
@@ -81,11 +81,11 @@ class AsyncApiKeysResource:
 
     async def create(self, body: CreateApiKeyRequest | dict[str, Any]) -> CreateApiKeyResponse:
         data = await self._http.request("POST", "/v1/api-keys", json_body=coerce_body(body))
-        return CreateApiKeyResponse.model_validate(data)
+        return parse_model(CreateApiKeyResponse, data)
 
     async def list(self) -> ApiKeyList:
         data = await self._http.request("GET", "/v1/api-keys")
-        return ApiKeyList.model_validate(data)
+        return parse_model(ApiKeyList, data)
 
     async def revoke(self, key_id: str) -> None:
         await self._http.request("DELETE", f"/v1/api-keys/{quote(key_id, safe='')}")
@@ -100,4 +100,4 @@ class AsyncApiKeysResource:
             f"/v1/api-keys/{quote(key_id, safe='')}/rotate",
             json_body=body,
         )
-        return RotateApiKeyResponse.model_validate(data)
+        return parse_model(RotateApiKeyResponse, data)

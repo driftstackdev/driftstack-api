@@ -182,7 +182,7 @@ describe('W820 cross-SDK public-export surface parity', () => {
 
   it('CRITICAL each customer-facing entry-point file includes copy-pasteable customer code. TS: docstring-included example (via api-types). Python: 4-line example in __init__. Go: 9-line Quickstart in doc.go. Drift to dropping the inline examples would force customers to find examples in separate docs/example files.', () => {
     expect(read(PY)).toMatch(
-      /client = Driftstack\(api_key="ds_live_\.\.\."\)\s*\n\s+session = client\.sessions\.create\(\)\s*\n\s+client\.sessions\.navigate\(session\.id, url="https:\/\/example\.com"\)\s*\n\s+client\.sessions\.destroy\(session\.id\)/,
+      /client = Driftstack\(api_key="ds_live_\.\.\."\)\s*\n\s+session = client\.sessions\.create\(\)\s*\n\s+client\.sessions\.navigate\(session\.id, \{"url": "https:\/\/example\.com"\}\)\s*\n\s+client\.sessions\.destroy\(session\.id\)/,
     );
     expect(read(GO)).toMatch(/session, err := client\.Sessions\.Create\(ctx, nil\)/);
   });

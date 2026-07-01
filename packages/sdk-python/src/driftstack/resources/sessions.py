@@ -34,7 +34,7 @@ from driftstack._generated.models import (
     WaitRequest,
     WaitResponse,
 )
-from driftstack.http import AsyncHttpClient, HttpClient
+from driftstack.http import AsyncHttpClient, HttpClient, parse_model
 from driftstack.pagination import aiterate_paginated, iterate_paginated
 from driftstack.resources._common import coerce_body, coerce_query
 
@@ -62,12 +62,12 @@ class SessionsResource:
     ) -> CreateSessionResponse:
         """Create a new session. Returns the new ``Session`` row."""
         data = self._http.request("POST", "/v1/sessions", json_body=coerce_body(body) or {})
-        return CreateSessionResponse.model_validate(data)
+        return parse_model(CreateSessionResponse, data)
 
     def list(self, query: PaginationQuery | dict[str, Any] | None = None) -> SessionsListPage:
         """List sessions for the current account, newest first."""
         data = self._http.request("GET", "/v1/sessions", params=coerce_query(query))
-        return SessionsListPage.model_validate(data)
+        return parse_model(SessionsListPage, data)
 
     def iterate(self, *, limit: int | None = None) -> Iterator[Session]:
         """Lazily walk every session for the calling account.
@@ -90,47 +90,47 @@ class SessionsResource:
 
     def get(self, session_id: str) -> Session:
         data = self._http.request("GET", _session_path(session_id))
-        return Session.model_validate(data)
+        return parse_model(Session, data)
 
     def navigate(self, session_id: str, body: NavigateRequest | dict[str, Any]) -> NavigateResponse:
         data = self._http.request(
             "POST", _session_path(session_id, "/navigate"), json_body=coerce_body(body)
         )
-        return NavigateResponse.model_validate(data)
+        return parse_model(NavigateResponse, data)
 
     def interact(self, session_id: str, body: InteractRequest | dict[str, Any]) -> InteractResponse:
         data = self._http.request(
             "POST", _session_path(session_id, "/interact"), json_body=coerce_body(body)
         )
-        return InteractResponse.model_validate(data)
+        return parse_model(InteractResponse, data)
 
     def wait(self, session_id: str, body: WaitRequest | dict[str, Any]) -> WaitResponse:
         data = self._http.request(
             "POST", _session_path(session_id, "/wait"), json_body=coerce_body(body)
         )
-        return WaitResponse.model_validate(data)
+        return parse_model(WaitResponse, data)
 
     def get_state(self, session_id: str) -> SessionState:
         data = self._http.request("GET", _session_path(session_id, "/state"))
-        return SessionState.model_validate(data)
+        return parse_model(SessionState, data)
 
     def capture(self, session_id: str, body: CaptureRequest | dict[str, Any]) -> CaptureResponse:
         data = self._http.request(
             "POST", _session_path(session_id, "/capture"), json_body=coerce_body(body)
         )
-        return CaptureResponse.model_validate(data)
+        return parse_model(CaptureResponse, data)
 
     def extract(self, session_id: str, body: ExtractRequest | dict[str, Any]) -> ExtractResponse:
         data = self._http.request(
             "POST", _session_path(session_id, "/extract"), json_body=coerce_body(body)
         )
-        return ExtractResponse.model_validate(data)
+        return parse_model(ExtractResponse, data)
 
     def search(self, session_id: str, body: SearchRequest | dict[str, Any]) -> SearchResponse:
         data = self._http.request(
             "POST", _session_path(session_id, "/search"), json_body=coerce_body(body)
         )
-        return SearchResponse.model_validate(data)
+        return parse_model(SearchResponse, data)
 
     def login(
         self, session_id: str, body: SessionLoginRequest | dict[str, Any]
@@ -138,7 +138,7 @@ class SessionsResource:
         data = self._http.request(
             "POST", _session_path(session_id, "/login"), json_body=coerce_body(body)
         )
-        return SessionLoginResponse.model_validate(data)
+        return parse_model(SessionLoginResponse, data)
 
     def destroy(self, session_id: str) -> None:
         """Destroy the session. Idempotent (safe to call twice)."""
@@ -155,11 +155,11 @@ class AsyncSessionsResource:
         self, body: CreateSessionRequest | dict[str, Any] | None = None
     ) -> CreateSessionResponse:
         data = await self._http.request("POST", "/v1/sessions", json_body=coerce_body(body) or {})
-        return CreateSessionResponse.model_validate(data)
+        return parse_model(CreateSessionResponse, data)
 
     async def list(self, query: PaginationQuery | dict[str, Any] | None = None) -> SessionsListPage:
         data = await self._http.request("GET", "/v1/sessions", params=coerce_query(query))
-        return SessionsListPage.model_validate(data)
+        return parse_model(SessionsListPage, data)
 
     def iterate(self, *, limit: int | None = None) -> AsyncIterator[Session]:
         """Async variant of :meth:`SessionsResource.iterate`.
@@ -179,7 +179,7 @@ class AsyncSessionsResource:
 
     async def get(self, session_id: str) -> Session:
         data = await self._http.request("GET", _session_path(session_id))
-        return Session.model_validate(data)
+        return parse_model(Session, data)
 
     async def navigate(
         self, session_id: str, body: NavigateRequest | dict[str, Any]
@@ -187,7 +187,7 @@ class AsyncSessionsResource:
         data = await self._http.request(
             "POST", _session_path(session_id, "/navigate"), json_body=coerce_body(body)
         )
-        return NavigateResponse.model_validate(data)
+        return parse_model(NavigateResponse, data)
 
     async def interact(
         self, session_id: str, body: InteractRequest | dict[str, Any]
@@ -195,17 +195,17 @@ class AsyncSessionsResource:
         data = await self._http.request(
             "POST", _session_path(session_id, "/interact"), json_body=coerce_body(body)
         )
-        return InteractResponse.model_validate(data)
+        return parse_model(InteractResponse, data)
 
     async def wait(self, session_id: str, body: WaitRequest | dict[str, Any]) -> WaitResponse:
         data = await self._http.request(
             "POST", _session_path(session_id, "/wait"), json_body=coerce_body(body)
         )
-        return WaitResponse.model_validate(data)
+        return parse_model(WaitResponse, data)
 
     async def get_state(self, session_id: str) -> SessionState:
         data = await self._http.request("GET", _session_path(session_id, "/state"))
-        return SessionState.model_validate(data)
+        return parse_model(SessionState, data)
 
     async def capture(
         self, session_id: str, body: CaptureRequest | dict[str, Any]
@@ -213,7 +213,7 @@ class AsyncSessionsResource:
         data = await self._http.request(
             "POST", _session_path(session_id, "/capture"), json_body=coerce_body(body)
         )
-        return CaptureResponse.model_validate(data)
+        return parse_model(CaptureResponse, data)
 
     async def extract(
         self, session_id: str, body: ExtractRequest | dict[str, Any]
@@ -221,13 +221,13 @@ class AsyncSessionsResource:
         data = await self._http.request(
             "POST", _session_path(session_id, "/extract"), json_body=coerce_body(body)
         )
-        return ExtractResponse.model_validate(data)
+        return parse_model(ExtractResponse, data)
 
     async def search(self, session_id: str, body: SearchRequest | dict[str, Any]) -> SearchResponse:
         data = await self._http.request(
             "POST", _session_path(session_id, "/search"), json_body=coerce_body(body)
         )
-        return SearchResponse.model_validate(data)
+        return parse_model(SearchResponse, data)
 
     async def login(
         self, session_id: str, body: SessionLoginRequest | dict[str, Any]
@@ -235,7 +235,7 @@ class AsyncSessionsResource:
         data = await self._http.request(
             "POST", _session_path(session_id, "/login"), json_body=coerce_body(body)
         )
-        return SessionLoginResponse.model_validate(data)
+        return parse_model(SessionLoginResponse, data)
 
     async def destroy(self, session_id: str) -> None:
         await self._http.request("DELETE", _session_path(session_id))

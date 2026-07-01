@@ -15,7 +15,7 @@ from driftstack._generated.models import (
     WebhookDelivery,
     WebhookEndpoint,
 )
-from driftstack.http import AsyncHttpClient, HttpClient
+from driftstack.http import AsyncHttpClient, HttpClient, parse_model
 from driftstack.pagination import aiterate_paginated, iterate_paginated
 from driftstack.resources._common import coerce_body, coerce_query
 
@@ -51,15 +51,15 @@ class WebhooksResource:
         cannot be retrieved later. Requires the ``account_owner`` scope.
         """
         data = self._http.request("POST", "/v1/webhooks", json_body=coerce_body(body))
-        return CreateWebhookResponse.model_validate(data)
+        return parse_model(CreateWebhookResponse, data)
 
     def list(self) -> WebhookEndpointList:
         data = self._http.request("GET", "/v1/webhooks")
-        return WebhookEndpointList.model_validate(data)
+        return parse_model(WebhookEndpointList, data)
 
     def get(self, webhook_id: str) -> WebhookEndpoint:
         data = self._http.request("GET", _webhook_path(webhook_id))
-        return WebhookEndpoint.model_validate(data)
+        return parse_model(WebhookEndpoint, data)
 
     def delete(self, webhook_id: str) -> None:
         """Soft-delete (disable) the endpoint. Idempotent."""
@@ -75,7 +75,7 @@ class WebhooksResource:
             _webhook_path(webhook_id, "/deliveries"),
             params=coerce_query(query),
         )
-        return WebhookDeliveryListPage.model_validate(data)
+        return parse_model(WebhookDeliveryListPage, data)
 
     def iterate_deliveries(
         self,
@@ -114,7 +114,7 @@ class WebhooksResource:
             f"/v1/webhook-deliveries/{quote(delivery_id, safe='')}/replay",
             json_body={},
         )
-        return WebhookDelivery.model_validate(data)
+        return parse_model(WebhookDelivery, data)
 
     def rotate_secret(self, webhook_id: str) -> dict[str, Any]:
         """V-359 — rotate the webhook signing secret.
@@ -145,7 +145,7 @@ class WebhooksResource:
         endpoints cannot be updated (returns 409).
         """
         data = self._http.request("PATCH", _webhook_path(webhook_id), json_body=coerce_body(body))
-        return WebhookEndpoint.model_validate(data)
+        return parse_model(WebhookEndpoint, data)
 
 
 class AsyncWebhooksResource:
@@ -156,15 +156,15 @@ class AsyncWebhooksResource:
 
     async def create(self, body: CreateWebhookRequest | dict[str, Any]) -> CreateWebhookResponse:
         data = await self._http.request("POST", "/v1/webhooks", json_body=coerce_body(body))
-        return CreateWebhookResponse.model_validate(data)
+        return parse_model(CreateWebhookResponse, data)
 
     async def list(self) -> WebhookEndpointList:
         data = await self._http.request("GET", "/v1/webhooks")
-        return WebhookEndpointList.model_validate(data)
+        return parse_model(WebhookEndpointList, data)
 
     async def get(self, webhook_id: str) -> WebhookEndpoint:
         data = await self._http.request("GET", _webhook_path(webhook_id))
-        return WebhookEndpoint.model_validate(data)
+        return parse_model(WebhookEndpoint, data)
 
     async def delete(self, webhook_id: str) -> None:
         await self._http.request("DELETE", _webhook_path(webhook_id))
@@ -179,7 +179,7 @@ class AsyncWebhooksResource:
             _webhook_path(webhook_id, "/deliveries"),
             params=coerce_query(query),
         )
-        return WebhookDeliveryListPage.model_validate(data)
+        return parse_model(WebhookDeliveryListPage, data)
 
     def iterate_deliveries(
         self,
@@ -209,7 +209,7 @@ class AsyncWebhooksResource:
             f"/v1/webhook-deliveries/{quote(delivery_id, safe='')}/replay",
             json_body={},
         )
-        return WebhookDelivery.model_validate(data)
+        return parse_model(WebhookDelivery, data)
 
     async def rotate_secret(self, webhook_id: str) -> dict[str, Any]:
         """V-359 — async secret rotation. See :meth:`WebhooksResource.rotate_secret`."""
@@ -226,4 +226,4 @@ class AsyncWebhooksResource:
         data = await self._http.request(
             "PATCH", _webhook_path(webhook_id), json_body=coerce_body(body)
         )
-        return WebhookEndpoint.model_validate(data)
+        return parse_model(WebhookEndpoint, data)

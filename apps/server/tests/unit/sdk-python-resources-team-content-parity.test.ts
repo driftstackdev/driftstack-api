@@ -88,16 +88,16 @@ describe('W582.B packages/sdk-python/src/driftstack/resources/team.py content pa
 
   it('list_members + list_invites (sync) — GET /v1/team/members + GET /v1/team/invites, both return pydantic-validated envelopes (TeamMembersList / TeamInvitesList). model_validate at the boundary so wire-shape drift is caught here, not deep in dashboard code.', () => {
     expect(body).toMatch(
-      /def list_members\(self\) -> TeamMembersList:\s*\n\s*data = self\._http\.request\("GET", "\/v1\/team\/members"\)\s*\n\s*return TeamMembersList\.model_validate\(data\)/,
+      /def list_members\(self\) -> TeamMembersList:\s*\n\s*data = self\._http\.request\("GET", "\/v1\/team\/members"\)\s*\n\s*return parse_model\(TeamMembersList, data\)/,
     );
     expect(body).toMatch(
-      /def list_invites\(self\) -> TeamInvitesList:\s*\n\s*data = self\._http\.request\("GET", "\/v1\/team\/invites"\)\s*\n\s*return TeamInvitesList\.model_validate\(data\)/,
+      /def list_invites\(self\) -> TeamInvitesList:\s*\n\s*data = self\._http\.request\("GET", "\/v1\/team\/invites"\)\s*\n\s*return parse_model\(TeamInvitesList, data\)/,
     );
   });
 
   it('accept_invite (sync) — POST /v1/team/invites/accept with bare-string token wrapped as {"token": token}. Customer ergonomic: pasted magic-link tokens go directly to the verb without constructing a request struct. Returns AcceptInviteResponse with the new TeamMember row so dashboards can render the "you joined X" confirmation.', () => {
     expect(body).toMatch(
-      /def accept_invite\(self, token: str\) -> AcceptInviteResponse:\s*\n\s*data = self\._http\.request\("POST", "\/v1\/team\/invites\/accept", json_body=\{"token": token\}\)\s*\n\s*return AcceptInviteResponse\.model_validate\(data\)/,
+      /def accept_invite\(self, token: str\) -> AcceptInviteResponse:\s*\n\s*data = self\._http\.request\("POST", "\/v1\/team\/invites\/accept", json_body=\{"token": token\}\)\s*\n\s*return parse_model\(AcceptInviteResponse, data\)/,
     );
   });
 
@@ -114,13 +114,13 @@ describe('W582.B packages/sdk-python/src/driftstack/resources/team.py content pa
       /async def invite\(self, email: str, \*, role: TeamRole \| None = None\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(
-      /async def list_members\(self\) -> TeamMembersList:\s*\n\s*data = await self\._http\.request\("GET", "\/v1\/team\/members"\)\s*\n\s*return TeamMembersList\.model_validate\(data\)/,
+      /async def list_members\(self\) -> TeamMembersList:\s*\n\s*data = await self\._http\.request\("GET", "\/v1\/team\/members"\)\s*\n\s*return parse_model\(TeamMembersList, data\)/,
     );
     expect(body).toMatch(
-      /async def list_invites\(self\) -> TeamInvitesList:\s*\n\s*data = await self\._http\.request\("GET", "\/v1\/team\/invites"\)\s*\n\s*return TeamInvitesList\.model_validate\(data\)/,
+      /async def list_invites\(self\) -> TeamInvitesList:\s*\n\s*data = await self\._http\.request\("GET", "\/v1\/team\/invites"\)\s*\n\s*return parse_model\(TeamInvitesList, data\)/,
     );
     expect(body).toMatch(
-      /async def accept_invite\(self, token: str\) -> AcceptInviteResponse:\s*\n\s*data = await self\._http\.request\(\s*\n\s*"POST", "\/v1\/team\/invites\/accept", json_body=\{"token": token\}\s*\n\s*\)\s*\n\s*return AcceptInviteResponse\.model_validate\(data\)/,
+      /async def accept_invite\(self, token: str\) -> AcceptInviteResponse:\s*\n\s*data = await self\._http\.request\(\s*\n\s*"POST", "\/v1\/team\/invites\/accept", json_body=\{"token": token\}\s*\n\s*\)\s*\n\s*return parse_model\(AcceptInviteResponse, data\)/,
     );
     expect(body).toMatch(
       /async def remove_member\(self, membership_id: str\) -> None:\s*\n\s*await self\._http\.request\("DELETE", f"\/v1\/team\/members\/\{quote\(membership_id, safe=''\)\}"\)/,
@@ -132,6 +132,8 @@ describe('W582.B packages/sdk-python/src/driftstack/resources/team.py content pa
     expect(body).toMatch(/^from typing import Any, Literal$/m);
     expect(body).toMatch(/^from urllib\.parse import quote$/m);
     expect(body).toMatch(/^from pydantic import BaseModel$/m);
-    expect(body).toMatch(/^from driftstack\.http import AsyncHttpClient, HttpClient$/m);
+    expect(body).toMatch(
+      /^from driftstack\.http import AsyncHttpClient, HttpClient, parse_model$/m,
+    );
   });
 });

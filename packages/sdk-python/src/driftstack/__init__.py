@@ -8,7 +8,7 @@ Resource accessors live on the client instance::
 
     client = Driftstack(api_key="ds_live_...")
     session = client.sessions.create()
-    client.sessions.navigate(session.id, url="https://example.com")
+    client.sessions.navigate(session.id, {"url": "https://example.com"})
     client.sessions.destroy(session.id)
 """
 
