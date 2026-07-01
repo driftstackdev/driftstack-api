@@ -717,6 +717,10 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
         formWrap.classList.remove('hidden');
         reveal.classList.add('hidden');
+        // WIPE the previously-minted plaintext key from the DOM — hiding the
+        // reveal pane left the full secret recoverable via devtools/extensions
+        // until navigation, defeating the show-once guarantee.
+        if (revealPre) revealPre.textContent = '';
         const nameInput = form.querySelector('input[name="name"]');
         if (nameInput) nameInput.focus();
       }
@@ -725,6 +729,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         formWrap.classList.add('hidden');
         createError.classList.add('hidden');
         createError.textContent = '';
+        if (revealPre) revealPre.textContent = '';
+        reveal.classList.add('hidden');
         form.reset();
       }
 

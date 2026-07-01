@@ -432,6 +432,9 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         dismissBtn.addEventListener('click', () => {
           sessionStorage.removeItem('ds_first_api_key_plaintext');
           reveal.classList.add('hidden');
+          // Also WIPE the plaintext key from the DOM node — hiding the pane left
+          // the full key recoverable via devtools until navigation.
+          if (plaintextEl) plaintextEl.textContent = '';
         });
       })();
 

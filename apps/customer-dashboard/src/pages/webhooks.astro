@@ -520,10 +520,16 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
         if (createWrap) createWrap.classList.remove('hidden');
         if (createReveal) createReveal.classList.add('hidden');
+        // Wipe the previously-revealed signing secret from the DOM (hiding the
+        // pane left the full plaintext secret recoverable via devtools until
+        // navigation — defeats the show-once guarantee).
+        if (revealSecret) revealSecret.textContent = '';
       }
       function hideCreate() {
         if (createWrap) createWrap.classList.add('hidden');
         if (createForm) createForm.reset();
+        if (createReveal) createReveal.classList.add('hidden');
+        if (revealSecret) revealSecret.textContent = '';
         if (createError) {
           createError.classList.add('hidden');
           createError.textContent = '';
