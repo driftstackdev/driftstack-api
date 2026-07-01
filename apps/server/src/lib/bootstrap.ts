@@ -51,6 +51,7 @@ import { DrizzleByokAnthropicRotationReminderRepo } from '../db/byok-anthropic-r
 import { WebhookRotationReminderService } from '../services/webhook-rotation-reminder.js';
 import { ByokAnthropicRotationReminderService } from '../services/byok-anthropic-rotation-reminder.js';
 import { WebhookSecretForceRotationService } from '../services/webhook-secret-force-rotation.js';
+import { WebhookGraceExpiringNoticeService } from '../services/webhook-grace-expiring-notice.js';
 import { DrizzleAdminAuditLogRepo } from '../db/admin-audit-repo.js';
 import { DrizzleAccountsAdminRepo } from '../db/admin-accounts-repo.js';
 import { DrizzleAdminBillingRepo } from '../db/admin-billing-repo.js';
@@ -2113,6 +2114,23 @@ export async function createProductionDeps(
     logger,
     { dashboardUrl: config.dashboardOrigin },
   );
+  // Arc 3 sub-slice 28.5 follow-up (v2-#28) — 24h-before-grace-expiry
+  // last-chance email. The template + interface
+  // (EmailService.sendWebhookSecretGraceExpiring) were fully built in
+  // sub-slice 28.4/28.5 but no scheduler ever called it; this wires
+  // the sweep. Reuses webhooksRepo directly (DrizzleWebhooksRepo
+  // structurally satisfies WebhookGraceExpiringNoticeRepo — the two
+  // methods live alongside findEndpointsNeedingForceRotation in
+  // db/webhooks-repo.ts) — no separate repo wrapper needed, same as
+  // webhookSecretForceRotationService above. Shares the same
+  // DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS opt-out + daily cadence
+  // as the other rotation-related timers.
+  const webhookGraceExpiringNoticeService = new WebhookGraceExpiringNoticeService(
+    webhooksRepo,
+    email,
+    logger,
+    { dashboardUrl: config.dashboardOrigin },
+  );
   const webhookRotationReminderTimer = rotationRemindersDisabled
     ? null
     : setInterval(() => {
@@ -2240,6 +2258,31 @@ export async function createProductionDeps(
       }, ROTATION_REMINDER_INTERVAL_MS);
   webhookSecretForceRotationTimer?.unref();
 
+  // Arc 3 sub-slice 28.5 follow-up (v2-#28) — daily grace-expiring
+  // notice sweep. See webhookGraceExpiringNoticeService construction
+  // above for why this was previously unwired.
+  const webhookGraceExpiringNoticeTimer = rotationRemindersDisabled
+    ? null
+    : setInterval(() => {
+        void (async () => {
+          try {
+            await webhookGraceExpiringNoticeService.tickOnce(new Date());
+          } catch (err) {
+            logger.warn(
+              {
+                component: 'webhook-grace-expiring-notice-poller',
+                err:
+                  err instanceof Error
+                    ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                    : { value: err },
+              },
+              'webhook-grace-expiring-notice tickOnce threw unexpectedly (interval continues)',
+            );
+          }
+        })();
+      }, ROTATION_REMINDER_INTERVAL_MS);
+  webhookGraceExpiringNoticeTimer?.unref();
+
   // v2-#29 — daily stale-secret_prev cleanup. v2-#20's worker fix
   // already stops emitting the prev signature past the grace window;
   // this sweep is a data-hygiene follow-up that nulls the row columns
@@ -2296,6 +2339,7 @@ export async function createProductionDeps(
     if (webhookRotationReminderTimer) clearInterval(webhookRotationReminderTimer);
     if (byokAnthropicRotationReminderTimer) clearInterval(byokAnthropicRotationReminderTimer);
     if (webhookSecretForceRotationTimer) clearInterval(webhookSecretForceRotationTimer);
+    if (webhookGraceExpiringNoticeTimer) clearInterval(webhookGraceExpiringNoticeTimer);
     if (webhookSecretPrevCleanupTimer) clearInterval(webhookSecretPrevCleanupTimer);
     clearInterval(pairModeHeartbeatSweepTimer);
     clearInterval(webhookDeliveryTimer);

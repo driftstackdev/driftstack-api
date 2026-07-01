@@ -1,0 +1,22 @@
+-- Arc 3 sub-slice 28.5 follow-up (v2-#28) — dedupe column for the
+-- "grace window expires in 24h" last-chance email
+-- (EmailService.sendWebhookSecretGraceExpiring). The template + the
+-- force-rotation email were fully built (sub-slice 28.4/28.5) but no
+-- scheduler ever called sendWebhookSecretGraceExpiring — this column
+-- is what the new WebhookGraceExpiringNoticeService sweep dedupes
+-- against.
+--
+-- Distinct from force_rotated_at (stamps the rotation EVENT) and
+-- secret_created_at (stamps when the active secret was minted):
+-- grace_expiring_notified_at stamps when the 24h-before-
+-- grace_window_ends_at notice was actually SENT, so the sweep can
+-- tell "already notified for this grace window" apart from "not
+-- notified yet". Set to now() ONLY on a successful send — a failed
+-- send leaves it NULL so the very next tick retries, instead of
+-- silently going quiet until the next ~91-day force-rotation cycle
+-- resets the other bookkeeping columns.
+--
+-- Nullable + additive, no backfill needed (existing rows have no
+-- live grace window at migration time, or if they do, NULL correctly
+-- means "not yet notified").
+ALTER TABLE "webhook_endpoints" ADD COLUMN IF NOT EXISTS "grace_expiring_notified_at" timestamptz;

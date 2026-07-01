@@ -57,9 +57,15 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     expect(body).toMatch(/\/\/ Drizzle-backed implementation of WebhooksRepo\./);
   });
 
-  it('imports: and/desc/eq/isNotNull/isNull/lt/ne/sql from drizzle-orm; 9 service types; Database; accounts + webhookDeliveries + webhookEndpoints schemas', () => {
+  it('imports: and/desc/eq/gt/isNotNull/isNull/lte/lt/ne/sql from drizzle-orm; 9 service types; Database; accounts + webhookDeliveries + webhookEndpoints schemas', () => {
+    // gt/lte (Arc 3 sub-slice 28.5 follow-up) are typed drizzle
+    // comparison operators, not raw `sql` template interpolation — they
+    // sidestep the drizzle-orm Date-param-in-raw-sql crash class
+    // entirely (docs/internal/drizzle-date-param-workaround.md), same
+    // rationale as the existing lt(webhookEndpoints.secretCreatedAt, cutoff)
+    // / lt(webhookEndpoints.secretPrevExpiresAt, args.now) call sites below.
     expect(body).toMatch(
-      /import \{ and, desc, eq, isNotNull, isNull, lt, ne, sql \} from 'drizzle-orm';/,
+      /import \{ and, desc, eq, gt, isNotNull, isNull, lte, lt, ne, sql \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(
       /import type \{\s*\n?\s*EndpointDeliveryCounts,\s*\n?\s*ListDeliveriesPage,\s*\n?\s*NewWebhookDeliveryInput,\s*\n?\s*NewWebhookEndpointInput,\s*\n?\s*WebhookDeliveryRow,\s*\n?\s*WebhookDeliveryStatus,\s*\n?\s*WebhookEndpointRow,\s*\n?\s*WebhookEventType,\s*\n?\s*WebhooksRepo,\s*\n?\s*\} from '\.\.\/services\/webhooks\.js';/,

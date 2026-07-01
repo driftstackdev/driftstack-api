@@ -1,6 +1,6 @@
 // Drizzle-backed implementation of WebhooksRepo.
 
-import { and, desc, eq, isNotNull, isNull, lt, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNotNull, isNull, lte, lt, ne, sql } from 'drizzle-orm';
 import type {
   EndpointDeliveryCounts,
   ListDeliveriesPage,
@@ -327,6 +327,109 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     }));
   }
 
+  /**
+   * Arc 3 sub-slice 28.5 follow-up (v2-#28) — find endpoints whose
+   * server-initiated grace window (graceWindowEndsAt) closes within
+   * `windowHours` AND hasn't already closed AND haven't been sent the
+   * "grace expiring" last-chance notice yet. Mirrors
+   * findEndpointsNeedingForceRotation's shape/pattern: caller
+   * (WebhookGraceExpiringNoticeService) iterates the result + calls
+   * email.sendWebhookSecretGraceExpiring per row, marking
+   * grace_expiring_notified_at only on a successful send.
+   */
+  async findEndpointsNeedingGraceExpiringNotice(args: {
+    now: Date;
+    windowHours: number;
+    limit: number;
+  }): Promise<ReadonlyArray<WebhookEndpointRow & { accountEmail: string | null }>> {
+    const MS_PER_HOUR = 60 * 60 * 1000;
+    const horizon = new Date(args.now.getTime() + args.windowHours * MS_PER_HOUR);
+    const rows = await this.database.db
+      .select({
+        id: webhookEndpoints.id,
+        accountId: webhookEndpoints.accountId,
+        url: webhookEndpoints.url,
+        secret: webhookEndpoints.secret,
+        secretPrefix: webhookEndpoints.secretPrefix,
+        secretPrev: webhookEndpoints.secretPrev,
+        secretPrevExpiresAt: webhookEndpoints.secretPrevExpiresAt,
+        secretCreatedAt: webhookEndpoints.secretCreatedAt,
+        lastReminderSentAt: webhookEndpoints.lastReminderSentAt,
+        graceWindowEndsAt: webhookEndpoints.graceWindowEndsAt,
+        forceRotatedAt: webhookEndpoints.forceRotatedAt,
+        events: webhookEndpoints.events,
+        description: webhookEndpoints.description,
+        active: webhookEndpoints.active,
+        consecutiveFailures: webhookEndpoints.consecutiveFailures,
+        lastSuccessAt: webhookEndpoints.lastSuccessAt,
+        lastFailureAt: webhookEndpoints.lastFailureAt,
+        disabledAt: webhookEndpoints.disabledAt,
+        createdAt: webhookEndpoints.createdAt,
+        updatedAt: webhookEndpoints.updatedAt,
+        accountEmail: accounts.email,
+      })
+      .from(webhookEndpoints)
+      .innerJoin(accounts, eq(accounts.id, webhookEndpoints.accountId))
+      .where(
+        and(
+          isNull(webhookEndpoints.disabledAt),
+          isNotNull(webhookEndpoints.graceWindowEndsAt),
+          isNull(webhookEndpoints.graceExpiringNotifiedAt),
+          // graceWindowEndsAt within (now, now + windowHours] — not yet
+          // expired (> now) and due within the notice horizon (<= horizon).
+          // Uses drizzle's gt/lte helpers, NOT a raw `sql` template with a
+          // Date interpolated directly — see docs/internal/
+          // drizzle-date-param-workaround.md (a raw-sql Date param silently
+          // crashes via drizzle's transparentParser OID swap; gt/lte handle
+          // Date params correctly, matching findEndpointsNeedingForceRotation's
+          // lt(...) sibling call above).
+          gt(webhookEndpoints.graceWindowEndsAt, args.now),
+          lte(webhookEndpoints.graceWindowEndsAt, horizon),
+        ),
+      )
+      .orderBy(webhookEndpoints.graceWindowEndsAt)
+      .limit(args.limit);
+    return rows.map((r) => ({
+      id: r.id,
+      accountId: r.accountId,
+      url: r.url,
+      secret: r.secret,
+      secretPrefix: r.secretPrefix,
+      secretPrev: r.secretPrev,
+      secretPrevExpiresAt: r.secretPrevExpiresAt,
+      secretCreatedAt: r.secretCreatedAt,
+      lastReminderSentAt: r.lastReminderSentAt,
+      graceWindowEndsAt: r.graceWindowEndsAt,
+      forceRotatedAt: r.forceRotatedAt,
+      events: r.events,
+      description: r.description,
+      active: r.active,
+      consecutiveFailures: r.consecutiveFailures,
+      lastSuccessAt: r.lastSuccessAt,
+      lastFailureAt: r.lastFailureAt,
+      disabledAt: r.disabledAt,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      accountEmail: r.accountEmail,
+    }));
+  }
+
+  /**
+   * Arc 3 sub-slice 28.5 follow-up (v2-#28) — mark the grace-expiring
+   * notice sent for one endpoint. Caller only invokes this AFTER a
+   * successful email send (unlike markReminderSent, which fires
+   * unconditionally) — a failed send leaves the column NULL so the
+   * very next sweep tick retries it, rather than swallowing the
+   * failure until the next ~91-day force-rotation cycle resets the
+   * bookkeeping.
+   */
+  async markGraceExpiringNotified(args: { endpointId: string; now: Date }): Promise<void> {
+    await this.database.db
+      .update(webhookEndpoints)
+      .set({ graceExpiringNotifiedAt: args.now, updatedAt: args.now })
+      .where(eq(webhookEndpoints.id, args.endpointId));
+  }
+
   async forceRotateSecret(input: {
     id: string;
     newSecret: string;
@@ -339,6 +442,12 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     // event so the daily sweep doesn't loop; graceWindowEndsAt is
     // the 7-day deadline (Q2=B) the validator (sub-slice 28.3) reads
     // to accept the prev secret for inbound HMAC verification.
+    // graceExpiringNotifiedAt is reset to null (mirrors
+    // lastReminderSentAt) so the sub-slice 28.5 follow-up "grace
+    // expiring" notice can fire again for THIS new grace window —
+    // without the reset, a stale non-null value from a PRIOR
+    // force-rotation cycle would permanently block the notice for
+    // every future cycle on this endpoint.
     const [row] = await this.database.db
       .update(webhookEndpoints)
       .set({
@@ -350,6 +459,7 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
         forceRotatedAt: input.now,
         secretCreatedAt: input.now,
         lastReminderSentAt: null,
+        graceExpiringNotifiedAt: null,
         updatedAt: input.now,
       })
       .where(and(eq(webhookEndpoints.id, input.id), isNull(webhookEndpoints.disabledAt)))

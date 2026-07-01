@@ -1133,6 +1133,16 @@ export const webhookEndpoints = pgTable(
     // rotation fired. Reset to NULL on the next customer-initiated
     // rotation so the 91-day clock restarts cleanly.
     forceRotatedAt: timestamp('force_rotated_at', { withTimezone: true }),
+    // Arc 3 sub-slice 28.5 follow-up (v2-#28) — dedupe column for the
+    // 24h-before-grace-expiry last-chance email
+    // (sendWebhookSecretGraceExpiring). Distinct from forceRotatedAt
+    // (stamps the rotation event) and secretCreatedAt (stamps when
+    // the active secret was minted): this stamps when the notice was
+    // actually SENT. Null = not yet notified for the current grace
+    // window. Reset to NULL on every force-rotation (mirrors
+    // lastReminderSentAt) so each new 91-day cycle gets its own
+    // notification chance.
+    graceExpiringNotifiedAt: timestamp('grace_expiring_notified_at', { withTimezone: true }),
     events: webhookEventType('events').array().notNull(),
     description: text('description'),
     active: boolean('active').notNull().default(true),
