@@ -99,12 +99,16 @@ describe('W806 infra bootstrap + deploy + nginx + systemd parity', () => {
     }
   });
 
-  it('CRITICAL both nginx vhosts trust CF-Connecting-IP for real-client-IP. Drift to X-Real-IP-from-arbitrary-upstream would let any client spoof their IP; drift to dropping the header would break audit log + rate-limit buckets that need the actual customer IP.', () => {
+  it("CRITICAL both nginx vhosts resolve CF-Connecting-IP as the real client IP ONLY when trust is scoped to Cloudflare's actual edge ranges (infra/nginx/cloudflare-real-ip.conf, installed to conf.d). Drift to a 0.0.0.0/0 wildcard (the 2026-07-01-fixed CF-Connecting-IP origin-spoof gap) or an arbitrary upstream would let any direct-to-origin client forge their IP and defeat every IP-keyed rate limit; drift to dropping the header would break audit log + rate-limit buckets that need the actual customer IP.", () => {
     for (const f of [NGINX_PROD, NGINX_STG]) {
       const p = read(f);
-      expect(p).toMatch(/set_real_ip_from 0\.0\.0\.0\/0;/);
-      expect(p).toMatch(/real_ip_header CF-Connecting-IP;/);
+      expect(p).not.toMatch(/^\s*set_real_ip_from 0\.0\.0\.0\/0;/m);
+      expect(p).toMatch(/\/etc\/nginx\/conf\.d\/cloudflare-real-ip\.conf/);
     }
+    const snippet = read(resolve(REPO_ROOT, 'infra/nginx/cloudflare-real-ip.conf'));
+    expect(snippet).toMatch(/real_ip_header CF-Connecting-IP;/);
+    expect(snippet).toMatch(/set_real_ip_from 173\.245\.48\.0\/20;/);
+    expect(snippet).not.toMatch(/^\s*set_real_ip_from 0\.0\.0\.0\/0;/m);
   });
 
   it('CRITICAL both nginx vhosts proxy to 127.0.0.1:7780 with 5-header proxy_set_header set — Host + X-Real-IP + X-Forwarded-For + X-Forwarded-Proto + Connection "". Drift would either break Fastify trustProxy or lose Host-routing.', () => {

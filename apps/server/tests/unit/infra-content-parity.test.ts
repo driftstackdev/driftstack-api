@@ -331,8 +331,15 @@ describe('W614 infra/ content parity', () => {
     expect(body).toMatch(/^\s+ssl_session_timeout 10m;$/m);
     expect(body).toMatch(/^\s+ssl_session_tickets off;$/m);
     expect(body).toMatch(/Real client IP — Cloudflare passes it via CF-Connecting-IP\./);
-    expect(body).toMatch(/^\s+set_real_ip_from 0\.0\.0\.0\/0;$/m);
-    expect(body).toMatch(/^\s+real_ip_header CF-Connecting-IP;$/m);
+    // Security fix 2026-07-01 — the 0.0.0.0/0 wildcard (which let ANY direct
+    // connection to the origin forge CF-Connecting-IP and defeat every
+    // IP-keyed rate limit) is gone; trust is now scoped to Cloudflare's real
+    // edge ranges via the conf.d snippet, not declared per-vhost anymore.
+    expect(body).not.toMatch(/^\s*set_real_ip_from 0\.0\.0\.0\/0;/m);
+    expect(body).toMatch(/\/etc\/nginx\/conf\.d\/cloudflare-real-ip\.conf/);
+    expect(body).toMatch(
+      /set_real_ip_from\s*\n\s*# is cumulative across directives, not last-wins\./,
+    );
     expect(body).toMatch(/^\s+client_max_body_size 100m;$/m);
     expect(body).toMatch(/^\s+client_body_timeout 30s;$/m);
     expect(body).toMatch(/^\s+client_header_timeout 15s;$/m);
@@ -373,8 +380,9 @@ describe('W614 infra/ content parity', () => {
       /^\s+ssl_certificate_key \/etc\/letsencrypt\/live\/staging\.driftstack\.dev\/privkey\.pem;$/m,
     );
     expect(body).toMatch(/^\s+ssl_protocols TLSv1\.2 TLSv1\.3;$/m);
-    expect(body).toMatch(/^\s+set_real_ip_from 0\.0\.0\.0\/0;$/m);
-    expect(body).toMatch(/^\s+real_ip_header CF-Connecting-IP;$/m);
+    // Security fix 2026-07-01 — same wildcard removal as api.driftstack.dev.conf.
+    expect(body).not.toMatch(/^\s*set_real_ip_from 0\.0\.0\.0\/0;/m);
+    expect(body).toMatch(/\/etc\/nginx\/conf\.d\/cloudflare-real-ip\.conf/);
     expect(body).toMatch(/^\s+client_max_body_size 100m;$/m);
     expect(body).toMatch(
       /^\s+access_log \/var\/log\/nginx\/staging\.driftstack\.dev\.access\.log;$/m,
@@ -502,12 +510,12 @@ describe('W614 infra/ content parity', () => {
       expect(body).toMatch(/^NODE_ENV=production$/m);
       expect(body).toMatch(/^PORT=7780$/m);
       expect(body).toMatch(/^LOG_LEVEL=info$/m);
-      expect(body).toMatch(/# Postgres \(Neon, eu-central-1\)/);
+      expect(body).toMatch(/#.*Postgres \(Neon, eu-central-1\)/);
       expect(body).toMatch(
         /^DATABASE_URL=postgresql:\/\/neondb_owner:[^@]+@ep-aged-pond-al77cutb\.c-3\.eu-central-1\.aws\.neon\.tech\/neondb\?sslmode=require$/m,
       );
       expect(body).toMatch(
-        /# Redis \(Upstash, rediss:\/\/ — TLS to port 6379; same auth token as REST\)/,
+        /#.*Redis \(Upstash, rediss:\/\/ — TLS to port 6379; same auth token as REST\)/,
       );
       expect(body).toMatch(
         /^REDIS_URL=rediss:\/\/default:[^@]+@welcome-antelope-114301\.upstash\.io:6379$/m,
@@ -516,28 +524,36 @@ describe('W614 infra/ content parity', () => {
         /^UPSTASH_REDIS_REST_URL=https:\/\/welcome-antelope-114301\.upstash\.io$/m,
       );
       expect(body).toMatch(/^UPSTASH_REDIS_REST_TOKEN=\S+$/m);
-      expect(body).toMatch(/# Postmark/);
+      expect(body).toMatch(/#.*Postmark/);
       expect(body).toMatch(/^POSTMARK_API_TOKEN=[0-9a-f-]+$/m);
       expect(body).toMatch(/^POSTMARK_FROM=noreply@driftstack\.dev$/m);
       expect(body).toMatch(/^POSTMARK_REPLY_TO=info@driftstack\.dev$/m);
-      expect(body).toMatch(/# Sentry \(EU region\)/);
+      expect(body).toMatch(/#.*Sentry \(EU region\)/);
       expect(body).toMatch(/^SENTRY_ENVIRONMENT=production$/m);
       expect(body).toMatch(/^SENTRY_TRACES_SAMPLE_RATE=0\.05$/m);
       expect(body).toMatch(
-        /# Stripe \(TEST mode pre-KvK; live keys swap in via SSH-write post-launch\)/,
+        /#.*Stripe \(TEST mode pre-KvK; live keys swap in via SSH-write post-launch\)/,
       );
       expect(body).toMatch(/^STRIPE_SECRET_KEY=sk_test_\S+$/m);
       expect(body).toMatch(/^STRIPE_PUBLISHABLE_KEY=pk_test_\S+$/m);
-      expect(body).toMatch(/# Auth secrets \(per-environment unique\)/);
+      expect(body).toMatch(/#.*Auth secrets \(per-environment unique\)/);
       expect(body).toMatch(/^SESSION_SIGNING_SECRET=[0-9a-f]{64}$/m);
       expect(body).toMatch(/^EMAIL_VERIFICATION_SIGNING_SECRET=[0-9a-f]{64}$/m);
       expect(body).toMatch(/^PASSWORD_RESET_SIGNING_SECRET=[0-9a-f]{64}$/m);
       expect(body).toMatch(/^MAGIC_LINK_SIGNING_SECRET=[0-9a-f]{64}$/m);
-      expect(body).toMatch(/^MFA_ENCRYPTION_KEY=[0-9a-f]{64}$/m);
+      // MFA_ENCRYPTION_KEY / PROFILE_MASTER_KEY are AES-256 keys — config.ts's
+      // boot guard requires base64-decoding to exactly 32 bytes, not the hex
+      // shape the other signing secrets use (fixed 2026-07-01: staging had
+      // this wrong as hex, which crashed the boot-time zod validation).
+      expect(body).toMatch(/^MFA_ENCRYPTION_KEY=[A-Za-z0-9+/]{43}=$/m);
+      expect(body).toMatch(/^PROFILE_MASTER_KEY=[A-Za-z0-9+/]{43}=$/m);
       expect(body).toMatch(/^WEBHOOK_DEFAULT_SIGNING_SEED=[0-9a-f]{64}$/m);
-      expect(body).toMatch(/# Public URLs/);
+      expect(body).toMatch(/# Public URLs|# ── Misc/);
       expect(body).toMatch(/^PUBLIC_BASE_URL=https:\/\/api\.driftstack\.dev$/m);
       expect(body).toMatch(/^DASHBOARD_BASE_URL=https:\/\/app\.driftstack\.dev$/m);
+      // Required by config.ts's boot-time guard — see the matching comment
+      // in the staging.env block below.
+      expect(body).toMatch(/^DASHBOARD_ORIGIN=https:\/\/app\.driftstack\.dev$/m);
       expect(body).toMatch(/^DOCS_BASE_URL=https:\/\/docs\.driftstack\.dev$/m);
       expect(body).toMatch(/^MARKETING_BASE_URL=https:\/\/driftstack\.dev$/m);
       expect(body).toMatch(/^TRUST_PROXY=1$/m);
@@ -571,10 +587,20 @@ describe('W614 infra/ content parity', () => {
       expect(body).toMatch(/^EMAIL_VERIFICATION_SIGNING_SECRET=[0-9a-f]{64}$/m);
       expect(body).toMatch(/^PASSWORD_RESET_SIGNING_SECRET=[0-9a-f]{64}$/m);
       expect(body).toMatch(/^MAGIC_LINK_SIGNING_SECRET=[0-9a-f]{64}$/m);
-      expect(body).toMatch(/^MFA_ENCRYPTION_KEY=[0-9a-f]{64}$/m);
+      // AES-256 key, base64 not hex — see the matching comment in the
+      // production.env block above (fixed 2026-07-01: this was hex here,
+      // which crashed config.ts's boot-time zod validation).
+      expect(body).toMatch(/^MFA_ENCRYPTION_KEY=[A-Za-z0-9+/]{43}=$/m);
       expect(body).toMatch(/^WEBHOOK_DEFAULT_SIGNING_SEED=[0-9a-f]{64}$/m);
       expect(body).toMatch(/^PUBLIC_BASE_URL=https:\/\/api\.staging\.driftstack\.dev$/m);
       expect(body).toMatch(/^DASHBOARD_BASE_URL=https:\/\/staging\.driftstack\.dev$/m);
+      // Required by config.ts's boot-time guard (NODE_ENV=production refuses
+      // to boot without it) — missing here since 2026-05-12 crashed staging
+      // in a restart loop until fixed 2026-07-01. See docs/internal/
+      // 2026-05-26-staging-hostname-inconsistency.md: app-staging.driftstack.dev
+      // doesn't resolve in DNS yet (separate, still-open external-config gap;
+      // this value at least satisfies the boot guard).
+      expect(body).toMatch(/^DASHBOARD_ORIGIN=https:\/\/app-staging\.driftstack\.dev$/m);
       expect(body).toMatch(/^DOCS_BASE_URL=https:\/\/docs\.driftstack\.dev$/m);
       expect(body).toMatch(/^MARKETING_BASE_URL=https:\/\/driftstack\.dev$/m);
       expect(body).toMatch(/^TRUST_PROXY=1$/m);
