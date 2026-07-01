@@ -351,12 +351,14 @@ export function serializeNavigateHistory(args: {
   requestId: string;
   sessionId: string;
   direction: 'back' | 'forward';
+  tabId?: string;
 }): NavigateHistoryRequest {
   return NavigateHistoryRequestSchema.parse({
     type: 'navigateHistory',
     requestId: args.requestId,
     sessionId: args.sessionId,
     direction: args.direction,
+    ...(args.tabId !== undefined ? { tabId: args.tabId } : {}),
   });
 }
 

@@ -157,6 +157,51 @@ describe('POST /v1/agent-sessions/:id/history (wired)', () => {
     expect(relayedDirection).toBe('forward');
   });
 
+  it('an optional tabId in the request body crosses the wire verbatim (multi-tab forward-compat); omitted when not given', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
+    const id = await createSession(fx);
+    const nodeId = 'node-history-tabid';
+    await fx.agentSessionsRepo!.setNodeId(id, nodeId);
+    let relayedTabId: unknown = 'UNSET';
+    const conn = fx.fleetControlRegistry.register(nodeId, (data) => {
+      const frame = JSON.parse(data) as {
+        type?: string;
+        requestId?: string;
+        sessionId?: string;
+        tabId?: unknown;
+      };
+      if (frame.type === 'navigateHistory') {
+        relayedTabId = 'tabId' in frame ? frame.tabId : 'ABSENT';
+        conn.handleInbound(
+          JSON.stringify({
+            type: 'navigateHistoryResult',
+            requestId: frame.requestId,
+            sessionId: frame.sessionId,
+            ok: true,
+          }),
+        );
+      }
+    });
+    const withTabId = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/history`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { direction: 'back' as const, tabId: 'tab_42' },
+    });
+    expect(withTabId.statusCode).toBe(200);
+    expect(withTabId.json<NavigateHistoryBody>().status).toBe('ok');
+    expect(relayedTabId).toBe('tab_42');
+
+    const withoutTabId = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/history`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { direction: 'back' as const },
+    });
+    expect(withoutTabId.statusCode).toBe(200);
+    expect(relayedTabId).toBe('ABSENT');
+  });
+
   it('connected node reports an error → 200 { status:"error", reason }', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
     const id = await createSession(fx);

@@ -311,14 +311,18 @@ export class FleetControlConnection {
    * matching `navigateHistoryResult`; resolves a uniform NavigateHistoryOutcome (ok /
    * error / timeout) and NEVER rejects, so the route maps each case to a response.
    * `requestId` is caller-generated (the route mints a uuid) so the key stays testable.
+   * `tabId` (optional, after `timeoutMs` to avoid shifting existing positional
+   * callers) forwards which tab's back-forward list to step — gated-inert until
+   * A3's harness reads it, same as navigateHistory itself already is.
    */
   navigateHistory(
     requestId: string,
     sessionId: string,
     direction: 'back' | 'forward',
     timeoutMs?: number,
+    tabId?: string,
   ): Promise<NavigateHistoryOutcome> {
-    const req = serializeNavigateHistory({ requestId, sessionId, direction });
+    const req = serializeNavigateHistory({ requestId, sessionId, direction, tabId });
     return this.navigateHistoryCorrelator.request(req, timeoutMs);
   }
 

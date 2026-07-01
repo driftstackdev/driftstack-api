@@ -824,6 +824,13 @@ export const NavigateHistoryRequestSchema = z
     requestId: z.string().min(1),
     sessionId: z.string().min(1),
     direction: z.enum(['back', 'forward']),
+    // `tabId` (forward-compat plumbing — A3 harness contract pending, mirrors
+    // PageStateFrame.tabId above): lets the CP tell the box WHICH tab's
+    // back-forward list to step, instead of always the foreground tab. Optional
+    // → backward-compatible (a step without it targets the session's current
+    // tab, today's only behavior). Ships gated-inert like navigateHistory
+    // itself already does: until A3's harness reads this field, it's ignored.
+    tabId: z.string().optional(),
   })
   .strict();
 export type NavigateHistoryRequest = z.infer<typeof NavigateHistoryRequestSchema>;

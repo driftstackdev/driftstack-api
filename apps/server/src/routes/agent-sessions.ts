@@ -2311,6 +2311,10 @@ export function registerAgentSessionsRoutes(
   const NavigateHistoryBodySchema = z.object({
     // The only two history steps; the closed enum mirrors the wire schema.
     direction: z.enum(['back', 'forward']),
+    // Optional (multi-tab): which tab's back-forward list to step. Omitted →
+    // the session's current tab (today's only behavior, unchanged). Gated-inert
+    // like navigateHistory itself until A3's harness reads it.
+    tabId: z.string().optional(),
   });
   app.post<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id/history',
@@ -2364,7 +2368,13 @@ export function registerAgentSessionsRoutes(
         return { status: 'error' as const, reason: RELAY_BUSY_REASON };
       }
       try {
-        const outcome = await conn.navigateHistory(randomUUID(), rec.id, parsed.data.direction);
+        const outcome = await conn.navigateHistory(
+          randomUUID(),
+          rec.id,
+          parsed.data.direction,
+          undefined,
+          parsed.data.tabId,
+        );
         if (outcome.status === 'ok') {
           return { status: 'ok' as const };
         }

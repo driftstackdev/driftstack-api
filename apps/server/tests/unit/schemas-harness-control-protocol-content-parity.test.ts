@@ -252,12 +252,18 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     );
   });
 
-  it('history-navigation frames pinned: navigateHistory (CP→node, strict, direction enum back|forward) + navigateHistoryResult (node→CP, in union)', () => {
+  it('history-navigation frames pinned: navigateHistory (CP→node, strict, direction enum back|forward, optional tabId) + navigateHistoryResult (node→CP, in union)', () => {
     // CP→node REQUEST — strict, carries the closed direction enum (the sibling of
-    // setCookies; the only two history steps).
-    expect(body).toMatch(
-      /export const NavigateHistoryRequestSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('navigateHistory'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*direction: z\.enum\(\['back', 'forward'\]\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
-    );
+    // setCookies; the only two history steps) + an optional tabId (multi-tab
+    // forward-compat, gated-inert until A3's harness reads it).
+    // toContain fragments (not a closed multi-line regex) so the tabId field +
+    // its rationale comment don't break the pin.
+    expect(body).toContain('export const NavigateHistoryRequestSchema = z');
+    expect(body).toContain('.object({');
+    expect(body).toContain("type: z.literal('navigateHistory'),");
+    expect(body).toContain('requestId: z.string().min(1),');
+    expect(body).toContain("direction: z.enum(['back', 'forward']),");
+    expect(body).toContain('tabId: z.string().optional(),');
     // node→CP RESULT — ok?/error?, lenient forward-compat like setCookiesResult.
     expect(body).toMatch(
       /export const NavigateHistoryResultSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('navigateHistoryResult'\),\s*\n?\s*requestId: z\.string\(\)\.min\(1\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*ok: z\.boolean\(\)\.optional\(\),\s*\n?\s*error: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
@@ -901,6 +907,36 @@ describe('harness-control-protocol behavioral contract', () => {
         type: 'navigateHistoryResult',
         sessionId: 'agt_1',
         ok: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('navigateHistory.tabId is optional (multi-tab forward-compat) — accepted when present, absent still validates, non-string rejected', () => {
+    expect(
+      NavigateHistoryRequestSchema.safeParse({
+        type: 'navigateHistory',
+        requestId: 'rq_1',
+        sessionId: 'agt_1',
+        direction: 'back',
+        tabId: 'tab_2',
+      }).success,
+    ).toBe(true);
+    // Omitted — unchanged from the pre-tabId behavior (targets the current tab).
+    expect(
+      NavigateHistoryRequestSchema.safeParse({
+        type: 'navigateHistory',
+        requestId: 'rq_1',
+        sessionId: 'agt_1',
+        direction: 'back',
+      }).success,
+    ).toBe(true);
+    expect(
+      NavigateHistoryRequestSchema.safeParse({
+        type: 'navigateHistory',
+        requestId: 'rq_1',
+        sessionId: 'agt_1',
+        direction: 'back',
+        tabId: 123,
       }).success,
     ).toBe(false);
   });

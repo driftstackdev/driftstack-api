@@ -174,6 +174,37 @@ describe('FleetControlConnection navigate-history (sim back/forward)', () => {
     expect(await p).toEqual({ status: 'ok' });
   });
 
+  it('navigateHistory forwards an optional tabId as the 5th positional arg (after timeoutMs) — omitted when not given', async () => {
+    const sent: string[] = [];
+    const conn = new FleetControlConnection('node-1', (d) => sent.push(d));
+    // timeoutMs explicitly undefined here, mirroring how the route calls it when
+    // the caller wants the default timeout but still needs to reach past it to tabId.
+    const p = conn.navigateHistory('rq_1', 'agt_x', 'back', undefined, 'tab_7');
+    expect(JSON.parse(sent[0]!)).toEqual({
+      type: 'navigateHistory',
+      requestId: 'rq_1',
+      sessionId: 'agt_x',
+      direction: 'back',
+      tabId: 'tab_7',
+    });
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'navigateHistoryResult',
+        requestId: 'rq_1',
+        sessionId: 'agt_x',
+        ok: true,
+      }),
+    );
+    expect(await p).toEqual({ status: 'ok' });
+  });
+
+  it('an existing positional timeoutMs caller (no tabId) is unaffected — the 4th arg still means timeoutMs, not tabId', async () => {
+    const conn = new FleetControlConnection('node-1', () => {});
+    const p = conn.navigateHistory('rq_1', 'agt_x', 'back', 1);
+    vi.advanceTimersByTime(1);
+    expect(await p).toEqual({ status: 'timeout' });
+  });
+
   it('close() fails an in-flight navigate-history (resolves immediately, not at timeout)', async () => {
     const conn = new FleetControlConnection('node-1', () => {});
     const p = conn.navigateHistory('rq_1', 'agt_x', 'forward');
