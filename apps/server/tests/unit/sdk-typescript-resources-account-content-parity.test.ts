@@ -237,7 +237,7 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
       /getBundledLlmSettings\(\): Promise<BundledLlmSettings> \{\s*\n?\s*return this\.http\.request<BundledLlmSettings>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/account\/me\/bundled-llm-settings',\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /updateBundledLlmSettings\(\s*\n?\s*body: UpdateBundledLlmSettingsRequest,\s*\n?\s*\): Promise<BundledLlmSettings> \{\s*\n?\s*return this\.http\.request<BundledLlmSettings>\(\{\s*\n?\s*method: 'PATCH',\s*\n?\s*path: '\/v1\/account\/me\/bundled-llm-settings',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /updateBundledLlmSettings\(body: UpdateBundledLlmSettingsRequest\): Promise<BundledLlmSettings> \{\s*\n?\s*return this\.http\.request<BundledLlmSettings>\(\{\s*\n?\s*method: 'PATCH',\s*\n?\s*path: '\/v1\/account\/me\/bundled-llm-settings',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
     expect(body).toMatch(
       /getBundledLlmStatus\(\): Promise<BundledLlmStatus> \{\s*\n?\s*return this\.http\.request<BundledLlmStatus>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/account\/me\/bundled-llm-status',\s*\n?\s*\}\);\s*\n?\s*\}/,
