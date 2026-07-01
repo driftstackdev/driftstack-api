@@ -50,7 +50,7 @@ export function ConnectionPill({ status, baseUrl, onClick }: Props): JSX.Element
       type="button"
       onClick={onClick}
       title={tooltip}
-      className="flex items-center gap-1.5 rounded-full border border-surface-divider bg-surface-base/60 px-2.5 py-0.5 text-[11px] text-ink-secondary transition hover:border-glow-red/40 hover:text-ink-primary"
+      className="flex items-center gap-1.5 rounded-full border border-surface-divider bg-surface-base/60 px-2.5 py-0.5 text-[11px] text-ink-secondary transition hover:border-status-error/40 hover:text-ink-primary"
     >
       <span
         className={`inline-block h-1.5 w-1.5 rounded-full ${COLOR[status.state]} ${

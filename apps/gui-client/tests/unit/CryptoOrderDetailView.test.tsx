@@ -186,6 +186,8 @@ describe('V-534.AD CryptoOrderDetailView', () => {
     render(<CryptoOrderDetailView orderId="ord_42" />);
     const cancelBtn = await waitFor(() => screen.getByRole('button', { name: /Cancel order/i }));
     fireEvent.click(cancelBtn);
+    const confirmBtn = await waitFor(() => screen.getByRole('button', { name: /Confirm cancel/i }));
+    fireEvent.click(confirmBtn);
     await waitFor(() => {
       expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/cancel'))).toBe(true);
     });

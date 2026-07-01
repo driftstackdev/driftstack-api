@@ -23,6 +23,7 @@ import {
   type DraftValidation,
 } from '../lib/fleet-members';
 import { useConfirm } from '../components/ConfirmProvider';
+import { SkeletonRows } from '../components/Skeleton';
 
 interface FormState {
   draft: FleetMemberDraft;
@@ -320,6 +321,8 @@ export function FleetView(): JSX.Element {
           </div>
         </form>
       )}
+
+      {loading && <SkeletonRows rows={3} label="Loading fleet…" />}
 
       {!loading && loadError !== null && (
         <div className="flex flex-col items-center gap-3 rounded border border-surface-divider bg-surface-raised p-8 text-center">

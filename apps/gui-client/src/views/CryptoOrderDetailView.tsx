@@ -12,6 +12,8 @@
 // once the order reaches paid; before that we surface the polling
 // status so the user knows we're waiting for on-chain confirmation.
 
+import { useEffect, useRef, useState } from 'react';
+
 import { CryptoOrderStatusBadge } from '../components/CryptoOrderStatusBadge';
 import { CryptoOrderSummaryCard } from '../components/CryptoOrderSummaryCard';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -49,6 +51,20 @@ export interface CryptoOrderDetailViewProps {
 export function CryptoOrderDetailView(props: CryptoOrderDetailViewProps): JSX.Element {
   const { state, refetch } = useCryptoOrder(props.orderId);
   const cancel = useCancelOrder();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const keepBtnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!confirmOpen) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setConfirmOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    keepBtnRef.current?.focus();
+    return () => {
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [confirmOpen]);
 
   if (props.orderId === null) {
     return (
@@ -86,7 +102,7 @@ export function CryptoOrderDetailView(props: CryptoOrderDetailViewProps): JSX.El
         <div className="flex flex-col gap-2">
           <button
             type="button"
-            onClick={() => void onCancel()}
+            onClick={() => setConfirmOpen(true)}
             disabled={cancel.state.kind === 'submitting'}
             className="self-start rounded border border-status-error/40 px-3 py-1 text-sm text-status-error hover:bg-status-error/10 disabled:opacity-50"
           >
@@ -116,6 +132,44 @@ export function CryptoOrderDetailView(props: CryptoOrderDetailViewProps): JSX.El
         </section>
       )}
       {isPaid && <CryptoReceiptView orderId={order.order_id} />}
+      {confirmOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm order cancellation"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        >
+          <div className="flex w-full max-w-md flex-col gap-4 rounded-md border border-surface-divider bg-surface-base p-6">
+            <h3 className="text-base font-semibold">Cancel this order?</h3>
+            <p className="text-sm">
+              Order <span className="font-mono text-xs">{order.order_id}</span> will be marked
+              cancelled. You can still mint a new order afterwards. Crypto payments are{' '}
+              <strong>non-refundable</strong>; cancelling only stops the pending pay window — if
+              you've already sent crypto, contact support to reconcile.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                ref={keepBtnRef}
+                type="button"
+                onClick={() => setConfirmOpen(false)}
+                className="rounded border border-surface-divider px-3 py-1 text-sm hover:bg-surface-inset"
+              >
+                Keep order
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmOpen(false);
+                  void onCancel();
+                }}
+                className="rounded border border-status-error/40 bg-status-error/10 px-3 py-1 text-sm font-medium text-status-error hover:bg-status-error/20"
+              >
+                Confirm cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

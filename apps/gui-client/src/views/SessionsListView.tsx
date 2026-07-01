@@ -37,7 +37,7 @@ export function SessionsListView(props: SessionsListViewProps): JSX.Element {
         <button
           type="button"
           onClick={() => void refetch()}
-          className="rounded border border-surface-divider px-2 py-1 text-sm text-ink-primary hover:bg-surface-hover"
+          className="rounded border border-surface-divider px-2 py-1 text-sm text-ink-primary hover:bg-surface-elevated"
         >
           Refresh
         </button>

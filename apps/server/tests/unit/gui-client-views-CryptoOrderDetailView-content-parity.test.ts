@@ -95,7 +95,7 @@ describe('W479.C apps/gui-client/src/views/CryptoOrderDetailView.tsx content par
 
   it("Cancel button: only inside cancellable branch + disabled when cancel.state.kind === 'submitting' + label 'Cancelling…' during submit else 'Cancel order' + on 'failed' state surfaces cancel.state.message inline below the button; payment-seen non-terminal explanatory copy: 'Payment activity has been detected on-chain. Cancellation is no longer self-service — contact support to reconcile or refund.' (shown only for 'confirming'/'partial' — NOT 'cancelled', which is terminal with no payment received)", () => {
     expect(body).toMatch(
-      /\{cancellable && \(\s*\n?\s*<div className="flex flex-col gap-2">\s*\n?\s*<button\s*\n?\s*type="button"\s*\n?\s*onClick=\{\(\) => void onCancel\(\)\}\s*\n?\s*disabled=\{cancel\.state\.kind === 'submitting'\}/,
+      /\{cancellable && \(\s*\n?\s*<div className="flex flex-col gap-2">\s*\n?\s*<button\s*\n?\s*type="button"\s*\n?\s*onClick=\{\(\) => setConfirmOpen\(true\)\}\s*\n?\s*disabled=\{cancel\.state\.kind === 'submitting'\}/,
     );
     expect(body).toMatch(
       /\{cancel\.state\.kind === 'submitting' \? 'Cancelling…' : 'Cancel order'\}/,
@@ -105,6 +105,19 @@ describe('W479.C apps/gui-client/src/views/CryptoOrderDetailView.tsx content par
     );
     expect(body).toMatch(
       /\{\(order\.status === 'confirming' \|\| order\.status === 'partial'\) && \(\s*\n?\s*<p className="text-xs text-ink-secondary">\s*\n?\s*Payment activity has been detected on-chain\. Cancellation is no longer self-service —\s*\n?\s*contact support to reconcile or refund\.\s*\n?\s*<\/p>\s*\n?\s*\)\}/,
+    );
+  });
+
+  it("CRITICAL confirm-cancel dialog: the Cancel button now opens a confirm dialog (setConfirmOpen(true)) instead of calling onCancel() directly — a customer misclick no longer immediately fires a non-refundable on-chain cancellation. Dialog: role='dialog' aria-modal='true' aria-label='Confirm order cancellation', 'Keep order' closes without cancelling, 'Confirm cancel' closes THEN calls onCancel(). Drift back to a direct one-click onCancel would reopen the misclick-triggers-a-non-refundable-action risk this fix closed.", () => {
+    expect(body).toMatch(/const \[confirmOpen, setConfirmOpen\] = useState\(false\);/);
+    expect(body).toMatch(
+      /\{confirmOpen && \(\s*\n?\s*<div\s*\n?\s*role="dialog"\s*\n?\s*aria-modal="true"\s*\n?\s*aria-label="Confirm order cancellation"/,
+    );
+    expect(body).toMatch(
+      /onClick=\{\(\) => setConfirmOpen\(false\)\}\s*\n?\s*className="rounded border border-surface-divider px-3 py-1 text-sm hover:bg-surface-inset"\s*\n?\s*>\s*\n?\s*Keep order/,
+    );
+    expect(body).toMatch(
+      /onClick=\{\(\) => \{\s*\n?\s*setConfirmOpen\(false\);\s*\n?\s*void onCancel\(\);\s*\n?\s*\}\}[\s\S]{0,200}Confirm cancel/,
     );
   });
 
