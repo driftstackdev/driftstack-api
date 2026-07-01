@@ -118,10 +118,20 @@ export class ProfilesResource {
    * 2026-05-20 — antidetect-browser-style one-shot launch. Creates a
    * session bound to this profile (archetype + metadata inherited from
    * the profile, last_used_at bumped server-side). Body shape is
-   * {proxy?, label?} — everything else flows from the profile.
-   * Returns the freshly-minted Session (use sessions.destroy to stop).
+   * {label?} — everything else flows from the profile. Returns the
+   * freshly-minted Session (use sessions.destroy to stop).
+   *
+   * Per-session customer-configurable egress is NOT available on this
+   * resource (or on `sessions.create()`) yet — `/v1/sessions`' execution
+   * backend has no driver-layer proxy plumbing today, so there used to be
+   * a `proxy` field here that silently did nothing; it's been removed so
+   * passing one is a compile error instead of a no-op. If you need
+   * customer-controlled egress today, use
+   * `client.agentSessions.create({ proxy_id })` instead — that resource
+   * dispatches to the real device fleet and routes traffic through one of
+   * your saved `account_proxies`.
    */
-  launch(id: string, body: { proxy?: unknown; label?: string } = {}): Promise<Session> {
+  launch(id: string, body: { label?: string } = {}): Promise<Session> {
     return this.http.request<Session>({
       method: 'POST',
       path: `/v1/profiles/${encodeURIComponent(id)}/launch`,

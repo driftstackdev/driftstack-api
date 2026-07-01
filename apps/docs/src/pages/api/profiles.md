@@ -145,10 +145,10 @@ old profile after migration.
 `POST /v1/profiles/:id/launch`
 
 ```json
-{ "proxy": null, "label": "checkout-run-2026-05-20" }
+{ "label": "checkout-run-2026-05-20" }
 ```
 
-Both fields are optional overrides; everything else flows from the
+`label` is an optional override; everything else flows from the
 profile (archetype + metadata inherited, `last_used_at` bumped
 server-side fire-and-forget). One-shot wrapper around `POST
 /v1/sessions` — equivalent to:
@@ -171,6 +171,15 @@ normal `navigate` / `interact` / `wait` / `capture` /
 `destroy` verbs (or via the desktop GUI's Live session view, which
 mounts on the returned `session.id`).
 
+Per-session customer-configurable egress is **not available** on
+this endpoint (or on `POST /v1/sessions`) yet — the execution
+backend behind both has no driver-layer proxy plumbing today, so
+there is no `proxy` body field to set here. If you need customer-
+controlled egress today, use `POST /v1/agent-sessions` with a
+`proxy_id` referencing one of your saved `/v1/account/me/proxies`
+configs instead — that resource dispatches to the real device
+fleet and actually routes traffic through the attached proxy.
+
 Errors:
 
 - `404` if the profile isn't owned by the calling account
@@ -180,9 +189,11 @@ Errors:
   a profile can run only one session at a time (the body's
   `active_session_id` names the live one). End it first, then launch.
 - Any error the underlying `POST /v1/sessions` can return — most
-  commonly `429` (concurrent-session cap reached) or `400` if the
-  EGRESS gate requires a `proxy` envelope on this deployment and the
-  launch body omits it.
+  commonly `429` (concurrent-session cap reached), or `400` on
+  deployments that force the raw-HTTP egress safeguard
+  (`SESSION_PROXY_REQUIRED=true`) if the request body lacks a `proxy`
+  key entirely. Not reachable via the official SDKs, which don't
+  expose a way to send this field (see the egress note above).
 
 ## Clone
 

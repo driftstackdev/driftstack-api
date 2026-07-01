@@ -60,16 +60,18 @@ describe('Slice 1-2 — profile_id + POST /v1/profiles/:id/launch cross-source i
     );
   });
 
-  it('TS SDK profiles.ts exposes launch(id, body?) returning Promise<Session>', () => {
+  it('TS SDK profiles.ts exposes launch(id, body?) returning Promise<Session>, with NO proxy field (removed — /v1/sessions has no driver-layer proxy plumbing yet; see agentSessions.create({ proxy_id }) for real customer egress)', () => {
     const lib = resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources/profiles.ts');
     const body = read(lib);
     expect(body).toMatch(
-      /launch\(\s*\n?\s*id: string,\s*\n?\s*body: \{ proxy\?: unknown; label\?: string \} = \{\}\s*,?\s*\n?\s*\): Promise<Session>/,
+      /launch\(\s*\n?\s*id: string,\s*\n?\s*body: \{ label\?: string \} = \{\}\s*,?\s*\n?\s*\): Promise<Session>/,
     );
     expect(body).toMatch(/path: `\/v1\/profiles\/\$\{encodeURIComponent\(id\)\}\/launch`,/);
+    expect(body).not.toMatch(/proxy\?: unknown/);
+    expect(body).toMatch(/agentSessions\.create\(\{ proxy_id \}\)/);
   });
 
-  it('Python SDK profiles.py exposes def launch + async def launch (sync + async mirrors)', () => {
+  it('Python SDK profiles.py exposes def launch + async def launch (sync + async mirrors), docstring no longer claims a proxy override', () => {
     const lib = resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/resources/profiles.py');
     const body = read(lib);
     expect(body).toMatch(
@@ -79,14 +81,14 @@ describe('Slice 1-2 — profile_id + POST /v1/profiles/:id/launch cross-source i
       /async def launch\(\s*\n?\s*self, profile_id: str, body: dict\[str, Any\] \| None = None\s*\n?\s*\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(/f"\/v1\/profiles\/\{quote\(profile_id, safe=''\)\}\/launch"/);
+    expect(body).not.toMatch(/accepts optional ``proxy`` \+ ``label`` overrides/);
   });
 
-  it('Go SDK profiles.go exposes LaunchProfileRequest + Launch method returning *Session', () => {
+  it("Go SDK profiles.go exposes LaunchProfileRequest + Launch method returning *Session, with NO Proxy field (removed — customer-configurable egress isn't wired for /v1/sessions yet)", () => {
     const lib = resolve(REPO_ROOT, 'packages/sdk-go/profiles.go');
     const body = read(lib);
-    expect(body).toMatch(
-      /type LaunchProfileRequest struct \{[\s\S]*?Proxy any[\s\S]*?Label string/,
-    );
+    expect(body).toMatch(/type LaunchProfileRequest struct \{[\s\S]*?Label string/);
+    expect(body).not.toMatch(/Proxy any/);
     expect(body).toMatch(
       /func \(r \*ProfilesResource\) Launch\(\s*\n?\s*ctx context\.Context,\s*\n?\s*profileID string,\s*\n?\s*body \*LaunchProfileRequest,\s*\n?\s*\) \(\*Session, error\)/,
     );

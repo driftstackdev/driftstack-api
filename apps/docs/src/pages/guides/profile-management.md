@@ -116,13 +116,15 @@ For the antidetect-browser flow (where the typical action is "give me a session 
 
 ```ts
 const session = await client.profiles.launch('prof_01HV...', {
-  // optional overrides — `proxy` envelope to attach a SOCKS5 backend,
-  // `label` for human-readable identification in the dashboard
+  // `label` for human-readable identification in the dashboard — the
+  // only override this endpoint accepts today.
   label: 'checkout-run-2026-05-20',
 });
 ```
 
 Returns the freshly-minted session (same shape as `sessions.create`). The dashboard `/profiles` page exposes a per-row **Launch** button that calls this endpoint and surfaces the returned `session.id`; from there the customer drives the session via the desktop GUI client's Live session view or the standard `navigate`/`interact`/`wait`/`capture`/`destroy` verbs from any SDK.
+
+`profiles.launch()` does not support customer-configurable egress yet — there's no `proxy` field to set, since `/v1/sessions`' execution backend has no driver-layer proxy plumbing today. If you need customer-controlled egress today, use `client.agentSessions.create({ proxy_id })` instead, which dispatches to the real device fleet and routes traffic through one of your saved account proxies.
 
 Profile-bound sessions inherit the profile's storage state on launch and write new state back on clean destroy (or clean idle-timeout). Without a `profile_id`, sessions start ephemeral.
 

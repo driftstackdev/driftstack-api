@@ -163,11 +163,19 @@ func (r *ProfilesResource) Purge(ctx context.Context, profileID string) error {
 }
 
 // LaunchProfileRequest — 2026-05-20 antidetect-browser-style one-shot
-// launch. Both fields are optional overrides; everything else flows
-// from the profile (archetype + metadata + last_used_at bumped
+// launch. Label is an optional override; everything else flows from
+// the profile (archetype + metadata + last_used_at bumped
 // server-side).
+//
+// Per-session customer-configurable egress is NOT available on this
+// resource yet -- /v1/sessions's execution backend has no driver-layer
+// proxy plumbing today, so this struct used to carry a Proxy field that
+// silently did nothing; it has been removed so setting one is a compile
+// error instead of a no-op. If you need customer-controlled egress
+// today, use AgentSessionsResource.Create with ProxyID instead -- that
+// resource dispatches to the real device fleet and routes traffic
+// through one of your saved account proxies.
 type LaunchProfileRequest struct {
-	Proxy any    `json:"proxy,omitempty"`
 	Label string `json:"label,omitempty"`
 }
 
