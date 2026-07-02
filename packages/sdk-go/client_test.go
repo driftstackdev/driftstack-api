@@ -432,3 +432,34 @@ func TestKeyedPostIsRetried(t *testing.T) {
 		t.Errorf("calls=%d, want 2 (keyed POST may retry)", *calls)
 	}
 }
+
+// A response body larger than the 8 MiB drain cap must surface an EXPLICIT
+// size-limit TransportError, not a silently-truncated body that then fails
+// JSON decoding with a misleading "failed to parse JSON response body". Fable
+// SDK re-audit 2026-07-02: io.LimitReader truncates without error, so the old
+// read (cap exactly) masked oversized bodies as parse failures.
+func TestOversizedResponseBody_SurfacesExplicitError(t *testing.T) {
+	t.Parallel()
+	const maxBodyBytes = 8 * 1024 * 1024
+	padding := strings.Repeat("a", maxBodyBytes+1024) // valid JSON, just over the cap
+	_, client := newServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"data":[],"has_more":false,"padding":"` + padding + `"}`))
+	})
+
+	_, err := client.Sessions.List(context.Background(), nil)
+	if err == nil {
+		t.Fatal("expected an error for an oversized response body, got nil")
+	}
+	var te *TransportError
+	if !errors.As(err, &te) {
+		t.Fatalf("expected *TransportError, got %T: %v", err, err)
+	}
+	if !strings.Contains(te.Message, "exceeds") || !strings.Contains(te.Message, "limit") {
+		t.Errorf("want an explicit size-limit message, got %q", te.Message)
+	}
+	if strings.Contains(te.Message, "parse JSON") {
+		t.Errorf("size-limit error must not masquerade as a JSON parse failure: %q", te.Message)
+	}
+}

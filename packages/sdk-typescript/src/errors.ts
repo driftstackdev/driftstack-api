@@ -534,14 +534,12 @@ export function errorFromProblem(p: Problem, retryAfterHeader: string | null): D
   const ctor = TYPE_TO_CTOR[p.type];
   if (ctor) return ctor(p);
   // Unknown problem type — surface as DriftstackError with the raw fields.
-  return new DriftstackError({
-    kind: p.status >= 500 ? 'internal' : 'bad_request',
-    status: p.status,
-    type: p.type,
-    title: p.title,
-    ...(p.detail !== undefined ? { detail: p.detail } : {}),
-    ...(p.instance !== undefined ? { instance: p.instance } : {}),
-  });
+  // Route through toOpts so the problem's EXTENSION members (code, request_id,
+  // retry_after_seconds, …) are preserved on `.extensions` rather than dropped,
+  // exactly as every mapped error type does. Retryability of an unknown 5xx
+  // (kind 'internal' → retryable, matching the SDK's documented "retry generic
+  // 5xx" policy) is intentionally unchanged.
+  return new DriftstackError(toOpts(p.status >= 500 ? 'internal' : 'bad_request', p));
 }
 
 function toOpts(

@@ -160,7 +160,16 @@ describe('W588.A packages/sdk-go/client.go content parity', () => {
     );
     expect(body).toMatch(/return transportErrorFromHTTP\("http request failed", err\)/);
     expect(body).toMatch(/const maxBodyBytes = 8 \* 1024 \* 1024/);
-    expect(body).toMatch(/body, err := io\.ReadAll\(io\.LimitReader\(resp\.Body, maxBodyBytes\)\)/);
+    // Reads one byte past the cap so an oversized body is DETECTED and surfaced
+    // as an explicit size-limit error rather than silently truncated by
+    // io.LimitReader (which returns no error) and misreported as a JSON parse
+    // failure. Fable SDK re-audit 2026-07-02.
+    expect(body).toMatch(
+      /body, err := io\.ReadAll\(io\.LimitReader\(resp\.Body, maxBodyBytes\+1\)\)/,
+    );
+    expect(body).toMatch(
+      /if len\(body\) > maxBodyBytes \{\s*\n\s*return transportErrorFromHTTP\(\s*\n\s*fmt\.Sprintf\("response body exceeds %d-byte limit", maxBodyBytes\),/,
+    );
     expect(body).toMatch(
       /if resp\.StatusCode == http\.StatusNoContent \|\| len\(body\) == 0 \|\| opts\.out == nil \{\s*\n\s*return nil\s*\n\s*\}/,
     );

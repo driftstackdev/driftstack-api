@@ -348,11 +348,21 @@ func (c *Client) doOnce(ctx context.Context, opts requestOptions) error {
 
 	// Drain body once — needed both for success path (decode) and
 	// error path (parse problem-json). Cap at a reasonable ceiling so
-	// a hostile server can't OOM the SDK.
+	// a hostile server can't OOM the SDK. Read ONE byte past the cap so a
+	// body that exceeds the ceiling is DETECTED and surfaced as an explicit
+	// "too large" transport error rather than silently truncated: io.LimitReader
+	// returns no error on truncation, so a >cap valid JSON body would otherwise
+	// masquerade as a misleading "failed to parse JSON response body" below.
 	const maxBodyBytes = 8 * 1024 * 1024
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
 	if err != nil {
 		return transportErrorFromHTTP("failed to read response body", err)
+	}
+	if len(body) > maxBodyBytes {
+		return transportErrorFromHTTP(
+			fmt.Sprintf("response body exceeds %d-byte limit", maxBodyBytes),
+			nil,
+		)
 	}
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {

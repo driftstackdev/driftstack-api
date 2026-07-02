@@ -259,11 +259,13 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
     );
   });
 
-  it("errorFromProblem unknown-type fallback — `kind: p.status >= 500 ? 'internal' : 'bad_request'`. CRITICAL: drift to defaulting to a single kind would lose the retryability split (internal IS retryable per isRetryable; bad_request is NOT). The unknown-type path uses DriftstackError directly (not a typed subclass) so consumers fall back to `instanceof DriftstackError`.", () => {
+  it("errorFromProblem unknown-type fallback — routes through toOpts(p.status >= 500 ? 'internal' : 'bad_request', p). CRITICAL: (a) the status-based kind keeps the retryability split (internal IS retryable per isRetryable; bad_request is NOT); (b) routing through toOpts preserves the problem's EXTENSION members on .extensions (Fable SDK re-audit 2026-07-02 — the old direct-construct fallback dropped them). The unknown-type path uses DriftstackError directly (not a typed subclass) so consumers fall back to `instanceof DriftstackError`.", () => {
     expect(body).toMatch(
       /\/\/ Unknown problem type — surface as DriftstackError with the raw fields\./,
     );
-    expect(body).toMatch(/kind: p\.status >= 500 \? 'internal' : 'bad_request',/);
+    expect(body).toMatch(
+      /return new DriftstackError\(toOpts\(p\.status >= 500 \? 'internal' : 'bad_request', p\)\);/,
+    );
   });
 
   it('toOpts helper — maps Problem → DriftstackError constructor opts. Conditional spread on detail + instance (NOT always-include) keeps undefined-vs-missing-key distinction so extensions={} stays clean of fake "detail: undefined" entries. extensions: extensionMembers(p) call pinned.', () => {

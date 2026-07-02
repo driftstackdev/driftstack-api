@@ -165,15 +165,46 @@ describe('errorFromProblem', () => {
     expect(e).toBeInstanceOf(NotFoundError);
   });
 
-  it('unknown problem type → DriftstackError with raw fields', () => {
+  it('unknown problem type → DriftstackError with raw fields + preserved extensions', () => {
     const e = errorFromProblem(
-      { type: 'https://errors.example.dev/custom', title: 'Custom', status: 418 },
+      {
+        type: 'https://errors.example.dev/custom',
+        title: 'Custom',
+        status: 418,
+        // Extension members MUST survive the unknown-type fallback (they were
+        // dropped before the Fable SDK re-audit fix — the fallback bypassed
+        // toOpts/extensionMembers).
+        request_id: 'req_abc123',
+        code: 'teapot',
+      },
       null,
     );
     expect(e).toBeInstanceOf(DriftstackError);
     expect(e).not.toBeInstanceOf(BadRequestError);
     expect(e.type).toBe('https://errors.example.dev/custom');
     expect(e.status).toBe(418);
+    expect(e.extensions.request_id).toBe('req_abc123');
+    expect(e.extensions.code).toBe('teapot');
+    // <500 unknown → bad_request (non-retryable).
+    expect(e.kind).toBe('bad_request');
+  });
+
+  it('unknown 5xx problem type → retryable internal kind, extensions preserved', () => {
+    const e = errorFromProblem(
+      {
+        type: 'https://errors.driftstack.dev/upstream-overloaded',
+        title: 'Overloaded',
+        status: 503,
+        retry_after_seconds: 30,
+      },
+      null,
+    );
+    expect(e).toBeInstanceOf(DriftstackError);
+    expect(e.status).toBe(503);
+    // Documented policy: a generic (non-terminal) 5xx is retryable.
+    expect(e.kind).toBe('internal');
+    expect(isRetryable(e)).toBe(true);
+    expect(e.extensions.retry_after_seconds).toBe(30);
   });
 
   it('preserves extension members on the parent class via .extensions', () => {
