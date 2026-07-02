@@ -25,9 +25,8 @@ Restoring a snapshot creates a **new profile row** populated from
 the snapshot's frozen state — the source profile is untouched and
 the new profile starts evolving from there.
 
-The customer-dashboard surface for snapshots lives at
-[/snapshots](https://app.driftstack.dev/snapshots). The endpoints
-below are the API equivalents.
+Snapshots are captured and restored in the Driftstack desktop app
+(the profiles hub). The endpoints below are the API equivalents.
 
 ## Capture a snapshot of a profile
 

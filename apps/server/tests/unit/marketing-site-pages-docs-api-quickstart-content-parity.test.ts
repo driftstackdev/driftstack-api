@@ -12,7 +12,9 @@
 //   • Session id ses_ prefix + creating → ready → busy → destroyed /
 //     errored states.
 //   • Captures inline base64 + encoding field + byte_size + duration_ms.
-//   • Live-view at https://app.driftstack.dev/sessions/<id>.
+//   • Live session viewed in the Driftstack desktop app (2026-07-02:
+//     the web /sessions/<id> live-view URL was retired — sessions are
+//     driven + viewed in the desktop GUI, not the web dashboard).
 //   • Poll every 5 seconds fine for small workloads; webhooks for prod.
 //   • developers@driftstack.dev + 1-business-day SLA.
 
@@ -74,10 +76,10 @@ describe('W512.C apps/marketing-site/src/pages/docs/api-quickstart.astro content
     );
   });
 
-  it("Live-view URL pinned: 'https://app.driftstack.dev/sessions/<id>' — pinned so the dashboard live-view URL pattern stays consistent (drift to a different path would create marketing↔dashboard-routing divergence)", () => {
-    expect(body).toMatch(
-      /Open the live-view stream in\s*\n?\s*the dashboard at\s*\n?\s*<code>https:\/\/app\.driftstack\.dev\/sessions\/&lt;id&gt;<\/code>\./,
-    );
+  it('Live-view framing pinned: sessions are watched in the Driftstack desktop app (2026-07-02 account-portal IA — the web /sessions/<id> live-view route was retired; drift back to a web live-view URL would resurrect a 404 path)', () => {
+    expect(body).toMatch(/Watch the live session in the\s*\n?\s*Driftstack desktop app\./);
+    // The retired web live-view URL must NOT come back.
+    expect(body).not.toMatch(/app\.driftstack\.dev\/sessions\//);
   });
 
   it('Separate-navigate-call framing pinned: \'To drive the session to a URL after it\'s running, use POST /v1/sessions/<id>/navigate with {"url": "https://example.com"} — the session-create call itself doesn\'t take a target URL.\' — pinned so the separate-navigate + sessions.create-no-URL commitment stays consistent with /docs/sdk-typescript + /docs/sdk-python (drift to claiming session-create takes a URL would create marketing↔SDK divergence)', () => {
