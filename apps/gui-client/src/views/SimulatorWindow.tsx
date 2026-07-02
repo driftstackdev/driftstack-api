@@ -4704,6 +4704,7 @@ export function SimulatorWindow(): JSX.Element {
   // NEW_TAB_URL so the tab label + address bar read sensibly before the box reports.
   const onNewTab = useCallback((): void => {
     const tab: SimTab = { id: makeTabId(), url: NEW_TAB_URL, scrollY: 0, title: NEW_TAB_TITLE };
+    const prevActive = activeTabId;
     setTabs((prev) => {
       const next = [...prev, tab];
       emitTabList(next, tab.id);
@@ -4718,7 +4719,28 @@ export function SimulatorWindow(): JSX.Element {
     // tab automatically (the about:blank/'New Tab' record), so there's no manual
     // reset to do — and no stamp-back loop to carry the prior page onto the + tab.
     lastSwitchAtRef.current = Date.now();
-  }, [emitTabList, resetPageChromeForSwitch]);
+    // ACTIVELY switch the box's published page to the new tab NOW. emitTabList above
+    // is a state-only tabListUpdate that does NOT switch the published page (per the
+    // A2↔A3 contract), so without this the box keeps publishing the PRIOR tab and the
+    // founder sees the old page linger until the box happens to catch up (founder
+    // 2026-07-02: "new tab keeps the old tab open until the new page loads"). Fire the
+    // same activateTab path onActivateTab uses so the box starts loading NEW_TAB_URL
+    // immediately + the GUI shows instant "switching…" feedback. Via the *Ref handles
+    // because sendActivateAttempt / reconcilePageState are defined below this callback.
+    if (room !== null) {
+      setSwitchingTabId(tab.id);
+      sendActivateAttemptRef.current({
+        tabId: tab.id,
+        prevTabId: prevActive,
+        url: NEW_TAB_URL,
+        scrollY: 0,
+      });
+      reconcilePageStateRef.current();
+      window.setTimeout(() => {
+        setSwitchingTabId((s) => (s === tab.id ? null : s));
+      }, SWITCH_AFFORDANCE_TIMEOUT_MS);
+    }
+  }, [emitTabList, resetPageChromeForSwitch, activeTabId, room]);
   // Close a tab — remove it; if it was active, activate the nearest neighbor (prefer
   // the one to the left, else the right). NEVER drops below one tab (the close button
   // is hidden on the last tab too, but guard here as well).

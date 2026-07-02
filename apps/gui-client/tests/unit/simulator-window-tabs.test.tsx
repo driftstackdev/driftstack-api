@@ -150,6 +150,7 @@ describe('SimulatorWindow — page tab strip', () => {
 
   it('the + button appends a tab, activates it, and publishes the full list', () => {
     const { container } = renderSim();
+    sendActivateTab.mockClear();
     fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
     const tabs = tabEls(container);
     expect(tabs).toHaveLength(2);
@@ -161,6 +162,14 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(payload.sessionId).toBe('agt_x');
     expect(payload.tabs).toHaveLength(2);
     expect(payload.activeTabId).toBe((payload.tabs[1] as { id: string }).id);
+    // The + must ACTIVELY switch the box to the new tab's page (a state-only
+    // tabListUpdate does NOT switch the published page per the contract) so the box
+    // starts loading NEW_TAB_URL immediately instead of lingering on the prior tab
+    // (founder 2026-07-02: "new tab keeps the old tab open until the new page loads").
+    expect(sendActivateTab).toHaveBeenCalledTimes(1);
+    const activateArg = sendActivateTab.mock.calls[0][1] as { tabId: string; url: string };
+    expect(activateArg.tabId).toBe((payload.tabs[1] as { id: string }).id);
+    expect(activateArg.url).toBe('https://driftstack.dev/newtab/');
   });
 
   it('clicking an inactive tab activates it + sends activateTab (correlation) and a fresh list', () => {
