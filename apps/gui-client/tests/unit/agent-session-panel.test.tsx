@@ -641,3 +641,44 @@ describe('AgentSessionPanel overlay UX', () => {
     }
   });
 });
+
+describe('AgentSessionPanel optimistic tap ripple (#124 perceived-latency)', () => {
+  it('spawns a ripple on pointerdown over the live video when interactive, and clears it after the timeout', () => {
+    connectMock.mockReset();
+    connectMock.mockReturnValueOnce(new Promise(() => {})); // stays connecting; room is still created on mount
+    vi.useFakeTimers();
+    try {
+      const { container } = render(<AgentSessionPanel info={INFO} interactive />);
+      const video = container.querySelector('video') as HTMLVideoElement;
+      // jsdom's PointerEvent drops clientX/Y; a MouseEvent typed 'pointerdown'
+      // carries finite coords AND still triggers React's onPointerDown.
+      act(() => {
+        fireEvent(
+          video,
+          new MouseEvent('pointerdown', { bubbles: true, clientX: 40, clientY: 60 }),
+        );
+      });
+      // An instant visual pulse appears the moment the pointer goes down —
+      // masking the input→inject→re-encode→publish round-trip.
+      expect(container.querySelectorAll('[data-tap-ripple]')).toHaveLength(1);
+      // …and it auto-clears so ripples never accumulate.
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+      expect(container.querySelectorAll('[data-tap-ripple]')).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does NOT spawn a ripple when the panel is non-interactive (subscriber-only embed — no real tap is sent)', () => {
+    connectMock.mockReset();
+    connectMock.mockReturnValueOnce(new Promise(() => {}));
+    const { container } = render(<AgentSessionPanel info={INFO} />);
+    const video = container.querySelector('video') as HTMLVideoElement;
+    act(() => {
+      fireEvent(video, new MouseEvent('pointerdown', { bubbles: true, clientX: 40, clientY: 60 }));
+    });
+    expect(container.querySelectorAll('[data-tap-ripple]')).toHaveLength(0);
+  });
+});

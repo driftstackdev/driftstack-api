@@ -181,6 +181,47 @@ export function isAuthConnectError(message: string): boolean {
 
 const IPHONE_16_PRO_ASPECT_RATIO = 1206 / 2622; // ≈ 0.46
 
+/**
+ * Optimistic local tap feedback — a soft pulse rendered at the touch point the
+ * INSTANT the pointer goes down, so a tap FEELS immediate while the real input
+ * makes its round-trip (pointerdown → data channel → box harness inject → fork
+ * repaint → encode → publish → decode). Founder 2026-07-02: "browser/GUI can be
+ * very unresponsive, delayed taps/clicks". This is PURELY visual — it does NOT
+ * synthesize or alter the InputEvent sent to the device (useInputCapture owns
+ * the real tap); it only masks the perceived latency. Self-removes when its
+ * animation finishes. Falls back to a no-op if Web Animations is unavailable
+ * (the parent's timeout still clears the ripple from state).
+ */
+function TapRipple({ x, y }: { x: number; y: number }): JSX.Element {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el === null || typeof el.animate !== 'function') return;
+    const anim = el.animate(
+      [
+        { transform: 'translate(-50%, -50%) scale(0.35)', opacity: 0.5 },
+        { transform: 'translate(-50%, -50%) scale(1)', opacity: 0 },
+      ],
+      { duration: 450, easing: 'cubic-bezier(0.2, 0.65, 0.3, 1)' },
+    );
+    return () => anim.cancel();
+  }, []);
+  return (
+    <span
+      ref={ref}
+      aria-hidden="true"
+      data-tap-ripple=""
+      className="pointer-events-none absolute z-[15] block h-11 w-11 rounded-full"
+      style={{
+        left: x,
+        top: y,
+        background: 'radial-gradient(circle, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 70%)',
+        willChange: 'transform, opacity',
+      }}
+    />
+  );
+}
+
 export function AgentSessionPanel({
   info,
   aspectRatio = IPHONE_16_PRO_ASPECT_RATIO,
@@ -207,6 +248,11 @@ export function AgentSessionPanel({
   // when it mounts — a ref's `.current` is mutated without re-rendering, so an
   // effect keyed on the ref would attach to the stale (null) element.
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
+  // Optimistic-tap-feedback state (#124): a small ring of active ripples, each
+  // spawned on pointerdown over the live video and auto-cleared shortly after.
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const rippleIdRef = useRef(0);
+  const [ripples, setRipples] = useState<Array<{ id: number; x: number; y: number }>>([]);
   const [state, setState] = useState<LivekitConnectionState>({ kind: 'idle' });
   // Box aspect = the `aspectRatio` prop, which the simulator drives with the LIVE
   // CONTENT aspect (videoW/videoH) — the SAME value its window-sizing math uses to
@@ -606,6 +652,24 @@ export function AgentSessionPanel({
       // margin reads as bezel, not a light frame.
       className="relative h-full max-h-full max-w-full overflow-hidden rounded-lg bg-black"
       style={{ aspectRatio: effectiveAspectRatio.toString() }}
+      ref={containerRef}
+      onPointerDown={(e) => {
+        // Optimistic tap ripple (#124): fire ONLY on a direct pointerdown on the
+        // live <video> while interactive. A terminal/reconnecting overlay is a
+        // higher-z child, so `e.target` is that overlay (not the video) and no
+        // ripple shows over it — matching where a real tap is actually accepted.
+        // Purely visual: useInputCapture (attached to the same <video>) still
+        // owns the real InputEvent; this only masks the input→publish round-trip.
+        if (!interactive || room === null || e.target !== videoRef.current) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return; // no coords → nothing to place
+        const id = (rippleIdRef.current += 1);
+        // Cap the concurrent ring so a rapid tap storm can't unbound the array.
+        setRipples((prev) => [...prev.slice(-4), { id, x, y }]);
+        window.setTimeout(() => setRipples((prev) => prev.filter((r) => r.id !== id)), 500);
+      }}
     >
       <video
         ref={(el) => {
@@ -633,6 +697,12 @@ export function AgentSessionPanel({
           }
         }}
       />
+      {/* Optimistic tap ripples (#124) — sit above the <video> (z-15) but below
+          every terminal/reconnecting overlay (z-20+), so they never draw over a
+          "Session ended" / "Switching…" state. */}
+      {ripples.map((r) => (
+        <TapRipple key={r.id} x={r.x} y={r.y} />
+      ))}
       {/* Chrome-band masks REMOVED (A3 84de32ad4d content-only per-archetype fork on
           box mac-macstadium-us-001): the old fork baked a ~110px bottom + ~50px top
           bezel-black band into the capture (it hid the iOS-Safari URL bar but kept the
