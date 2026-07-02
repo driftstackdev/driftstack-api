@@ -2497,7 +2497,20 @@ export function SimulatorWindow(): JSX.Element {
       const ct = el !== null && Number.isFinite(el.currentTime) ? el.currentTime : null;
       if (ct !== null) {
         const prev = lastSampledCurrentTimeRef.current;
-        if (prev === null || Math.abs(ct - prev) > 0.001) {
+        if (prev === null) {
+          // FIRST sample: SEED the baseline only — do NOT stamp it as an advance.
+          // Before any real frame the <video>'s currentTime is pinned at 0; if the
+          // null-baseline counted as progress it stamped lastCurrentTimeAdvanceAtRef,
+          // which armed sawFramesRef (lastProgressAt>0) even though nothing was ever
+          // decoded — so a session whose worker never publishes (proxy down / long
+          // cold start) false-fired 'Video frozen' 4s later, which drove the
+          // resubscribe→Room-rebuild recovery loop (~every 16s) and SUPPRESSED the
+          // honest 'no live video' launch-failed overlay (its 30s no-publisher timer
+          // never elapsed because the rebuild kept restarting it). Progress is now
+          // recorded only on an ACTUAL currentTime change. (Fable GUI re-audit
+          // 2026-07-02.)
+          lastSampledCurrentTimeRef.current = ct;
+        } else if (Math.abs(ct - prev) > 0.001) {
           lastSampledCurrentTimeRef.current = ct;
           lastCurrentTimeAdvanceAtRef.current = now;
         }
@@ -4604,8 +4617,13 @@ export function SimulatorWindow(): JSX.Element {
   // ── Browser-style page TABS (doc-150 item 4; locked A2↔A3 contract) ──────────
   // Fire-and-forget full-list publish to the harness; called on EVERY new / close /
   // switch / reorder so the harness reconciles its per-tab pages. No-op (the wire
-  // payload is still computed) until the room connects. Teardown races are swallowed
-  // in the livekit wrapper, so a stray send during disconnect can't blank the window.
+  // payload is still computed) until the room connects. MUST .catch: the livekit
+  // wrapper only swallows BENIGN teardown races, but a tab op landing mid-RECONNECT
+  // rejects with "Publisher connection not set" / "could not establish Publisher
+  // connection" (not benign-matched) → re-thrown into this `void` → the global
+  // unhandledrejection backstop paints the fatal overlay over the borderless
+  // window (the 2026-06-18 blank-black-box incident). A dropped tab-list push
+  // during a reconnect is harmless — the next new/close/switch re-syncs the set.
   const emitTabList = useCallback(
     (nextTabs: SimTab[], nextActiveId: string): void => {
       if (room === null || sessionId === '') return;
@@ -4613,7 +4631,7 @@ export function SimulatorWindow(): JSX.Element {
         sessionId,
         tabs: nextTabs.map((t) => ({ id: t.id, url: t.url, scrollY: t.scrollY, title: t.title })),
         activeTabId: nextActiveId,
-      });
+      }).catch(() => undefined);
     },
     [room, sessionId],
   );
@@ -4706,6 +4724,16 @@ export function SimulatorWindow(): JSX.Element {
   // is hidden on the last tab too, but guard here as well).
   const onCloseTab = useCallback(
     (id: string): void => {
+      // Cancel any in-flight switch retry for the tab being CLOSED so its ack-miss
+      // timer can't re-issue activateTab for a tab that no longer exists (the box
+      // would try to switch its published page to a removed tab). Same root cause
+      // as the superseded-switch cancel in onActivateTab. (Fable GUI re-audit
+      // 2026-07-02.)
+      const closingRetry = activationRetryRef.current.get(id);
+      if (closingRetry !== undefined) {
+        window.clearTimeout(closingRetry.timer);
+        activationRetryRef.current.delete(id);
+      }
       // Whether the close moves focus to a neighbour (we closed the ACTIVE tab). Side
       // effects (grace-arm + chrome reset) run OUTSIDE the setTabs reducer to keep it pure.
       const closingActive = id === activeTabId;
@@ -4843,6 +4871,21 @@ export function SimulatorWindow(): JSX.Element {
       const target = tabs.find((t) => t.id === id);
       if (target === undefined || id === activeTabId) return;
       const prevActive = activeTabId;
+      // SUPERSEDE any in-flight switch to a DIFFERENT tab: cancel its ack-miss
+      // retry timer so a stale timer can't later re-issue activateTab for the
+      // abandoned tab. Without this, tapping B then quickly C left B's 1200ms
+      // retry armed; if B's ack lagged past that window the timer re-activated B
+      // on the box — swinging the published video BACK to B while the GUI shows C
+      // (video/GUI desync), and the next tabId-less poll then wrote B's url onto
+      // tab C (corrupting the active tab's stored URL). resolveSwitch's own doc
+      // says it's called "when a newer switch supersedes it" — this wires that.
+      // (Fable GUI re-audit 2026-07-02.)
+      for (const [tid, r] of activationRetryRef.current) {
+        if (tid !== id) {
+          window.clearTimeout(r.timer);
+          activationRetryRef.current.delete(tid);
+        }
+      }
       // Mark the switch BEFORE flipping active so the ~2s poll's grace window is
       // armed for the moment the activeTabId changes — without it a poll tick that
       // already carries the PRIOR tab's url (no tabId) would clobber the just-

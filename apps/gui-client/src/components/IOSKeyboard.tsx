@@ -88,12 +88,25 @@ export interface IOSKeyboardProps {
 }
 
 /** Fire a real keypress: keyDown then keyUp with the SAME `key` (mirrors the
- *  host path — a keypress is down-then-up). Fire-and-forget; sendInputEvent
- *  already swallows benign teardown races. No-op without a room. */
+ *  host path — a keypress is down-then-up). Fire-and-forget. No-op without a room.
+ *
+ *  MUST .catch every send: sendInputEvent only swallows BENIGN teardown races
+ *  (isBenignTeardownError — "PC manager is closed" etc.), but a keypress landing
+ *  mid-RECONNECT rejects with "Publisher connection not set" / "could not
+ *  establish Publisher connection" which are NOT benign-matched → re-thrown. An
+ *  uncaught reject on this `void` call reaches the global unhandledrejection
+ *  backstop, which (its regex is narrower still) paints the fatal overlay over
+ *  the borderless simulator → undraggable black box → force-quit (the exact
+ *  2026-06-18 incident). A dropped keystroke during a reconnect is acceptable
+ *  (the founder retypes; the input-capture path owns the dead-channel badge), so
+ *  swallow here rather than widening the shared benign-teardown allowlist (which
+ *  input-capture relies on re-throwing to surface a genuinely dead channel). */
 function pressKey(room: Room | null, key: string): void {
   if (room === null) return;
-  void sendInputEvent(room, { type: 'keyDown', key });
-  void sendInputEvent(room, { type: 'keyUp', key });
+  // Promise.resolve wraps the call so .catch is safe even if sendInputEvent is
+  // mocked to return a non-Promise (matches livekit-latency-ping's guard).
+  void Promise.resolve(sendInputEvent(room, { type: 'keyDown', key })).catch(() => undefined);
+  void Promise.resolve(sendInputEvent(room, { type: 'keyUp', key })).catch(() => undefined);
 }
 
 /**
@@ -104,9 +117,15 @@ function pressKey(room: Room | null, key: string): void {
 export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps): JSX.Element {
   const [layer, setLayer] = useState<KeyboardLayer>('letters');
   const [shift, setShift] = useState<ShiftState>('off');
-  // The currently-pressed CHARACTER key (its sent `key`), for the iOS pop-up
-  // magnifier. Function keys get a press-state highlight, not a pop-up.
-  const [poppedKey, setPoppedKey] = useState<string | null>(null);
+  // The currently-pressed CHARACTER key for the iOS pop-up magnifier: its stable
+  // button IDENTITY (`ch`, layer-relative, shift-independent) + the cased GLYPH to
+  // show in the balloon, both captured at press. Keyed by identity — NOT the
+  // shift-cased `sent` value — because a one-shot-shift press consumes the shift
+  // in the same render, so a sent-value match ('Q' set at press vs a recomputed
+  // 'q' at render) went false and the balloon never appeared for a shifted
+  // letter. The frozen glyph keeps the balloon showing the UPPERCASE letter even
+  // after the shift reverts. Function keys get a press highlight, not a pop-up.
+  const [poppedKey, setPoppedKey] = useState<{ id: string; glyph: string } | null>(null);
   // Last shift-tap timestamp, for the double-tap → caps-lock detection.
   const lastShiftTap = useRef(0);
 
@@ -115,6 +134,13 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
     (ch: string): void => {
       const key = keyForChar(ch, layer === 'letters' ? shift : 'off');
       pressKey(room, key);
+      // A non-shift keypress BREAKS the shift double-tap sequence: caps-lock is
+      // "two shift taps IN A ROW". Without clearing this, fast-typing an acronym
+      // like "AB" (shift → a → shift, all within 300ms) had the second shift see
+      // the FIRST shift's timestamp still within the window and falsely engage
+      // caps-lock. Reset it so only two CONSECUTIVE shift taps lock. (Fable GUI
+      // re-audit 2026-07-02.)
+      lastShiftTap.current = 0;
       // One-shot shift reverts after a single letter (iOS); caps-lock persists.
       if (layer === 'letters' && shift === 'once') setShift('off');
     },
@@ -184,14 +210,14 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
 
             {row.map((ch) => {
               const shown = layer === 'letters' ? applyShift(ch, shift) : ch;
-              const sent = layer === 'letters' ? keyForChar(ch, shift) : ch;
               return (
                 <CharKey
                   key={ch}
                   label={shown}
-                  popped={poppedKey === sent}
+                  popped={poppedKey?.id === ch}
+                  popLabel={poppedKey?.id === ch ? poppedKey.glyph : shown}
                   onDown={() => {
-                    setPoppedKey(sent);
+                    setPoppedKey({ id: ch, glyph: shown });
                     onCharPress(ch);
                   }}
                   onUp={() => setPoppedKey(null)}
@@ -254,11 +280,15 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
 function CharKey({
   label,
   popped,
+  popLabel,
   onDown,
   onUp,
 }: {
   label: string;
   popped: boolean;
+  /** Glyph shown in the pop-up balloon — frozen at press so a one-shot-shift
+   *  letter's balloon stays uppercase after the shift reverts. Defaults to label. */
+  popLabel?: string;
   onDown: () => void;
   onUp: () => void;
 }): JSX.Element {
@@ -287,7 +317,7 @@ function CharKey({
           aria-hidden="true"
           className="pointer-events-none absolute -top-[44px] left-1/2 z-30 flex h-[48px] w-[44px] -translate-x-1/2 items-center justify-center rounded-[10px] bg-white text-[26px] leading-none text-[#1c1c1e] shadow-[0_3px_8px_rgba(0,0,0,0.35)]"
         >
-          {label}
+          {popLabel ?? label}
         </span>
       )}
     </button>

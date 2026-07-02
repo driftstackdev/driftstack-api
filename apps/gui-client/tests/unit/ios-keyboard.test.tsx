@@ -203,6 +203,27 @@ describe('IOSKeyboard — shift', () => {
     }
   });
 
+  it('a char press BETWEEN two quick shift taps does NOT falsely caps-lock (fast acronym "AB")', () => {
+    const now = vi.spyOn(Date, 'now');
+    try {
+      const { container } = render(<IOSKeyboard room={ROOM} />);
+      const kb = (): Element => el(container, '[data-component="ios-keyboard"]');
+      now.mockReturnValue(1000);
+      tap(container, '⇧'); // shift → once (uppercase keys)
+      // Type a letter WITHIN the double-tap window — consumes the one-shot shift
+      // AND must break the double-tap sequence.
+      pressKey(container, 'A');
+      expect(kb()).toHaveAttribute('data-shift', 'off');
+      // A second shift tap still inside the FIRST tap's window must NOT lock,
+      // because the intervening keypress reset the double-tap timer.
+      now.mockReturnValue(1000 + DOUBLE_TAP_MS - 1);
+      tap(container, '⇧');
+      expect(kb()).toHaveAttribute('data-shift', 'once'); // toggled on, NOT locked
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('two slow taps (outside the window) do NOT caps-lock — they toggle one-shot off', () => {
     const now = vi.spyOn(Date, 'now');
     try {
@@ -305,6 +326,25 @@ describe('IOSKeyboard — key pop-up magnifier', () => {
     expect(container.querySelector('[data-component="key-popup"]')).not.toBeNull();
     act(() => {
       fireEvent.pointerUp(aKey);
+    });
+    expect(container.querySelector('[data-component="key-popup"]')).toBeNull();
+  });
+
+  it('shows the UPPERCASE glyph in the balloon for a one-shot-shifted letter (frozen at press)', () => {
+    const { container } = render(<IOSKeyboard room={ROOM} />);
+    tap(container, '⇧'); // shift → once; letter keys render uppercase (data-key="A")
+    const aKey = el(container, '[data-key="A"]');
+    act(() => {
+      fireEvent.pointerDown(aKey);
+    });
+    // The press consumes the one-shot shift so the key re-renders lowercase, but
+    // the pop-up balloon must still show the UPPERCASE 'A' it was pressed as
+    // (regression: the pre-fix popped-vs-sent match went false → NO balloon).
+    const popup = container.querySelector('[data-component="key-popup"]');
+    expect(popup).not.toBeNull();
+    expect(popup?.textContent).toBe('A');
+    act(() => {
+      fireEvent.pointerUp(el(container, '[data-key="a"]')); // key is now lowercase
     });
     expect(container.querySelector('[data-component="key-popup"]')).toBeNull();
   });

@@ -97,9 +97,16 @@ export function parseConnectionStats(report: RTCStatsReport): ConnectionStats {
     out.relayed = relayed;
     // Effective transport: a relay's relayProtocol if relayed, else the local
     // candidate protocol (udp/tcp).
-    const proto = (relayed ? (local?.relayProtocol ?? local?.protocol) : local?.protocol) as
+    const rawProto = (relayed ? (local?.relayProtocol ?? local?.protocol) : local?.protocol) as
       | string
       | undefined;
+    // TURN-over-TLS ('tls') is TCP-based (TLS runs over TCP, typically on 443) —
+    // the single most common "relayed over TCP" case when UDP is blocked
+    // (corporate / hotel / VPN networks), and exactly the head-of-line-blocking,
+    // worse-than-RDP path this badge exists to surface. Without mapping it, `proto`
+    // was 'tls' → failed the udp/tcp guard → transport stayed null → the pill read
+    // 'unknown' and the slow-relay warning never showed. (Fable GUI re-audit.)
+    const proto = rawProto === 'tls' ? 'tcp' : rawProto;
     if (proto === 'udp' || proto === 'tcp') out.transport = proto;
   }
 

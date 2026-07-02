@@ -159,8 +159,12 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).toMatch(
       /export const AUTO_RECONNECT_BACKOFF_MS = \[1_000, 3_000, 9_000\] as const;/,
     );
-    // The Disconnected handler schedules a backoff bump of retryNonce.
-    expect(body).toMatch(/autoReconnectAttempt < AUTO_RECONNECT_BACKOFF_MS\.length/);
+    // The Disconnected handler schedules a backoff bump of retryNonce. The
+    // attempt counter is a component-level REF (autoReconnectAttemptRef) so it
+    // survives the effect re-run each reconnect triggers — a plain effect-local
+    // reset every reconnect, defeating the backoff+cap (Fable GUI re-audit).
+    expect(body).toMatch(/autoReconnectAttemptRef\.current < AUTO_RECONNECT_BACKOFF_MS\.length/);
+    expect(body).toMatch(/const autoReconnectAttemptRef = useRef\(0\);/);
     expect(body).toMatch(/setRetryNonce\(\(n\) => n \+ 1\);/);
     // Both timers are cleared on teardown so a torn-down panel can't fire stale work.
     expect(body).toMatch(/if \(autoReconnectTimer !== null\) clearTimeout\(autoReconnectTimer\);/);

@@ -259,6 +259,19 @@ export function AgentSessionPanel({
   // RemoteTrackPublication the SFU surfaces for the worker's published video track.
   const videoPublicationRef = useRef<{ setSubscribed?: (s: boolean) => void } | null>(null);
 
+  // #8 auto-reconnect attempt counter — held in a REF so it survives the connect
+  // effect re-run that each reconnect triggers (a Disconnected schedules a
+  // reconnect by bumping retryNonce, which is in the effect's deps → the effect
+  // tears down and re-runs). A plain effect-local `let` reset to 0 on every such
+  // re-run, so the exponential backoff (1s→3s→9s) and the 3-attempt cap were
+  // UNREACHABLE — a flaky link that keeps dropping reconnected at a flat 1s
+  // forever and never fell back to the manual Reconnect overlay (contributing to
+  // "reconnects happen too often", task #70). Reset to 0 only on a GENUINELY
+  // healthy session (a video track actually arrives — TrackSubscribed), so a
+  // link that flaps without ever delivering a frame escalates to the manual
+  // overlay instead of thrashing. (Fable GUI re-audit 2026-07-02.)
+  const autoReconnectAttemptRef = useRef(0);
+
   // Keep the latest onStateChange in a ref so the connect effect does NOT
   // depend on the callback's identity. onStateChange exists for consumers (the
   // LK.6.c badge) to hook connection state, and the natural usage is an inline
@@ -353,8 +366,10 @@ export function AgentSessionPanel({
         publisherLostTimer = null;
       }
     };
-    // #8 — bounded auto-reconnect schedule for an UNEXPECTED Disconnected.
-    let autoReconnectAttempt = 0;
+    // #8 — bounded auto-reconnect schedule for an UNEXPECTED Disconnected. The
+    // attempt COUNTER lives in autoReconnectAttemptRef (component-level) so it
+    // survives this effect's re-run on a reconnect (see the ref's declaration);
+    // an effect-local counter reset every reconnect, defeating the backoff+cap.
     let autoReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     // RoomEvent wire-up. `as any` casts are scoped to the
@@ -385,6 +400,11 @@ export function AgentSessionPanel({
       clearPublisherLostTimer();
       setPublisherReconnecting(false);
       setPublisher('publishing');
+      // #8 — a real video frame arrived → the session is GENUINELY healthy, so
+      // reset the auto-reconnect attempt counter. A later unrelated drop then
+      // starts a fresh 1s→3s→9s backoff sequence. A link that only flaps and
+      // never delivers a track never resets → it escalates to the manual overlay.
+      autoReconnectAttemptRef.current = 0;
     });
     // Reverse of TrackSubscribed: the publishing worker (the Mac browser fork) crashes or
     // restarts → the SFU drops its video track while OUR signal connection stays UP, so
@@ -447,9 +467,9 @@ export function AgentSessionPanel({
       // `cancelled` BEFORE disconnect()) auto-retries with exponential backoff before
       // falling back to the manual Reconnect button. A reconnect re-runs this whole
       // effect via retryNonce (fresh Room + connect), so we only schedule the bump.
-      if (autoReconnectAttempt < AUTO_RECONNECT_BACKOFF_MS.length) {
-        const delay = AUTO_RECONNECT_BACKOFF_MS[autoReconnectAttempt];
-        autoReconnectAttempt += 1;
+      if (autoReconnectAttemptRef.current < AUTO_RECONNECT_BACKOFF_MS.length) {
+        const delay = AUTO_RECONNECT_BACKOFF_MS[autoReconnectAttemptRef.current];
+        autoReconnectAttemptRef.current += 1;
         setS({ kind: 'reconnecting' });
         if (autoReconnectTimer !== null) clearTimeout(autoReconnectTimer);
         autoReconnectTimer = setTimeout(() => {
@@ -742,6 +762,9 @@ export function AgentSessionPanel({
                   type="button"
                   data-action="retry-launch"
                   onClick={() => {
+                    // #8 — a USER-initiated retry grants a fresh auto-reconnect
+                    // budget (1s→3s→9s) if the new connection later drops.
+                    autoReconnectAttemptRef.current = 0;
                     setRetryNonce((n) => n + 1);
                   }}
                   className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-ink-primary transition hover:bg-white/20"
@@ -814,6 +837,9 @@ export function AgentSessionPanel({
               type="button"
               data-action="reconnect-stream"
               onClick={() => {
+                // #8 — a USER-initiated reconnect grants a fresh auto-reconnect
+                // budget (1s→3s→9s) if the new connection later drops.
+                autoReconnectAttemptRef.current = 0;
                 setRetryNonce((n) => n + 1);
               }}
               className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-ink-primary transition hover:bg-white/20"
