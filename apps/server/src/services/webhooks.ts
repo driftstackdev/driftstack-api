@@ -658,6 +658,11 @@ export class WebhooksService {
       effectiveAccountId?: string;
     },
   ): Promise<ListDeliveriesPage> {
+    // Reading delivery history (event payloads + endpoint response excerpts) is a
+    // read:webhooks operation — gate it like list()/get()/listWithCounts() so a
+    // narrowly-scoped key can't page delivery data it wasn't granted (Fable audit
+    // 2026-07-02; the sibling reads all enforce this, this one was the oversight).
+    throwIfMissingScope(ctx, 'read:webhooks');
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     return this.repo.listDeliveriesForEndpoint(endpointId, accountId, opts);
   }

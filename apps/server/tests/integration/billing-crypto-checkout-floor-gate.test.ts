@@ -153,4 +153,82 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
     expect(secondBody.provider).toBe('nowpayments');
     expect(secondBody.payment_address).toBe('0xORIGADDR');
   });
+
+  it('CONCURRENT same-key checkouts never surface an orphaned mint — the loser echoes the BOUND payment (Fable comprehensive audit 2026-07-02)', async () => {
+    // Two overlapping checkouts on one Idempotency-Key both read
+    // order.payment_id === null and reach the mint branch (the sequential replay
+    // guard doesn't fire yet). Whoever binds first wins; the loser's freshly
+    // minted payment is orphaned and MUST NOT be surfaced — else the customer
+    // pays an address whose IPN applyIpnStatus rejects on the payment_id
+    // mismatch and their crypto is lost. Deferred createPayment lets us park
+    // BOTH requests in the mint branch before either binds.
+    const release: Array<() => void> = [];
+    let call = 0;
+    const createPayment = vi.fn((): Promise<CreatePaymentResult> => {
+      const n = ++call;
+      return new Promise((resolve) => {
+        release.push(() =>
+          resolve({
+            paymentId: n === 1 ? 'pay_A' : 'pay_B',
+            payAddress: n === 1 ? '0xADDR_A' : '0xADDR_B',
+            payCurrency: 'btc',
+            payAmount: 0.0012,
+            priceAmount: 79,
+            priceCurrency: 'usd',
+            paymentStatus: 'waiting',
+          }),
+        );
+      });
+    });
+    const getPayment = vi.fn((id: string) =>
+      Promise.resolve({
+        paymentStatus: 'waiting',
+        payAddress: id === 'pay_A' ? '0xADDR_A' : '0xADDR_B',
+        payCurrency: 'btc',
+        payAmount: 0.0012,
+      }),
+    );
+    const client = { createPayment, getPayment } as unknown as NowPaymentsApiClient;
+    fx = await buildTestApp({ nowpaymentsClient: client });
+    const payload = { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' };
+    const headers = {
+      authorization: `Bearer ${fx.plaintext}`,
+      'idempotency-key': 'k-crypto-concurrent-1',
+    };
+    const inject = (): Promise<{ statusCode: number; json: <T>() => T }> =>
+      fx.app.inject({
+        method: 'POST',
+        url: '/v1/billing/crypto-checkout',
+        headers,
+        payload,
+      });
+
+    const pA = inject();
+    const pB = inject();
+
+    // Wait until BOTH requests have parked at createPayment → the concurrent
+    // window is genuinely open (both in the mint branch, neither bound yet).
+    const started = Date.now();
+    while (release.length < 2 && Date.now() - started < 3000) {
+      await new Promise((r) => setImmediate(r));
+    }
+    expect(release.length).toBe(2);
+
+    // Request 1 binds pay_A and returns; request 2 then mints pay_B, detects the
+    // order is bound to pay_A, and echoes pay_A instead of its orphan.
+    release[0]?.();
+    const a = await pA;
+    release[1]?.();
+    const b = await pB;
+
+    const bodyA = a.json<{ order_id: string; payment_address: string | null }>();
+    const bodyB = b.json<{ order_id: string; payment_address: string | null }>();
+    expect(a.statusCode).toBe(201);
+    expect(b.statusCode).toBe(201);
+    expect(bodyB.order_id).toBe(bodyA.order_id); // same order (idempotent)
+    expect(bodyA.payment_address).toBe('0xADDR_A');
+    // The loser MUST show the BOUND address (0xADDR_A), never its orphan 0xADDR_B.
+    expect(bodyB.payment_address).toBe('0xADDR_A');
+    expect(getPayment).toHaveBeenCalledWith('pay_A');
+  });
 });

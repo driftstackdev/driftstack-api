@@ -329,9 +329,6 @@ export function registerCryptoCheckoutRoutes(
             ipnCallbackUrl: deps.nowpaymentsIpnCallbackUrl,
           });
           provider = 'nowpayments';
-          paymentAddress = payment.payAddress;
-          payCurrency = payment.payCurrency;
-          payAmount = payment.payAmount;
           // Billing-integrity (#9 payment_id binding + #1 crypto-denominated
           // quote) — persist the minted NowPayments payment_id AND the
           // crypto-denominated quote (pay_amount + pay_currency) on the order so
@@ -340,8 +337,20 @@ export function registerCryptoCheckoutRoutes(
           // pay_amount (not the fiat price). Best-effort: a failure here leaves
           // these null (the first IPN backfills them), so it must not fail the
           // checkout response.
+          //
+          // CONCURRENCY (Fable audit 2026-07-02): the sequential idempotency
+          // replay is guarded above, but two checkouts sharing one
+          // Idempotency-Key that overlap in the createPayment window BOTH reach
+          // this mint branch (each read order.payment_id === null before either
+          // bound). recordPaymentId runs under the order row-lock and returns the
+          // order with its EFFECTIVE bound payment_id: whoever binds first wins,
+          // and the loser's freshly-minted payment is ORPHANED. We MUST surface
+          // the bound payment's address, never the orphan — else the customer
+          // pays an address whose IPN applyIpnStatus rejects on the payment_id
+          // mismatch and their crypto is lost.
+          let boundOrder = null as Awaited<ReturnType<typeof deps.service.recordPaymentId>>;
           try {
-            await deps.service.recordPaymentId({
+            boundOrder = await deps.service.recordPaymentId({
               order_id: order.order_id,
               payment_id: payment.paymentId,
               ...(payment.payAmount !== null && payment.payAmount !== undefined
@@ -360,6 +369,36 @@ export function registerCryptoCheckoutRoutes(
               },
               'failed to bind NowPayments payment_id to order (will bind on first IPN)',
             );
+          }
+          if (
+            boundOrder !== null &&
+            boundOrder.payment_id !== null &&
+            boundOrder.payment_id !== payment.paymentId
+          ) {
+            // A concurrent checkout bound this order to a DIFFERENT payment first;
+            // our mint is orphaned. Echo the bound payment so the customer pays
+            // the address whose IPN will actually reconcile.
+            try {
+              const bound = await deps.nowpayments.getPayment(boundOrder.payment_id);
+              paymentAddress = bound.payAddress;
+              payCurrency = bound.payCurrency;
+              payAmount = bound.payAmount;
+            } catch (err) {
+              req.log.warn(
+                {
+                  event: 'nowpayments_concurrent_bound_get_payment_failed',
+                  order_id: order.order_id,
+                  err: err instanceof Error ? err.message : String(err),
+                },
+                'failed to re-fetch the concurrently-bound NowPayments payment; returning stub posture',
+              );
+            }
+          } else {
+            // We bound the order to our freshly-minted payment (or the bind was
+            // best-effort-null and the first IPN backfills) — surface it.
+            paymentAddress = payment.payAddress;
+            payCurrency = payment.payCurrency;
+            payAmount = payment.payAmount;
           }
         } catch (err) {
           // Soft-fail: the local order persists, the customer sees
