@@ -7,6 +7,9 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 //   - GET /v1/api-keys
 //   - GET /v1/sessions
 //   - GET /v1/billing
+//   - GET /v1/usage (session-hours stat) + GET /v1/usage/series?days=14
+//     (the 14-day mini chart; honest empty state while the V-014/V-015
+//     usage_records writers are unwired and totals are all zero)
 // Each call is independent; failures in one section don't blank the
 // rest. Render is client-side so the dashboard server stays static
 // (Astro's hybrid mode is intentionally avoided here).
@@ -26,18 +29,18 @@ const ARCHETYPE_LABELS = Object.fromEntries(
 
 <DashboardLayout title="Overview">
   <div class="mx-auto max-w-6xl px-6 py-10" data-page="overview">
-    {/* 2026-05-22 — overview header gets a soft glow-red gradient
-        backdrop. Visual depth without distracting from the data
-        below. */}
+    {/* Fleet v2 (2026-07-02) — calm accent-token backdrop (the old
+        hard-coded brand-red radials are retired; ambience follows the
+        data-accent axis at low alpha). */}
     <div
       class="relative -mx-6 -mt-10 mb-6 overflow-hidden px-6 pb-8 pt-10"
       aria-hidden="true"
     >
       <div
         class="absolute inset-0 -z-10"
-        style="background: radial-gradient(ellipse 60% 80% at 0% 0%, rgba(220, 38, 38, 0.10), transparent 70%), radial-gradient(ellipse 50% 70% at 100% 50%, rgba(220, 38, 38, 0.05), transparent 70%);"
+        style="background: radial-gradient(ellipse 60% 80% at 0% 0%, var(--accent-soft), transparent 70%);"
       ></div>
-      <header class="relative flex items-center justify-between gap-6">
+      <header class="relative flex flex-wrap items-center justify-between gap-4">
         <div class="min-w-0">
           <p class="text-sm text-tk-ink-3">Welcome back</p>
           <h1
@@ -47,12 +50,22 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             —
           </h1>
         </div>
-        <span
-          data-account-tier
-          class="rounded-full border border-tk-accent/30 bg-tk-accent/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-tk-accent"
-        >
-          —
-        </span>
+        <div class="flex items-center gap-3">
+          <span
+            data-account-tier
+            class="rounded-full border border-tk-accent/30 bg-tk-accent/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-tk-accent"
+          >
+            —
+          </span>
+          <a
+            href="https://docs.driftstack.dev/quickstart/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-primary"
+          >
+            Get the app
+          </a>
+        </div>
       </header>
     </div>
 
@@ -63,55 +76,65 @@ const ARCHETYPE_LABELS = Object.fromEntries(
     >
     </div>
 
-    {/* 2026-05-22 — icons on each stat card for visual anchor.
-        Same glow-red square mark used across marketing surface. */}
-    <section class="grid gap-6 md:grid-cols-3">
-      <div class="dashboard-card">
-        <div class="flex items-start justify-between">
-          <p class="text-xs font-mono uppercase tracking-widest text-tk-ink-3">Concurrent sessions</p>
-          <div class="flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 text-tk-accent ring-1 ring-tk-accent/30">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="2" y="3" width="20" height="14" rx="2" />
-              <path d="M8 21h8M12 17v4" />
-            </svg>
-          </div>
-        </div>
-        <p class="mt-3 text-3xl font-semibold text-tk-ink">
-          <span data-stat-concurrent>—</span>
-          <span class="text-base font-normal text-tk-ink-3">
-            / <span data-stat-concurrent-cap>—</span>
-          </span>
+    {/* Fleet v2 (2026-07-02) — founder-locked stat row: Active sessions
+        (with cap meter — per ADR-004 the concurrent cap is the ONLY
+        meter) · Profiles · Session hours this cycle (total, no cap) ·
+        Plan. The API-keys count moved into the Mint-API-key quick
+        action below. */}
+    <section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="stat-card">
+        <p class="stat-label">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <path d="M8 21h8M12 17v4" />
+          </svg>
+          Active sessions
         </p>
-        <p class="mt-1 text-sm text-tk-ink-3">running now</p>
-      </div>
-      <div class="dashboard-card">
-        <div class="flex items-start justify-between">
-          <p class="text-xs font-mono uppercase tracking-widest text-tk-ink-3">Profiles</p>
-          <div class="flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 text-tk-accent ring-1 ring-tk-accent/30">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="7" r="4" />
-              <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
-            </svg>
-          </div>
-        </div>
-        <p class="mt-3 text-3xl font-semibold text-tk-ink">
-          <span data-stat-profiles>—</span>
-          <span data-stat-profiles-cap class="text-base font-normal text-tk-ink-3"></span>
+        <p class="stat-value">
+          <span data-stat-concurrent>—</span><span class="text-base font-normal text-tk-ink-3">
+            / <span data-stat-concurrent-cap>—</span></span
+          >
         </p>
-        <p class="mt-1 text-sm text-tk-ink-3">saved identities</p>
+        <div class="meter"><span data-stat-concurrent-meter class="meter-fill" style="width: 0%"></span></div>
+        <p class="stat-sub">running now · concurrent cap is the only meter</p>
       </div>
-      <div class="dashboard-card">
-        <div class="flex items-start justify-between">
-          <p class="text-xs font-mono uppercase tracking-widest text-tk-ink-3">API keys</p>
-          <div class="flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 text-tk-accent ring-1 ring-tk-accent/30">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="9" cy="12" r="7" />
-              <path d="M16 12h6M19 9v6" />
-            </svg>
-          </div>
-        </div>
-        <p class="mt-3 text-3xl font-semibold text-tk-ink"><span data-stat-api-keys>—</span></p>
-        <p class="mt-1 text-sm text-tk-ink-3">active</p>
+      <div class="stat-card">
+        <p class="stat-label">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="7" r="4" />
+            <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
+          </svg>
+          Profiles
+        </p>
+        <p class="stat-value">
+          <span data-stat-profiles>—</span><span
+            data-stat-profiles-cap
+            class="text-base font-normal text-tk-ink-3"></span>
+        </p>
+        <div class="meter"><span data-stat-profiles-meter class="meter-fill" style="width: 0%"></span></div>
+        <p class="stat-sub">saved identities</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v5l3 3" />
+          </svg>
+          Session hours
+        </p>
+        <p class="stat-value"><span data-stat-hours>—</span></p>
+        <p class="stat-sub">this billing cycle</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="5" width="20" height="14" rx="2" />
+            <path d="M2 10h20" />
+          </svg>
+          Plan
+        </p>
+        <p class="stat-value"><span data-stat-plan>—</span></p>
+        <p data-stat-plan-sub class="stat-sub">&nbsp;</p>
       </div>
     </section>
 
@@ -224,7 +247,9 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             </span>
             <p class="font-medium text-tk-ink">Mint API key</p>
           </div>
-          <p class="mt-2 text-xs text-tk-ink-3">For SDK + CLI integrations.</p>
+          <p class="mt-2 text-xs text-tk-ink-3">
+            For SDK + CLI integrations. <span data-stat-api-keys>—</span> active.
+          </p>
         </a>
         <a
           href="https://docs.driftstack.dev/quickstart/"
@@ -245,34 +270,54 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       </div>
     </section>
 
-    <section class="mt-10">
-      <div class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold tracking-tight text-tk-ink">Active sessions</h2>
-        <span class="text-xs text-tk-ink-3">Drive sessions in the desktop app</span>
-      </div>
-      <div data-sessions-empty class="mt-3 hidden text-sm text-tk-ink-3">
-        No sessions running right now.
-      </div>
-      <ul
-        data-sessions-list
-        class="mt-4 hidden divide-y divide-slate-200 rounded-lg border border-tk-border bg-tk-surface"
-      >
-      </ul>
-    </section>
-
-    <section class="mt-10">
-      <h2 class="text-lg font-semibold tracking-tight text-tk-ink">Subscription</h2>
-      <div data-subscription-empty class="mt-3 hidden text-sm text-tk-ink-3">
-        No active subscription. <a href="/select-tier" class="text-tk-accent hover:underline">Pick a tier →</a>
-      </div>
-      <div data-subscription-card class="dashboard-card mt-4 hidden">
-        <p
-          data-subscription-line
-          class="font-mono text-xs uppercase tracking-widest text-tk-ink-3"
+    {/* Fleet v2 (2026-07-02) — blueprint row2: read-only session
+        visibility (left; sessions are DRIVEN in the desktop app) +
+        14-day usage mini chart and plan panel (right). */}
+    <section class="mt-10 grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+      <div class="panel">
+        <h2 class="panel-title">
+          Active sessions
+          <span class="flex-1"></span>
+          <span class="text-xs font-normal text-tk-ink-3">Drive sessions in the desktop app</span>
+        </h2>
+        <div data-sessions-empty class="hidden text-sm text-tk-ink-3">
+          No sessions running right now.
+        </div>
+        <ul
+          data-sessions-list
+          class="hidden divide-y divide-tk-border rounded-lg border border-tk-border bg-tk-surface"
         >
-        </p>
-        <p data-subscription-period class="mt-3 text-sm text-tk-ink-2"></p>
-        <a href="/billing" class="btn-secondary mt-4 inline-flex">Manage billing</a>
+        </ul>
+      </div>
+      <div class="flex flex-col gap-4">
+        <div class="panel">
+          <h2 class="panel-title">Session hours · last 14 days</h2>
+          {/* Dependency-free bar chart (blueprint recipe): the script fills
+              [data-usage-chart] with height-percentage bars from
+              /v1/usage/series. All-zero series (the expected prod state
+              until the V-014/V-015 usage writers land) renders the honest
+              empty state instead of a fabricated flat line. */}
+          <div data-usage-chart class="hidden h-[90px] items-end gap-1.5" aria-hidden="true"></div>
+          <div data-usage-legend class="mt-2 hidden justify-between text-[11px] text-tk-ink-3"></div>
+          <div data-usage-empty class="hidden text-sm text-tk-ink-3">
+            No usage recorded this period yet.
+          </div>
+        </div>
+        <div class="panel">
+          <h2 class="panel-title">Plan</h2>
+          <div data-subscription-empty class="hidden text-sm text-tk-ink-3">
+            No active subscription. <a href="/select-tier" class="text-tk-accent hover:underline">Pick a tier →</a>
+          </div>
+          <div data-subscription-card class="hidden">
+            <p
+              data-subscription-line
+              class="font-mono text-xs uppercase tracking-widest text-tk-ink-3"
+            >
+            </p>
+            <p data-subscription-period class="mt-3 text-sm text-tk-ink-2"></p>
+            <a href="/billing" class="btn-secondary mt-4 inline-flex w-full justify-center">Manage billing</a>
+          </div>
+        </div>
       </div>
     </section>
   </div>
@@ -304,19 +349,18 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         b.classList.remove('hidden');
       }
 
-      // 2026-06-30 — same per-status badge classes as /sessions
-      // (STATUS_BADGE_CLASS in sessions.astro) so a session shows the
-      // SAME color on Overview as it does one click away on /sessions.
-      // Was hardcoded emerald/"ready" for every active row, so a
-      // still-spinning-up `creating` or mid-operation `busy` session
-      // read as green/healthy here while showing accent/blue on
-      // /sessions.
+      // Fleet v2 (2026-07-02) — per-status badge classes on the two-axis
+      // status tokens (ready/busy/err flip with data-mode, unlike the old
+      // hard-coded emerald/blue/red Tailwind literals that broke in light
+      // mode). The 5-value catalog matches the SessionStatus union —
+      // creating / ready / busy / destroyed / errored — and must stay
+      // complete: an uncatalogued status would render unstyled.
       const STATUS_BADGE_CLASS = {
         creating: 'bg-tk-accent/10 text-tk-accent',
-        ready: 'bg-emerald-400/10 text-emerald-300',
-        busy: 'bg-blue-50 text-blue-700',
-        destroyed: 'bg-tk-surface text-tk-ink-2',
-        errored: 'bg-red-50 text-red-700',
+        ready: 'bg-tk-ready/10 text-tk-ready',
+        busy: 'bg-tk-busy/10 text-tk-busy',
+        destroyed: 'bg-tk-hover text-tk-ink-2',
+        errored: 'bg-tk-err/10 text-tk-err',
       };
 
       function escapeHtml(s) {
@@ -359,6 +403,22 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         window.location.replace('/login?return_to=' + ret);
         return;
       }
+      // Fleet v2 (2026-07-02) — post-checkout landing. /select-tier's
+      // Stripe success_url returns the customer to /?subscribed=<tier>
+      // (the old /first-session landing was retired with the
+      // account-portal IA); greet the new subscription inline.
+      try {
+        const sub = new URLSearchParams(location.search).get('subscribed');
+        if (sub) {
+          showBanner(
+            'Your ' + tierLabel(sub) + ' subscription is active — welcome aboard. ' +
+              'Install the desktop app to start your first session.',
+          );
+        }
+      } catch (_) {
+        /* greeting is best-effort */
+      }
+
       // V-331 — pick up the X-Driftstack-Account header from the
       // shared helper installed by DashboardLayout. Self-scope returns
       // {} so the request behaves identically when not "acting as".
@@ -404,6 +464,28 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           if (profiles) profiles.textContent = String(me.profile_count ?? 0);
           const profilesCap = root.querySelector('[data-stat-profiles-cap]');
           if (profilesCap && me.profile_cap != null) profilesCap.textContent = ' / ' + me.profile_cap;
+
+          // Fleet v2 — cap meters. Width clamps to [0,100]; a missing or
+          // zero cap leaves the track empty rather than dividing by zero.
+          function setMeter(sel, active, cap) {
+            const el = root.querySelector(sel);
+            if (!el) return;
+            const a = Number(active);
+            const c = Number(cap);
+            if (!isFinite(a) || !isFinite(c) || c <= 0) return;
+            el.style.width = Math.max(0, Math.min(100, (a / c) * 100)) + '%';
+          }
+          setMeter(
+            '[data-stat-concurrent-meter]',
+            me.concurrent_session_active,
+            me.concurrent_session_cap,
+          );
+          setMeter('[data-stat-profiles-meter]', me.profile_count, me.profile_cap);
+
+          // Fleet v2 — plan stat card (tier from /v1/account/me; the
+          // status sub-line hydrates from /v1/billing below).
+          const planEl = root.querySelector('[data-stat-plan]');
+          if (planEl) planEl.textContent = tierLabel(me.tier);
         })
         .catch(function (err) {
           showBanner(
@@ -489,14 +571,17 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           const sub = b.subscription;
           const empty = root.querySelector('[data-subscription-empty]');
           const card = root.querySelector('[data-subscription-card]');
+          const planSub = root.querySelector('[data-stat-plan-sub]');
           if (sub) {
             if (card) card.classList.remove('hidden');
             const line = root.querySelector('[data-subscription-line]');
             if (line) line.textContent = tierLabel(sub.tier) + ' · ' + String(sub.status);
             const period = root.querySelector('[data-subscription-period]');
             if (period) period.textContent = 'Period ends ' + fmtIsoDay(sub.current_period_end) + '.';
-          } else if (empty) {
-            empty.classList.remove('hidden');
+            if (planSub) planSub.textContent = String(sub.status);
+          } else {
+            if (empty) empty.classList.remove('hidden');
+            if (planSub) planSub.textContent = 'free plan';
           }
         })
         .catch(function () {
@@ -505,6 +590,72 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             empty.textContent = 'Could not load billing.';
             empty.classList.remove('hidden');
           }
+        });
+
+      // ─── /v1/usage ─────────────────────────────────────────────────────
+      // Session-hours stat: the period's session_minute total. Honest
+      // zero — 0.0 h is the expected prod state until the V-014/V-015
+      // usage_records writers land.
+      getJson('/v1/usage')
+        .then(function (u) {
+          // UsagePeriodSummary is a flat object: { period_start, period_end,
+          // tier, totals: { session_minute, ... } }.
+          const totals = (u && u.totals) || {};
+          const minutes = Number(totals.session_minute);
+          const el = root.querySelector('[data-stat-hours]');
+          if (el) el.textContent = isFinite(minutes) ? (minutes / 60).toFixed(1) + ' h' : '0.0 h';
+        })
+        .catch(function () {
+          /* leave dash */
+        });
+
+      // ─── /v1/usage/series?days=14 ──────────────────────────────────────
+      // 14-day mini chart (blueprint recipe: percentage-height divs, no
+      // chart lib). All-zero series → the honest empty state.
+      getJson('/v1/usage/series?days=14')
+        .then(function (s) {
+          // UsageSeriesResponse: { from_date, to_date, buckets: [{ date,
+          // totals }] } — one contiguous bucket per UTC day.
+          const buckets = s && Array.isArray(s.buckets) ? s.buckets : [];
+          const chart = root.querySelector('[data-usage-chart]');
+          const legend = root.querySelector('[data-usage-legend]');
+          const empty = root.querySelector('[data-usage-empty]');
+          const values = buckets.map(function (b) {
+            const t = (b && b.totals) || {};
+            const v = Number(t.session_minute);
+            return isFinite(v) && v > 0 ? v : 0;
+          });
+          const max = values.reduce(function (m, v) {
+            return v > m ? v : m;
+          }, 0);
+          if (!buckets.length || max <= 0) {
+            if (empty) empty.classList.remove('hidden');
+            return;
+          }
+          if (!chart) return;
+          chart.classList.remove('hidden');
+          chart.classList.add('flex');
+          chart.innerHTML = values
+            .map(function (v) {
+              const pct = Math.max(2, Math.min(100, Math.round((v / max) * 100)));
+              return (
+                '<span class="flex-1 rounded-t bg-tk-accent/80" style="height: ' + pct + '%"></span>'
+              );
+            })
+            .join('');
+          if (legend && buckets.length > 1) {
+            legend.classList.remove('hidden');
+            legend.classList.add('flex');
+            const first = buckets[0] && buckets[0].date;
+            const last = buckets[buckets.length - 1] && buckets[buckets.length - 1].date;
+            legend.innerHTML =
+              '<span>' + escapeHtml(first || '—') + '</span><span>' +
+              escapeHtml(last || '—') + '</span>';
+          }
+        })
+        .catch(function () {
+          const empty = root.querySelector('[data-usage-empty]');
+          if (empty) empty.classList.remove('hidden');
         });
     })();
   </script>

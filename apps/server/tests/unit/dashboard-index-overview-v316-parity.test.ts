@@ -145,7 +145,11 @@ describe('W748 dashboard index/overview V-316 live-data parity', () => {
       /if \(line\) line\.textContent = tierLabel\(sub\.tier\) \+ ' · ' \+ String\(sub\.status\)/,
     );
     expect(i).toMatch(/'Period ends ' \+ fmtIsoDay\(sub\.current_period_end\) \+ '\.'/);
-    expect(i).toMatch(/\} else if \(empty\) \{\s*\n\s+empty\.classList\.remove\('hidden'\);/);
+    // Fleet v2 (2026-07-02): the no-subscription branch reveals the empty
+    // slot AND labels the Plan stat card 'free plan'.
+    expect(i).toMatch(
+      /\} else \{\s*\n\s+if \(empty\) empty\.classList\.remove\('hidden'\);\s*\n\s+if \(planSub\) planSub\.textContent = 'free plan';/,
+    );
   });
 
   it('trial-pack credit display removed — the perpetual free tier carries no credit, so the dashboard overview no longer reads b.trial_pack.', () => {

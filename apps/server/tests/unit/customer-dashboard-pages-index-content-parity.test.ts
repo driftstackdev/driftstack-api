@@ -48,20 +48,22 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
     );
   });
 
-  it("3-tile metric grid: 'Concurrent sessions' (active / cap) + 'Profiles' (count / cap) + 'API keys' (active count) — pinned so the at-a-glance dashboard metrics stay 3-tile (drift to dropping a tile would force customers to navigate to detail pages for the most-common questions: am I at concurrent cap? am I at profile cap?)", () => {
-    expect(body).toMatch(
-      /<p class="text-xs font-mono uppercase tracking-widest text-tk-ink-3">Concurrent sessions<\/p>/,
-    );
-    expect(body).toMatch(
-      /<p class="text-xs font-mono uppercase tracking-widest text-tk-ink-3">Profiles<\/p>/,
-    );
-    expect(body).toMatch(
-      /<p class="text-xs font-mono uppercase tracking-widest text-tk-ink-3">API keys<\/p>/,
-    );
+  it("4-tile metric grid (Fleet v2, founder-locked 2026-07-02): 'Active sessions' (active / cap + meter — per ADR-004 the concurrent cap is the ONLY meter) + 'Profiles' (count / cap + meter) + 'Session hours' (cycle total, NO cap) + 'Plan' (tier + status). The API-keys count moved into the Mint-API-key quick action. Pinned so the at-a-glance metrics answer: am I at concurrent cap? am I at profile cap? how much have I used? what am I on?", () => {
+    expect(body).toMatch(/Active sessions\s*\n?\s*<\/p>/);
+    expect(body).toMatch(/Profiles\s*\n?\s*<\/p>/);
+    expect(body).toMatch(/Session hours\s*\n?\s*<\/p>/);
+    expect(body).toMatch(/Plan\s*\n?\s*<\/p>/);
     expect(body).toMatch(/data-stat-concurrent>—<\/span>/);
     expect(body).toMatch(/data-stat-concurrent-cap>—<\/span>/);
+    expect(body).toMatch(/data-stat-concurrent-meter/);
     expect(body).toMatch(/data-stat-profiles>—<\/span>/);
-    expect(body).toMatch(/data-stat-api-keys>—<\/span>/);
+    expect(body).toMatch(/data-stat-profiles-meter/);
+    expect(body).toMatch(/data-stat-hours>—<\/span>/);
+    expect(body).toMatch(/data-stat-plan>—<\/span>/);
+    // API-keys count lives in the quick-action card now.
+    expect(body).toMatch(/<span data-stat-api-keys>—<\/span> active\./);
+    // ADR-004 honesty: session hours carry NO cap (concurrent is the only meter).
+    expect(body).toMatch(/concurrent cap is the only meter/);
   });
 
   it("Active sessions filter: status !== 'destroyed' && status !== 'errored' + slice(0, 5) — pinned so the dashboard shows only currently-running sessions (drift to including destroyed/errored would clutter the home view with terminal-state rows) and the 5-row limit prevents the section from dominating the page for high-volume accounts", () => {

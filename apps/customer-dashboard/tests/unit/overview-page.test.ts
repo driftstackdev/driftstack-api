@@ -29,6 +29,8 @@ interface MockFetchCall {
 interface SetUpOpts {
   token?: string;
   route: (call: MockFetchCall) => Response;
+  /** Page URL override (e.g. the ?subscribed= post-checkout landing). */
+  url?: string;
 }
 
 interface SetUpResult {
@@ -48,7 +50,7 @@ function setUpDom(html: string, opts: SetUpOpts): SetUpResult {
   const virtualConsole = new VirtualConsole();
   virtualConsole.on('jsdomError', () => {});
   const dom = new JSDOM(htmlNoScripts, {
-    url: PAGE_URL,
+    url: opts.url ?? PAGE_URL,
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     virtualConsole,
@@ -104,6 +106,8 @@ interface RouterOpts {
   apiKeys?: Array<Record<string, unknown>>;
   sessions?: Array<Record<string, unknown>>;
   billing?: Record<string, unknown>;
+  usage?: Record<string, unknown>;
+  usageSeries?: Record<string, unknown>;
 }
 
 function makeRouter(opts: RouterOpts): (c: MockFetchCall) => Response {
@@ -116,6 +120,8 @@ function makeRouter(opts: RouterOpts): (c: MockFetchCall) => Response {
     if (/\/v1\/api-keys$/.test(u)) return json({ data: opts.apiKeys ?? [] });
     if (/\/v1\/sessions$/.test(u)) return json({ data: opts.sessions ?? [] });
     if (/\/v1\/billing$/.test(u)) return json(opts.billing ?? {});
+    if (/\/v1\/usage$/.test(u)) return json(opts.usage ?? { totals: {} });
+    if (/\/v1\/usage\/series\?days=14$/.test(u)) return json(opts.usageSeries ?? { buckets: [] });
     return json({}, 404);
   };
 }
@@ -251,15 +257,18 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
       const row = rows.find((li) => li.textContent?.includes(id));
       return row?.querySelector('span')?.className ?? '';
     };
-    // 'creating' must NOT render the green "ready" emerald badge — it's
-    // still spinning up. Distinct accent color, same map as /sessions.
+    // 'creating' must NOT render the green "ready" badge — it's still
+    // spinning up. Distinct accent color. (Fleet v2 2026-07-02: badges
+    // moved onto the two-axis status tokens — tk-ready/tk-busy/tk-err —
+    // so they flip with data-mode instead of the old hard-coded
+    // emerald/blue/red literals that broke in light mode.)
     expect(badgeClassFor('sess_creating')).toContain('tk-accent');
-    expect(badgeClassFor('sess_creating')).not.toContain('emerald');
+    expect(badgeClassFor('sess_creating')).not.toContain('tk-ready');
     // 'busy' must NOT render green either — mid-operation, not idle-ready.
-    expect(badgeClassFor('sess_busy')).toContain('blue');
-    expect(badgeClassFor('sess_busy')).not.toContain('emerald');
-    // 'ready' legitimately gets the green/emerald badge.
-    expect(badgeClassFor('sess_ready')).toContain('emerald');
+    expect(badgeClassFor('sess_busy')).toContain('tk-busy');
+    expect(badgeClassFor('sess_busy')).not.toContain('tk-ready');
+    // 'ready' legitimately gets the green/ready badge.
+    expect(badgeClassFor('sess_ready')).toContain('tk-ready');
   });
 
   it('billing: an active subscription renders the subscription card', async () => {
@@ -317,5 +326,95 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
     win = window;
     await flush();
     expect(hydratedCount()).toBeGreaterThanOrEqual(1);
+  });
+
+  it('usage: the session-hours stat converts the cycle session_minute total to hours', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter({
+        me: { name: 'A', tier: 'solo_manual' },
+        usage: { totals: { session_minute: 90 } },
+      }),
+    });
+    win = window;
+    await flush();
+    expect(text(window, '[data-stat-hours]')).toBe('1.5 h');
+  });
+
+  it('usage series: an all-zero 14-day series renders the honest empty state, never a fabricated chart (expected prod state until the V-014/V-015 usage writers land)', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter({
+        me: { name: 'A', tier: 'solo_manual' },
+        usageSeries: {
+          buckets: [
+            { date: '2026-06-19', totals: {} },
+            { date: '2026-06-20', totals: { session_minute: 0 } },
+          ],
+        },
+      }),
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-usage-empty]')).toBe(false);
+    expect(isHidden(window, '[data-usage-chart]')).toBe(true);
+  });
+
+  it('usage series: non-zero buckets render one bar per day + the first/last-day legend', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter({
+        me: { name: 'A', tier: 'solo_manual' },
+        usageSeries: {
+          buckets: [
+            { date: '2026-06-19', totals: { session_minute: 30 } },
+            { date: '2026-06-20', totals: {} },
+            { date: '2026-06-21', totals: { session_minute: 60 } },
+          ],
+        },
+      }),
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-usage-chart]')).toBe(false);
+    const chart = window.document.querySelector('[data-usage-chart]');
+    expect(chart?.querySelectorAll('span').length).toBe(3);
+    expect(text(window, '[data-usage-legend]')).toContain('2026-06-19');
+    expect(text(window, '[data-usage-legend]')).toContain('2026-06-21');
+  });
+
+  it('cap meters: concurrent + profile meter widths reflect active/cap; a zero cap leaves the track empty', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter({
+        me: {
+          name: 'A',
+          tier: 'solo_manual',
+          concurrent_session_active: 2,
+          concurrent_session_cap: 5,
+          profile_count: 3,
+          profile_cap: 0,
+        },
+      }),
+    });
+    win = window;
+    await flush();
+    const meter = window.document.querySelector<HTMLElement>('[data-stat-concurrent-meter]');
+    expect(meter?.style.width).toBe('40%');
+    const pMeter = window.document.querySelector<HTMLElement>('[data-stat-profiles-meter]');
+    expect(pMeter?.style.width).toBe('0%');
+  });
+
+  it('?subscribed=<tier> (the post-checkout Stripe landing) greets the new subscription in the banner', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      url: 'https://app.driftstack.dev/?subscribed=team_manual',
+      route: makeRouter({ me: { name: 'A', tier: 'team_manual' } }),
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-banner]')).toBe(false);
+    expect(text(window, '[data-banner]')).toContain(TIER_DISPLAY_NAMES['team_manual']);
+    expect(text(window, '[data-banner]')).toContain('subscription is active');
   });
 });
