@@ -59,4 +59,20 @@ describe('newtab page baseline', () => {
   it('is excluded from search indexing (a chrome page, not a marketing page)', () => {
     expect(body).toMatch(/name="robots"[^>]*content="noindex/);
   });
+
+  it('shows a live connection panel — exit IP, location, time zone, language, protocol, UDP/QUIC (founder 2026-07-02)', () => {
+    // The panel rows the customer sees.
+    for (const id of ['v-ip', 'v-loc', 'v-tz', 'v-lang', 'v-proto', 'v-quic']) {
+      expect(body).toContain(`id="${id}"`);
+    }
+    // Exit IP + country + negotiated protocol come from the SAME-ORIGIN Cloudflare
+    // trace echo (goes through the session proxy → IP is the proxy exit); stays
+    // self-contained (no third-party IP API, no new external asset).
+    expect(body).toContain('/cdn-cgi/trace');
+    expect(body).not.toMatch(/ipify|ipapi|ipinfo|api\.myip/i);
+    // Time zone is the (spoofed) browser zone, detected in-page.
+    expect(body).toContain('resolvedOptions().timeZone');
+    // UDP/QUIC is derived from the negotiated HTTP/3 protocol.
+    expect(body).toMatch(/h3|quic/i);
+  });
 });

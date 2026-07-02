@@ -146,6 +146,80 @@
         color: var(--ink-3);
         font-size: 12.5px;
       }
+      /* Live "this device's network identity" panel — shows the customer exactly
+         what a real site sees through their proxy (exit IP, spoofed timezone,
+         whether the connection negotiated HTTP/3 over QUIC/UDP). All detected
+         client-side + via the same-origin Cloudflare /cdn-cgi/trace echo. */
+      .conn {
+        margin-top: 26px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--surface);
+        overflow: hidden;
+        text-align: left;
+      }
+      .conn-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 11px 16px;
+        border-bottom: 1px solid var(--border);
+        color: var(--ink-2);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+      .conn-head .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #35c26b;
+        box-shadow: 0 0 8px rgba(53, 194, 107, 0.6);
+      }
+      .info-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 10px 16px;
+      }
+      .info-row + .info-row {
+        border-top: 1px solid var(--border);
+      }
+      .info-label {
+        color: var(--ink-3);
+        font-size: 13px;
+        flex: none;
+      }
+      .info-value {
+        color: var(--ink);
+        font-size: 13.5px;
+        font-weight: 500;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        overflow-wrap: anywhere;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .badge.on {
+        color: #7ee2a8;
+        background: rgba(53, 194, 107, 0.14);
+      }
+      .badge.off {
+        color: var(--ink-3);
+        background: rgba(115, 115, 127, 0.14);
+      }
+      .muted {
+        color: var(--ink-3);
+      }
     </style>
   </head>
   <body>
@@ -195,7 +269,33 @@
         />
         <button type="submit">Go</button>
       </form>
-      <p class="hint">A fresh iPhone Safari tab on Driftstack.</p>
+      <section class="conn" aria-label="Connection details">
+        <div class="conn-head"><span class="dot"></span>This device, as sites see it</div>
+        <div class="info-row">
+          <span class="info-label">IP address</span>
+          <span class="info-value" id="v-ip">…</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Location</span>
+          <span class="info-value" id="v-loc">…</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Time zone</span>
+          <span class="info-value" id="v-tz">…</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Language</span>
+          <span class="info-value" id="v-lang">…</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Connection</span>
+          <span class="info-value" id="v-proto">…</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">UDP / QUIC</span>
+          <span class="info-value" id="v-quic"><span class="badge off">Checking…</span></span>
+        </div>
+      </section>
     </main>
     <script is:inline>
       (function () {
@@ -218,6 +318,98 @@
           var dest = resolve(input.value);
           if (dest !== null) window.location.assign(dest);
         });
+
+        // ── Live connection panel ────────────────────────────────────────────
+        // Shows what a real website sees about this simulated device: exit IP +
+        // country, the (spoofed) browser time zone + language, and whether the
+        // connection to the edge negotiated HTTP/3 over QUIC/UDP. Everything is
+        // detected in-page; IP/country/protocol come from the same-origin
+        // Cloudflare /cdn-cgi/trace echo (goes through the session's proxy, so
+        // the IP IS the proxy exit). All best-effort — a field that can't be
+        // read shows "—" rather than breaking the tab.
+        function set(id, text) {
+          var el = document.getElementById(id);
+          if (el) el.textContent = text;
+        }
+        function flag(cc) {
+          if (!cc || cc.length !== 2 || !/^[A-Za-z]{2}$/.test(cc)) return '';
+          var base = 0x1f1e6;
+          return (
+            String.fromCodePoint(base + (cc.toUpperCase().charCodeAt(0) - 65)) +
+            String.fromCodePoint(base + (cc.toUpperCase().charCodeAt(1) - 65))
+          );
+        }
+        function protoLabel(p) {
+          p = (p || '').toLowerCase();
+          if (p === 'h3' || p.indexOf('http/3') === 0 || p.indexOf('quic') !== -1)
+            return 'HTTP/3 · QUIC over UDP';
+          if (p === 'h2' || p.indexOf('http/2') === 0) return 'HTTP/2 · TCP';
+          if (p.indexOf('http/1') === 0 || p === 'http/1.1') return 'HTTP/1.1 · TCP';
+          return p ? p : '—';
+        }
+        function setQuic(on) {
+          var el = document.getElementById('v-quic');
+          if (!el) return;
+          el.innerHTML =
+            '<span class="badge ' +
+            (on ? 'on' : 'off') +
+            '">' +
+            (on ? '✓ Supported' : '✗ Not detected') +
+            '</span>';
+        }
+
+        // Time zone + local time + language — instant, no network.
+        try {
+          var tz = (Intl.DateTimeFormat().resolvedOptions().timeZone) || '—';
+          var off = -new Date().getTimezoneOffset();
+          var sign = off >= 0 ? '+' : '-';
+          var a = Math.abs(off);
+          var pad = function (n) {
+            return (n < 10 ? '0' : '') + n;
+          };
+          var offStr = 'UTC' + sign + pad(Math.floor(a / 60)) + ':' + pad(a % 60);
+          var localTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          set('v-tz', tz + ' · ' + offStr + ' · ' + localTime);
+        } catch (e) {
+          set('v-tz', '—');
+        }
+        set('v-lang', navigator.language || '—');
+
+        // Fast secondary protocol signal from the navigation timing entry.
+        var hop = '';
+        try {
+          var navEntry =
+            performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+          hop = (navEntry && navEntry.nextHopProtocol) || '';
+        } catch (e) {}
+
+        // Same-origin Cloudflare trace → exit IP, country, negotiated protocol, TLS.
+        fetch('/cdn-cgi/trace', { cache: 'no-store' })
+          .then(function (r) {
+            return r.text();
+          })
+          .then(function (t) {
+            var m = {};
+            String(t)
+              .trim()
+              .split('\n')
+              .forEach(function (line) {
+                var i = line.indexOf('=');
+                if (i > 0) m[line.slice(0, i)] = line.slice(i + 1);
+              });
+            set('v-ip', m.ip || 'unavailable');
+            set('v-loc', m.loc ? (flag(m.loc) + ' ' + m.loc).trim() : '—');
+            var proto = m.http || hop;
+            set('v-proto', protoLabel(proto) + (m.tls ? ' · ' + m.tls : ''));
+            setQuic(/h3|quic/i.test(proto) || hop === 'h3');
+          })
+          .catch(function () {
+            // Proxy/edge didn't return trace — fall back to what the page itself knows.
+            set('v-ip', 'unavailable');
+            set('v-loc', '—');
+            set('v-proto', protoLabel(hop));
+            setQuic(hop === 'h3');
+          });
       })();
     </script>
   </body>
