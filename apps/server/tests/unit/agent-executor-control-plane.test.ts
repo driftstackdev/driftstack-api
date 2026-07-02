@@ -229,6 +229,75 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
     expect(got).toHaveLength(1);
   });
 
+  it('does NOT auto-retry a session_error on a side-effecting interact (dispatch timeout/drop may have already applied the tap → double-submit hazard)', async () => {
+    // intent_dispatch_error → diagnosis category session_error. For an interact
+    // (tap/type/press) this is the transmitted-but-unacked class: the action MAY
+    // have executed, so a fresh-intentId retry would double-apply it.
+    const { got, dispatcher } = mockDispatcher((d) =>
+      failResult(d.intentId, 'intent_dispatch_error'),
+    );
+    const { sleep, calls } = instantSleep();
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), { maxRetries: 2, sleep });
+    const res = await exec.execute(
+      planArgs([{ kind: 'interact', action: 'tap', selector: '#pay' }]),
+    );
+    expect(res.ok).toBe(false);
+    expect(res.results[0]!.kind).toBe('failure');
+    expect(got).toHaveLength(1); // failed safe: dispatched exactly once, no retry
+    expect(calls).toHaveLength(0);
+  });
+
+  it('intent_session_not_established on an interact is also NOT auto-retried (same session_error class — fail safe)', async () => {
+    const { got, dispatcher } = mockDispatcher((d) =>
+      failResult(d.intentId, 'intent_session_not_established'),
+    );
+    const { sleep } = instantSleep();
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), { maxRetries: 2, sleep });
+    const res = await exec.execute(
+      planArgs([{ kind: 'interact', action: 'type', selector: '#q', value: 'hi' }]),
+    );
+    expect(res.ok).toBe(false);
+    expect(got).toHaveLength(1);
+  });
+
+  it('a session_error on a NON-side-effecting kind (navigate) STILL retries — double-apply is harmless there', async () => {
+    // navigate to the same URL twice is idempotent, so the maybe-executed
+    // concern does not apply; keep the useful transient-recovery retry.
+    let n = 0;
+    const { got, dispatcher } = mockDispatcher((d) =>
+      n++ < 2
+        ? failResult(d.intentId, 'intent_dispatch_error')
+        : okResult(d.intentId, d.sessionId, { url: 'https://x' }),
+    );
+    const { sleep } = instantSleep();
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
+      maxRetries: 2,
+      retryDelayMs: 0,
+      sleep,
+    });
+    const res = await exec.execute(planArgs([{ kind: 'navigate', url: 'https://x' }]));
+    expect(res.ok).toBe(true);
+    expect(got).toHaveLength(3); // retried through the transient dispatch errors
+  });
+
+  it('a WEBDRIVER failure on an interact STILL retries — the atomic command errored WITHOUT tapping (proven not applied)', async () => {
+    let n = 0;
+    const { got, dispatcher } = mockDispatcher((d) =>
+      n++ < 1 ? failResult(d.intentId, 'intent_webdriver_failed') : okResult(d.intentId),
+    );
+    const { sleep } = instantSleep();
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
+      maxRetries: 2,
+      retryDelayMs: 0,
+      sleep,
+    });
+    const res = await exec.execute(
+      planArgs([{ kind: 'interact', action: 'tap', selector: '#go' }]),
+    );
+    expect(res.ok).toBe(true);
+    expect(got).toHaveLength(2); // element_not_found retried, then succeeded
+  });
+
   it('retries only the FAILING step, not the whole plan — earlier successes are not re-dispatched', async () => {
     // intent 0 (navigate) succeeds once; intent 1 (interact) fails-retryable twice then succeeds.
     const { got, dispatcher } = mockDispatcher((d) => {

@@ -94,13 +94,31 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
 
   /**
    * One intent, with bounded auto-retry of RETRYABLE transient failures
-   * (doc-132 §5.3). A `retryable` diagnosis (element not found / page didn't
-   * load / condition unmet / session hiccup) means the intent did NOT complete
-   * its effect, so re-dispatching cannot double-apply a side effect — safe even
-   * for an already-approved consequential action (the confirmation gate ran
-   * before dispatch). Non-retryable failures (invalid request, over-cap result)
-   * and encode errors are deterministic — surfaced on the first attempt, never
-   * retried. Each attempt gets a fresh intentId (a new dispatch to correlate).
+   * (doc-132 §5.3). Most `retryable` diagnoses prove the intent did NOT take
+   * effect, so re-dispatching cannot double-apply a side effect:
+   *   - a WebDriver failure on an `interact` (category element_not_found, etc.)
+   *     means the atomic WebDriver command errored WITHOUT performing the
+   *     action — the tap/type never landed, so a retry is safe;
+   *   - a page-load / condition / capture failure is inherently side-effect-free.
+   *
+   * EXCEPTION (do NOT retry): a `session_error` on a side-effecting `interact`.
+   * That category is synthesized by the dispatch correlator for a dispatch
+   * TIMEOUT and a control-connection DROP (failAll) as well as a genuine
+   * no-session — and in the timeout/drop cases the intent was already
+   * transmitted to the harness, so the action MAY have executed and only its
+   * ack was lost. Each retry uses a FRESH intentId with no harness-side dedup,
+   * so blindly retrying a tap/type/press here would double-apply it (a
+   * double-submit — exactly what an approved consequential action must never
+   * become; approval is not idempotency). We cannot distinguish "never sent"
+   * from "sent, executed, ack lost" at this layer, so we fail safe: surface the
+   * failure on the first attempt and let the agent/customer re-issue explicitly.
+   * Read-only / idempotent kinds (navigate to the same URL, wait, capture,
+   * scroll, behavioral_pause) stay retryable on session_error — a double-apply
+   * there is harmless.
+   *
+   * Non-retryable failures (invalid request, over-cap result) and encode errors
+   * are deterministic — surfaced on the first attempt, never retried. Each
+   * attempt gets a fresh intentId (a new dispatch to correlate).
    */
   private async runIntent(
     sessionId: string,
@@ -135,9 +153,18 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       const parsed = await this.dispatcher.dispatch(dispatch);
       result = intentResultToCustomer(intent, parsed);
 
+      // A session_error on a side-effecting interact MAY have already executed
+      // (dispatch-timeout / connection-drop are transmitted-but-unacked), and a
+      // retry uses a fresh intentId with no harness dedup → would double-apply.
+      // Fail safe: don't auto-retry that one class. See the method doc above.
+      const maybeAlreadyApplied =
+        result.kind === 'failure' &&
+        result.diagnosis?.category === 'session_error' &&
+        intent.kind === 'interact';
       const shouldRetry =
         result.kind === 'failure' &&
         result.diagnosis?.retryable === true &&
+        !maybeAlreadyApplied &&
         attempt < this.maxRetries;
       if (!shouldRetry) return result;
       await this.sleep(this.retryDelayMs);
