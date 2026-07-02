@@ -3889,14 +3889,22 @@ export function SimulatorWindow(): JSX.Element {
             setCookies(res.cookies ?? []);
             setCookiesNote(null);
             backoff = 3000; // reset cadence on a real success
+          } else if (res.status === 'timeout') {
+            // Founder report 2026-07-02 (profile Qqd11) — "not realtime at all
+            // times". A 'timeout' means the SERVER already held the request
+            // open ~10s waiting for the device to answer — the device is live,
+            // just slow, not dead/gated. Doubling the CLIENT's own retry delay
+            // on top of that 10s hold compounded into a worst-case ~40-50s gap
+            // before the next real attempt. The 10s server-side hold is
+            // already a natural throttle; stay at the steady cadence so a
+            // device that's merely slow gets polled again promptly instead of
+            // being treated like a persistently degraded/gated path.
+            setCookies(null);
+            setCookiesNote('waiting for the device…');
           } else {
             setCookies(null);
-            setCookiesNote(
-              res.status === 'timeout'
-                ? 'waiting for the device…'
-                : friendlyUnavailableNote(res.reason),
-            );
-            backoff = Math.min(backoff * 2, 30000); // degraded → back off
+            setCookiesNote(friendlyUnavailableNote(res.reason));
+            backoff = Math.min(backoff * 2, 30000); // genuinely degraded → back off
           }
         })
         .catch((err: unknown) => {
@@ -4052,14 +4060,16 @@ export function SimulatorWindow(): JSX.Element {
             setDownloads(res.files ?? []);
             setDownloadsNote(null);
             backoff = 3000; // reset cadence on a real success
+          } else if (res.status === 'timeout') {
+            // Twin of the cookies-poll fix just above — see that comment. The
+            // server already held the request ~10s waiting for the device;
+            // don't ALSO double the client's own retry delay on top of it.
+            setDownloads(null);
+            setDownloadsNote('waiting for the device…');
           } else {
             setDownloads(null);
-            setDownloadsNote(
-              res.status === 'timeout'
-                ? 'waiting for the device…'
-                : friendlyUnavailableNote(res.reason),
-            );
-            backoff = Math.min(backoff * 2, 30000); // degraded → back off
+            setDownloadsNote(friendlyUnavailableNote(res.reason));
+            backoff = Math.min(backoff * 2, 30000); // genuinely degraded → back off
           }
         })
         .catch((err: unknown) => {
