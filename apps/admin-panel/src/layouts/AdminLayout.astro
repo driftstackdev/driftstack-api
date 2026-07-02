@@ -236,11 +236,15 @@ const navItems = [
       </div>
     </div>
     <script is:inline>
-      {`
         // 2026-05-29 — branded window.driftstackConfirm / driftstackPrompt
         // for the admin panel. Mirror of the DashboardLayout helpers.
         // driftstackConfirm(message, opts) -> Promise<boolean>;
         // driftstackPrompt(message, opts) -> Promise<string|null>.
+        // NOTE: plain code, NOT the {`…`} template-literal wrapper — Astro
+        // emits that wrapper literally, which made this whole script a
+        // no-op string in the browser (both globals were undefined in
+        // production — including the W2820 destructive-confirm guard —
+        // until the 2026-07-02 fix).
         (function () {
           window.driftstackConfirm = function (message, opts) {
             return new Promise(function (resolve) {
@@ -341,7 +345,6 @@ const navItems = [
             });
           };
         })();
-      `}
     </script>
     <script is:inline>
       {
