@@ -178,6 +178,36 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (el) el.textContent = text;
       }
 
+      // Mirrors the frontmatter STATUS_BADGE_CLASS — the SSR class is only
+      // ever right for the mock/initial status. Every live-fetch branch below
+      // called setText() alone, so the badge TEXT updated but its color stayed
+      // frozen at whatever the SSR default rendered (e.g. a real past_due
+      // subscriber could see red "past due" text on a green "active" pill).
+      // BADGE_TONE_CLASSES lists every class any status ever applies, so we
+      // can strip them all before adding the new one.
+      const STATUS_BADGE_CLASS = {
+        active: 'bg-emerald-400/10 text-emerald-300',
+        trialing: 'bg-tk-accent/10 text-tk-accent',
+        past_due: 'bg-red-50 text-red-700',
+        canceled: 'bg-tk-surface text-tk-ink-2',
+        unpaid: 'bg-red-50 text-red-700',
+        incomplete: 'bg-tk-accent/10 text-tk-accent',
+        incomplete_expired: 'bg-tk-surface text-tk-ink-2',
+        paused: 'bg-tk-surface text-tk-ink-2',
+        no_subscription: 'bg-tk-surface text-tk-ink-2',
+      };
+      const BADGE_TONE_CLASSES = Array.from(
+        new Set(Object.values(STATUS_BADGE_CLASS).flatMap((c) => c.split(' '))),
+      );
+      function setStatusBadge(text, toneKey) {
+        setText('sub-status-badge', text);
+        const el = root.querySelector('[data-field="sub-status-badge"]');
+        if (!el) return;
+        el.classList.remove(...BADGE_TONE_CLASSES);
+        const toneClass = STATUS_BADGE_CLASS[toneKey] || STATUS_BADGE_CLASS.no_subscription;
+        el.classList.add(...toneClass.split(' '));
+      }
+
       function fmtIso(iso) {
         if (!iso) return '—';
         return new Date(iso).toISOString().slice(0, 10);
@@ -280,7 +310,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               ' · ' +
               (sub.cancel_at_period_end ? 'set to cancel at period end' : 'auto-renews');
             setText('sub-summary', summary);
-            setText('sub-status-badge', (sub.status || '').replace(/_/g, ' '));
+            setStatusBadge((sub.status || '').replace(/_/g, ' '), sub.status);
             // Paid subscriber: portal + (conditionally) cancel apply.
             if (portalBtn) portalBtn.classList.remove('hidden');
             setText('plan-cta', 'Change plan');
@@ -299,7 +329,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               'sub-summary',
               'Upgrade to a paid tier to unlock concurrent caps + archetype access.',
             );
-            setText('sub-status-badge', 'no subscription');
+            setStatusBadge('no subscription', 'no_subscription');
             // No subscription → no Stripe customer/portal and nothing to
             // cancel; hide both so they can't lead to a dead Stripe call.
             // The plan CTA becomes "Choose a plan" (not "Change").
@@ -328,7 +358,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               'sub-summary',
               'Paid-plan billing activates once Stripe setup completes — nothing to pay or manage here yet.',
             );
-            setText('sub-status-badge', 'pending setup');
+            setStatusBadge('pending setup', 'no_subscription');
             if (portalBtn) portalBtn.classList.add('hidden');
             if (cancelBtn) cancelBtn.classList.add('hidden');
             if (cancelHint) cancelHint.classList.add('hidden');
@@ -347,7 +377,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               'sub-summary',
               "Couldn't load your live subscription state — reload to try again.",
             );
-            setText('sub-status-badge', 'unavailable');
+            setStatusBadge('unavailable', 'no_subscription');
             if (portalBtn) portalBtn.classList.add('hidden');
             if (cancelBtn) cancelBtn.classList.add('hidden');
             if (cancelHint) cancelHint.classList.add('hidden');

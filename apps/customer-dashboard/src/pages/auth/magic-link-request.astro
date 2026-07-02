@@ -98,6 +98,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const debugWrap = root.querySelector('[data-debug-token]');
       const debugLink = root.querySelector('[data-debug-link]');
       const emailInput = root.querySelector('#magic-link-email');
+      const submitBtn = form.querySelector('button[type="submit"]');
 
       // Honor ?email= prefill — e.g. from a /login bounce after a failed
       // password attempt where the user wants to try magic-link instead.
@@ -110,8 +111,16 @@ const apiBaseUrl = resolveApiBaseUrl();
         banner.classList.remove('hidden');
       }
 
+      let requestInFlight = false;
       form.addEventListener('submit', (ev) => {
         ev.preventDefault();
+        // A double-click (or a fast double-Enter) fired this POST twice
+        // before the first response swapped the form away — each request
+        // mints a NEW valid magic-link token, so the customer's inbox got
+        // two working sign-in links instead of one.
+        if (requestInFlight) return;
+        requestInFlight = true;
+        if (submitBtn) submitBtn.disabled = true;
         banner.classList.add('hidden');
         const email = (new FormData(form).get('email') || '').toString();
         fetch(apiBaseUrl + '/v1/auth/magic-link/request', {
@@ -148,6 +157,10 @@ const apiBaseUrl = resolveApiBaseUrl();
           })
           .catch((err) => {
             showBanner(err && err.message ? err.message : 'Request failed.');
+          })
+          .finally(() => {
+            requestInFlight = false;
+            if (submitBtn) submitBtn.disabled = false;
           });
       });
     })();

@@ -600,6 +600,24 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
       }
     }
 
+    // A failed mode-switch (transient 4xx/5xx or a network blip) used to call
+    // paintError() — which is meant for a genuinely dead/offline SESSION and
+    // disables every mode button + the composer permanently. That bricked a
+    // perfectly healthy session over one flaky /mode call: the optimistic
+    // rollback restored the correct mode, but the customer could never try
+    // switching again or send a message without a full page reload. This is
+    // scoped to the mode-status line only — nothing else gets disabled — and
+    // self-heals by repainting the real current mode after a few seconds.
+    function flashModeError(message) {
+      if (!modeStatus) return;
+      modeStatus.textContent = message;
+      modeStatus.classList.add('text-red-400');
+      setTimeout(() => {
+        modeStatus.classList.remove('text-red-400');
+        paintMode();
+      }, 4000);
+    }
+
     function paintError(detail) {
       if (statusPill) {
         statusPill.textContent = 'OFFLINE';
@@ -757,7 +775,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
           // Roll back optimistic paint.
           mode = previousMode;
           paintMode();
-          paintError('POST /mode returned ' + res.status.toString());
+          flashModeError('Couldn’t switch modes (HTTP ' + res.status.toString() + ') — try again.');
           return;
         }
         const body = await res.json();
@@ -768,7 +786,11 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
       } catch (err) {
         mode = previousMode;
         paintMode();
-        paintError(err instanceof Error ? err.message : String(err));
+        flashModeError(
+          'Couldn’t switch modes (' +
+            (err instanceof Error ? err.message : String(err)) +
+            ') — try again.',
+        );
       }
     }
 

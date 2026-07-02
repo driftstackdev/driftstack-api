@@ -121,7 +121,7 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
     const p = read(PAGE);
     expect(p).toMatch(/if \(err && err\.status === 503\) \{/);
     expect(p).toMatch(/setText\('sub-tier', 'Billing not configured yet'\);/);
-    expect(p).toMatch(/setText\('sub-status-badge', 'pending setup'\);/);
+    expect(p).toMatch(/setStatusBadge\('pending setup', 'no_subscription'\);/);
     // The mock preview must be cleared, and the portal/cancel actions hidden.
     expect(p).toMatch(/Paid-plan billing activates once Stripe setup completes/);
     // The old misleading "Showing preview data below" wording is gone from 503.
@@ -174,9 +174,9 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
 
     // Inline-script version.
     expect(p).toMatch(
-      /setText\('sub-status-badge', \(sub\.status \|\| ''\)\.replace\(\/_\/g, ' '\)\);/,
+      /setStatusBadge\(\(sub\.status \|\| ''\)\.replace\(\/_\/g, ' '\), sub\.status\);/,
     );
-    expect(p).toMatch(/setText\('sub-status-badge', 'no subscription'\);/);
+    expect(p).toMatch(/setStatusBadge\('no subscription', 'no_subscription'\);/);
   });
 
   it("CRITICAL tax + EU VAT framing pinned. The 'All prices in USD. VAT/BTW added per region per applicable EU rules. Stripe handles tax computation + invoicing per ADR-002.' framing threads ADR-002 (Stripe-handles-tax) — the load-bearing EU/Dutch tax framing.", () => {

@@ -470,6 +470,15 @@ const apiBaseUrl = resolveApiBaseUrl();
           setStatus('Label, host, and port are required.', 'error');
           return;
         }
+        // The <input min="1" max="65535"> only constrains the native
+        // stepper/submit-validation UI — this button click handler reads
+        // el.value directly, so a typed 0 / negative / >65535 port sailed
+        // straight past that and only got caught (unfriendly, post-round-
+        // trip) by the server's Zod bound.
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          setStatus('Port must be a whole number between 1 and 65535.', 'error');
+          return;
+        }
         if (!token) {
           setStatus('Sign in first.', 'error');
           return;

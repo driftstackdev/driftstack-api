@@ -253,8 +253,18 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       if (moreBtn) {
+        // No in-flight guard meant a fast double-click fired fetchPage()
+        // twice with the SAME cursor before the first call advanced
+        // nextCursor — appending the same page of recipes to the list twice.
         moreBtn.addEventListener('click', () => {
-          if (nextCursor) fetchPage(nextCursor);
+          if (!nextCursor || moreBtn.disabled) return;
+          moreBtn.disabled = true;
+          const originalText = moreBtn.textContent;
+          moreBtn.textContent = 'Loading…';
+          fetchPage(nextCursor).finally(() => {
+            moreBtn.disabled = false;
+            moreBtn.textContent = originalText;
+          });
         });
       }
 
