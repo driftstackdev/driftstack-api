@@ -46,7 +46,7 @@ describe('W281.A DashboardLayout nav-item ↔ page parity', () => {
   it('layout declares the expected primary nav items', () => {
     expect(navHrefs.length).toBeGreaterThan(5);
     expect(navHrefs).toContain('/');
-    expect(navHrefs).toContain('/sessions');
+    expect(navHrefs).toContain('/billing');
     expect(navHrefs).toContain('/api-keys');
   });
 

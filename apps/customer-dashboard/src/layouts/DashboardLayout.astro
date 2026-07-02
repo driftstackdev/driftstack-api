@@ -10,7 +10,7 @@ interface Props {
 
 const {
   title,
-  description = 'Driftstack — manage your account, profiles, sessions, and billing.',
+  description = 'Driftstack — manage your account, API keys, and billing.',
   withSidebar = true,
 } = Astro.props;
 
@@ -24,15 +24,17 @@ const pathname = Astro.url.pathname;
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
 
-// 2026-05-21 — sidebar nav restructure: group items into 4 sections
-// (Browse / Activity / Account / System) with an inline-SVG icon per
-// item. Matches the gui-client Sidebar treatment so the two operator
-// surfaces feel like one product. Iconography stays Driftstack-native
-// (Lucide-shape 14px stroke). No JS-hydration required for icons.
-// 2026-05-21 — `badgeKey` ties a nav item to a count slot the inline
-// account-me-hydration script fills in (Profiles X/Y, Sessions X/Y).
+// 2026-07-02 — account-portal IA (dashboard redesign slice 2): the
+// operational surfaces (profiles / snapshots / sessions / agent
+// sessions / recipes / proxies) belong to the desktop GUI; the web
+// dashboard is the account portal. Nav groups into 3 sections
+// (General / Developers / Account) with an inline-SVG icon per item.
+// Iconography stays Driftstack-native (Lucide-shape 14px stroke).
+// No JS-hydration required for icons.
+// `badgeKey` ties a nav item to a count slot the inline
+// account-me-hydration script fills in (Team N).
 // Items without a badgeKey just have a label.
-type BadgeKey = 'profiles' | 'sessions' | 'team';
+type BadgeKey = 'team';
 type NavItem = { href: string; label: string; icon: string; badgeKey?: BadgeKey };
 type NavSection = { label: string; items: NavItem[] };
 
@@ -61,21 +63,13 @@ const ICON = {
 
 const navSections: NavSection[] = [
   {
-    label: 'Browse',
-    items: [
-      { href: '/', label: 'Overview', icon: ICON.home },
-      { href: '/profiles', label: 'Profiles', icon: ICON.layers, badgeKey: 'profiles' },
-      { href: '/snapshots', label: 'Snapshots', icon: ICON.film },
-      { href: '/sessions', label: 'Sessions', icon: ICON.activity, badgeKey: 'sessions' },
-      { href: '/agent-sessions', label: 'Agent sessions', icon: ICON.agent },
-      { href: '/recipes', label: 'Recipes', icon: ICON.bookmark },
-    ],
+    label: 'General',
+    items: [{ href: '/', label: 'Overview', icon: ICON.home }],
   },
   {
-    label: 'Connectivity',
+    label: 'Developers',
     items: [
       { href: '/api-keys', label: 'API keys', icon: ICON.key },
-      { href: '/proxies', label: 'Proxies', icon: ICON.globe },
       { href: '/webhooks', label: 'Webhooks', icon: ICON.webhook },
     ],
   },
@@ -84,7 +78,6 @@ const navSections: NavSection[] = [
     items: [
       { href: '/usage', label: 'Usage', icon: ICON.chart },
       { href: '/billing', label: 'Billing', icon: ICON.card },
-      { href: '/subscription', label: 'Subscription', icon: ICON.receipt },
       { href: '/audit-log', label: 'Audit log', icon: ICON.list },
       { href: '/team', label: 'Team', icon: ICON.users, badgeKey: 'team' },
       { href: '/settings', label: 'Settings', icon: ICON.cog },
@@ -1120,9 +1113,10 @@ const navSections: NavSection[] = [
               // it binds unconditionally — not gated on the fetch success / picker el.
 
               // 2026-05-21 — operator-UI polish wave: fill the per-nav-item
-              // count badges from the same /account/me payload. Profiles
-              // X/Y, Sessions X/Y, Team N. Each badge has CSS .hidden by
-              // default; we strip the class once we have data to show.
+              // count badges from the same /account/me payload. Team N only
+              // since the 2026-07-02 account-portal IA (the operational
+              // profiles/sessions surfaces moved to the desktop GUI). Each
+              // badge slot stays invisible until we have data to show.
               const setBadge = (key, text) => {
                 const el = document.querySelector('[data-nav-badge="' + key + '"]');
                 if (!el) return;
@@ -1137,16 +1131,6 @@ const navSections: NavSection[] = [
                 el.classList.remove('opacity-0');
                 el.classList.add('opacity-100');
               };
-              const ratio = (active, cap) => {
-                if (typeof active !== 'number') return null;
-                if (typeof cap !== 'number' || cap === null) return String(active);
-                return active + '/' + cap;
-              };
-              setBadge('profiles', ratio(me.profile_count, me.profile_cap));
-              setBadge(
-                'sessions',
-                ratio(me.concurrent_session_active, me.concurrent_session_cap),
-              );
               setBadge(
                 'team',
                 Array.isArray(me.teams) && me.teams.length > 0 ? String(me.teams.length) : null,

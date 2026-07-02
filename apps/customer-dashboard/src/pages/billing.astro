@@ -138,6 +138,14 @@ const apiBaseUrl = resolveApiBaseUrl();
             URL — bookmark for accounting. The full invoice history is also
             accessible via the Stripe Customer Portal link above.
           </p>
+          {/* 2026-07-02 (redesign slice 2) — /subscription left the sidebar
+              nav with the account-portal IA; this link keeps the page
+              reachable until it merges into this page in slice 3. */}
+          <p class="mt-3 text-sm">
+            <a href="/subscription" class="text-tk-accent hover:text-tk-accent-2"
+              >Plan history &amp; subscription details →</a
+            >
+          </p>
         </div>
       </div>
     </section>

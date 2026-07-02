@@ -50,7 +50,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
 
   it('description fallback + withSidebar default true', () => {
     expect(body).toMatch(
-      /description = 'Driftstack — manage your account, profiles, sessions, and billing\.',/,
+      /description = 'Driftstack — manage your account, API keys, and billing\.',/,
     );
     expect(body).toMatch(/withSidebar = true,/);
   });
@@ -63,10 +63,9 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/const fullTitle = `\$\{title\} · Driftstack`;/);
   });
 
-  it('15 navItems pinned in canonical order (v2-#8 sub-slice 8.24 added /agent-sessions between /sessions and /api-keys — primary differentiator per 2026-05-17 AI-chat-+-manual-live-feature-APPROVED-for-v1.0 verdict; /recipes added after /agent-sessions for the AI-B4 recipe-library surface). 2026-05-21 — navItems were grouped into navSections (Browse / Connectivity / Account) with an icon field per item; parser scans navSections for the same (href, label) entries.', () => {
-    // 2026-05-21 — scan the navSections array (replaces the legacy flat
-    // navItems). Items now carry an `icon` field; match (href, label)
-    // pairs across all sections, preserving the encounter order.
+  it('8 navItems pinned in canonical order (2026-07-02 account-portal IA, dashboard redesign slice 2: the operational surfaces — /profiles /snapshots /sessions /agent-sessions /recipes /proxies — moved to the desktop GUI; /subscription left the nav ahead of its slice-3 merge into /billing but stays routable via the billing-page link). Sections: General / Developers / Account; parser scans navSections for (href, label) entries.', () => {
+    // Scan the navSections array. Items carry an `icon` field; match
+    // (href, label) pairs across all sections, preserving encounter order.
     const block = body.match(/const navSections: NavSection\[\] = \[([\s\S]+?)\];/);
     expect(block).not.toBeNull();
     const entries = Array.from(
@@ -76,17 +75,10 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     ).map((m) => ({ href: m[1], label: m[2] }));
     expect(entries).toEqual([
       { href: '/', label: 'Overview' },
-      { href: '/profiles', label: 'Profiles' },
-      { href: '/snapshots', label: 'Snapshots' },
-      { href: '/sessions', label: 'Sessions' },
-      { href: '/agent-sessions', label: 'Agent sessions' },
-      { href: '/recipes', label: 'Recipes' },
       { href: '/api-keys', label: 'API keys' },
-      { href: '/proxies', label: 'Proxies' },
       { href: '/webhooks', label: 'Webhooks' },
       { href: '/usage', label: 'Usage' },
       { href: '/billing', label: 'Billing' },
-      { href: '/subscription', label: 'Subscription' },
       { href: '/audit-log', label: 'Audit log' },
       { href: '/team', label: 'Team' },
       { href: '/settings', label: 'Settings' },

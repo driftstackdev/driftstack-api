@@ -34,29 +34,21 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     );
 
     // Default description.
-    expect(l).toMatch(
-      /description = 'Driftstack — manage your account, profiles, sessions, and billing\.'/,
-    );
+    expect(l).toMatch(/description = 'Driftstack — manage your account, API keys, and billing\.'/);
 
     // Default withSidebar = true.
     expect(l).toMatch(/withSidebar = true,/);
   });
 
-  it('CRITICAL nav-item roster pinned (Overview/Profiles/Snapshots/Sessions/Agent sessions/API keys/Proxies/Webhooks/Usage/Billing/Subscription/Audit log/Team/Settings). 2026-05-21 — items now carry an icon field + are grouped into navSections (Browse / Connectivity / Account), so the parity matches `{ href, label, icon }` triples rather than the legacy bare `{ href, label }` shape.', () => {
+  it('CRITICAL nav-item roster pinned (Overview/API keys/Webhooks/Usage/Billing/Audit log/Team/Settings). 2026-07-02 account-portal IA (redesign slice 2): the operational surfaces (Profiles/Snapshots/Sessions/Agent sessions/Recipes/Proxies) moved to the desktop GUI; Subscription left the nav ahead of its slice-3 merge into Billing. Items carry an icon field + group into navSections.', () => {
     const l = read(LAYOUT);
 
     const expected: Array<[string, string]> = [
       ['/', 'Overview'],
-      ['/profiles', 'Profiles'],
-      ['/snapshots', 'Snapshots'],
-      ['/sessions', 'Sessions'],
-      ['/agent-sessions', 'Agent sessions'],
       ['/api-keys', 'API keys'],
-      ['/proxies', 'Proxies'],
       ['/webhooks', 'Webhooks'],
       ['/usage', 'Usage'],
       ['/billing', 'Billing'],
-      ['/subscription', 'Subscription'],
       ['/audit-log', 'Audit log'],
       ['/team', 'Team'],
       ['/settings', 'Settings'],
@@ -71,10 +63,10 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     }
   });
 
-  it('CRITICAL 3-section taxonomy pinned (Browse / Connectivity / Account). 2026-05-21 — operator-UI polish wave grouped flat navItems into navSections; the section labels are visible chrome and dropping any one collapses the IA.', () => {
+  it('CRITICAL 3-section taxonomy pinned (General / Developers / Account). 2026-07-02 account-portal IA — the section labels are visible chrome and dropping any one collapses the IA.', () => {
     const l = read(LAYOUT);
-    expect(l).toMatch(/label: 'Browse',/);
-    expect(l).toMatch(/label: 'Connectivity',/);
+    expect(l).toMatch(/label: 'General',/);
+    expect(l).toMatch(/label: 'Developers',/);
     expect(l).toMatch(/label: 'Account',/);
   });
 

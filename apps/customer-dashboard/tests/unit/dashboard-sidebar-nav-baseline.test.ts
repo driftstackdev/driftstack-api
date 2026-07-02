@@ -50,15 +50,13 @@ describe('W335.C DashboardLayout sidebar nav baseline', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('nav covers the canonical customer-facing surfaces', () => {
+  it('nav covers the canonical customer-facing surfaces (2026-07-02 account-portal IA — operational surfaces live in the desktop GUI, not the web nav)', () => {
     for (const expected of [
-      '/profiles',
-      '/snapshots',
-      '/sessions',
+      '/',
       '/api-keys',
+      '/webhooks',
       '/usage',
       '/billing',
-      '/webhooks',
       '/audit-log',
       '/team',
       '/settings',

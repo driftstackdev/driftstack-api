@@ -68,7 +68,7 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
       /interface Props \{\s*\n?\s*title: string;\s*\n?\s*description\?: string;\s*\n?\s*\/\*\* When true, render the side-nav\. Onboarding pages opt out\. \*\/\s*\n?\s*withSidebar\?: boolean;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /description = 'Driftstack — manage your account, profiles, sessions, and billing\.',/,
+      /description = 'Driftstack — manage your account, API keys, and billing\.',/,
     );
     expect(body).toMatch(/withSidebar = true,/);
   });
@@ -79,20 +79,13 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     );
   });
 
-  it('navItems 15-entry catalog pinned: Overview + Profiles + Snapshots + Sessions + Agent sessions + Recipes + API keys + Proxies + Usage + Billing + Subscription + Webhooks + Audit log + Team + Settings. Drift to dropping Agent sessions would orphan the AI-chat surface; drift to dropping Recipes would hide the AI-B4 recipe-library surface; drift to dropping Proxies would hide the EGRESS surface; drift to dropping Team would break the V-298 team-RBAC navigation. 2026-05-21 — items now carry an `icon` field + group into navSections (Browse / Connectivity / Account); each item still matched on (href, label) but with the new `, icon: ICON.X }` suffix.', () => {
+  it('navItems 8-entry catalog pinned: Overview + API keys + Webhooks + Usage + Billing + Audit log + Team + Settings (2026-07-02 account-portal IA, redesign slice 2 — the operational surfaces Profiles/Snapshots/Sessions/Agent sessions/Recipes/Proxies moved to the desktop GUI; Subscription left the nav ahead of its slice-3 merge into Billing but stays routable via the billing-page link). Drift to dropping Team would break the V-298 team-RBAC navigation; sections are General / Developers / Account.', () => {
     const items: Array<[string, string]> = [
       ['/', 'Overview'],
-      ['/profiles', 'Profiles'],
-      ['/snapshots', 'Snapshots'],
-      ['/sessions', 'Sessions'],
-      ['/agent-sessions', 'Agent sessions'],
-      ['/recipes', 'Recipes'],
       ['/api-keys', 'API keys'],
-      ['/proxies', 'Proxies'],
+      ['/webhooks', 'Webhooks'],
       ['/usage', 'Usage'],
       ['/billing', 'Billing'],
-      ['/subscription', 'Subscription'],
-      ['/webhooks', 'Webhooks'],
       ['/audit-log', 'Audit log'],
       ['/team', 'Team'],
       ['/settings', 'Settings'],
@@ -100,8 +93,23 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     for (const [href, label] of items) {
       expect(body, `${href} → ${label}`).toMatch(
         new RegExp(
-          `\\{ href: '${href}', label: '${label}', icon: ICON\\.[a-z]+(?:, badgeKey: '[a-z]+')? \\},`,
+          `\\{ href: '${href}', label: '${label}', icon: ICON\\.[a-z]+(?:, badgeKey: '[a-z]+')? \\}`,
         ),
+      );
+    }
+    // The operational hrefs must be GONE from the nav (they 404 for the
+    // account portal's job; the GUI owns them).
+    for (const gone of [
+      "'/profiles'",
+      "'/snapshots'",
+      "'/sessions'",
+      "'/agent-sessions'",
+      "'/recipes'",
+      "'/proxies'",
+      "'/subscription'",
+    ]) {
+      expect(body, `nav must not contain ${gone}`).not.toMatch(
+        new RegExp(`href: ${gone.replace(/[/']/g, (c) => '\\' + c)}, label:`),
       );
     }
   });
