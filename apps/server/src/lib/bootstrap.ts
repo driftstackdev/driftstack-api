@@ -1575,10 +1575,20 @@ export async function createProductionDeps(
               // connection (anti-spoof), so passing it as the eviction scope is
               // safe. Absent on a quiet/older node's beat → no-op.
               if (frame.activeSessionStates) {
+                // Stamp beatAt with the SERVER's receive time, NOT the node's
+                // self-reported frame.timestamp. SessionLivenessStore.isFresh
+                // measures age against the server clock (Date.now()), so trusting
+                // the node's wall-clock here computes freshness across two clocks:
+                // a node whose clock lags the server would have its live sessions
+                // read stale (and a fast-clock node's crashed sessions read fresh)
+                // under routine NTP drift. Server-authoritative time keeps the
+                // freshness comparison single-clock and makes beatAt monotonic
+                // with server time (which the oldest-first size-cap eviction also
+                // relies on). frame.timestamp stays available for other telemetry.
                 sessionLivenessStore.recordBeat(
                   frame.macNodeId,
                   frame.activeSessionStates,
-                  Date.parse(frame.timestamp) || Date.now(),
+                  Date.now(),
                 );
                 // CP↔daemon reconcile (A2 W2808 / A3 W2804): re-issue sessionEnd for
                 // any session this still-connected worker reports active that the CP
