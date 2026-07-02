@@ -752,6 +752,38 @@ describe('harness-control-protocol behavioral contract', () => {
         livekit: { room: 'r', token: 't', wsUrl: 'wss://x', expiresAt: 'z' },
       }).success,
     ).toBe(false);
+    // geolocation override (A3 verdict 2026-07-01) — optional; bounded lat/lon,
+    // optional positive accuracy, strict (no extra keys). Absent → auto-derive.
+    expect(
+      SessionAssignSchema.safeParse({
+        ...valid,
+        geolocation: { latitude: 48.8566, longitude: 2.3522, accuracy: 20 },
+      }).success,
+    ).toBe(true);
+    expect(
+      SessionAssignSchema.safeParse({ ...valid, geolocation: { latitude: 0, longitude: 0 } })
+        .success,
+    ).toBe(true);
+    expect(
+      SessionAssignSchema.safeParse({ ...valid, geolocation: { latitude: 91, longitude: 0 } })
+        .success,
+    ).toBe(false);
+    expect(
+      SessionAssignSchema.safeParse({ ...valid, geolocation: { latitude: 0, longitude: 181 } })
+        .success,
+    ).toBe(false);
+    expect(
+      SessionAssignSchema.safeParse({
+        ...valid,
+        geolocation: { latitude: 0, longitude: 0, accuracy: -1 },
+      }).success,
+    ).toBe(false);
+    expect(
+      SessionAssignSchema.safeParse({
+        ...valid,
+        geolocation: { latitude: 0, longitude: 0, bogus: 1 },
+      }).success,
+    ).toBe(false);
     // strict envelope: unknown top-level key rejected.
     expect(SessionAssignSchema.safeParse({ ...valid, bogus: 1 }).success).toBe(false);
   });

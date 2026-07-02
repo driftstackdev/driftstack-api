@@ -142,6 +142,41 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect(frame.initialUrl).toBe(DISPATCH.initialUrl);
   });
 
+  it('geolocation override rides the dispatched assign when passed (A3 contract 2026-07-01)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_geo',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      logger: logger(),
+      geolocation: { latitude: 48.8566, longitude: 2.3522, accuracy: 20 },
+    });
+    expect(sent).toHaveLength(1);
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame.geolocation).toEqual({ latitude: 48.8566, longitude: 2.3522, accuracy: 20 });
+  });
+
+  it('absent geolocation → omitted from the assign (harness keeps its proxy-exit auto-derive)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_nogeo',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      logger: logger(),
+    });
+    expect(sent).toHaveLength(1);
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame.geolocation).toBeUndefined();
+  });
+
   it('idleTimeoutSeconds (manual-session knob, A3 W2813) rides the assign when passed', async () => {
     const sent: string[] = [];
     const registry = new FleetControlRegistry();

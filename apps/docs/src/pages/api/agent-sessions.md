@@ -96,7 +96,8 @@ Request body (all fields optional):
   "token_budget": 100000,
   "profile_id": "prof_<uuid>",
   "proxy_id": "a1b2c3d4-...",
-  "initial_url": "https://driftstack.dev"
+  "initial_url": "https://driftstack.dev",
+  "geolocation": { "latitude": 48.8566, "longitude": 2.3522, "accuracy": 20 }
 }
 ```
 
@@ -140,6 +141,17 @@ The optional `initial_url` sets the start URL the remote browser opens on
 launch, overriding the operator-default start URL. It must be an absolute
 `http(s)` URL; `file:`, `javascript:`, and `data:` schemes are rejected
 (`400`). Omit it to use the operator default.
+
+The optional `geolocation` explicitly overrides the location reported by the
+session's `navigator.geolocation`. **By default you should not set this** — when
+omitted, the device's location is derived from the proxy exit IP, so the
+reported location is automatically coherent with the session's apparent network
+location. Supply explicit coordinates only when you know the proxy's true
+physical location better than IP geolocation does; coordinates that diverge
+from the proxy's exit country make the session's fingerprint internally
+inconsistent (a detectable signal). `latitude` is `-90..90`, `longitude` is
+`-180..180`, and the optional `accuracy` is in meters (omit for the device
+default). Out-of-range values are rejected (`400`).
 
 ## Get
 

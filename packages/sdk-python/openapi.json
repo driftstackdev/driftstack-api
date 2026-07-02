@@ -16118,6 +16118,38 @@
                   },
                   "profile_id": {
                     "type": "string"
+                  },
+                  "proxy_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "skip_proxy_probe": {
+                    "type": "boolean"
+                  },
+                  "initial_url": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "geolocation": {
+                    "type": "object",
+                    "properties": {
+                      "latitude": {
+                        "type": "number",
+                        "minimum": -90,
+                        "maximum": 90
+                      },
+                      "longitude": {
+                        "type": "number",
+                        "minimum": -180,
+                        "maximum": 180
+                      },
+                      "accuracy": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": ["latitude", "longitude"]
                   }
                 }
               }

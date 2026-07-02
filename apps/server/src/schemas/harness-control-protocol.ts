@@ -282,6 +282,25 @@ export const SessionAssignProfileSchema = z
   })
   .strict();
 
+// Per-session geolocation OVERRIDE (A3 bus verdict 2026-07-01, doc-146→07/47).
+// The harness ALREADY derives lat/lon from the proxy-exit IP by default
+// (EgressProbeResult.proxiedLoc → DRIFTSTACK_GEO_* env → the fork's
+// WebGeolocationManagerProxy provider), so navigator.geolocation follows the
+// exit geo-coherently with NO field. This block is the customer's EXPLICIT
+// override of that auto-derive; absent ⇒ auto-derive (never regress the
+// exit-coherent default). `accuracy` is meters; omitted → harness default 35.0
+// (iPhone-faithful stationary CoreLocation). Coherence divergence (explicit geo
+// ≠ exit country) is surfaced as a soft client-side warning, deliberately NOT
+// enforced here — the customer may genuinely know their proxy's real location
+// better than the ipinfo derive does.
+export const SessionAssignGeolocationSchema = z
+  .object({
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    accuracy: z.number().positive().max(100_000).optional(),
+  })
+  .strict();
+
 export const SessionAssignSchema = z
   .object({
     type: z.literal('sessionAssign'),
@@ -315,9 +334,13 @@ export const SessionAssignSchema = z
     livekit: SessionAssignLivekitSchema.optional(),
     // Profile-backed session restore/save (optional; absent ⇒ stateless).
     profile: SessionAssignProfileSchema.optional(),
+    // Explicit geolocation override (optional; absent ⇒ harness auto-derives
+    // from the proxy-exit IP — see SessionAssignGeolocationSchema above).
+    geolocation: SessionAssignGeolocationSchema.optional(),
   })
   .strict();
 export type SessionAssign = z.infer<typeof SessionAssignSchema>;
+export type SessionAssignGeolocation = z.infer<typeof SessionAssignGeolocationSchema>;
 
 // ── ControlInbound.sessionEnd (server → harness) ──────────────────────
 // The trivial teardown envelope (W122 ControlInbound set: sessionAssign /

@@ -172,6 +172,11 @@ export function serializeSessionAssign(args: {
     sealedBlobUrl?: string;
     sealedBlobPutUrl?: string;
   };
+  /** Explicit geolocation OVERRIDE (A3 verdict 2026-07-01). Absent ⇒ the
+   *  harness keeps its proxy-exit auto-derive (exit-coherent default);
+   *  present ⇒ the fork's location provider serves exactly these coordinates.
+   *  accuracy is meters; omitted → harness default 35.0. */
+  geolocation?: { latitude: number; longitude: number; accuracy?: number };
 }): SessionAssign {
   let inlineProxyConfig: string | undefined;
   if (args.inlineProxyConfig !== undefined) {
@@ -238,6 +243,17 @@ export function serializeSessionAssign(args: {
               : {}),
             ...(args.profile.sealedBlobPutUrl !== undefined
               ? { sealed_blob_put_url: args.profile.sealedBlobPutUrl }
+              : {}),
+          },
+        }
+      : {}),
+    ...(args.geolocation !== undefined
+      ? {
+          geolocation: {
+            latitude: args.geolocation.latitude,
+            longitude: args.geolocation.longitude,
+            ...(args.geolocation.accuracy !== undefined
+              ? { accuracy: args.geolocation.accuracy }
               : {}),
           },
         }

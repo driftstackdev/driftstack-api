@@ -213,6 +213,22 @@ const CreateAgentSessionRequestSchema = z.object({
         'initial_url must be an absolute http(s) URL; file:, javascript:, data:, etc. are rejected',
     })
     .optional(),
+  // Per-session geolocation OVERRIDE (A3-approved contract 2026-07-01,
+  // doc-146→07/47). By default the device's navigator.geolocation auto-derives
+  // from the proxy-exit IP (geo-coherent, no field needed) — this explicitly
+  // overrides that derive with fixed coordinates for the session's lifetime.
+  // `accuracy` is meters (omit → device default 35.0). Deliberately NOT
+  // validated against the proxy exit country: a customer may know their
+  // proxy's true location better than IP geolocation does; clients surface a
+  // soft coherence warning instead. Bounds mirror the SessionAssign wire schema.
+  geolocation: z
+    .object({
+      latitude: z.number().min(-90).max(90),
+      longitude: z.number().min(-180).max(180),
+      accuracy: z.number().positive().max(100_000).optional(),
+    })
+    .strict()
+    .optional(),
 });
 
 const RunTurnRequestSchema = z.object({
@@ -790,6 +806,12 @@ export async function dispatchSessionAssignOnCreate(args: {
   // ~1800s default mid-use; absent → the box default (correct for ai/pair sessions,
   // bounded by token budget + the orphan reaper instead of a wall clock).
   maxDurationSeconds?: number;
+  // Explicit geolocation override from the create body (A3-approved contract
+  // 2026-07-01). Absent → the harness keeps its proxy-exit auto-derive (the
+  // exit-coherent default); present → the fork's location provider serves
+  // exactly these coordinates for the session's lifetime. Already
+  // bounds-validated at the route; serializeSessionAssign re-validates at the wire.
+  geolocation?: { latitude: number; longitude: number; accuracy?: number };
 }): Promise<void> {
   const {
     sessionId,
@@ -809,6 +831,7 @@ export async function dispatchSessionAssignOnCreate(args: {
     initialUrl,
     idleTimeoutSeconds,
     maxDurationSeconds,
+    geolocation,
   } = args;
   if (
     fleetControlRegistry === undefined ||
@@ -979,6 +1002,7 @@ export async function dispatchSessionAssignOnCreate(args: {
       ...(profile !== undefined ? { profile } : {}),
       ...(idleTimeoutSeconds !== undefined ? { idleTimeoutSeconds } : {}),
       ...(maxDurationSeconds !== undefined ? { maxDurationSeconds } : {}),
+      ...(geolocation !== undefined ? { geolocation } : {}),
     });
     const dispatchedNodeId = mac.nodeId ?? mac.id;
     // Worker-disconnect fix (2026-06-19) — persist session→node so the disconnect
@@ -1909,6 +1933,12 @@ export function registerAgentSessionsRoutes(
           // default; omitted when absent so the fallback applies. The harness opens
           // this URL on session launch (inert until the box honors initialUrl).
           ...(parsed.data.initial_url !== undefined ? { initialUrl: parsed.data.initial_url } : {}),
+          // Explicit geolocation override from the create body (A3-approved
+          // contract 2026-07-01) — omitted when absent so the harness keeps its
+          // exit-coherent proxy-IP auto-derive.
+          ...(parsed.data.geolocation !== undefined
+            ? { geolocation: parsed.data.geolocation }
+            : {}),
           // Manual (GUI) sessions are interactively WATCHED — give them a generous idle
           // timeout AND a generous max-duration so a sim the operator watches without
           // touching isn't reaped at the box ~300s idle default, nor hard-killed at the

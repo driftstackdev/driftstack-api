@@ -339,6 +339,33 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
       expect(() => serializeSessionAssign({ ...base, initialUrl })).toThrow();
     }
   });
+
+  it('geolocation override — emits latitude/longitude (+ optional accuracy); absent → omitted', () => {
+    // accuracy present → all three ride the wire
+    const withAcc = serializeSessionAssign({
+      ...base,
+      geolocation: { latitude: 48.8566, longitude: 2.3522, accuracy: 20 },
+    });
+    expect(withAcc.geolocation).toEqual({ latitude: 48.8566, longitude: 2.3522, accuracy: 20 });
+    // accuracy omitted → the harness applies its own default (35.0), so the field
+    // is dropped entirely rather than sent as null/undefined.
+    const noAcc = serializeSessionAssign({
+      ...base,
+      geolocation: { latitude: -33.8688, longitude: 151.2093 },
+    });
+    expect(noAcc.geolocation).toEqual({ latitude: -33.8688, longitude: 151.2093 });
+    // absent → omitted (harness keeps its proxy-exit auto-derive default)
+    expect(serializeSessionAssign(base).geolocation).toBeUndefined();
+  });
+
+  it('geolocation out-of-range latitude/longitude throws (wire schema bounds)', () => {
+    expect(() =>
+      serializeSessionAssign({ ...base, geolocation: { latitude: 91, longitude: 0 } }),
+    ).toThrow();
+    expect(() =>
+      serializeSessionAssign({ ...base, geolocation: { latitude: 0, longitude: 181 } }),
+    ).toThrow();
+  });
 });
 
 describe('serializeSessionEnd (ControlInbound teardown)', () => {

@@ -89,7 +89,9 @@ class AgentSessionsResource:
         Body shape (all fields optional): ``{"driftstack_session_id"?: ...,
         "token_budget"?: int, "mode"?: "manual"|"ai"|"pair",
         "model"?: "claude-opus-4-8"|"claude-opus-4-7"|"claude-sonnet-4-6"|"claude-haiku-4-5",
-        "profile_id"?: str, "proxy_id"?: str, "initial_url"?: str}``.
+        "profile_id"?: str, "proxy_id"?: str, "initial_url"?: str,
+        "geolocation"?: {"latitude": float, "longitude": float,
+        "accuracy"?: float}}``.
         ``model`` (6.c) picks the Claude 4.x model the AI agent runs;
         defaults server-side to ``"claude-opus-4-8"`` ("claude-opus-4-7" stays
         accepted for back-compat). ``profile_id`` attaches a
@@ -100,7 +102,13 @@ class AgentSessionsResource:
         owned proxy id (unknown or not-owned → 404). ``initial_url`` sets the
         start URL the remote browser opens on launch (overrides the operator
         default); must be an absolute http(s) URL — ``file:``, ``javascript:``,
-        ``data:`` schemes are rejected (400).
+        ``data:`` schemes are rejected (400). ``geolocation`` explicitly
+        overrides the device's reported location; by default it derives from
+        the proxy exit IP (coherent with the session's apparent network
+        location), so omit it for most sessions — coordinates diverging from
+        the exit country make the fingerprint internally inconsistent.
+        Latitude -90..90, longitude -180..180, ``accuracy`` in meters (omit
+        for the device default).
 
         ``idempotency_key`` (optional, v2-#19) is forwarded as the
         ``Idempotency-Key`` request header — Stripe-pattern dedupe. The

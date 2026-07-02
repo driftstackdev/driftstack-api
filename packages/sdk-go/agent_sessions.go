@@ -117,6 +117,22 @@ type CreateAgentSessionRequest struct {
 	// URL; file:, javascript:, data: schemes are rejected (400). Empty string
 	// omits it (operator default).
 	InitialURL string `json:"initial_url,omitempty"`
+	// Explicit geolocation override. By default the device's
+	// navigator.geolocation derives from the proxy exit IP (coherent with the
+	// session's apparent network location) — omit this for most sessions.
+	// Supply it only when you know the proxy's true physical location better
+	// than IP geolocation; coordinates diverging from the exit country make
+	// the fingerprint internally inconsistent (a detection signal).
+	Geolocation *SessionGeolocation `json:"geolocation,omitempty"`
+}
+
+// SessionGeolocation is the explicit per-session geolocation override.
+// Latitude -90..90, Longitude -180..180; Accuracy is meters (nil → device
+// default).
+type SessionGeolocation struct {
+	Latitude  float64  `json:"latitude"`
+	Longitude float64  `json:"longitude"`
+	Accuracy  *float64 `json:"accuracy,omitempty"`
 }
 
 // AgentMessageResponse is the discriminated turn-result. Branch on

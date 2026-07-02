@@ -227,6 +227,27 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.statusCode).toBe(201);
   });
 
+  it('geolocation override: valid coordinates → 201; out-of-range → 400 (A3 contract 2026-07-01)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const ok = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: {
+        token_budget: 50_000,
+        geolocation: { latitude: 48.8566, longitude: 2.3522, accuracy: 20 },
+      },
+    });
+    expect(ok.statusCode).toBe(201);
+    const bad = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { token_budget: 50_000, geolocation: { latitude: 91, longitude: 0 } },
+    });
+    expect(bad.statusCode).toBe(400);
+  });
+
   it('ARC A: create with an unknown/unowned proxy_id → 404 (never confirms a foreign proxy)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const res = await fx.app.inject({

@@ -190,6 +190,18 @@ export interface CreateAgentSessionRequest {
    * operator default.
    */
   initial_url?: string;
+  /**
+   * Explicit geolocation override for the session. By default the device's
+   * `navigator.geolocation` is derived from the proxy exit IP, so its reported
+   * location automatically matches the session's apparent network location —
+   * for most sessions you should NOT set this. Supply it only when you know
+   * the proxy's true physical location better than IP geolocation does.
+   * Coordinates that diverge from the proxy exit country make the session's
+   * fingerprint internally inconsistent (a detection signal). `latitude`
+   * -90..90, `longitude` -180..180, `accuracy` in meters (omit for the
+   * device default).
+   */
+  geolocation?: { latitude: number; longitude: number; accuracy?: number };
 }
 
 export type AgentIntent =

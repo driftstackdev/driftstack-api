@@ -3155,6 +3155,28 @@ function buildRegistry(): OpenAPIRegistry {
               // uuid is also accepted. Must be owned (unknown/not-owned → 404);
               // omit for a stateless session.
               profile_id: z.string().optional(),
+              // ARC A — route the session through an owned account proxy
+              // (unknown/not-owned → 404); omit for the default egress.
+              proxy_id: z.string().uuid().optional(),
+              // Skip the pre-launch live proxy probe for THIS launch (the
+              // dispatch-side SSRF re-guard still applies).
+              skip_proxy_probe: z.boolean().optional(),
+              // Start URL the remote browser opens on launch; absolute http(s)
+              // only. Omit → operator default.
+              initial_url: z.string().min(1).max(2048).optional(),
+              // Explicit geolocation override. Default (omitted) derives the
+              // device's location from the proxy exit IP — coherent with the
+              // session's apparent network location. Only set this when you
+              // know the proxy's true location better than IP geolocation;
+              // divergence from the exit country is a fingerprint-consistency
+              // risk. accuracy is meters (omit → device default).
+              geolocation: z
+                .object({
+                  latitude: z.number().min(-90).max(90),
+                  longitude: z.number().min(-180).max(180),
+                  accuracy: z.number().positive().optional(),
+                })
+                .optional(),
             }),
           },
         },
