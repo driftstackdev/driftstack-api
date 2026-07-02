@@ -242,4 +242,50 @@ describe('disabled deployment (MFA_ENCRYPTION_KEY unset) — V-352b mapping', ()
     // The disabled guard fires before any audited action.
     expect(auditRepo.getAll()).toHaveLength(0);
   });
+
+  it('DELETE writes an error-audit row when the store remove() fails (D-025 audit-on-failure, like PUT/reveal)', async () => {
+    const app = Fastify();
+    registerErrorHandler(app);
+    await app.register(authPlugin, {
+      authRepo: makeRepo(),
+      authCache: makeCache(),
+      authCoalescer: null,
+      ownerEmail: OWNER_EMAIL,
+    });
+    app.decorate('rateLimit', () => async () => {});
+    const auditRepo = new InMemoryAdminAuditLogRepo();
+    const secrets = new PlatformSecretsService(
+      new InMemoryPlatformSecretsRepo(),
+      randomBytes(32).toString('base64'),
+    );
+    // Simulate a store/decrypt failure on remove (NOT a benign not-found).
+    (secrets as { remove: () => Promise<boolean> }).remove = () =>
+      Promise.reject(Object.assign(new Error('boom'), { name: 'StoreError' }));
+    registerAdminOwnerRoutes(app, {
+      platformStatus: {
+        billing: false,
+        livekit: false,
+        crypto: false,
+        oauth_client: false,
+        sentry: false,
+        permissive_cors: false,
+      },
+      pricing: new PricingService(new InMemoryPricingRepo()),
+      secrets,
+      audit: new AdminAuditService(auditRepo),
+    });
+    await app.ready();
+
+    const del = await app.inject({
+      method: 'DELETE',
+      url: '/v1/admin/owner/secrets/stripe_secret_key',
+      headers: { authorization: `Bearer ${OWNER_TOKEN}` },
+    });
+    expect(del.statusCode).toBeGreaterThanOrEqual(500);
+
+    const deleted = auditRepo.getAll().filter((r) => r.action === 'secret.deleted');
+    expect(deleted).toHaveLength(1);
+    expect(deleted[0]?.result).toMatch(/^error:/);
+    await app.close();
+  });
 });

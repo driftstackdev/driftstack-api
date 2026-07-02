@@ -305,18 +305,40 @@ export function registerAdminOwnerRoutes(
       if (!ctx) throw new Error('account context missing after requireOwner');
       const params = SecretNameParamsSchema.safeParse(req.params);
       if (!params.success) throw new ValidationError(params.error.flatten());
-      const removed = await opts.secrets.remove(params.data.name);
-      if (!removed) throw new NotFoundError(`Secret ${params.data.name} not found.`);
-      await opts.audit.record({
-        adminAccountId: ctx.account.id,
-        adminKeyId: ctx.apiKey.id,
-        action: 'secret.deleted',
-        targetResourceId: params.data.name,
-        inputPayload: { name: params.data.name },
-        result: 'success',
-        ipAddress: readClientIp(req),
-      });
-      return reply.code(204).send();
+      // Audit-before-response on BOTH success AND failure (D-025), mirroring the
+      // PUT + reveal siblings — a failed deletion of a high-value platform secret
+      // must still leave a trace. (A benign not-found is excluded, same as reveal.)
+      try {
+        const removed = await opts.secrets.remove(params.data.name);
+        if (!removed) throw new NotFoundError(`Secret ${params.data.name} not found.`);
+        await opts.audit.record({
+          adminAccountId: ctx.account.id,
+          adminKeyId: ctx.apiKey.id,
+          action: 'secret.deleted',
+          targetResourceId: params.data.name,
+          inputPayload: { name: params.data.name },
+          result: 'success',
+          ipAddress: readClientIp(req),
+        });
+        return reply.code(204).send();
+      } catch (err) {
+        if (!(err instanceof NotFoundError)) {
+          const code =
+            err instanceof Error && err.name
+              ? err.name.toLowerCase().replace(/error$/, '')
+              : 'unknown';
+          await opts.audit.record({
+            adminAccountId: ctx.account.id,
+            adminKeyId: ctx.apiKey.id,
+            action: 'secret.deleted',
+            targetResourceId: params.data.name,
+            inputPayload: { name: params.data.name },
+            result: `error: ${code}`,
+            ipAddress: readClientIp(req),
+          });
+        }
+        throw err;
+      }
     },
   );
 }

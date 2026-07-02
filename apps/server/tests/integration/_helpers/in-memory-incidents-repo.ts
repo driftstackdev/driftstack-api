@@ -86,8 +86,13 @@ export class InMemoryIncidentsRepo implements IncidentsRepo {
       postedAt: new Date(),
     };
     this.updates.push(update);
+    // Mirror DrizzleIncidentsRepo.addUpdate: keep resolved_at in lockstep with
+    // status so the timeline-update path can't drift the invariant
+    // (status==='resolved' <=> resolved_at != null).
+    const now = new Date();
     incident.status = input.status;
-    incident.updatedAt = new Date();
+    incident.resolvedAt = input.status === 'resolved' ? (incident.resolvedAt ?? now) : null;
+    incident.updatedAt = now;
     return update;
   }
 

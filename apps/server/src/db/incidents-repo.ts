@@ -135,10 +135,30 @@ export class DrizzleIncidentsRepo implements IncidentsRepo {
         .returning();
       if (!updateRow) throw new Error('incident_updates insert returned no row');
 
-      // Bump incident.status + updated_at to reflect the latest state.
+      // Bump incident.status + updated_at to reflect the latest state, AND keep
+      // resolved_at in lockstep with status so this timeline-update path can't
+      // drift the two apart the way /resolve + /reopen deliberately don't (the
+      // invariant is status==='resolved' <=> resolved_at != null). Without this,
+      // posting a 'resolved' update leaves resolved_at NULL (a resolved incident
+      // with no resolution time on the public status page), and posting a
+      // non-resolved update on an already-resolved incident leaves a stale
+      // resolved_at (an active incident that still carries a resolution time).
+      const now = new Date();
+      let resolvedAt: Date | null;
+      if (input.status === 'resolved') {
+        // Preserve the original resolution time if already resolved; else stamp now.
+        const [existing] = await tx
+          .select({ resolvedAt: incidents.resolvedAt })
+          .from(incidents)
+          .where(eq(incidents.id, input.incidentId))
+          .limit(1);
+        resolvedAt = existing?.resolvedAt ?? now;
+      } else {
+        resolvedAt = null;
+      }
       await tx
         .update(incidents)
-        .set({ status: input.status, updatedAt: new Date() })
+        .set({ status: input.status, resolvedAt, updatedAt: now })
         .where(eq(incidents.id, input.incidentId));
 
       return toUpdateRow(updateRow);

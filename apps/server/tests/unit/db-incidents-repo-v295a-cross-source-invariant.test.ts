@@ -131,14 +131,17 @@ describe('W999 db/incidents-repo V-295a cross-source invariant', () => {
 
   // ─── addUpdate transactional 2-write ─────────────────────────
 
-  it("CRITICAL addUpdate is transactional — 'this.database.db.transaction(async (tx) => { ... })' + 2-write (insert(incidentUpdates) + update(incidents).status + updatedAt). The txn keeps the update-row + incident.status-bump atomic.", () => {
+  it("CRITICAL addUpdate is transactional — 'this.database.db.transaction(async (tx) => { ... })' + insert(incidentUpdates) + update(incidents) that bumps status AND keeps resolved_at in lockstep (V-295a invariant: status==='resolved' <=> resolved_at != null). The txn keeps the update-row + incident bump atomic.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/incidents-repo.ts'));
     expect(p).toMatch(/return this\.database\.db\.transaction\(async \(tx\) => \{/);
     expect(p).toMatch(/await tx/);
     expect(p).toMatch(/\.insert\(incidentUpdates\)/);
-    expect(p).toMatch(/\/\/ Bump incident\.status \+ updated_at to reflect the latest state\./);
     expect(p).toMatch(/\.update\(incidents\)/);
-    expect(p).toMatch(/\.set\(\{ status: input\.status, updatedAt: new Date\(\) \}\)/);
+    // resolved_at lockstep on the timeline-update path (Fable admin re-audit
+    // 2026-07-02) — the addUpdate invariant is now guarded here too.
+    expect(p).toMatch(/if \(input\.status === 'resolved'\) \{/);
+    expect(p).toMatch(/resolvedAt = existing\?\.resolvedAt \?\? now;/);
+    expect(p).toMatch(/\.set\(\{ status: input\.status, resolvedAt, updatedAt: now \}\)/);
   });
 
   // ─── resolve transactional 3-write + NotFoundError ──────────

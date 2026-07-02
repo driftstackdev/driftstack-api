@@ -183,6 +183,46 @@ describe('POST /v1/admin/incidents/:id/updates', () => {
     expect(body.incident.status).toBe('identified');
     expect(body.updates).toHaveLength(2); // initial + this update
   });
+
+  it('keeps resolved_at in lockstep with status set via /updates (invariant, not just /resolve+/reopen)', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/incidents',
+      headers: { ...headers, ...auth(fx) },
+      payload: { title: 'x', description: 'x', severity: 'major' },
+    });
+    const incidentId = create.json<CreateResponse>().incident.id;
+
+    const detailOf = async (): Promise<IncidentResp> => {
+      const d = await fx.app.inject({
+        method: 'GET',
+        url: `/v1/admin/incidents/${incidentId}`,
+        headers: auth(fx),
+      });
+      return d.json<{ incident: IncidentResp }>().incident;
+    };
+    const post = (status: string): Promise<{ statusCode: number }> =>
+      fx.app.inject({
+        method: 'POST',
+        url: `/v1/admin/incidents/${incidentId}/updates`,
+        headers: { ...headers, ...auth(fx) },
+        payload: { message: `now ${status}`, status },
+      });
+
+    // Resolve via /updates (NOT /resolve) → resolved_at must be stamped.
+    expect((await post('resolved')).statusCode).toBe(201);
+    let inc = await detailOf();
+    expect(inc.status).toBe('resolved');
+    expect(inc.resolved_at).not.toBeNull();
+
+    // Move back to a non-resolved status via /updates → resolved_at must clear
+    // (no stale resolution timestamp on an active incident).
+    expect((await post('monitoring')).statusCode).toBe(201);
+    inc = await detailOf();
+    expect(inc.status).toBe('monitoring');
+    expect(inc.resolved_at).toBeNull();
+  });
 });
 
 describe('POST /v1/admin/incidents/:id/resolve', () => {
