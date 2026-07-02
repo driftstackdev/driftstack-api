@@ -32,6 +32,10 @@ import type { Logger } from '../lib/logger.js';
 export const AGENT_SESSION_ORPHAN_REAP_JOB_TYPE = 'agent_session.orphan_reap';
 
 const DEFAULT_MAX_LIFETIME_HOURS = 12;
+/** Upper sanity bound for the operator-set lifetime cap (30 days). Anything
+ *  above this is treated as a fat-finger and falls back to the default so the
+ *  backstop can never be silently disabled (see resolveMaxLifetimeHours). */
+const MAX_REASONABLE_LIFETIME_HOURS = 24 * 30;
 const HOUR_MS = 60 * 60 * 1000;
 
 /**
@@ -46,7 +50,15 @@ export function resolveMaxLifetimeHours(
   const raw = env.DRIFTSTACK_AGENT_SESSION_MAX_LIFETIME_HOURS;
   if (raw === undefined) return DEFAULT_MAX_LIFETIME_HOURS;
   const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_MAX_LIFETIME_HOURS;
+  // Reject non-finite / non-positive AND absurdly-large values. Without the
+  // upper bound a fat-fingered "120000" (a plausible typo for 12) silently
+  // DISABLES the backstop — the cutoff (now − maxLifetimeMs) lands ~13 years in
+  // the past so no session is ever old enough to reap — the exact outcome the
+  // doc above promises is impossible. 30 days is far above any legitimate cap
+  // (the default is 12h) while keeping the guard's stated invariant.
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > MAX_REASONABLE_LIFETIME_HOURS) {
+    return DEFAULT_MAX_LIFETIME_HOURS;
+  }
   return parsed;
 }
 

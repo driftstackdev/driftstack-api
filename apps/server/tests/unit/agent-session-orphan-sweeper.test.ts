@@ -68,6 +68,23 @@ describe('resolveMaxLifetimeHours', () => {
     expect(resolveMaxLifetimeHours({ DRIFTSTACK_AGENT_SESSION_MAX_LIFETIME_HOURS: '0' })).toBe(12);
     expect(resolveMaxLifetimeHours({ DRIFTSTACK_AGENT_SESSION_MAX_LIFETIME_HOURS: '-5' })).toBe(12);
   });
+
+  it('falls back to 12 for an absurdly-large value (a fat-finger must NOT silently disable the backstop)', () => {
+    // 120000 (a plausible typo for 12) would push the cutoff ~13.7 years into
+    // the past → nothing ever old enough to reap → backstop disabled, which the
+    // JSDoc promises is impossible. Anything above 30 days falls back.
+    expect(resolveMaxLifetimeHours({ DRIFTSTACK_AGENT_SESSION_MAX_LIFETIME_HOURS: '120000' })).toBe(
+      12,
+    );
+    // Exactly 30 days (the ceiling) is still honored.
+    expect(
+      resolveMaxLifetimeHours({ DRIFTSTACK_AGENT_SESSION_MAX_LIFETIME_HOURS: String(24 * 30) }),
+    ).toBe(24 * 30);
+    // Just over the ceiling falls back.
+    expect(
+      resolveMaxLifetimeHours({ DRIFTSTACK_AGENT_SESSION_MAX_LIFETIME_HOURS: String(24 * 30 + 1) }),
+    ).toBe(12);
+  });
 });
 
 describe('nextReapRunAt', () => {

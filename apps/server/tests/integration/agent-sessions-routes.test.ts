@@ -1562,6 +1562,16 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(read.json<{ pair_mode_state: { kind: string } }>().pair_mode_state.kind).toBe(
       'takeover-pending',
     );
+    // The input-event takeover MUST register a heartbeat (like the explicit
+    // /takeover route) so the sweep can auto-revert a stalled takeover-pending.
+    // Without it the session would be invisible to findStaleSessions and
+    // stranded in takeover-pending forever. ttlMs:0 → any recorded entry counts.
+    expect(
+      fx.pairModeHeartbeatTracker.findStaleSessions({
+        now: new Date(Date.now() + 60_000),
+        ttlMs: 0,
+      }),
+    ).toContain(id);
   });
 
   it('Slice 5 POST /:id/input-event on mode=pair + ai-driving WITHOUT client_id → 400 ValidationFailed (client_id required for takeover-trigger)', async () => {

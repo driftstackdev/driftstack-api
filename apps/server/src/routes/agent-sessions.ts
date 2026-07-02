@@ -3086,6 +3086,19 @@ export function registerAgentSessionsRoutes(
             } catch {
               /* swallow */
             }
+            // Record a fresh heartbeat so the 5s sweep can see this session and
+            // auto-revert a stalled takeover — IDENTICAL to the explicit POST
+            // /:id/takeover route (line ~3300). Without it the input-event
+            // takeover enters takeover-pending but is NEVER registered with the
+            // heartbeat tracker, so the sweep's findStaleSessions can't see it
+            // and never fires heartbeat-timeout → the session is stranded in
+            // takeover-pending forever (every later input-event 409s on the
+            // pending guard below). The tracker is in-memory; recordHeartbeat
+            // doesn't throw.
+            pairModeHeartbeatTracker?.recordHeartbeat({
+              sessionId: req.params.id,
+              at: new Date(),
+            });
             return reply.code(200).send({
               kind: 'pair-mode-takeover-fired' as const,
               pair_mode_state: nextState,
@@ -3098,6 +3111,17 @@ export function registerAgentSessionsRoutes(
               });
             }
             throw err;
+          } finally {
+            // Release the pair-mode lock as soon as the takeover-request
+            // transition completes (or fails) — mirrors the explicit /:id/takeover
+            // route's finally (line ~3313). Without this the input-event takeover
+            // path leaked the lock for the full 30s SET-NX-EX TTL on BOTH the
+            // success and error paths, needlessly blocking a legitimate contending
+            // client for up to 30s.
+            await pairModeLock.release({
+              sessionId: req.params.id,
+              clientId: parsed.data.client_id,
+            });
           }
         }
         // Pending / queued mid-transition states reject — a click

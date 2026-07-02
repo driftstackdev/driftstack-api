@@ -215,6 +215,38 @@ describe('IntentDispatchCorrelator', () => {
     expect(c.inFlight()).toBe(0);
   });
 
+  it('DROPS a result whose sessionId disagrees with the pending dispatch (cross-session spoof guard) and leaves the pending entry for the legitimate result', async () => {
+    const { transport } = recorder();
+    const c = new IntentDispatchCorrelator(transport);
+    // int_1 is in-flight for ses_A (its DOM/screenshot output must only settle
+    // ses_A's dispatch).
+    const p = c.dispatch(dispatch('int_1', 'get_page_source', {}, 'ses_A'));
+    // A misrouted / id-echoed frame carrying ANOTHER session's output but the
+    // same intentId must NOT settle int_1 (would leak ses_B's page into ses_A).
+    c.onResultFrame({
+      type: 'intentResult',
+      sessionId: 'ses_B',
+      intentId: 'int_1',
+      success: true,
+      durationMs: 1,
+      outputData: encodeWireData({ source: '<html>ses_B secret</html>' }),
+    });
+    expect(c.inFlight()).toBe(1); // still pending — the spoof frame was dropped
+    // The legitimate same-session result still settles it.
+    c.onResultFrame({
+      type: 'intentResult',
+      sessionId: 'ses_A',
+      intentId: 'int_1',
+      success: true,
+      durationMs: 2,
+      outputData: encodeWireData({ source: '<html>ses_A</html>' }),
+    });
+    const r = await p;
+    expect(r.success).toBe(true);
+    expect(r.outputData).toEqual({ source: '<html>ses_A</html>' });
+    expect(c.inFlight()).toBe(0);
+  });
+
   it('failAll fails every in-flight dispatch (connection drop)', async () => {
     const { transport } = recorder();
     const c = new IntentDispatchCorrelator(transport);

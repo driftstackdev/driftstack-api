@@ -138,6 +138,19 @@ export class IntentDispatchCorrelator {
         'malformed IntentResult outputData',
       );
     }
+    // Cross-session spoof guard — a shared fleet connection carries every
+    // session on the node, so a misrouted / id-echoed IntentResult whose
+    // sessionId disagrees with the pending dispatch it would settle must NOT
+    // resolve another session's in-flight intent with this frame's page output
+    // (DOM / screenshot / extracted text → a cross-account data leak). Mirrors
+    // the identical guard the six sibling request-correlators already carry
+    // (cookies / download / navigate-history / upload / set-cookies /
+    // trim-profile). Drop the frame but LEAVE the pending entry so the
+    // legitimate result — or the per-intent timeout — still settles it.
+    const target = this.pending.get(parsed.intentId);
+    if (target !== undefined && target.sessionId !== parsed.sessionId) {
+      return;
+    }
     this.settle(parsed.intentId, parsed);
   }
 
