@@ -68,8 +68,21 @@ function hashesByTag() {
 }
 
 async function pullAppliedRows(client) {
+  // Sort by the SERIAL primary key (true insertion order), not created_at.
+  // created_at is the migration's journal `when` value — a timestamp BAKED
+  // IN AT drizzle-kit-generate TIME on whatever branch authored it — not
+  // when the row was actually inserted. Two migrations authored on
+  // parallel feature branches and merged out of authoring-timestamp order
+  // apply (and get their id assigned) in journal-array order but can carry
+  // created_at values that are NOT monotonic with that order. Verified
+  // empirically against the live staging DB 2026-07-02: id ASC and
+  // created_at ASC disagree on the ordering of 53 of ~57 rows (ids
+  // 34-83 were authored — created_at-stamped — chronologically AFTER
+  // 51-83 despite applying, and getting assigned an id, BEFORE them) —
+  // sorting by created_at made Check 1 zip every one of those rows to
+  // the wrong journal tag and report a false P0 SQL-rewrite failure.
   const rows = await client`
-    SELECT id, hash, created_at FROM drizzle.__drizzle_migrations ORDER BY created_at ASC
+    SELECT id, hash, created_at FROM drizzle.__drizzle_migrations ORDER BY id ASC
   `;
   return rows.map((r) => ({
     id: Number(r.id),
