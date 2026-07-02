@@ -40,7 +40,7 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     expect(existsSync(resolve(REPO_ROOT, 'apps/admin-panel/src/styles/base.css'))).toBe(true);
   });
 
-  it('customer-dashboard src/styles/base.css (Fleet rework): mode-axis color-scheme + tk token bg + btn-primary on accent tokens + form-input/form-label/banner-warn/auth-card + section-label mono + dashboard-card glass — tokens-shared-with-marketing-site framing pinned', () => {
+  it('customer-dashboard src/styles/base.css (Fleet v2, 2026-07-02 redesign): mode-axis color-scheme + tk token bg + FLAT btn-primary on accent tokens (no glow ring / no hover lift — accent discipline) + solid btn-secondary/dashboard-card/auth-card (glass + glow-on-everything retired; shadow-ambient replaces shadow-glow-accent on default chrome) + form-input/form-label/banner-warn + section-label mono + self-hosted Geist/JetBrains-Mono font faces — tokens-shared-with-marketing-site framing pinned', () => {
     const body = read('apps/customer-dashboard/src/styles/base.css');
     expect(body).toMatch(/^@tailwind base;$/m);
     expect(body).toMatch(/^@tailwind components;$/m);
@@ -53,32 +53,42 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     expect(body).toMatch(/\[data-mode='dark'\] \{\s*\n\s*color-scheme: dark;/);
     expect(body).toMatch(/@apply bg-tk-bg text-tk-ink;/);
     expect(body).toMatch(/font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;/);
-    expect(body).toMatch(/font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;/);
+    expect(body).toMatch(
+      /font-family: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;/,
+    );
     expect(body).toMatch(/@apply bg-tk-accent text-white;/);
     expect(body).toMatch(/\.btn-primary \{/);
     expect(body).toMatch(/bg-tk-accent/);
-    expect(body).toMatch(/shadow-glow-accent/);
+    expect(body).toMatch(/shadow-ambient/);
     expect(body).toMatch(/hover:bg-tk-accent-strong/);
-    expect(body).toMatch(/hover:-translate-y-0\.5/);
+    // Fleet v2 accent discipline: glow ring + hover lift are GONE from
+    // default button/card chrome (glow-accent is reserved for hot elements).
+    expect(body).not.toMatch(/shadow-glow-accent/);
+    expect(body).not.toMatch(/hover:-translate-y-0\.5/);
     expect(body).toMatch(/\.btn-secondary \{/);
     expect(body).toMatch(/border border-tk-border/);
-    expect(body).toMatch(/backdrop-blur-sm/);
+    expect(body).toMatch(/\.btn-ghost \{/);
+    expect(body).toMatch(/\.btn-danger \{/);
     expect(body).toMatch(/\.nav-link \{/);
     expect(body).toMatch(/@apply text-sm text-tk-ink-2 transition-colors hover:text-tk-accent;/);
     expect(body).toMatch(/\.dashboard-card \{/);
-    expect(body).toMatch(/rounded-xl border border-tk-border/);
+    expect(body).toMatch(/rounded-card border border-tk-border bg-tk-surface p-6 shadow-ambient/);
     expect(body).toMatch(/\.form-input \{/);
     expect(body).toMatch(/\.form-label \{/);
     expect(body).toMatch(/\.form-helper \{/);
     expect(body).toMatch(/\.banner-info \{/);
     expect(body).toMatch(/\.banner-warn \{/);
+    expect(body).toMatch(/\.banner-err \{/);
     expect(body).toMatch(/\.section-label \{/);
     expect(body).toMatch(/font-mono text-xs uppercase/);
     expect(body).toMatch(/\.section-label::before \{/);
     expect(body).toMatch(/content: '\/\/ ';/);
     expect(body).toMatch(/\.auth-card \{/);
-    expect(body).toMatch(/bg-tk-surface\/70 backdrop-blur-md/);
-    expect(body).toMatch(/shadow-glow-accent/);
+    expect(body).toMatch(/bg-tk-surface shadow-ambient-lg/);
+    // Self-hosted fonts (OFL): Geist variable + JetBrains Mono, vendored
+    // under public/fonts/ — Berkeley Mono is licensed and never vendored.
+    expect(body).toMatch(/url\('\/fonts\/geist\/GeistVF\.woff2'\)/);
+    expect(body).toMatch(/url\('\/fonts\/jetbrains-mono\/JetBrainsMono-Regular\.woff2'\)/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/customer-dashboard/src/styles/base.css'))).toBe(
       true,
     );

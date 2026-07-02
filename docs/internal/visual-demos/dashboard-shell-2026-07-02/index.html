@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dashboard shell v2 — slice-1 vibe check (2026-07-02)</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 28px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        background: #f2f3f6;
+        color: #0f1014;
+      }
+      h1 {
+        font-size: 20px;
+        letter-spacing: -0.4px;
+      }
+      p.note {
+        max-width: 72ch;
+        color: #474a55;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+        gap: 18px;
+        margin-top: 22px;
+      }
+      figure {
+        margin: 0;
+        background: #fff;
+        border: 1px solid #e4e6ec;
+        border-radius: 12px;
+        padding: 10px;
+      }
+      figure.default {
+        outline: 2px solid #9b3b46;
+      }
+      img {
+        width: 100%;
+        border-radius: 8px;
+        display: block;
+      }
+      figcaption {
+        font-size: 12px;
+        padding: 8px 2px 2px;
+        color: #474a55;
+        font-weight: 600;
+      }
+      figure.default figcaption::after {
+        content: '  — SHIPPED DEFAULT';
+        color: #9b3b46;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Customer dashboard shell v2 — slice-1 vibe check (2026-07-02)</h1>
+    <p class="note">
+      Design-system foundation + restyled shell only — page content gets redesigned in the next
+      slices. Default is dark + oxblood (founder-locked 2026-07-02) with the light toggle live in
+      the sidebar-foot / auth-header themer pill. Nav still shows the full pre-deletion roster;
+      the operational entries (Profiles, Snapshots, Sessions, Agent sessions, Recipes, Proxies)
+      are removed in slice 2 after this vibe check.
+    </p>
+    <div class="grid">
+      <figure class="default">
+        <img src="dark-oxblood-overview.png" alt="" />
+        <figcaption>dark · oxblood · overview</figcaption>
+      </figure>
+      <figure class="default">
+        <img src="dark-oxblood-login.png" alt="" />
+        <figcaption>dark · oxblood · login</figcaption>
+      </figure>
+      <figure>
+        <img src="light-oxblood-overview.png" alt="" />
+        <figcaption>light · oxblood · overview</figcaption>
+      </figure>
+      <figure>
+        <img src="light-oxblood-login.png" alt="" />
+        <figcaption>light · oxblood · login</figcaption>
+      </figure>
+      <figure>
+        <img src="dark-violet-overview.png" alt="" />
+        <figcaption>dark · violet · overview</figcaption>
+      </figure>
+      <figure>
+        <img src="dark-violet-login.png" alt="" />
+        <figcaption>dark · violet · login</figcaption>
+      </figure>
+      <figure>
+        <img src="light-violet-overview.png" alt="" />
+        <figcaption>light · violet · overview</figcaption>
+      </figure>
+      <figure>
+        <img src="light-violet-login.png" alt="" />
+        <figcaption>light · violet · login</figcaption>
+      </figure>
+      <figure>
+        <img src="dark-teal-overview.png" alt="" />
+        <figcaption>dark · teal · overview</figcaption>
+      </figure>
+      <figure>
+        <img src="dark-teal-login.png" alt="" />
+        <figcaption>dark · teal · login</figcaption>
+      </figure>
+      <figure>
+        <img src="light-teal-overview.png" alt="" />
+        <figcaption>light · teal · overview</figcaption>
+      </figure>
+      <figure>
+        <img src="light-teal-login.png" alt="" />
+        <figcaption>light · teal · login</figcaption>
+      </figure>
+    </div>
+  </body>
+</html>

@@ -79,40 +79,68 @@ export default {
           ready: 'rgb(var(--ready-rgb) / <alpha-value>)',
           busy: 'rgb(var(--busy-rgb) / <alpha-value>)',
           err: 'rgb(var(--err-rgb) / <alpha-value>)',
+          sync: 'rgb(var(--sync-rgb) / <alpha-value>)',
+          'code-bg': 'rgb(var(--code-bg-rgb) / <alpha-value>)',
         },
       },
       fontFamily: {
         sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        mono: ['Berkeley Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        // Berkeley Mono renders for users with a local license; the vendored
+        // JetBrains Mono (public/fonts/jetbrains-mono, OFL) is what ships.
+        mono: ['Berkeley Mono', 'JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+      },
+      borderRadius: {
+        // Fleet card radius (spec §3: 12–16px cards; blueprint uses 14px).
+        card: '14px',
       },
       maxWidth: {
         prose: '65ch',
       },
       boxShadow: {
         'glow-red': '0 0 0 1px rgba(226, 56, 71, 0.3), 0 6px 20px -8px rgba(226, 56, 71, 0.35)',
-        // Fleet: accent-aware glow following the data-accent axis.
+        // Fleet: accent-aware glow following the data-accent axis. Reserved
+        // for "hot" elements only (spec §3) — never default card/button chrome.
         'glow-accent': '0 0 0 1px var(--accent), 0 0 26px var(--glow)',
         'glow-red-lg': '0 0 0 1px rgba(226, 56, 71, 0.4), 0 12px 40px -12px rgba(226, 56, 71, 0.5)',
         'inset-divider': 'inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+        // Fleet v2 — calm ambient card shadows (replace glow-on-everything).
+        ambient: '0 1px 2px rgb(15 16 20 / 0.04), 0 10px 28px -18px rgb(15 16 20 / 0.12)',
+        'ambient-lg': '0 2px 4px rgb(15 16 20 / 0.05), 0 24px 56px -24px rgb(15 16 20 / 0.2)',
       },
       backgroundImage: {
         'glow-radial-red':
           'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(226, 56, 71, 0.18), transparent 70%)',
+        // Fleet v2 — calmer ambient radials for the auth/onboarding surfaces:
+        // tighter ellipses + earlier fade-out than the pre-rework versions so
+        // light mode reads clean and dark mode loses the heavy wash.
         'glow-radial-accent':
-          'radial-gradient(ellipse 70% 50% at 50% 0%, var(--glow), transparent 70%)',
+          'radial-gradient(ellipse 55% 38% at 50% 0%, var(--glow), transparent 60%)',
         'glow-radial-accent-soft':
-          'radial-gradient(ellipse 60% 40% at 50% 100%, var(--accent-soft), transparent 75%)',
+          'radial-gradient(ellipse 45% 30% at 50% 100%, var(--accent-soft), transparent 65%)',
         'glow-radial-red-soft':
           'radial-gradient(ellipse 60% 40% at 50% 100%, rgba(114, 47, 55, 0.22), transparent 75%)',
         'gradient-accent': 'linear-gradient(135deg, #722F37 0%, #e23847 100%)',
       },
       animation: {
         'fade-up': 'fade-up 0.6s ease-out',
+        'view-in': 'view-in 0.15s ease-out',
+        livepulse: 'livepulse 2.4s ease-in-out infinite',
       },
       keyframes: {
         'fade-up': {
           '0%': { opacity: '0', transform: 'translateY(8px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        // Fleet v2 — view/panel entrance (GUI ds-view-in port).
+        'view-in': {
+          '0%': { opacity: '0', transform: 'translateY(3px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        // Fleet v2 — live-status dot breathe (spec §3; killed by the global
+        // prefers-reduced-motion clamp in base.css).
+        livepulse: {
+          '0%, 100%': { boxShadow: '0 0 0 0 var(--glow)' },
+          '50%': { boxShadow: '0 0 0 4px var(--glow)' },
         },
       },
     },

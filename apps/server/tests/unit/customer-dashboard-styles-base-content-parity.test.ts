@@ -48,9 +48,18 @@ describe('customer-dashboard styles/base content parity', () => {
     expect(body).toMatch(/max-width: 100vw;/);
   });
 
-  it('Font stack pinned: Geist (display) + Berkeley Mono (code). Drift to a different font would break cross-app typographic consistency', () => {
+  it('Font stack pinned: Geist (display, self-hosted variable woff2) + Berkeley Mono → JetBrains Mono (code; Berkeley Mono stays FIRST for locally-licensed users, the vendored OFL JetBrains Mono is what ships). Drift to a different font would break cross-app typographic consistency', () => {
     expect(body).toMatch(/font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;/);
-    expect(body).toMatch(/font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;/);
+    expect(body).toMatch(
+      /font-family: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;/,
+    );
+    // Self-hosted font faces (Fleet v2 2026-07-02): Geist VF + JetBrains
+    // Mono Regular/Bold from public/fonts/, all font-display: swap.
+    expect(body).toMatch(/src: url\('\/fonts\/geist\/GeistVF\.woff2'\) format\('woff2'\);/);
+    expect(body).toMatch(
+      /src: url\('\/fonts\/jetbrains-mono\/JetBrainsMono-Regular\.woff2'\) format\('woff2'\);/,
+    );
+    expect(body).toMatch(/font-display: swap;/);
   });
 
   it('Geist font-feature-settings cv11 + ss01 pinned: the OpenType features that give Geist its tabular-numeric + alternate-glyph polish. Drift to dropping would weaken the typography', () => {

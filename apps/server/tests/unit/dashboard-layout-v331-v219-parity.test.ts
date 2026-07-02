@@ -116,9 +116,9 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     expect(l).toMatch(/<meta name="robots" content="noindex" \/>/);
   });
 
-  it('CRITICAL theme-color #0b0f14 pinned (matches dark theme + marketing-site). Drift to a different color would mismatch the splash screen + browser chrome on mobile.', () => {
+  it('CRITICAL theme-color #060608 pinned (the token layer dark --bg; Fleet v2 2026-07-02 aligned the meta to the actual dark surface — the old #0b0f14 predated the token layer). The pre-paint theme script + themer rewrite it to #f2f3f6 when light mode is active. Drift to a different color would mismatch the splash screen + browser chrome on mobile.', () => {
     const l = read(LAYOUT);
-    expect(l).toMatch(/<meta name="theme-color" content="#0b0f14" \/>/);
+    expect(l).toMatch(/<meta name="theme-color" content="#060608" \/>/);
   });
 
   it('CRITICAL fullTitle pattern `${title} · Driftstack` pinned. The "·" (middle-dot) separator is canonical Driftstack-suffix.', () => {

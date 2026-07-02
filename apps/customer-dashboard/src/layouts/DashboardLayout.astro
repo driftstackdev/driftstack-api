@@ -98,11 +98,62 @@ const navSections: NavSection[] = [
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0b0f14" />
+    <meta name="theme-color" content="#060608" />
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
     <meta name="robots" content="noindex" />
     <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=4" />
+    <link
+      rel="preload"
+      href="/fonts/geist/GeistVF.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/jetbrains-mono/JetBrainsMono-Regular.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <script is:inline>
+      {
+        /*
+         * Fleet v2 (2026-07-02) — theme persistence, pre-paint. Applies the
+         * customer's saved mode/accent BEFORE first paint so there is no
+         * flash of the default theme. Values are WHITELISTED — never write
+         * raw localStorage into a DOM attribute. The defaults (dark +
+         * oxblood, founder-locked 2026-07-02) live on the <html> attrs;
+         * the themer pill (wired at body end) writes ds_theme_mode /
+         * ds_theme_accent. Runs on BOTH layout branches so auth pages
+         * honour the saved theme too.
+         *
+         * NOTE: plain code in a brace-comment block, NOT the {`…`}
+         * template-literal wrapper — Astro emits that wrapper literally,
+         * which turns the whole script into a no-op string expression in
+         * the browser (the 2026-07-02 dead-inline-script bug class).
+         */
+      }
+      (function () {
+        try {
+          var m = localStorage.getItem('ds_theme_mode');
+          var a = localStorage.getItem('ds_theme_accent');
+          if (m === 'light' || m === 'dark') {
+            document.documentElement.setAttribute('data-mode', m);
+          }
+          if (a === 'violet' || a === 'oxblood' || a === 'teal') {
+            document.documentElement.setAttribute('data-accent', a);
+          }
+          if (m === 'light') {
+            var mt = document.querySelector('meta[name="theme-color"]');
+            if (mt) mt.setAttribute('content', '#f2f3f6');
+          }
+        } catch (_) {
+          /* default theme */
+        }
+      })();
+    </script>
     <style>
       /* 2026-05-21 — when the pre-paint script confirms the cached
        * `ds_is_team_user` flag, override the picker wrap's default
@@ -131,7 +182,6 @@ const navSections: NavSection[] = [
     {
       withSidebar && (
         <script is:inline>
-          {`
             // 2026-05-21 — login gate. The signed-in dashboard pages should
             // never render to a non-authenticated visitor — that exposed a
             // flash of scaffolding mock data on every page load. This runs
@@ -200,7 +250,6 @@ const navSections: NavSection[] = [
                 location.replace('/login');
               }
             })();
-          `}
         </script>
       )
     }
@@ -238,7 +287,7 @@ const navSections: NavSection[] = [
     <div class="flex min-h-screen flex-col">
       {
         !withSidebar && (
-          <header class="border-b border-tk-border bg-tk-bg/70 backdrop-blur-md">
+          <header class="border-b border-tk-border bg-tk-bg">
             <div class="mx-auto flex max-w-6xl items-center px-6 py-4">
               <a
                 href="/"
@@ -253,6 +302,40 @@ const navSections: NavSection[] = [
                 />
                 <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK</span></span>
               </a>
+              <span class="flex-1" />
+              {/* Fleet v2 — theme switcher on auth/onboarding pages (the
+                  signed-in shell carries its own instance in the sidebar).
+                  Wired by the [data-themer] script at body end. */}
+              <div data-themer class="themer" role="group" aria-label="Theme">
+                <button type="button" class="themer-btn" data-set-mode="dark">
+                  Dark
+                </button>
+                <button type="button" class="themer-btn" data-set-mode="light">
+                  Light
+                </button>
+                <span class="themer-divider" aria-hidden="true" />
+                <button
+                  type="button"
+                  class="themer-swatch"
+                  data-set-accent="oxblood"
+                  style="background:#9b3b46"
+                  aria-label="Oxblood accent"
+                />
+                <button
+                  type="button"
+                  class="themer-swatch"
+                  data-set-accent="violet"
+                  style="background:#6d5efc"
+                  aria-label="Violet accent"
+                />
+                <button
+                  type="button"
+                  class="themer-swatch"
+                  data-set-accent="teal"
+                  style="background:#109a82"
+                  aria-label="Teal accent"
+                />
+              </div>
             </div>
           </header>
         )
@@ -264,7 +347,7 @@ const navSections: NavSection[] = [
           `hidden md:block` keeps it collapsed).  */}
       {withSidebar && (
         <header
-          class="flex items-center justify-between border-b border-tk-border bg-tk-bg/70 px-4 py-3 backdrop-blur-md md:hidden"
+          class="flex items-center justify-between border-b border-tk-border bg-tk-bg px-4 py-3 md:hidden"
         >
           <a
             href="/"
@@ -319,7 +402,7 @@ const navSections: NavSection[] = [
       <div class="flex flex-1">
         {
           withSidebar && (
-            <aside data-mobile-nav class="hidden w-60 shrink-0 border-r border-tk-border bg-tk-surface/40 backdrop-blur-md md:block">
+            <aside data-mobile-nav class="hidden w-[212px] shrink-0 border-r border-tk-border bg-tk-surface md:block">
               <div class="flex h-16 items-center px-6 border-b border-tk-border">
                 <a
                   href="/"
@@ -511,6 +594,42 @@ const navSections: NavSection[] = [
                   <span class="flex-1">Open admin panel</span>
                 </a>
               </div>
+              {/* Fleet v2 — theme switcher (dark+oxblood default, light
+                  toggle per founder direction 2026-07-02). Second instance
+                  lives in the withSidebar=false auth header; both are
+                  wired by the [data-themer] script at body end. */}
+              <div class="border-t border-tk-border px-4 py-3">
+                <div data-themer class="themer" role="group" aria-label="Theme">
+                  <button type="button" class="themer-btn" data-set-mode="dark">
+                    Dark
+                  </button>
+                  <button type="button" class="themer-btn" data-set-mode="light">
+                    Light
+                  </button>
+                  <span class="themer-divider" aria-hidden="true" />
+                  <button
+                    type="button"
+                    class="themer-swatch"
+                    data-set-accent="oxblood"
+                    style="background:#9b3b46"
+                    aria-label="Oxblood accent"
+                  />
+                  <button
+                    type="button"
+                    class="themer-swatch"
+                    data-set-accent="violet"
+                    style="background:#6d5efc"
+                    aria-label="Violet accent"
+                  />
+                  <button
+                    type="button"
+                    class="themer-swatch"
+                    data-set-accent="teal"
+                    style="background:#109a82"
+                    aria-label="Teal accent"
+                  />
+                </div>
+              </div>
             </aside>
           )
         }
@@ -649,13 +768,16 @@ const navSections: NavSection[] = [
         </div>
       </div>
       <script is:inline>
-        {`
           // 2026-05-29 — window.driftstackConfirm(message, opts?) → Promise<boolean>.
           // Branded replacement for native window.confirm(). opts.confirmLabel
           // overrides the OK button text. Falls back to native confirm only if
           // the modal markup is somehow absent (defensive). Escape / Cancel
           // resolve false; Confirm resolves true.
           (function () {
+            // NOTE: plain code, NOT the {`…`} template-literal wrapper — Astro
+            // emits that wrapper literally, which made this whole script a
+            // no-op string in the browser (window.driftstackConfirm was
+            // undefined in production until the 2026-07-02 fix).
             window.driftstackConfirm = function (message, opts) {
               return new Promise(function (resolve) {
                 var overlay = document.querySelector('[data-ds-confirm]');
@@ -703,7 +825,6 @@ const navSections: NavSection[] = [
               });
             };
           })();
-        `}
       </script>
 
       {/* 2026-05-29 — branded prompt modal. Replaces native
@@ -746,12 +867,15 @@ const navSections: NavSection[] = [
         </div>
       </div>
       <script is:inline>
-        {`
           // 2026-05-29 — window.driftstackPrompt(message, opts?) → Promise<string|null>.
           // Branded replacement for native window.prompt(). Resolves the
           // input string on OK / Enter, or null on Cancel / Escape. opts:
           // defaultValue, placeholder, confirmLabel. Falls back to native
           // prompt only if the modal markup is absent (defensive).
+          // NOTE: plain code, NOT the {`…`} template-literal wrapper — Astro
+          // emits that wrapper literally, which made this whole script a
+          // no-op string in the browser (window.driftstackPrompt was
+          // undefined in production until the 2026-07-02 fix).
           (function () {
             window.driftstackPrompt = function (message, opts) {
               return new Promise(function (resolve) {
@@ -810,7 +934,6 @@ const navSections: NavSection[] = [
               });
             };
           })();
-        `}
       </script>
       <script is:inline define:vars={{ apiBaseUrl }}>
         // V-331 — "Acting as" picker + global helper.
@@ -1404,7 +1527,7 @@ const navSections: NavSection[] = [
             });
         })();
       </script>
-      <footer class="border-t border-tk-border bg-tk-bg/70 backdrop-blur-md">
+      <footer class="border-t border-tk-border bg-tk-bg">
         <div
           class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4 text-xs text-tk-ink-3"
         >
@@ -1468,6 +1591,67 @@ const navSections: NavSection[] = [
         // perpetually-blank surface).
         window.dashboardHydrated = reveal;
         setTimeout(reveal, 1200);
+      })();
+    </script>
+    <script is:inline>
+      {
+        /*
+         * Fleet v2 (2026-07-02) — themer wiring. Both [data-themer]
+         * instances (sidebar foot + auth header) share this handler.
+         * Click writes the WHITELISTED value to <html> + localStorage
+         * (ds_theme_mode / ds_theme_accent — read back by the pre-paint
+         * script in <head>), syncs aria-pressed on every control, and
+         * keeps the theme-color meta in step so mobile browser chrome
+         * matches the active surface. addEventListener only — inline
+         * on* handlers are banned by the dashboard sweep tests.
+         */
+      }
+      (function () {
+        var MODES = ['light', 'dark'];
+        var ACCENTS = ['violet', 'oxblood', 'teal'];
+        var root = document.documentElement;
+        var meta = document.querySelector('meta[name="theme-color"]');
+        function syncPressed() {
+          var mode = root.getAttribute('data-mode');
+          var accent = root.getAttribute('data-accent');
+          document.querySelectorAll('[data-set-mode]').forEach(function (b) {
+            b.setAttribute('aria-pressed', String(b.getAttribute('data-set-mode') === mode));
+          });
+          document.querySelectorAll('[data-set-accent]').forEach(function (b) {
+            b.setAttribute(
+              'aria-pressed',
+              String(b.getAttribute('data-set-accent') === accent),
+            );
+          });
+          if (meta) meta.setAttribute('content', mode === 'light' ? '#f2f3f6' : '#060608');
+        }
+        document.querySelectorAll('[data-set-mode]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            var m = b.getAttribute('data-set-mode');
+            if (MODES.indexOf(m) === -1) return;
+            root.setAttribute('data-mode', m);
+            try {
+              localStorage.setItem('ds_theme_mode', m);
+            } catch (_) {
+              /* theme stays session-only */
+            }
+            syncPressed();
+          });
+        });
+        document.querySelectorAll('[data-set-accent]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            var a = b.getAttribute('data-set-accent');
+            if (ACCENTS.indexOf(a) === -1) return;
+            root.setAttribute('data-accent', a);
+            try {
+              localStorage.setItem('ds_theme_accent', a);
+            } catch (_) {
+              /* theme stays session-only */
+            }
+            syncPressed();
+          });
+        });
+        syncPressed();
       })();
     </script>
     <script is:inline>

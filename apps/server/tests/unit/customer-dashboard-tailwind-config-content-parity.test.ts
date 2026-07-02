@@ -72,8 +72,11 @@ describe('W526.B apps/customer-dashboard/tailwind.config.mjs content parity', ()
 
   it('fontFamily + maxWidth + plugins-empty framing pinned: \'sans: ["Geist", "ui-sans-serif", "system-ui", "sans-serif"]\' + \'mono: ["Berkeley Mono", "ui-monospace", "SFMono-Regular", "monospace"]\' + \'maxWidth: { prose: "65ch" }\' + \'plugins: []\' (no @tailwindcss/typography on dashboard — dashboard has no prose pages, only forms/tables) — pinned so the Geist+system + Berkeley-Mono mono-stack + 65ch-prose + no-typography-plugin commitment survives (drift to adding @tailwindcss/typography would inflate dashboard bundle without need)', () => {
     expect(body).toMatch(/sans: \['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'\],/);
+    // Fleet v2 (2026-07-02): 'JetBrains Mono' (vendored, OFL) sits between
+    // Berkeley Mono (first — renders for locally-licensed users, never
+    // vendored) and the system fallbacks.
     expect(body).toMatch(
-      /mono: \['Berkeley Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'\],/,
+      /mono: \['Berkeley Mono', 'JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'\],/,
     );
     expect(body).toMatch(/maxWidth: \{\s*\n?\s*prose: '65ch',\s*\n?\s*\},/);
     expect(body).toMatch(/plugins: \[\],/);
