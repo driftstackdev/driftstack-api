@@ -1642,6 +1642,12 @@ export function ProfilesView({
       // probe via "Launch anyway"). It rides on the request body even though the SDK's
       // CreateAgentSessionRequest type doesn't (yet) declare it — the SDK forwards the
       // body verbatim; the cast keeps the call type-safe without editing the SDK.
+      // Advanced per-profile geolocation override (task #115) — when the profile
+      // has one saved in its local meta, pass it so the device reports those
+      // exact coordinates; absent → omitted, so the server/harness keeps the
+      // default proxy-exit auto-derive. Validated at save time (profiles-meta
+      // cleanEntry + the edit modal), re-bounded server-side on create.
+      const geoOverride = profilesMeta[profile.id]?.geolocation;
       const createBody: CreateAgentSessionRequest & { skip_proxy_probe?: boolean } =
         proxyIdForLaunch !== undefined
           ? {
@@ -1649,9 +1655,15 @@ export function ProfilesView({
               proxy_id: proxyIdForLaunch,
               mode: 'manual',
               initial_url: startUrl,
+              ...(geoOverride !== undefined ? { geolocation: geoOverride } : {}),
               ...(skipProxyProbe ? { skip_proxy_probe: true } : {}),
             }
-          : { profile_id: profile.id, mode: 'manual', initial_url: startUrl };
+          : {
+              profile_id: profile.id,
+              mode: 'manual',
+              initial_url: startUrl,
+              ...(geoOverride !== undefined ? { geolocation: geoOverride } : {}),
+            };
       // Idempotency-Key on create: the server runs a pre-launch proxy probe (up to ~12s)
       // before responding, so a launch feels slow and a network blip can drop the 201
       // AFTER the server already created the session. With a stable key the SDK can
@@ -4251,6 +4263,15 @@ function EditProfileModal({
   // setDefaultProxy when it changed, and the parent's refresh(false) reloads
   // bindings so pickProxy re-renders the card/table with the rebound proxy.
   const [proxyChoice, setProxyChoice] = useState<string>(currentProxyId ?? 'first-available');
+  // Advanced geolocation override (A3-approved per-session contract 2026-07-01).
+  // Held as strings so a partially-typed value doesn't fight a numeric input;
+  // parsed + range-validated on submit. Empty lat AND lon = "no override" (clear
+  // → the device auto-derives its location from the proxy exit IP, the default).
+  const [geoLat, setGeoLat] = useState(meta?.geolocation ? String(meta.geolocation.latitude) : '');
+  const [geoLon, setGeoLon] = useState(meta?.geolocation ? String(meta.geolocation.longitude) : '');
+  const [geoAccuracy, setGeoAccuracy] = useState(
+    meta?.geolocation?.accuracy !== undefined ? String(meta.geolocation.accuracy) : '',
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -4278,6 +4299,44 @@ function EditProfileModal({
     const nextFolder = folder.trim().slice(0, MAX_FOLDER_NAME_CHARS);
     const nextNote = note.trim().slice(0, 280);
     const nextDescription = description.trim();
+    // Parse the advanced geolocation override. Both lat AND lon blank = clear
+    // (no override → the device auto-derives location from the proxy exit IP).
+    // Otherwise BOTH are required + must be in range; accuracy is optional but,
+    // when given, must be a positive number. A partial/invalid entry aborts the
+    // save with a message rather than silently dropping to the auto-derive
+    // default (which would look like the override "didn't take").
+    const latStr = geoLat.trim();
+    const lonStr = geoLon.trim();
+    const accStr = geoAccuracy.trim();
+    let nextGeolocation: { latitude: number; longitude: number; accuracy?: number } | undefined;
+    if (latStr.length > 0 || lonStr.length > 0) {
+      const lat = Number(latStr);
+      const lon = Number(lonStr);
+      if (
+        latStr.length === 0 ||
+        lonStr.length === 0 ||
+        !Number.isFinite(lat) ||
+        !Number.isFinite(lon) ||
+        lat < -90 ||
+        lat > 90 ||
+        lon < -180 ||
+        lon > 180
+      ) {
+        setError('Location override needs a latitude (-90 to 90) and longitude (-180 to 180).');
+        setSubmitting(false);
+        return;
+      }
+      nextGeolocation = { latitude: lat, longitude: lon };
+      if (accStr.length > 0) {
+        const acc = Number(accStr);
+        if (!Number.isFinite(acc) || acc <= 0) {
+          setError('Location accuracy must be a positive number of meters (or leave it blank).');
+          setSubmitting(false);
+          return;
+        }
+        nextGeolocation.accuracy = acc;
+      }
+    }
     const diff: UpdateProfileRequest = {};
     if (trimmedName !== profile.name) diff.name = trimmedName;
     if (nextDescription !== (profile.description ?? '')) {
@@ -4314,7 +4373,17 @@ function EditProfileModal({
           console.warn('[profiles] setDefaultProxy failed (profile updated):', err);
         });
       }
-      onSaved({ icon, folder: nextFolder, tags: tagList, note: nextNote });
+      // geolocation is client-side org metadata only (no server profile column),
+      // so it rides onSaved → saveProfileMeta, never the PATCH diff. Passing
+      // `undefined` when both fields are blank CLEARS a prior override (back to
+      // the proxy-exit auto-derive default) via cleanEntry's absence handling.
+      onSaved({
+        icon,
+        folder: nextFolder,
+        tags: tagList,
+        note: nextNote,
+        geolocation: nextGeolocation,
+      });
     } catch (err) {
       setError(friendlyError(err, settings.baseUrl));
       setSubmitting(false);
@@ -4464,6 +4533,70 @@ function EditProfileModal({
             className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
           />
         </label>
+        {/* Advanced — explicit location override (A3-approved per-session
+            geolocation contract). Collapsed by default (<details>) because the
+            RIGHT choice for almost everyone is to leave it blank: the device's
+            reported location then derives from the proxy's exit IP, so it stays
+            coherent with where the session appears to connect from. */}
+        <details className="rounded-sm border border-surface-divider bg-surface-base/40 px-2 py-1.5">
+          <summary className="cursor-pointer select-none text-xs font-medium text-ink-secondary">
+            Advanced — location override
+          </summary>
+          <div className="mt-2 flex flex-col gap-2">
+            <p className="text-[11px] leading-snug text-ink-muted">
+              Leave blank (recommended): the device reports a location derived from your proxy's
+              exit IP, so it matches where the session appears to connect from. Set coordinates only
+              if you know your proxy's real location — a location that doesn't match the proxy's
+              country is an inconsistency sites can detect.
+            </p>
+            <div className="flex gap-2">
+              <label className="flex flex-1 flex-col gap-1">
+                <span className="section-label">Latitude</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  min={-90}
+                  max={90}
+                  value={geoLat}
+                  onChange={(e) => setGeoLat(e.target.value)}
+                  placeholder="48.8566"
+                  disabled={submitting}
+                  className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+                />
+              </label>
+              <label className="flex flex-1 flex-col gap-1">
+                <span className="section-label">Longitude</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  min={-180}
+                  max={180}
+                  value={geoLon}
+                  onChange={(e) => setGeoLon(e.target.value)}
+                  placeholder="2.3522"
+                  disabled={submitting}
+                  className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+                />
+              </label>
+              <label className="flex w-24 flex-col gap-1">
+                <span className="section-label">Accuracy&nbsp;(m)</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  min={0}
+                  value={geoAccuracy}
+                  onChange={(e) => setGeoAccuracy(e.target.value)}
+                  placeholder="auto"
+                  disabled={submitting}
+                  className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+                />
+              </label>
+            </div>
+          </div>
+        </details>
         <div className="mt-1 flex justify-end gap-2">
           <button
             type="button"

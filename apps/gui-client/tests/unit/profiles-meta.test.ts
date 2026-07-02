@@ -94,6 +94,45 @@ describe('profiles-meta store', () => {
     expect(await loadProfilesMeta()).toEqual({});
   });
 
+  it('geolocation override: a valid in-range pair round-trips (+ optional accuracy)', async () => {
+    await saveProfileMeta('prof-1', {
+      geolocation: { latitude: 48.8566, longitude: 2.3522, accuracy: 20 },
+    });
+    let m = (await loadProfilesMeta())['prof-1']!;
+    expect(m.geolocation).toEqual({ latitude: 48.8566, longitude: 2.3522, accuracy: 20 });
+    // accuracy omitted → stored without it (device applies its default)
+    await saveProfileMeta('prof-2', { geolocation: { latitude: -33.8688, longitude: 151.2093 } });
+    m = (await loadProfilesMeta())['prof-2']!;
+    expect(m.geolocation).toEqual({ latitude: -33.8688, longitude: 151.2093 });
+  });
+
+  it('geolocation override: out-of-range / partial / non-numeric degrades to no override', async () => {
+    seed({
+      badLat: { geolocation: { latitude: 91, longitude: 0 } },
+      badLon: { geolocation: { latitude: 0, longitude: 181 } },
+      partial: { geolocation: { latitude: 10 } },
+      nonNumeric: { geolocation: { latitude: 'x', longitude: 'y' } },
+      badAcc: { geolocation: { latitude: 1, longitude: 2, accuracy: -5 } },
+    });
+    const all = await loadProfilesMeta();
+    expect(all['badLat']!.geolocation).toBeUndefined();
+    expect(all['badLon']!.geolocation).toBeUndefined();
+    expect(all['partial']!.geolocation).toBeUndefined();
+    expect(all['nonNumeric']!.geolocation).toBeUndefined();
+    // lat/lon valid but accuracy invalid → keep the coords, drop only accuracy
+    expect(all['badAcc']!.geolocation).toEqual({ latitude: 1, longitude: 2 });
+  });
+
+  it('geolocation override: a later save can CLEAR it (undefined → back to auto-derive)', async () => {
+    await saveProfileMeta('prof-1', { geolocation: { latitude: 40, longitude: -74 } });
+    expect((await loadProfilesMeta())['prof-1']!.geolocation).toEqual({
+      latitude: 40,
+      longitude: -74,
+    });
+    await saveProfileMeta('prof-1', { geolocation: undefined });
+    expect((await loadProfilesMeta())['prof-1']!.geolocation).toBeUndefined();
+  });
+
   it('bulk: merge unions tags + folder overwrites; replace overwrites tags', async () => {
     const { saveProfilesMetaBulk } = await import('../../src/lib/profiles-meta');
     await saveProfileMeta('a', { tags: ['x'], folder: 'Old' });

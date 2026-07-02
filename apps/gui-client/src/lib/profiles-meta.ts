@@ -24,6 +24,14 @@ export interface ProfileMeta {
   note: string;
   /** Optional chosen icon (a short emoji); empty string = use the monogram. */
   icon: string;
+  /** Optional explicit geolocation override for launches of this profile
+   *  (A3-approved per-session contract 2026-07-01). Absent/undefined = the
+   *  default: the remote device's navigator.geolocation derives from the proxy
+   *  exit IP (coherent with the session's apparent network location). When set,
+   *  it's passed as `geolocation` on session create so the device reports these
+   *  exact coordinates. Client-side org metadata only (no server profile column);
+   *  read at launch and threaded into agentSessions.create. */
+  geolocation?: { latitude: number; longitude: number; accuracy?: number };
 }
 
 export type ProfilesMetaMap = Record<string, ProfileMeta>;
@@ -75,6 +83,34 @@ function cleanEntry(raw: unknown): ProfileMeta {
   }
   if (typeof r.note === 'string') out.note = r.note.slice(0, MAX_NOTE_CHARS);
   if (typeof r.icon === 'string') out.icon = r.icon.slice(0, MAX_ICON_CHARS);
+  // Geolocation override — only adopt a fully-valid, in-range pair (matches the
+  // server's SessionAssign bounds: lat -90..90, lon -180..180, accuracy > 0).
+  // Anything malformed/partial/out-of-range degrades to "no override" (the safe
+  // auto-derive default) rather than shipping a bad coordinate to the device.
+  if (typeof r.geolocation === 'object' && r.geolocation !== null) {
+    const g = r.geolocation as Record<string, unknown>;
+    const lat = g.latitude;
+    const lon = g.longitude;
+    if (
+      typeof lat === 'number' &&
+      Number.isFinite(lat) &&
+      lat >= -90 &&
+      lat <= 90 &&
+      typeof lon === 'number' &&
+      Number.isFinite(lon) &&
+      lon >= -180 &&
+      lon <= 180
+    ) {
+      const geo: { latitude: number; longitude: number; accuracy?: number } = {
+        latitude: lat,
+        longitude: lon,
+      };
+      if (typeof g.accuracy === 'number' && Number.isFinite(g.accuracy) && g.accuracy > 0) {
+        geo.accuracy = g.accuracy;
+      }
+      out.geolocation = geo;
+    }
+  }
   return out;
 }
 
