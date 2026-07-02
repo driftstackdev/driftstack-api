@@ -1380,7 +1380,12 @@ const apiBaseUrl = resolveApiBaseUrl();
         // team header; the LIST must too, or acting-as a team renders the
         // USER's own endpoints while mutations target the TEAM's — you'd edit
         // what you can't see.
-        headers: { authorization: 'Bearer ' + token, ...window.driftstackActAsHeaders() },
+        headers: {
+          authorization: 'Bearer ' + token,
+          ...(typeof window.driftstackActAsHeaders === 'function'
+            ? window.driftstackActAsHeaders()
+            : {}),
+        },
         credentials: 'include',
       })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))

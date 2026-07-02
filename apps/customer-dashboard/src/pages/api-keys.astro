@@ -726,11 +726,16 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function hideCreate() {
+        // Deliberately does NOT touch the reveal pane (revealPre/reveal) —
+        // the create-success path calls hideCreate() to close the FORM
+        // right after populating the reveal with the new plaintext key, so
+        // wiping it here would erase a secret the customer hasn't seen yet.
+        // showCreate() already wipes any STALE reveal on reopen, and the
+        // dedicated dismiss handler wipes it on explicit dismiss — this
+        // function only ever owns the form's own visibility/error/fields.
         formWrap.classList.add('hidden');
         createError.classList.add('hidden');
         createError.textContent = '';
-        if (revealPre) revealPre.textContent = '';
-        reveal.classList.add('hidden');
         form.reset();
       }
 
