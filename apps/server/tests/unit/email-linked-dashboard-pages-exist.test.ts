@@ -29,6 +29,7 @@ const EMAIL_LINKED_PATHS: Array<{ path: string; page: string; source: string; ap
   { path: '/reset-password', page: 'reset-password.astro', source: 'auth-flows password-reset', app: 'customer-dashboard' }, // prettier-ignore
   { path: '/team/accept', page: 'team/accept.astro', source: 'team-members invite', app: 'customer-dashboard' }, // prettier-ignore
   { path: '/auth/oauth-client/confirm-merge', page: 'auth/oauth-client/confirm-merge.astro', source: 'oauth-client verify-merge', app: 'customer-dashboard' }, // prettier-ignore
+  { path: '/settings', page: 'settings.astro', source: 'byok rotation-reminder', app: 'customer-dashboard' }, // prettier-ignore
   // status-site (statusPageBaseUrl) — double-opt-in + one-click unsubscribe
   { path: '/subscribe/confirm', page: 'subscribe/confirm.astro', source: 'status double-opt-in', app: 'status-site' }, // prettier-ignore
   { path: '/subscribe/unsubscribe', page: 'subscribe/unsubscribe.astro', source: 'status unsubscribe', app: 'status-site' }, // prettier-ignore

@@ -1,7 +1,8 @@
 // W285.A — drift guard for welcome.astro CTA targets. The free-tier
-// "Start free" CTA goes to /first-session (no purchase); the upgrade
-// CTA goes to /select-tier. (The one-time trial pack + its
-// ?focus=trial deep-link were retired 2026-05-27.)
+// "Start free" CTA goes to the dashboard home (2026-07-02 account-portal
+// IA — the deleted /first-session was the old target; sessions launch in
+// the desktop app); the upgrade CTA goes to /select-tier. (The one-time
+// trial pack + its ?focus=trial deep-link were retired 2026-05-27.)
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -19,8 +20,8 @@ function read(p: string): string {
 describe('W285.A welcome page CTA consistency', () => {
   const body = read(PAGE);
 
-  it('free-tier primary CTA links to /first-session (no purchase step)', () => {
-    expect(body).toMatch(/href=["']\/first-session["']/);
+  it('free-tier primary CTA links to the dashboard home (no purchase step; 2026-07-02 the CTA moved off the deleted /first-session — sessions launch in the desktop app)', () => {
+    expect(body).toMatch(/<a href="\/" class="btn-primary/);
   });
 
   it('upgrade CTA links to /select-tier', () => {

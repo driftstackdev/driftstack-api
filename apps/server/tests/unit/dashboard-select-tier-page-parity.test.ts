@@ -107,11 +107,11 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
     expect(p).not.toMatch(/we refund the unused remainder\s+pro-rated to the day/);
   });
 
-  it("CRITICAL paid-tier POST /v1/billing/checkout-session contract pinned — body {tier, billing_period:'monthly', success_url, cancel_url}. success_url lands on /first-session?subscribed=<tier>; cancel_url returns to /select-tier.", () => {
+  it("CRITICAL paid-tier POST /v1/billing/checkout-session contract pinned — body {tier, billing_period:'monthly', success_url, cancel_url}. success_url lands on /?subscribed=<tier> (2026-07-02: was /first-session, which the account-portal IA deleted — the dashboard home reads ?subscribed); cancel_url returns to /select-tier.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /authedFetch\('\/v1\/billing\/checkout-session', \{\s*\n\s+method: 'POST',\s*\n\s+body: JSON\.stringify\(\{\s*\n\s+tier,\s*\n\s+billing_period: 'monthly',\s*\n\s+success_url: window\.location\.origin \+ '\/first-session\?subscribed=' \+ tier,\s*\n\s+cancel_url: window\.location\.origin \+ '\/select-tier',/,
+      /authedFetch\('\/v1\/billing\/checkout-session', \{\s*\n\s+method: 'POST',\s*\n\s+body: JSON\.stringify\(\{\s*\n\s+tier,\s*\n\s+billing_period: 'monthly',\s*\n\s+success_url: window\.location\.origin \+ '\/\?subscribed=' \+ tier,\s*\n\s+cancel_url: window\.location\.origin \+ '\/select-tier',/,
     );
   });
 

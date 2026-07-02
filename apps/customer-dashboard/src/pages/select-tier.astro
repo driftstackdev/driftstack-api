@@ -365,7 +365,7 @@ const TIER_LABELS: Record<string, string> = Object.fromEntries(
               body: JSON.stringify({
                 tier,
                 billing_period: 'monthly',
-                success_url: window.location.origin + '/first-session?subscribed=' + tier,
+                success_url: window.location.origin + '/?subscribed=' + tier,
                 cancel_url: window.location.origin + '/select-tier',
               }),
             })

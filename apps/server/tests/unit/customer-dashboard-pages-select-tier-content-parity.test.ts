@@ -103,9 +103,9 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
     );
   });
 
-  it("POST /v1/billing/checkout-session contract: tier + billing_period:'monthly' + success_url with ?subscribed={tier} + cancel_url → /select-tier — pinned so the post-checkout landing URL signals which tier was purchased (for the post-onboarding /first-session view to read) and billing_period stays 'monthly' (drift to dropping would silently default server-side, which may or may not match customer intent)", () => {
+  it("POST /v1/billing/checkout-session contract: tier + billing_period:'monthly' + success_url with ?subscribed={tier} + cancel_url → /select-tier — pinned so the post-checkout landing URL signals which tier was purchased (for the dashboard home to read; 2026-07-02 the landing moved from /first-session to / with the account-portal IA) and billing_period stays 'monthly' (drift to dropping would silently default server-side, which may or may not match customer intent)", () => {
     expect(body).toMatch(
-      /authedFetch\('\/v1\/billing\/checkout-session', \{\s*\n?\s*method: 'POST',\s*\n?\s*body: JSON\.stringify\(\{\s*\n?\s*tier,\s*\n?\s*billing_period: 'monthly',\s*\n?\s*success_url: window\.location\.origin \+ '\/first-session\?subscribed=' \+ tier,\s*\n?\s*cancel_url: window\.location\.origin \+ '\/select-tier',\s*\n?\s*\}\),\s*\n?\s*\}\)/,
+      /authedFetch\('\/v1\/billing\/checkout-session', \{\s*\n?\s*method: 'POST',\s*\n?\s*body: JSON\.stringify\(\{\s*\n?\s*tier,\s*\n?\s*billing_period: 'monthly',\s*\n?\s*success_url: window\.location\.origin \+ '\/\?subscribed=' \+ tier,\s*\n?\s*cancel_url: window\.location\.origin \+ '\/select-tier',\s*\n?\s*\}\),\s*\n?\s*\}\)/,
     );
   });
 

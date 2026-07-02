@@ -180,33 +180,36 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       </h2>
       <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <a
-          href="/agent-sessions"
+          href="https://docs.driftstack.dev/quickstart/"
+          target="_blank"
+          rel="noopener noreferrer"
           class="group rounded-lg border border-tk-border bg-tk-surface p-4 hover:border-tk-accent/40 hover:bg-tk-surface/80"
         >
           <div class="flex items-center gap-2">
             <span class="flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 text-tk-accent">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
               </svg>
             </span>
-            <p class="font-medium text-tk-ink">Start an AI session</p>
+            <p class="font-medium text-tk-ink">Get the app</p>
           </div>
-          <p class="mt-2 text-xs text-tk-ink-3">Plain-English task → agent runs it.</p>
+          <p class="mt-2 text-xs text-tk-ink-3">Launch iPhone sessions from the desktop app.</p>
         </a>
         <a
-          href="/profiles"
+          href="/team"
           class="group rounded-lg border border-tk-border bg-tk-surface p-4 hover:border-tk-accent/40 hover:bg-tk-surface/80"
         >
           <div class="flex items-center gap-2">
             <span class="flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 text-tk-accent">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="7" r="4" />
-                <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
             </span>
-            <p class="font-medium text-tk-ink">New profile</p>
+            <p class="font-medium text-tk-ink">Invite your team</p>
           </div>
-          <p class="mt-2 text-xs text-tk-ink-3">Create a reusable browser identity.</p>
+          <p class="mt-2 text-xs text-tk-ink-3">Share access with roles + seats.</p>
         </a>
         <a
           href="/api-keys"
@@ -245,7 +248,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
     <section class="mt-10">
       <div class="flex items-center justify-between">
         <h2 class="text-lg font-semibold tracking-tight text-tk-ink">Active sessions</h2>
-        <a href="/sessions" class="text-sm text-tk-accent hover:underline">View all →</a>
+        <span class="text-xs text-tk-ink-3">Drive sessions in the desktop app</span>
       </div>
       <div data-sessions-empty class="mt-3 hidden text-sm text-tk-ink-3">
         No sessions running right now.

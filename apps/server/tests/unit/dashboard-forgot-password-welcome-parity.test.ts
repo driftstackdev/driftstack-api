@@ -105,33 +105,32 @@ describe('W739 dashboard forgot-password + welcome page parity', () => {
     expect(w).toMatch(/Onboarding step 3 — brief intro \+ CTA to tier-select/);
   });
 
-  it('CRITICAL welcome 2-choice card-pair pinned — Start free ($0 · no card) + Pick a tier ($79-$1,499/mo). The perpetual free tier replaced the one-time trial pack; the free card routes to /first-session, the paid card to /select-tier.', () => {
+  it('CRITICAL welcome 2-choice card-pair pinned — Start free ($0 · no card) + Pick a tier ($79-$1,499/mo). The perpetual free tier replaced the one-time trial pack; the free card routes to the dashboard home (2026-07-02 account-portal IA — was /first-session, now deleted), the paid card to /select-tier.', () => {
     const w = read(WELCOME);
 
     // Free card.
     expect(w).toMatch(/<h2 class="text-lg font-semibold text-tk-ink">Start free<\/h2>/);
     expect(w).toMatch(/\$0 · no card/);
     expect(w).toMatch(/Your account is already on the free plan: 1 profile, 1 concurrent/);
-    expect(w).toMatch(/<a href="\/first-session" class="btn-primary/);
+    expect(w).toMatch(/<a href="\/" class="btn-primary/);
 
     // Paid-tier card.
     expect(w).toMatch(/<h2 class="text-lg font-semibold text-tk-ink">Pick a tier<\/h2>/);
     expect(w).toMatch(/<a href="\/select-tier" class="btn-secondary/);
   });
 
-  it('CRITICAL welcome 3-step what-happens-next ordered list pinned. The 3 steps (Stripe payment + first session + first API key auto-mint) tell customers what to expect post-tier-select.', () => {
+  it('CRITICAL welcome 3-step what-happens-next ordered list pinned. The 3 steps (Stripe payment + get the desktop app + create an API key) tell customers what to expect post-tier-select (2026-07-02 account-portal IA — step 2 funnels into the desktop app instead of creating a session in the web dashboard).', () => {
     const w = read(WELCOME);
 
     expect(w).toMatch(
       /Start free with no card — or pick a paid tier and we'll send you\s*\n\s+to Stripe to confirm payment\. Your card details stay between you\s*\n\s+and Stripe — we never see them/,
     );
-    // W501 — proxy/VPN claim de-jargoned for the new-user welcome step
-    // (was "SOCKS5 / OpenVPN / WireGuard egress per profile").
+    // Step 2 — download the desktop app + sign in; that's where sessions launch.
     expect(w).toMatch(
-      /Back here, you'll create your first session — an iPhone\s*\n\s+Safari browser, with the option to route its traffic through\s*\n\s+your own proxy or VPN/,
+      /Download the Driftstack desktop app and sign in from your\s*\n\s+browser — that's where you launch and drive iPhone Safari\s*\n\s+sessions, with the option to route traffic through your own\s*\n\s+proxy or VPN/,
     );
     expect(w).toMatch(
-      /We'll create your first API key automatically\. You can revoke\s*\n\s+or rotate it any time on the API keys page/,
+      /Create an API key on the API keys page to connect the desktop\s*\n\s+app or the SDKs\. You can revoke or rotate it any time/,
     );
   });
 

@@ -31,7 +31,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
     expect(body).not.toMatch(/real iPhone Safari/);
   });
 
-  it('Start-free card framing pinned: $0 · no card + already-on-free-plan + create-first-session CTA', () => {
+  it('Start-free card framing pinned: $0 · no card + already-on-free-plan + go-to-dashboard CTA (2026-07-02: CTA moved off the deleted /first-session onto the dashboard home — sessions launch in the desktop app)', () => {
     expect(body).toMatch(
       /<span class="font-mono text-sm text-tk-accent-soft">\$0 · no card<\/span>/,
     );
@@ -39,7 +39,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
       /Your account is already on the free plan: 1 profile, 1 concurrent\s*\n?\s*session of up to 20 minutes\. No subscription, no expiry/,
     );
     expect(body).toMatch(
-      /<a href="\/first-session" class="btn-primary mt-4 inline-flex">\s*\n?\s*Create your first session\s*\n?\s*<\/a>/,
+      /<a href="\/" class="btn-primary mt-4 inline-flex">\s*\n?\s*Go to your dashboard\s*\n?\s*<\/a>/,
     );
   });
 
@@ -64,16 +64,15 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
     expect(body).toMatch(
       /Your card details stay between you\s*\n?\s*and Stripe — we never see them\./,
     );
-    // Step 2 — first session = iPhone Safari instance with optional
-    // proxy/VPN egress. 2026-05-16 honesty pass dropped "real"; 2026-
-    // 05-22 EU-fleet phrasing replaced with proxy-capability claim
-    // per founder direction.
+    // Step 2 — download the desktop app + sign in; that's where iPhone
+    // Safari sessions are launched (2026-07-02 account-portal IA — the
+    // web dashboard no longer creates sessions).
     expect(body).toMatch(
-      /Back here, you'll create your first session — an iPhone\s*\n?\s*Safari browser, with the option to route its traffic through\s*\n?\s*your own proxy or VPN\./,
+      /Download the Driftstack desktop app and sign in from your\s*\n?\s*browser — that's where you launch and drive iPhone Safari\s*\n?\s*sessions, with the option to route traffic through your own\s*\n?\s*proxy or VPN\./,
     );
-    // Step 3 — first API key auto-created + revocable.
+    // Step 3 — create an API key to connect the app or the SDKs.
     expect(body).toMatch(
-      /We'll create your first API key automatically\. You can revoke\s*\n?\s*or rotate it any time on the API keys page\./,
+      /Create an API key on the API keys page to connect the desktop\s*\n?\s*app or the SDKs\. You can revoke or rotate it any time\./,
     );
     // The numbered-circle visual treatment: glow-red bordered round badges 1/2/3.
     expect(body).toMatch(/rounded-full border border-tk-accent\/40 bg-tk-accent\/10/);

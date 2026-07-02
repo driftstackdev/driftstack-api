@@ -98,9 +98,7 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
   it('POST /v1/billing/checkout-session wired with tier + billing_period + success/cancel URLs', () => {
     expect(body).toMatch(/authedFetch\('\/v1\/billing\/checkout-session'/);
     expect(body).toMatch(/tier,\s*\n?\s*billing_period: 'monthly'/);
-    expect(body).toMatch(
-      /success_url: window\.location\.origin \+ '\/first-session\?subscribed=' \+ tier/,
-    );
+    expect(body).toMatch(/success_url: window\.location\.origin \+ '\/\?subscribed=' \+ tier/);
   });
 
   it('V-501 withBusy double-checkout guard pinned (no double-Stripe-session)', () => {

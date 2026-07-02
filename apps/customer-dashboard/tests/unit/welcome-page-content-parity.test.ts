@@ -61,15 +61,15 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     expect(body).toMatch(
       /Start free with no card — or pick a paid tier and we'll send you\s+to Stripe to confirm payment\. Your card details stay between you\s+and Stripe — we never see them/,
     );
-    // Step 2 — first session = iPhone Safari browser with optional
-    // proxy/VPN routing. W501 de-jargoned the new-user welcome step
-    // (was "SOCKS5 / OpenVPN / WireGuard egress per profile").
+    // Step 2 — download the desktop app + sign in; sessions launch there
+    // (2026-07-02 account-portal IA — the web dashboard no longer creates
+    // sessions).
     expect(body).toMatch(
-      /you'll create your first session — an iPhone\s+Safari browser, with the option to route its traffic through\s+your own proxy or VPN/,
+      /Download the Driftstack desktop app and sign in from your\s+browser — that's where you launch and drive iPhone Safari\s+sessions, with the option to route traffic through your own\s+proxy or VPN/,
     );
-    // Step 3 — first API key auto-created + revocable.
+    // Step 3 — create an API key to connect the app or the SDKs.
     expect(body).toMatch(
-      /We'll create your first API key automatically\. You can revoke\s+or rotate it any time on the API keys page/,
+      /Create an API key on the API keys page to connect the desktop\s+app or the SDKs\. You can revoke or rotate it any time/,
     );
   });
 
@@ -79,8 +79,8 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     );
   });
 
-  it('CTAs go to /first-session (free start) + /select-tier (upgrade) — destinations exist', () => {
-    expect(body).toMatch(/href="\/first-session"/);
+  it('CTAs go to the dashboard home (free start) + /select-tier (upgrade) — destinations exist (2026-07-02: free CTA moved off the deleted /first-session)', () => {
+    expect(body).toMatch(/<a href="\/" class="btn-primary/);
     expect(body).toMatch(/href="\/select-tier"/);
     expect(existsSync(SELECT_TIER)).toBe(true);
   });

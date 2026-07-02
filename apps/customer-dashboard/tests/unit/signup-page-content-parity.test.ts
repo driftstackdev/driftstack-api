@@ -5,7 +5,7 @@
 // fetch wiring. This guard pins the load-bearing UX claims:
 //
 //   • Flow framing comment: signup → verify-email → welcome →
-//     select-tier → first-session. A future short-circuit (e.g.
+//     select-tier → dashboard. A future short-circuit (e.g.
 //     skipping verify-email) must update this comment first.
 //   • POST /v1/auth/signup is the registered server route.
 //   • Password minlength=12 + passphrase guidance pinned.
@@ -36,8 +36,8 @@ function read(p: string): string {
 describe('W368.B customer-dashboard /signup page content parity', () => {
   const body = read(PAGE);
 
-  it('V-184a onboarding flow comment pinned (signup → verify-email → welcome → select-tier → first-session)', () => {
-    expect(body).toMatch(/Flow: signup → verify-email → welcome → select-tier → first-session/);
+  it('V-184a onboarding flow comment pinned (signup → verify-email → welcome → select-tier → dashboard)', () => {
+    expect(body).toMatch(/Flow: signup → verify-email → welcome → select-tier → dashboard/);
   });
 
   it('POST /v1/auth/signup wired client-side + registered server-side', () => {

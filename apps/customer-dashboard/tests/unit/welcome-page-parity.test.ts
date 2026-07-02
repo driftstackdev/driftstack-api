@@ -4,7 +4,8 @@
 //    time trial pack 2026-05-27 — TRIAL_PACK no longer exists in
 //    marketing pricing).
 // 2. Subscription price range $79–$1,499 matches API_TIERS span.
-// 3. CTAs target /first-session (free start) + /select-tier (upgrade).
+// 3. CTAs target the dashboard home (free start; 2026-07-02 account-portal
+//    IA moved it off the deleted /first-session) + /select-tier (upgrade).
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -34,8 +35,8 @@ describe('W268.C /welcome onboarding ↔ TRIAL_PACK + subscription parity', () =
     expect(page).toMatch(/\$79–\$1,499/);
   });
 
-  it('CTAs target /first-session (free start) + /select-tier (upgrade)', () => {
-    expect(page).toMatch(/href="\/first-session"/);
+  it('CTAs target the dashboard home (free start) + /select-tier (upgrade)', () => {
+    expect(page).toMatch(/<a href="\/" class="btn-primary/);
     expect(page).toMatch(/href="\/select-tier"/);
   });
 

@@ -1,8 +1,9 @@
 // W332.C — drift guard for /welcome onboarding page. Pins the
 // post-signup framing:
-//   • Start-free CTA → /first-session (no purchase; perpetual free)
+//   • Start-free CTA → dashboard home (2026-07-02 account-portal IA;
+//     the old /first-session target was deleted — sessions run in the app)
 //   • Pick-a-tier CTA → /select-tier
-//   • What-happens-next sequence (Stripe → first session → API key mint)
+//   • What-happens-next sequence (Stripe → get the app → API key mint)
 //   • Defensive redirect to /signup when no ds_web_session_token
 
 import { readFileSync } from 'node:fs';
@@ -21,8 +22,8 @@ function read(p: string): string {
 describe('W332.C /welcome onboarding baseline', () => {
   const body = read(PAGE);
 
-  it('start-free CTA links to /first-session', () => {
-    expect(body).toContain('href="/first-session"');
+  it('start-free CTA links to the dashboard home', () => {
+    expect(body).toContain('<a href="/" class="btn-primary');
   });
 
   it('pick-a-tier CTA links to /select-tier', () => {
@@ -35,10 +36,10 @@ describe('W332.C /welcome onboarding baseline', () => {
     expect(body).not.toMatch(/\$2\.99/);
   });
 
-  it('what-happens-next sequence covers Stripe → first session → API key mint', () => {
+  it('what-happens-next sequence covers Stripe → get the desktop app → API key', () => {
     expect(body).toMatch(/[Ss]tripe to confirm payment/);
-    expect(body).toMatch(/first session/i);
-    expect(body).toMatch(/first API key/i);
+    expect(body).toMatch(/desktop app/i);
+    expect(body).toMatch(/API key/i);
   });
 
   it('defensive redirect to /signup when ds_web_session_token absent', () => {
