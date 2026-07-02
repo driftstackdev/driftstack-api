@@ -159,15 +159,40 @@ describe('NowPaymentsApiClient.createPayment', () => {
 });
 
 describe('NowPaymentsApiClient.getPayment', () => {
-  it('GETs /v1/payment/:id and maps payment_status', async () => {
+  it('GETs /v1/payment/:id and maps payment_status (+ pay address/quote when present)', async () => {
     const { fetchImpl, calls } = makeStubFetch([
-      { status: 200, body: { payment_status: 'confirmed' } },
+      {
+        status: 200,
+        body: {
+          payment_status: 'confirmed',
+          pay_address: '0xORIG',
+          pay_currency: 'btc',
+          pay_amount: 0.0012,
+        },
+      },
     ]);
     const client = makeClient(fetchImpl);
     const result = await client.getPayment('5077125051');
-    expect(result).toEqual({ paymentStatus: 'confirmed' });
+    expect(result).toEqual({
+      paymentStatus: 'confirmed',
+      payAddress: '0xORIG',
+      payCurrency: 'btc',
+      payAmount: 0.0012,
+    });
     expect(calls[0]!.url).toBe('https://api.nowpayments.io/v1/payment/5077125051');
     expect(calls[0]!.init.method).toBe('GET');
+  });
+
+  it('maps the address/quote fields to null when the payment response omits them', async () => {
+    const { fetchImpl } = makeStubFetch([{ status: 200, body: { payment_status: 'waiting' } }]);
+    const client = makeClient(fetchImpl);
+    const result = await client.getPayment('5077125051');
+    expect(result).toEqual({
+      paymentStatus: 'waiting',
+      payAddress: null,
+      payCurrency: null,
+      payAmount: null,
+    });
   });
 
   it('URL-encodes the payment id path segment', async () => {

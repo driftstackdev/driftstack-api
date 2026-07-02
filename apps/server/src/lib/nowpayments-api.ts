@@ -169,12 +169,30 @@ export class NowPaymentsApiClient {
     };
   }
 
-  async getPayment(paymentId: string): Promise<{ paymentStatus: string }> {
-    const res = await this.requestJson<{ payment_status: string }>(
-      'GET',
-      `/v1/payment/${encodeURIComponent(paymentId)}`,
-    );
-    return { paymentStatus: res.payment_status };
+  async getPayment(paymentId: string): Promise<{
+    paymentStatus: string;
+    payAddress: string | null;
+    payCurrency: string | null;
+    payAmount: number | null;
+  }> {
+    // The NowPayments GET /payment/{id} response carries the ORIGINAL pay
+    // address + crypto-denominated quote alongside the status, so an
+    // idempotent-replay checkout can echo the EXISTING payment (bound to the
+    // order's already-recorded payment_id) instead of minting a mismatched
+    // second payment. Address/quote fields are optional (absent on some
+    // pre-confirmation states) → null when missing.
+    const res = await this.requestJson<{
+      payment_status: string;
+      pay_address?: string;
+      pay_currency?: string;
+      pay_amount?: number;
+    }>('GET', `/v1/payment/${encodeURIComponent(paymentId)}`);
+    return {
+      paymentStatus: res.payment_status,
+      payAddress: typeof res.pay_address === 'string' ? res.pay_address : null,
+      payCurrency: typeof res.pay_currency === 'string' ? res.pay_currency : null,
+      payAmount: typeof res.pay_amount === 'number' ? res.pay_amount : null,
+    };
   }
 
   private async requestJson<T>(method: string, path: string, body?: unknown): Promise<T> {

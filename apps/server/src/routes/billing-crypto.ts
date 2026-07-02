@@ -283,8 +283,43 @@ export function registerCryptoCheckoutRoutes(
       if (
         deps.nowpayments !== undefined &&
         deps.nowpaymentsIpnCallbackUrl !== undefined &&
+        serverPriceCents >= NOWPAYMENTS_MIN_USD_CENTS &&
+        replayed &&
+        order.payment_id !== null
+      ) {
+        // IDEMPOTENT REPLAY of an order that ALREADY minted a payment: do NOT
+        // call createPayment again. A second mint returns a NEW payment_id +
+        // pay_address, but recordPaymentId no-ops (the order stays bound to the
+        // FIRST payment_id), so the customer would pay the second address whose
+        // IPN then fails applyIpnStatus's payment_id-match guard and is rejected
+        // — the customer loses real crypto for no entitlement. Instead echo the
+        // ORIGINAL payment (bound to order.payment_id) so a retried checkout
+        // shows the same address. Best-effort: a lookup failure returns the stub
+        // posture (no wrong address surfaced).
+        try {
+          const existing = await deps.nowpayments.getPayment(order.payment_id);
+          provider = 'nowpayments';
+          paymentAddress = existing.payAddress;
+          payCurrency = existing.payCurrency;
+          payAmount = existing.payAmount;
+        } catch (err) {
+          req.log.warn(
+            {
+              event: 'nowpayments_replay_get_payment_failed',
+              order_id: order.order_id,
+              err: err instanceof Error ? err.message : String(err),
+            },
+            'failed to re-fetch the original NowPayments payment on replay; returning stub posture',
+          );
+        }
+      } else if (
+        deps.nowpayments !== undefined &&
+        deps.nowpaymentsIpnCallbackUrl !== undefined &&
         serverPriceCents >= NOWPAYMENTS_MIN_USD_CENTS
       ) {
+        // Fresh order, OR a replay whose original mint never bound a payment_id
+        // (order.payment_id === null) → minting is safe: recordPaymentId binds
+        // the first/only payment_id, so there is no mismatch.
         try {
           const payment = await deps.nowpayments.createPayment({
             priceAmount: order.price_cents / 100,

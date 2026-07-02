@@ -83,4 +83,74 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
     expect(body.payment_address).toBeNull();
     expect(body.order_id).toMatch(/^ord_/);
   });
+
+  it('idempotency REPLAY does NOT re-mint a NowPayments payment; echoes the ORIGINAL address via getPayment (Fable billing re-audit 2026-07-02)', async () => {
+    const createPayment = vi.fn(
+      (): Promise<CreatePaymentResult> =>
+        Promise.resolve({
+          paymentId: 'pay_orig',
+          payAddress: '0xORIGADDR',
+          payCurrency: 'btc',
+          payAmount: 0.0012,
+          priceAmount: 79,
+          priceCurrency: 'usd',
+          paymentStatus: 'waiting',
+        }),
+    );
+    const getPayment = vi.fn(() =>
+      Promise.resolve({
+        paymentStatus: 'waiting',
+        payAddress: '0xORIGADDR',
+        payCurrency: 'btc',
+        payAmount: 0.0012,
+      }),
+    );
+    const client = { createPayment, getPayment } as unknown as NowPaymentsApiClient;
+    fx = await buildTestApp({ nowpaymentsClient: client });
+    const payload = { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' };
+    const headers = {
+      authorization: `Bearer ${fx.plaintext}`,
+      'idempotency-key': 'k-crypto-replay-1',
+    };
+
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers,
+      payload,
+    });
+    expect(first.statusCode).toBe(201);
+    const firstBody = first.json<{
+      order_id: string;
+      provider: string;
+      payment_address: string | null;
+    }>();
+    expect(firstBody.provider).toBe('nowpayments');
+    expect(firstBody.payment_address).toBe('0xORIGADDR');
+    expect(createPayment).toHaveBeenCalledTimes(1);
+
+    // Retry with the SAME idempotency key (e.g. the first response was lost).
+    const second = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers,
+      payload,
+    });
+    expect(second.statusCode).toBe(201);
+    expect(second.headers['idempotent-replayed']).toBe('1');
+    const secondBody = second.json<{
+      order_id: string;
+      provider: string;
+      payment_address: string | null;
+    }>();
+    expect(secondBody.order_id).toBe(firstBody.order_id);
+    // CRITICAL: the replay must NOT re-mint (a second payment would bind a new
+    // payment_id the order never adopts → the customer pays a mismatched address
+    // whose IPN is rejected → lost crypto). createPayment stays at ONE call; the
+    // original address is echoed via getPayment(the order's bound payment_id).
+    expect(createPayment).toHaveBeenCalledTimes(1);
+    expect(getPayment).toHaveBeenCalledWith('pay_orig');
+    expect(secondBody.provider).toBe('nowpayments');
+    expect(secondBody.payment_address).toBe('0xORIGADDR');
+  });
 });
