@@ -60,6 +60,40 @@ describe('audit-M1 makeSessionPageStateRelay', () => {
     expect(store.get('agt_1')).not.toBeNull();
   });
 
+  it('preserves per-session ORDER even when the first frame lookup resolves SLOWER than the second (no stale clobber)', async () => {
+    const store = new SessionPageStateStore();
+    // First lookup is deliberately slow, second is fast — without per-session
+    // chaining the fast 'loaded' would land first and the slow 'loading' would
+    // clobber it. With chaining, frame 1 fully applies before frame 2 is looked
+    // up, so the final stored state is the NEWER frame ('loaded').
+    let call = 0;
+    const sessions = {
+      get: vi.fn().mockImplementation(() => {
+        call += 1;
+        const delayMs = call === 1 ? 30 : 0; // frame 1 slow, frame 2 fast
+        return new Promise((resolve) => setTimeout(() => resolve({ nodeId: 'node-1' }), delayMs));
+      }),
+    };
+    const relay = makeSessionPageStateRelay(sessions, store, logger);
+    const loading: PageStateFrame = {
+      type: 'pageState',
+      sessionId: 'agt_1',
+      state: 'loading',
+      url: 'https://example.com',
+    };
+    const loaded: PageStateFrame = {
+      type: 'pageState',
+      sessionId: 'agt_1',
+      state: 'loaded',
+      url: 'https://example.com',
+    };
+    relay(loading, 'node-1');
+    relay(loaded, 'node-1');
+    await new Promise((r) => setTimeout(r, 60));
+    // The newer frame wins; the older slow one did NOT overwrite it.
+    expect(store.get('agt_1')?.state).toBe('loaded');
+  });
+
   it('never throws + does not store when the lookup rejects (fire-and-forget, error-logged)', async () => {
     const store = new SessionPageStateStore();
     const sessions = { get: vi.fn().mockRejectedValue(new Error('db down')) };

@@ -36,29 +36,52 @@ export function makeSessionPageStateRelay(
   store: SessionPageStateStore,
   logger: Logger,
 ): (frame: PageStateFrame, reportingNodeId: string) => void {
+  // Per-session write ORDERING. Each frame's ownership check is an independent
+  // async sessions.get(), and handleInbound fires frames synchronously without
+  // awaiting — so for two frames on the SAME session (e.g. loading → loaded on a
+  // fast navigate) the second lookup can resolve BEFORE the first under DB
+  // latency variance, and the older frame's store.set then clobbers the newer
+  // one (the GUI is left showing a stale 'loading' bar until the next ~2s frame
+  // self-corrects). Chain each session's processing so frame N's store.set
+  // completes before frame N+1 is even looked up. The map is bounded: an entry
+  // exists only while a session has an in-flight chain, and self-deletes when
+  // the chain drains (the `=== chained` identity check ensures a newer frame
+  // that extended the chain isn't dropped by an older link's cleanup).
+  const chains = new Map<string, Promise<void>>();
+
+  const process = async (frame: PageStateFrame, reportingNodeId: string): Promise<void> => {
+    const session = await sessions.get(frame.sessionId);
+    if (session !== null && isCrossNodeSpoof(session.nodeId, reportingNodeId)) {
+      logger.warn(
+        {
+          component: 'session-page-state-relay',
+          sessionId: frame.sessionId,
+          ownerNodeId: session.nodeId,
+          reportingNodeId,
+        },
+        'dropped pageState from a non-owning node (cross-node spoof guard)',
+      );
+      return;
+    }
+    store.set(frame);
+  };
+
   return (frame: PageStateFrame, reportingNodeId: string): void => {
-    void sessions
-      .get(frame.sessionId)
-      .then((session) => {
-        if (session !== null && isCrossNodeSpoof(session.nodeId, reportingNodeId)) {
-          logger.warn(
-            {
-              component: 'session-page-state-relay',
-              sessionId: frame.sessionId,
-              ownerNodeId: session.nodeId,
-              reportingNodeId,
-            },
-            'dropped pageState from a non-owning node (cross-node spoof guard)',
-          );
-          return;
-        }
-        store.set(frame);
-      })
-      .catch((err: unknown) => {
+    const sessionId = frame.sessionId;
+    const prev = chains.get(sessionId) ?? Promise.resolve();
+    // Swallow+log a per-frame failure so it never breaks the chain for the next
+    // frame (the successor awaits `chained`, which must always resolve).
+    const chained = prev.then(() =>
+      process(frame, reportingNodeId).catch((err: unknown) => {
         logger.error(
-          { component: 'session-page-state-relay', sessionId: frame.sessionId, err },
+          { component: 'session-page-state-relay', sessionId, err },
           'failed to gate/store pageState',
         );
-      });
+      }),
+    );
+    chains.set(sessionId, chained);
+    void chained.finally(() => {
+      if (chains.get(sessionId) === chained) chains.delete(sessionId);
+    });
   };
 }
