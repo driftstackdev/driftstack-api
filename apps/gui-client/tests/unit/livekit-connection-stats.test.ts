@@ -81,6 +81,18 @@ describe('parseConnectionStats', () => {
     expect(r.packetLossPct).toBe(5);
   });
 
+  it('clamps a NEGATIVE packetsLost (signed WebRTC counter) to 0% loss', () => {
+    // packetsLost is a signed cumulative estimate that legitimately goes
+    // negative early in a relayed stream (RTX/duplicates/reorder). It must never
+    // surface as a negative loss % in the founder-facing diagnostics.
+    const r = parseConnectionStats(
+      report([
+        { id: 'in', type: 'inbound-rtp', kind: 'video', packetsLost: -3, packetsReceived: 997 },
+      ]),
+    );
+    expect(r.packetLossPct).toBe(0);
+  });
+
   it('returns nulls (never throws) for an empty / unknown report', () => {
     const r = parseConnectionStats(report([{ id: 'x', type: 'codec' }]));
     expect(r.transport).toBeNull();

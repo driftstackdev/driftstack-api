@@ -119,7 +119,12 @@ export function parseConnectionStats(report: RTCStatsReport): ConnectionStats {
     const lost = typeof s.packetsLost === 'number' ? s.packetsLost : null;
     const recv = typeof s.packetsReceived === 'number' ? s.packetsReceived : null;
     if (lost !== null && recv !== null && lost + recv > 0) {
-      out.packetLossPct = Math.round((lost / (lost + recv)) * 1000) / 10;
+      // packetsLost is a SIGNED cumulative estimate (WebRTC spec) that
+      // legitimately goes negative early in a relayed SFU stream (RTX /
+      // duplicates / reorder counted as "negative loss"). Clamp so the
+      // founder-facing diagnostics pill + Copy-diagnostics never show a
+      // nonsensical negative loss % (Fable GUI LiveKit re-audit).
+      out.packetLossPct = Math.max(0, Math.round((lost / (lost + recv)) * 1000) / 10);
     }
   });
 

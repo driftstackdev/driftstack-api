@@ -897,9 +897,21 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // never reaches the device.
     const isBareEscape = (e: KeyboardEvent): boolean =>
       e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey;
+    // Keys whose keyDown we forwarded to the device this capture run, tracked by
+    // PHYSICAL key (e.code, stable across shift so a keyDown 'A' still matches its
+    // keyUp 'a'). The keyUp gate MUST mirror the keyDown decision, not re-evaluate
+    // editingLocally()/isBareEscape() at keyup time: a key whose default action
+    // moves GUI focus INTO an input (Tab / Shift+Tab into the address bar or the
+    // "Tell the agent" composer) fires its keyUp while editingLocally() is now
+    // true, so re-checking there would forward keyDown but drop keyUp → a stuck
+    // key (or stuck Shift corrupting every later key) on the remote device (Fable
+    // GUI LiveKit re-audit). Always forward the keyUp iff we forwarded its keyDown.
+    const forwardedKeys = new Set<string>();
+    const keyId = (e: KeyboardEvent): string => (e.code !== '' ? e.code : e.key);
     const onKeyDown = (e: KeyboardEvent): void => {
       if (editingLocally()) return;
       if (isBareEscape(e)) return;
+      forwardedKeys.add(keyId(e));
       const modifiers = modifiersFromEvent(e);
       send(
         {
@@ -911,8 +923,11 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       );
     };
     const onKeyUp = (e: KeyboardEvent): void => {
-      if (editingLocally()) return;
-      if (isBareEscape(e)) return;
+      // Mirror the keyDown decision: only forward the up for a key whose down we
+      // forwarded (so composer typing still never leaks), but do so regardless of
+      // the CURRENT editing/escape state so a focus-moving key can't strand a
+      // half-press on the device.
+      if (!forwardedKeys.delete(keyId(e))) return;
       const modifiers = modifiersFromEvent(e);
       send(
         {
