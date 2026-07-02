@@ -2,7 +2,7 @@
 // ledger + subscription mirror writes + account tier / trial-pack
 // mutations triggered by inbound Stripe events.
 
-import { eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { AccountTier } from '@driftstack/api-types';
 import type { StripeWebhooksRepo } from '../services/stripe-webhooks.js';
 import type { Database } from './client.js';
@@ -158,6 +158,47 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
         .set({ tier: args.tier, updatedAt: args.at })
         .where(eq(accounts.id, args.accountId));
       return { previousTier };
+    });
+  }
+
+  async downgradeAccountTierToBestRemaining(args: {
+    accountId: string;
+    fallbackTier: AccountTier;
+    at: Date;
+  }): Promise<{ previousTier: AccountTier | null; appliedTier: AccountTier }> {
+    // Same FOR UPDATE serialization as setAccountTier — lock the accounts row so
+    // the read-of-remaining-subs → write-tier is atomic against a concurrent
+    // same-account delivery. The current subscription's terminal/past_due status
+    // was already committed by the upsertSubscription call before this, so it is
+    // (correctly) excluded from the active/trialing set below.
+    return this.database.db.transaction(async (tx) => {
+      const before = await tx
+        .select({ tier: accounts.tier })
+        .from(accounts)
+        .where(eq(accounts.id, args.accountId))
+        .for('update')
+        .limit(1);
+      const previousTier = before[0]?.tier ?? null;
+      // The account's best remaining active/trialing subscription (most-recently
+      // updated wins in the pathological multi-active case). Its tier is the true
+      // entitlement; only when NONE remain do we drop to the fallback (free).
+      const remaining = await tx
+        .select({ tier: subscriptions.tier })
+        .from(subscriptions)
+        .where(
+          and(
+            eq(subscriptions.accountId, args.accountId),
+            inArray(subscriptions.status, ['active', 'trialing']),
+          ),
+        )
+        .orderBy(desc(subscriptions.updatedAt))
+        .limit(1);
+      const appliedTier = remaining[0]?.tier ?? args.fallbackTier;
+      await tx
+        .update(accounts)
+        .set({ tier: appliedTier, updatedAt: args.at })
+        .where(eq(accounts.id, args.accountId));
+      return { previousTier, appliedTier };
     });
   }
 }

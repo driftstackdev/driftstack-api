@@ -234,6 +234,58 @@ describe('customer.subscription.deleted — cancel + downgrade', () => {
     const acct = fx.stripeWebhooksRepo.readAccount(fx.accountId);
     expect(acct?.tier).toBe('free');
   });
+
+  it('does NOT downgrade when a SUPERSEDED subscription is deleted while another subscription is still active (Fable billing re-audit 2026-07-02)', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    // sub_A active on api_builder → account tier api_builder.
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_subA_create',
+        type: 'customer.subscription.created',
+        stripeSubscriptionId: 'sub_A',
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+        createdSec: 1000,
+      }),
+    );
+    // The customer re-checks out (permitted while the old one is past_due) → a
+    // SECOND active subscription sub_B on api_scale. Two subscription rows now
+    // exist for the one account (only stripe_subscription_id is unique).
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_subB_create',
+        type: 'customer.subscription.created',
+        stripeSubscriptionId: 'sub_B',
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_scale_monthly',
+        status: 'active',
+        createdSec: 1001,
+      }),
+    );
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_scale');
+
+    // Stripe's dunning on the OLD sub_A finally concludes → subscription.deleted
+    // for sub_A. This must NOT downgrade the account — sub_B is active + billing.
+    const result = (await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_subA_deleted',
+        type: 'customer.subscription.deleted',
+        stripeSubscriptionId: 'sub_A',
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'canceled',
+        canceledAtSec: 1002,
+        createdSec: 1002,
+      }),
+    )) as { statusCode: number; body: { outcome: string } };
+    expect(result.body.outcome).toBe('handled');
+    // sub_A is canceled but the account stays on api_scale (from sub_B), NOT free.
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_scale');
+  });
 });
 
 // V-226 — subscription.tier_changed customer-facing audit emit.

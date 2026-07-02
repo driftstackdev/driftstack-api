@@ -113,10 +113,14 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
     );
   });
 
-  it("handleSubscriptionDeleted: downgrade default 'free'; cancel-handler dispatches tier_changed lifecycle", () => {
+  it("handleSubscriptionDeleted: downgrade default 'free'; recomputes tier from best remaining active subscription; dispatches tier_changed lifecycle", () => {
     expect(body).toMatch(/const downgradeTier = this\.config\.cancelDowngradeTier \?\? 'free';/);
+    // A superseded subscription's cancel must not downgrade an account that
+    // still holds another active subscription — the tier is recomputed from the
+    // account's remaining active subs, so the emit carries the APPLIED tier.
+    expect(body).toMatch(/downgradeAccountTierToBestRemaining\(\{/);
     expect(body).toMatch(
-      /kind: 'subscription\.tier_changed',\s*\n?\s*fromTier: previousTier,\s*\n?\s*toTier: downgradeTier,/,
+      /kind: 'subscription\.tier_changed',\s*\n?\s*fromTier: previousTier,\s*\n?\s*toTier: appliedTier,/,
     );
   });
 

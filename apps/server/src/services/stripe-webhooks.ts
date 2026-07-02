@@ -111,6 +111,24 @@ export interface StripeWebhooksRepo {
     tier: AccountTier;
     at: Date;
   }): Promise<{ previousTier: AccountTier | null }>;
+  /**
+   * After a subscription goes terminal (`canceled`) or past_due/unpaid, set the
+   * account's tier from its BEST remaining active/trialing subscription — or
+   * `fallbackTier` if none remain — in ONE locked transaction (mirrors
+   * setAccountTier's FOR UPDATE serialization). Prevents a SUPERSEDED
+   * subscription's cancel/past_due event from downgrading an account that still
+   * holds another active subscription: an account can hold multiple subscription
+   * rows (only stripe_subscription_id is unique, and re-checkout is permitted
+   * while an existing subscription is past_due), so keying the account tier off
+   * whichever single subscription's event was processed last silently strands a
+   * paying customer on the free tier. Returns the previous + applied tier so the
+   * caller can gate the cache-invalidate + tier_changed emit on a real change.
+   */
+  downgradeAccountTierToBestRemaining(args: {
+    accountId: string;
+    fallbackTier: AccountTier;
+    at: Date;
+  }): Promise<{ previousTier: AccountTier | null; appliedTier: AccountTier }>;
 }
 
 export type DispatchOutcome = 'handled' | 'ignored' | `error:${string}`;
@@ -401,17 +419,21 @@ export class StripeWebhooksService {
       // and the branch above naturally re-upgrades on the next in-order
       // event — no separate recovery path needed.
       const downgradeTier = this.config.cancelDowngradeTier ?? 'free';
-      const { previousTier } = await this.repo.setAccountTier({
+      // Recompute from the account's remaining active subscriptions — a
+      // past_due on a SUPERSEDED subscription must not downgrade an account
+      // that still holds another active subscription (an account can hold
+      // multiple subscription rows; re-checkout is allowed while past_due).
+      const { previousTier, appliedTier } = await this.repo.downgradeAccountTierToBestRemaining({
         accountId,
-        tier: downgradeTier,
+        fallbackTier: downgradeTier,
         at,
       });
-      if (previousTier !== downgradeTier) await this.invalidateAuthCache(accountId);
-      if (this.accountLifecycle !== null) {
+      if (previousTier !== appliedTier) await this.invalidateAuthCache(accountId);
+      if (this.accountLifecycle !== null && previousTier !== appliedTier) {
         await this.accountLifecycle.emit(accountId, {
           kind: 'subscription.tier_changed',
           fromTier: previousTier,
-          toTier: downgradeTier,
+          toTier: appliedTier,
           effectiveAt: at,
           stripeEventType: event.type,
           stripeEventId: event.id,
@@ -459,19 +481,23 @@ export class StripeWebhooksService {
       return 'handled';
     }
     const downgradeTier = this.config.cancelDowngradeTier ?? 'free';
-    const { previousTier } = await this.repo.setAccountTier({
+    // Recompute from the account's remaining active subscriptions — a cancel of
+    // a SUPERSEDED subscription must not downgrade an account that still holds
+    // another active subscription (the recency guard above is per-subscription-
+    // row, not per-account, so it doesn't catch a stale sub's cancel landing
+    // after a newer sub is active).
+    const { previousTier, appliedTier } = await this.repo.downgradeAccountTierToBestRemaining({
       accountId,
-      tier: downgradeTier,
+      fallbackTier: downgradeTier,
       at,
     });
-    // Invalidate on a real downgrade only (account wasn't already at the
-    // downgrade tier) — same condition as the tier_changed emit below.
-    if (previousTier !== downgradeTier) await this.invalidateAuthCache(accountId);
-    if (this.accountLifecycle !== null) {
+    // Invalidate on a real tier change only — same condition as the emit below.
+    if (previousTier !== appliedTier) await this.invalidateAuthCache(accountId);
+    if (this.accountLifecycle !== null && previousTier !== appliedTier) {
       await this.accountLifecycle.emit(accountId, {
         kind: 'subscription.tier_changed',
         fromTier: previousTier,
-        toTier: downgradeTier,
+        toTier: appliedTier,
         effectiveAt: at,
         stripeEventType: event.type,
         stripeEventId: event.id,

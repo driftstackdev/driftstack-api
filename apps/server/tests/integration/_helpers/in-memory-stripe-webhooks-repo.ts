@@ -166,4 +166,24 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     this.accounts.set(args.accountId, { ...a, tier: args.tier });
     return Promise.resolve({ previousTier });
   }
+
+  downgradeAccountTierToBestRemaining(args: {
+    accountId: string;
+    fallbackTier: AccountTier;
+    at: Date;
+  }): Promise<{ previousTier: AccountTier | null; appliedTier: AccountTier }> {
+    const a = this.accounts.get(args.accountId);
+    if (!a) return Promise.resolve({ previousTier: null, appliedTier: args.fallbackTier });
+    const previousTier = a.tier;
+    // Best remaining active/trialing subscription for the account (most-recently
+    // updated wins), else the fallback — mirrors the Drizzle query.
+    const remaining = Array.from(this.subs.values())
+      .filter(
+        (s) => s.accountId === args.accountId && (s.status === 'active' || s.status === 'trialing'),
+      )
+      .sort((x, y) => y.updatedAt.getTime() - x.updatedAt.getTime());
+    const appliedTier = remaining[0]?.tier ?? args.fallbackTier;
+    this.accounts.set(args.accountId, { ...a, tier: appliedTier });
+    return Promise.resolve({ previousTier, appliedTier });
+  }
 }
