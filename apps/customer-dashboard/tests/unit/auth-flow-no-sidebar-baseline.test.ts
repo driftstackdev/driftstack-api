@@ -1,9 +1,10 @@
 // W302.C — drift guard for customer-dashboard auth-flow pages.
 // Pages used before the user is signed in (login / signup /
-// forgot-password / reset-password / verify-email / first-session /
-// select-tier / welcome / cli/authorize) must declare
-// `withSidebar={false}` on DashboardLayout so the sidebar nav (with
-// auth-gated routes) doesn't render before the user is signed in.
+// forgot-password / reset-password / verify-email / select-tier /
+// welcome / cli/authorize) must declare `withSidebar={false}` on
+// DashboardLayout so the sidebar nav (with auth-gated routes) doesn't
+// render before the user is signed in. (first-session removed 2026-07-02
+// with the account-portal IA.)
 
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -24,7 +25,6 @@ const AUTH_FLOW_PAGES = [
   'forgot-password.astro',
   'reset-password.astro',
   'verify-email.astro',
-  'first-session.astro',
   'select-tier.astro',
   // 404 is also rendered without sidebar.
   '404.astro',

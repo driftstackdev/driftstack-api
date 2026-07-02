@@ -132,19 +132,10 @@ describe('W876 Profile policy cross-source invariant', () => {
   });
 
   // ─── Customer-dashboard V-312 + V-313 wiring ──────────────────
-
-  it('CRITICAL apps/customer-dashboard/src/pages/profiles.astro has V-312 snapshot-button wiring + V-313 clone-button wiring. Both anchors must reference the V-NNN provenance.', () => {
-    const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/profiles.astro'));
-    expect(p).toMatch(/V-312 — snapshot-button wiring/);
-    expect(p).toMatch(/V-313 — clone-button wiring/);
-  });
-
-  it('CRITICAL apps/customer-dashboard/src/pages/profiles.astro import-profile placeholder shows the V-480 envelope shape — \'{"version":1,"exported_at":"…","source_profile_id":"prof_…","source_account_id":"…","profile":{"name":"…","archetype":"…","description":null}}\'. The placeholder doubles as documentation of the envelope shape for customers.', () => {
-    const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/profiles.astro'));
-    expect(p).toMatch(/"version":1/);
-    expect(p).toMatch(/"source_profile_id":"prof_/);
-    expect(p).toMatch(/"source_account_id"/);
-  });
+  // (Removed 2026-07-02 — the customer-dashboard profiles.astro page,
+  // with its snapshot/clone/import wiring, moved to the desktop GUI with
+  // the account-portal IA. The profile policy itself stays guarded by the
+  // api-types Zod schemas + server routes this invariant reads above.)
 
   // ─── Cardinality constants ───────────────────────────────────
 

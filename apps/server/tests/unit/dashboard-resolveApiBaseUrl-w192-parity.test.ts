@@ -113,7 +113,7 @@ describe('W742 dashboard resolveApiBaseUrl W192 helper parity', () => {
     expect(exports.length, 'export count').toBe(1);
   });
 
-  it('CRITICAL consumed by 20+ .astro files. Cross-app parity — at least 6 of the W735-W741 pages (verify-email, reset-password, magic-link, signup, login, cli/authorize, forgot-password, select-tier, first-session) MUST import resolveApiBaseUrl from this helper.', () => {
+  it('CRITICAL consumed by 20+ .astro files. Cross-app parity — the W735-W741 pages (verify-email, reset-password, magic-link, signup, login, cli/authorize, forgot-password, select-tier) MUST import resolveApiBaseUrl from this helper. (first-session removed 2026-07-02 with the account-portal IA.)', () => {
     const consumers = [
       'apps/customer-dashboard/src/pages/verify-email.astro',
       'apps/customer-dashboard/src/pages/reset-password.astro',
@@ -123,7 +123,6 @@ describe('W742 dashboard resolveApiBaseUrl W192 helper parity', () => {
       'apps/customer-dashboard/src/pages/cli/authorize.astro',
       'apps/customer-dashboard/src/pages/forgot-password.astro',
       'apps/customer-dashboard/src/pages/select-tier.astro',
-      'apps/customer-dashboard/src/pages/first-session.astro',
     ];
 
     for (const path of consumers) {
@@ -151,7 +150,6 @@ describe('W742 dashboard resolveApiBaseUrl W192 helper parity', () => {
       'apps/customer-dashboard/src/pages/cli/authorize.astro',
       'apps/customer-dashboard/src/pages/forgot-password.astro',
       'apps/customer-dashboard/src/pages/select-tier.astro',
-      'apps/customer-dashboard/src/pages/first-session.astro',
     ];
 
     for (const path of consumers) {

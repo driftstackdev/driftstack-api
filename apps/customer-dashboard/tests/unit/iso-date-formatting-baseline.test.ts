@@ -44,10 +44,6 @@ describe('W299.B customer-dashboard date-formatting baseline', () => {
       if (!/\b\w+_at\b/.test(body)) continue;
       // Subscription page is V-134 stub w/ mock data, exempt.
       if (/subscription\.astro$/.test(f)) continue;
-      // agent-sessions/[id].astro is a server-rendered shell that
-      // hydrates the live data client-side from a shared helper;
-      // the `_at` mentions are framing-comment refs only. Exempt.
-      if (/agent-sessions\/\[id\]\.astro$/.test(f)) continue;
       if (
         !/toLocaleString|toLocaleDateString|toLocaleTimeString|Intl\.DateTimeFormat|Date\(/.test(
           body,

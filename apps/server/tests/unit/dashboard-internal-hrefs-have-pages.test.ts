@@ -52,7 +52,11 @@ describe('W530 dashboard internal hrefs resolve to pages', () => {
   }
 
   it('finds pages and hrefs to check', () => {
-    expect(provided.size).toBeGreaterThanOrEqual(25);
+    // 2026-07-02 — floor lowered 25→20 with the account-portal IA
+    // (redesign slice 2): the 9 operational pages (profiles/snapshots/
+    // sessions/agent-sessions[+/[id]]/recipes[+/[id]]/proxies/first-session)
+    // moved to the desktop GUI, leaving 23 dashboard pages.
+    expect(provided.size).toBeGreaterThanOrEqual(20);
     expect(hrefs.size).toBeGreaterThanOrEqual(10);
   });
 

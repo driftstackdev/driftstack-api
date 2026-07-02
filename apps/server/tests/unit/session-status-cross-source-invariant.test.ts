@@ -106,15 +106,10 @@ describe('W854 SessionStatus cross-source invariant', () => {
   });
 
   // ─── Terminal-status classification ──────────────────────────
-
-  it("CRITICAL the 'destroyed' + 'errored' terminal classification is what customer-dashboard sessions.astro pivots on. Drift to a different terminal-detection rule would silently let 'open' filters show ended sessions.", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/sessions.astro'));
-    // 'open' filter: NOT destroyed AND NOT errored.
-    expect(p).toMatch(/s\.status !== 'destroyed' && s\.status !== 'errored'/);
-    // 'ended' filter: destroyed OR errored.
-    expect(p).toMatch(/s\.status === 'destroyed' \|\| s\.status === 'errored'/);
-    expect(TERMINAL_STATUSES).toEqual(['destroyed', 'errored']);
-  });
+  // (The customer-dashboard sessions.astro open/ended-filter subtest was
+  // removed 2026-07-02 — the operational sessions page moved to the
+  // desktop GUI. The terminal split stays guarded below + across the
+  // server/api-types/SDK/GUI sources this invariant already reads.)
 
   // ─── 5-value cardinality ─────────────────────────────────────
 

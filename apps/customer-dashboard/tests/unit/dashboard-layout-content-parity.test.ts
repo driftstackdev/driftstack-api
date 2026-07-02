@@ -171,20 +171,27 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     );
   });
 
-  it('all 11 navItem targets exist as pages (no dangling sidebar links)', () => {
+  it('all 8 navItem targets exist as pages (no dangling sidebar links; 2026-07-02 account-portal IA — the operational pages moved to the desktop GUI)', () => {
     const dir = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages');
     expect(existsSync(resolve(dir, 'index.astro'))).toBe(true);
-    expect(existsSync(resolve(dir, 'profiles.astro'))).toBe(true);
-    expect(existsSync(resolve(dir, 'snapshots.astro'))).toBe(true);
-    expect(existsSync(resolve(dir, 'sessions.astro'))).toBe(true);
-    expect(existsSync(resolve(dir, 'recipes.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'api-keys.astro'))).toBe(true);
+    expect(existsSync(resolve(dir, 'webhooks.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'usage.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'billing.astro'))).toBe(true);
-    expect(existsSync(resolve(dir, 'webhooks.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'audit-log.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'team.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'settings.astro'))).toBe(true);
+    // The retired operational pages must be GONE (they now 404→/ via _redirects).
+    for (const gone of [
+      'profiles.astro',
+      'snapshots.astro',
+      'sessions.astro',
+      'recipes.astro',
+      'proxies.astro',
+      'first-session.astro',
+    ]) {
+      expect(existsSync(resolve(dir, gone)), `${gone} should be deleted`).toBe(false);
+    }
   });
 
   it('2026-05-20 notification SSE banner present + 4-kind subscriber + dismiss affordance', () => {
