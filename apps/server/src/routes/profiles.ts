@@ -353,7 +353,11 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   // emit lets customers reconstruct file-flow lineage post-hoc.
   app.get<{ Params: { id: string } }>(
     '/v1/profiles/:id/export',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    // read:profiles gate MUST live here — exportProfile only scopes by
+    // accountId, not by scope (like the other GET reads above). Without it a
+    // read:sessions-only granular key could read profile metadata it wasn't
+    // granted (Fable customer-routes re-audit 2026-07-02).
+    { preHandler: [app.requireAuth, app.requireScope('read:profiles'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));

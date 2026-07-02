@@ -177,6 +177,13 @@ describe('W437.B apps/server/src/routes/profiles.ts content parity', () => {
     expect(body).toMatch(
       /return \{\s*\n?\s*version: PROFILE_EXPORT_ENVELOPE_VERSION,\s*\n?\s*exported_at: new Date\(\)\.toISOString\(\),\s*\n?\s*source_profile_id: `prof_\$\{row\.id\}`,\s*\n?\s*source_account_id: row\.accountId,\s*\n?\s*profile: \{\s*\n?\s*name: row\.name,\s*\n?\s*archetype: row\.archetype,\s*\n?\s*description: row\.description,\s*\n?\s*\},\s*\n?\s*\};/,
     );
+    // The export route (a READ) MUST carry the read:profiles scope gate its
+    // sibling reads enforce — exportProfile only scopes by accountId, so without
+    // it a narrow key lacking read:profiles could read profile metadata (Fable
+    // customer-routes re-audit 2026-07-02).
+    expect(body).toMatch(
+      /'\/v1\/profiles\/:id\/export',[\s\S]*?preHandler: \[app\.requireAuth, app\.requireScope\('read:profiles'\), app\.rateLimit\('global'\)\]/,
+    );
   });
 
   it('V-480 POST /v1/profiles/import framing pinned: v1 envelope → fresh profile minted in caller account; tier-cap + name-conflict match POST /v1/profiles; importing into different account than source permitted (transfer between teammate accounts via file)', () => {
