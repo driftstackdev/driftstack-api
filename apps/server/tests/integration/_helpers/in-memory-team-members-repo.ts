@@ -58,7 +58,11 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
 
   // eslint-disable-next-line @typescript-eslint/require-await
   async findInviteByTokenHash(hash: string): Promise<TeamInviteRow | null> {
-    return this.invites.find((inv) => inv.inviteTokenHash === hash) ?? null;
+    // SINGLE-USE — only an un-accepted invite is returned (mirrors the Drizzle
+    // isNull(acceptedAt) filter); a used token can't be replayed.
+    return (
+      this.invites.find((inv) => inv.inviteTokenHash === hash && inv.acceptedAt === null) ?? null
+    );
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -134,6 +138,17 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
     const removed = this.members[idx];
     this.members.splice(idx, 1);
     return removed?.memberAccountId ?? null;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async deleteInvitesForEmail(ownerAccountId: string, email: string): Promise<void> {
+    const norm = email.trim().toLowerCase();
+    for (let i = this.invites.length - 1; i >= 0; i--) {
+      const inv = this.invites[i];
+      if (inv && inv.ownerAccountId === ownerAccountId && inv.inviteeEmail === norm) {
+        this.invites.splice(i, 1);
+      }
+    }
   }
 
   /** Test-only — exposes raw rows for assertions. */

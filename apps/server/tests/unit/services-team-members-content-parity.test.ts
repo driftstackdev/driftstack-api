@@ -160,16 +160,21 @@ describe('W407.B apps/server/src/services/team-members.ts content parity', () =>
     expect(body).toMatch(
       /\/\*\*\s*\n?\s*\*\s*Remove a member by membership id\. Returns the removed member's\s*\n?\s*\*\s*account id when the row was found \+ deleted \(so the caller can\s*\n?\s*\*\s*invalidate that member's auth cache\); null when the row was not\s*\n?\s*\*\s*found or owned by a different account\./,
     );
+    // Removal also cancels the member's OUTSTANDING invites (Fable auth
+    // re-audit 2026-07-02) so they can't re-join via a still-pending invite.
     expect(body).toMatch(
-      /async removeMember\(input: \{ membershipId: string; ownerAccountId: string \}\): Promise<boolean> \{[\s\S]+?if \(removedMemberAccountId === null\) return false;\s*\n?\s*await this\.invalidateAuthCache\(removedMemberAccountId\);/,
+      /async removeMember\(input: \{ membershipId: string; ownerAccountId: string \}\): Promise<boolean> \{[\s\S]+?if \(removedMemberAccountId === null\) return false;[\s\S]+?deleteInvitesForEmail\(input\.ownerAccountId, removedEmail\)[\s\S]+?await this\.invalidateAuthCache\(removedMemberAccountId\);/,
     );
     expect(body).toMatch(
       /action: 'team\.member_removed',\s*\n?\s*targetResourceId: `mem_\$\{input\.membershipId\}`,/,
     );
   });
 
-  it('TeamMembersRepo: 7-method interface (upsertInvite / findInviteByTokenHash / findAccountEmail / upsertMembership / markInviteAccepted / listMembers / listPendingInvites / removeMember returning accountId|null)', () => {
+  it('TeamMembersRepo: 8-method interface (upsertInvite / findInviteByTokenHash / findAccountEmail / upsertMembership / markInviteAccepted / listMembers / listPendingInvites / removeMember returning accountId|null / deleteInvitesForEmail)', () => {
     expect(body).toMatch(/export interface TeamMembersRepo \{/);
+    expect(body).toMatch(
+      /deleteInvitesForEmail\(ownerAccountId: string, email: string\): Promise<void>;/,
+    );
     expect(body).toMatch(/upsertInvite\(input: \{/);
     expect(body).toMatch(/findInviteByTokenHash\(hash: string\): Promise<TeamInviteRow \| null>;/);
     expect(body).toMatch(/findAccountEmail\(accountId: string\): Promise<string \| null>;/);

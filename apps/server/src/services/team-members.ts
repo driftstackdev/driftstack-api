@@ -93,6 +93,15 @@ export interface TeamMembersRepo {
    * found or owned by a different account.
    */
   removeMember(membershipId: string, ownerAccountId: string): Promise<string | null>;
+  /**
+   * Delete ALL invites (pending or accepted) for an (owner, invitee-email) pair.
+   * Called on member removal so a removed member cannot re-join by accepting a
+   * still-pending invite (e.g. one created by a role-change re-invite) — the
+   * single-use accept guard only stops replay of an already-USED token, not
+   * acceptance of an outstanding un-accepted one. `email` is normalized
+   * (trim+lowercase) to match how inviteeEmail is stored.
+   */
+  deleteInvitesForEmail(ownerAccountId: string, email: string): Promise<void>;
 }
 
 export const TEAM_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -269,6 +278,15 @@ export class TeamMembersService {
       input.ownerAccountId,
     );
     if (removedMemberAccountId === null) return false;
+    // Cancel any outstanding invites for the removed member so they cannot
+    // re-join by accepting a still-pending invite (e.g. one created by a
+    // role-change re-invite before the removal). The single-use accept guard
+    // only blocks REPLAY of a used token; a pending un-accepted invite would
+    // still let a removed member back in. (Fable auth re-audit 2026-07-02.)
+    const removedEmail = await this.repo.findAccountEmail(removedMemberAccountId);
+    if (removedEmail !== null) {
+      await this.repo.deleteInvitesForEmail(input.ownerAccountId, removedEmail);
+    }
     await this.invalidateAuthCache(removedMemberAccountId);
     if (this.accountAudit) {
       try {

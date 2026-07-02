@@ -75,7 +75,9 @@ function makeRepo(): {
       return Promise.resolve(row);
     },
     findInviteByTokenHash: (hash) =>
-      Promise.resolve(state.invites.find((i) => i.inviteTokenHash === hash) ?? null),
+      Promise.resolve(
+        state.invites.find((i) => i.inviteTokenHash === hash && i.acceptedAt === null) ?? null,
+      ),
     findAccountEmail: (accountId) => Promise.resolve(state.emailByAccount.get(accountId) ?? null),
     upsertMembership: (input) => {
       const existing = state.members.find(
@@ -117,6 +119,13 @@ function makeRepo(): {
       const removed = state.members[idx];
       state.members.splice(idx, 1);
       return Promise.resolve(removed?.memberAccountId ?? null);
+    },
+    deleteInvitesForEmail: (ownerAccountId, email) => {
+      const norm = email.trim().toLowerCase();
+      state.invites = state.invites.filter(
+        (i) => !(i.ownerAccountId === ownerAccountId && i.inviteeEmail === norm),
+      );
+      return Promise.resolve();
     },
   };
   return { repo, state };
@@ -317,6 +326,32 @@ describe('V-553.B-13 TeamMembersService.accept — happy path', () => {
     expect(spy).toHaveBeenCalledWith('acc_b');
     expect(calls.map((c) => c.action)).toEqual(['team.invite_accepted']);
   });
+
+  it('a used invite token is SINGLE-USE: replaying it after acceptance is rejected (Fable auth re-audit 2026-07-02)', async () => {
+    const { repo, state } = makeRepo();
+    const { service: email } = makeEmail();
+    state.invites.push({
+      id: 'inv_1',
+      ownerAccountId: 'acc_owner',
+      inviteeEmail: 'b@e.test',
+      role: 'admin',
+      inviteTokenHash: tokenHash('plain-tok'),
+      inviteExpiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      invitedByAccountId: 'acc_owner',
+      acceptedAt: null,
+      createdAt: new Date(),
+    });
+    state.emailByAccount.set('acc_b', 'b@e.test');
+    const svc = new TeamMembersService(repo, email, CONFIG);
+    // First accept succeeds.
+    await svc.accept({ plaintextToken: 'plain-tok', acceptingAccountId: 'acc_b' });
+    // A REPLAY of the same (now-accepted) token must be rejected — otherwise a
+    // removed member could re-join, or a demoted member re-escalate, by replaying
+    // their original accept link within the 7-day window.
+    await expect(
+      svc.accept({ plaintextToken: 'plain-tok', acceptingAccountId: 'acc_b' }),
+    ).rejects.toThrow(/not found or already used/i);
+  });
 });
 
 describe('V-553.B-13 TeamMembersService — list operations', () => {
@@ -457,5 +492,41 @@ describe('V-553.B-13 TeamMembersService.removeMember', () => {
     expect(result).toBe(true);
     expect(spy).toHaveBeenCalledWith('acc_b');
     expect(calls.map((c) => c.action)).toEqual(['team.member_removed']);
+  });
+
+  it('cancels the removed member OUTSTANDING invites so they cannot re-join via a pending invite (Fable auth re-audit 2026-07-02)', async () => {
+    const { repo, state } = makeRepo();
+    const { service: email } = makeEmail();
+    state.emailByAccount.set('acc_b', 'b@e.test');
+    state.members.push({
+      id: 'mem_1',
+      ownerAccountId: 'acc_owner',
+      memberAccountId: 'acc_b',
+      memberEmail: 'b@e.test',
+      role: 'admin',
+      invitedAt: new Date(),
+      acceptedAt: new Date(),
+      invitedByAccountId: 'acc_owner',
+      createdAt: new Date(),
+    });
+    // A still-pending re-invite (e.g. from a role change) for the same member.
+    state.invites.push({
+      id: 'inv_pending',
+      ownerAccountId: 'acc_owner',
+      inviteeEmail: 'b@e.test',
+      role: 'member',
+      inviteTokenHash: tokenHash('pending-tok'),
+      inviteExpiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      invitedByAccountId: 'acc_owner',
+      acceptedAt: null,
+      createdAt: new Date(),
+    });
+    const svc = new TeamMembersService(repo, email, CONFIG);
+    await svc.removeMember({ membershipId: 'mem_1', ownerAccountId: 'acc_owner' });
+    // The outstanding invite is gone → the removed member can't accept it to re-join.
+    expect(state.invites).toHaveLength(0);
+    await expect(
+      svc.accept({ plaintextToken: 'pending-tok', acceptingAccountId: 'acc_b' }),
+    ).rejects.toThrow(/not found or already used/i);
   });
 });

@@ -80,9 +80,12 @@ describe('W448.C apps/server/src/db/team-members-repo.ts content parity', () => 
     expect(body).toMatch(/if \(!row\) throw new Error\('team_invites insert returned no row'\);/);
   });
 
-  it('findInviteByTokenHash + findAccountEmail: limit 1 lookups; findAccountEmail returns row?.email ?? null', () => {
+  it('findInviteByTokenHash is SINGLE-USE (isNull(acceptedAt) filter) + findAccountEmail: limit 1 lookups; findAccountEmail returns row?.email ?? null', () => {
+    // Single-use guard (Fable auth re-audit 2026-07-02): an accepted invite
+    // token must never be returned, so a used token can't be replayed to
+    // re-join a team / re-escalate a role.
     expect(body).toMatch(
-      /async findInviteByTokenHash\(hash: string\): Promise<TeamInviteRow \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(teamInvites\)\s*\n?\s*\.where\(eq\(teamInvites\.inviteTokenHash, hash\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toInviteRow\(row\) : null;\s*\n?\s*\}/,
+      /async findInviteByTokenHash\(hash: string\): Promise<TeamInviteRow \| null> \{[\s\S]*?\.where\(and\(eq\(teamInvites\.inviteTokenHash, hash\), isNull\(teamInvites\.acceptedAt\)\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toInviteRow\(row\) : null;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
       /async findAccountEmail\(accountId: string\): Promise<string \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\{ email: accounts\.email \}\)\s*\n?\s*\.from\(accounts\)\s*\n?\s*\.where\(eq\(accounts\.id, accountId\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row\?\.email \?\? null;\s*\n?\s*\}/,

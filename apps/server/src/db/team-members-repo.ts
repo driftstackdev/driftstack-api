@@ -84,10 +84,18 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
   }
 
   async findInviteByTokenHash(hash: string): Promise<TeamInviteRow | null> {
+    // SINGLE-USE: only an UN-accepted invite is returned. Without the
+    // isNull(acceptedAt) filter an already-accepted invite token could be
+    // REPLAYED to re-join a team after removal, or to re-escalate a role after
+    // a demote (accept() had no acceptedAt guard, markInviteAccepted leaves the
+    // row + token valid until the original 7-day expiry, and removeMember didn't
+    // touch invites). Filtering here makes accept()'s existing not-found path
+    // ("Invite not found or already used.") fire on any replay of a used token.
+    // (Fable auth re-audit 2026-07-02.)
     const [row] = await this.database.db
       .select()
       .from(teamInvites)
-      .where(eq(teamInvites.inviteTokenHash, hash))
+      .where(and(eq(teamInvites.inviteTokenHash, hash), isNull(teamInvites.acceptedAt)))
       .limit(1);
     return row ? toInviteRow(row) : null;
   }
@@ -191,6 +199,17 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
       .where(and(eq(teamMembers.id, membershipId), eq(teamMembers.ownerAccountId, ownerAccountId)))
       .returning({ memberAccountId: teamMembers.memberAccountId });
     return result.length > 0 ? (result[0]?.memberAccountId ?? null) : null;
+  }
+
+  async deleteInvitesForEmail(ownerAccountId: string, email: string): Promise<void> {
+    await this.database.db
+      .delete(teamInvites)
+      .where(
+        and(
+          eq(teamInvites.ownerAccountId, ownerAccountId),
+          eq(teamInvites.inviteeEmail, email.trim().toLowerCase()),
+        ),
+      );
   }
 
   /** Helper — when an upsertMembership returns just the team_members row,
