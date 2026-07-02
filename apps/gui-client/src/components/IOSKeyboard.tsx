@@ -18,7 +18,7 @@
 // shift+a sends keyDown key:'A'); no modifier-only event is sent for the shift
 // tap itself.
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { sendInputEvent, type Room } from '../lib/livekit';
 
 /** The three iOS keyboard layers. `letters` re-renders upper/lower per the live
@@ -35,6 +35,18 @@ export type ShiftState = 'off' | 'once' | 'locked';
 
 /** Double-tap window (ms) for shift → caps-lock, matching iOS's ~300ms. */
 export const DOUBLE_TAP_MS = 300;
+
+/**
+ * Press-and-hold key-repeat cadence, matching iOS. Real iOS repeats ONLY the
+ * delete key on hold (letters show an accent picker, space activates the cursor
+ * trackpad), so this is wired to the delete key exclusively via FnKey's
+ * `repeatOnHold`. Hold ~0.4s, then repeat starting slow and accelerating to a
+ * floor — the same "deletes faster the longer you hold" feel as the device.
+ */
+export const KEY_REPEAT_INITIAL_MS = 400;
+export const KEY_REPEAT_START_MS = 120;
+export const KEY_REPEAT_MIN_MS = 40;
+export const KEY_REPEAT_ACCEL_MS = 12;
 
 /** The letter rows (lowercase canonical). Re-cased per shift state at render. */
 const LETTER_ROWS: readonly (readonly string[])[] = [
@@ -226,7 +238,9 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
             })}
 
             {/* Row 3 right flank: delete on every layer's last char row. */}
-            {isLastCharRow && <FnKey label="⌫" ariaLabel="Delete" wide onPress={onDelete} />}
+            {isLastCharRow && (
+              <FnKey label="⌫" ariaLabel="Delete" wide onPress={onDelete} repeatOnHold />
+            )}
           </div>
         );
       })}
@@ -340,6 +354,7 @@ function FnKey({
   active,
   locked,
   disabled,
+  repeatOnHold,
 }: {
   label: string;
   ariaLabel: string;
@@ -353,7 +368,41 @@ function FnKey({
    *  keys present for iPhone-faithful layout that have no backing action yet
    *  (the bottom-row emoji key) so they don't invite a tap that does nothing. */
   disabled?: boolean;
+  /** iPhone-faithful press-and-hold repeat. Only the delete key sets this: hold
+   *  fires onPress once immediately, then repeats at an accelerating cadence
+   *  until pointer up/leave/cancel (or unmount). Letters/space must NOT set it
+   *  (real iOS shows an accent picker / cursor trackpad there instead). */
+  repeatOnHold?: boolean;
 }): JSX.Element {
+  // Held-repeat timer. Kept in a ref so pointer up/leave/cancel and unmount can
+  // all cancel the same in-flight timeout chain.
+  const repeatTimerRef = useRef<number | null>(null);
+  // onPress identity changes across renders (its useCallback deps include the
+  // live room); read it through a ref so a long hold always fires the current
+  // handler without re-arming the timer.
+  const onPressRef = useRef(onPress);
+  onPressRef.current = onPress;
+
+  const stopRepeat = useCallback((): void => {
+    if (repeatTimerRef.current !== null) {
+      window.clearTimeout(repeatTimerRef.current);
+      repeatTimerRef.current = null;
+    }
+  }, []);
+
+  const beginRepeat = useCallback((): void => {
+    let interval = KEY_REPEAT_START_MS;
+    const tick = (): void => {
+      onPressRef.current();
+      interval = Math.max(KEY_REPEAT_MIN_MS, interval - KEY_REPEAT_ACCEL_MS);
+      repeatTimerRef.current = window.setTimeout(tick, interval);
+    };
+    repeatTimerRef.current = window.setTimeout(tick, KEY_REPEAT_INITIAL_MS);
+  }, []);
+
+  // Cancel any pending repeat if the key unmounts mid-hold (e.g. layout swaps to
+  // the symbols page) so it can't keep firing Backspace into a torn-down view.
+  useEffect(() => stopRepeat, [stopRepeat]);
   // Grey function keys (#aeb3bd-ish); accent → blue is reserved (return is grey by
   // default like real iOS). Caps-locked shift gets a white highlight (iOS lights
   // the shift key); one-shot shift a lighter grey.
@@ -383,7 +432,11 @@ function FnKey({
         e.preventDefault();
         if (disabled === true) return;
         onPress();
+        if (repeatOnHold === true) beginRepeat();
       }}
+      onPointerUp={repeatOnHold === true ? stopRepeat : undefined}
+      onPointerLeave={repeatOnHold === true ? stopRepeat : undefined}
+      onPointerCancel={repeatOnHold === true ? stopRepeat : undefined}
       // A disabled key is dimmed and drops the active:brightness-95 press flash
       // so it visibly reads as inert rather than a working key that flashes.
       className={`flex h-[42px] min-w-0 items-center justify-center rounded-[5px] text-[15px] leading-none shadow-[0_1px_0_rgba(0,0,0,0.28)] transition-colors ${

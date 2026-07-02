@@ -12,6 +12,8 @@ import {
   applyShift,
   keyForChar,
   DOUBLE_TAP_MS,
+  KEY_REPEAT_INITIAL_MS,
+  KEY_REPEAT_START_MS,
 } from '../../src/components/IOSKeyboard';
 import { DeviceToolbar } from '../../src/views/SimulatorWindow';
 import type { InputEvent } from '../../src/lib/livekit';
@@ -264,6 +266,98 @@ describe('IOSKeyboard — named keys', () => {
       { type: 'keyDown', key: ' ' },
       { type: 'keyUp', key: ' ' },
     ]);
+  });
+});
+
+describe('IOSKeyboard — delete key press-and-hold repeat (iOS fidelity)', () => {
+  it('holding delete repeats Backspace at an accelerating cadence; release stops it', () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(<IOSKeyboard room={ROOM} />);
+      const del = el(container, '[data-key="⌫"]');
+
+      // Press down: one immediate Backspace (keyDown + keyUp), no repeat yet.
+      act(() => {
+        fireEvent.pointerDown(del);
+      });
+      expect(emitted()).toEqual([
+        { type: 'keyDown', key: 'Backspace' },
+        { type: 'keyUp', key: 'Backspace' },
+      ]);
+
+      // Nothing more until the initial hold delay elapses.
+      act(() => {
+        vi.advanceTimersByTime(KEY_REPEAT_INITIAL_MS - 1);
+      });
+      expect(emitted().length).toBe(2);
+
+      // First repeat fires at the initial-hold boundary (+1 Backspace pair).
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(emitted().length).toBe(4);
+
+      // A further repeat interval yields another Backspace pair.
+      act(() => {
+        vi.advanceTimersByTime(KEY_REPEAT_START_MS);
+      });
+      expect(emitted().length).toBe(6);
+
+      // Release: no further repeats no matter how long we wait.
+      act(() => {
+        fireEvent.pointerUp(del);
+      });
+      const afterRelease = emitted().length;
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(emitted().length).toBe(afterRelease);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('pointer leaving the key mid-hold stops the repeat (iOS: slide off to cancel)', () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(<IOSKeyboard room={ROOM} />);
+      const del = el(container, '[data-key="⌫"]');
+
+      act(() => {
+        fireEvent.pointerDown(del);
+      });
+      act(() => {
+        fireEvent.pointerLeave(del);
+      });
+      const afterLeave = emitted().length;
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(emitted().length).toBe(afterLeave);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a normal delete tap (press + release) fires exactly one Backspace, no repeat', () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(<IOSKeyboard room={ROOM} />);
+      const del = el(container, '[data-key="⌫"]');
+      act(() => {
+        fireEvent.pointerDown(del);
+        fireEvent.pointerUp(del);
+      });
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(emitted()).toEqual([
+        { type: 'keyDown', key: 'Backspace' },
+        { type: 'keyUp', key: 'Backspace' },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
