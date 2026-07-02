@@ -259,7 +259,7 @@ describe('disabled deployment (MFA_ENCRYPTION_KEY unset) — V-352b mapping', ()
       randomBytes(32).toString('base64'),
     );
     // Simulate a store/decrypt failure on remove (NOT a benign not-found).
-    (secrets as { remove: () => Promise<boolean> }).remove = () =>
+    (secrets as unknown as { remove: () => Promise<boolean> }).remove = () =>
       Promise.reject(Object.assign(new Error('boom'), { name: 'StoreError' }));
     registerAdminOwnerRoutes(app, {
       platformStatus: {
