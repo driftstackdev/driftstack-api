@@ -1,0 +1,19 @@
+---
+// Accent icon chip — the rounded square that visually anchors feature
+// cards. Put an inline SVG in the slot; the tile supplies size + the
+// AA-safe accent tones. Decorative only (aria-hidden).
+interface Props {
+  class?: string;
+}
+const { class: className = '' } = Astro.props;
+---
+
+<div
+  class:list={[
+    'flex h-10 w-10 items-center justify-center rounded-lg border border-tk-accent/20 bg-tk-accent/10 text-tk-accent-text',
+    className,
+  ]}
+  aria-hidden="true"
+>
+  <slot />
+</div>

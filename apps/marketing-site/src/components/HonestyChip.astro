@@ -1,0 +1,30 @@
+---
+// Honesty chip — the load-bearing feature-state labels (honest-claims
+// guardrail: unshipped features MUST carry their chip). Exactly three
+// states; labels are verbatim contract strings pinned by the parity
+// suite — never reword them here without re-pinning.
+type ChipState = 'live' | 'rolling-out' | 'roadmap';
+interface Props {
+  state: ChipState;
+}
+const { state } = Astro.props;
+const LABELS: Record<ChipState, string> = {
+  live: 'Live',
+  'rolling-out': 'Rolling out',
+  roadmap: 'Roadmap',
+};
+const TONES: Record<ChipState, string> = {
+  live: 'text-tk-ready border-tk-ready/30',
+  'rolling-out': 'text-tk-busy border-tk-busy/30',
+  roadmap: 'text-tk-ink-3 border-tk-border',
+};
+---
+
+<span
+  class:list={[
+    'inline-flex items-center rounded-full border px-2.5 py-0.5 font-mono text-[11px]',
+    TONES[state],
+  ]}
+>
+  {LABELS[state]}
+</span>

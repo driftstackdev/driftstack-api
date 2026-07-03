@@ -1,0 +1,29 @@
+---
+// Alternating feature row — copy column (default slot) + media column
+// ("media" slot: mockup/graphic), with an optional honesty chip beside
+// the row title. Set reverse to alternate column order per row.
+import HonestyChip from './HonestyChip.astro';
+
+interface Props {
+  title: string;
+  chip?: 'live' | 'rolling-out' | 'roadmap';
+  /** Swap copy/media columns (alternate rows). */
+  reverse?: boolean;
+}
+const { title, chip, reverse = false } = Astro.props;
+---
+
+<div class="grid items-center gap-10 md:grid-cols-2">
+  <div class:list={[reverse ? 'md:order-2' : '']}>
+    <div class="flex flex-wrap items-center gap-3">
+      <h3 class="text-lg font-semibold text-tk-ink">{title}</h3>
+      {chip ? <HonestyChip state={chip} /> : null}
+    </div>
+    <div class="mt-3 text-sm leading-6 text-tk-ink-2">
+      <slot />
+    </div>
+  </div>
+  <div class:list={[reverse ? 'md:order-1' : '']}>
+    <slot name="media" />
+  </div>
+</div>

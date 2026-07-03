@@ -1,0 +1,56 @@
+---
+// Code window — .code-preview chrome (three pips + mono title) around a
+// <pre> in the default slot, with an optional copy button wired via the
+// shared [data-copy-target] listener below. The script body is PLAIN
+// code on purpose: wrapping an is:inline script in an Astro expression
+// container with a template literal ships a literal no-op string.
+interface Props {
+  /** Chrome title, e.g. 'quickstart.ts'. */
+  title?: string;
+  /** id of the element whose textContent the Copy button copies. */
+  copyTargetId?: string;
+}
+const { title, copyTargetId } = Astro.props;
+---
+
+<figure class="code-preview overflow-hidden">
+  <div class="code-window-chrome">
+    <span class="pip"></span><span class="pip"></span><span class="pip"></span>
+    {title ? <span class="ml-2 text-[11px] text-white/40">{title}</span> : null}
+    {
+      copyTargetId ? (
+        <button
+          type="button"
+          class="ml-auto rounded border border-white/10 px-2 py-0.5 text-[11px] text-white/60 transition-colors hover:text-white"
+          data-copy-target={copyTargetId}
+        >
+          Copy
+        </button>
+      ) : null
+    }
+  </div>
+  <div class="overflow-x-auto p-4">
+    <slot />
+  </div>
+</figure>
+
+<script is:inline>
+  // Shared copy-button wiring — one document-level listener, guarded so
+  // multiple CodeWindow instances on a page don't double-bind.
+  if (!window.__dsCopyWired) {
+    window.__dsCopyWired = true;
+    document.addEventListener('click', function (e) {
+      var btn = e.target instanceof Element ? e.target.closest('[data-copy-target]') : null;
+      if (!btn) return;
+      var target = document.getElementById(btn.getAttribute('data-copy-target') || '');
+      if (!target || !navigator.clipboard) return;
+      navigator.clipboard.writeText(target.textContent || '').then(function () {
+        var prev = btn.textContent;
+        btn.textContent = 'Copied';
+        window.setTimeout(function () {
+          btn.textContent = prev;
+        }, 1200);
+      });
+    });
+  }
+</script>

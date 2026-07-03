@@ -1,0 +1,17 @@
+---
+// Fleet v2 card — solid .card recipe wrapper with optional title and an
+// icon slot (pair with IconTile). Body copy goes in the default slot.
+interface Props {
+  title?: string;
+  class?: string;
+}
+const { title, class: className = '' } = Astro.props;
+---
+
+<div class:list={['card p-6', className]}>
+  <slot name="icon" />
+  {title ? <h3 class="mt-4 text-base font-semibold text-tk-ink first:mt-0">{title}</h3> : null}
+  <div class="mt-2 text-sm leading-6 text-tk-ink-2">
+    <slot />
+  </div>
+</div>

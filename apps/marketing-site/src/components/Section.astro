@@ -1,0 +1,32 @@
+---
+// Fleet v2 shared section shell (2026-07-03) — the standard marketing
+// section: top hairline, centered container, mono // label, headline +
+// optional lead, then slot content. Extracted from the hand-inlined
+// pattern previously repeated across index/pricing/about/security/….
+interface Props {
+  /** Mono section-label text (rendered inside .section-label after //). */
+  label: string;
+  /** Section headline (h2). */
+  title: string;
+  /** Optional one-paragraph lead under the headline. */
+  lead?: string;
+  /** Optional anchor id for in-page links. */
+  id?: string;
+  /** Widen the container to max-w-7xl (default max-w-6xl). */
+  wide?: boolean;
+  /** Extra classes on the outer <section>. */
+  class?: string;
+}
+const { label, title, lead, id, wide = false, class: className = '' } = Astro.props;
+---
+
+<section id={id} class:list={['relative border-t border-tk-border', className]}>
+  <div class:list={['mx-auto px-6 py-20 md:py-24', wide ? 'max-w-7xl' : 'max-w-6xl']}>
+    <p class="section-label">{label}</p>
+    <h2 class="mt-4 text-2xl font-semibold tracking-tight text-tk-ink sm:text-3xl md:text-4xl">
+      {title}
+    </h2>
+    {lead ? <p class="mt-4 max-w-2xl text-base leading-7 text-tk-ink-2">{lead}</p> : null}
+    <slot />
+  </div>
+</section>

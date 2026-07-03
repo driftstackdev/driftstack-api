@@ -1,0 +1,26 @@
+---
+// Fleet v2 interior-page hero — label + h1 + lead over the ambient
+// hero-glow + grid backdrop. For pricing/about/faq/comparison/… (the
+// homepage keeps its own bespoke hero + fleet wall).
+interface Props {
+  label: string;
+  title: string;
+  lead?: string;
+}
+const { label, title, lead } = Astro.props;
+---
+
+<div class="relative overflow-hidden border-b border-tk-border">
+  <div class="hero-glow" aria-hidden="true"></div>
+  <div class="absolute inset-0 grid-bg opacity-60" aria-hidden="true"></div>
+  <div class="relative mx-auto max-w-6xl px-6 py-20 md:py-24">
+    <p class="section-label">{label}</p>
+    <h1
+      class="mt-4 max-w-3xl text-3xl font-bold tracking-tight text-tk-ink sm:text-4xl md:text-5xl"
+    >
+      {title}
+    </h1>
+    {lead ? <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">{lead}</p> : null}
+    <slot />
+  </div>
+</div>

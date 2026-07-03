@@ -1,0 +1,18 @@
+---
+// Band-B tile — the "big plain line + small precise line" copy pattern:
+// a plain-language claim anyone can read, with the exact technical fact
+// demoted to small mono print inside the same element.
+interface Props {
+  /** The plain-language claim (big line). */
+  plain: string;
+  /** The precise technical line (small mono print). */
+  technical?: string;
+  class?: string;
+}
+const { plain, technical, class: className = '' } = Astro.props;
+---
+
+<div class:list={['stat-card', className]}>
+  <p class="text-base font-semibold leading-snug text-tk-ink">{plain}</p>
+  {technical ? <p class="mt-2 font-mono text-xs leading-5 text-tk-ink-3">{technical}</p> : null}
+</div>

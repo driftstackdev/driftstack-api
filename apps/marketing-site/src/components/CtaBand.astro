@@ -1,0 +1,44 @@
+---
+// Final call-to-action band — accent radial wash + headline + CTA pair.
+// External hrefs get rel="noopener noreferrer" automatically.
+interface Props {
+  label?: string;
+  title: string;
+  lead?: string;
+  primaryHref: string;
+  primaryLabel: string;
+  secondaryHref?: string;
+  secondaryLabel?: string;
+}
+const {
+  label = 'Ready when you are',
+  title,
+  lead,
+  primaryHref,
+  primaryLabel,
+  secondaryHref,
+  secondaryLabel,
+} = Astro.props;
+const relFor = (href: string) => (href.startsWith('http') ? 'noopener noreferrer' : undefined);
+---
+
+<section class="relative overflow-hidden border-t border-tk-border">
+  <div class="absolute inset-0 bg-glow-radial-accent opacity-50" aria-hidden="true"></div>
+  <div class="relative mx-auto max-w-4xl px-6 py-24 text-center md:py-28">
+    <p class="section-label justify-center">{label}</p>
+    <h2 class="mt-6 text-2xl font-semibold tracking-tight text-tk-ink sm:text-3xl md:text-5xl">
+      {title}
+    </h2>
+    {lead ? <p class="mx-auto mt-4 max-w-xl text-base leading-7 text-tk-ink-2">{lead}</p> : null}
+    <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
+      <a href={primaryHref} class="btn-primary" rel={relFor(primaryHref)}>{primaryLabel}</a>
+      {
+        secondaryHref && secondaryLabel ? (
+          <a href={secondaryHref} class="btn-secondary" rel={relFor(secondaryHref)}>
+            {secondaryLabel}
+          </a>
+        ) : null
+      }
+    </div>
+  </div>
+</section>

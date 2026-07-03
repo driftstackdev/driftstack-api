@@ -1,0 +1,66 @@
+---
+// Pricing summary card. The PRICE STRING is formatted by the CALLER from
+// src/data/pricing.ts figures (W292.B data-binding discipline: pages
+// derive every figure from API_TIERS/SELF_HOSTED_SKUS — this component
+// deliberately has no dollar literals and no pricing imports, so it can
+// never become a second source of truth).
+interface Props {
+  title: string;
+  /** Caller-formatted price, e.g. fmtUsd(tier.monthlyUsd). */
+  price: string;
+  /** Suffix after the price (default '/mo'). */
+  cadence?: string;
+  /** Optional prefix before the price, e.g. 'from'. */
+  pricePrefix?: string;
+  description?: string;
+  bullets?: string[];
+  href: string;
+  cta: string;
+  highlight?: boolean;
+}
+const {
+  title,
+  price,
+  cadence = '/mo',
+  pricePrefix,
+  description,
+  bullets = [],
+  href,
+  cta,
+  highlight = false,
+} = Astro.props;
+const external = href.startsWith('http');
+---
+
+<div class:list={['card flex flex-col p-6', highlight ? 'border-tk-accent/50' : '']}>
+  <div class="flex items-center justify-between gap-3">
+    <h3 class="text-base font-semibold text-tk-ink">{title}</h3>
+    {highlight ? <span class="pill text-tk-accent-text">Popular</span> : null}
+  </div>
+  <p class="mt-3 text-tk-ink">
+    {pricePrefix ? <span class="text-sm text-tk-ink-2">{pricePrefix}&nbsp;</span> : null}
+    <span class="text-3xl font-extrabold tracking-tight">{price}</span>
+    <span class="text-sm text-tk-ink-3">{cadence}</span>
+  </p>
+  {description ? <p class="mt-2 text-sm leading-6 text-tk-ink-2">{description}</p> : null}
+  {
+    bullets.length > 0 ? (
+      <ul class="mt-4 space-y-2 text-sm text-tk-ink-2">
+        {bullets.map((b) => (
+          <li class="flex gap-2">
+            <span class="arrow-bullet">›</span>
+            <span>{b}</span>
+          </li>
+        ))}
+      </ul>
+    ) : null
+  }
+  <div class="mt-6 flex-1"></div>
+  <a
+    href={href}
+    class={highlight ? 'btn-primary w-full' : 'btn-secondary w-full'}
+    rel={external ? 'noopener noreferrer' : undefined}
+  >
+    {cta}
+  </a>
+</div>
