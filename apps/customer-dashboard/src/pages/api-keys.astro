@@ -38,7 +38,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     >
     </div>
 
-    <header class="mb-10 flex items-start justify-between gap-6">
+    <header class="mb-10 flex flex-wrap items-start justify-between gap-6">
       <div>
         <p class="text-sm text-tk-ink-3">Bearer tokens · scoped + revocable</p>
         <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">API keys</h1>
@@ -48,8 +48,51 @@ const apiBaseUrl = resolveApiBaseUrl();
           immediate.
         </p>
       </div>
-      <button type="button" class="btn-primary shrink-0" data-show-create>New key</button>
+      <div class="flex shrink-0 items-center gap-2">
+        {/* Fleet v2 (slice 3.5) — contextual docs deep-links. */}
+        <a
+          href="https://docs.driftstack.dev/api/api-keys/"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn-ghost"
+        >
+          Docs
+        </a>
+        <button type="button" class="btn-primary" data-show-create>New key</button>
+      </div>
     </header>
+
+    {/* Fleet v2 (slice 3.5) — "use it now" quickstart. A copy-paste curl +
+        SDK install using a PLACEHOLDER key (ds_live_…) — never a real key
+        (the one-time plaintext lives only in the reveal pane below, which
+        wipes on dismiss). Links the auth + SDK references. */}
+    <section class="dashboard-card mb-8">
+      <div class="flex flex-wrap items-center gap-2">
+        <p class="section-label">Use it now</p>
+        <span class="flex-1"></span>
+        <a
+          href="https://docs.driftstack.dev/api/auth/"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-xs text-tk-accent hover:underline">Auth reference →</a
+        >
+        <a
+          href="https://docs.driftstack.dev/sdk/"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-xs text-tk-accent hover:underline">SDKs →</a
+        >
+      </div>
+      <pre class="mt-4 overflow-x-auto rounded-lg border border-tk-border bg-tk-code-bg px-4 py-3 font-mono text-xs text-white"><code>curl https://api.driftstack.dev/v1/account/me \
+  -H "Authorization: Bearer ds_live_&lt;your-key&gt;"
+
+# TypeScript SDK
+npm i @driftstack/sdk</code></pre>
+      <p class="mt-2 text-xs text-tk-ink-3">
+        Replace <code class="font-mono">ds_live_&lt;your-key&gt;</code> with the key you copy on
+        creation — the plaintext is shown once and never stored.
+      </p>
+    </section>
 
     <!-- V-270: Create-key form (hidden by default) -->
     <div
@@ -250,10 +293,10 @@ const apiBaseUrl = resolveApiBaseUrl();
     {/* 2026-05-23 — icon on key-created success panel. */}
     <div
       data-created-reveal
-      class="mb-8 hidden rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-6"
+      class="mb-8 hidden rounded-lg border border-tk-ready/30 bg-tk-ready/10 p-6"
     >
-      <h2 class="flex items-center gap-2 text-lg font-semibold text-emerald-200">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-400/20 ring-1 ring-emerald-400/40">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ready">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-ready/15 ring-1 ring-tk-ready/40">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M9 12l2 2 4-4" />
             <circle cx="12" cy="12" r="9" />
@@ -261,23 +304,23 @@ const apiBaseUrl = resolveApiBaseUrl();
         </span>
         Key created — copy it now
       </h2>
-      <p class="mt-2 text-sm text-emerald-200">
+      <p class="mt-2 text-sm text-tk-ready">
         This is the only time the full key is shown. Store it in your secret manager before
         dismissing.
       </p>
       <pre
         data-created-plaintext
-        class="mt-4 overflow-x-auto rounded border border-emerald-400/30 bg-tk-surface px-4 py-3 font-mono text-sm text-tk-ink"></pre>
+        class="mt-4 overflow-x-auto rounded border border-tk-ready/30 bg-tk-surface px-4 py-3 font-mono text-sm text-tk-ink"></pre>
       <div class="mt-4 flex items-center gap-3">
         <button type="button" class="btn-primary" data-created-copy>Copy to clipboard</button>
         <button
           type="button"
-          class="rounded-md border border-emerald-400/40 bg-tk-surface px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-100"
+          class="rounded-md border border-tk-ready/40 bg-tk-surface px-4 py-2 text-sm font-medium text-tk-ready hover:bg-tk-ready/20"
           data-created-dismiss
         >
           Dismiss — I've saved it
         </button>
-        <span data-created-copy-feedback class="hidden text-xs text-emerald-300">Copied.</span>
+        <span data-created-copy-feedback class="hidden text-xs text-tk-ready">Copied.</span>
       </div>
     </div>
 
@@ -306,17 +349,17 @@ const apiBaseUrl = resolveApiBaseUrl();
         keeps working for the grace window below; deploy the new key everywhere
         before then or requests using the old key will start returning 401.
       </p>
-      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-amber-800">
+      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-tk-busy">
         Rotated from
       </p>
       <p data-rotate-from-id class="mt-1 font-mono text-xs text-tk-ink"></p>
-      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-amber-800">
+      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-tk-busy">
         New plaintext
       </p>
       <pre
         data-rotate-plaintext
         class="mt-1 overflow-x-auto rounded border border-tk-accent/30 bg-tk-surface px-3 py-2 font-mono text-xs text-tk-ink"></pre>
-      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-amber-800">
+      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-tk-busy">
         Old key valid until
       </p>
       <p data-rotate-grace-expires class="mt-1 text-sm text-tk-ink"></p>
@@ -372,7 +415,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     </div>
     <ul
       data-list
-      class="divide-y divide-slate-200 rounded-lg border border-tk-border bg-tk-surface"
+      class="divide-y divide-tk-border rounded-lg border border-tk-border bg-tk-surface"
     >
       {[0, 1].map(() => (
         <li data-skeleton="true" class="px-6 py-4" aria-hidden="true">

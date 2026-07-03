@@ -143,4 +143,17 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
       expect(body).toMatch(new RegExp(`${broad}:\\s*'[a-z_]+'`));
     }
   });
+
+  it("Fleet v2 (slice 3.5): the 'use it now' quickstart uses a ds_live_ PLACEHOLDER, never a real key, and the header links docs — the one-time plaintext must never leak into static markup", () => {
+    // The snippet documents the header shape with a placeholder token.
+    expect(body).toMatch(/Authorization: Bearer ds_live_&lt;your-key&gt;/);
+    expect(body).toMatch(/npm i @driftstack\/sdk/);
+    // Contextual docs deep-links (absolute cross-origin; rel guarded by the sweep).
+    expect(body).toContain('https://docs.driftstack.dev/api/api-keys/');
+    expect(body).toContain('https://docs.driftstack.dev/api/auth/');
+    // Safety: no created/rotate plaintext data-attr value is ever baked into
+    // the static snippet region — the real key lives only in the reveal
+    // panes (which wipe on dismiss), never in server-rendered HTML.
+    expect(body).not.toMatch(/ds_live_[a-z0-9]{8,}/i);
+  });
 });
