@@ -115,33 +115,36 @@
 }
 
 @layer components {
-  /* Primary CTA — oxblood base with a red glow ring + lift on hover.
-     The two layered shadows + transition give it a tactile feel
-     without overloading the saturation budget. */
+  /* Primary CTA — flat accent, Fleet v2 (2026-07-03 port from the
+     dashboard kit): calm ambient shadow instead of the glow ring +
+     hover lift. Color change only on hover keeps it tactile without
+     motion. */
   .btn-primary {
-    @apply relative inline-flex items-center justify-center rounded-md
-           bg-tk-accent px-5 py-2.5 text-sm font-medium text-tk-accent-ink
-           shadow-glow-accent transition-all duration-200
-           hover:bg-tk-accent-strong hover:-translate-y-0.5
+    @apply relative inline-flex items-center justify-center rounded-lg
+           bg-tk-accent px-5 py-2.5 text-sm font-semibold text-tk-accent-ink
+           shadow-ambient transition-colors duration-150
+           hover:bg-tk-accent-strong
            focus-visible:outline focus-visible:outline-2
            focus-visible:outline-offset-2 focus-visible:outline-tk-accent
-           active:translate-y-0;
+           disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
-  /* Secondary CTA — glass-on-dark with subtle border + soft hover. */
+  /* Secondary CTA — solid surface (Fleet v2: glass/backdrop-blur retired)
+     with subtle border + soft hover. */
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-md
+    @apply inline-flex items-center justify-center rounded-lg
            border border-tk-border bg-tk-surface px-5 py-2.5 text-sm
-           font-medium text-tk-ink backdrop-blur-sm
-           transition-all duration-200
+           font-medium text-tk-ink
+           transition-colors duration-150
            hover:border-tk-ink-3 hover:bg-tk-hover
            focus-visible:outline focus-visible:outline-2
            focus-visible:outline-offset-2 focus-visible:outline-tk-accent;
   }
 
-  /* Nav link — muted by default, accent on hover. */
+  /* Nav link — muted by default, readable accent on hover (accent-text
+     is the AA-safe text tone; raw --accent is ~3.0:1 on the dark bg). */
   .nav-link {
-    @apply text-sm text-tk-ink-2 transition-colors hover:text-tk-accent;
+    @apply text-sm text-tk-ink-2 transition-colors hover:text-tk-accent-text;
   }
 
   /* Bracketed section label — mono + glow accent. Used as the
@@ -150,35 +153,22 @@
      content stays the bare word. */
   .section-label {
     @apply inline-flex items-center font-mono text-xs uppercase
-           tracking-[0.2em] text-tk-accent;
+           tracking-[0.2em] text-tk-accent-text;
   }
   .section-label::before {
     content: '// ';
     @apply text-tk-ink-3;
   }
 
-  /* Card surface — glass-morphism on dark with red-tinted top edge
-     accent on hover. Used for feature cards, tier teasers, code
-     previews, etc. */
+  /* Card surface — solid Fleet v2 card (glass/backdrop-blur + hover
+     top-edge shimmer retired 2026-07-03): tokened surface, 14px radius,
+     calm ambient shadow. The subtle accent border on hover stays as the
+     marketing-only flourish. Used for feature cards, tier teasers, etc. */
   .card {
-    @apply relative overflow-hidden rounded-xl border border-tk-border
-           bg-tk-surface/70 backdrop-blur-sm
-           transition-all duration-300
-           hover:border-tk-accent/40 hover:bg-tk-surface;
-  }
-  .card::before {
-    content: '';
-    @apply pointer-events-none absolute inset-x-0 top-0 h-px
-           opacity-0 transition-opacity duration-300;
-    background: linear-gradient(
-      to right,
-      transparent 0%,
-      rgb(var(--accent-rgb) / 0.6) 50%,
-      transparent 100%
-    );
-  }
-  .card:hover::before {
-    @apply opacity-100;
+    @apply relative overflow-hidden rounded-card border border-tk-border
+           bg-tk-surface shadow-ambient
+           transition-colors duration-300
+           hover:border-tk-accent/40;
   }
 
   /* Subtle grid background — used on hero + select sections to add
@@ -192,10 +182,12 @@
     -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 30%, transparent 75%);
   }
 
-  /* 2026-05-22 — hero atmosphere. Three layered radial glows in the
-     brand color (glow-red) that subtly pulse to keep the hero alive
-     without feeling animated-for-its-own-sake. 12s cycle, opacity-
-     only animation (no transform, no repaint thrash). */
+  /* 2026-05-22 — hero atmosphere (marketing's editorial signature; the
+     app kit dropped glows entirely, the public site keeps a calmer one).
+     Layered accent radial glows that subtly pulse to keep the hero alive
+     without feeling animated-for-its-own-sake. 12s cycle, opacity-only
+     animation (no transform, no repaint thrash). Fleet v2 2026-07-03:
+     intensities halved (0.18→0.10 / 0.12→0.06). */
   .hero-glow {
     position: absolute;
     inset: 0;
@@ -216,14 +208,14 @@
     left: -10%;
     width: 50%;
     height: 60%;
-    background: radial-gradient(circle, rgb(var(--accent-rgb) / 0.18), transparent 70%);
+    background: radial-gradient(circle, rgb(var(--accent-rgb) / 0.1), transparent 70%);
   }
   .hero-glow::after {
     bottom: -20%;
     right: -10%;
     width: 60%;
     height: 70%;
-    background: radial-gradient(circle, rgb(var(--accent-rgb) / 0.12), transparent 70%);
+    background: radial-gradient(circle, rgb(var(--accent-rgb) / 0.06), transparent 70%);
     animation-delay: -6s;
   }
   @keyframes hero-glow-pulse {
@@ -266,9 +258,79 @@
     box-shadow: -2px 0 16px -4px var(--glow);
   }
 
-  /* Trust pip — small dot used in stat callouts. */
+  /* Trust pip — small dot used in stat callouts (accent-text = AA-safe). */
   .arrow-bullet {
-    @apply text-tk-accent font-mono;
+    @apply text-tk-accent-text font-mono;
+  }
+
+  /* ── Fleet v2 recipes (2026-07-03 port from the dashboard kit —
+     docs/internal/2026-07-03-design-system-v2-dashboard.md). Class
+     signatures match apps/customer-dashboard/src/styles/base.css so the
+     two surfaces read as one product. */
+
+  /* Panel — general content container. */
+  .panel {
+    @apply rounded-card border border-tk-border bg-tk-surface p-[18px] shadow-ambient;
+  }
+  .panel-title {
+    @apply mb-3.5 flex items-center gap-2 text-sm font-semibold text-tk-ink;
+  }
+
+  /* Stat card — KPI tiles (big plain line + small technical line). */
+  .stat-card {
+    @apply rounded-card border border-tk-border bg-tk-surface p-4 shadow-ambient;
+  }
+  .stat-label {
+    @apply mb-2 flex items-center gap-1.5 text-xs font-semibold text-tk-ink-3;
+  }
+  .stat-value {
+    @apply text-[26px] font-extrabold leading-tight tracking-[-0.6px] text-tk-ink;
+  }
+  .stat-sub {
+    @apply mt-1 text-xs text-tk-ink-3;
+  }
+
+  /* Status dot — colored presence dot + label (status tokens only). */
+  .status-dot {
+    @apply inline-flex items-center gap-1.5 text-xs font-semibold;
+  }
+  .status-dot::before {
+    content: '';
+    @apply h-[7px] w-[7px] shrink-0 rounded-full bg-current;
+  }
+  .status-dot--ready {
+    @apply text-tk-ready;
+  }
+  .status-dot--busy {
+    @apply text-tk-busy;
+  }
+  .status-dot--err {
+    @apply text-tk-err;
+  }
+  .status-dot--idle {
+    @apply text-tk-ink-3;
+  }
+  .status-dot--live::before {
+    animation: livepulse 2.4s ease-out infinite;
+  }
+
+  /* Pill — rounded mono chip (ids, plan names, versions, counts). */
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-tk-border
+           bg-tk-surface px-2.5 py-0.5 font-mono text-[11px] text-tk-ink-2;
+  }
+
+  /* Themer — the mode-toggle pill (Header/Footer; matches the dashboard). */
+  .themer {
+    @apply inline-flex items-center gap-1 rounded-full border border-tk-border
+           bg-tk-surface p-[3px];
+  }
+  .themer-btn {
+    @apply rounded-full px-2.5 py-1 text-xs font-semibold text-tk-ink-3
+           transition-colors hover:text-tk-ink;
+  }
+  .themer-btn[aria-pressed='true'] {
+    @apply bg-tk-accent text-tk-accent-ink;
   }
 }
 
@@ -391,6 +453,9 @@
   --hover: #22232c;
   --ink: #f5f5f7;
   --ink-2: #b0b0bb;
+  /* --ink-3 deliberately diverges from the dashboard's #73737f: marketing
+     uses ink-3 for small muted print at reading distance, and #8c8c96
+     clears WCAG AA on #060608 where #73737f (≈4.2:1) does not. */
   --ink-3: #8c8c96;
   --border: #1e1e26;
   --ready: #2fe39a;
@@ -398,4 +463,32 @@
   --err: #ff6b61;
   --sync: #60a5fa;
   --code-bg: #0c0c11;
+}
+
+/* ── AA-safe accent-toned TEXT (Fleet v2 2026-07-03). The raw --accent fails
+   WCAG AA as text on the dark bg (oxblood #9b3b46 on #060608 ≈ 3.0:1 — fine
+   for button FILLS with white ink, not for colored text). --accent-text is
+   the readable tone per mode × accent pair (all ≥4.5:1 on --bg, verified):
+   dark oxblood #d4626e 5.56 / violet #8b7dff 6.24 / teal #1bc7a8 9.43;
+   light oxblood #8d2c3e 7.39 / violet #5847e0 5.58 / teal #0c7d69 4.56.
+   Text-on-background accent roles (.section-label, .nav-link hover,
+   .arrow-bullet, inline accent links) use tk-accent-text; fills/borders
+   keep the raw accent. */
+[data-mode='dark'][data-accent='violet'] {
+  --accent-text: #8b7dff;
+}
+[data-mode='dark'][data-accent='oxblood'] {
+  --accent-text: #d4626e;
+}
+[data-mode='dark'][data-accent='teal'] {
+  --accent-text: #1bc7a8;
+}
+[data-mode='light'][data-accent='violet'] {
+  --accent-text: #5847e0;
+}
+[data-mode='light'][data-accent='oxblood'] {
+  --accent-text: #8d2c3e;
+}
+[data-mode='light'][data-accent='teal'] {
+  --accent-text: #0c7d69;
 }

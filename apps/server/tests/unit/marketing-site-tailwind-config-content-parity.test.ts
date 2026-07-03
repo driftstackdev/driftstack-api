@@ -1,16 +1,24 @@
-// W525.B — drift guard for apps/marketing-site/tailwind.config.mjs.
-// Oxblood (#722F37) brand-color palette + Geist/Berkeley-Mono font
-// stacks + slate palette + @tailwindcss/typography plugin. Drift here
-// either changes the brand-color (would create cross-page brand-color
+// W525.B (Fleet v2 2026-07-03) — drift guard for
+// apps/marketing-site/tailwind.config.mjs. Two-axis tk token namespace +
+// typography stacks + @tailwindcss/typography plugin. Drift here either
+// changes the brand accent plumbing (would create cross-page brand
 // divergence on every CTA/nav/selection) or breaks the typography
 // plugin wiring (would break prose styling on legal/docs pages).
 //
-//   • Locked oxblood 50→950 palette anchored at #722F37 (700 base —
-//     "primary accent, locked" per founder direction).
-//   • Slate 50→950 base palette for body text + surfaces.
+// 2026-07-03 SUPERSESSION — the legacy baked palettes are RETIRED: the
+// oxblood 50→950 ladder ("locked accent per founder direction, #722F37"),
+// the custom slate ladder (byte-identical to Tailwind 3's built-in), the
+// graphite surface/ink sets, glow reds, and gradient-accent. Zero markup
+// used them (verified repo-wide) and the locked #722F37 accent lives on
+// as --accent-strong in the [data-accent='oxblood'] axis (styles/base.css)
+// per the 2026-06-15 "Fleet Mission Control — Dark + Red" verdict.
+// Negative pins below keep them from silently returning.
+//
+//   • tk token namespace → two-axis CSS custom properties (+ accent-text).
 //   • fontFamily: sans=Geist + system fallback, mono=Berkeley Mono +
-//     ui-monospace fallback.
-//   • maxWidth: prose 65ch.
+//     JetBrains Mono (vendored) + system fallback.
+//   • maxWidth: prose 65ch; borderRadius.card 14px.
+//   • boxShadow: glow-accent (hot elements) + ambient/ambient-lg (v2 kit).
 //   • @tailwindcss/typography plugin.
 //   • content glob: ./src/**/*.{astro,html,js,jsx,md,mdx,ts,tsx}.
 
@@ -37,36 +45,20 @@ describe('W525.B apps/marketing-site/tailwind.config.mjs content parity', () => 
     expect(body).toMatch(/plugins: \[typography\],/);
   });
 
-  it("Oxblood palette + locked-#722F37 framing pinned: 'Oxblood — locked accent per founder direction (#722F37).' + 11-step (50→950) palette: 50=#fbf3f4 / 100=#f5e1e3 / 200=#ebbfc4 / 300=#dc939c / 400=#c8606e / 500=#a83b4d / 600=#8d2c3e / 700=#722F37 (base — primary accent, locked) / 800=#5e2730 / 900=#4f242b / 950=#2b0f15 — pinned so the locked #722F37 brand-color + full 11-step shade ladder commitment survives (drift to a different oxblood-700 hex would propagate to every CTA/nav/selection on the marketing site)", () => {
-    expect(body).toMatch(/\/\/ Oxblood — locked accent per founder direction \(#722F37\)\./);
-    expect(body).toMatch(/oxblood: \{/);
-    expect(body).toMatch(/50: '#fbf3f4',/);
-    expect(body).toMatch(/100: '#f5e1e3',/);
-    expect(body).toMatch(/200: '#ebbfc4',/);
-    expect(body).toMatch(/300: '#dc939c',/);
-    expect(body).toMatch(/400: '#c8606e',/);
-    expect(body).toMatch(/500: '#a83b4d',/);
-    expect(body).toMatch(/600: '#8d2c3e',/);
-    expect(body).toMatch(/700: '#722F37', \/\/ base — primary accent, locked/);
-    expect(body).toMatch(/800: '#5e2730',/);
-    expect(body).toMatch(/900: '#4f242b',/);
-    expect(body).toMatch(/950: '#2b0f15',/);
-  });
-
-  it("Slate palette framing pinned: 'Slate base — body text + surfaces.' + 11-step (50→950) palette: 50=#f8fafc / 100=#f1f5f9 / 200=#e2e8f0 / 300=#cbd5e1 / 400=#94a3b8 / 500=#64748b / 600=#475569 / 700=#334155 / 800=#1e293b / 900=#0f172a / 950=#020617 — pinned so the slate-body-text + surfaces commitment + full 11-step shade ladder survives", () => {
-    expect(body).toMatch(/\/\/ Slate base — body text \+ surfaces\./);
-    expect(body).toMatch(/slate: \{/);
-    expect(body).toMatch(/50: '#f8fafc',/);
-    expect(body).toMatch(/100: '#f1f5f9',/);
-    expect(body).toMatch(/200: '#e2e8f0',/);
-    expect(body).toMatch(/300: '#cbd5e1',/);
-    expect(body).toMatch(/400: '#94a3b8',/);
-    expect(body).toMatch(/500: '#64748b',/);
-    expect(body).toMatch(/600: '#475569',/);
-    expect(body).toMatch(/700: '#334155',/);
-    expect(body).toMatch(/800: '#1e293b',/);
-    expect(body).toMatch(/900: '#0f172a',/);
-    expect(body).toMatch(/950: '#020617',/);
+  it("Legacy palette retirement pinned (2026-07-03 supersession): the oxblood ladder, custom slate ladder, graphite surface/ink sets, glow reds, gradient-accent, and glow-radial-red variants are GONE and must stay gone — the locked #722F37 accent lives on as --accent-strong in the [data-accent='oxblood'] axis (styles/base.css), and stock Tailwind slate-* utilities in legacy markup render unchanged (the removed custom ladder was byte-identical to the built-in)", () => {
+    // supersession note must stay in the config so the retirement is
+    // self-documenting at the source
+    expect(body).toMatch(/legacy baked palettes RETIRED \(Fleet v2 port\)/);
+    expect(body).toMatch(/#722F37 accent lives on as --accent-strong/);
+    // negative pins — none of the retired blocks may silently return
+    expect(body).not.toMatch(/oxblood: \{/);
+    expect(body).not.toMatch(/slate: \{/);
+    expect(body).not.toMatch(/surface: \{/);
+    expect(body).not.toMatch(/ink: \{/);
+    expect(body).not.toMatch(/glow: \{/);
+    expect(body).not.toMatch(/'gradient-accent'/);
+    expect(body).not.toMatch(/'glow-radial-red'/);
+    expect(body).not.toMatch(/'glow-red'/);
   });
 
   it('fontFamily + maxWidth framing pinned: \'sans: ["Geist", "ui-sans-serif", "system-ui", "sans-serif"]\' + \'mono: ["Berkeley Mono", "JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"]\' (Fleet v2 2026-07-03: vendored JetBrains Mono ships; Berkeley Mono stays first-family for licensed local installs, never vendored) + \'maxWidth: { prose: "65ch" }\' — pinned so the Geist+system-fallback sans-stack + the shipped-mono-stack + 65ch-prose-max-width commitment survives', () => {
@@ -77,13 +69,19 @@ describe('W525.B apps/marketing-site/tailwind.config.mjs content parity', () => 
     expect(body).toMatch(/maxWidth: \{\s*\n?\s*prose: '65ch',\s*\n?\s*\},/);
   });
 
-  it("Fleet tk token namespace + glow-accent shadow pinned (2026-06-12 rework): tk.* resolves to the two-axis CSS custom properties (styles/base.css) so tk-* classes flip with <html data-mode>/<html data-accent>; 'glow-accent' shadow follows the accent axis — ADDITIVE next to the legacy palettes until each page ports", () => {
+  it("Fleet tk token namespace + shadows pinned (v2 2026-07-03): tk.* resolves to the two-axis CSS custom properties (styles/base.css) so tk-* classes flip with <html data-mode>/<html data-accent>; tk-accent-text = the AA-safe accent TEXT tone; 'glow-accent' shadow survives for hot elements while ambient/ambient-lg are the v2 kit's calm card shadows; borderRadius.card = 14px (spec §3)", () => {
     // rgb-triplet + <alpha-value> form so Tailwind alpha modifiers
     // (bg-tk-accent\/10, ring-tk-accent\/30) work on token colors.
     expect(body).toMatch(/tk: \{\s*\n\s*bg: 'rgb\(var\(--bg-rgb\) \/ <alpha-value>\)',/);
     expect(body).toMatch(/accent: 'rgb\(var\(--accent-rgb\) \/ <alpha-value>\)',/);
     expect(body).toMatch(/'accent-strong': 'rgb\(var\(--accent-strong-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/'accent-text': 'var\(--accent-text\)',/);
     expect(body).toMatch(/'glow-accent': '0 0 0 1px var\(--accent\), 0 0 26px var\(--glow\)',/);
+    expect(body).toMatch(
+      /ambient: '0 1px 2px rgb\(15 16 20 \/ 0\.04\), 0 10px 28px -18px rgb\(15 16 20 \/ 0\.12\)',/,
+    );
+    expect(body).toMatch(/'ambient-lg':/);
+    expect(body).toMatch(/card: '14px',/);
   });
 
   it('file exists at canonical path', () => {
