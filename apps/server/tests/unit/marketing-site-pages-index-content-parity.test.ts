@@ -169,11 +169,11 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/secondaryHref="https:\/\/docs\.driftstack\.dev"/);
   });
 
-  it("Fleet-wall hero pinned: 'Command a fleet of real iPhones.' + identity/history/geo triad + 'just people on phones' close + Band-A de-jargoned telemetry footer (v2 2026-07-03: '4 iPhones running / each with its own identity / all healthy' — the fingerprint-coherence/detection-flags mono line was too technical above the fold)", () => {
+  it("Hero fleet visual pinned: 'Command a fleet of real iPhones.' + identity/history/geo triad + 'just people on phones' close + the fan-of-open-iPhones telemetry footer (S4.5 2026-07-03: the hero is now a fan of open iPhone windows matching the current GUI — '4 iPhones in your fleet / each with its own identity / all healthy'; the pre-v2 fingerprint-coherence mono line stays gone)", () => {
     expect(body).toMatch(/Command a fleet of real iPhones\./);
     expect(body).toMatch(/its own identity,\s*\n?\s*its own history, its own corner of the world/);
     expect(body).toMatch(/they're just people on\s*\n?\s*phones\./);
-    expect(body).toMatch(/<b class="text-tk-ready">4 iPhones<\/b> running/);
+    expect(body).toMatch(/<b class="text-tk-ready">4 iPhones<\/b> in your fleet/);
     expect(body).toMatch(/all <b class="text-tk-ready">healthy<\/b>/);
     // the pre-v2 technical telemetry line must not return above the fold
     expect(body).not.toMatch(/fingerprint coherence <b/);

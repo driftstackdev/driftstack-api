@@ -30,6 +30,44 @@ const manualLineup = manualLadder.map((t) => `${t.name} ${fmtUsd(t.monthlyUsd!)}
 const apiLineup = apiLadder.map((t) => `${t.name} ${fmtUsd(t.monthlyUsd!)}/mo`).join(' · ');
 const manualCaps = manualLadder.map((t) => t.concurrent).join(' / ');
 const apiCaps = apiLadder.map((t) => t.concurrent).join(' / ');
+
+// Hero fleet fan — three open iPhone windows, drawn to match the current
+// desktop GUI (phone-framed, LIVE/IDLE, dark+oxblood). Band A: cities
+// spelled out, "own connection", no protocol jargon. example.com pages
+// only (no real brands/URLs). Center phone is accent-lit + LIVE.
+const heroFleet = [
+  {
+    name: 'us-retail-qa',
+    live: true,
+    site: 'market.example.com',
+    wrap: 'z-10 -mr-5 rotate-[-8deg] translate-y-4 scale-[0.9]',
+    center: false,
+  },
+  {
+    name: 'amsterdam-shopper',
+    live: true,
+    site: 'shop.example.com',
+    wrap: 'z-30',
+    center: true,
+  },
+  {
+    name: 'jp-market',
+    live: false,
+    site: '',
+    wrap: 'z-10 -ml-5 rotate-[8deg] translate-y-4 scale-[0.9]',
+    center: false,
+  },
+];
+
+// Cockpit profile grid — the current GUI renders profiles as phone-framed
+// cards (LIVE/IDLE, exit flag + country code). example.com only.
+const cockpitProfiles = [
+  { name: 'amsterdam-shopper', flag: '🇳🇱', cc: 'NL', live: true, center: true },
+  { name: 'us-retail-qa', flag: '🇺🇸', cc: 'US', live: true, center: false },
+  { name: 'jp-market', flag: '🇯🇵', cc: 'JP', live: false, center: false },
+  { name: 'de-pricing', flag: '🇩🇪', cc: 'DE', live: true, center: false },
+  { name: 'uk-checkout', flag: '🇬🇧', cc: 'GB', live: true, center: false },
+];
 ---
 
 <BaseLayout
@@ -68,53 +106,67 @@ const apiCaps = apiLadder.map((t) => t.concurrent).join(' / ');
           </p>
         </div>
 
-        <!-- The fleet wall: the WORKSPACE the product actually shows — GUI hub
-             layout with workspace nav, folders, and profile cards. Band A pass
-             2026-07-03: exit shown as city + "own connection" (the protocol
-             names live in the developer section + docs). -->
-        <div class="rounded-2xl border border-tk-border bg-tk-surface p-4 shadow-ambient-lg">
-          <div class="mb-3 flex items-center gap-2 font-mono text-[11px] text-tk-ink-3">
-            <span class="font-sans text-[12px] font-black italic tracking-tight text-tk-ink">DRIFT<span class="text-tk-accent-text">STACK</span></span>
-            <span>your-workspace</span>
-            <span class="ml-auto flex items-center gap-1"><span class="live-dot inline-block h-2 w-2 rounded-full bg-tk-ready"></span><b class="text-tk-ready">4 running</b></span>
+        <!-- The fleet: a fan of open iPhone windows — the literal "command a
+             fleet of real iPhones" visual. Drawn to match the current GUI
+             (phone-framed, LIVE/IDLE, dark+oxblood). Band A: cities spelled
+             out, "own connection", example.com pages only. -->
+        <div class="relative">
+          <div class="flex items-end justify-center pt-2">
+            {
+              heroFleet.map((p) => (
+                <div class={`relative w-[118px] shrink-0 sm:w-[128px] ${p.wrap}`}>
+                  <div
+                    class={`overflow-hidden rounded-[22px] p-[3px] shadow-ambient-lg ${p.center ? 'ring-1 ring-tk-accent shadow-glow-accent' : 'ring-1 ring-tk-border'}`}
+                    style="background: linear-gradient(160deg, #161b24, #0a0e14);"
+                  >
+                    <div class="flex items-center gap-1 rounded-t-[19px] bg-[#1d1e24] px-2 py-1">
+                      <span class="h-1.5 w-1.5 rounded-full bg-[#ff5f57]" />
+                      <span class="h-1.5 w-1.5 rounded-full bg-[#febc2e]" />
+                      <span class="ml-1 truncate font-sans text-[8px] font-semibold text-white/85">
+                        {p.name}
+                      </span>
+                      <span
+                        class={`ml-auto flex shrink-0 items-center gap-0.5 text-[7px] font-bold uppercase tracking-wide ${p.live ? 'text-tk-ready' : 'text-tk-ink-3'}`}
+                      >
+                        {p.live ? (
+                          <span class="live-dot h-1 w-1 rounded-full bg-tk-ready" />
+                        ) : (
+                          <span class="h-1 w-1 rounded-full border border-tk-ink-3" />
+                        )}
+                        {p.live ? 'Live' : 'Idle'}
+                      </span>
+                    </div>
+                    <div class="relative aspect-[9/17] overflow-hidden rounded-[19px] bg-black">
+                      <div class="absolute left-1/2 top-1.5 z-10 h-2 w-8 -translate-x-1/2 rounded-full bg-black ring-1 ring-white/10" />
+                      {p.site ? (
+                        <div class="absolute inset-0 flex flex-col bg-gradient-to-b from-white to-slate-100 pt-5">
+                          <div class="mx-1.5 truncate rounded-sm bg-white px-1 py-0.5 font-mono text-[6px] text-slate-400 ring-1 ring-slate-200">
+                            {p.site} 🔒
+                          </div>
+                          <div class="mx-1.5 mt-1 h-8 rounded-sm bg-gradient-to-br from-slate-800 to-slate-600" />
+                          <div class="mx-1.5 mt-1 grid grid-cols-2 gap-1">
+                            <div class="h-6 rounded-sm bg-white ring-1 ring-slate-200" />
+                            <div class="h-6 rounded-sm bg-white ring-1 ring-slate-200" />
+                          </div>
+                          <div class="mx-1.5 mb-2 mt-auto h-3 rounded-sm bg-slate-900" />
+                        </div>
+                      ) : (
+                        <div class="absolute inset-0 flex items-center justify-center bg-tk-bg">
+                          <span class="font-mono text-[7px] text-tk-ink-3">New Tab</span>
+                        </div>
+                      )}
+                      <div class="absolute bottom-1 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full bg-white/40" />
+                    </div>
+                  </div>
+                </div>
+              ))
+            }
           </div>
-          <div class="flex gap-3">
-            <div class="w-28 shrink-0 rounded-lg border border-tk-border bg-tk-bg p-2 font-mono text-[9.5px]">
-              <p class="text-tk-accent-text">// workspace</p>
-              <p class="mt-1 rounded bg-tk-accent/10 px-1.5 py-0.5 font-semibold text-tk-ink">Profiles</p>
-              <p class="px-1.5 py-0.5 text-tk-ink-3">Sessions</p>
-              <p class="px-1.5 py-0.5 text-tk-ink-3">Recipes</p>
-              <p class="px-1.5 py-0.5 text-tk-ink-3">Proxies</p>
-              <p class="mt-2 text-tk-accent-text">// folders</p>
-              <p class="px-1.5 py-0.5 text-tk-ink-3">📁 E-commerce</p>
-              <p class="px-1.5 py-0.5 text-tk-ink-3">📁 Social ops</p>
-              <p class="px-1.5 py-0.5 text-tk-ink-3">📁 QA suite</p>
-            </div>
-            <div class="grid min-w-0 flex-1 grid-cols-2 gap-2">
-              <div class="rounded-lg border-2 border-tk-accent bg-tk-bg p-2.5 shadow-glow-accent">
-                <div class="flex items-center justify-between gap-1"><span class="truncate text-[11px] font-semibold text-tk-ink">amsterdam-shopper</span><span class="inline-flex shrink-0 items-center gap-1 rounded-full border border-tk-border px-1.5 py-0.5 text-[8.5px] font-semibold text-tk-ready"><span class="live-dot h-1 w-1 rounded-full bg-tk-ready"></span>Running</span></div>
-                <p class="mt-1 font-mono text-[9px] text-tk-ink-3">iPhone 17 · 🇳🇱 Amsterdam · own connection</p>
-                <div class="mt-1.5 flex gap-1"><span class="rounded-full border border-tk-border px-1.5 py-px text-[8px] text-tk-ink-3">checkout</span><span class="rounded-full border border-tk-border px-1.5 py-px text-[8px] text-tk-ink-3">priority</span></div>
-              </div>
-              <div class="rounded-lg border border-tk-border bg-tk-bg p-2.5">
-                <div class="flex items-center justify-between gap-1"><span class="truncate text-[11px] font-semibold text-tk-ink">us-retail-qa</span><span class="inline-flex shrink-0 items-center gap-1 rounded-full border border-tk-border px-1.5 py-0.5 text-[8.5px] font-semibold text-tk-ready"><span class="live-dot h-1 w-1 rounded-full bg-tk-ready"></span>Running</span></div>
-                <p class="mt-1 font-mono text-[9px] text-tk-ink-3">iPhone 17 · 🇺🇸 New York · own connection</p>
-                <div class="mt-1.5 flex gap-1"><span class="rounded-full border border-tk-border px-1.5 py-px text-[8px] text-tk-ink-3">e2e</span></div>
-              </div>
-              <div class="rounded-lg border border-tk-border bg-tk-bg p-2.5">
-                <div class="flex items-center justify-between gap-1"><span class="truncate text-[11px] font-semibold text-tk-ink">jp-market</span><span class="inline-flex shrink-0 items-center gap-1 rounded-full border border-tk-border px-1.5 py-0.5 text-[8.5px] font-semibold text-tk-ink-3"><span class="h-1 w-1 rounded-full bg-tk-ink-3"></span>Idle</span></div>
-                <p class="mt-1 font-mono text-[9px] text-tk-ink-3">iPhone 15 Pro · 🇯🇵 Tokyo · own connection</p>
-                <div class="mt-1.5 flex gap-1"><span class="rounded-full border border-tk-border px-1.5 py-px text-[8px] text-tk-ink-3">research</span></div>
-              </div>
-              <div class="rounded-lg border border-tk-border bg-tk-bg p-2.5">
-                <div class="flex items-center justify-between gap-1"><span class="truncate text-[11px] font-semibold text-tk-ink">de-pricing</span><span class="inline-flex shrink-0 items-center gap-1 rounded-full border border-tk-border px-1.5 py-0.5 text-[8.5px] font-semibold text-tk-busy"><span class="live-dot h-1 w-1 rounded-full bg-tk-busy"></span>Syncing</span></div>
-                <p class="mt-1 font-mono text-[9px] text-tk-ink-3">iPhone 17 · 🇩🇪 Frankfurt · own connection</p>
-                <div class="mt-1.5 flex gap-1"><span class="rounded-full border border-tk-border px-1.5 py-px text-[8px] text-tk-ink-3">daily</span></div>
-              </div>
-            </div>
-          </div>
-          <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-tk-ink-3">
-            <span><b class="text-tk-ready">4 iPhones</b> running</span>
+          <p class="mt-4 text-center font-mono text-[10px] text-tk-ink-3">
+            🇺🇸 New York · 🇳🇱 Amsterdam · 🇯🇵 Tokyo — each on its own connection
+          </p>
+          <div class="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 font-mono text-[10px] text-tk-ink-3">
+            <span><b class="text-tk-ready">4 iPhones</b> in your fleet</span>
             <span>each with <b class="text-tk-ink-2">its own identity</b></span>
             <span>all <b class="text-tk-ready">healthy</b></span>
           </div>
@@ -233,56 +285,81 @@ const apiCaps = apiLadder.map((t) => t.concurrent).join(' / ');
   >
       <div class="mt-10 relative">
         <div class="rounded-2xl border border-tk-border bg-tk-surface shadow-ambient-lg overflow-hidden">
-          <!-- window chrome -->
+          <!-- window chrome — matches the current GUI titlebar: brand +
+               · cloud, a Connected pill on the right. -->
           <div class="flex items-center gap-2 border-b border-tk-border bg-tk-hover/60 px-4 py-2.5">
             <span class="h-3 w-3 rounded-full bg-[#ff5f57]"></span>
             <span class="h-3 w-3 rounded-full bg-[#febc2e]"></span>
             <span class="h-3 w-3 rounded-full bg-[#28c840]"></span>
             <span class="ml-3 font-sans text-xs font-black italic tracking-tight text-tk-ink">DRIFT<span class="text-tk-accent-text">STACK</span></span>
-            <span class="ml-auto font-mono text-[10px] text-tk-ink-3">your-workspace · 4 running</span>
+            <span class="font-mono text-[10px] text-tk-ink-3">· cloud</span>
+            <span class="ml-auto inline-flex items-center gap-1 rounded-full border border-tk-border px-2 py-0.5 font-mono text-[9px] text-tk-ink-2"><span class="live-dot h-1.5 w-1.5 rounded-full bg-tk-ready"></span>Connected</span>
           </div>
-          <div class="grid md:grid-cols-[180px_1fr]">
-            <!-- sidebar -->
+          <div class="grid md:grid-cols-[188px_1fr]">
+            <!-- sidebar — the current grouped GUI navigation -->
             <div class="hidden border-r border-tk-border bg-tk-bg/60 p-3 md:block">
-              <div class="font-mono text-[9px] uppercase tracking-widest text-tk-ink-3"><span class="text-tk-accent-text">//</span> workspace</div>
-              <div class="mt-2 rounded bg-tk-accent/10 px-2 py-1 text-xs font-medium text-tk-ink">Profiles</div>
-              <div class="mt-1 px-2 py-1 text-xs text-tk-ink-2">Sessions</div>
-              <div class="mt-1 px-2 py-1 text-xs text-tk-ink-2">Recipes</div>
-              <div class="mt-1 px-2 py-1 text-xs text-tk-ink-2">Proxies</div>
-              <div class="mt-4 font-mono text-[9px] uppercase tracking-widest text-tk-ink-3"><span class="text-tk-accent-text">//</span> folders</div>
-              <div class="mt-2 flex items-center gap-1.5 px-2 py-0.5 text-xs text-tk-ink-2"><span class="h-1.5 w-1.5 rounded-full bg-tk-ready"></span> E-commerce</div>
-              <div class="flex items-center gap-1.5 px-2 py-0.5 text-xs text-tk-ink-2"><span class="h-1.5 w-1.5 rounded-full bg-tk-accent/60"></span> Social ops</div>
-              <div class="flex items-center gap-1.5 px-2 py-0.5 text-xs text-tk-ink-2"><span class="h-1.5 w-1.5 rounded-full bg-tk-busy"></span> QA suite</div>
+              <p class="text-[8px] font-semibold uppercase tracking-widest text-tk-ink-3">Home</p>
+              <div class="mt-1.5 px-2 py-1 text-xs text-tk-ink-2">Command center</div>
+              <p class="mt-3 text-[8px] font-semibold uppercase tracking-widest text-tk-ink-3">Browse</p>
+              <div class="mt-1.5 flex items-center justify-between rounded bg-tk-accent/10 px-2 py-1 text-xs font-medium text-tk-ink">Profiles <span class="font-mono text-[9px] text-tk-ink-3">4/10</span></div>
+              <div class="px-2 py-1 text-xs text-tk-ink-2">Proxies</div>
+              <div class="px-2 py-1 text-xs text-tk-ink-2">Marketplace</div>
+              <p class="mt-3 text-[8px] font-semibold uppercase tracking-widest text-tk-ink-3">Automate</p>
+              <div class="mt-1.5 px-2 py-1 text-xs text-tk-ink-2">AI Browser Automation</div>
+              <div class="px-2 py-1 text-xs text-tk-ink-2">Saved tasks</div>
+              <p class="mt-3 text-[8px] font-semibold uppercase tracking-widest text-tk-ink-3">History</p>
+              <div class="mt-1.5 px-2 py-1 text-xs text-tk-ink-2">Session log</div>
+              <div class="px-2 py-1 text-xs text-tk-ink-2">Recordings</div>
             </div>
-            <!-- profile grid -->
-            <div class="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
-              <div class="rounded-lg border border-tk-border bg-tk-bg/40 p-3">
-                <div class="flex items-center justify-between"><span class="text-xs font-semibold text-tk-ink">amsterdam-shopper</span><span class="inline-flex items-center gap-1 rounded-full border border-tk-border px-1.5 py-0.5 text-[9px] font-semibold text-tk-ready"><span class="live-dot h-1.5 w-1.5 rounded-full bg-tk-ready"></span>Running</span></div>
-                <div class="mt-1 font-mono text-[9px] text-tk-ink-3">iPhone 17 · 🇳🇱 Amsterdam · own connection</div>
-                <div class="mt-2 flex gap-1"><span class="rounded-sm bg-tk-accent/10 px-1 text-[8px] text-tk-accent-text">checkout</span><span class="rounded-sm bg-tk-hover px-1 text-[8px] text-tk-ink-3">priority</span></div>
+            <!-- profiles pane — phone-framed cards (the current GUI look) -->
+            <div class="p-4">
+              <div class="mb-3 flex items-center justify-between">
+                <span class="font-mono text-[11px] text-tk-ink-2"><b class="text-tk-ready">4 live</b> · 98% proxy health</span>
+                <span class="rounded-md bg-tk-accent px-2 py-0.5 text-[10px] font-semibold text-tk-accent-ink">+ New profile</span>
               </div>
-              <div class="rounded-lg border border-tk-border bg-tk-bg/40 p-3">
-                <div class="flex items-center justify-between"><span class="text-xs font-semibold text-tk-ink">us-retail-qa</span><span class="inline-flex items-center gap-1 rounded-full border border-tk-border px-1.5 py-0.5 text-[9px] font-semibold text-tk-ready"><span class="live-dot h-1.5 w-1.5 rounded-full bg-tk-ready"></span>Running</span></div>
-                <div class="mt-1 font-mono text-[9px] text-tk-ink-3">iPhone 17 · 🇺🇸 New York · own connection</div>
-                <div class="mt-2 flex gap-1"><span class="rounded-sm bg-tk-hover px-1 text-[8px] text-tk-ink-3">e2e</span></div>
-              </div>
-              <div class="hidden rounded-lg border border-tk-border bg-tk-bg/40 p-3 lg:block">
-                <div class="flex items-center justify-between"><span class="text-xs font-semibold text-tk-ink">jp-market</span><span class="inline-flex items-center gap-1 rounded-full border border-tk-border px-1.5 py-0.5 text-[9px] font-semibold text-tk-ink-3"><span class="h-1.5 w-1.5 rounded-full bg-tk-ink-3"></span>Idle</span></div>
-                <div class="mt-1 font-mono text-[9px] text-tk-ink-3">iPhone 15 Pro · 🇯🇵 Tokyo · own connection</div>
-                <div class="mt-2 flex gap-1"><span class="rounded-sm bg-tk-hover px-1 text-[8px] text-tk-ink-3">research</span></div>
-              </div>
-              <div class="rounded-lg border border-tk-border bg-tk-bg/40 p-3">
-                <div class="flex items-center justify-between"><span class="text-xs font-semibold text-tk-ink">de-pricing</span><span class="inline-flex items-center gap-1 rounded-full border border-tk-border px-1.5 py-0.5 text-[9px] font-semibold text-tk-busy"><span class="live-dot h-1.5 w-1.5 rounded-full bg-tk-busy"></span>Syncing</span></div>
-                <div class="mt-1 font-mono text-[9px] text-tk-ink-3">iPhone 17 · 🇩🇪 Frankfurt · own connection</div>
-                <div class="mt-2 flex gap-1"><span class="rounded-sm bg-tk-accent/10 px-1 text-[8px] text-tk-accent-text">daily</span></div>
-              </div>
-              <div class="rounded-lg border border-tk-border bg-tk-bg/40 p-3">
-                <div class="flex items-center justify-between"><span class="text-xs font-semibold text-tk-ink">uk-checkout</span><span class="inline-flex items-center gap-1 rounded-full border border-tk-border px-1.5 py-0.5 text-[9px] font-semibold text-tk-ready"><span class="live-dot h-1.5 w-1.5 rounded-full bg-tk-ready"></span>Running</span></div>
-                <div class="mt-1 font-mono text-[9px] text-tk-ink-3">iPhone 17 · 🇬🇧 London · own connection</div>
-                <div class="mt-2 flex gap-1"><span class="rounded-sm bg-tk-hover px-1 text-[8px] text-tk-ink-3">bot-check</span></div>
-              </div>
-              <div class="hidden items-center justify-center rounded-lg border border-dashed border-tk-border p-3 text-center sm:flex">
-                <span class="text-[10px] text-tk-ink-3">+ New profile<br/>or ⚡ Quick Session</span>
+              <div class="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+                {
+                  cockpitProfiles.map((p) => (
+                    <div
+                      class={`overflow-hidden rounded-[16px] p-[3px] ${p.center ? 'ring-1 ring-tk-accent shadow-glow-accent' : 'ring-1 ring-tk-border'}`}
+                      style="background: linear-gradient(160deg, #161b24, #0a0e14);"
+                    >
+                      <div class="flex items-center gap-1 rounded-t-[13px] bg-[#1d1e24] px-1.5 py-1">
+                        <span class="truncate font-sans text-[7px] font-semibold text-white/85">{p.name}</span>
+                        <span
+                          class={`ml-auto flex shrink-0 items-center gap-0.5 text-[6px] font-bold uppercase ${p.live ? 'text-tk-ready' : 'text-tk-ink-3'}`}
+                        >
+                          {p.live ? (
+                            <span class="live-dot h-1 w-1 rounded-full bg-tk-ready" />
+                          ) : (
+                            <span class="h-1 w-1 rounded-full border border-tk-ink-3" />
+                          )}
+                          {p.live ? 'Live' : 'Idle'}
+                        </span>
+                      </div>
+                      <div class="relative aspect-[9/13] overflow-hidden rounded-b-[13px] bg-black">
+                        <div class="absolute left-1/2 top-1 z-10 h-1.5 w-6 -translate-x-1/2 rounded-full bg-black ring-1 ring-white/10" />
+                        {p.live ? (
+                          <div class="absolute inset-0 flex flex-col bg-gradient-to-b from-white to-slate-100 pt-3.5">
+                            <div class="mx-1 h-4 rounded-sm bg-gradient-to-br from-slate-800 to-slate-600" />
+                            <div class="mx-1 mt-1 grid grid-cols-2 gap-0.5">
+                              <div class="h-3 rounded-sm bg-white ring-1 ring-slate-200" />
+                              <div class="h-3 rounded-sm bg-white ring-1 ring-slate-200" />
+                            </div>
+                          </div>
+                        ) : (
+                          <div class="absolute inset-0 bg-tk-bg" />
+                        )}
+                        <div class="absolute bottom-1 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/60 px-1 font-mono text-[6px] text-white/80">
+                          {p.flag} {p.cc}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                }
+                <div class="flex items-center justify-center rounded-[16px] border border-dashed border-tk-border text-center">
+                  <span class="text-[10px] text-tk-ink-3">+ New<br />profile</span>
+                </div>
               </div>
             </div>
           </div>
