@@ -115,6 +115,23 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
     expect(body).toMatch(/<link rel="apple-touch-icon" href="\/apple-touch-icon\.png" \/>/);
   });
 
+  it('self-hosted font preloads (Fleet v2 port 2026-07-03): GeistVF + JetBrainsMono-Regular woff2, as="font" + crossorigin, and both files ship in public/fonts/', () => {
+    expect(body).toMatch(
+      /<link rel="preload" href="\/fonts\/geist\/GeistVF\.woff2" as="font" type="font\/woff2" crossorigin \/>/,
+    );
+    expect(body).toMatch(/href="\/fonts\/jetbrains-mono\/JetBrainsMono-Regular\.woff2"/);
+    const publicDir = resolve(REPO_ROOT, 'apps/marketing-site/public');
+    expect(existsSync(resolve(publicDir, 'fonts/geist/GeistVF.woff2'))).toBe(true);
+    expect(existsSync(resolve(publicDir, 'fonts/geist/OFL.txt'))).toBe(true);
+    expect(existsSync(resolve(publicDir, 'fonts/jetbrains-mono/JetBrainsMono-Regular.woff2'))).toBe(
+      true,
+    );
+    expect(existsSync(resolve(publicDir, 'fonts/jetbrains-mono/JetBrainsMono-Bold.woff2'))).toBe(
+      true,
+    );
+    expect(existsSync(resolve(publicDir, 'fonts/jetbrains-mono/OFL.txt'))).toBe(true);
+  });
+
   it('renders <Header /> + <slot /> in <main class="flex-1"> + <Footer />, with the skip-link target on <main>', () => {
     expect(body).toMatch(/<Header \/>/);
     expect(body).toMatch(/<main\b[^>]*\bclass="flex-1">\s*<slot \/>\s*<\/main>/);

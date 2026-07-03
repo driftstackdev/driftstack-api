@@ -107,10 +107,18 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
     expect(body).toMatch(/<link rel="apple-touch-icon" href="\/apple-touch-icon\.png" \/>/);
   });
 
+  it('self-hosted font preloads pinned (Fleet v2 port 2026-07-03): GeistVF + JetBrainsMono-Regular woff2 preloaded as="font" with crossorigin so first paint does not flash the system stack longer than needed (font-display: swap in base.css)', () => {
+    expect(body).toMatch(
+      /<link rel="preload" href="\/fonts\/geist\/GeistVF\.woff2" as="font" type="font\/woff2" crossorigin \/>/,
+    );
+    expect(body).toMatch(/href="\/fonts\/jetbrains-mono\/JetBrainsMono-Regular\.woff2"/);
+  });
+
   it('doctype + viewport + canonical-link + Header/Footer-slot framing pinned: \'<!doctype html>\' + \'<html lang="en">\' + \'meta name="viewport" content="width=device-width, initial-scale=1"\' + \'link rel="canonical" href={canonical}\' + Header + main flex-1 + slot + Footer — pinned so the doctype + lang=en + viewport + canonical-link + Header/Footer-shell + main-slot commitment survives', () => {
     expect(body).toMatch(/<!doctype html>/);
-    // Fleet token axes (2026-06-12 rework): dark+oxblood defaults = today's
-    // look until the index Fleet port flips to light+violet (founder-locked).
+    // Fleet token axes: dark+oxblood is the shipped default ("Fleet Mission
+    // Control — Dark + Red", founder-locked 2026-06-15, superseding the
+    // 2026-06-12 spec's light+violet direction).
     expect(body).toMatch(/<html lang="en" data-mode="dark" data-accent="oxblood">/);
     expect(body).toMatch(/<meta name="viewport" content="width=device-width, initial-scale=1" \/>/);
     expect(body).toMatch(/<link rel="canonical" href=\{canonical\} \/>/);

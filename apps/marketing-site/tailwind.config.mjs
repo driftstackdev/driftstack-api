@@ -91,7 +91,7 @@ export default {
       },
       fontFamily: {
         sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        mono: ['Berkeley Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        mono: ['Berkeley Mono', 'JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       maxWidth: {
         prose: '65ch',

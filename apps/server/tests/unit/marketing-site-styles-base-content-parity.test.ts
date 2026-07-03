@@ -7,7 +7,11 @@
 //
 //   • 3 Tailwind directives: @tailwind base / components / utilities.
 //   • Dark mode by default: color-scheme: dark; surface-base bg.
-//   • Geist + Berkeley Mono font-family with system-stack fallback.
+//   • Self-hosted @font-face set (Fleet v2 port 2026-07-03): Geist VF +
+//     JetBrains Mono Regular/Bold from public/fonts/, font-display: swap.
+//   • Geist + Berkeley Mono font-family with system-stack fallback
+//     (JetBrains Mono ships as the vendored mono; Berkeley Mono stays
+//     first-family for licensed local installs, never vendored).
 //   • Radial-glow body background (oxblood top + soft bottom).
 //   • ::selection bg-tk-accent text-white.
 //   • btn-primary: bg-tk-accent + shadow-glow-accent + hover lift.
@@ -58,11 +62,24 @@ describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => 
     expect(body).toMatch(/background-attachment: fixed;/);
   });
 
-  it('code/pre/kbd Berkeley-Mono framing pinned (F-1 also adds overflow-wrap:anywhere + word-break:break-word + pre overflow-x:auto so long strings wrap or scroll internally on iPhone Safari)', () => {
+  it('code/pre/kbd mono framing pinned — Berkeley Mono first-family (licensed local installs), vendored JetBrains Mono second (what actually ships), system fallback after (F-1 also adds overflow-wrap:anywhere + word-break:break-word + pre overflow-x:auto so long strings wrap or scroll internally on iPhone Safari)', () => {
     expect(body).toMatch(
-      /code,\s*\n?\s*pre,\s*\n?\s*kbd \{\s*\n?\s*font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;\s*\n?\s*font-feature-settings: normal;[\s\S]*?overflow-wrap: anywhere;\s*\n?\s*word-break: break-word;\s*\n?\s*\}/,
+      /code,\s*\n?\s*pre,\s*\n?\s*kbd \{\s*\n?\s*font-family: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;\s*\n?\s*font-feature-settings: normal;[\s\S]*?overflow-wrap: anywhere;\s*\n?\s*word-break: break-word;\s*\n?\s*\}/,
     );
     expect(body).toMatch(/pre \{[\s\S]*?overflow-x: auto;\s*\n?\s*\}/);
+  });
+
+  it('self-hosted @font-face set pinned (Fleet v2 port 2026-07-03): Geist VF (100 900 variable) + JetBrains Mono Regular/Bold from public/fonts/, all font-display: swap; Berkeley Mono is NEVER vendored (commercial license)', () => {
+    expect(body).toMatch(/src: url\('\/fonts\/geist\/GeistVF\.woff2'\) format\('woff2'\);/);
+    expect(body).toMatch(/font-weight: 100 900;/);
+    expect(body).toMatch(
+      /src: url\('\/fonts\/jetbrains-mono\/JetBrainsMono-Regular\.woff2'\) format\('woff2'\);/,
+    );
+    expect(body).toMatch(
+      /src: url\('\/fonts\/jetbrains-mono\/JetBrainsMono-Bold\.woff2'\) format\('woff2'\);/,
+    );
+    expect(body).toMatch(/font-display: swap;/);
+    expect(body).toMatch(/NEVER vendored \(commercial license\)/);
   });
 
   it('::selection accent framing pinned (follows the data-accent axis)', () => {

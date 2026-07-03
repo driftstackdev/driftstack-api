@@ -6,6 +6,34 @@
    dashboard/src/styles/base.css. Keep synchronised — customer
    experience reads as one product. */
 
+/* Self-hosted font faces (Fleet v2 port, 2026-07-03): Geist VF + JetBrains
+   Mono Regular/Bold vendored at public/fonts/ (both OFL-licensed; license
+   files ship alongside). Berkeley Mono stays first in the mono stack for
+   licensed local installs but is NEVER vendored (commercial license) —
+   JetBrains Mono is what actually ships. font-display: swap so text renders
+   in the system fallback until the woff2 arrives. */
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/geist/GeistVF.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono/JetBrainsMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono/JetBrainsMono-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     /* Fleet rework: color-scheme follows the data-mode axis (set on <html>). */
@@ -50,7 +78,7 @@
   code,
   pre,
   kbd {
-    font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;
+    font-family: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
     font-feature-settings: normal;
     /* F-1 — long unbreakable strings (URLs, hashes, tokens) must
        wrap or scroll-internally instead of pushing the page wider

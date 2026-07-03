@@ -124,6 +124,17 @@ const structuredData = {
     {/* W464 — schema.org structured data (Organization + WebSite + SoftwareApplication). */}
     <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
     <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=4" />
+    {/* Self-hosted fonts (Fleet v2 port 2026-07-03) — preload the two
+        above-the-fold faces so first paint doesn't flash the system
+        stack longer than needed (font-display: swap in base.css). */}
+    <link rel="preload" href="/fonts/geist/GeistVF.woff2" as="font" type="font/woff2" crossorigin />
+    <link
+      rel="preload"
+      href="/fonts/jetbrains-mono/JetBrainsMono-Regular.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     {/* iOS home-screen icon — apple-touch-icon MUST be raster (PNG); an
         SVG favicon alone leaves driftstack.dev with a blank/generic icon
         when added to an iPhone home screen. Generated from the brand mark

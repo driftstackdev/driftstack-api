@@ -69,10 +69,10 @@ describe('W525.B apps/marketing-site/tailwind.config.mjs content parity', () => 
     expect(body).toMatch(/950: '#020617',/);
   });
 
-  it('fontFamily + maxWidth framing pinned: \'sans: ["Geist", "ui-sans-serif", "system-ui", "sans-serif"]\' + \'mono: ["Berkeley Mono", "ui-monospace", "SFMono-Regular", "monospace"]\' + \'maxWidth: { prose: "65ch" }\' — pinned so the Geist+system-fallback sans-stack + Berkeley-Mono+ui-monospace-fallback mono-stack + 65ch-prose-max-width commitment survives', () => {
+  it('fontFamily + maxWidth framing pinned: \'sans: ["Geist", "ui-sans-serif", "system-ui", "sans-serif"]\' + \'mono: ["Berkeley Mono", "JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"]\' (Fleet v2 2026-07-03: vendored JetBrains Mono ships; Berkeley Mono stays first-family for licensed local installs, never vendored) + \'maxWidth: { prose: "65ch" }\' — pinned so the Geist+system-fallback sans-stack + the shipped-mono-stack + 65ch-prose-max-width commitment survives', () => {
     expect(body).toMatch(/sans: \['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'\],/);
     expect(body).toMatch(
-      /mono: \['Berkeley Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'\],/,
+      /mono: \['Berkeley Mono', 'JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'\],/,
     );
     expect(body).toMatch(/maxWidth: \{\s*\n?\s*prose: '65ch',\s*\n?\s*\},/);
   });
