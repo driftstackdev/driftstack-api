@@ -1,7 +1,11 @@
-// W500.C (R5-refreshed) — drift guard for apps/marketing-site/src/pages/index.astro.
-// R5 reworked the homepage copy for non-technical readers, added a
-// 3-card use-case section, and a final-CTA bottom section. This guard
-// pins the load-bearing claims on the rewritten page.
+// W500.C (Homepage v2 2026-07-03 "Plain Words, Same Teeth") — drift guard
+// for apps/marketing-site/src/pages/index.astro. The homepage was rebuilt
+// from ~22 sections to 13, adopting the shared Fleet v2 component kit
+// (Section/Card/Stat/FeatureRow/CodeWindow/CtaBand) and binding all tier
+// figures to src/data/pricing.ts (W292.B — no hand-typed dollars). Three
+// altitude bands: A (plain language, hero→use cases), B (big plain line +
+// small mono technical line), C (// for developers). This guard pins the
+// load-bearing claims that survived the rebuild.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -66,20 +70,20 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).not.toMatch(/Reference device: iPhone 16 Pro, iOS 18\.7, Safari 26\.4\./);
   });
 
-  it('R12 Stack framing: "Apple\'s engine. Not a Chromium copy." headline replaces the prior "Real WebKit. Real Core Text. Real iOS rendering." copy. Still preserves the Not-Chromium / Not-Playwright contrast + names WebKit / Core Text / iOS rendering pipeline downstream', () => {
+  it('Stack framing inside the v2 proof section: "Apple\'s engine. Not a Chromium copy." + the "WebKit, Core Text, and the iOS rendering pipeline" capability sentence. The Chromium-fork/Playwright-patch competitor contrast now lives on /comparison (linked from this section).', () => {
     expect(body).toMatch(/Apple's engine\. Not a Chromium copy\./);
-    expect(body).toMatch(/Chromium fork with a\s*\n?\s*fake user-agent/);
-    expect(body).toMatch(/Playwright with a patch plugin layered on/);
     expect(body).toMatch(
-      /WebKit, Core Text, and\s*\n?\s*the iOS rendering pipeline produce your fingerprint the way\s*\n?\s*Apple wrote them, in the order Apple intended\./,
+      /WebKit, Core Text, and the\s*\n?\s*iOS rendering pipeline produce your fingerprint the way Apple\s*\n?\s*wrote them, in the order Apple intended\./,
     );
+    expect(body).toMatch(/href="\/comparison"/);
   });
 
   it("Hero CTAs + free-tier subline (R5: 'Start free' → /pricing#free + M.3 Plan Item 2 'Compare the alternatives' generic CTA — replaces 'Why not Browserless?' which gave free SEO to a competitor and read defensive). The 2026-05-19 polish stripped the mobile-responsive w-full sm:w-auto wrappers since the hero already uses flex-wrap; the buttons relax to their natural width on small screens via the parent container.", () => {
     expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Start free<\/a>/);
-    expect(body).toMatch(
-      /<a href="\/comparison" class="btn-secondary">Compare the alternatives<\/a>/,
-    );
+    // v2 2026-07-03: the hero secondary CTA anchors to the in-page
+    // how-it-works section (the /comparison deep link moved into the proof
+    // section as the tool-by-tool "comparison page" link).
+    expect(body).toMatch(/<a href="#how-it-works" class="btn-secondary">See how it works<\/a>/);
     expect(body).toMatch(/One profile · 20-minute sessions · no card required\./);
     // The defensive "Why not Browserless?" CTA must NOT return.
     expect(body).not.toMatch(/Why not Browserless\?/);
@@ -101,23 +105,19 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).not.toMatch(/session\.navigate\(\{ url:/);
   });
 
-  it('R12 Concurrent metering framing pinned: "One metric. Concurrent sessions. That\'s it." headline + per-line anti-pattern callouts (No per-call markup. No per-element fees. No hourly metering...) + 200-pages-on-one-session concrete example — replaces the prior "Pay per concurrent session, not per call." copy', () => {
+  it('Concurrent metering framing pinned (v2 trust band): "One metric. Concurrent sessions. That\'s it." headline + no-per-call-markup / no-per-element-fees callouts + 200-pages-on-one-session concrete example', () => {
     expect(body).toMatch(/One metric\. Concurrent sessions\. That's it\./);
-    expect(body).toMatch(/No\s*\n?\s*per-call markup\. No per-element fees\./);
-    expect(body).toMatch(
-      /No hourly metering that\s*\n?\s*turns idle sessions into surprise overage charges\./,
-    );
-    expect(body).toMatch(/Visit\s*\n?\s*200 pages on one session for the cost of visiting one\./);
+    expect(body).toMatch(/No per-call markup\. No\s*\n?\s*per-element fees\./);
+    expect(body).toMatch(/Visit 200 pages on one session for the cost of\s*\n?\s*visiting one\./);
   });
 
-  it('M.3 (Plan Item 8) EU compliance simplification: "EU-only by default." headline (replaces "Customer data stays in the EU." for inviting/scan-friendly tone) + plain-English body ("Your data stays in the EU. We don\'t log what your sessions visit or do — only the operational metadata we need to bill") + customer-configurable egress card still cross-links to /trust/security-overview per W247.A drift-sweep gate (egress disclaimer status quo respected; W247.A gate auto-flips when EG-API-1.6 customer-egress propagation slice lands at the API layer).', () => {
+  it('EU compliance pinned (v2 trust band): "EU-only by default." + plain-English body ("Your data stays in the EU. We don\'t log what your sessions visit or do — only the operational metadata we need to bill (session duration, archetype, cap usage)") + the live/roadmap egress framing cross-links /trust/security-overview.', () => {
     expect(body).toMatch(/EU-only by default\./);
     expect(body).toMatch(/Your data stays in the EU\./);
     expect(body).toMatch(/only the operational metadata we need to bill/);
-    expect(body).toMatch(/session duration, archetype, cap usage/);
-    expect(body).toMatch(
-      /Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\)\s*\n?\s*— see/,
-    );
+    expect(body).toMatch(/session duration,\s*\n?\s*archetype, cap usage/);
+    expect(body).toMatch(/Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\) is live/);
+    expect(body).toMatch(/href="\/trust\/security-overview"/);
     // Prior framings must NOT return at this slot.
     expect(body).not.toMatch(/Customer data stays in the EU\./);
     expect(body).not.toMatch(
@@ -127,18 +127,23 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).not.toMatch(/Hetzner\s*\n?\s*Falkenstein, Neon EU, and Cloudflare R2/);
   });
 
-  it('Manual ladder framing: $79/$249/$699 + 1/3/8 concurrent + unlimited hours within cap', () => {
-    expect(body).toMatch(/Personal \$79\/mo · Team \$249\/mo · Agency \$699\/mo/);
-    expect(body).toMatch(/1 \/ 3 \/ 8 concurrent sessions per tier/);
+  it('Manual ladder framing BOUND from pricing.ts (W292.B — no hand-typed dollars): {manualLineup} + {manualCaps} concurrent + unlimited hours within cap. The $79/$249/$699 values are guarded by pricing-manual-tier-figures-baseline.', () => {
+    expect(body).toMatch(/import \{ API_TIERS \} from '\.\.\/data\/pricing'/);
+    expect(body).toMatch(/const manualLineup = manualLadder/);
+    expect(body).toMatch(/\{manualLineup\}/);
+    expect(body).toMatch(/\{manualCaps\} concurrent sessions per tier/);
     expect(body).toMatch(/Unlimited hours within your concurrent cap/);
+    expect(body).not.toMatch(/Personal \$79\/mo · Team \$249\/mo · Agency \$699\/mo/);
   });
 
-  it('API ladder framing: $149/$499/$1,499 + 2/8/24 concurrent + bundled-or-BYOK AI on Builder+', () => {
-    expect(body).toMatch(/API Starter \$149\/mo · Builder \$499\/mo · Scale \$1,499\/mo/);
-    expect(body).toMatch(/2 \/ 8 \/ 24 concurrent sessions per tier; Enterprise custom/);
+  it('API ladder framing BOUND from pricing.ts (W292.B): {apiLineup} + {apiCaps} concurrent; Enterprise custom + bundled-or-BYOK AI on Builder+. The $149/$499/$1,499 values are guarded by pricing-api-tier-figures-baseline.', () => {
+    expect(body).toMatch(/const apiLineup = apiLadder/);
+    expect(body).toMatch(/\{apiLineup\}/);
+    expect(body).toMatch(/\{apiCaps\} concurrent sessions per tier; Enterprise custom/);
     expect(body).toMatch(
       /Optional bundled AI assistant — or bring your own Anthropic API key\s+\(Builder\+\)/,
     );
+    expect(body).not.toMatch(/API Starter \$149\/mo · Builder \$499\/mo · Scale \$1,499\/mo/);
   });
 
   it("Pricing teaser: 'Two ladders. A free tier to start.' + 20% annual savings", () => {
@@ -146,68 +151,64 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/Annual contracts save 20%\./);
   });
 
-  it('Self-hosted teaser 3-driver list (R5 plain language: privacy-sensitive / high-concurrency / sovereignty)', () => {
-    expect(body).toMatch(
-      /Privacy-sensitive workloads where session contents must\s*\n?\s*not leave your network/,
-    );
-    expect(body).toMatch(
-      /High-concurrency use where owned hardware costs less than\s*\n?\s*an equivalent cloud subscription/,
-    );
-    expect(body).toMatch(
-      /Full data sovereignty over recordings, screenshots, and\s*\n?\s*everything sessions produce/,
-    );
+  it('Self-hosted teaser pinned (v2 compact band): "Run Driftstack on your own infrastructure." + /self-hosted link', () => {
+    expect(body).toMatch(/Run Driftstack on your own infrastructure\./);
+    expect(body).toMatch(/href="\/self-hosted"/);
   });
 
-  it('R12 use-case section pinned: "Anywhere mobile Safari fidelity decides the outcome." headline + 3-card Mobile-Safari coverage / Mobile-first scraping / Multi-account operations — replaces the prior "Anywhere a real iPhone Safari fingerprint matters." headline', () => {
-    expect(body).toMatch(/Anywhere mobile Safari fidelity decides the outcome\./);
-    expect(body).toMatch(/Mobile-Safari coverage/);
-    expect(body).toMatch(/Mobile-first scraping/);
-    expect(body).toMatch(/Multi-account operations/);
+  it('use-case section pinned (v2 Band-A personas, operators first): "Built for the work you actually do." headline + 3 persona cards (Run many accounts, safely apart / Test on the real thing / See what iPhone users see)', () => {
+    expect(body).toMatch(/Built for the work you actually do\./);
+    expect(body).toMatch(/Run many accounts, safely apart/);
+    expect(body).toMatch(/Test on the real thing/);
+    expect(body).toMatch(/See what iPhone users see/);
   });
 
-  it('R12 final-CTA pinned: "See it for yourself. Free." headline + Read the docs secondary CTA', () => {
+  it('final-CTA pinned (v2 CtaBand component): "See it for yourself. Free." + "Read the docs" secondary CTA → docs.driftstack.dev', () => {
     expect(body).toMatch(/See it for yourself\. Free\./);
-    expect(body).toMatch(/Read the docs/);
-    expect(body).toMatch(/<a href="https:\/\/docs\.driftstack\.dev" class="btn-secondary">/);
+    expect(body).toMatch(/secondaryLabel="Read the docs"/);
+    expect(body).toMatch(/secondaryHref="https:\/\/docs\.driftstack\.dev"/);
   });
 
-  it("Fleet merge (founder 2026-06-12 'best of both'): 'Command a fleet of real iPhones.' fleet-wall hero pinned — identity/history/geo triad + 'just people on phones' close + live-status framing + GENERIC telemetry wording (fingerprint coherence verified / detection flags 0 — founder: no tool names, keep it professional)", () => {
+  it("Fleet-wall hero pinned: 'Command a fleet of real iPhones.' + identity/history/geo triad + 'just people on phones' close + Band-A de-jargoned telemetry footer (v2 2026-07-03: '4 iPhones running / each with its own identity / all healthy' — the fingerprint-coherence/detection-flags mono line was too technical above the fold)", () => {
     expect(body).toMatch(/Command a fleet of real iPhones\./);
     expect(body).toMatch(/its own identity,\s*\n?\s*its own history, its own corner of the world/);
     expect(body).toMatch(/they're just people on\s*\n?\s*phones\./);
-    expect(body).toMatch(/fingerprint coherence <b class="text-tk-ready">verified<\/b>/);
-    expect(body).toMatch(/detection flags <b class="text-tk-ready">0<\/b>/);
+    expect(body).toMatch(/<b class="text-tk-ready">4 iPhones<\/b> running/);
+    expect(body).toMatch(/all <b class="text-tk-ready">healthy<\/b>/);
+    // the pre-v2 technical telemetry line must not return above the fold
+    expect(body).not.toMatch(/fingerprint coherence <b/);
     expect(body).not.toMatch(/CreepJS/);
   });
 
-  it("Fleet merge: homepage 'Not another anti-detect browser.' comparison table pinned — 4 capability rows (fingerprint / where-it-runs / detection surface / automation) + the /comparison cross-link for full detail", () => {
-    expect(body).toMatch(/Not another anti-detect browser\./);
-    expect(body).toMatch(/Anti-detects patch a desktop browser to lie about itself\./);
-    expect(body).toMatch(/real WebKit, real iOS/);
-    expect(body).toMatch(/no runtime JS patching at all/);
-    expect(body).toMatch(
-      /<a href="\/comparison" class="text-tk-accent underline">comparison page<\/a>/,
-    );
+  it("Proof section costume metaphor + detection matrix (v2 merge of the former comparison teaser + why-works + how-its-built): 'One iPhone among millions.' + the costume-metaphor lead + the 7-signal 'What detection systems see' matrix + /comparison cross-link. The standalone 'Not another anti-detect browser.' teaser table was folded in here.", () => {
+    expect(body).toMatch(/One iPhone among millions\./);
+    expect(body).toMatch(/Most tools dress up a desktop browser to look like a phone/);
+    expect(body).toMatch(/What detection systems see/);
+    expect(body).toMatch(/Same signals as a physical iPhone\. Not "close enough"\./);
+    expect(body).toMatch(/href="\/comparison"/);
+    // the retired standalone teaser table headline must not return
+    expect(body).not.toMatch(/Not another anti-detect browser\./);
   });
 
-  it("Human-by-design behavioural section pinned (2026-06-12, founder: feature the automation framework): 'Every tap drawn from human motion.' + the bots-move-in-straight-lines lead + touch/scroll + typing-cadence + per-profile-persona cards — all claims backed by packages/behavioural-simulation (touch/scroll/keyboard/dwell/profiles, prod-wired)", () => {
-    expect(body).toMatch(/Every tap drawn from human motion\./);
+  it("Human-by-design behavioural section pinned (v2 headline 'It even moves like a person.'): the bots-move-in-straight-lines lead + touch/scroll + typing-cadence + per-profile-persona cards — all backed by packages/behavioural-simulation (prod-wired)", () => {
+    expect(body).toMatch(/It even moves like a person\./);
     expect(body).toMatch(/Bots move in straight lines and constant time\./);
     expect(body).toMatch(/Curved touch paths, momentum flicks, variable dwell/);
     expect(body).toMatch(/Per-character rhythm with natural pauses/);
     expect(body).toMatch(/consistent motion signature across\s*\n?\s*sessions/);
   });
 
-  it("Console section pinned (founder 2026-06-12: 'mainly the reason I chose this template'): 'Run identities like infrastructure.' + the 5 rows — Identity Wardrobe (Rolling out chip) / Session Replay + Warm-up Scheduler (ROADMAP chips: the honesty device — unbuilt features MUST carry the badge) / egress / Sealed by architecture", () => {
-    expect(body).toMatch(/Run identities like infrastructure\./);
+  it("Console section pinned (v2 headline 'Your fleet, kept in order.'): the FeatureRow rows — The Identity Wardrobe (rolling-out chip) / Session Replay + Warm-up Scheduler (roadmap chips: the honesty device — unbuilt features MUST carry the badge, rendered via the HonestyChip component) / 'Exit anywhere. Leak nowhere.' egress row", () => {
+    expect(body).toMatch(/Your fleet, kept in order\./);
     expect(body).toMatch(/The Identity Wardrobe/);
     // the honesty chips are load-bearing: Replay + Warm-up are unbuilt and
-    // MUST be visibly badged Roadmap until they exist.
-    expect(body).toMatch(/Session Replay\s*\n?\s*<span[^>]*>Roadmap<\/span>/);
-    expect(body).toMatch(/Warm-up Scheduler\s*\n?\s*<span[^>]*>Roadmap<\/span>/);
+    // MUST carry the roadmap chip (FeatureRow chip="roadmap" → HonestyChip).
+    expect(body).toMatch(/title="Session Replay" chip="roadmap"/);
+    expect(body).toMatch(/title="Warm-up Scheduler" chip="roadmap"/);
     expect(body).toMatch(/Exit anywhere\. Leak nowhere\./);
-    expect(body).toMatch(/Sealed by architecture\./);
-    expect(body).toMatch(/Nobody at\s*\n?\s*Driftstack can watch your sessions\./);
+    // the trust-center console row folded into the trust band (§10);
+    // "Sealed by architecture" is no longer a console row.
+    expect(body).not.toMatch(/Run identities like infrastructure\./);
   });
 
   it('file exists at canonical path', () => {

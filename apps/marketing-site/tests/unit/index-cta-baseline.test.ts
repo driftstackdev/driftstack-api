@@ -35,7 +35,7 @@ describe('W327.B / index CTA baseline', () => {
     expect(body).toMatch(/See API pricing/i);
   });
 
-  it('final CTA points at /pricing', () => {
-    expect(body).toMatch(/<a\s+href="\/pricing"\s+class="btn-primary"/);
+  it('pricing-section CTA points at /pricing (v2: btn-primary with a shrink-0 utility)', () => {
+    expect(body).toMatch(/<a href="\/pricing" class="btn-primary[^"]*">See pricing<\/a>/);
   });
 });

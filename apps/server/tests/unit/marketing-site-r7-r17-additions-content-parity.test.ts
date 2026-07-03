@@ -47,43 +47,33 @@ function read(p: string): string {
 }
 
 describe('W627 R7-R17 marketing additions content parity', () => {
-  describe('F-2/F-5 "What sets us apart" product-differentiator 4-up strip (homepage)', () => {
+  describe('"What is Driftstack?" Band-B differentiator tiles (homepage)', () => {
     const body = read(INDEX);
 
-    // 2026-05-16 F-2 (Issue 5) + F-5 (Issue 6) + F-7 (Issue 7): the
-    // homepage strip was repurposed. Was: 4 compliance signals
-    // (EU-resident / Stripe-billed / GDPR DPA / Source escrow) under
-    // a "Pre-launch trust signals" eyebrow. Now: 4 product
-    // differentiators (Bit-identical / Three proxies / Three access
-    // paths / EU-hosted) under "What sets us apart". Vendor names
-    // (Hetzner FSN / Neon EU / R2 EU) moved to /trust/sub-processors
-    // per Issue 6. "Pre-launch" framing dropped per Issue 5.
-    it('"What sets us apart" eyebrow + 4 fingerprint-leading differentiator labels pinned (M.3 Plan Item 5 dedupe: Population-matched / Zero detection surface / Apple\'s WebKit not Chromium / API · SDK · GUI). "Indistinguishable" moved off this card so it only appears once on the page (hero h1 brand line) — the canvas+WebGL-hash technical descriptor pairs more naturally with "Population-matched" anyway.', () => {
-      expect(body).toMatch(/What sets us apart/);
+    // v2 2026-07-03 ("Plain Words, Same Teeth"): the former "What sets us
+    // apart" 4-up differentiator strip merged into the "What is Driftstack?"
+    // band as <Stat> tiles — a big plain-language claim (plain) + the exact
+    // technical descriptor demoted to a small mono line (technical). The
+    // sub-claim TEXT survives verbatim in the technical props; the
+    // "No runtime JS patching…" descriptor moved to the proof section's
+    // Engine-deep card.
+    it('4 Band-B Stat tiles under "What is Driftstack?" (plain claim + technical descriptor), operators-first plain labels', () => {
+      expect(body).toMatch(/What is Driftstack\?/);
       expect(body).not.toMatch(/Pre-launch trust signals/);
-      expect(body).toMatch(
-        /<span class="text-base font-semibold text-tk-ink">Population-matched<\/span>/,
-      );
-      // The pre-dedupe label must NOT return at this slot.
-      expect(body).not.toMatch(
-        /<span class="text-base font-semibold text-tk-ink">Indistinguishable<\/span>/,
-      );
-      expect(body).toMatch(
-        /<span class="text-base font-semibold text-tk-ink">Zero detection surface<\/span>/,
-      );
-      expect(body).toMatch(
-        /<span class="text-base font-semibold text-tk-ink">Apple's WebKit, not Chromium<\/span>/,
-      );
-      expect(body).toMatch(
-        /<span class="text-base font-semibold text-tk-ink">API · SDK · GUI<\/span>/,
-      );
+      expect(body).not.toMatch(/What sets us apart/);
+      expect(body).toMatch(/plain="A real iPhone, not a lookalike"/);
+      expect(body).toMatch(/plain="Looks human to every website"/);
+      expect(body).toMatch(/plain="Drive it three ways"/);
+      expect(body).toMatch(/plain="Any country you need"/);
     });
 
-    it('Each differentiator-card sub-claim pinned (canvas+WebGL real-iPhone-population hash + no-runtime-JS-patching + Apple WebKit source + same engine 3 access paths)', () => {
+    it('differentiator sub-claims preserved verbatim in the Stat technical props (canvas+WebGL real-iPhone-population hash + Apple WebKit source + same-engine 3 access paths); the no-runtime-JS-patching descriptor moved to the proof section Engine-deep card', () => {
       expect(body).toMatch(
         /Canvas \+ WebGL hashes match the real-iPhone population — not unique-per-session like every other API/,
       );
-      expect(body).toMatch(/No runtime JS patching, no stealth bundle for fingerprinters to spot/);
+      expect(body).toMatch(
+        /No runtime JS patching, no stealth bundle for\s*\n?\s*fingerprinters to spot/,
+      );
       expect(body).toMatch(
         /Built from Apple's WebKit source — same engine your iOS users actually run/,
       );
@@ -92,7 +82,7 @@ describe('W627 R7-R17 marketing additions content parity', () => {
       );
     });
 
-    it('Vendor names removed from homepage splash strip per Issue 6 (moved to /trust/sub-processors)', () => {
+    it('Vendor names stay off the homepage splash (moved to /trust/sub-processors)', () => {
       expect(body).not.toMatch(/Hetzner FSN · Neon EU · R2 EU/);
       expect(body).not.toMatch(/SCA \/ 3DS · 14-day window/);
       expect(body).not.toMatch(/Article 28\(2\) change-log/);
@@ -102,12 +92,12 @@ describe('W627 R7-R17 marketing additions content parity', () => {
   describe('R7 → R9 "Built by engineers" design-partner band (homepage)', () => {
     const body = read(INDEX);
 
-    it('R9 capability-led headline pinned ("Built by engineers, not a growth team." replaces the prior "operators / 20-person growth team" framing) + "people who write the WebKit patches" body copy', () => {
+    it('R9 capability-led headline pinned ("Built by engineers, not a growth team.") + "people who write the WebKit patches" body copy', () => {
       expect(body).toMatch(/Built by engineers, not a growth team\./);
       expect(body).toMatch(
         /Driftstack is built by the people who write the WebKit\s*\n?\s*patches/,
       );
-      expect(body).toMatch(/no SDR machine, no upsell ladder, no roadmap chosen/);
+      expect(body).toMatch(/no\s*\n?\s*SDR machine, no upsell ladder, no roadmap chosen/);
     });
 
     it('3-card posture grid pinned (Design partner direct-engineer-access + Honest pricing one-concurrent-metric + Sovereignty your-data-stays-in-EU) — each card has its eyebrow label + headline + sub-processors cross-link in the Sovereignty card', () => {

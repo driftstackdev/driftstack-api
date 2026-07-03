@@ -61,9 +61,10 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).toMatch(/One profile · 20-minute sessions · no card required\./);
   });
 
-  it('Comparison CTA pinned (M.3 Plan Item 2 — "Compare the alternatives" generic framing replaced "Why not Browserless?" which read too defensive and gave free SEO to a specific competitor)', () => {
+  it('Comparison cross-link pinned (v2 2026-07-03: the hero secondary CTA is now "See how it works" → the in-page how-it-works section; the /comparison deep link moved into the proof section as the tool-by-tool "comparison page" link)', () => {
     expect(body).toMatch(/href="\/comparison"/);
-    expect(body).toMatch(/Compare the alternatives/);
+    expect(body).toMatch(/comparison page/);
+    expect(body).toMatch(/See how it works/);
     // The prior "Why not Browserless?" CTA must NOT return.
     expect(body).not.toMatch(/Why not Browserless\?/);
   });
@@ -99,17 +100,17 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).toMatch(/ds\.sessions\.destroy/);
   });
 
-  it('R12 metering framing pinned: "One metric. Concurrent sessions. That\'s it." + no-per-call-markup + no-per-element-fees + 200-pages-on-one-session example — replaces the prior "Pay per concurrent session, not per call." copy', () => {
+  it('metering framing pinned (v2 trust band): "One metric. Concurrent sessions. That\'s it." + no-per-call-markup + no-per-element-fees + 200-pages-on-one-session example', () => {
     expect(body).toMatch(/One metric\. Concurrent sessions\. That's it\./);
-    expect(body).toMatch(/No\s*\n?\s*per-call markup\. No per-element fees\./);
-    expect(body).toMatch(/Visit\s+200 pages on one session for the cost of visiting one\./);
+    expect(body).toMatch(/No per-call markup\. No\s*\n?\s*per-element fees\./);
+    expect(body).toMatch(/Visit 200 pages on one session for the cost of\s*\n?\s*visiting one\./);
   });
 
   it('M.3 (Plan Item 8) EU compliance simplification: "EU-only by default." headline (replaces "Customer data stays in the EU." for inviting/scan-friendly tone) + plain-English body ("Your data stays in the EU. We don\'t log what your sessions visit or do — only the operational metadata we need to bill") + sub-processors cross-link. Infra-tier detail (Database / object storage / compute / single-region) was moved off the homepage to /trust/security-overview and /trust/sub-processors where infra-tier readers go.', () => {
     expect(body).toMatch(/EU-only by default\./);
     expect(body).toMatch(/Your data stays in the EU\./);
     expect(body).toMatch(/only the operational metadata we need to bill/);
-    expect(body).toMatch(/session duration, archetype, cap usage/);
+    expect(body).toMatch(/session duration,\s*\n?\s*archetype, cap usage/);
     expect(body).toMatch(/href="\/trust\/sub-processors"/);
     // Prior framings must NOT return at this slot.
     expect(body).not.toMatch(/Customer data stays in the EU\./);
@@ -119,50 +120,46 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).not.toMatch(/Hetzner\s+Falkenstein, Neon EU, and Cloudflare R2/);
   });
 
-  it('egress code-preview reflects the accurate MIXED state, consistent with /trust/security-overview (egress marked live): per-profile SOCKS5 / OpenVPN / WireGuard egress IS shipped (attached per profile, dialed at session launch); only the per-session "change a running session\'s proxy mid-flight" path is roadmap. The page must NOT flatly claim egress is "(not shipped)" — that stale outlier contradicted the live Egress feature section + the "Exit anywhere. Leak nowhere." console row + the security-overview green-check. Priority order SOCKS5 / OpenVPN / WireGuard per founder verdict 2026-05-16.', () => {
-    expect(body).toMatch(/Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\)\s+— see/);
-    // Live per-profile egress framing in the code-preview.
-    expect(body).toMatch(/SOCKS5 \/ OpenVPN \/ WireGuard, attached per profile/);
-    expect(body).toMatch(/dialed at session launch · DNS leaks blocked/);
+  it('egress state reflected accurately in the v2 trust band (per-profile SOCKS5 / OpenVPN / WireGuard egress IS live; only the per-session "change a running session\'s proxy mid-flight" path is roadmap) + the /trust/security-overview cross-link. The page must NOT flatly claim egress itself is "(not shipped)".', () => {
+    expect(body).toMatch(/Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\) is live/);
     // Only the mid-flight per-session proxy swap is honestly roadmap.
-    expect(body).toMatch(/change a running session's proxy mid-flight \(not shipped\)/);
+    expect(body).toMatch(/changing a running session's proxy mid-flight is on the roadmap/);
+    expect(body).toMatch(/href="\/trust\/security-overview"/);
     // The stale "egress itself is not shipped" outlier must NOT return —
     // it self-contradicted every other egress surface on the site.
     expect(body).not.toMatch(/SOCKS5 \/ OpenVPN \/ WireGuard \(not shipped\)/);
     expect(body).not.toMatch(/SOCKS5 \/ WireGuard \/ OpenVPN \(not shipped\)/);
-    expect(body).not.toMatch(
-      /Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\)\s+is on the roadmap/,
-    );
   });
 
-  it('two-ladder pricing teaser pinned: Manual $79/$249/$699 + API $149/$499/$1,499', () => {
-    expect(body).toMatch(/Personal \$79\/mo · Team \$249\/mo · Agency \$699\/mo/);
-    expect(body).toMatch(/API Starter \$149\/mo · Builder \$499\/mo · Scale \$1,499\/mo/);
-    expect(body).toMatch(/1 \/ 3 \/ 8 concurrent sessions per tier/);
-    expect(body).toMatch(/2 \/ 8 \/ 24 concurrent sessions per tier; Enterprise custom/);
+  it('two-ladder pricing teaser is BOUND from src/data/pricing.ts (W292.B — no hand-typed dollars in the markup; figures derive from API_TIERS and the exact $79/$249/$699 + $149/$499/$1,499 values are guarded by the pricing-*-tier-figures baselines)', () => {
+    expect(body).toMatch(/import \{ API_TIERS \} from '\.\.\/data\/pricing'/);
+    expect(body).toMatch(/const manualLineup = manualLadder/);
+    expect(body).toMatch(/const apiLineup = apiLadder/);
+    // the ladders + caps render via interpolation, not literals
+    expect(body).toMatch(/\{manualLineup\}/);
+    expect(body).toMatch(/\{apiLineup\}/);
+    expect(body).toMatch(/\{manualCaps\} concurrent sessions per tier/);
+    expect(body).toMatch(/\{apiCaps\} concurrent sessions per tier; Enterprise custom/);
+    // no hand-typed tier dollar figure survives in the markup
+    expect(body).not.toMatch(/Personal \$79\/mo · Team \$249\/mo · Agency \$699\/mo/);
   });
 
   it('annual 20%-off claim pinned (aligned with /faq + /pricing)', () => {
     expect(body).toMatch(/Annual contracts save 20%/);
   });
 
-  it('self-hosted teaser pinned: 3 use cases (privacy / volume / sovereignty) + /self-hosted link', () => {
+  it('self-hosted teaser pinned (v2 compact band): "Run Driftstack on your own infrastructure." + /self-hosted link + the page exists', () => {
     expect(body).toMatch(/Run Driftstack on your own infrastructure\./);
-    expect(body).toMatch(/Privacy-sensitive workloads/);
-    expect(body).toMatch(/High-concurrency use/);
-    expect(body).toMatch(/Full data sovereignty/);
     expect(body).toMatch(/href="\/self-hosted"/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/self-hosted.astro'))).toBe(
       true,
     );
   });
 
-  it('R12 stack-statement pinned: "Apple\'s engine. Not a Chromium copy." headline + "Chromium fork with a fake user-agent" + "Playwright with a patch plugin layered on top" contrast + "WebKit, Core Text, and the iOS rendering pipeline" capability list — replaces the prior "Real WebKit. Real Core Text. Real iOS rendering." three-Reals headline', () => {
+  it('stack-statement pinned inside the v2 proof section: "Apple\'s engine. Not a Chromium copy." + the "WebKit, Core Text, and the iOS rendering pipeline" capability sentence (the Chromium-fork/Playwright-patch competitor contrast now lives on /comparison)', () => {
     expect(body).toMatch(/Apple's engine\. Not a Chromium copy\./);
-    expect(body).toMatch(/Chromium fork with a\s+fake user-agent/);
-    expect(body).toMatch(/Playwright with a patch plugin layered on/);
     expect(body).toMatch(
-      /WebKit, Core Text, and\s+the iOS rendering pipeline produce your fingerprint the way\s+Apple wrote them, in the order Apple intended\./,
+      /WebKit, Core Text, and the\s*\n?\s*iOS rendering pipeline produce your fingerprint the way Apple\s*\n?\s*wrote them, in the order Apple intended\./,
     );
   });
 
@@ -172,11 +169,11 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     );
   });
 
-  it('R12 polish: 3-card use-case section "Anywhere mobile Safari fidelity decides the outcome." headline + Mobile-Safari coverage / Mobile-first scraping / Multi-account operations cards + Final-CTA "See it for yourself. Free." headline + "Read the docs" secondary CTA', () => {
-    expect(body).toMatch(/Anywhere mobile Safari fidelity decides the outcome\./);
-    expect(body).toMatch(/Mobile-Safari coverage/);
-    expect(body).toMatch(/Mobile-first scraping/);
-    expect(body).toMatch(/Multi-account operations/);
+  it('v2 use-case section (Band A personas, operators first): "Built for the work you actually do." headline + the 3 persona cards (Run many accounts, safely apart / Test on the real thing / See what iPhone users see) + Final-CTA "See it for yourself. Free." + "Read the docs" secondary CTA', () => {
+    expect(body).toMatch(/Built for the work you actually do\./);
+    expect(body).toMatch(/Run many accounts, safely apart/);
+    expect(body).toMatch(/Test on the real thing/);
+    expect(body).toMatch(/See what iPhone users see/);
     expect(body).toMatch(/See it for yourself\. Free\./);
     expect(body).toMatch(/Read the docs/);
   });
