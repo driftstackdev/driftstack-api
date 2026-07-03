@@ -201,10 +201,25 @@ function redactPathCredentials(pathname: string): { pathname: string; changed: b
  */
 function redactUrlCredentials(url: string): string {
   let parsed: URL;
+  let relative = false;
   try {
     parsed = new URL(url);
   } catch {
-    return url; // not an absolute URL → not a structured-credential vector
+    // A RELATIVE URL / path still carries the SAME path / query / fragment
+    // credential vectors — e.g. a `wait:url` value `/account/reset/<token>/edit`
+    // or a stashed relative post-auth redirect `/confirm/<jwt>`. Without this
+    // the whole absolute-only redaction (path-token / query-secret / fragment-
+    // token) is bypassed for relative inputs and the secret leaks into the
+    // result verbatim. Parse against a sentinel base (`.invalid` never resolves)
+    // so the same redaction applies, then strip the base back off below. A truly
+    // unparseable string is still left untouched (it can't carry structured
+    // credentials).
+    try {
+      parsed = new URL(url, 'http://driftstack.invalid/');
+      relative = true;
+    } catch {
+      return url;
+    }
   }
   let changed = false;
   if (parsed.username !== '' || parsed.password !== '') {
@@ -267,7 +282,12 @@ function redactUrlCredentials(url: string): string {
       changed = true;
     }
   }
-  return changed ? parsed.toString() : url;
+  if (!changed) return url;
+  // Relative input: return only path + query + fragment, never the sentinel
+  // origin. A clean relative URL was already returned byte-for-byte above, so
+  // this only runs on an already-redacted value where a leading slash the
+  // base-parse normalized in is acceptable (the secret is what mattered).
+  return relative ? `${parsed.pathname}${parsed.search}${parsed.hash}` : parsed.toString();
 }
 
 /**

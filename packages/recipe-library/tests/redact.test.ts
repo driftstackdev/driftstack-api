@@ -48,9 +48,35 @@ describe('redactStepForResult', () => {
     expect(redactStepForResult(waitTime)).toBe(waitTime); // non-URL wait unchanged
   });
 
-  it('leaves an unparseable / relative navigate URL unchanged (not a structured cred vector)', () => {
-    const nav: RecipeStep = { kind: 'navigate', url: '/relative/path' };
-    expect(redactStepForResult(nav)).toBe(nav);
+  it('redacts credentials in RELATIVE URLs too (path token / JWT / query / fragment) — closes the absolute-only bypass — but leaves a clean relative URL byte-for-byte unchanged', () => {
+    // Clean relative path → unchanged (same reference; no structured cred).
+    const clean: RecipeStep = { kind: 'navigate', url: '/relative/path' };
+    expect(redactStepForResult(clean)).toBe(clean);
+
+    // Path-embedded reset token in a RELATIVE wait:url — previously bypassed
+    // redaction entirely because `new URL` throws on a relative string.
+    const waitReset: RecipeStep = {
+      kind: 'wait',
+      condition: 'url',
+      value: '/account/reset-password/aLongResetToken16plusChars/edit',
+    };
+    const outReset = redactStepForResult(waitReset) as { kind: 'wait'; value: string };
+    expect(outReset.value).not.toContain('aLongResetToken16plusChars');
+    expect(outReset.value).toContain('/account/reset-password/'); // context kept
+
+    // JWT-shaped segment in a relative confirm path.
+    const navJwt: RecipeStep = {
+      kind: 'navigate',
+      url: '/confirm/eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sigpart',
+    };
+    const outJwt = redactStepForResult(navJwt) as { kind: 'navigate'; url: string };
+    expect(outJwt.url).not.toContain('eyJhbGciOiJIUzI1NiJ9');
+
+    // Secret query param + secret fragment in a relative navigate URL.
+    const navQ: RecipeStep = { kind: 'navigate', url: '/callback?access_token=leakme&page=2' };
+    const outQ = redactStepForResult(navQ) as { kind: 'navigate'; url: string };
+    expect(outQ.url).not.toContain('leakme');
+    expect(outQ.url).toContain('page=2'); // non-secret param preserved
   });
 
   it('redacts secret-bearing FRAGMENT params (OAuth implicit post-auth redirect), keeps non-secret fragment params', () => {
