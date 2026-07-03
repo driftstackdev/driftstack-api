@@ -1,5 +1,6 @@
 // W372.A — drift guard for marketing-site /pricing page content.
-// V-502. Existing pricing-* tests (concurrency-profile-cap-parity,
+// V-502 + v2 redesign (2026-07-03 "Plain Words, Same Teeth" pass).
+// Existing pricing-* tests (concurrency-profile-cap-parity,
 // pricing-data-binding-parity, pricing-section-anchors-baseline,
 // pricing-hero-baseline, pricing-tier-ordering-parity, pricing-
 // tier-id-schema-parity, ladder-coverage,
@@ -11,11 +12,17 @@
 //     ../data/pricing.ts (data-driven, not inline-hardcoded; TRIAL_PACK retired).
 //   • 5 canonical section anchors: #free / #which-tier
 //     (V-502 decision tree) / #manual / #api / #self-hosted.
+//   • Band-A decision fork: "who drives the sessions" question +
+//     #manual / #api anchor cards + the quieter both-workflows card.
+//   • One-sentence glossary above the ladders (concurrent = browser
+//     tabs metaphor, matching the homepage; profile = saved identity).
 //   • V-502 decision-tree teaser ladder pinned with
 //     verbatim title strings (Free $0 → Enterprise from $4,000).
 //   • Monthly/annual toggle wired (id=billing-toggle + data-
 //     period-target=monthly/annual).
 //   • "Pay per concurrent session" landing-band copy pinned.
+//   • Product + AggregateOffer JSON-LD, figures DERIVED from
+//     API_TIERS, with NO fabricated ratings/reviews.
 //   • BYOK-or-bundled LLM explainer: Anthropic console link +
 //     Self-hosted SKUs are BYOK-only.
 //   • Free tier is perpetual (never expires; matches /faq's claim).
@@ -54,6 +61,46 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     expect(body).toMatch(/<section id="manual"/);
     expect(body).toMatch(/<section id="api"/);
     expect(body).toMatch(/<section id="self-hosted"/);
+  });
+
+  it('Band-A decision fork pinned: "who drives the sessions" question + #manual / #api anchor cards + both-workflows card', () => {
+    expect(body).toMatch(/who drives the sessions — a person\s*\n?\s*clicking, or code calling\?/);
+    // The two fork cards are anchor links straight into the ladders.
+    expect(body).toMatch(/<a href="#manual" class="card block p-8">/);
+    expect(body).toMatch(/<a href="#api" class="card block p-8">/);
+    expect(body).toMatch(/A person → Manual\./);
+    expect(body).toMatch(/You drive iPhones by hand in the desktop app\./);
+    expect(body).toMatch(/Code → API\./);
+    expect(body).toMatch(/Your scripts and pipelines run the sessions\./);
+    // The quieter third card: both ladders share the engine + free tier.
+    expect(body).toMatch(/Both\? Neither yet\? Start free\./);
+    expect(body).toMatch(/Both ladders run the same engine and share the same free tier\./);
+  });
+
+  it('one-sentence glossary above the ladders: concurrent (browser-tabs metaphor, matches homepage) + profile (saved iPhone identity)', () => {
+    expect(body).toMatch(
+      /concurrent<\/strong> means\s*\n?\s*sessions running at the same time — think browser tabs/,
+    );
+    expect(body).toMatch(
+      /profile<\/strong> is a saved iPhone identity\s*\n?\s*that keeps its logins and history\./,
+    );
+  });
+
+  it('Product + AggregateOffer JSON-LD: figures derived from API_TIERS, strictly factual (no ratings/reviews)', () => {
+    expect(body).toMatch(
+      /<script type="application\/ld\+json" set:html=\{JSON\.stringify\(pricingStructuredData\)\} \/>/,
+    );
+    expect(body).toMatch(/'@type': 'Product'/);
+    expect(body).toMatch(/'@type': 'AggregateOffer'/);
+    // Derived, not hand-typed: lowPrice = free tier, highPrice = max
+    // listed monthly, offerCount = tier count.
+    expect(body).toMatch(/lowPrice: String\(freeTier\.monthlyUsd\)/);
+    expect(body).toMatch(/highPrice: String\(Math\.max\(\.\.\.listedMonthlyUsd\)\)/);
+    expect(body).toMatch(/offerCount: String\(API_TIERS\.length\)/);
+    expect(body).toMatch(/priceCurrency: 'USD'/);
+    // Hard guardrail: never fabricate social proof in structured data.
+    expect(body).not.toMatch(/aggregateRating/i);
+    expect(body).not.toMatch(/"review"|'review'|reviewCount/i);
   });
 
   it('V-502 decision-tree 7-tier teaser ladder pinned verbatim', () => {
@@ -136,9 +183,12 @@ describe('W372.A marketing-site /pricing page content parity', () => {
   });
 
   it('cross-link to /pricing/comparison per-tier side-by-side pinned', () => {
-    // Astro source splits the closing `>` to next line; tolerate WS.
+    // Astro source splits attributes + the closing `>` across lines;
+    // tolerate WS. v2: accent-colored TEXT uses the AA-safe
+    // text-tk-accent-text token (raw text-tk-accent fails WCAG AA on
+    // the dark bg).
     expect(body).toMatch(
-      /<a href="\/pricing\/comparison" class="font-medium text-tk-accent underline"\s*>/,
+      /<a\s*\n?\s*href="\/pricing\/comparison"\s*\n?\s*class="font-medium text-tk-accent-text underline[^"]*"\s*\n?\s*>/,
     );
     expect(
       existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing/comparison.astro')),
@@ -148,6 +198,9 @@ describe('W372.A marketing-site /pricing page content parity', () => {
   it("'Concurrent capacity bounded by your hardware, not by license' self-hosted teaser pinned", () => {
     expect(body).toMatch(/Concurrent capacity is bounded by your hardware, not by license\./);
     expect(body).toMatch(/Hardware procurement detail at\{' '\}/);
-    expect(body).toMatch(/<a href="\/self-hosted" class="text-tk-accent underline">/);
+    // v2: accent-colored TEXT uses the AA-safe text-tk-accent-text token.
+    expect(body).toMatch(
+      /<a\s*\n?\s*href="\/self-hosted"\s*\n?\s*class="text-tk-accent-text underline[^"]*"\s*\n?\s*>/,
+    );
   });
 });

@@ -1,5 +1,13 @@
 ---
+// Pricing v2 (2026-07-03) — "Plain Words, Same Teeth" pass, same treatment
+// as the homepage: Band A (hero → decision helper) speaks plain language;
+// the ladders keep full technical precision. Every figure BINDS to
+// src/data/pricing.ts (W292.B — no hand-typed dollars in the matrix).
 import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHero from '../components/PageHero.astro';
+import Section from '../components/Section.astro';
+import IconTile from '../components/IconTile.astro';
+import CtaBand from '../components/CtaBand.astro';
 import {
   API_TIERS,
   SELF_HOSTED_ARCHETYPE_UPDATES,
@@ -59,58 +67,76 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
   }
 }
 
+// W507 — schema.org Product + AggregateOffer for rich-result eligibility on
+// the pricing page (complements the site-wide @graph in BaseLayout). Every
+// figure DERIVES from API_TIERS (W292.B data-binding discipline): lowPrice is
+// the perpetual free tier, highPrice the highest listed monthly price,
+// offerCount the tier count. Strictly factual — no fabricated ratings or
+// reviews (we have none; inventing them is dishonest + a Google
+// structured-data penalty risk).
+const listedMonthlyUsd = API_TIERS.map((t) => t.monthlyUsd).filter(
+  (v): v is number => typeof v === 'number',
+);
+const pricingStructuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'Product',
+  name: 'Driftstack',
+  description:
+    'Real iPhone Safari sessions in the cloud — drive them by hand in a desktop app (Manual tiers) or from code via SDK (API tiers). Perpetual free tier included.',
+  brand: { '@type': 'Brand', name: 'Driftstack' },
+  url: new URL('/pricing', Astro.site).toString(),
+  offers: {
+    '@type': 'AggregateOffer',
+    priceCurrency: 'USD',
+    lowPrice: String(freeTier.monthlyUsd),
+    highPrice: String(Math.max(...listedMonthlyUsd)),
+    offerCount: String(API_TIERS.length),
+  },
+};
 ---
 
 <BaseLayout
   title="Pricing"
   description="Driftstack pricing — start free, then pay only for the sessions you run at once. Pick Manual (drive sessions yourself in our desktop app) or API (automate with code). Or self-host and run it all yourself."
 >
-  <!-- Header -->
-  <section class="relative overflow-hidden">
-    {/* 2026-05-22 — same hero-glow atmosphere as the landing page so
-        the pricing surface reads as part of the same visual family. */}
-    <div class="hero-glow" aria-hidden="true"></div>
-    <div class="absolute inset-0 grid-bg opacity-40" aria-hidden="true"></div>
-    <div class="relative mx-auto max-w-6xl px-6 py-24 animate-fade-up">
-      <p class="section-label">Pricing</p>
-      <h1
-        class="mt-6 text-4xl font-semibold tracking-tight md:text-5xl lg:text-6xl"
-        style="letter-spacing: -0.02em;"
-      >
-        
-          Two ladders.
-        
-        <span class="block text-tk-ink">One free tier to start.</span>
-      </h1>
-      <p class="mt-6 max-w-prose text-lg text-tk-ink-2 leading-relaxed">
-        <strong class="text-tk-ink">Manual</strong> if a person is driving
-        sessions in our desktop app.
-        <strong class="text-tk-ink">API</strong> if your code is calling
-        the SDK. Same engine underneath; pick the workflow that matches yours.
-        Start on the free tier first to see which feels right.
-      </p>
-    </div>
-  </section>
+  <!-- Hero — Fleet v2 PageHero (label + h1 + lead over hero-glow + grid). -->
+  <PageHero label="Pricing" title="Two ladders. One free tier to start.">
+    <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">
+      <strong class="text-tk-ink">Manual</strong> if a person is driving
+      sessions in our desktop app.
+      <strong class="text-tk-ink">API</strong> if your code is calling
+      the SDK. Same engine underneath — start free and see which one fits.
+    </p>
+  </PageHero>
 
   <!-- Free tier hero card -->
-  <section id="free" class="border-t border-tk-border bg-tk-bg">
+  <section id="free" class="bg-tk-bg">
     <div class="mx-auto max-w-6xl px-6 py-16">
-      <div
-        class="grid gap-8 rounded-lg border border-tk-accent/30 bg-tk-surface p-8 md:grid-cols-3 md:items-center"
-      >
+      <div class="card grid gap-8 border-tk-accent/40 p-8 md:grid-cols-3 md:items-center">
         <div class="md:col-span-2">
-          {/* 2026-05-23 — icon + h2 on free-tier hero. */}
           <div class="flex items-start gap-3">
-            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mt-1">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            <IconTile class="mt-1">
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
               </svg>
-            </div>
+            </IconTile>
             <div>
-              <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Start here</p>
+              <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">
+                Start here
+              </p>
               <h2 class="mt-3 text-2xl font-semibold text-tk-ink">
-                  Free — {fmtUsd(freeTier.monthlyUsd)}, forever
-                </h2>
+                Free — {fmtUsd(freeTier.monthlyUsd)}, forever
+              </h2>
             </div>
           </div>
           <p class="mt-3 max-w-prose text-tk-ink-2">
@@ -124,17 +150,17 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
             sessions as you like. Upgrade to a paid tier when you need the
             API, more profiles, more concurrency, or the AI agent.
           </p>
-          <ul class="mt-4 space-y-1 text-sm text-tk-ink-2">
+          <ul class="mt-4 space-y-1.5 text-sm text-tk-ink-2">
             <li class="flex gap-2">
-              <span class="text-tk-accent">•</span> Real iOS WebKit. No emulation, no runtime
+              <span class="arrow-bullet">›</span> Real iOS WebKit. No emulation, no runtime
               patches.
             </li>
             <li class="flex gap-2">
-              <span class="text-tk-accent">•</span> Same SDK + GUI as paid tiers — switch tiers without
+              <span class="arrow-bullet">›</span> Same SDK + GUI as paid tiers — switch tiers without
               code changes.
             </li>
             <li class="flex gap-2">
-              <span class="text-tk-accent">•</span> Perpetual — no expiry, no credit to run down.
+              <span class="arrow-bullet">›</span> Perpetual — no expiry, no credit to run down.
             </li>
           </ul>
         </div>
@@ -169,126 +195,202 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
     </div>
   </section>
 
-  <!-- Monthly/annual toggle (controls both Manual + API tables) -->
-  <!-- V-502 — decision-tree section between the free-tier hero and the
-       monthly/annual toggle. Static prose ladder; intentionally
-       no JS interaction (Tier-1 placeholder bound). -->
+  <!-- V-502 — decision helper between the free-tier hero and the
+       monthly/annual toggle. Band A fork question ("who drives the
+       sessions?") + two anchor cards into the ladders + a quieter
+       both-workflows card, then the 8-tier prose teaser ladder. -->
   <section
     id="which-tier"
     aria-label="Which tier is right for me?"
     class="border-t border-tk-border bg-tk-surface"
   >
     <div class="mx-auto max-w-6xl px-6 py-16">
-      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
-        Pick your tier
+      <p class="section-label">Pick your tier</p>
+      <h2 class="mt-4 text-2xl font-semibold tracking-tight text-tk-ink sm:text-3xl">
+        Which tier is right for me?
+      </h2>
+      <p class="mt-4 max-w-2xl text-lg leading-8 text-tk-ink-2">
+        One question decides most of it: who drives the sessions — a person
+        clicking, or code calling?
       </p>
-      <h2 class="mt-3 text-2xl font-semibold tracking-tight text-tk-ink">Which tier is right for me?</h2>
-      <p class="mt-3 max-w-3xl text-sm text-tk-ink-2">
-        All tiers run the same engine and the same fingerprint surface.
-        Differences are concurrent caps + profile counts + AI-agent
-        availability. The right tier is the one that matches your access
-        pattern (Manual vs API) and your peak parallelism — switch any
-        time, prorated automatically.
+
+      <div class="mt-8 grid gap-6 md:grid-cols-2">
+        <a href="#manual" class="card block p-8">
+          <div class="flex items-center gap-3">
+            <IconTile>
+              <svg
+                viewBox="0 0 24 24"
+                width="20"
+                height="20"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="7" r="4"></circle>
+                <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2"></path>
+              </svg>
+            </IconTile>
+            <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Manual</p>
+          </div>
+          <h3 class="mt-5 text-xl font-semibold tracking-tight text-tk-ink sm:text-2xl">
+            A person → Manual.
+          </h3>
+          <p class="mt-3 text-sm leading-6 text-tk-ink-2">
+            You drive iPhones by hand in the desktop app. Open a profile,
+            click around, keep logins alive — no code anywhere. Tiers differ
+            by how many people can work at once.
+          </p>
+          <p class="mt-5 text-sm font-medium text-tk-accent-text">See Manual tiers ↓</p>
+        </a>
+        <a href="#api" class="card block p-8">
+          <div class="flex items-center gap-3">
+            <IconTile>
+              <svg
+                viewBox="0 0 24 24"
+                width="20"
+                height="20"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <polyline points="16 18 22 12 16 6"></polyline>
+                <polyline points="8 6 2 12 8 18"></polyline>
+              </svg>
+            </IconTile>
+            <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">API</p>
+          </div>
+          <h3 class="mt-5 text-xl font-semibold tracking-tight text-tk-ink sm:text-2xl">
+            Code → API.
+          </h3>
+          <p class="mt-3 text-sm leading-6 text-tk-ink-2">
+            Your scripts and pipelines run the sessions. Start them from
+            TypeScript, Python, or Go and read back what they find. Tiers
+            differ by how many sessions run at once.
+          </p>
+          <p class="mt-5 text-sm font-medium text-tk-accent-text">See API tiers ↓</p>
+        </a>
+      </div>
+      <div class="panel mt-6 md:flex md:items-center md:justify-between md:gap-8">
+        <div>
+          <h3 class="text-base font-semibold text-tk-ink">Both? Neither yet? Start free.</h3>
+          <p class="mt-2 max-w-2xl text-sm leading-6 text-tk-ink-2">
+            Both ladders run the same engine and share the same free tier.
+            Start free, drive a session by hand, run one from code, and see
+            which workflow fits before paying for anything.
+          </p>
+        </div>
+        <a href="#free" class="btn-secondary mt-4 shrink-0 md:mt-0">Start free ↑</a>
+      </div>
+
+      <p class="mt-12 max-w-2xl text-sm leading-6 text-tk-ink-2">
+        Every tier runs the same engine — same iPhones, same fidelity. Paying
+        more buys more sessions at once, more saved profiles, and the AI
+        agent. Switch tiers any time; billing is prorated automatically.
       </p>
       <p class="mt-3 text-sm text-tk-ink-2">
         Need every dimension side-by-side?
-        <a href="/pricing/comparison" class="font-medium text-tk-accent underline"
+        <a
+          href="/pricing/comparison"
+          class="font-medium text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
           >See the per-tier comparison →</a
         >
       </p>
 
       <ul class="mt-8 grid gap-4 md:grid-cols-2">
-        <li class="rounded-lg border border-tk-accent/30 bg-tk-surface p-5">
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
+        <li class="card border-tk-accent/40 p-5">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">
             Just looking
           </p>
           <h3 class="mt-2 font-medium text-tk-ink">
             Free — $0, forever
           </h3>
           <p class="mt-2 text-sm text-tk-ink-2">
-            One profile, one concurrent session of up to 20 minutes — no
-            card required. The right entry if you want to click through
-            iPhone Safari sessions and see the fingerprint surface before
-            committing to a paid tier.
+            One profile, one session at a time, up to 20 minutes — no card
+            required. The right entry if you want to click around a real
+            iPhone in the cloud before paying for anything.
           </p>
         </li>
-        <li class="rounded-lg border border-tk-border bg-tk-surface p-5">
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">
-            Solo operator, GUI
+        <li class="card p-5">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-ink-3">
+            One person, by hand
           </p>
           <h3 class="mt-2 font-medium text-tk-ink">Personal — $79/mo</h3>
           <p class="mt-2 text-sm text-tk-ink-2">
-            One human clicking in the desktop GUI client; up to 10
-            persistent profiles. Power users running 1 session at a time
-            across 10 different client identities — sneaker resellers,
-            sole-trader compliance work, individual researchers.
+            One person clicking in the desktop app; up to 10 saved profiles.
+            Run 1 session at a time across 10 different client identities —
+            sneaker resellers, sole-trader compliance work, individual
+            researchers.
           </p>
         </li>
-        <li class="rounded-lg border border-tk-border bg-tk-surface p-5">
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">
-            Small team, GUI
+        <li class="card p-5">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-ink-3">
+            Small team, by hand
           </p>
           <h3 class="mt-2 font-medium text-tk-ink">Team — $249/mo</h3>
           <p class="mt-2 text-sm text-tk-ink-2">
-            3 humans clicking in parallel; 50 profiles. Account managers
-            running multiple client identities concurrently. AI-agent
-            available (BYOK).
+            3 people clicking at the same time; 50 profiles. Account managers
+            keeping several client identities open at once. AI agent
+            available (bring your own Anthropic key).
           </p>
         </li>
-        <li class="rounded-lg border border-tk-border bg-tk-surface p-5">
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">
-            Agency, GUI
+        <li class="card p-5">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-ink-3">
+            Big team, by hand
           </p>
           <h3 class="mt-2 font-medium text-tk-ink">Agency — $699/mo</h3>
           <p class="mt-2 text-sm text-tk-ink-2">
-            8 concurrent operators; 200 profiles. Marketing agencies,
-            compliance teams, legal-tech ops juggling many client
-            identities at once.
+            8 people working at once; 200 profiles. Marketing agencies,
+            compliance teams, legal-tech ops juggling many client identities
+            at once.
           </p>
         </li>
-        <li class="rounded-lg border border-tk-border bg-tk-surface p-5">
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">
-            Solo dev, code
+        <li class="card p-5">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-ink-3">
+            One developer, code
           </p>
           <h3 class="mt-2 font-medium text-tk-ink">API Starter — $149/mo</h3>
           <p class="mt-2 text-sm text-tk-ink-2">
-            Programmatic SDK access; 2 concurrent sessions; 25 profiles.
-            Solo developers writing test automation or evaluation-stage
-            scrapers. AI-agent available (BYOK).
+            Your code runs the sessions — 2 at a time, 25 profiles. Solo
+            developers writing test automation or early-stage scrapers. AI
+            agent available (bring your own Anthropic key).
           </p>
         </li>
-        <li class="rounded-lg border border-tk-border bg-tk-surface p-5">
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">
-            Production scale, code
+        <li class="card p-5">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-ink-3">
+            Production, code
           </p>
           <h3 class="mt-2 font-medium text-tk-ink">API Builder — $499/mo</h3>
           <p class="mt-2 text-sm text-tk-ink-2">
-            8 concurrent; 100 profiles. Production automation jobs,
-            CI suites running iPhone Safari on real WebKit, AI-agent
-            flows with either BYOK or bundled-rate billing.
+            8 sessions at a time; 100 profiles. Production automation and CI
+            suites that need iPhone Safari on real WebKit. AI agent with your
+            own key or billed on one invoice.
           </p>
         </li>
-        <li class="rounded-lg border border-tk-border bg-tk-surface p-5">
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">
-            High throughput, code
+        <li class="card p-5">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-ink-3">
+            High volume, code
           </p>
           <h3 class="mt-2 font-medium text-tk-ink">API Scale — $1,499/mo</h3>
           <p class="mt-2 text-sm text-tk-ink-2">
-            24 concurrent; 500 profiles. High-volume automation fleets,
-            agencies running scraping jobs across many domains, AI-agent
-            workflows at scale.
+            24 sessions at a time; 500 profiles. High-volume automation
+            fleets and agencies running jobs across many sites at once.
           </p>
         </li>
-        <li class="rounded-lg border border-tk-border bg-tk-surface p-5">
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">
+        <li class="card p-5">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-ink-3">
             Custom contract
           </p>
           <h3 class="mt-2 font-medium text-tk-ink">Enterprise — from $4,000/mo</h3>
           <p class="mt-2 text-sm text-tk-ink-2">
-            Annual contracts only. Custom concurrency + profiles +
-            archetypes + SLA + DPA terms. The right tier for regulated
-            industries (finance, healthcare) needing custom paperwork or
-            customers needing a dedicated CSM.
+            Annual contracts only. Custom concurrency, profiles, device
+            archetypes, SLA and DPA terms. For regulated industries (finance,
+            healthcare) that need custom paperwork or a dedicated CSM.
           </p>
         </li>
       </ul>
@@ -296,12 +398,18 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
       <p class="mt-8 max-w-3xl text-sm text-tk-ink-2">
         Need to run on your own hardware (regulated industry, air-gapped
         deployment, custom hardware fingerprint)?
-        <a href="#self-hosted" class="text-tk-accent underline">
+        <a
+          href="#self-hosted"
+          class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+        >
           See self-hosted SKUs
         </a>
-        — pricing is engine-license-based with source-escrow, not the
-        per-seat ladder above. Or
-        <a href="/faq#architecture-sessions" class="text-tk-accent underline">
+        — priced as an engine license with source-escrow, not the per-seat
+        ladder above. Or
+        <a
+          href="/faq#architecture-sessions"
+          class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+        >
           read the architecture FAQ
         </a>
         if you're still deciding whether real-WebKit fits your workload.
@@ -309,12 +417,21 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
     </div>
   </section>
 
+  <!-- Glossary line + monthly/annual toggle (controls both Manual + API tables) -->
   <section class="border-t border-tk-border bg-tk-bg">
     <div class="mx-auto max-w-6xl px-6 py-10">
-      <div class="flex items-center justify-end">
+      <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        {/* One-sentence glossary for the ladders below — same browser-tabs
+            metaphor as the homepage metering band. */}
+        <p class="max-w-2xl text-sm leading-6 text-tk-ink-3">
+          Two words to know: <strong class="font-medium text-tk-ink-2">concurrent</strong> means
+          sessions running at the same time — think browser tabs — and a
+          <strong class="font-medium text-tk-ink-2">profile</strong> is a saved iPhone identity
+          that keeps its logins and history.
+        </p>
         <div
           id="billing-toggle"
-          class="inline-flex rounded-md border border-tk-border bg-tk-surface p-1 text-sm font-medium"
+          class="inline-flex shrink-0 self-start rounded-md border border-tk-border bg-tk-surface p-1 text-sm font-medium md:self-auto"
           role="tablist"
         >
           <button
@@ -333,7 +450,7 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
           >
             Annual
             <span
-              class="ml-1 rounded-sm bg-tk-accent/20 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-tk-accent"
+              class="ml-1 rounded-sm bg-tk-accent/20 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-tk-accent-text"
               >−20%</span
             >
           </button>
@@ -346,17 +463,27 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
   <section id="manual" class="bg-tk-bg">
     <div class="mx-auto max-w-6xl px-6 pb-20">
       <div class="mb-10 flex items-start gap-4">
-        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mt-1">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="7" r="4" />
-            <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
+        <IconTile class="mt-1">
+          <svg
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.75"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="7" r="4"></circle>
+            <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2"></path>
           </svg>
-        </div>
+        </IconTile>
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Manual</p>
+          <p class="section-label">Manual</p>
           <h2 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink">
-              Manual — for humans
-            </h2>
+            Manual — for humans
+          </h2>
           <p class="mt-3 max-w-prose text-tk-ink-2">
             Persistent profiles. Drive sessions yourself in the GUI client. No code
             required.
@@ -367,19 +494,10 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
       <div class="grid gap-6 md:grid-cols-3">
         {
           manualTiers.map((tier) => (
-            <div
-              class:list={[
-                'rounded-lg border bg-tk-surface p-6',
-                tier.highlight ? 'border-tk-accent shadow-md' : 'border-tk-border',
-              ]}
-            >
+            <div class:list={['card p-6', tier.highlight ? 'border-tk-accent/50' : '']}>
               <div class="flex items-center justify-between">
                 <h3 class="text-lg font-semibold text-tk-ink">{tier.name}</h3>
-                {tier.highlight && (
-                  <span class="rounded-sm bg-tk-accent/20 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-tk-accent">
-                    popular
-                  </span>
-                )}
+                {tier.highlight && <span class="pill text-tk-accent-text">Popular</span>}
               </div>
               <div class="price-monthly mt-3" data-period-target="monthly">
                 <span class="text-2xl font-semibold text-tk-ink">{fmtUsd(tier.monthlyUsd)}</span>
@@ -417,10 +535,12 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
                   <dd class="text-right text-tk-ink-2">{tier.support}</dd>
                 </div>
               </dl>
-              <a href="https://app.driftstack.dev/signup" class="btn-primary mt-6 w-full">Get started free</a>
+              <a href="https://app.driftstack.dev/signup" class="btn-primary mt-6 w-full">
+                Get started free
+              </a>
               <a
                 href="https://app.driftstack.dev/signup"
-                class="mt-2 block w-full text-center text-sm font-medium text-tk-accent underline-offset-4 hover:underline"
+                class="mt-2 block w-full text-center text-sm font-medium text-tk-accent-text underline-offset-4 hover:underline"
               >
                 Buy {tier.name} →
               </a>
@@ -442,49 +562,50 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
   <section id="api" class="bg-tk-surface">
     <div class="mx-auto max-w-6xl px-6 py-20">
       <div class="mb-10 flex items-start gap-4">
-        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mt-1">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="16 18 22 12 16 6" />
-            <polyline points="8 6 2 12 8 18" />
+        <IconTile class="mt-1">
+          <svg
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.75"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
           </svg>
-        </div>
+        </IconTile>
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">API</p>
+          <p class="section-label">API</p>
           <h2 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink">
-              API — for code
-            </h2>
-        <p class="mt-3 max-w-prose text-tk-ink-2">
-          SDK in your language. Programmatic session creation. Concurrent caps that
-          scale with your fleet.
-        </p>
-        <p class="mt-3 max-w-prose text-sm text-tk-ink-3">
-          You'll see <strong class="text-tk-ink-2">"BYOK"</strong> in the tier
-          tables below — it means
-          <em>bring your own API key</em> from Anthropic for the optional AI
-          agent feature. Your model spend goes
-          to your provider account; Driftstack doesn't markup or proxy.
-          Bundled LLM is the alternative — Driftstack proxies + bills on one
-          invoice. Detail below the tier tables.
-        </p>
+            API — for code
+          </h2>
+          <p class="mt-3 max-w-prose text-tk-ink-2">
+            SDK in your language. Programmatic session creation. Concurrent caps that
+            scale with your fleet.
+          </p>
+          <p class="mt-3 max-w-prose text-sm text-tk-ink-3">
+            You'll see <strong class="text-tk-ink-2">"BYOK"</strong> in the tier
+            tables below — it means
+            <em>bring your own API key</em> from Anthropic for the optional AI
+            agent feature. Your model spend goes
+            to your provider account; Driftstack doesn't markup or proxy.
+            Bundled LLM is the alternative — Driftstack proxies + bills on one
+            invoice. Detail below the tier tables.
+          </p>
         </div>
       </div>
 
       <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         {
           apiTiers.map((tier) => (
-            <div
-              class:list={[
-                'rounded-lg border bg-tk-surface p-6',
-                tier.highlight ? 'border-tk-accent shadow-md' : 'border-tk-border',
-              ]}
-            >
+            <div class:list={['card p-6', tier.highlight ? 'border-tk-accent/50' : '']}>
               <div class="flex items-center justify-between">
                 <h3 class="text-lg font-semibold text-tk-ink">{tier.name}</h3>
-                {tier.highlight && (
-                  <span class="rounded-sm bg-tk-accent/20 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-tk-accent">
-                    popular
-                  </span>
-                )}
+                {tier.highlight && <span class="pill text-tk-accent-text">Popular</span>}
               </div>
               {tier.id === 'enterprise' ? (
                 <div class="mt-3">
@@ -547,7 +668,7 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
                     </a>
                     <a
                       href="https://app.driftstack.dev/signup"
-                      class="mt-2 block w-full text-center text-sm font-medium text-tk-accent underline-offset-4 hover:underline"
+                      class="mt-2 block w-full text-center text-sm font-medium text-tk-accent-text underline-offset-4 hover:underline"
                     >
                       Buy {tier.name} →
                     </a>
@@ -577,7 +698,7 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
   <section id="self-hosted" class="bg-tk-bg">
     <div class="mx-auto max-w-6xl px-6 py-20">
       <div class="mb-10">
-        <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Self-hosted</p>
+        <p class="section-label">Self-hosted</p>
         <h2 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink">
           Self-hosted — for sovereignty
         </h2>
@@ -591,7 +712,7 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
       <div class="grid gap-6 md:grid-cols-3">
         {
           SELF_HOSTED_SKUS.map((sku) => (
-            <div class="rounded-lg border border-tk-border bg-tk-surface p-6 shadow-sm">
+            <div class="card p-6">
               <h3 class="text-lg font-semibold text-tk-ink">{sku.name}</h3>
               <div class="mt-3">
                 {sku.monthlyUsd === null ? (
@@ -659,7 +780,10 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
               <p class="mt-4 text-xs text-tk-ink-3">
                 Concurrent capacity is bounded by your hardware, not by license.
                 Hardware procurement detail at{' '}
-                <a href="/self-hosted" class="text-tk-accent underline">
+                <a
+                  href="/self-hosted"
+                  class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+                >
                   /self-hosted
                 </a>
                 .
@@ -675,71 +799,74 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
   </section>
 
   <!-- BYOK / Bundled LLM explainer -->
-  <section class="border-t border-tk-border bg-tk-surface">
-    <div class="mx-auto max-w-4xl px-6 py-16">
-      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">AI agent feature</p>
-      <h2 class="mt-3 text-2xl font-semibold text-tk-ink">BYOK or bundled — your call.</h2>
-      <p class="mt-4 max-w-prose text-tk-ink-2">
-        BYOK means you bring your <strong>Anthropic API key</strong> from
-        <a
-          href="https://console.anthropic.com"
-          class="text-tk-accent underline"
-          target="_blank"
-          rel="noopener noreferrer">console.anthropic.com</a
-        > and pay Anthropic directly. Bundled LLM (API Builder, API Scale, Enterprise)
-        means we proxy and bill — token usage rolls up to your Driftstack invoice
-        with a per-token markup. Bundled per-token rate announced at launch.
-        Self-hosted SKUs are BYOK-only because we don't proxy LLM calls into
-        customer hardware.
-      </p>
-    </div>
-  </section>
+  <Section label="AI agent feature" title="BYOK or bundled — your call." class="bg-tk-surface">
+    <p class="mt-6 max-w-prose text-base leading-7 text-tk-ink-2">
+      BYOK means you bring your <strong>Anthropic API key</strong> from
+      <a
+        href="https://console.anthropic.com"
+        class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+        target="_blank"
+        rel="noopener noreferrer">console.anthropic.com</a
+      > and pay Anthropic directly. Bundled LLM (API Builder, API Scale, Enterprise)
+      means we proxy and bill — token usage rolls up to your Driftstack invoice
+      with a per-token markup. Bundled per-token rate announced at launch.
+      Self-hosted SKUs are BYOK-only because we don't proxy LLM calls into
+      customer hardware.
+    </p>
+  </Section>
 
   <!-- Mini FAQ teaser -->
-  <section class="border-t border-tk-border bg-tk-bg">
-    <div class="mx-auto max-w-6xl px-6 py-16">
-      <h2 class="text-2xl font-semibold text-tk-ink">Common questions</h2>
-      <div class="mt-8 grid gap-8 md:grid-cols-2">
-        <div>
-          <h3 class="font-medium text-tk-ink">Manual or API — which one?</h3>
-          <p class="mt-2 text-sm text-tk-ink-2">
-            Manual if a human will be clicking in the GUI client. API if your code
-            will be calling the SDK. Same engine, same fingerprints, same fidelity
-            — different access surface, different upgrade trigger.
-          </p>
-        </div>
-        <div>
-          <h3 class="font-medium text-tk-ink">Why concurrent caps and not hours?</h3>
-          <p class="mt-2 text-sm text-tk-ink-2">
-            Hours metering breaks for manual users — an account manager running 3
-            persistent profiles 8 hours a day generates 720 browser-hours/month
-            and a surprise overage bill. Concurrent caps mean you only pay for how
-            many sessions you can run simultaneously. Use them as much as you
-            want.
-          </p>
-        </div>
-        <div>
-          <h3 class="font-medium text-tk-ink">Can I switch tiers mid-month?</h3>
-          <p class="mt-2 text-sm text-tk-ink-2">
-            Yes. Stripe prorates the change automatically. New limits apply
-            immediately on the next session-creation gate.
-          </p>
-        </div>
-        <div>
-          <h3 class="font-medium text-tk-ink">Does the free tier expire?</h3>
-          <p class="mt-2 text-sm text-tk-ink-2">
-            No. The free tier is perpetual — one profile, one concurrent
-            session of up to 20 minutes, no card. When you need more
-            concurrency, more profiles, longer sessions, or the AI agent,
-            subscribe to a paid tier from your dashboard.
-          </p>
-        </div>
+  <Section label="FAQ" title="Common questions" class="bg-tk-bg">
+    <div class="mt-10 grid gap-8 md:grid-cols-2">
+      <div>
+        <h3 class="font-medium text-tk-ink">Manual or API — which one?</h3>
+        <p class="mt-2 text-sm text-tk-ink-2">
+          Manual if a human will be clicking in the GUI client. API if your code
+          will be calling the SDK. Same engine, same fingerprints, same fidelity
+          — different access surface, different upgrade trigger.
+        </p>
       </div>
-      <div class="mt-10">
-        <a href="/faq" class="btn-secondary">See full FAQ</a>
+      <div>
+        <h3 class="font-medium text-tk-ink">Why concurrent caps and not hours?</h3>
+        <p class="mt-2 text-sm text-tk-ink-2">
+          Hours metering breaks for manual users — an account manager running 3
+          persistent profiles 8 hours a day generates 720 browser-hours/month
+          and a surprise overage bill. Concurrent caps mean you only pay for how
+          many sessions you can run simultaneously. Use them as much as you
+          want.
+        </p>
+      </div>
+      <div>
+        <h3 class="font-medium text-tk-ink">Can I switch tiers mid-month?</h3>
+        <p class="mt-2 text-sm text-tk-ink-2">
+          Yes. Stripe prorates the change automatically. New limits apply
+          immediately on the next session-creation gate.
+        </p>
+      </div>
+      <div>
+        <h3 class="font-medium text-tk-ink">Does the free tier expire?</h3>
+        <p class="mt-2 text-sm text-tk-ink-2">
+          No. The free tier is perpetual — one profile, one concurrent
+          session of up to 20 minutes, no card. When you need more
+          concurrency, more profiles, longer sessions, or the AI agent,
+          subscribe to a paid tier from your dashboard.
+        </p>
       </div>
     </div>
-  </section>
+    <div class="mt-10">
+      <a href="/faq" class="btn-secondary">See full FAQ</a>
+    </div>
+  </Section>
+
+  <!-- Final CTA -->
+  <CtaBand
+    title="Start free. Upgrade when you outgrow it."
+    lead="One profile, 20-minute manual sessions, no card required — and the free tier never expires. Move up a ladder when you need more sessions at once."
+    primaryHref="https://app.driftstack.dev/signup"
+    primaryLabel="Get started free"
+    secondaryHref="/pricing/comparison"
+    secondaryLabel="Compare every tier"
+  />
 
   <!-- Monthly/Annual toggle script -->
   <script is:inline>
@@ -778,4 +905,10 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
       setPeriod('monthly');
     })();
   </script>
+
+  {/* W507 — schema.org Product + AggregateOffer (figures derived from
+      API_TIERS in the frontmatter; strictly factual, no ratings/reviews).
+      Kept after the is:inline toggle script so the self-closing tag can't
+      pair with the toggle's closing tag in source-scanning sweeps. */}
+  <script type="application/ld+json" set:html={JSON.stringify(pricingStructuredData)} />
 </BaseLayout>

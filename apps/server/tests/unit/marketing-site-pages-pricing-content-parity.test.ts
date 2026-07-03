@@ -12,11 +12,18 @@
 //     20-min session cap, never expires.
 //   • Positioning band: 'Pay per concurrent session.' + 'No surprise
 //     overage bills.' framing.
+//   • v2 Band-A decision fork (2026-07-03): 'who drives the sessions'
+//     question + '#manual / #api' anchor cards + both-workflows card.
+//   • One-sentence concurrent/profile glossary above the ladders
+//     (browser-tabs metaphor, consistent with the homepage).
 //   • V-502 'Which tier is right for me?' decision-tree section: Free
 //     $0 / Personal $79 / Team $249 / Agency $699
 //     / API Starter $149 / API Builder $499 / API Scale $1,499 /
 //     Enterprise from $4,000.
 //   • Monthly/annual toggle with −20% annual savings badge.
+//   • Product + AggregateOffer JSON-LD, figures DERIVED from API_TIERS
+//     (lowPrice = free tier / highPrice = max listed monthly /
+//     offerCount = tier count), NO fabricated ratings or reviews.
 //   • BYOK / Bundled LLM explainer.
 //   • Mini FAQ teaser: 4 questions + 'See full FAQ' link.
 
@@ -91,10 +98,44 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     expect(body).toMatch(/Enterprise — from \$4,000\/mo/);
   });
 
-  it("Personal decision-card framing pinned: 'One human clicking in the desktop GUI client; up to 10 persistent profiles. Power users running 1 session at a time across 10 different client identities' — pinned so the 1-session/10-profile/desktop-GUI Solo framing stays consistent (drift to dropping '10 persistent profiles' would create marketing↔pricing-table divergence on the per-tier profile counts)", () => {
+  it("Personal decision-card framing pinned: 'One person clicking in the desktop app; up to 10 saved profiles. Run 1 session at a time across 10 different client identities' — pinned so the 1-session/10-profile/desktop framing stays consistent (drift to dropping '10 saved profiles' would create marketing↔pricing-table divergence on the per-tier profile counts). 2026-07-03 Band-A rewording: 'human clicking in the desktop GUI client' → 'person clicking in the desktop app', 'persistent profiles' → 'saved profiles' — same figures, plainer words", () => {
     expect(body).toMatch(
-      /One human clicking in the desktop GUI client; up to 10\s*\n?\s*persistent profiles\. Power users running 1 session at a time\s*\n?\s*across 10 different client identities/,
+      /One person clicking in the desktop app; up to 10 saved profiles\.\s*\n?\s*Run 1 session at a time across 10 different client identities/,
     );
+  });
+
+  it("v2 Band-A decision fork pinned: 'who drives the sessions — a person clicking, or code calling?' question + '#manual'/'#api' anchor cards ('A person → Manual.' / 'Code → API.') + the quieter both-workflows card — pinned so the plain-language fork that routes non-technical buyers into the right ladder survives (drift to dropping an anchor card would strand one audience above the wrong ladder)", () => {
+    expect(body).toMatch(/who drives the sessions — a person\s*\n?\s*clicking, or code calling\?/);
+    expect(body).toMatch(/<a href="#manual" class="card block p-8">/);
+    expect(body).toMatch(/<a href="#api" class="card block p-8">/);
+    expect(body).toMatch(/A person → Manual\./);
+    expect(body).toMatch(/You drive iPhones by hand in the desktop app\./);
+    expect(body).toMatch(/Code → API\./);
+    expect(body).toMatch(/Your scripts and pipelines run the sessions\./);
+    expect(body).toMatch(/Both ladders run the same engine and share the same free tier\./);
+  });
+
+  it("concurrent/profile glossary pinned above the ladders: 'concurrent means sessions running at the same time — think browser tabs' + 'profile is a saved iPhone identity that keeps its logins and history' — pinned so both ladder column headers stay defined in plain words before the tables use them (the browser-tabs metaphor matches the homepage metering band; drift here would re-jargonize the ladders' two load-bearing terms)", () => {
+    expect(body).toMatch(
+      /concurrent<\/strong> means\s*\n?\s*sessions running at the same time — think browser tabs/,
+    );
+    expect(body).toMatch(
+      /profile<\/strong> is a saved iPhone identity\s*\n?\s*that keeps its logins and history\./,
+    );
+  });
+
+  it("Product + AggregateOffer JSON-LD pinned: '@type Product' + '@type AggregateOffer' with lowPrice/highPrice/offerCount DERIVED from API_TIERS (String(freeTier.monthlyUsd) / String(Math.max(...listedMonthlyUsd)) / String(API_TIERS.length)) and NO aggregateRating/review keys — pinned so the structured data stays data-bound (hand-typed dollars would diverge from pricing.ts) and strictly factual (fabricated ratings are a hard guardrail violation + a Google structured-data penalty risk)", () => {
+    expect(body).toMatch(
+      /<script type="application\/ld\+json" set:html=\{JSON\.stringify\(pricingStructuredData\)\} \/>/,
+    );
+    expect(body).toMatch(/'@type': 'Product'/);
+    expect(body).toMatch(/'@type': 'AggregateOffer'/);
+    expect(body).toMatch(/priceCurrency: 'USD'/);
+    expect(body).toMatch(/lowPrice: String\(freeTier\.monthlyUsd\)/);
+    expect(body).toMatch(/highPrice: String\(Math\.max\(\.\.\.listedMonthlyUsd\)\)/);
+    expect(body).toMatch(/offerCount: String\(API_TIERS\.length\)/);
+    expect(body).not.toMatch(/aggregateRating/i);
+    expect(body).not.toMatch(/reviewCount/i);
   });
 
   it("Annual −20% toggle pinned: 'Monthly' button + 'Annual' button + '−20%' badge — pinned so the monthly/annual toggle UI + the 20% annual savings positioning survives (drift to dropping the −20% badge would hide the annual-contract discount that drives high-ACV deals)", () => {
