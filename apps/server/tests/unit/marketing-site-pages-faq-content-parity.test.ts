@@ -1,9 +1,15 @@
-// W500.A — drift guard for apps/marketing-site/src/pages/faq.astro.
+// W500.A — drift guard for the marketing-site /faq surface.
 // Public FAQ page. Drift here either drops a V-500 group (would lose
 // the architecture / migration / AUP questions that pad support
 // inboxes pre-launch) or breaks the canonical pricing/SLA numbers
 // (which customers reading the FAQ compare against the actual
 // product config).
+//
+// 2026-07-03 Fleet v2 — the Q&A array moved verbatim from faq.astro
+// to apps/marketing-site/src/data/faq.ts (single source of truth):
+// the page markup AND the FAQPage JSON-LD both derive from
+// FAQ_GROUPS. Content pins below read the data file; the JSON-LD
+// single-source pin reads the page.
 //
 //   • 10-group taxonomy (Pricing model + Free tier + Tiers + upgrades
 //     + Billing + payments + Bundled LLM + BYOK + EU stack + compliance
@@ -16,9 +22,8 @@
 //     Programmatic API/SDK access starts on the API ladder.
 //   • Enterprise from $4,000/mo.
 //   • Stripe payment processor + EU VAT/BTW reverse-charge.
-//   • Support SLA ladder: 48h/24h/12h+Slack/4h+Slack/1h+CSM.
-//   • Uptime SLA: 99% Starter+Solo / 99.5% Builder+Scale / 99.9%
-//     Enterprise.
+//   • Support: single 48h business-time target across all tiers.
+//   • Uptime: single best-effort 99.5% across all tiers.
 //   • 20% annual discount + 30-day cancellation notice.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -28,14 +33,16 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const LIB = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/faq.astro');
+const LIB = resolve(REPO_ROOT, 'apps/marketing-site/src/data/faq.ts');
+const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/faq.astro');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-describe('W500.A apps/marketing-site/src/pages/faq.astro content parity', () => {
+describe('W500.A apps/marketing-site /faq (src/data/faq.ts + faq.astro) content parity', () => {
   const body = read(LIB);
+  const page = read(PAGE);
 
   it('10-group taxonomy pinned: Pricing model + Free tier + Tiers + upgrades + Billing + payments + Bundled LLM + BYOK + EU stack + compliance + V-500 Architecture + sessions + V-500 Migrating from another vendor + V-500 Acceptable use + Support + reliability — pinned so the 10-bucket structure stays consistent (drift to dropping V-500 groups would re-orphan customers from architecture / migration / AUP self-service answers)', () => {
     expect(body).toMatch(/title: 'Pricing model',/);
@@ -132,7 +139,18 @@ describe('W500.A apps/marketing-site/src/pages/faq.astro content parity', () => 
     expect(body).toMatch(/Enterprise \+ Self-hosted licensees receive source escrow/);
   });
 
-  it('file exists at canonical path', () => {
+  it('FAQPage JSON-LD single-source pinned: the page derives Question/acceptedAnswer pairs from the same FAQ_GROUPS array it renders (W507 discipline — schema can never diverge from the visible Q&A; no fabricated ratings/reviews)', () => {
+    expect(page).toMatch(
+      /import \{ FAQ_GROUPS, faqGroupSlug, faqPlainText \} from '\.\.\/data\/faq';/,
+    );
+    expect(page.match(/'@type': 'FAQPage'/g)).toHaveLength(1);
+    expect(page).toMatch(/mainEntity: FAQ_GROUPS\.flatMap\(\(group\) => group\.entries\)/);
+    expect(page).toMatch(/text: faqPlainText\(entry\.a\)/);
+    expect(page).not.toMatch(/aggregateRating|reviewCount|ratingValue/i);
+  });
+
+  it('files exist at canonical paths', () => {
     expect(existsSync(LIB)).toBe(true);
+    expect(existsSync(PAGE)).toBe(true);
   });
 });

@@ -1,0 +1,25 @@
+---
+// FAQ entry list — every question is a real h3 heading in the DOM
+// (crawlable + deep-linkable; no accordion hiding answers from
+// crawlers or find-in-page). Entries come from src/data/faq.ts — the
+// same array that feeds the page's FAQPage JSON-LD, so the markup and
+// the schema can never diverge.
+import type { FaqEntry } from '../data/faq';
+
+interface Props {
+  entries: FaqEntry[];
+  class?: string;
+}
+const { entries, class: className = '' } = Astro.props;
+---
+
+<div class:list={['space-y-5', className]}>
+  {
+    entries.map((entry) => (
+      <article class="panel">
+        <h3 class="text-base font-semibold leading-6 text-tk-ink">{entry.q}</h3>
+        <div class="mt-2.5 text-sm leading-relaxed text-tk-ink-2" set:html={entry.a} />
+      </article>
+    ))
+  }
+</div>

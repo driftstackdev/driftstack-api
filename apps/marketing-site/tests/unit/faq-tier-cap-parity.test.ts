@@ -15,7 +15,10 @@ import {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/faq.astro');
+// 2026-07-03 Fleet v2 — the Q&A array moved verbatim from faq.astro to
+// src/data/faq.ts (single source for page markup + FAQPage JSON-LD).
+// Path-only retarget; every assertion below is unchanged.
+const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/data/faq.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');

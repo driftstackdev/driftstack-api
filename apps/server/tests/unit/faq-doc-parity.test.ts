@@ -9,7 +9,10 @@ import { describe, expect, it } from 'vitest';
 import { TIER_CONCURRENT_SESSION_LIMITS } from '@driftstack/api-types';
 
 const REPO = join(__dirname, '..', '..', '..', '..');
-const DOC_PATH = join(REPO, 'apps', 'marketing-site', 'src', 'pages', 'faq.astro');
+// 2026-07-03 Fleet v2 — the Q&A array moved verbatim from faq.astro to
+// src/data/faq.ts (single source for page markup + FAQPage JSON-LD).
+// Path-only retarget; every assertion below is unchanged.
+const DOC_PATH = join(REPO, 'apps', 'marketing-site', 'src', 'data', 'faq.ts');
 
 function read(): string {
   return readFileSync(DOC_PATH, 'utf8');
