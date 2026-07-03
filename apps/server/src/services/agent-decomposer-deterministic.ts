@@ -26,6 +26,7 @@ import type {
   DecomposeArgs,
   DecomposeResult,
 } from './agent-decomposer.js';
+import { normalizeTaskForScreening } from './task-refusal.js';
 
 // AUP-refusal keyword corpus (subset for the deterministic impl;
 // AI-B1.b will use the Anthropic content-policy + a fuller corpus).
@@ -91,8 +92,16 @@ function detectAmbiguity(task: string): string | null {
 }
 
 function checkAupRefusal(task: string): string | null {
+  // Match the CANONICAL form too, so trivial unicode obfuscation (zero-width
+  // joiners, fullwidth/homoglyph letters, soft hyphens) can't slip an abuse
+  // task past the pre-filter — the sibling guards (task-refusal.ts,
+  // agent-consequential-action.ts) already normalize; this one must match them.
+  // Test BOTH raw and normalized so no pattern that matched before can regress.
+  // Kept byte-identical to ClaudeAgentDecomposer.checkAupRefusal (cross-source
+  // AUP invariant — a drift weakens the deterministic-path AUP enforcement).
+  const normalized = normalizeTaskForScreening(task);
   for (const { pattern, reason } of AUP_REFUSAL_PATTERNS) {
-    if (pattern.test(task)) return reason;
+    if (pattern.test(task) || pattern.test(normalized)) return reason;
   }
   return null;
 }

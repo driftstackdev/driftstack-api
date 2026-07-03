@@ -33,6 +33,7 @@ import type {
   DecomposeUsage,
 } from './agent-decomposer.js';
 import { AUP_REFUSAL_PATTERNS } from './agent-decomposer-deterministic.js';
+import { normalizeTaskForScreening } from './task-refusal.js';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION_HEADER = '2023-06-01';
@@ -457,8 +458,16 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
 }
 
 function checkAupRefusal(task: string): string | null {
+  // Match the CANONICAL form too, so trivial unicode obfuscation (zero-width
+  // joiners, fullwidth/homoglyph letters, soft hyphens) can't slip an abuse
+  // task past the pre-filter — the sibling guards (task-refusal.ts,
+  // agent-consequential-action.ts) already normalize; this one must match them.
+  // Test BOTH raw and normalized so no pattern that matched before can regress.
+  // Kept byte-identical to DeterministicAgentDecomposer.checkAupRefusal (cross-
+  // source AUP invariant — a drift weakens the deterministic-path AUP enforcement).
+  const normalized = normalizeTaskForScreening(task);
   for (const { pattern, reason } of AUP_REFUSAL_PATTERNS) {
-    if (pattern.test(task)) return reason;
+    if (pattern.test(task) || pattern.test(normalized)) return reason;
   }
   return null;
 }
