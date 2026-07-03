@@ -53,10 +53,10 @@ describe('W344.B /billing STATUS_BADGE_CLASS ↔ SubscriptionStatusSchema parity
     expect(keys.has('no_subscription')).toBe(true);
   });
 
-  it('active uses emerald (positive billing state), past_due/unpaid use red (recovery state)', () => {
-    expect(block![1]!).toMatch(/active:\s*'[^']*emerald[^']*'/);
-    expect(block![1]!).toMatch(/past_due:\s*'[^']*red[^']*'/);
-    expect(block![1]!).toMatch(/unpaid:\s*'[^']*red[^']*'/);
+  it('active uses the ready token (positive billing state), past_due/unpaid use the err token (recovery state) — Fleet v2 2026-07-02 moved severities onto the two-axis status tokens so badges flip with data-mode', () => {
+    expect(block![1]!).toMatch(/active:\s*'[^']*tk-ready[^']*'/);
+    expect(block![1]!).toMatch(/past_due:\s*'[^']*tk-err[^']*'/);
+    expect(block![1]!).toMatch(/unpaid:\s*'[^']*tk-err[^']*'/);
   });
 
   it('trialing/incomplete use tk-accent (transient/needs-action state, R2 dark migration)', () => {

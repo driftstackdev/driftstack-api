@@ -16,6 +16,7 @@ const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/billing.ts');
 // billing.ts since the auth gate + service deps differ). Include both
 // route sources when checking registration coverage.
 const CRYPTO_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto.ts');
+const CRYPTO_ORDERS_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto-orders.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -25,7 +26,8 @@ describe('W268.D /billing page ↔ /v1/billing/* route parity', () => {
   const page = read(PAGE);
   const route = read(ROUTE);
   const cryptoRoute = read(CRYPTO_ROUTE);
-  const allRouteSources = route + '\n' + cryptoRoute;
+  const cryptoOrdersRoute = read(CRYPTO_ORDERS_ROUTE);
+  const allRouteSources = route + '\n' + cryptoRoute + '\n' + cryptoOrdersRoute;
 
   it('every /v1/billing/* path cited by inline action handlers is registered', () => {
     const paths = [...page.matchAll(/['"`](\/v1\/billing\/[a-z-]+)['"`]/g)].map((m) => m[1]!);
@@ -46,6 +48,15 @@ describe('W268.D /billing page ↔ /v1/billing/* route parity', () => {
     // disabled-route stub for it under registerBillingDisabledRoutes —
     // that's apps/server's concern, not this page's.)
     expect(page).not.toContain('/v1/billing/trial-pack');
+  });
+
+  it('crypto payments history targets /v1/billing/crypto-orders (+ per-order receipt.pdf) and both are registered (slice 3.3)', () => {
+    expect(page).toContain("'/v1/billing/crypto-orders?limit=5'");
+    expect(page).toMatch(
+      /\/v1\/billing\/crypto-orders\/' \+ encodeURIComponent\(id\) \+ '\/receipt\.pdf/,
+    );
+    expect(cryptoOrdersRoute).toContain(`'/v1/billing/crypto-orders'`);
+    expect(cryptoOrdersRoute).toContain(`'/v1/billing/crypto-orders/:order_id/receipt.pdf'`);
   });
 
   it('checkout-session route exists on the live server (used by /select-tier, not /billing)', () => {

@@ -211,4 +211,107 @@ describe('customer-dashboard Billing (billing.astro) behaviour', () => {
     );
     expect(portalCall).toBeTruthy();
   });
+
+  it('crypto orders: renders tier label, price, created day + a Receipt button ONLY on paid orders (slice 3.3)', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/billing\/crypto-orders\?limit=5$/.test(call.url)) {
+          return json({
+            orders: [
+              {
+                order_id: 'cro_paid1',
+                product: 'team_manual',
+                price_cents: 24900,
+                price_currency: 'USD',
+                status: 'paid',
+                created_at: '2026-06-20T10:00:00.000Z',
+              },
+              {
+                order_id: 'cro_pend1',
+                product: 'solo_manual',
+                price_cents: 7900,
+                price_currency: 'USD',
+                status: 'pending',
+                created_at: '2026-07-01T10:00:00.000Z',
+              },
+            ],
+            next_cursor: null,
+          });
+        }
+        return json({ subscription: null });
+      },
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-crypto-list]')).toBe(false);
+    const listText = text(window, '[data-crypto-list]');
+    expect(listText).toContain('Team');
+    expect(listText).toContain('249.00 USD');
+    expect(listText).toContain('cro_paid1');
+    expect(listText).toContain('2026-06-20');
+    // Receipt affordance only where a receipt exists (paid).
+    const receipts = window.document.querySelectorAll('[data-crypto-receipt]');
+    expect(receipts.length).toBe(1);
+    expect(receipts[0]?.getAttribute('data-crypto-receipt')).toBe('cro_paid1');
+  });
+
+  it('crypto orders: empty list reveals the empty state; a failing fetch does the same (quiet failure)', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/crypto-orders/.test(call.url)) return json({ detail: 'nope' }, 500);
+        return json({ subscription: null });
+      },
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-crypto-empty]')).toBe(false);
+    expect(isHidden(window, '[data-crypto-list]')).toBe(true);
+  });
+
+  it('crypto receipt click: fetches receipt.pdf WITH the Bearer header (a plain link would 401)', async () => {
+    const pdf = new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/receipt\.pdf$/.test(call.url)) return pdf;
+        if (/\/v1\/billing\/crypto-orders\?limit=5$/.test(call.url)) {
+          return json({
+            orders: [
+              {
+                order_id: 'cro_paid1',
+                product: 'team_manual',
+                price_cents: 24900,
+                price_currency: 'USD',
+                status: 'paid',
+                created_at: '2026-06-20T10:00:00.000Z',
+              },
+            ],
+            next_cursor: null,
+          });
+        }
+        return json({ subscription: null });
+      },
+    });
+    win = window;
+    // jsdom lacks createObjectURL — stub the pair so the download path runs.
+    // @ts-expect-error — jsdom global is loose
+    window.URL.createObjectURL = () => 'blob:stub';
+    // @ts-expect-error — jsdom global is loose
+    window.URL.revokeObjectURL = () => {};
+    await flush();
+    const btn = window.document.querySelector('[data-crypto-receipt]') as HTMLButtonElement;
+    expect(btn).not.toBeNull();
+    btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush();
+    const receiptCall = fetchCalls.find((c) =>
+      /\/v1\/billing\/crypto-orders\/cro_paid1\/receipt\.pdf$/.test(c.url),
+    );
+    expect(receiptCall).toBeTruthy();
+    const headers = (receiptCall?.init?.headers ?? {}) as Record<string, string>;
+    const authKey = Object.keys(headers).find((h) => h.toLowerCase() === 'authorization');
+    expect(authKey).toBeDefined();
+    expect(headers[authKey!]).toBe('Bearer tok');
+  });
 });

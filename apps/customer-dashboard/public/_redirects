@@ -16,3 +16,5 @@
 /recipes/*         /   302
 /proxies           /   302
 /first-session     /   302
+# 2026-07-02 (slice 3.3) — /subscription merged into /billing.
+/subscription      /billing   302

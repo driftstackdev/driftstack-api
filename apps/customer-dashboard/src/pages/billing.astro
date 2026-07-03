@@ -14,16 +14,20 @@ function fmtIso(iso: string | null): string {
 }
 
 const status = MOCK_SUBSCRIPTION?.status ?? 'no_subscription';
+// Fleet v2 (2026-07-02) — the 9-state Stripe lifecycle catalog is
+// load-bearing (an uncatalogued status renders unstyled); values sit on
+// the two-axis status tokens so badges flip with data-mode instead of
+// the old hard-coded emerald/red literals that broke in light mode.
 const STATUS_BADGE_CLASS: Record<string, string> = {
-  active: 'bg-emerald-400/10 text-emerald-300',
+  active: 'bg-tk-ready/10 text-tk-ready',
   trialing: 'bg-tk-accent/10 text-tk-accent',
-  past_due: 'bg-red-50 text-red-700',
-  canceled: 'bg-tk-surface text-tk-ink-2',
-  unpaid: 'bg-red-50 text-red-700',
+  past_due: 'bg-tk-err/10 text-tk-err',
+  canceled: 'bg-tk-hover text-tk-ink-2',
+  unpaid: 'bg-tk-err/10 text-tk-err',
   incomplete: 'bg-tk-accent/10 text-tk-accent',
-  incomplete_expired: 'bg-tk-surface text-tk-ink-2',
-  paused: 'bg-tk-surface text-tk-ink-2',
-  no_subscription: 'bg-tk-surface text-tk-ink-2',
+  incomplete_expired: 'bg-tk-hover text-tk-ink-2',
+  paused: 'bg-tk-hover text-tk-ink-2',
+  no_subscription: 'bg-tk-hover text-tk-ink-2',
 };
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
@@ -116,6 +120,15 @@ const apiBaseUrl = resolveApiBaseUrl();
       >
         Opens the Stripe billing portal in a new step — choose "Cancel plan" there to finish cancelling.
       </p>
+      {/* 2026-07-02 (slice 3.3) — plan-change honesty copy, absorbed from
+          the retired /subscription page (the account-portal IA folded that
+          drill-down into this card; plan history + the full invoice list
+          live in the Stripe portal). */}
+      <p class="mt-2 text-xs text-tk-ink-3">
+        Upgrades take effect immediately and prorate your remaining period.
+        Downgrades take effect at the end of the current period — you keep
+        your current cap until renewal.
+      </p>
     </section>
 
     {/* 2026-05-23 — icon header on the invoices card. */}
@@ -138,14 +151,32 @@ const apiBaseUrl = resolveApiBaseUrl();
             URL — bookmark for accounting. The full invoice history is also
             accessible via the Stripe Customer Portal link above.
           </p>
-          {/* 2026-07-02 (redesign slice 2) — /subscription left the sidebar
-              nav with the account-portal IA; this link keeps the page
-              reachable until it merges into this page in slice 3. */}
-          <p class="mt-3 text-sm">
-            <a href="/subscription" class="text-tk-accent hover:text-tk-accent-2"
-              >Plan history &amp; subscription details →</a
-            >
+        </div>
+      </div>
+    </section>
+
+    {/* Fleet v2 (2026-07-02, slice 3.3) — crypto payments history. The
+        top-up orders the GUI's Billing "Orders" tab shows, surfaced on the
+        web portal too: GET /v1/billing/crypto-orders (5 most recent).
+        Receipt downloads go through an authed fetch → blob (the receipt
+        endpoints require the Bearer header, so a plain <a href> would 401). */}
+    <!-- Crypto payments -->
+    <section class="dashboard-card mt-6">
+      <div class="flex items-start gap-4">
+        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mt-1">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M9 8h4.5a2 2 0 0 1 0 4H9h5a2 2 0 0 1 0 4H9M12 6v2M12 16v2" />
+          </svg>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Crypto payments</p>
+          <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">Recent orders</h2>
+          <p data-crypto-empty class="mt-3 hidden text-sm text-tk-ink-3">
+            No crypto payments yet. Pay with crypto from the
+            <a href="/select-tier" class="text-tk-accent hover:underline">plan picker</a>.
           </p>
+          <ul data-crypto-list class="mt-4 hidden divide-y divide-tk-border"></ul>
         </div>
       </div>
     </section>
@@ -194,15 +225,15 @@ const apiBaseUrl = resolveApiBaseUrl();
       // BADGE_TONE_CLASSES lists every class any status ever applies, so we
       // can strip them all before adding the new one.
       const STATUS_BADGE_CLASS = {
-        active: 'bg-emerald-400/10 text-emerald-300',
+        active: 'bg-tk-ready/10 text-tk-ready',
         trialing: 'bg-tk-accent/10 text-tk-accent',
-        past_due: 'bg-red-50 text-red-700',
-        canceled: 'bg-tk-surface text-tk-ink-2',
-        unpaid: 'bg-red-50 text-red-700',
+        past_due: 'bg-tk-err/10 text-tk-err',
+        canceled: 'bg-tk-hover text-tk-ink-2',
+        unpaid: 'bg-tk-err/10 text-tk-err',
         incomplete: 'bg-tk-accent/10 text-tk-accent',
-        incomplete_expired: 'bg-tk-surface text-tk-ink-2',
-        paused: 'bg-tk-surface text-tk-ink-2',
-        no_subscription: 'bg-tk-surface text-tk-ink-2',
+        incomplete_expired: 'bg-tk-hover text-tk-ink-2',
+        paused: 'bg-tk-hover text-tk-ink-2',
+        no_subscription: 'bg-tk-hover text-tk-ink-2',
       };
       const BADGE_TONE_CLASSES = Array.from(
         new Set(Object.values(STATUS_BADGE_CLASS).flatMap((c) => c.split(' '))),
@@ -399,6 +430,114 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (typeof window.dashboardHydrated === 'function') {
             window.dashboardHydrated();
           }
+        });
+
+      // ─── Crypto payments history (slice 3.3) ──────────────────────────
+      // GET /v1/billing/crypto-orders?limit=5 — the same orders the GUI's
+      // Billing "Orders" tab lists. Quiet failure: the section keeps its
+      // empty state (crypto is optional; a transient error here must not
+      // alarm a card-paying customer).
+      function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+          if (c === '&') return '&amp;';
+          if (c === '<') return '&lt;';
+          if (c === '>') return '&gt;';
+          if (c === '"') return '&quot;';
+          return '&#39;';
+        });
+      }
+      // 6-state CryptoOrderStatus catalog (api-types) — an uncatalogued
+      // status renders with the muted fallback, never unstyled.
+      const CRYPTO_BADGE = {
+        pending: 'bg-tk-busy/10 text-tk-busy',
+        confirming: 'bg-tk-busy/10 text-tk-busy',
+        paid: 'bg-tk-ready/10 text-tk-ready',
+        failed: 'bg-tk-err/10 text-tk-err',
+        partial: 'bg-tk-busy/10 text-tk-busy',
+        cancelled: 'bg-tk-hover text-tk-ink-2',
+      };
+      function fmtPrice(cents, currency) {
+        const n = Number(cents);
+        if (!isFinite(n)) return '—';
+        return (n / 100).toFixed(2) + ' ' + String(currency || 'USD');
+      }
+      authedFetch('/v1/billing/crypto-orders?limit=5', { method: 'GET' })
+        .then(function (r) {
+          return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+        })
+        .then(function (body) {
+          const orders = body && Array.isArray(body.orders) ? body.orders : [];
+          const list = root.querySelector('[data-crypto-list]');
+          const empty = root.querySelector('[data-crypto-empty]');
+          if (!orders.length) {
+            if (empty) empty.classList.remove('hidden');
+            return;
+          }
+          if (!list) return;
+          list.classList.remove('hidden');
+          list.innerHTML = orders
+            .map(function (o) {
+              const badge = CRYPTO_BADGE[o.status] || 'bg-tk-hover text-tk-ink-2';
+              const receipt =
+                o.status === 'paid'
+                  ? '<button type="button" data-crypto-receipt="' +
+                    escapeHtml(o.order_id) +
+                    '" class="text-xs text-tk-accent hover:underline">Receipt (PDF)</button>'
+                  : '';
+              return (
+                '<li class="flex flex-wrap items-center justify-between gap-3 py-3">' +
+                '<div class="min-w-0">' +
+                '<p class="text-sm font-medium text-tk-ink">' +
+                escapeHtml(tierLabel(o.product)) +
+                ' · ' +
+                escapeHtml(fmtPrice(o.price_cents, o.price_currency)) +
+                '</p>' +
+                '<p class="mt-0.5 font-mono text-xs text-tk-ink-3">' +
+                escapeHtml(o.order_id) +
+                ' · ' +
+                escapeHtml(fmtIso(o.created_at)) +
+                '</p></div>' +
+                '<span class="flex items-center gap-3">' +
+                receipt +
+                '<span class="rounded-full px-2 py-1 text-xs font-medium uppercase tracking-wide ' +
+                badge +
+                '">' +
+                escapeHtml(String(o.status || '—')) +
+                '</span></span></li>'
+              );
+            })
+            .join('');
+          // Receipt downloads: the endpoint requires the Bearer header, so
+          // a plain <a href> would 401 — fetch with auth, then hand the
+          // blob to the browser as a download.
+          list.querySelectorAll('[data-crypto-receipt]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              const id = btn.getAttribute('data-crypto-receipt');
+              authedFetch('/v1/billing/crypto-orders/' + encodeURIComponent(id) + '/receipt.pdf', {
+                method: 'GET',
+              })
+                .then(function (r) {
+                  return r.ok ? r.blob() : Promise.reject(new Error('HTTP ' + r.status));
+                })
+                .then(function (blob) {
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'driftstack-receipt-' + id + '.pdf';
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                  URL.revokeObjectURL(url);
+                })
+                .catch(function () {
+                  showBanner("Couldn't download the receipt — try again in a moment.");
+                });
+            });
+          });
+        })
+        .catch(function () {
+          const empty = root.querySelector('[data-crypto-empty]');
+          if (empty) empty.classList.remove('hidden');
         });
     })();
   </script>
