@@ -1,5 +1,10 @@
 ---
+// Changelog v2 (2026-07-03) — Fleet v2 re-skin (PageHero + .card entry
+// cards, AA-safe accent text) + roadmap cross-link. Every pre-existing
+// entry is byte-identical; the 2026-07-03 entry announces the site
+// redesign itself (which deploys together with this entry).
 import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHero from '../components/PageHero.astro';
 
 // Placeholder entries. Once the verification log + tagged GitHub
 // releases stabilize, this file becomes a build-time generator that
@@ -16,6 +21,12 @@ interface ChangelogEntry {
 }
 
 const ENTRIES: readonly ChangelogEntry[] = [
+  {
+    date: '2026-07-03',
+    category: 'launch',
+    title: 'A clearer driftstack.dev',
+    body: 'The public site has been redesigned. Plainer language on every page — what each thing does first, with the precise technical claims kept in the small print. A rebuilt homepage shows the desktop app and the fleet of open iPhone sessions it drives. The site now ships its brand typography (self-hosted, no third-party requests), the groundwork for an accessible light theme is in place, and shared links get a fresh preview card. Prices, plans, and the API are unchanged.',
+  },
   {
     date: '2026-06-16',
     category: 'launch',
@@ -248,30 +259,28 @@ const CATEGORY_COLOR: Record<ChangelogEntry['category'], string> = {
   title="Changelog"
   description="What changed in Driftstack — pricing, SDK releases, security posture, self-hosted updates."
 >
-  <!-- Header -->
-  <section class="relative overflow-hidden bg-gradient-to-b from-tk-bg to-tk-surface">
-    {/* 2026-05-22 — hero-glow atmosphere matches the rest of the site. */}
-    <div class="hero-glow" aria-hidden="true"></div>
-    <div class="relative mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Changelog</p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl text-tk-ink">What changed.</h1>
-      <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
-        Customer-facing changes, in reverse-chronological order. SDK
-        releases, pricing changes, security posture updates,
-        self-hosted-tier adjustments. Engineering-internal changes
-        (refactors, test fixtures, observability work) live in the
-        verification log inside the repo, not here.
-      </p>
-    </div>
-  </section>
+  <!-- Hero -->
+  <PageHero label="Changelog" title="What changed.">
+    <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
+      Customer-facing changes, in reverse-chronological order. SDK
+      releases, pricing changes, security posture updates,
+      self-hosted-tier adjustments. Engineering-internal changes
+      (refactors, test fixtures, observability work) live in the
+      verification log inside the repo, not here.
+    </p>
+    <p class="mt-3 max-w-prose text-base text-tk-ink-2">
+      For what lands next, see the
+      <a href="/roadmap" class="text-tk-accent-text underline">roadmap</a>.
+    </p>
+  </PageHero>
 
   <!-- Entries -->
-  <section class="border-t border-tk-border bg-tk-surface">
-    <div class="mx-auto max-w-6xl px-6 py-16">
-      <ol class="space-y-10">
+  <section class="relative border-t border-tk-border bg-tk-surface">
+    <div class="mx-auto max-w-6xl px-6 py-16 md:py-20">
+      <ol class="space-y-6">
         {
           ENTRIES.map((entry) => (
-            <li class="border-b border-tk-border pb-8 last:border-b-0">
+            <li class="card p-6 md:p-8">
               <div class="flex items-center gap-3">
                 <time class="font-mono text-xs text-tk-ink-3" datetime={entry.date}>
                   {entry.date}
@@ -280,7 +289,7 @@ const CATEGORY_COLOR: Record<ChangelogEntry['category'], string> = {
                   {entry.category}
                 </span>
               </div>
-              <h2 class="mt-3 text-2xl font-semibold tracking-tight text-tk-ink">{entry.title}</h2>
+              <h2 class="mt-3 text-xl font-semibold tracking-tight text-tk-ink md:text-2xl">{entry.title}</h2>
               <p class="mt-3 max-w-prose text-tk-ink-2">{entry.body}</p>
             </li>
           ))
@@ -290,7 +299,7 @@ const CATEGORY_COLOR: Record<ChangelogEntry['category'], string> = {
   </section>
 
   <!-- Subscribe banner -->
-  <section class="border-t border-tk-border bg-tk-bg">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-12">
       <div class="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
         <div>
@@ -300,7 +309,7 @@ const CATEGORY_COLOR: Record<ChangelogEntry['category'], string> = {
           <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
             Email <a
               href="mailto:hello@driftstack.dev?subject=Changelog%20subscribe"
-              class="text-tk-accent underline">hello@driftstack.dev</a> to
+              class="text-tk-accent-text underline">hello@driftstack.dev</a> to
             get added to the customer changelog list. Roughly one email
             every 2-4 weeks; only material changes (no internal-noise
             spam).

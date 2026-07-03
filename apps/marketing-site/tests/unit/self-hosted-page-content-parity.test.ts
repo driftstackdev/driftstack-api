@@ -74,15 +74,15 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
     );
   });
 
-  it('3 "when self-hosted is the right call" categories pinned (Privacy / Volume / Sovereignty)', () => {
+  it('3 "when self-hosted is the right call" categories pinned (Privacy / Volume / Sovereignty). 2026-07-03 v2 re-skin — label tone moved to text-tk-accent-text (the AA-safe accent text token; raw --accent is a fill tone).', () => {
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Privacy<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">Privacy<\/p>/,
     );
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Volume<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">Volume<\/p>/,
     );
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Sovereignty<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">Sovereignty<\/p>/,
     );
   });
 

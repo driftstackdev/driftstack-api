@@ -1,5 +1,11 @@
 ---
+// Roadmap v2 (2026-07-03) — Fleet v2 re-skin (PageHero + .card lanes,
+// AA-safe accent text, status-token lane pills: tk-ready = live /
+// tk-busy = active / muted = on deck). The Now / Next / Later ladder,
+// every item, and the no-dates honesty framing are byte-identical to
+// the pre-redesign page.
 import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHero from '../components/PageHero.astro';
 
 // V-473 — public roadmap. Sourced selectively from the internal V-294
 // catalog; internal V-NNN tags are intentionally NOT exposed (they
@@ -103,34 +109,32 @@ const LATER: RoadmapItem[] = [
   description="What's live now, what's landing next, and what's further out for Driftstack. iPhone Safari fingerprint platform — agent sessions (AI / manual / pair), additional archetypes, GUI streaming, recipe library."
 >
   <!-- Hero -->
-  <section class="relative overflow-hidden bg-gradient-to-b from-tk-bg to-tk-surface">
-    {/* 2026-05-24 — hero-glow atmosphere matches the rest of the site. */}
-    <div class="hero-glow" aria-hidden="true"></div>
-    <div class="relative mx-auto max-w-6xl px-6 pb-16 pt-20 md:pt-24">
-      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Roadmap</p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl text-tk-ink">What's live, next, and further out.</h1>
-      <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
-        We don't publish dates; we publish ordering. <strong>Now</strong> ships
-        today. <strong>Next</strong> is in active engineering and lands in the
-        weeks ahead. <strong>Later</strong> is on the deck and will move up
-        as the foundation supports it.
-      </p>
-      <p class="mt-3 max-w-prose text-base text-tk-ink-2">
-        If something on the Later list would unlock a real workload for you
-        today, mail
-        <a href="mailto:support@driftstack.dev" class="text-tk-accent underline"
-          >support@driftstack.dev</a
-        > — concrete demand reorders the deck.
-      </p>
-    </div>
-  </section>
+  <PageHero label="Roadmap" title="What's live, next, and further out.">
+    <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
+      We don't publish dates; we publish ordering. <strong>Now</strong> ships
+      today. <strong>Next</strong> is in active engineering and lands in the
+      weeks ahead. <strong>Later</strong> is on the deck and will move up
+      as the foundation supports it.
+    </p>
+    <p class="mt-3 max-w-prose text-base text-tk-ink-2">
+      If something on the Later list would unlock a real workload for you
+      today, mail
+      <a href="mailto:support@driftstack.dev" class="text-tk-accent-text underline"
+        >support@driftstack.dev</a
+      > — concrete demand reorders the deck.
+    </p>
+    <p class="mt-3 max-w-prose text-base text-tk-ink-2">
+      Everything that already shipped is on the
+      <a href="/changelog" class="text-tk-accent-text underline">changelog</a>.
+    </p>
+  </PageHero>
 
   <!-- Now -->
-  <section class="border-t border-tk-border bg-tk-surface">
-    <div class="mx-auto max-w-6xl px-6 py-16">
+  <section class="relative border-t border-tk-border bg-tk-surface">
+    <div class="mx-auto max-w-6xl px-6 py-16 md:py-20">
       <div class="mb-8 flex items-baseline gap-4">
         <span
-          class="rounded-full bg-emerald-100 px-3 py-1 font-mono text-xs uppercase tracking-widest text-emerald-300"
+          class="rounded-full border border-tk-ready/30 px-3 py-1 font-mono text-xs uppercase tracking-widest text-tk-ready"
         >
           Now
         </span>
@@ -139,7 +143,7 @@ const LATER: RoadmapItem[] = [
       <ul class="grid gap-6 md:grid-cols-2">
         {
           NOW.map((item) => (
-            <li class="rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-6">
+            <li class="card border-tk-ready/25 p-6">
               <h3 class="text-lg font-medium text-tk-ink">{item.title}</h3>
               <p class="mt-3 text-sm text-tk-ink-2">{item.body}</p>
             </li>
@@ -150,11 +154,11 @@ const LATER: RoadmapItem[] = [
   </section>
 
   <!-- Next -->
-  <section class="border-t border-tk-border bg-tk-bg">
-    <div class="mx-auto max-w-6xl px-6 py-16">
+  <section class="relative border-t border-tk-border">
+    <div class="mx-auto max-w-6xl px-6 py-16 md:py-20">
       <div class="mb-8 flex items-baseline gap-4">
         <span
-          class="rounded-full bg-tk-accent/20 px-3 py-1 font-mono text-xs uppercase tracking-widest text-tk-accent"
+          class="rounded-full border border-tk-busy/30 px-3 py-1 font-mono text-xs uppercase tracking-widest text-tk-busy"
         >
           Next
         </span>
@@ -163,7 +167,7 @@ const LATER: RoadmapItem[] = [
       <ul class="grid gap-6 md:grid-cols-2">
         {
           NEXT.map((item) => (
-            <li class="rounded-lg border border-tk-accent/30 bg-tk-surface p-6">
+            <li class="card border-tk-busy/25 p-6">
               <h3 class="text-lg font-medium text-tk-ink">{item.title}</h3>
               <p class="mt-3 text-sm text-tk-ink-2">{item.body}</p>
             </li>
@@ -174,11 +178,11 @@ const LATER: RoadmapItem[] = [
   </section>
 
   <!-- Later -->
-  <section class="border-t border-tk-border bg-tk-surface">
-    <div class="mx-auto max-w-6xl px-6 py-16">
+  <section class="relative border-t border-tk-border bg-tk-surface">
+    <div class="mx-auto max-w-6xl px-6 py-16 md:py-20">
       <div class="mb-8 flex items-baseline gap-4">
         <span
-          class="rounded-full bg-tk-raised px-3 py-1 font-mono text-xs uppercase tracking-widest text-tk-ink-2"
+          class="rounded-full border border-tk-border px-3 py-1 font-mono text-xs uppercase tracking-widest text-tk-ink-3"
         >
           Later
         </span>
@@ -187,7 +191,7 @@ const LATER: RoadmapItem[] = [
       <ul class="grid gap-6 md:grid-cols-2">
         {
           LATER.map((item) => (
-            <li class="rounded-lg border border-tk-border bg-tk-bg/60 p-6">
+            <li class="card p-6">
               <h3 class="text-lg font-medium text-tk-ink">{item.title}</h3>
               <p class="mt-3 text-sm text-tk-ink-2">{item.body}</p>
             </li>
@@ -198,14 +202,12 @@ const LATER: RoadmapItem[] = [
   </section>
 
   <!-- CTA -->
-  <section class="border-t border-tk-border bg-tk-bg">
-    <div class="mx-auto max-w-6xl px-6 py-16">
+  <section class="relative border-t border-tk-border">
+    <div class="mx-auto max-w-6xl px-6 py-16 md:py-20">
       <div class="flex flex-col items-start gap-6 md:flex-row md:items-end md:justify-between">
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
-            Influence the order
-          </p>
-          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink">
+          <p class="section-label">Influence the order</p>
+          <h2 class="mt-4 text-3xl font-semibold tracking-tight text-tk-ink">
             Tell us what would unlock your workload.
           </h2>
           <p class="mt-3 max-w-prose text-tk-ink-2">

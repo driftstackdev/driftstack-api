@@ -15,7 +15,10 @@
 //   • 2-category nav grid: Product / Company.
 //   • Product 6-link: /pricing + /comparison + /self-hosted +
 //     docs.driftstack.dev (external) + app/signup + app/login.
-//   • Company 5-link: /about + /faq + /changelog + support@ + sales@.
+//   • Company 6-link (2026-07-03 S11): /about + /faq + /changelog +
+//     /roadmap + support@ + sales@. (/roadmap returned as a Company
+//     link with the v2 redesign — the Issue-5 removal targeted the
+//     aspirational Product-column/header placement, which stays gone.)
 //   • Meta link row: /legal/privacy + /legal/terms + /legal/dpa +
 //     /legal/aup + /trust + /security + /trust/sub-processors +
 //     status.driftstack.dev (external).
@@ -48,13 +51,14 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
     expect(body).toMatch(/&copy; \{year\} Driftstack\. All rights reserved\./);
   });
 
-  it('Product-category 6-link framing pinned (F-3 — /roadmap removed per Issue 5 no-aspirational-language): /pricing + /comparison + /self-hosted + docs.driftstack.dev (external) + app/signup + app/login', () => {
+  it('Product-category 6-link framing pinned (F-3 — /roadmap removed per Issue 5 no-aspirational-language; 2026-07-03 S11 scoped the not-check to the Product column since /roadmap now ships as a Company link): /pricing + /comparison + /self-hosted + docs.driftstack.dev (external) + app/signup + app/login', () => {
     expect(body).toMatch(
       /<h3 class="font-medium text-tk-ink text-xs uppercase tracking-widest">Product<\/h3>/,
     );
     expect(body).toMatch(/<li><a href="\/pricing" class="nav-link">Pricing<\/a><\/li>/);
     expect(body).toMatch(/<li><a href="\/comparison" class="nav-link">Comparison<\/a><\/li>/);
-    expect(body).not.toMatch(/<li><a href="\/roadmap"/);
+    const productColumn = body.slice(body.indexOf('>Product</h3>'), body.indexOf('>Company</h3>'));
+    expect(productColumn).not.toMatch(/<li><a href="\/roadmap"/);
     expect(body).toMatch(/<li><a href="\/self-hosted" class="nav-link">Self-hosted<\/a><\/li>/);
     expect(body).toMatch(
       /<a\s*\n?\s*href="https:\/\/docs\.driftstack\.dev"\s*\n?\s*class="nav-link"\s*\n?\s*target="_blank"\s*\n?\s*rel="noopener noreferrer">Docs<\/a/,
@@ -67,13 +71,14 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
     );
   });
 
-  it('Company-category 5-link framing pinned: /about + /faq + /changelog + mailto:support@driftstack.dev + mailto:sales@driftstack.dev — pinned so the 5-company-link surface + 2-mailto-channel (support + sales) commitment survives (drift to dropping either mailto would orphan the sales+support routing)', () => {
+  it('Company-category 6-link framing pinned (2026-07-03 S11 added /roadmap): /about + /faq + /changelog + /roadmap + mailto:support@driftstack.dev + mailto:sales@driftstack.dev — pinned so the 6-company-link surface + 2-mailto-channel (support + sales) commitment survives (drift to dropping either mailto would orphan the sales+support routing)', () => {
     expect(body).toMatch(
       /<h3 class="font-medium text-tk-ink text-xs uppercase tracking-widest">Company<\/h3>/,
     );
     expect(body).toMatch(/<li><a href="\/about" class="nav-link">About<\/a><\/li>/);
     expect(body).toMatch(/<li><a href="\/faq" class="nav-link">FAQ<\/a><\/li>/);
     expect(body).toMatch(/<li><a href="\/changelog" class="nav-link">Changelog<\/a><\/li>/);
+    expect(body).toMatch(/<li><a href="\/roadmap" class="nav-link">Roadmap<\/a><\/li>/);
     expect(body).toMatch(
       /<a href="mailto:support@driftstack\.dev" class="nav-link">support@driftstack\.dev<\/a>/,
     );

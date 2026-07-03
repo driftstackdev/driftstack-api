@@ -58,8 +58,10 @@ describe('W499.B apps/marketing-site/src/pages/roadmap.astro content parity', ()
   });
 
   it("'Concrete demand reorders the deck' framing pinned: 'If something on the Later list would unlock a real workload for you today, mail support@driftstack.dev — concrete demand reorders the deck.' + bottom-CTA 'Customer demand is the single best ordering signal we have' — pinned so the demand-driven-reordering commitment survives (drift to dropping would let the roadmap look fixed; drift to dropping support@ would orphan customers from the influence channel)", () => {
+    // 2026-07-03 v2 re-skin — inline accent links moved to the AA-safe
+    // text-tk-accent-text token (raw --accent is a fill tone).
     expect(body).toMatch(
-      /If something on the Later list would unlock a real workload for you\s*\n?\s*today, mail\s*\n?\s*<a href="mailto:support@driftstack\.dev" class="text-tk-accent underline"\s*\n?\s*>support@driftstack\.dev<\/a\s*\n?\s*> — concrete demand reorders the deck\./,
+      /If something on the Later list would unlock a real workload for you\s*\n?\s*today, mail\s*\n?\s*<a href="mailto:support@driftstack\.dev" class="text-tk-accent-text underline"\s*\n?\s*>support@driftstack\.dev<\/a\s*\n?\s*> — concrete demand reorders the deck\./,
     );
     expect(body).toMatch(/Customer demand is the single best ordering signal we have\./);
   });
@@ -136,13 +138,13 @@ describe('W499.B apps/marketing-site/src/pages/roadmap.astro content parity', ()
     expect(body).not.toMatch(/BYOK Anthropic ships from \/settings → BYOK Anthropic/);
   });
 
-  it("3-section header taxonomy: Now (emerald, 'Live and supported today.') + Next (oxblood, 'In active engineering.') + Later (slate, 'On the deck.') — pinned so the 3-bucket visual hierarchy (green = shipped / oxblood = active / slate = on deck) survives (drift to flattening the visual color would lose the at-a-glance 'this is live, this is coming, this is later' signal)", () => {
+  it("3-section header taxonomy: Now (tk-ready, 'Live and supported today.') + Next (tk-busy, 'In active engineering.') + Later (muted, 'On the deck.') — pinned so the 3-bucket visual hierarchy (green = shipped / warm = active / muted = on deck) survives (drift to flattening the visual color would lose the at-a-glance 'this is live, this is coming, this is later' signal). 2026-07-03 v2 re-skin — the raw emerald/oxblood palette classes moved onto the design-system status tokens (tk-ready / tk-busy) so the lane colors track the theme.", () => {
     expect(body).toMatch(
-      /class="rounded-full bg-emerald-100 px-3 py-1 font-mono text-xs uppercase tracking-widest text-emerald-300"\s*\n?\s*>\s*\n?\s*Now/,
+      /class="rounded-full border border-tk-ready\/30 px-3 py-1 font-mono text-xs uppercase tracking-widest text-tk-ready"\s*\n?\s*>\s*\n?\s*Now/,
     );
     expect(body).toMatch(/Live and supported today\./);
     expect(body).toMatch(
-      /class="rounded-full bg-tk-accent\/20 px-3 py-1 font-mono text-xs uppercase tracking-widest text-tk-accent"\s*\n?\s*>\s*\n?\s*Next/,
+      /class="rounded-full border border-tk-busy\/30 px-3 py-1 font-mono text-xs uppercase tracking-widest text-tk-busy"\s*\n?\s*>\s*\n?\s*Next/,
     );
     expect(body).toMatch(/In active engineering\./);
     expect(body).toMatch(/On the deck\./);

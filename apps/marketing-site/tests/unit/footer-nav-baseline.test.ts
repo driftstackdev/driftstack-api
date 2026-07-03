@@ -45,11 +45,22 @@ describe('W337.B BaseLayout (Header + Footer) nav baseline', () => {
   const header = read(HEADER);
   const pageUrls = buildPageUrls();
 
-  it('Footer contains the canonical product nav (F-3 — /roadmap removed per Issue 5)', () => {
+  it('Footer contains the canonical product nav (F-3 — /roadmap removed per Issue 5; 2026-07-03 S11 — /roadmap returned as a COMPANY-column link, so the not-in-Product check is scoped to the Product column)', () => {
     expect(footer).toContain('href="/pricing"');
     expect(footer).toContain('href="/comparison"');
     expect(footer).toContain('href="/self-hosted"');
-    expect(footer).not.toContain('href="/roadmap"');
+    const productStart = footer.indexOf('>Product</h3>');
+    const companyStart = footer.indexOf('>Company</h3>');
+    expect(productStart).toBeGreaterThan(-1);
+    expect(companyStart).toBeGreaterThan(productStart);
+    const productColumn = footer.slice(productStart, companyStart);
+    expect(productColumn).not.toContain('href="/roadmap"');
+  });
+
+  it('Footer Company column links /roadmap (2026-07-03 S11 — roadmap is reachable from every page via the footer; it stays out of the header nav on purpose)', () => {
+    const companyStart = footer.indexOf('>Company</h3>');
+    expect(companyStart).toBeGreaterThan(-1);
+    expect(footer.slice(companyStart)).toContain('href="/roadmap"');
   });
 
   it('Footer contains the canonical trust nav', () => {

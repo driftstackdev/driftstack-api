@@ -29,8 +29,10 @@
 //   • 2 columns: Product / Company.
 //   • Product (6 links, F-3): Pricing / Comparison / Self-hosted /
 //     Docs(external) / Sign up / Sign in. /roadmap removed.
-//   • Company (5 links): About / FAQ / Changelog / support@ /
-//     sales@.
+//   • Company (6 links, 2026-07-03 S11): About / FAQ / Changelog /
+//     Roadmap / support@ / sales@. (/roadmap returned as a Company
+//     link with the v2 redesign; it stays out of the header nav and
+//     the Product column on purpose.)
 //   • Meta link row: legal/privacy / legal/terms / legal/dpa /
 //     legal/aup / trust / security / trust/sub-processors /
 //     status(external).
@@ -153,10 +155,11 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
     );
   });
 
-  it('Product column 6 links pinned (F-3 — /roadmap removed): Pricing / Comparison / Self-hosted / Docs[ext] / Sign up / Sign in', () => {
+  it('Product column 6 links pinned (F-3 — /roadmap removed from Product; 2026-07-03 S11 scoped the check to the Product column since /roadmap now lives in Company): Pricing / Comparison / Self-hosted / Docs[ext] / Sign up / Sign in', () => {
     expect(body).toMatch(/<a href="\/pricing" class="nav-link">Pricing<\/a>/);
     expect(body).toMatch(/<a href="\/comparison" class="nav-link">Comparison<\/a>/);
-    expect(body).not.toMatch(/<a href="\/roadmap"/);
+    const productColumn = body.slice(body.indexOf('>Product</h3>'), body.indexOf('>Company</h3>'));
+    expect(productColumn).not.toMatch(/<a href="\/roadmap"/);
     expect(body).toMatch(/<a href="\/self-hosted" class="nav-link">Self-hosted<\/a>/);
     expect(body).toMatch(/href="https:\/\/docs\.driftstack\.dev"[\s\S]+?Docs/);
     expect(body).toMatch(
@@ -167,10 +170,11 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
     );
   });
 
-  it('Company column: About / FAQ / Changelog + support@ + sales@ mailto', () => {
+  it('Company column: About / FAQ / Changelog / Roadmap (2026-07-03 S11) + support@ + sales@ mailto', () => {
     expect(body).toMatch(/<a href="\/about" class="nav-link">About<\/a>/);
     expect(body).toMatch(/<a href="\/faq" class="nav-link">FAQ<\/a>/);
     expect(body).toMatch(/<a href="\/changelog" class="nav-link">Changelog<\/a>/);
+    expect(body).toMatch(/<a href="\/roadmap" class="nav-link">Roadmap<\/a>/);
     expect(body).toMatch(
       /<a href="mailto:support@driftstack\.dev" class="nav-link">support@driftstack\.dev<\/a>/,
     );

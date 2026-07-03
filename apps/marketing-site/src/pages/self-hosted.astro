@@ -1,5 +1,14 @@
 ---
+// Self-hosted v2 (2026-07-03) — "Plain Words, Same Teeth" pass: Band-A
+// hero (plain why-self-host opening in the homepage §12 register), Fleet
+// v2 recipes (PageHero/Section/Card/IconTile/CtaBand, AA-safe accent
+// text). SKU data binding, prices, the ASCII architecture diagram and
+// every substantive claim are byte-identical to the pre-redesign page.
 import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHero from '../components/PageHero.astro';
+import Section from '../components/Section.astro';
+import IconTile from '../components/IconTile.astro';
+import CtaBand from '../components/CtaBand.astro';
 import {
   SELF_HOSTED_ARCHETYPE_UPDATES,
   SELF_HOSTED_SKUS,
@@ -59,53 +68,48 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
   title="Self-Hosted"
   description="Run Driftstack on your own infrastructure. Privacy-required workloads, sustained high-concurrency operations, full data sovereignty. Contact Sales for early access; GA within 6 months of API public launch."
 >
-  <!-- Header -->
-  <section class="relative overflow-hidden bg-gradient-to-b from-tk-bg to-tk-surface">
-    {/* 2026-05-22 — hero-glow atmosphere matches the rest of the site. */}
-    <div class="hero-glow" aria-hidden="true"></div>
-    <div class="relative mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Self-hosted</p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl text-tk-ink">Run Driftstack on your own infrastructure.</h1>
-      <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
-        Same SDK, same archetypes, same iPhone Safari fidelity — just running
-        on hardware you own and inside a network you control. Driftstack
-        handles the orchestration, you handle the metal. Any Apple
-        Silicon Mac works; the SKU you choose maps to how many concurrent
-        sessions you need to run at once, not a software-feature ladder.
-      </p>
-      <div class="mt-8 flex flex-wrap items-center gap-4">
-        <a href="mailto:sales@driftstack.dev?subject=Self-Hosted%20inquiry" class="btn-primary"
-          >Contact sales</a
-        >
-        <a href="/pricing#self-hosted" class="btn-secondary">See pricing</a>
-      </div>
-      <p class="mt-3 text-xs text-tk-ink-3">
-        Available "Contact Sales" from day 0. Self-hosted GA within 6 months
-        of API public launch.
-      </p>
+  <!-- Hero — Band A: the plain why-self-host sentence leads, the
+       technical substance rides underneath. -->
+  <PageHero label="Self-hosted" title="Run Driftstack on your own infrastructure.">
+    <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">
+      Some work can't leave your building. If your sessions carry data
+      that must stay inside your own network, if your security team
+      needs to own every box in the chain, or if you run enough
+      concurrent sessions that renting stops making sense — run the
+      whole thing on Macs you own.
+    </p>
+    <p class="mt-4 max-w-2xl text-base leading-7 text-tk-ink-2">
+      Same SDK, same archetypes, same iPhone Safari fidelity — just running
+      on hardware you own and inside a network you control. Driftstack
+      handles the orchestration, you handle the metal. Any Apple
+      Silicon Mac works; the SKU you choose maps to how many concurrent
+      sessions you need to run at once, not a software-feature ladder.
+    </p>
+    <div class="mt-8 flex flex-wrap items-center gap-4">
+      <a href="mailto:sales@driftstack.dev?subject=Self-Hosted%20inquiry" class="btn-primary"
+        >Contact sales</a
+      >
+      <a href="/pricing#self-hosted" class="btn-secondary">See pricing</a>
     </div>
-  </section>
+    <p class="mt-4 font-mono text-xs text-tk-ink-3">
+      Available "Contact Sales" from day 0. Self-hosted GA within 6 months
+      of API public launch.
+    </p>
+  </PageHero>
 
   <!-- Architecture diagram -->
-  <section class="border-t border-tk-border bg-tk-bg">
-    <div class="mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Architecture</p>
-      <h2
-        class="mt-4 max-w-3xl text-3xl font-semibold tracking-tight text-tk-ink md:text-4xl"
-        style="letter-spacing: -0.02em;"
-      >
-        Two boxes. One secure channel. Your hardware, our orchestration.
-      </h2>
-      <p class="mt-6 max-w-prose text-base text-tk-ink-2">
-        Self-hosted is one piece of Driftstack software running on Mac
-        hardware you own. The control plane orchestrates sessions, exposes
-        the SDK + GUI, and never holds your session content.
-      </p>
+  <Section
+    label="Architecture"
+    title="Two boxes. One secure channel. Your hardware, our orchestration."
+  >
+    <p class="mt-4 max-w-2xl text-base leading-7 text-tk-ink-2">
+      Self-hosted is one piece of Driftstack software running on Mac
+      hardware you own. The control plane orchestrates sessions, exposes
+      the SDK + GUI, and never holds your session content.
+    </p>
 
-      <div
-        class="mt-10 overflow-x-auto rounded-lg border border-tk-border bg-tk-bg p-8 font-mono text-sm leading-6 text-tk-ink"
-      >
-        <pre class="whitespace-pre">{`  YOUR INFRA                                 DRIFTSTACK ORCHESTRATION
+    <div class="panel mt-10 overflow-x-auto p-8 font-mono text-sm leading-6 text-tk-ink">
+      <pre class="whitespace-pre">{`  YOUR INFRA                                 DRIFTSTACK ORCHESTRATION
   ──────────                                 ────────────────────────
 
   ┌──────────────────┐                       ┌──────────────────────┐
@@ -123,246 +127,235 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
   │   BYO SOCKS5 +   │
   │   OpenVPN + WG)  │
   └──────────────────┘`}</pre>
-      </div>
-
-      <p class="mt-6 max-w-prose text-sm text-tk-ink-3">
-        Session content (URLs, form data, captures, recordings) stays inside
-        your network. Driftstack's control plane sees license + session
-        metadata, never the session itself.
-      </p>
     </div>
-  </section>
+
+    <p class="mt-6 max-w-prose text-sm text-tk-ink-3">
+      Session content (URLs, form data, captures, recordings) stays inside
+      your network. Driftstack's control plane sees license + session
+      metadata, never the session itself.
+    </p>
+  </Section>
 
   <!-- When self-hosted makes sense -->
-  <section class="border-t border-tk-border bg-tk-surface">
-    <div class="mx-auto max-w-6xl px-6 py-20">
-      <h2 class="text-3xl font-semibold tracking-tight text-tk-ink">When self-hosted is the right call.</h2>
-      <div class="mt-10 grid gap-10 md:grid-cols-3">
-        <div>
-          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mb-3">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 2L4 5v6c0 5.5 3.8 10.7 8 11.8 4.2-1.1 8-6.3 8-11.8V5l-8-3z" />
-            </svg>
-          </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Privacy</p>
-          <h3 class="mt-3 text-xl font-semibold text-tk-ink">Sessions never leave your perimeter</h3>
-          <p class="mt-3 text-sm text-tk-ink-2">
-            For workloads where session content (URLs, form data, captures,
-            recordings) must not transit any vendor infrastructure beyond
-            your own. Self-hosted runs the WebKit engine + control plane on
-            your Mac mini / Mac Studio; nothing leaves your network.
-          </p>
-        </div>
-        <div>
-          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mb-3">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" />
-            </svg>
-          </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Volume</p>
-          <h3 class="mt-3 text-xl font-semibold text-tk-ink">
-            Sustained high-concurrency operations
-          </h3>
-          <p class="mt-3 text-sm text-tk-ink-2">
-            When your fleet runs at consistently high concurrent-session
-            counts (sustained 10+ concurrent across the month), owned
-            hardware unit economics flip favorably against equivalent
-            cloud-tier subscriptions. We'll model the break-even with your
-            team based on your actual concurrency profile.
-          </p>
-        </div>
-        <div>
-          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mb-3">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-          </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Sovereignty</p>
-          <h3 class="mt-3 text-xl font-semibold text-tk-ink">Full control over recordings + state</h3>
-          <p class="mt-3 text-sm text-tk-ink-2">
-            Recordings, screenshots, request artefacts — all stored on your
-            own R2-compatible bucket (or local NAS) with retention policies
-            you set. No Driftstack-side copies, no shared sub-processor
-            access, no DPA addendum required for your security review.
-          </p>
-        </div>
+  <Section label="Why self-host" title="When self-hosted is the right call." class="bg-tk-surface">
+    <div class="mt-10 grid gap-10 md:grid-cols-3">
+      <div>
+        <IconTile class="mb-3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 2L4 5v6c0 5.5 3.8 10.7 8 11.8 4.2-1.1 8-6.3 8-11.8V5l-8-3z" />
+          </svg>
+        </IconTile>
+        <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">Privacy</p>
+        <h3 class="mt-3 text-xl font-semibold text-tk-ink">Sessions never leave your perimeter</h3>
+        <p class="mt-3 text-sm text-tk-ink-2">
+          For workloads where session content (URLs, form data, captures,
+          recordings) must not transit any vendor infrastructure beyond
+          your own. Self-hosted runs the WebKit engine + control plane on
+          your Mac mini / Mac Studio; nothing leaves your network.
+        </p>
+      </div>
+      <div>
+        <IconTile class="mb-3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" />
+          </svg>
+        </IconTile>
+        <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">Volume</p>
+        <h3 class="mt-3 text-xl font-semibold text-tk-ink">
+          Sustained high-concurrency operations
+        </h3>
+        <p class="mt-3 text-sm text-tk-ink-2">
+          When your fleet runs at consistently high concurrent-session
+          counts (sustained 10+ concurrent across the month), owned
+          hardware unit economics flip favorably against equivalent
+          cloud-tier subscriptions. We'll model the break-even with your
+          team based on your actual concurrency profile.
+        </p>
+      </div>
+      <div>
+        <IconTile class="mb-3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+        </IconTile>
+        <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">Sovereignty</p>
+        <h3 class="mt-3 text-xl font-semibold text-tk-ink">Full control over recordings + state</h3>
+        <p class="mt-3 text-sm text-tk-ink-2">
+          Recordings, screenshots, request artefacts — all stored on your
+          own R2-compatible bucket (or local NAS) with retention policies
+          you set. No Driftstack-side copies, no shared sub-processor
+          access, no DPA addendum required for your security review.
+        </p>
       </div>
     </div>
-  </section>
+  </Section>
 
   <!-- SKU comparison -->
-  <section class="border-t border-tk-border bg-tk-bg">
-    <div class="mx-auto max-w-6xl px-6 py-20">
-      <h2 class="text-3xl font-semibold tracking-tight text-tk-ink">Three configurations.</h2>
-      <p class="mt-3 max-w-prose text-tk-ink-2">
-        Each SKU pairs a Mac configuration with a Driftstack license tier.
-        Hardware is customer-purchased; Driftstack provisions the control
-        plane + orchestration layer on your gear.
-      </p>
-
-      <div class="mt-10 grid gap-6 md:grid-cols-3">
-        {SELF_HOSTED_SKUS.map((sku) => (
-          <div class="rounded-lg border border-tk-border bg-tk-surface p-6 shadow-sm">
-            <h3 class="text-xl font-semibold text-tk-ink">{sku.name}</h3>
-            <div class="mt-4">
-              {sku.monthlyUsd === null ? (
-                <div>
-                  <span class="text-3xl font-semibold text-tk-ink">
-                    from {fmtUsd(sku.annualMonthlyEquivalentUsd)}
-                  </span>
-                  <span class="text-sm font-normal text-tk-ink-3">/mo</span>
-                  <div class="text-xs text-tk-ink-3">annual contract only</div>
+  <Section
+    label="Configurations"
+    title="Three configurations."
+    lead="Each SKU pairs a Mac configuration with a Driftstack license tier. Hardware is customer-purchased; Driftstack provisions the control plane + orchestration layer on your gear."
+  >
+    <div class="mt-10 grid gap-6 md:grid-cols-3">
+      {SELF_HOSTED_SKUS.map((sku) => (
+        <div class="card p-6">
+          <h3 class="text-xl font-semibold text-tk-ink">{sku.name}</h3>
+          <div class="mt-4">
+            {sku.monthlyUsd === null ? (
+              <div>
+                <span class="text-3xl font-semibold text-tk-ink">
+                  from {fmtUsd(sku.annualMonthlyEquivalentUsd)}
+                </span>
+                <span class="text-sm font-normal text-tk-ink-3">/mo</span>
+                <div class="text-xs text-tk-ink-3">annual contract only</div>
+              </div>
+            ) : (
+              <div>
+                <span class="text-3xl font-semibold text-tk-ink">
+                  {fmtUsd(sku.monthlyUsd)}
+                </span>
+                <span class="text-sm font-normal text-tk-ink-3">/mo</span>
+                <div class="text-xs text-tk-ink-3">
+                  or {fmtUsd(sku.annualMonthlyEquivalentUsd)}/mo billed annually
                 </div>
-              ) : (
-                <div>
-                  <span class="text-3xl font-semibold text-tk-ink">
-                    {fmtUsd(sku.monthlyUsd)}
-                  </span>
-                  <span class="text-sm font-normal text-tk-ink-3">/mo</span>
-                  <div class="text-xs text-tk-ink-3">
-                    or {fmtUsd(sku.annualMonthlyEquivalentUsd)}/mo billed annually
-                  </div>
-                </div>
-              )}
-            </div>
-            <dl class="mt-6 space-y-3 text-sm">
-              <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                <dt class="text-tk-ink-3">Hardware</dt>
-                <dd class="text-right text-tk-ink">{HARDWARE_BY_SKU[sku.id]}</dd>
               </div>
-              <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                <dt class="text-tk-ink-3">Browser profiles</dt>
-                <dd class="text-right text-tk-ink">
-                  {sku.profilesMax === null ? 'Unlimited' : sku.profilesMax.toString()}
-                </dd>
-              </div>
-              <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                <dt class="text-tk-ink-3">Archetypes</dt>
-                <dd class="text-right text-tk-ink">{fmtArchetypes(sku.archetypesMax)}</dd>
-              </div>
-              <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                <dt class="text-tk-ink-3">Software updates</dt>
-                <dd class="text-right text-tk-ink-2">{SELF_HOSTED_SOFTWARE_UPDATES[sku.id]}</dd>
-              </div>
-              <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                <dt class="text-tk-ink-3">Archetype updates</dt>
-                <dd class="text-right text-tk-ink-2">{SELF_HOSTED_ARCHETYPE_UPDATES[sku.id]}</dd>
-              </div>
-              <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                <dt class="text-tk-ink-3">Source code access</dt>
-                <dd class="text-right text-tk-ink-2">{SELF_HOSTED_SOURCE_ACCESS[sku.id]}</dd>
-              </div>
-              <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                <dt class="text-tk-ink-3">Custom archetype dev</dt>
-                <dd class="text-right text-tk-ink-2">
-                  {fmtCustomArchetypeDev(sku.customArchetypeDevelopment)}
-                </dd>
-              </div>
-              <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                <dt class="text-tk-ink-3">Source escrow</dt>
-                <dd class="text-right text-tk-ink-2">{sku.sourceEscrow ? 'Yes' : 'No'}</dd>
-              </div>
-              <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                <dt class="text-tk-ink-3">Support</dt>
-                <dd class="text-right text-tk-ink-2">{fmtSupportTier(sku.supportTier)}</dd>
-              </div>
-              <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                <dt class="text-tk-ink-3">Minimum term</dt>
-                <dd class="text-right text-tk-ink">{sku.minimumTermMonths.toString()}-month</dd>
-              </div>
-            </dl>
-            <p class="mt-3 text-xs text-tk-ink-3">
-              Concurrent capacity is bounded by your hardware, not by license.
-            </p>
-            <a href={sku.ctaHref} class="btn-primary mt-6 w-full">Contact sales</a>
+            )}
           </div>
-        ))}
-      </div>
+          <dl class="mt-6 space-y-3 text-sm">
+            <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
+              <dt class="text-tk-ink-3">Hardware</dt>
+              <dd class="text-right text-tk-ink">{HARDWARE_BY_SKU[sku.id]}</dd>
+            </div>
+            <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
+              <dt class="text-tk-ink-3">Browser profiles</dt>
+              <dd class="text-right text-tk-ink">
+                {sku.profilesMax === null ? 'Unlimited' : sku.profilesMax.toString()}
+              </dd>
+            </div>
+            <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
+              <dt class="text-tk-ink-3">Archetypes</dt>
+              <dd class="text-right text-tk-ink">{fmtArchetypes(sku.archetypesMax)}</dd>
+            </div>
+            <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
+              <dt class="text-tk-ink-3">Software updates</dt>
+              <dd class="text-right text-tk-ink-2">{SELF_HOSTED_SOFTWARE_UPDATES[sku.id]}</dd>
+            </div>
+            <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
+              <dt class="text-tk-ink-3">Archetype updates</dt>
+              <dd class="text-right text-tk-ink-2">{SELF_HOSTED_ARCHETYPE_UPDATES[sku.id]}</dd>
+            </div>
+            <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
+              <dt class="text-tk-ink-3">Source code access</dt>
+              <dd class="text-right text-tk-ink-2">{SELF_HOSTED_SOURCE_ACCESS[sku.id]}</dd>
+            </div>
+            <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
+              <dt class="text-tk-ink-3">Custom archetype dev</dt>
+              <dd class="text-right text-tk-ink-2">
+                {fmtCustomArchetypeDev(sku.customArchetypeDevelopment)}
+              </dd>
+            </div>
+            <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
+              <dt class="text-tk-ink-3">Source escrow</dt>
+              <dd class="text-right text-tk-ink-2">{sku.sourceEscrow ? 'Yes' : 'No'}</dd>
+            </div>
+            <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
+              <dt class="text-tk-ink-3">Support</dt>
+              <dd class="text-right text-tk-ink-2">{fmtSupportTier(sku.supportTier)}</dd>
+            </div>
+            <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
+              <dt class="text-tk-ink-3">Minimum term</dt>
+              <dd class="text-right text-tk-ink">{sku.minimumTermMonths.toString()}-month</dd>
+            </div>
+          </dl>
+          <p class="mt-3 text-xs text-tk-ink-3">
+            Concurrent capacity is bounded by your hardware, not by license.
+          </p>
+          <a href={sku.ctaHref} class="btn-primary mt-6 w-full">Contact sales</a>
+        </div>
+      ))}
     </div>
-  </section>
+  </Section>
 
   <!-- Process -->
-  <section class="border-t border-tk-border bg-tk-surface">
-    <div class="mx-auto max-w-6xl px-6 py-20">
-      <h2 class="text-3xl font-semibold tracking-tight text-tk-ink">How it works.</h2>
-      <ol class="mt-10 grid gap-8 md:grid-cols-4">
-        <li>
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-            </svg>
-          </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">01</p>
-          <h3 class="mt-3 font-semibold text-tk-ink">Contact sales</h3>
-          <p class="mt-2 text-sm text-tk-ink-2">
-            Email <a href="mailto:sales@driftstack.dev" class="text-tk-accent underline">sales@driftstack.dev</a> with workload shape + concurrent-session profile.
-            We'll model fit + break-even.
-          </p>
-        </li>
-        <li>
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-            </svg>
-          </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">02</p>
-          <h3 class="mt-3 font-semibold text-tk-ink">Procure hardware</h3>
-          <p class="mt-2 text-sm text-tk-ink-2">
-            You buy the Mac configuration matching your SKU — Mini M4, Studio
-            M4 Max, or Studio Ultra / Mac Pro / multi-node. We provide
-            provisioning specs.
-          </p>
-        </li>
-        <li>
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
-            </svg>
-          </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">03</p>
-          <h3 class="mt-3 font-semibold text-tk-ink">Onboard</h3>
-          <p class="mt-2 text-sm text-tk-ink-2">
-            We deploy the Driftstack stack to your hardware, wire your team
-            to the admin console, run a joint smoke test against your
-            workload.
-          </p>
-        </li>
-        <li>
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
-          </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">04</p>
-          <h3 class="mt-3 font-semibold text-tk-ink">Run</h3>
-          <p class="mt-2 text-sm text-tk-ink-2">
-            Same SDK as cloud Driftstack — change one config field and your
-            existing code points at the self-hosted control plane. Support
-            via the SLA matching your SKU.
-          </p>
-        </li>
-      </ol>
-    </div>
-  </section>
+  <Section label="Process" title="How it works." class="bg-tk-surface">
+    <ol class="mt-10 grid gap-8 md:grid-cols-4">
+      <li>
+        <IconTile class="mb-3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+          </svg>
+        </IconTile>
+        <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">01</p>
+        <h3 class="mt-3 font-semibold text-tk-ink">Contact sales</h3>
+        <p class="mt-2 text-sm text-tk-ink-2">
+          Email <a href="mailto:sales@driftstack.dev" class="text-tk-accent-text underline">sales@driftstack.dev</a> with workload shape + concurrent-session profile.
+          We'll model fit + break-even.
+        </p>
+      </li>
+      <li>
+        <IconTile class="mb-3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+          </svg>
+        </IconTile>
+        <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">02</p>
+        <h3 class="mt-3 font-semibold text-tk-ink">Procure hardware</h3>
+        <p class="mt-2 text-sm text-tk-ink-2">
+          You buy the Mac configuration matching your SKU — Mini M4, Studio
+          M4 Max, or Studio Ultra / Mac Pro / multi-node. We provide
+          provisioning specs.
+        </p>
+      </li>
+      <li>
+        <IconTile class="mb-3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
+          </svg>
+        </IconTile>
+        <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">03</p>
+        <h3 class="mt-3 font-semibold text-tk-ink">Onboard</h3>
+        <p class="mt-2 text-sm text-tk-ink-2">
+          We deploy the Driftstack stack to your hardware, wire your team
+          to the admin console, run a joint smoke test against your
+          workload.
+        </p>
+      </li>
+      <li>
+        <IconTile class="mb-3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+        </IconTile>
+        <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">04</p>
+        <h3 class="mt-3 font-semibold text-tk-ink">Run</h3>
+        <p class="mt-2 text-sm text-tk-ink-2">
+          Same SDK as cloud Driftstack — change one config field and your
+          existing code points at the self-hosted control plane. Support
+          via the SLA matching your SKU.
+        </p>
+      </li>
+    </ol>
+  </Section>
 
   <!-- FAQ teaser -->
-  <section class="border-t border-tk-border bg-tk-bg">
-    <div class="mx-auto max-w-6xl px-6 py-16">
-      <div class="grid gap-8 md:grid-cols-2 md:items-center">
-        <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Common questions</p>
-          <h2 class="mt-3 text-2xl font-semibold text-tk-ink">What about updates? Compliance? SLAs?</h2>
-          <p class="mt-3 max-w-prose text-tk-ink-2">
-            See the FAQ for the standard answers, or email us with the
-            specific question your security / procurement / compliance team
-            is asking. We answer everything in writing.
-          </p>
-        </div>
-        <div class="flex gap-3">
-          <a href="/faq" class="btn-secondary">See FAQ</a>
-          <a href="mailto:sales@driftstack.dev?subject=Self-Hosted%20inquiry" class="btn-primary">Email sales</a>
-        </div>
-      </div>
+  <Section label="Common questions" title="What about updates? Compliance? SLAs?">
+    <p class="mt-4 max-w-2xl text-base leading-7 text-tk-ink-2">
+      See the FAQ for the standard answers, or email us with the
+      specific question your security / procurement / compliance team
+      is asking. We answer everything in writing.
+    </p>
+    <div class="mt-8">
+      <a href="/faq" class="btn-secondary">See FAQ</a>
     </div>
-  </section>
+  </Section>
+
+  <!-- Final CTA -->
+  <CtaBand
+    title="Talk to us about self-hosting."
+    lead="Email what you're running — workload shape and concurrent-session profile — and we'll model fit and break-even in writing."
+    primaryHref="mailto:sales@driftstack.dev?subject=Self-Hosted%20inquiry"
+    primaryLabel="Contact sales"
+    secondaryHref="/pricing#self-hosted"
+    secondaryLabel="See pricing"
+  />
 </BaseLayout>
