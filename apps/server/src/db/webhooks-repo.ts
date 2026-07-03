@@ -211,7 +211,18 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
       .set({
         secret: input.newSecret,
         secretPrefix: input.newPrefix,
-        secretPrev: sql`${webhookEndpoints.secret}`,
+        // Normally the outgoing current secret moves INTO the prev slot for the
+        // dual-sign grace. EXCEPTION (V-359.G.2, Fable audit 2026-07-03): when
+        // this rotation is running under a still-live FORCE-rotation grace
+        // window (forceRotatedAt set, secret_prev_expires_at in the future), the
+        // current `secret` is the SERVER's force-rotated value — which the
+        // customer only ever received as a 12-char prefix and never deployed —
+        // while secret_prev holds the secret the customer ACTUALLY has live. Do
+        // NOT clobber that with the un-deployed force secret, or the worker would
+        // dual-sign {new, force} and BOTH would fail the customer's verifier
+        // (still on the original). Preserve the customer's live secret in the
+        // grace slot so the new secret rolls out without breaking verification.
+        secretPrev: sql`CASE WHEN ${webhookEndpoints.forceRotatedAt} IS NOT NULL AND ${webhookEndpoints.secretPrevExpiresAt} > ${input.now} THEN ${webhookEndpoints.secretPrev} ELSE ${webhookEndpoints.secret} END`,
         secretPrevExpiresAt: input.graceExpiresAt,
         // v2-#10 — new secret is fresh; reset the rotation clock so
         // the 90d nag starts over from this rotation. Also clear the

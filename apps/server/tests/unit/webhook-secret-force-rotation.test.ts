@@ -136,6 +136,12 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
     const postForce = await repo.findEndpoint(ep.id, 'acc_1');
     expect(postForce?.forceRotatedAt).not.toBeNull();
     expect(postForce?.graceWindowEndsAt).not.toBeNull();
+    // Force-rotation moves the customer's original (still-deployed) secret into
+    // the grace slot; `secret` becomes the SERVER-minted force secret the
+    // customer only ever received as a prefix (never deployed).
+    expect(postForce?.secretPrev).toBe('whsec_aged');
+    const forceSecret = postForce?.secret;
+    expect(forceSecret).not.toBe('whsec_aged');
 
     await repo.rotateSecret({
       id: ep.id,
@@ -148,6 +154,15 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
     const postManual = await repo.findEndpoint(ep.id, 'acc_1');
     expect(postManual?.forceRotatedAt).toBeNull();
     expect(postManual?.graceWindowEndsAt).toBeNull();
+    // V-359.G.2 (Fable audit 2026-07-03) — the manual rotation during the still-
+    // live force-rotation grace must PRESERVE the customer's original deployed
+    // secret (whsec_aged) in the grace slot, NOT clobber it with the un-deployed
+    // server force secret. Otherwise the worker would dual-sign {new, force} and
+    // BOTH would fail the customer's verifier (still on whsec_aged) → dropped
+    // deliveries until they finish rolling out the new secret.
+    expect(postManual?.secret).toBe('whsec_customer_rotated_value_padded_____');
+    expect(postManual?.secretPrev).toBe('whsec_aged');
+    expect(postManual?.secretPrev).not.toBe(forceSecret);
   });
 
   it('email send failure is swallowed — rotation still persists', async () => {

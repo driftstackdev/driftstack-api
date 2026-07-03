@@ -140,7 +140,18 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       ...r,
       secret: input.newSecret,
       secretPrefix: input.newPrefix,
-      secretPrev: r.secret,
+      // V-359.G.2 (Fable audit 2026-07-03) — mirror the Drizzle CASE: under a
+      // still-live FORCE-rotation grace window the current `secret` is the
+      // server's force-rotated value (customer got only the prefix, never
+      // deployed it) while secret_prev holds the secret the customer actually
+      // has live. Preserve that live secret in the grace slot instead of
+      // clobbering it with the un-deployed force secret.
+      secretPrev:
+        r.forceRotatedAt !== null &&
+        r.secretPrevExpiresAt !== null &&
+        r.secretPrevExpiresAt.getTime() > input.now.getTime()
+          ? r.secretPrev
+          : r.secret,
       secretPrevExpiresAt: input.graceExpiresAt,
       secretCreatedAt: input.now,
       lastReminderSentAt: null,

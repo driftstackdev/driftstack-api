@@ -112,7 +112,13 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     expect(body).toMatch(
       /\/\/ Single UPDATE: copy current secret\/prefix INTO the prev slot,\s*\n?\s*\/\/ overwrite current with the new pair, set the grace expiry\.\s*\n?\s*\/\/ No SELECT-then-UPDATE race — Postgres reads the row's current\s*\n?\s*\/\/ values at UPDATE time\./,
     );
-    expect(body).toMatch(/secretPrev: sql`\$\{webhookEndpoints\.secret\}`,/);
+    // V-359.G.2 (Fable audit 2026-07-03): the prev slot preserves the customer's
+    // still-deployed secret under a live FORCE-rotation grace (forceRotatedAt set +
+    // not-yet-expired) rather than clobbering it with the un-deployed force secret —
+    // else the worker dual-signs {new, force} and both fail the customer's verifier.
+    expect(body).toMatch(
+      /secretPrev: sql`CASE WHEN \$\{webhookEndpoints\.forceRotatedAt\} IS NOT NULL AND \$\{webhookEndpoints\.secretPrevExpiresAt\} > \$\{input\.now\} THEN \$\{webhookEndpoints\.secretPrev\} ELSE \$\{webhookEndpoints\.secret\} END`,/,
+    );
   });
 
   it('enqueueDelivery: 4-field base values (webhookId + eventId + eventType + payload) + conditional nextAttemptAt spread + RETURNING id (returns the real delivery row id)', () => {
