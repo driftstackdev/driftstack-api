@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Marketing site v2 — vibe check (2026-07-03)</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 28px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        background: #060608;
+        color: #f5f5f7;
+      }
+      h1 {
+        font-size: 20px;
+        letter-spacing: -0.4px;
+      }
+      h2 {
+        font-size: 15px;
+        margin-top: 34px;
+        color: #d4626e;
+        border-bottom: 1px solid #1e1e26;
+        padding-bottom: 6px;
+      }
+      p.note {
+        max-width: 76ch;
+        color: #b0b0bb;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      ul.note {
+        max-width: 76ch;
+        color: #b0b0bb;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 18px;
+        margin-top: 18px;
+        align-items: start;
+      }
+      .grid.mobile {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 240px));
+      }
+      figure {
+        margin: 0;
+        background: #0e0e12;
+        border: 1px solid #1e1e26;
+        border-radius: 12px;
+        padding: 10px;
+      }
+      figure.default {
+        outline: 2px solid #9b3b46;
+      }
+      img {
+        width: 100%;
+        border-radius: 8px;
+        display: block;
+      }
+      figcaption {
+        font-size: 12px;
+        padding: 8px 2px 2px;
+        color: #b0b0bb;
+        font-weight: 600;
+      }
+      figure.default figcaption::after {
+        content: '  — DARK + OXBLOOD (default)';
+        color: #d4626e;
+      }
+      code {
+        background: #15151b;
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Marketing site v2 — vibe check (2026-07-03)</h1>
+    <p class="note">
+      Foundation slices (S0–S4) of the marketing redesign, rendered from the built
+      <code>dist/</code>. Default is <strong>dark + oxblood</strong> with a light toggle coming in a
+      later slice. What shipped so far, all gated green (24,238 tests):
+    </p>
+    <ul class="note">
+      <li>
+        <strong>Self-hosted fonts</strong> — the whole public site now renders real Geist + JetBrains
+        Mono (it was system fallbacks since launch).
+      </li>
+      <li>
+        <strong>Design-system v2</strong> — flat CTAs, solid cards, calm ambient shadows (no more
+        glow-on-everything), a new AA-safe accent-text tone, legacy palettes retired.
+      </li>
+      <li>
+        <strong>Homepage rebuild</strong> — "Plain Words, Same Teeth": 22 sections → 13, jargon moved
+        off the top fold (the fleet mockup says "own connection" and "4 iPhones running · all healthy"
+        instead of SOCKS5/telemetry), a clearly-labelled <code>// for developers</code> band for the
+        code, and every price bound to the pricing data (no hand-typed dollars).
+      </li>
+    </ul>
+    <p class="note">
+      Pages other than the homepage (pricing / comparison / faq / api-reference / security / about /
+      self-hosted) are shown here only re-skinned by the v2 tokens — their content redesign is the
+      next batch of slices. The two code windows stay dark in both themes by design.
+    </p>
+
+    <h2>Homepage — the rebuild (desktop)</h2>
+    <div class="grid">
+      <figure class="default">
+        <img src="index-desktop-dark.png" alt="Homepage dark" />
+        <figcaption>Homepage · 13 sections</figcaption>
+      </figure>
+      <figure>
+        <img src="index-desktop-light.png" alt="Homepage light" />
+        <figcaption>Homepage · light toggle</figcaption>
+      </figure>
+    </div>
+
+    <h2>Homepage — mobile</h2>
+    <div class="grid mobile">
+      <figure class="default">
+        <img src="index-mobile-dark.png" alt="Homepage mobile dark" />
+        <figcaption>Homepage · mobile (sticky CTA)</figcaption>
+      </figure>
+      <figure>
+        <img src="index-mobile-light.png" alt="Homepage mobile light" />
+        <figcaption>Homepage · mobile · light</figcaption>
+      </figure>
+    </div>
+
+    <h2>Funnel + content pages (v2 tokens only — content redesign pending)</h2>
+    <div class="grid">
+      <figure class="default">
+        <img src="pricing-desktop-dark.png" alt="Pricing dark" />
+        <figcaption>Pricing</figcaption>
+      </figure>
+      <figure>
+        <img src="pricing-desktop-light.png" alt="Pricing light" />
+        <figcaption>Pricing · light</figcaption>
+      </figure>
+      <figure class="default">
+        <img src="comparison-desktop-dark.png" alt="Comparison dark" />
+        <figcaption>Comparison</figcaption>
+      </figure>
+      <figure class="default">
+        <img src="faq-desktop-dark.png" alt="FAQ dark" />
+        <figcaption>FAQ</figcaption>
+      </figure>
+      <figure class="default">
+        <img src="security-desktop-dark.png" alt="Security dark" />
+        <figcaption>Security</figcaption>
+      </figure>
+      <figure class="default">
+        <img src="about-desktop-dark.png" alt="About dark" />
+        <figcaption>About</figcaption>
+      </figure>
+      <figure class="default">
+        <img src="self-hosted-desktop-dark.png" alt="Self-hosted dark" />
+        <figcaption>Self-hosted</figcaption>
+      </figure>
+      <figure class="default">
+        <img src="api-reference-desktop-dark.png" alt="API reference dark" />
+        <figcaption>API reference</figcaption>
+      </figure>
+      <figure>
+        <img src="pricing-mobile-dark.png" alt="Pricing mobile dark" />
+        <figcaption>Pricing · mobile</figcaption>
+      </figure>
+    </div>
+  </body>
+</html>
