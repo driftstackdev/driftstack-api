@@ -191,7 +191,7 @@ const EMAIL_EVENTS = [
             </div>
             <p
               data-field="mfa-error"
-              class="mt-2 hidden rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700"
+              class="mt-2 hidden rounded border border-tk-err/30 bg-tk-err/10 px-2 py-1 text-xs text-tk-err"
             ></p>
           </div>
         </div>
@@ -252,7 +252,7 @@ const EMAIL_EVENTS = [
           <button type="button" data-button="mfa-regenerate" class="btn-secondary text-sm">
             Regenerate recovery codes
           </button>
-          <button type="button" data-button="mfa-disable" class="btn-secondary text-sm text-red-700">
+          <button type="button" data-button="mfa-disable" class="btn-secondary text-sm text-tk-err">
             Disable two-factor
           </button>
         </div>
@@ -289,7 +289,7 @@ const EMAIL_EVENTS = [
         </div>
         <p
           data-field="mfa-step-up-error"
-          class="mt-2 hidden rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700"
+          class="mt-2 hidden rounded border border-tk-err/30 bg-tk-err/10 px-2 py-1 text-xs text-tk-err"
         ></p>
       </div>
     </section>
@@ -308,12 +308,12 @@ const EMAIL_EVENTS = [
         Browser sessions where you're signed in to the dashboard. Distinct
         from the automation sessions you run in the Driftstack desktop app.
       </p>
-      <ul class="mt-6 divide-y divide-slate-100" data-list="web-sessions">
+      <ul class="mt-6 divide-y divide-tk-border" data-list="web-sessions">
         <li class="py-3 text-sm text-tk-ink-3" data-field="web-sessions-empty">
           Sign in to load your active sessions.
         </li>
       </ul>
-      <div class="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
+      <div class="mt-4 flex items-center justify-between gap-3 border-t border-tk-border pt-4">
         <p
           data-field="web-sessions-status"
           class="text-xs text-tk-ink-3"
@@ -321,7 +321,7 @@ const EMAIL_EVENTS = [
         <button
           type="button"
           data-button="web-sessions-revoke-all"
-          class="btn-secondary text-sm text-red-700"
+          class="btn-secondary text-sm text-tk-err"
           hidden
         >
           Sign out everywhere else
@@ -375,7 +375,7 @@ const EMAIL_EVENTS = [
               <button
                 type="button"
                 data-button="avatar-remove"
-                class="btn-secondary text-sm text-red-700"
+                class="btn-secondary text-sm text-tk-err"
                 hidden
               >
                 Remove
@@ -386,7 +386,7 @@ const EMAIL_EVENTS = [
             </p>
             <p
               data-field="avatar-error"
-              class="hidden rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700"
+              class="hidden rounded border border-tk-err/30 bg-tk-err/10 px-2 py-1 text-xs text-tk-err"
             ></p>
           </div>
         </div>
@@ -459,9 +459,9 @@ const EMAIL_EVENTS = [
         </div>
         <p
           data-field="profile-error"
-          class="hidden rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          class="hidden rounded border border-tk-err/30 bg-tk-err/10 px-3 py-2 text-sm text-tk-err"
         ></p>
-        <div class="flex items-center justify-between border-t border-slate-100 pt-4">
+        <div class="flex items-center justify-between border-t border-tk-border pt-4">
           <span data-field="profile-status" class="text-xs text-tk-ink-3"></span>
           <button
             type="submit"
@@ -516,7 +516,7 @@ const EMAIL_EVENTS = [
 
       <div data-byok-state="set" class="mt-6 hidden space-y-2">
         <div class="flex items-center gap-3">
-          <span class="rounded-full bg-emerald-400/10 px-2 py-0.5 font-mono text-xs uppercase tracking-wide text-emerald-300">
+          <span class="rounded-full bg-tk-ready/10 px-2 py-0.5 font-mono text-xs uppercase tracking-wide text-tk-ready">
             Active
           </span>
           <span class="text-sm text-tk-ink-2">
@@ -610,7 +610,7 @@ const EMAIL_EVENTS = [
         it inactive here on next sign-in attempt; password sign-in
         continues to work either way.
       </p>
-      <ul class="mt-6 divide-y divide-slate-100" data-list="oauth-links">
+      <ul class="mt-6 divide-y divide-tk-border" data-list="oauth-links">
         <li class="py-3 text-sm text-tk-ink-3" data-field="oauth-links-empty">
           Sign in to load your linked accounts.
         </li>
@@ -635,7 +635,7 @@ const EMAIL_EVENTS = [
         API key mints + revokes, session lifecycle events, and other account
         changes. Newest first; filtered to your own account.
       </p>
-      <ul class="mt-6 divide-y divide-slate-100" data-list="audit-log">
+      <ul class="mt-6 divide-y divide-tk-border" data-list="audit-log">
         <li class="py-3 text-sm text-tk-ink-3" data-field="audit-empty">
           Sign in to load recent activity.
         </li>
@@ -643,16 +643,16 @@ const EMAIL_EVENTS = [
     </section>
 
     <!-- Danger zone -->
-    <section class="mt-10 rounded-lg border border-red-200 bg-red-50 p-6">
-      <h2 class="text-lg font-semibold text-red-900">Danger zone</h2>
-      <p class="mt-2 text-sm text-red-800">
+    <section class="mt-10 rounded-lg border border-tk-err/30 bg-tk-err/10 p-6">
+      <h2 class="text-lg font-semibold text-tk-err">Danger zone</h2>
+      <p class="mt-2 text-sm text-tk-err">
         Account deletion is irreversible. All sessions, profiles, API keys,
         and webhook endpoints are immediately revoked. Recordings are hard-
         deleted from R2 within your configured retention window (default 30
         days). Invoice history retained per Dutch tax law (7 years) — not
         deletable on request.
       </p>
-      <p class="mt-3 text-xs text-red-800">
+      <p class="mt-3 text-xs text-tk-err">
         Deletion is currently processed by emailing
         <a
           href="mailto:support@driftstack.dev?subject=Account%20deletion%20request"
@@ -1131,7 +1131,7 @@ const EMAIL_EVENTS = [
               ? 'last sign-in ' + escapeHtml(fmtRelative(link.last_login_at))
               : 'never used';
             const revokedFrag = link.last_revoked_at
-              ? ' · <span class="text-amber-700">revoked upstream — sign in to re-link</span>'
+              ? ' · <span class="text-tk-busy">revoked upstream — sign in to re-link</span>'
               : '';
             const manageUrl = providerManageUrl(link.provider);
             const manageFrag = manageUrl
@@ -1266,8 +1266,8 @@ const EMAIL_EVENTS = [
               ' · expires ' +
               escapeHtml(fmtIso(s.expires_at));
             const action = s.current
-              ? '<span class="rounded-full bg-emerald-400/10 px-2 py-1 text-xs font-medium text-emerald-300">current</span>'
-              : '<button type="button" class="btn-secondary text-sm text-red-700" data-revoke-id="' +
+              ? '<span class="rounded-full bg-tk-ready/10 px-2 py-1 text-xs font-medium text-tk-ready">current</span>'
+              : '<button type="button" class="btn-secondary text-sm text-tk-err" data-revoke-id="' +
                 escapeHtml(s.id) +
                 '">Revoke</button>';
             return (
@@ -1826,11 +1826,11 @@ const EMAIL_EVENTS = [
           if (status.enrolled) {
             mfaStatusBadge.textContent = 'enrolled';
             mfaStatusBadge.classList.remove('bg-tk-surface', 'text-tk-ink-2');
-            mfaStatusBadge.classList.add('bg-emerald-400/10', 'text-emerald-300');
+            mfaStatusBadge.classList.add('bg-tk-ready/10', 'text-tk-ready');
           } else {
             mfaStatusBadge.textContent = 'not enrolled';
             mfaStatusBadge.classList.add('bg-tk-surface', 'text-tk-ink-2');
-            mfaStatusBadge.classList.remove('bg-emerald-400/10', 'text-emerald-300');
+            mfaStatusBadge.classList.remove('bg-tk-ready/10', 'text-tk-ready');
           }
         }
         showHidden(mfaEnrollSection, status.enrolled);
