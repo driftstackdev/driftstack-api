@@ -26,6 +26,8 @@ import {
   type Room,
 } from '../lib/livekit';
 import { useInputCapture } from '../lib/livekit-input-capture';
+import { parseConnectionStats } from '../lib/livekit-connection-stats';
+import { nextPlayoutDelay } from '../lib/livekit-adaptive-playout';
 
 export interface AgentSessionPanelProps {
   /** The LiveKit join info returned by the server — either from the
@@ -304,6 +306,12 @@ export function AgentSessionPanel({
   // the connect effect (which would thrash the room). `.setSubscribed` is on the
   // RemoteTrackPublication the SFU surfaces for the worker's published video track.
   const videoPublicationRef = useRef<{ setSubscribed?: (s: boolean) => void } | null>(null);
+  // The live subscribed remote video track — surfaced for the adaptive
+  // playout-delay controller (below) to sample stats + nudge the jitter buffer.
+  const remoteVideoTrackRef = useRef<{
+    getRTCStatsReport?: () => Promise<RTCStatsReport>;
+    setPlayoutDelay?: (d: number) => void;
+  } | null>(null);
 
   // #8 auto-reconnect attempt counter — held in a REF so it survives the connect
   // effect re-run that each reconnect triggers (a Disconnected schedules a
@@ -430,6 +438,9 @@ export function AgentSessionPanel({
       // #5/#9 — stash the publication so a sustained-freeze recovery can toggle its
       // subscription (forcing a fresh keyframe) without re-running the connect effect.
       videoPublicationRef.current = (publication ?? null) as typeof videoPublicationRef.current;
+      // Surface the track for the adaptive playout controller (stats sampling +
+      // jitter-buffer nudging). Cleared when a publisher-lost grace expires below.
+      remoteVideoTrackRef.current = track as typeof remoteVideoTrackRef.current;
       // Minimize the receiver-side jitter buffer for the interactive simulator:
       // a deep buffer trades latency for jitter-smoothing, but this is a live
       // control surface where input→pixel lag matters most. Pairs with the
@@ -493,6 +504,7 @@ export function AgentSessionPanel({
         // #5/#9 — the publication's track is gone; drop the stale handle so a
         // recovery toggle can't act on a detached track. A re-subscribe re-stashes it.
         videoPublicationRef.current = null;
+        remoteVideoTrackRef.current = null;
         onPublisherLost();
       }
     });
@@ -581,6 +593,52 @@ export function AgentSessionPanel({
     // `retryNonce` re-runs the effect on a manual Reconnect (intentional, not a
     // render-thrash — it changes only on the button click).
   }, [info.ws_url, info.token, retryNonce]);
+
+  // Adaptive receiver jitter buffer (founder 2026-07-03: "streaming sometimes
+  // majorly unresponsive … loss 2.4%, jitter 18ms, freezes 43 … tapping does
+  // nothing"). TrackSubscribed starts the track at setPlayoutDelay(0) for the
+  // lowest input→pixel latency, which is right on a clean link but turns every
+  // loss/jitter spike into a visible FREEZE on a bad one. This closed loop
+  // samples the live RTP stats each tick and nudges the playout delay UP under
+  // stress (a buffer to ride out the hiccups) and back toward 0 when the link
+  // is calm again — smoothness when the network is bad, latency when it's good.
+  // Read-only sampling + a single setPlayoutDelay() call; never touches input.
+  useEffect(() => {
+    if (room === null) return;
+    let cancelled = false;
+    let prevFreeze = 0;
+    let delay = 0;
+    const tick = (): void => {
+      if (cancelled) return;
+      const track = remoteVideoTrackRef.current;
+      if (track === null || typeof track.getRTCStatsReport !== 'function') return;
+      void Promise.resolve(track.getRTCStatsReport())
+        .then((report) => {
+          if (cancelled || report === undefined) return;
+          const s = parseConnectionStats(report);
+          const freezeDelta = s.freezeCount !== null ? Math.max(0, s.freezeCount - prevFreeze) : 0;
+          if (s.freezeCount !== null) prevFreeze = s.freezeCount;
+          delay = nextPlayoutDelay(delay, {
+            freezeDelta,
+            packetLossPct: s.packetLossPct,
+            jitterMs: s.jitterMs,
+          });
+          // Re-apply every tick (idempotent): a TrackSubscribed on a freeze
+          // resubscribe resets the track to 0, so re-asserting keeps the buffer.
+          try {
+            track.setPlayoutDelay?.(delay);
+          } catch {
+            /* setPlayoutDelay unsupported — ignore */
+          }
+        })
+        .catch(() => undefined);
+    };
+    const handle = setInterval(tick, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(handle);
+    };
+  }, [room]);
 
   // #5/#9 — perform the recovery action the simulator's freeze driver requests. We
   // react to each DISTINCT recoverAction.nonce exactly once (the last-handled nonce

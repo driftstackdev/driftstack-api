@@ -1,0 +1,76 @@
+// Adaptive receiver jitter buffer for the interactive simulator stream.
+//
+// The panel starts the subscribed video track at setPlayoutDelay(0) — a zero
+// jitter buffer, the lowest input→pixel latency, which is what you want on a
+// clean network. But on a lossy/jittery leg (founder 2026-07-03: "udp·direct,
+// decode 17fps, loss 2.4%, jitter 18ms, freezes 43 … tapping does nothing")
+// a zero buffer turns every packet-loss / jitter spike into a visible FREEZE:
+// the decoder has nothing queued to play while it waits for the retransmit or
+// the next keyframe. The stream stutters and taps land on a frozen frame.
+//
+// This is a small closed-loop controller: it samples the track's live RTP
+// stats each poll and nudges the playout delay UP when the link is stressed
+// (new freezes / elevated loss / elevated jitter) so a buffer absorbs the
+// hiccups, and eases it back toward 0 when the link is calm again — trading a
+// little latency for smoothness exactly when (and only when) the network is
+// bad. Ramp UP fast (stop the freezes) and ease DOWN slow (avoid oscillation).
+//
+// Pure decision function so the control law is unit-tested without a live
+// PeerConnection; the panel owns the sampling + the setPlayoutDelay() call.
+
+/** Playout-delay control law bounds/steps, in SECONDS (setPlayoutDelay's unit). */
+export const ADAPTIVE_PLAYOUT = {
+  /** Clean-network floor — the existing low-latency default. */
+  MIN_S: 0,
+  /** Ceiling: enough buffer to ride out a bad leg without unbounded lag. At
+   *  0.3s the stream is noticeably delayed but SMOOTH — the founder's stated
+   *  preference over "frozen + unusable". Only reached under sustained stress. */
+  MAX_S: 0.3,
+  /** Ramp up fast: one loss burst should start building buffer immediately. */
+  STEP_UP_S: 0.1,
+  /** Ease down slowly: don't collapse the buffer on the first calm sample and
+   *  re-freeze on the next spike. */
+  STEP_DOWN_S: 0.05,
+  /** Loss ≥ this (percent) → stressed. Below LOSS_CALM_PCT → calm. */
+  LOSS_STRESS_PCT: 1.5,
+  LOSS_CALM_PCT: 0.5,
+  /** Jitter ≥ this (ms) → stressed. Below JITTER_CALM_MS → calm. */
+  JITTER_STRESS_MS: 40,
+  JITTER_CALM_MS: 20,
+} as const;
+
+export interface PlayoutSignals {
+  /** New freezes observed since the previous sample (clamped ≥ 0 by the caller
+   *  so a track resubscribe resetting freezeCount doesn't read as negative). */
+  freezeDelta: number;
+  /** Inbound video loss percent this sample, or null when unknown. */
+  packetLossPct: number | null;
+  /** Inbound video jitter ms this sample, or null when unknown. */
+  jitterMs: number | null;
+}
+
+/**
+ * Next playout delay (seconds) given the current delay + this sample's signals.
+ * Stressed (any freeze, or loss/jitter over the stress thresholds) → step up.
+ * Calm (no freeze AND loss/jitter under the calm thresholds) → step down.
+ * In-between → hold (hysteresis band prevents oscillation). Always clamped to
+ * [MIN_S, MAX_S] and rounded to 1/100s to avoid float drift.
+ */
+export function nextPlayoutDelay(current: number, s: PlayoutSignals): number {
+  const loss = s.packetLossPct ?? 0;
+  const jitter = s.jitterMs ?? 0;
+  const froze = s.freezeDelta > 0;
+  const stressed =
+    froze ||
+    loss >= ADAPTIVE_PLAYOUT.LOSS_STRESS_PCT ||
+    jitter >= ADAPTIVE_PLAYOUT.JITTER_STRESS_MS;
+  const calm =
+    !froze && loss <= ADAPTIVE_PLAYOUT.LOSS_CALM_PCT && jitter <= ADAPTIVE_PLAYOUT.JITTER_CALM_MS;
+
+  let next = current;
+  if (stressed) next = current + ADAPTIVE_PLAYOUT.STEP_UP_S;
+  else if (calm) next = current - ADAPTIVE_PLAYOUT.STEP_DOWN_S;
+
+  next = Math.max(ADAPTIVE_PLAYOUT.MIN_S, Math.min(ADAPTIVE_PLAYOUT.MAX_S, next));
+  return Math.round(next * 100) / 100;
+}
