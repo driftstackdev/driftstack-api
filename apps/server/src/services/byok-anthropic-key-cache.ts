@@ -31,23 +31,70 @@
 // memory. The orchestrator's verdict was explicit about per-SESSION
 // caching, not cross-process; the trade-off is acceptable for v1.0.
 
-export class InMemoryByokKeyCache {
-  private readonly cache = new Map<string, string>();
+export interface ByokKeyCacheOptions {
+  /** LRU cap on retained entries — a hard bound on how many decrypted keys can
+   *  co-reside, independent of close-path delete() coverage. Default 10k. */
+  maxEntries?: number;
+  /** Per-entry TTL (ms), stamped at set(). An entry older than this is treated
+   *  as absent on get() and swept on the next set(). Defaults to 13h — just
+   *  past the 12h orphan-sweep session cap, so a live session's key is never
+   *  evicted mid-run, but a key LEAKED by a close path that missed delete()
+   *  (worker-initiated / reaper / sweeper terminal close — audit wsihqzj39)
+   *  can't be read or retained beyond the session's own max lifetime. */
+  ttlMs?: number;
+  /** Injectable clock (tests). Defaults to Date.now. */
+  now?: () => number;
+}
 
-  /**
-   * Stash the plaintext key for the given agent-session id. Overwrites
-   * any prior value (no-op on first call; intentional for the rare
-   * key-rotation-during-active-session edge case).
-   */
-  set(agentSessionId: string, plaintextKey: string): void {
-    this.cache.set(agentSessionId, plaintextKey);
+export class InMemoryByokKeyCache {
+  private readonly cache = new Map<string, { key: string; at: number }>();
+  private readonly maxEntries: number;
+  private readonly ttlMs: number;
+  private readonly now: () => number;
+
+  constructor(opts: ByokKeyCacheOptions = {}) {
+    this.maxEntries = opts.maxEntries ?? 10_000;
+    this.ttlMs = opts.ttlMs ?? 13 * 60 * 60 * 1000;
+    this.now = opts.now ?? Date.now;
   }
 
-  /** Returns the cached plaintext or undefined when no entry exists
-   *  (cache miss on process restart, never-stashed session, or
-   *  post-delete read). */
+  /**
+   * Stash the plaintext key for the given agent-session id. Overwrites any
+   * prior value (intentional for the rare key-rotation-during-active-session
+   * edge case). session-create is the ONLY writer, so the opportunistic
+   * expired-entry sweep + LRU-cap enforcement here are cheap and bound memory
+   * even when a session's close path omits delete().
+   */
+  set(agentSessionId: string, plaintextKey: string): void {
+    const now = this.now();
+    // Free (not just hide) plaintext keys leaked by a delete()-less close path.
+    for (const [id, e] of this.cache) {
+      if (now - e.at > this.ttlMs) this.cache.delete(id);
+    }
+    // Re-insert to move to the end (LRU recency) with a fresh timestamp.
+    this.cache.delete(agentSessionId);
+    this.cache.set(agentSessionId, { key: plaintextKey, at: now });
+    // Hard cap: evict oldest-inserted until within bound (an evicted live
+    // session degrades to the header/fallback resolution path, still correct).
+    while (this.cache.size > this.maxEntries) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest === undefined) break;
+      this.cache.delete(oldest);
+    }
+  }
+
+  /** Returns the cached plaintext or undefined when no entry exists (cache
+   *  miss on process restart, never-stashed session, post-delete read, or an
+   *  entry past its TTL — which is lazily evicted here so an aged plaintext key
+   *  can never be served). */
   get(agentSessionId: string): string | undefined {
-    return this.cache.get(agentSessionId);
+    const entry = this.cache.get(agentSessionId);
+    if (entry === undefined) return undefined;
+    if (this.now() - entry.at > this.ttlMs) {
+      this.cache.delete(agentSessionId);
+      return undefined;
+    }
+    return entry.key;
   }
 
   /**

@@ -71,13 +71,13 @@ describe('services/byok-anthropic-key-cache content parity', () => {
 
   it("set() overwrite-on-existing framing pinned: 'Overwrites any prior value (no-op on first call; intentional for the rare key-rotation-during-active-session edge case).' — pinned so the deliberate-overwrite-not-throw contract + the key-rotation-during-session edge case stay documented (drift to throwing on existing would break customer rotation mid-flight)", () => {
     expect(body).toMatch(
-      /\/\*\*\s*\n?\s*\*\s+Stash the plaintext key for the given agent-session id\. Overwrites\s*\n?\s*\*\s+any prior value \(no-op on first call; intentional for the rare\s*\n?\s*\*\s+key-rotation-during-active-session edge case\)\./,
+      /\*\s+Stash the plaintext key for the given agent-session id\. Overwrites any\s*\n?\s*\*\s+prior value \(intentional for the rare key-rotation-during-active-session\s*\n?\s*\*\s+edge case\)\./,
     );
   });
 
   it("get() cache-miss-returns-undefined framing pinned: 'Returns the cached plaintext or undefined when no entry exists (cache miss on process restart, never-stashed session, or post-delete read).' — pinned so the undefined-on-miss + 3-miss-scenario catalog (restart / never-stashed / post-delete) stay documented (drift to throwing on miss would crash the route's normal cache-miss-falls-through-to-header path)", () => {
     expect(body).toMatch(
-      /\/\*\* Returns the cached plaintext or undefined when no entry exists\s*\n?\s*\*\s+\(cache miss on process restart, never-stashed session, or\s*\n?\s*\*\s+post-delete read\)\. \*\//,
+      /\/\*\* Returns the cached plaintext or undefined when no entry exists \(cache\s*\n?\s*\*\s+miss on process restart, never-stashed session, post-delete read, or an\s*\n?\s*\*\s+entry past its TTL/,
     );
   });
 
@@ -85,5 +85,15 @@ describe('services/byok-anthropic-key-cache content parity', () => {
     expect(body).toMatch(
       /\*\s+Drop the cached plaintext\. Idempotent — safe to call on already-\s*\n?\s*\*\s+empty entries \(e\.g\. when the route's DELETE handler fires\s*\n?\s*\*\s+concurrent with the runtime's budget-exhausted close\)\./,
     );
+  });
+
+  it('TTL + LRU bound pinned (audit wsihqzj39): the cache MUST self-bound so a delete()-less close path (worker-initiated / reaper / sweeper terminal close) cannot retain a decrypted plaintext key unbounded — maxEntries LRU cap (10k default), a 13h TTL (past the 12h orphan cap), an opportunistic expired-entry sweep on set(), and lazy TTL eviction on get(). Drift back to a plain unbounded Map<string,string> would reintroduce the plaintext-key leak', () => {
+    expect(body).toMatch(
+      /private readonly cache = new Map<string, \{ key: string; at: number \}>\(\);/,
+    );
+    expect(body).toMatch(/this\.maxEntries = opts\.maxEntries \?\? 10_000;/);
+    expect(body).toMatch(/this\.ttlMs = opts\.ttlMs \?\? 13 \* 60 \* 60 \* 1000;/);
+    expect(body).toMatch(/if \(now - e\.at > this\.ttlMs\) this\.cache\.delete\(id\);/);
+    expect(body).toMatch(/while \(this\.cache\.size > this\.maxEntries\)/);
   });
 });
