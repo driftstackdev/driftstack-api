@@ -279,13 +279,13 @@
   }
 }
 
-/* ── Fleet design-system token layer (2026-06-12 rework; the LOCKED contract
-   is docs/internal/2026-06-12-design-system-spec.md). Two independent axes on
-   <html>: data-mode (light|dark) × data-accent (violet|oxblood|teal). ADDITIVE
-   foundation — new Fleet markup consumes these via the `tk` Tailwind namespace;
-   legacy classes keep their baked palette until each page's port lands, so this
-   block changes NOTHING visually on its own. Default flips to light+violet with
-   the index.astro Fleet port (founder-locked direction). */
+/* ── Fleet design-system token layer (2026-06-12 rework; token contract per
+   docs/internal/2026-06-12-design-system-spec.md). Two independent axes on
+   <html>: data-mode (light|dark) × data-accent (violet|oxblood|teal). Fleet
+   markup consumes these via the `tk` Tailwind namespace. The shipped default
+   is dark+oxblood ("Fleet Mission Control — Dark + Red", founder-locked
+   2026-06-15, superseding the spec's light+violet default) — set on <html>
+   in BaseLayout.astro; the other axis values stay selectable machinery. */
 [data-accent='violet'] {
   --accent-rgb: 109 94 252;
   --accent-2-rgb: 139 125 255;
