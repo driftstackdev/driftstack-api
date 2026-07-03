@@ -626,6 +626,37 @@ const navSections: NavSection[] = [
             </aside>
           )
         }
+        {/* Fleet v2 (slice 4) — ⌘K command palette. Signed-in shell only.
+            Dependency-free; opens on ⌘K / Ctrl-K, filters actions by
+            label, runs navigate / quick-action / theme / sign-out.
+            addEventListener-only (inline on* handlers are swept). */}
+        {withSidebar && (
+          <div
+            data-cmdk
+            class="hidden fixed inset-0 z-[60] flex items-start justify-center bg-black/50 px-4 pt-[12vh]"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Command palette"
+          >
+            <div class="w-full max-w-lg overflow-hidden rounded-card border border-tk-border bg-tk-surface shadow-ambient-lg">
+              <input
+                type="text"
+                data-cmdk-input
+                placeholder="Type a command or search…"
+                aria-label="Command palette search"
+                class="w-full border-b border-tk-border bg-transparent px-4 py-3 text-sm text-tk-ink placeholder:text-tk-ink-3 focus:outline-none"
+              />
+              <ul data-cmdk-list class="max-h-[52vh] overflow-y-auto py-1"></ul>
+              <div
+                class="flex items-center gap-3 border-t border-tk-border px-4 py-2 text-[11px] text-tk-ink-3"
+              >
+                <span><kbd class="font-mono">↑↓</kbd> navigate</span>
+                <span><kbd class="font-mono">↵</kbd> run</span>
+                <span><kbd class="font-mono">esc</kbd> close</span>
+              </div>
+            </div>
+          </div>
+        )}
         <main
           id="main-content"
           tabindex="-1"
@@ -1575,6 +1606,159 @@ const navSections: NavSection[] = [
         // perpetually-blank surface).
         window.dashboardHydrated = reveal;
         setTimeout(reveal, 1200);
+      })();
+    </script>
+    <script is:inline define:vars={{ apiBaseUrl }}>
+      {
+        /*
+         * Fleet v2 (slice 4, 2026-07-03) — ⌘K command palette. Signed-in
+         * shell only (the markup is gated to withSidebar). Dependency-free:
+         * builds a static action list (navigate + quick actions + theme +
+         * sign out), filters by label, and runs the selected action.
+         * addEventListener-only — inline on* handlers are banned by the
+         * dashboard sweep. Uses plain code, NOT the {`…`} wrapper (that
+         * ships as a literal no-op string — the 2026-07-02 dead-script bug).
+         */
+      }
+      (function () {
+        var overlay = document.querySelector('[data-cmdk]');
+        if (!overlay) return;
+        var input = overlay.querySelector('[data-cmdk-input]');
+        var list = overlay.querySelector('[data-cmdk-list]');
+        if (!input || !list) return;
+
+        function nav(href) {
+          return function () {
+            window.location.href = href;
+          };
+        }
+        function setTheme(kind, value) {
+          return function () {
+            document.documentElement.setAttribute('data-' + kind, value);
+            try {
+              localStorage.setItem(kind === 'mode' ? 'ds_theme_mode' : 'ds_theme_accent', value);
+            } catch (_) {
+              /* session-only */
+            }
+            var meta = document.querySelector('meta[name="theme-color"]');
+            if (meta && kind === 'mode') {
+              meta.setAttribute('content', value === 'light' ? '#f2f3f6' : '#060608');
+            }
+          };
+        }
+        var actions = [
+          { label: 'Go to Overview', run: nav('/') },
+          { label: 'Go to API keys', run: nav('/api-keys') },
+          { label: 'Go to Webhooks', run: nav('/webhooks') },
+          { label: 'Go to Usage', run: nav('/usage') },
+          { label: 'Go to Billing', run: nav('/billing') },
+          { label: 'Go to Audit log', run: nav('/audit-log') },
+          { label: 'Go to Team', run: nav('/team') },
+          { label: 'Go to Settings', run: nav('/settings') },
+          { label: 'New API key', run: nav('/api-keys') },
+          { label: 'Get the desktop app', run: function () { window.open('https://docs.driftstack.dev/quickstart/', '_blank', 'noopener'); } },
+          {
+            label: 'Copy account ID',
+            run: function () {
+              try {
+                var t = localStorage.getItem('ds_web_session_token') || '';
+                fetch(apiBaseUrl + '/v1/account/me', { headers: { authorization: 'Bearer ' + t } })
+                  .then(function (r) { return r.ok ? r.json() : null; })
+                  .then(function (me) {
+                    if (me && me.id && navigator.clipboard) navigator.clipboard.writeText(me.id);
+                  })
+                  .catch(function () {});
+              } catch (_) {}
+            },
+          },
+          { label: 'Theme: Light', run: setTheme('mode', 'light') },
+          { label: 'Theme: Dark', run: setTheme('mode', 'dark') },
+          { label: 'Accent: Oxblood', run: setTheme('accent', 'oxblood') },
+          { label: 'Accent: Violet', run: setTheme('accent', 'violet') },
+          { label: 'Accent: Teal', run: setTheme('accent', 'teal') },
+          {
+            label: 'Sign out',
+            run: function () {
+              var b = document.querySelector('[data-signout]');
+              if (b) b.click();
+            },
+          },
+        ];
+
+        var filtered = actions.slice();
+        var active = 0;
+
+        function render() {
+          list.innerHTML = '';
+          filtered.forEach(function (a, i) {
+            var li = document.createElement('li');
+            li.textContent = a.label;
+            li.setAttribute('role', 'option');
+            li.className =
+              'cursor-pointer px-4 py-2 text-sm ' +
+              (i === active ? 'bg-tk-accent/10 text-tk-accent' : 'text-tk-ink-2');
+            li.addEventListener('click', function () {
+              close();
+              a.run();
+            });
+            li.addEventListener('mousemove', function () {
+              active = i;
+              render();
+            });
+            list.appendChild(li);
+          });
+        }
+        function applyFilter() {
+          var q = input.value.trim().toLowerCase();
+          filtered = q
+            ? actions.filter(function (a) {
+                return a.label.toLowerCase().indexOf(q) !== -1;
+              })
+            : actions.slice();
+          active = 0;
+          render();
+        }
+        function open() {
+          overlay.classList.remove('hidden');
+          input.value = '';
+          applyFilter();
+          input.focus();
+        }
+        function close() {
+          overlay.classList.add('hidden');
+        }
+
+        input.addEventListener('input', applyFilter);
+        input.addEventListener('keydown', function (e) {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            active = Math.min(active + 1, filtered.length - 1);
+            render();
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            active = Math.max(active - 1, 0);
+            render();
+          } else if (e.key === 'Enter') {
+            e.preventDefault();
+            var a = filtered[active];
+            if (a) {
+              close();
+              a.run();
+            }
+          } else if (e.key === 'Escape') {
+            close();
+          }
+        });
+        overlay.addEventListener('click', function (e) {
+          if (e.target === overlay) close();
+        });
+        document.addEventListener('keydown', function (e) {
+          if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+            e.preventDefault();
+            if (overlay.classList.contains('hidden')) open();
+            else close();
+          }
+        });
       })();
     </script>
     <script is:inline>
