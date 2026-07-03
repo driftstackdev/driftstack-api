@@ -18,6 +18,7 @@ import {
   createDecipheriv,
   createHmac,
   randomBytes,
+  randomInt,
   timingSafeEqual,
 } from 'node:crypto';
 
@@ -179,10 +180,14 @@ export function generateRecoveryCodes(count = RECOVERY_COUNT): string[] {
 }
 
 function generateRecoveryCode(): string {
-  const buf = randomBytes(RECOVERY_LENGTH);
+  // crypto.randomInt draws a UNIFORM index in [0, len). A `randomBytes % len`
+  // pick would be modulo-biased (256 % 29 ≠ 0 → the first 24 alphabet chars
+  // ~12.5% more likely per char). Negligible for a rate-limited, scrypt-hashed,
+  // single-use code, but unbiased selection is free here and keeps the per-char
+  // entropy at the full log2(29) rather than a hair under it.
   let s = '';
   for (let i = 0; i < RECOVERY_LENGTH; i++) {
-    s += RECOVERY_ALPHABET[buf[i]! % RECOVERY_ALPHABET.length];
+    s += RECOVERY_ALPHABET[randomInt(RECOVERY_ALPHABET.length)];
   }
   // Hyphenate in the middle for readability: ABCDE-FGHJK.
   return `${s.slice(0, 5)}-${s.slice(5)}`;
