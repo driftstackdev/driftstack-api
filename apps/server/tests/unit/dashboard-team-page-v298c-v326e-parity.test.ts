@@ -133,11 +133,11 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     );
   });
 
-  it('CRITICAL member-row admin-role badge color contrast pinned. admin → bg-blue-50/text-blue-700; member → bg-tk-surface/text-tk-ink-2. Drift to identical styling would lose the visual role distinction.', () => {
+  it('CRITICAL member-row admin-role badge color contrast pinned. admin → bg-tk-accent/10 text-tk-accent; member → bg-tk-surface/text-tk-ink-2. Drift to identical styling would lose the visual role distinction. Fleet v2 (2026-07-03) moved admin onto the two-axis accent token (was hard-coded blue-50/blue-700) so the badge renders in light mode.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /m\.role === 'admin' \? 'bg-blue-50 text-blue-700' : 'bg-tk-surface text-tk-ink-2'/,
+      /m\.role === 'admin' \? 'bg-tk-accent\/10 text-tk-accent' : 'bg-tk-surface text-tk-ink-2'/,
     );
   });
 

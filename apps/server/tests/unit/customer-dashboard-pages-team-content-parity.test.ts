@@ -71,9 +71,9 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
     );
   });
 
-  it('Role badge styling: admin → bg-blue-50 text-blue-700 / member → bg-tk-surface text-tk-ink-2 — pinned so admin visually pops over member (admins have write power, customers should be able to tell at a glance who can take destructive actions); drift to identical styling would hide the role distinction', () => {
+  it('Role badge styling: admin → bg-tk-accent/10 text-tk-accent / member → bg-tk-surface text-tk-ink-2 — pinned so admin visually pops over member (admins have write power, customers should be able to tell at a glance who can take destructive actions); drift to identical styling would hide the role distinction. Fleet v2 (2026-07-03) moved admin off the hard-coded blue-50/blue-700 onto the two-axis accent token so the badge renders correctly in light mode.', () => {
     expect(body).toMatch(
-      /m\.role === 'admin' \? 'bg-blue-50 text-blue-700' : 'bg-tk-surface text-tk-ink-2';/,
+      /m\.role === 'admin' \? 'bg-tk-accent\/10 text-tk-accent' : 'bg-tk-surface text-tk-ink-2';/,
     );
   });
 
