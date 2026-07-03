@@ -57,7 +57,7 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     expect(body).toMatch(/\/\/ Drizzle-backed implementation of WebhooksRepo\./);
   });
 
-  it('imports: and/desc/eq/gt/isNotNull/isNull/lte/lt/ne/sql from drizzle-orm; 9 service types; Database; accounts + webhookDeliveries + webhookEndpoints schemas', () => {
+  it('imports: and/desc/eq/gt/isNotNull/isNull/lte/lt/ne/or/sql from drizzle-orm; 9 service types; Database; accounts + webhookDeliveries + webhookEndpoints schemas', () => {
     // gt/lte (Arc 3 sub-slice 28.5 follow-up) are typed drizzle
     // comparison operators, not raw `sql` template interpolation — they
     // sidestep the drizzle-orm Date-param-in-raw-sql crash class
@@ -65,7 +65,7 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     // rationale as the existing lt(webhookEndpoints.secretCreatedAt, cutoff)
     // / lt(webhookEndpoints.secretPrevExpiresAt, args.now) call sites below.
     expect(body).toMatch(
-      /import \{ and, desc, eq, gt, isNotNull, isNull, lte, lt, ne, sql \} from 'drizzle-orm';/,
+      /import \{ and, desc, eq, gt, isNotNull, isNull, lte, lt, ne, or, sql \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(
       /import type \{\s*\n?\s*EndpointDeliveryCounts,\s*\n?\s*ListDeliveriesPage,\s*\n?\s*NewWebhookDeliveryInput,\s*\n?\s*NewWebhookEndpointInput,\s*\n?\s*WebhookDeliveryRow,\s*\n?\s*WebhookDeliveryStatus,\s*\n?\s*WebhookEndpointRow,\s*\n?\s*WebhookEventType,\s*\n?\s*WebhooksRepo,\s*\n?\s*\} from '\.\.\/services\/webhooks\.js';/,
@@ -176,12 +176,18 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     );
   });
 
-  it('listDlqDeliveries: V-512 endpointId filter drill-down; limit+1 hasMore + nextCursor=last.createdAt.toISOString(); listDeliveriesForEndpoint: findEndpoint ownership-verify-before-listing + early-return on unowned', () => {
+  it('listDlqDeliveries: V-512 endpointId filter drill-down; limit+1 hasMore + composite (createdAt,id) keyset cursor (#125, no boundary-ms row drops); listDeliveriesForEndpoint: findEndpoint ownership-verify-before-listing + early-return on unowned', () => {
     expect(body).toMatch(
       /\/\/ V-512 — drill-down filter; uuid scoped to a single endpoint\s*\n?\s*\/\/ \(column is `webhook_id` at the schema level\)\./,
     );
+    // #125 — deterministic composite ordering (createdAt DESC, id DESC) so the
+    // keyset can tiebreak on id and never drop rows sharing the boundary ms.
     expect(body).toMatch(
-      /\.orderBy\(desc\(webhookDeliveries\.createdAt\)\)\s*\n?\s*\.limit\(opts\.limit \+ 1\);\s*\n?\s*const hasMore = rows\.length > opts\.limit;\s*\n?\s*const items = hasMore \? rows\.slice\(0, opts\.limit\) : rows;\s*\n?\s*const last = items\[items\.length - 1\];\s*\n?\s*return \{\s*\n?\s*items: items\.map\(toDeliveryRow\),\s*\n?\s*nextCursor: hasMore && last \? last\.createdAt\.toISOString\(\) : null,\s*\n?\s*\};/,
+      /\.orderBy\(desc\(webhookDeliveries\.createdAt\), desc\(webhookDeliveries\.id\)\)\s*\n?\s*\.limit\(opts\.limit \+ 1\);\s*\n?\s*const hasMore = rows\.length > opts\.limit;\s*\n?\s*const items = hasMore \? rows\.slice\(0, opts\.limit\) : rows;\s*\n?\s*const last = items\[items\.length - 1\];\s*\n?\s*return \{\s*\n?\s*items: items\.map\(toDeliveryRow\),\s*\n?\s*nextCursor: hasMore && last \? encodeDeliveryCursor\(last\.createdAt, last\.id\) : null,\s*\n?\s*\};/,
+    );
+    // The composite keyset predicate (created_at < T OR (created_at = T AND id < lastId)).
+    expect(body).toMatch(
+      /return or\(\s*\n?\s*lt\(webhookDeliveries\.createdAt, cursor\.createdAt\),\s*\n?\s*and\(eq\(webhookDeliveries\.createdAt, cursor\.createdAt\), lt\(webhookDeliveries\.id, cursor\.id\)\),\s*\n?\s*\);/,
     );
     expect(body).toMatch(
       /\/\/ Verify ownership before listing\.\s*\n?\s*const owned = await this\.findEndpoint\(endpointId, accountId\);\s*\n?\s*if \(!owned\) return \{ items: \[\], nextCursor: null \};/,

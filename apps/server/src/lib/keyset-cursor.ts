@@ -20,3 +20,44 @@ export function parseUuidCursor(cursor: string | undefined): string | undefined 
   if (cursor === undefined) return undefined;
   return UUID_RE.test(cursor) ? cursor : undefined;
 }
+
+/**
+ * Composite (created_at, id) keyset cursor for the webhook-delivery listings.
+ *
+ * The old cursor was `created_at.toISOString()` alone, paginated with
+ * `WHERE created_at < cursor ORDER BY created_at DESC`. That SILENTLY DROPS
+ * rows that share the boundary row's created_at (bulk-enqueued deliveries
+ * routinely land in the same millisecond): every row with `created_at = T`
+ * beyond the page limit is neither returned on the current page nor matched by
+ * the next page's strict `created_at < T`. The fix is to break the tie on the
+ * row id — encode BOTH values and paginate on the composite key.
+ */
+export interface DeliveryCursor {
+  createdAt: Date;
+  /** null when decoding a legacy created_at-only cursor (still in flight across
+   *  the deploy) — the caller then falls back to the plain created_at filter. */
+  id: string | null;
+}
+
+/** ISO timestamps and UUIDs both contain no `_`, so `<iso>_<uuid>` round-trips
+ *  unambiguously on the first underscore. */
+export function encodeDeliveryCursor(createdAt: Date, id: string): string {
+  return `${createdAt.toISOString()}_${id}`;
+}
+
+/**
+ * Decode a delivery cursor. A malformed/tampered created_at → null (first page,
+ * matching the prior "invalid cursor → first page" contract). A missing or
+ * malformed id tiebreaker → id:null (legacy created_at-only behaviour), never a
+ * throw — so an old in-flight cursor keeps working after this ships.
+ */
+export function decodeDeliveryCursor(cursor: string | undefined): DeliveryCursor | null {
+  if (cursor === undefined) return null;
+  const sep = cursor.indexOf('_');
+  const isoPart = sep === -1 ? cursor : cursor.slice(0, sep);
+  const idPart = sep === -1 ? null : cursor.slice(sep + 1);
+  const createdAt = new Date(isoPart);
+  if (Number.isNaN(createdAt.getTime())) return null;
+  const id = idPart !== null && UUID_RE.test(idPart) ? idPart : null;
+  return { createdAt, id };
+}

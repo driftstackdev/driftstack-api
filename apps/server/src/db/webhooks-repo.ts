@@ -1,6 +1,11 @@
 // Drizzle-backed implementation of WebhooksRepo.
 
-import { and, desc, eq, gt, isNotNull, isNull, lte, lt, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNotNull, isNull, lte, lt, ne, or, sql } from 'drizzle-orm';
+import {
+  decodeDeliveryCursor,
+  encodeDeliveryCursor,
+  type DeliveryCursor,
+} from '../lib/keyset-cursor.js';
 import type {
   EndpointDeliveryCounts,
   ListDeliveriesPage,
@@ -20,6 +25,22 @@ import { accounts, webhookDeliveries, webhookEndpoints } from './schema.js';
 // reclaims it. 5 min ≫ the 10s per-attempt delivery timeout, so a slow (not
 // crashed) delivery is never reclaimed out from under an active worker.
 const RECLAIM_STALE_IN_FLIGHT_MS = 5 * 60 * 1000;
+
+/**
+ * Composite (created_at DESC, id DESC) keyset predicate for the delivery
+ * listings (#125). Returns undefined for the first page. For a legacy
+ * created_at-only cursor (id null) it keeps the old strict-less-than on
+ * created_at; for a full cursor it uses `created_at < T OR (created_at = T AND
+ * id < lastId)` so no row sharing the boundary millisecond is skipped.
+ */
+function deliveryKeysetCondition(cursor: DeliveryCursor | null): ReturnType<typeof or> | undefined {
+  if (cursor === null) return undefined;
+  if (cursor.id === null) return lt(webhookDeliveries.createdAt, cursor.createdAt);
+  return or(
+    lt(webhookDeliveries.createdAt, cursor.createdAt),
+    and(eq(webhookDeliveries.createdAt, cursor.createdAt), lt(webhookDeliveries.id, cursor.id)),
+  );
+}
 
 export class DrizzleWebhooksRepo implements WebhooksRepo {
   constructor(private readonly database: Database) {}
@@ -711,14 +732,14 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     cursor?: string;
     endpointId?: string;
   }): Promise<ListDeliveriesPage> {
-    // A malformed/tampered cursor parses to an Invalid Date (truthy), which
-    // would reach the lt() filter below and throw on serialization (500).
-    // Treat an invalid cursor as absent → first page (decodeCursor contract).
-    const cursorParsed = opts.cursor ? new Date(opts.cursor) : null;
-    const cursorDate =
-      cursorParsed !== null && !Number.isNaN(cursorParsed.getTime()) ? cursorParsed : null;
+    // Composite (created_at, id) keyset — a created_at-only cursor silently
+    // drops rows sharing the boundary millisecond (#125). decode → null on a
+    // malformed created_at (first page); id:null preserves legacy created_at-
+    // only cursors still in flight across the deploy.
+    const cursor = decodeDeliveryCursor(opts.cursor);
     const filters = [eq(webhookDeliveries.status, 'dlq' as WebhookDeliveryStatus)];
-    if (cursorDate) filters.push(lt(webhookDeliveries.createdAt, cursorDate));
+    const keyset = deliveryKeysetCondition(cursor);
+    if (keyset) filters.push(keyset);
     // V-512 — drill-down filter; uuid scoped to a single endpoint
     // (column is `webhook_id` at the schema level).
     if (opts.endpointId) filters.push(eq(webhookDeliveries.webhookId, opts.endpointId));
@@ -727,7 +748,7 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
       .select()
       .from(webhookDeliveries)
       .where(and(...filters))
-      .orderBy(desc(webhookDeliveries.createdAt))
+      .orderBy(desc(webhookDeliveries.createdAt), desc(webhookDeliveries.id))
       .limit(opts.limit + 1);
 
     const hasMore = rows.length > opts.limit;
@@ -735,7 +756,7 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     const last = items[items.length - 1];
     return {
       items: items.map(toDeliveryRow),
-      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+      nextCursor: hasMore && last ? encodeDeliveryCursor(last.createdAt, last.id) : null,
     };
   }
 
@@ -808,21 +829,19 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     const owned = await this.findEndpoint(endpointId, accountId);
     if (!owned) return { items: [], nextCursor: null };
 
-    // A malformed/tampered cursor parses to an Invalid Date (truthy), which
-    // would reach the lt() filter below and throw on serialization (500).
-    // Treat an invalid cursor as absent → first page (decodeCursor contract).
-    const cursorParsed = opts.cursor ? new Date(opts.cursor) : null;
-    const cursorDate =
-      cursorParsed !== null && !Number.isNaN(cursorParsed.getTime()) ? cursorParsed : null;
+    // Composite (created_at, id) keyset — see listDlqDeliveries (#125): a
+    // created_at-only cursor drops rows sharing the boundary millisecond.
+    const cursor = decodeDeliveryCursor(opts.cursor);
     const filters = [eq(webhookDeliveries.webhookId, endpointId)];
-    if (cursorDate) filters.push(lt(webhookDeliveries.createdAt, cursorDate));
+    const keyset = deliveryKeysetCondition(cursor);
+    if (keyset) filters.push(keyset);
     if (opts.status) filters.push(eq(webhookDeliveries.status, opts.status));
 
     const rows = await this.database.db
       .select()
       .from(webhookDeliveries)
       .where(and(...filters))
-      .orderBy(desc(webhookDeliveries.createdAt))
+      .orderBy(desc(webhookDeliveries.createdAt), desc(webhookDeliveries.id))
       .limit(opts.limit + 1);
 
     const hasMore = rows.length > opts.limit;
@@ -830,7 +849,7 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     const last = items[items.length - 1];
     return {
       items: items.map(toDeliveryRow),
-      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+      nextCursor: hasMore && last ? encodeDeliveryCursor(last.createdAt, last.id) : null,
     };
   }
 }

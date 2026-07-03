@@ -1,6 +1,11 @@
 // In-memory WebhooksRepo for integration tests.
 
 import { randomUUID } from 'node:crypto';
+import {
+  decodeDeliveryCursor,
+  encodeDeliveryCursor,
+  type DeliveryCursor,
+} from '../../../src/lib/keyset-cursor.js';
 import type {
   EndpointDeliveryCounts,
   ListDeliveriesPage,
@@ -12,6 +17,24 @@ import type {
   WebhookEventType,
   WebhooksRepo,
 } from '../../../src/services/webhooks.js';
+
+/** Mirror of DrizzleWebhooksRepo.deliveryKeysetCondition (#125): keep a delivery
+ *  iff it sorts strictly AFTER the composite (created_at, id) cursor in DESC
+ *  order. Legacy created_at-only cursor (id null) → created_at-only compare. */
+function afterDeliveryCursor(r: WebhookDeliveryRow, cursor: DeliveryCursor | null): boolean {
+  if (cursor === null) return true;
+  const rt = r.createdAt.getTime();
+  const ct = cursor.createdAt.getTime();
+  if (cursor.id === null) return rt < ct;
+  return rt < ct || (rt === ct && r.id < cursor.id);
+}
+
+/** (created_at DESC, id DESC) — mirrors the Drizzle orderBy tiebreak. */
+function byCreatedThenIdDesc(a: WebhookDeliveryRow, b: WebhookDeliveryRow): number {
+  const dt = b.createdAt.getTime() - a.createdAt.getTime();
+  if (dt !== 0) return dt;
+  return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+}
 
 export class InMemoryWebhooksRepo implements WebhooksRepo {
   private readonly endpoints = new Map<string, WebhookEndpointRow>();
@@ -385,24 +408,21 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     cursor?: string;
     endpointId?: string;
   }): Promise<ListDeliveriesPage> {
-    // Mirror the Drizzle repo's malformed-cursor guard: an Invalid Date
-    // (truthy) would otherwise silently match nothing here. Invalid → absent.
-    const cursorParsed = opts.cursor ? new Date(opts.cursor) : null;
-    const cursorDate =
-      cursorParsed !== null && !Number.isNaN(cursorParsed.getTime()) ? cursorParsed : null;
+    // Composite (created_at, id) keyset — mirrors the Drizzle repo (#125).
+    const cursor = decodeDeliveryCursor(opts.cursor);
     const all = Array.from(this.deliveries.values())
       .filter((r) => r.status === 'dlq')
-      .filter((r) => (cursorDate ? r.createdAt < cursorDate : true))
+      .filter((r) => afterDeliveryCursor(r, cursor))
       // V-512 — drill-down filter on endpoint id (the row's
       // webhookId is the foreign key into webhook_endpoints).
       .filter((r) => (opts.endpointId ? r.webhookId === opts.endpointId : true))
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      .sort(byCreatedThenIdDesc);
     const items = all.slice(0, opts.limit);
     const last = items[items.length - 1];
     const hasMore = all.length > opts.limit;
     return Promise.resolve({
       items,
-      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+      nextCursor: hasMore && last ? encodeDeliveryCursor(last.createdAt, last.id) : null,
     });
   }
 
@@ -458,22 +478,19 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     if (!ep || ep.accountId !== accountId) {
       return Promise.resolve({ items: [], nextCursor: null });
     }
-    // Mirror the Drizzle repo's malformed-cursor guard: an Invalid Date
-    // (truthy) would otherwise silently match nothing here. Invalid → absent.
-    const cursorParsed = opts.cursor ? new Date(opts.cursor) : null;
-    const cursorDate =
-      cursorParsed !== null && !Number.isNaN(cursorParsed.getTime()) ? cursorParsed : null;
+    // Composite (created_at, id) keyset — mirrors the Drizzle repo (#125).
+    const cursor = decodeDeliveryCursor(opts.cursor);
     const all = Array.from(this.deliveries.values())
       .filter((r) => r.webhookId === endpointId)
-      .filter((r) => (cursorDate ? r.createdAt < cursorDate : true))
+      .filter((r) => afterDeliveryCursor(r, cursor))
       .filter((r) => (opts.status ? r.status === opts.status : true))
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      .sort(byCreatedThenIdDesc);
     const items = all.slice(0, opts.limit);
     const last = items[items.length - 1];
     const hasMore = all.length > opts.limit;
     return Promise.resolve({
       items,
-      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+      nextCursor: hasMore && last ? encodeDeliveryCursor(last.createdAt, last.id) : null,
     });
   }
 
