@@ -13,10 +13,15 @@
 //     DR rehearsed / sub-processor change-log Article 28(2) /
 //     source escrow.
 //   • Company facts 6-entry dl: Entity Dutch BV / HQ Netherlands /
-//     Team solo founder + contractors / Funding bootstrapped no VC /
+//     Focus one-product-narrow / Funding independent customer-funded /
 //     Sub-processors link / Contact hello@driftstack.dev.
 //   • Free-tier bottom CTA: one profile / 20-minute sessions /
 //     no card / perpetual.
+//
+// 2026-07-03 Fleet v2 re-skin: shared PageHero/Section/IconTile/
+// CtaBand recipes + AA-safe accent-text links. All pinned claims
+// byte-identical; only the sub-processors-anchor class and the CTA
+// pin (CtaBand props) changed shape.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -60,8 +65,11 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     // flows" claim contradicted the real sub-processor list. MUST NOT
     // come back.
     expect(body).not.toMatch(/Single-region — no silent transatlantic data/);
+    // 2026-07-03 Fleet v2 — inline links moved to the AA-safe accent
+    // tone (text-tk-accent-text; raw text-tk-accent fails WCAG AA as
+    // text on the dark background).
     expect(body).toMatch(
-      /<a href="\/trust\/sub-processors" class="text-tk-accent underline">\/trust\/sub-processors<\/a>/,
+      /<a href="\/trust\/sub-processors" class="text-tk-accent-text underline">\/trust\/sub-processors<\/a>/,
     );
     // Vendor names must not appear in the about-page splash strip
     // (still appear in security.astro and /trust/sub-processors, both
@@ -153,12 +161,13 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     expect(body).toMatch(/<dd class="text-sm text-tk-ink">hello@driftstack\.dev<\/dd>/);
   });
 
-  it("Free-tier bottom CTA: 'Want to try it?' + 'Start free — one profile, 20-minute sessions on real iPhone Safari, no card required. Perpetual, no expiry.' + 'Start free' button → /pricing#free — pinned so the free-tier value-prop (one profile / 20-minute / no card / perpetual) + the CTA destination all survive (drift would re-introduce the retired trial-pack framing)", () => {
+  it("Free-tier bottom CTA: 'Want to try it?' + 'Start free — one profile, 20-minute sessions on real iPhone Safari, no card required. Perpetual, no expiry.' + 'Start free' button → /pricing#free — pinned so the free-tier value-prop (one profile / 20-minute / no card / perpetual) + the CTA destination all survive (drift would re-introduce the retired trial-pack framing). 2026-07-03 Fleet v2 — the CTA is the shared CtaBand component, so destination + button label are pinned via its props.", () => {
     expect(body).toMatch(/Want to try it\?/);
     expect(body).toMatch(
       /Start free — one profile, 20-minute sessions on real\s*\n?\s*iPhone Safari, no card required\. Perpetual, no expiry\./,
     );
-    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Start free<\/a>/);
+    expect(body).toMatch(/primaryHref="\/pricing#free"/);
+    expect(body).toMatch(/primaryLabel="Start free"/);
   });
 
   it('file exists at canonical path', () => {

@@ -18,6 +18,12 @@
 //     with the one-profile / 20-minute-manual / no-card framing.
 //   • Source-modified WebKit framing (not JS-runtime-patches)
 //     pinned — load-bearing engineering differentiator.
+//
+// 2026-07-03 Fleet v2 re-skin: the page moved to the shared
+// PageHero/Section/IconTile/CtaBand recipes (Band-A hero "We build
+// one thing: real iPhones in the cloud." with the pinned positioning
+// line as mono small print). Every claim below is byte-identical;
+// only the CTA pin changed shape (CtaBand primaryHref prop).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -123,8 +129,8 @@ describe('W367.A marketing-site /about page content parity', () => {
     expect(body).toContain('hello@driftstack.dev');
   });
 
-  it('free-tier CTA cross-link points at /pricing#free + framing pinned (one profile / 20-minute / no card)', () => {
-    expect(body).toMatch(/href="\/pricing#free"/);
+  it('free-tier CTA cross-link points at /pricing#free + framing pinned (one profile / 20-minute / no card). 2026-07-03 Fleet v2 — the bottom CTA is now the shared CtaBand component, so the destination is pinned via its primaryHref prop.', () => {
+    expect(body).toMatch(/primaryHref="\/pricing#free"/);
     expect(body).toMatch(/Start free — one profile, 20-minute sessions on real/);
     expect(body).toMatch(/Perpetual, no expiry\./);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing.astro'))).toBe(

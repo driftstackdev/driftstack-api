@@ -5,8 +5,9 @@
 // + threat model framing (which security teams compare against the
 // /trust pages and the DPA).
 //
-//   • 6-pillar architecture: Transport + Egress (roadmap) + API keys +
-//     Webhooks + Team RBAC + No-customer-data-access.
+//   • 6-pillar architecture: Transport + Egress (shipped per profile,
+//     2026-05-22) + API keys + Webhooks + Team RBAC +
+//     No-customer-data-access.
 //   • TLS 1.2 + 1.3 + 2-year HSTS preload-eligible (includeSubDomains
 //     + preload).
 //   • API keys: scrypt logN=15 + 30-second sha256-keyed cache + no
@@ -26,6 +27,14 @@
 //     + MacStadium.
 //   • 'No SOC 2 / No ISO 27001' honest-scope framing.
 //   • security@driftstack.dev contact.
+//
+// 2026-07-03 Fleet v2 re-skin: the page is now the plain-terms
+// overview (each pillar leads with a plain sentence; the precise
+// pinned claim rides as mono small print) on the shared PageHero/
+// Section/IconTile/CtaBand recipes, deferring to /trust/security-
+// overview for parameter-level depth. Every pinned claim below is
+// byte-identical; only the contact-CTA pin (CtaBand props) changed
+// shape.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -151,9 +160,12 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
     expect(body).toMatch(
       /Email security@driftstack\.dev with the question\. We answer\s*\n?\s*everything in writing — no NDAs to read a one-paragraph\s*\n?\s*answer about scrypt parameters or TLS cipher suites\./,
     );
+    // 2026-07-03 Fleet v2 — the contact CTA is the shared CtaBand
+    // component; mailto destination + button label pinned via props.
     expect(body).toMatch(
-      /<a href="mailto:security@driftstack\.dev\?subject=Security%20question" class="btn-primary"\s*\n?\s*>Email security<\/a/,
+      /primaryHref="mailto:security@driftstack\.dev\?subject=Security%20question"/,
     );
+    expect(body).toMatch(/primaryLabel="Email security"/);
   });
 
   it('file exists at canonical path', () => {
