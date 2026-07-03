@@ -1,21 +1,30 @@
-// W524.C — drift guard for apps/marketing-site/public/og-default.svg.
+// W524.C (v2 2026-07-03) — drift guard for apps/marketing-site/public/og-default.svg.
 // Site-wide social-card fallback (1200x630 OpenGraph image). Drift here
 // either changes the social-share preview (would create marketing↔
 // social-platform preview divergence) or breaks the brand-color/
 // tagline commitment (would erode brand recognition on shared links).
 //
-// Fleet rework (2026-06-12, founder-locked): light + violet card with
-// the L2 Drift Layers mark + the W2 DRIFTSTACK two-tone wordmark.
+// 2026-07-03 SUPERSESSION: the card is now DARK + OXBLOOD ("Fleet Mission
+// Control — Dark + Red", founder-locked 2026-06-15) with the CURRENT fleet
+// tagline. The prior light+violet card (2026-06-12 direction) shipped for
+// weeks after the site itself flipped dark — every social preview was
+// off-brand and carried the retired "iPhone Safari sessions, on demand."
+// tagline. Negative pins below keep the stale art from returning. The
+// rendered og-default.png is regenerated from this SVG via
+// scripts/gen-og-image.mjs, and BaseLayout serves it as
+// /og-default.png?v=2 (immutable-1y edge cache bust).
 //
 //   • 1200x630 SVG canvas (OpenGraph standard size).
-//   • Light (#f2f3f6) background + violet (#6d5efc) top rule.
-//   • The L2 mark: ink outline back layer + violet filled front layer
-//     + white home-indicator dot.
-//   • DRIFT (ink #15161a) / STACK (violet #6d5efc) black-italic
+//   • Dark (#060608) background + oxblood (#9b3b46) top rule + a faint
+//     radially-masked 40px grid (the site's grid-bg idiom).
+//   • The L2 mark: muted-ink outline back layer + oxblood filled front
+//     layer + white home-indicator dot.
+//   • DRIFT (ink #f5f5f7) / STACK (accent-2 #c04b58) black-italic
 //     two-tone wordmark.
-//   • 'iPhone Safari sessions, on demand.' primary tagline.
-//   • 'never a bot' positioning subline (plain-language, W452-aligned).
-//   • 'driftstack.dev' mono footer in the accent violet.
+//   • 'Command a fleet of real iPhones.' primary tagline (the hero H1).
+//   • 'they're just people on phones.' positioning subline (Band A).
+//   • 'driftstack.dev' mono footer in accent-2 + quiet 'App · Code · AI'
+//     pills bottom-right.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -33,42 +42,49 @@ function read(p: string): string {
 describe('W524.C apps/marketing-site/public/og-default.svg content parity', () => {
   const body = read(LIB);
 
-  it('SVG canvas + Fleet light-bg framing pinned: \'<?xml version="1.0" encoding="UTF-8"?>\' + 1200x630 viewBox + light #f2f3f6 background + violet #6d5efc top rule — pinned so the OpenGraph canvas + the founder-locked light+violet brand surface survives', () => {
+  it('SVG canvas + dark+oxblood framing pinned: \'<?xml version="1.0" encoding="UTF-8"?>\' + 1200x630 viewBox + dark #060608 background + oxblood #9b3b46 top rule + faint masked grid — pinned so the OpenGraph canvas + the founder-locked dark+red brand surface survives', () => {
     expect(body).toMatch(/<\?xml version="1\.0" encoding="UTF-8"\?>/);
     expect(body).toMatch(
       /<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 1200 630" width="1200" height="630">/,
     );
-    expect(body).toMatch(/<rect width="1200" height="630" fill="#f2f3f6"\/>/);
-    expect(body).toMatch(/<rect x="0" y="0" width="1200" height="6" fill="#6d5efc"\/>/);
+    expect(body).toMatch(/<rect width="1200" height="630" fill="#060608"\/>/);
+    expect(body).toMatch(/<rect x="0" y="0" width="1200" height="6" fill="#9b3b46"\/>/);
+    expect(body).toMatch(/<pattern id="grid" width="40" height="40"/);
+    expect(body).toMatch(/mask="url\(#gridmask\)"/);
+    // the superseded light+violet surface must not return
+    expect(body).not.toMatch(/#f2f3f6/);
+    expect(body).not.toMatch(/#6d5efc/);
   });
 
-  it('L2 Drift Layers mark pinned: ink-outline back layer (stroke #474a55, opacity .55, rotate -7) + violet #6d5efc filled front layer + white home-indicator dot — pinned so the social card carries the founder-picked brand mark (drift to a different mark would erode brand recognition on shared links)', () => {
-    expect(body).toMatch(/stroke="#474a55" stroke-width="14" opacity="0\.55"/);
+  it('L2 Drift Layers mark pinned: muted-ink outline back layer (stroke #8c8c96, opacity .5, rotate -7) + oxblood #9b3b46 filled front layer + white home-indicator dot — the founder-picked brand mark, recolored to the dark+red axis', () => {
+    expect(body).toMatch(/stroke="#8c8c96" stroke-width="14" opacity="0\.5"/);
     expect(body).toMatch(/transform="rotate\(-7 105 127\)"/);
-    expect(body).toMatch(/<rect x="86" y="30" width="118" height="194" rx="34" fill="#6d5efc"\/>/);
+    expect(body).toMatch(/<rect x="86" y="30" width="118" height="194" rx="34" fill="#9b3b46"\/>/);
     expect(body).toMatch(/<circle cx="145" cy="192" r="12" fill="#ffffff"\/>/);
   });
 
-  it('W2 two-tone wordmark pinned: black-italic 900-weight DRIFT (ink #15161a) + STACK (violet #6d5efc) tspans — pinned so the picked wordmark treatment survives on shared links', () => {
+  it('W2 two-tone wordmark pinned: black-italic 900-weight DRIFT (ink #f5f5f7) + STACK (accent-2 #c04b58, the brighter oxblood for legibility on near-black) tspans', () => {
     expect(body).toMatch(/font-weight="900" font-style="italic"/);
     expect(body).toMatch(
-      /<tspan fill="#15161a">DRIFT<\/tspan><tspan fill="#6d5efc">STACK<\/tspan>/,
+      /<tspan fill="#f5f5f7">DRIFT<\/tspan><tspan fill="#c04b58">STACK<\/tspan>/,
     );
   });
 
-  it("primary tagline pinned: 'iPhone Safari sessions, on demand.' (matches the BaseLayout default-description lead)", () => {
-    expect(body).toMatch(/iPhone Safari sessions, on demand\./);
+  it("primary tagline pinned: 'Command a fleet of real iPhones.' (the homepage hero H1 — replaces the retired 'iPhone Safari sessions, on demand.')", () => {
+    expect(body).toMatch(/Command a fleet of real iPhones\./);
+    expect(body).not.toMatch(/iPhone Safari sessions, on demand\./);
   });
 
-  it("positioning subline pinned: the 'never a bot' outcome copy (plain-language, W452-aligned — replaces the prior 'Premium fingerprint fidelity' jargon subline)", () => {
-    expect(body).toMatch(/A real iPhone browser in the cloud/);
-    expect(body).toMatch(/sees a genuine iPhone, never a bot\./);
+  it("positioning subline pinned: the Band-A 'just people on phones' close (mirrors the hero paragraph)", () => {
+    expect(body).toMatch(/Real iPhone Safari in the cloud — to every website,/);
+    expect(body).toMatch(/they're just people on phones\./);
   });
 
-  it("mono footer pinned: 'driftstack.dev' in the accent violet", () => {
+  it("mono footer pinned: 'driftstack.dev' in accent-2 + the quiet 'App · Code · AI' access-paths line bottom-right", () => {
     expect(body).toMatch(
-      /<text[^>]*fill="#6d5efc"[^>]*font-family="ui-monospace[^"]*"[^>]*>driftstack\.dev<\/text>/,
+      /<text[^>]*fill="#c04b58"[^>]*font-family="ui-monospace[^"]*"[^>]*>driftstack\.dev<\/text>/,
     );
+    expect(body).toMatch(/App · Code · AI/);
   });
 
   it('file exists at canonical path + the rendered og-default.png exists beside it', () => {

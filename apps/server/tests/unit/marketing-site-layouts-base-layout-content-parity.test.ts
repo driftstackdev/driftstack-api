@@ -53,8 +53,11 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
       /\/\/ Resolve OG image to an absolute URL so social crawlers can fetch it\s*\n?\s*\/\/ without the path-resolution headaches some platforms have with\s*\n?\s*\/\/ relative paths\. Defaults to \/og-default\.png at the site root —\s*\n?\s*\/\/ Cloudflare Pages serves anything in apps\/marketing-site\/public\/\s*\n?\s*\/\/ at the root when build runs\./,
     );
     expect(body).toMatch(
-      /const ogImageUrl = new URL\(ogImage \?\? '\/og-default\.png', Astro\.site\)\.toString\(\);/,
+      /const ogImageBase = new URL\(ogImage \?\? '\/og-default\.png', Astro\.site\)\.toString\(\);/,
     );
+    // ?v=2 cache-bust on the site-wide default card only (immutable-1y edge
+    // cache; dark+oxblood v2 art 2026-07-03) — per-page overrides untouched.
+    expect(body).toMatch(/const ogImageUrl = ogImage \? ogImageBase : `\$\{ogImageBase\}\?v=2`;/);
     // The PNG (not SVG) rationale is pinned so nobody silently reverts the
     // default to the SVG (which social crawlers don't render).
     expect(body).toMatch(/PNG, NOT SVG: Twitter\/X, Facebook,/);

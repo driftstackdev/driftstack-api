@@ -77,8 +77,9 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
   it('OG image fallback: /og-default.png at the site root', () => {
     expect(body).toMatch(/Defaults to \/og-default\.png at the site root/);
     expect(body).toMatch(
-      /const ogImageUrl = new URL\(ogImage \?\? '\/og-default\.png', Astro\.site\)\.toString\(\);/,
+      /const ogImageBase = new URL\(ogImage \?\? '\/og-default\.png', Astro\.site\)\.toString\(\);/,
     );
+    expect(body).toMatch(/const ogImageUrl = ogImage \? ogImageBase : `\$\{ogImageBase\}\?v=2`;/);
   });
 
   it('noindex conditional: noindex,nofollow vs index,follow', () => {

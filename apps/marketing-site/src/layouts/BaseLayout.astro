@@ -39,7 +39,11 @@ const canonical = new URL(pathname, Astro.site).toString();
 // card is required for link previews to show an image at all. The PNG
 // is generated from og-default.svg via scripts/gen-og-image.mjs (the
 // SVG stays the editable design source-of-truth).
-const ogImageUrl = new URL(ogImage ?? '/og-default.png', Astro.site).toString();
+const ogImageBase = new URL(ogImage ?? '/og-default.png', Astro.site).toString();
+// ?v=2 busts the immutable-1y edge cache for the site-wide card (dark+oxblood
+// v2 art, 2026-07-03 — supersedes the light+violet card); per-page ogImage
+// overrides manage their own versioning.
+const ogImageUrl = ogImage ? ogImageBase : `${ogImageBase}?v=2`;
 
 // W464 — JSON-LD structured data (schema.org) for rich-result eligibility +
 // knowledge-graph understanding. Site-wide Organization + WebSite + the
