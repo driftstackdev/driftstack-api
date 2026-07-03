@@ -79,7 +79,7 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     );
   });
 
-  it('navItems 8-entry catalog pinned: Overview + API keys + Webhooks + Usage + Billing + Audit log + Team + Settings (2026-07-02 account-portal IA, redesign slice 2 — the operational surfaces Profiles/Snapshots/Sessions/Agent sessions/Recipes/Proxies moved to the desktop GUI; Subscription left the nav ahead of its slice-3 merge into Billing but stays routable via the billing-page link). Drift to dropping Team would break the V-298 team-RBAC navigation; sections are General / Developers / Account.', () => {
+  it('navItems 9-entry catalog pinned: Overview + API keys + Webhooks + Usage + Billing + Audit log + Team + Privacy & security + Settings (2026-07-02 account-portal IA, redesign slice 2 — the operational surfaces Profiles/Snapshots/Sessions/Agent sessions/Recipes/Proxies moved to the desktop GUI; Subscription left the nav ahead of its slice-3 merge into Billing but stays routable via the billing-page link; 2026-07-03 — /security split the Privacy & security surfaces out of /settings). Drift to dropping Team would break the V-298 team-RBAC navigation; sections are General / Developers / Account.', () => {
     const items: Array<[string, string]> = [
       ['/', 'Overview'],
       ['/api-keys', 'API keys'],
@@ -88,6 +88,7 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
       ['/billing', 'Billing'],
       ['/audit-log', 'Audit log'],
       ['/team', 'Team'],
+      ['/security', 'Privacy & security'],
       ['/settings', 'Settings'],
     ];
     for (const [href, label] of items) {

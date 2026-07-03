@@ -1,0 +1,1593 @@
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+
+// V-217 (split 2026-07-03) — the security surfaces moved out of
+// settings.astro to this dedicated /security page with the
+// design-system v2 redesign. Progressive-enhancement live wiring
+// against:
+//   - /v1/account/audit-log (V-216) — recent customer-visible events
+//   - /v1/auth/password-reset/request (V-079) — change-password trigger
+//
+// Surfaces here: change password (V-079), two-factor authentication
+// (V-353h), active sign-ins (V-355), connected accounts
+// (V-667.C-followup), recent activity (V-216), and the danger zone.
+// SSG renders mocks; inline <script> reads ds_web_session_token from
+// localStorage and replaces the live sections.
+
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
+---
+
+<DashboardLayout title="Privacy & security">
+  <div class="mx-auto max-w-4xl px-6 py-10" data-page="security">
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-tk-border bg-tk-bg px-4 py-3 text-sm text-tk-ink-2"
+      role="status"
+    >
+    </div>
+
+    <header class="mb-10">
+      <p class="text-sm text-tk-ink-3" data-field="header-account">
+        Account
+      </p>
+      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Privacy &amp; security</h1>
+      <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
+        Password, two-factor authentication, active sign-ins, connected
+        accounts, and control over your data. Changes here affect all
+        sessions, profiles, and webhooks under this account.
+      </p>
+    </header>
+
+    {/* Your-data-is-sealed trust surface (demo-concepts arc, 2026-06-12).
+        Every claim mirrors the verified architecture: sealed client-encrypted
+        profiles (profile-store), per-tenant cryptographic key isolation,
+        audited secret access. Static truth — no API call needed. */}
+    <section class="mt-10 rounded-xl border border-tk-border bg-gradient-to-br from-tk-accent/5 to-transparent p-6">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" />
+            <path d="M9 12l2 2 4-4" />
+          </svg>
+        </span>
+        <div>
+          <h2 class="text-lg font-semibold text-tk-ink">Your data is sealed</h2>
+          <p class="text-sm text-tk-ink-2">
+            Profiles are client-encrypted — Driftstack moves opaque bytes and can't read them.
+          </p>
+        </div>
+      </div>
+      <div class="mt-5 grid gap-3 sm:grid-cols-3">
+        <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
+          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Profile encryption</p>
+          <p class="mt-1.5 text-sm font-semibold text-tk-ink">AES-256-GCM, sealed</p>
+          <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
+            Encrypted before it reaches us; the server stores ciphertext only.
+          </p>
+        </div>
+        <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
+          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Tenant isolation</p>
+          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Cryptographic</p>
+          <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
+            A wrong account cannot decrypt your data — enforced by math, not policy.
+          </p>
+        </div>
+        <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
+          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Secret access</p>
+          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Always audited</p>
+          <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
+            Every credential read lands in your <a href="/audit-log" class="text-tk-accent underline">audit log</a>.
+          </p>
+        </div>
+      </div>
+      <p class="mt-4 text-xs text-tk-ink-3">
+        Full model at
+        <a href="https://driftstack.dev/trust/security-overview" class="text-tk-accent underline">driftstack.dev/trust</a>
+        · your data, your call — export or delete anytime from
+        <a href="#danger-zone" class="text-tk-accent underline">the danger zone</a>.
+      </p>
+    </section>
+
+    {/* 2026-05-23 — icon on the Security section header. */}
+    <!-- Security -->
+    <section class="dashboard-card mt-6">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+        </span>
+        Security
+      </h2>
+      <p class="mt-2 text-sm text-tk-ink-3">Password + recovery options.</p>
+      <div class="mt-6 space-y-3">
+        <button type="button" data-action="change-password" class="btn-secondary inline-flex">
+          Change password
+        </button>
+        <p class="text-xs text-tk-ink-3">
+          We email you a magic link to confirm. The link expires after 60
+          minutes; old sessions stay signed in until they naturally expire.
+        </p>
+      </div>
+    </section>
+
+    <!-- Two-factor authentication (V-353h) -->
+    <section class="dashboard-card mt-6" data-region="mfa">
+      <div class="flex items-start justify-between gap-6">
+        <div>
+          <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
+            <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z" />
+                <path d="M9 12l2 2 4-4" />
+              </svg>
+            </span>
+            Two-factor authentication
+          </h2>
+          <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
+            Add a TOTP code from your authenticator app on top of your password.
+            Recovery codes are issued at enrollment — store them somewhere safe;
+            without your authenticator AND your recovery codes, account access
+            requires support intervention.
+          </p>
+        </div>
+        <span
+          data-field="mfa-status-badge"
+          class="shrink-0 rounded-full bg-tk-surface px-2 py-1 text-xs font-medium text-tk-ink-2"
+        >
+          loading…
+        </span>
+      </div>
+
+      <!-- Enroll flow (hidden when already enrolled). -->
+      <div class="mt-6 hidden space-y-4" data-section="mfa-enroll">
+        <p class="text-sm text-tk-ink-2">
+          Click <strong>Set up</strong> to generate a fresh secret. Scan the QR
+          (or paste the manual-entry secret into your authenticator app), then
+          enter the 6-digit code to confirm.
+        </p>
+        <button type="button" data-button="mfa-start" class="btn-primary text-sm">
+          Set up two-factor authentication
+        </button>
+
+        <!-- Hidden until /enroll fires. -->
+        <div class="hidden space-y-4 rounded-lg border border-tk-border bg-tk-bg p-4" data-section="mfa-enroll-step">
+          <p class="text-sm text-tk-ink-2">
+            Open your authenticator app (1Password, Authy, Google Authenticator, etc.)
+            and either scan the QR or paste the manual secret.
+          </p>
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
+            <div
+              class="flex h-44 w-44 shrink-0 items-center justify-center rounded-md border border-tk-border bg-tk-surface p-2"
+              data-field="mfa-qr"
+            >
+              <span class="text-xs text-tk-ink-3">QR will render here</span>
+            </div>
+            <div class="min-w-0 flex-1">
+              <label class="block text-xs font-medium uppercase tracking-wide text-tk-ink-3"
+                >Manual secret</label>
+              <code
+                data-field="mfa-secret-base32"
+                class="mt-1 block break-all rounded bg-tk-surface px-2 py-1 font-mono text-xs text-tk-ink ring-1 ring-slate-200"
+              >—</code>
+              <p class="mt-2 text-xs text-tk-ink-3">
+                SHA-1 / 30s / 6-digit (RFC 6238 defaults; every authenticator app
+                supports).
+              </p>
+            </div>
+          </div>
+          <div class="border-t border-tk-border pt-3">
+            <label class="block text-sm font-medium text-tk-ink-2" for="mfa-verify-code">
+              Enter the 6-digit code from your app to confirm
+            </label>
+            <div class="mt-2 flex items-center gap-2">
+              <input
+                id="mfa-verify-code"
+                data-field="mfa-verify-code"
+                type="text"
+                inputmode="numeric"
+                pattern="\d{6}"
+                maxlength="6"
+                placeholder="123456"
+                class="w-32 rounded-md border border-tk-border px-3 py-2 font-mono text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
+              />
+              <button type="button" data-button="mfa-verify" class="btn-primary text-sm">
+                Confirm + finish
+              </button>
+            </div>
+            <p
+              data-field="mfa-error"
+              class="mt-2 hidden rounded border border-tk-err/30 bg-tk-err/10 px-2 py-1 text-xs text-tk-err"
+            ></p>
+          </div>
+        </div>
+
+        <!-- Hidden until /verify returns 10 recovery codes. -->
+        <div class="hidden rounded-lg border border-tk-accent/30 bg-tk-accent/10 p-4" data-section="mfa-recovery">
+          <p class="text-sm font-medium text-tk-accent-soft">
+            Save your recovery codes — these are shown ONCE
+          </p>
+          <p class="mt-1 text-xs text-tk-accent-soft">
+            Each code works once. Store them somewhere safe (password manager,
+            printed copy, secure note). Without your authenticator AND these
+            codes, account access requires support intervention.
+          </p>
+          <ul
+            class="mt-3 grid grid-cols-2 gap-2 font-mono text-sm text-tk-accent-soft"
+            data-list="mfa-recovery-codes"
+          ></ul>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              data-button="mfa-recovery-copy"
+              class="btn-secondary text-xs"
+            >
+              Copy all
+            </button>
+            <button
+              type="button"
+              data-button="mfa-recovery-download"
+              class="btn-secondary text-xs"
+            >
+              Download .txt
+            </button>
+            <button
+              type="button"
+              data-button="mfa-recovery-acknowledge"
+              class="btn-primary text-xs"
+            >
+              I've saved them
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Enrolled-state controls (hidden when not enrolled). -->
+      <div class="mt-6 hidden space-y-4" data-section="mfa-enrolled">
+        <dl class="grid grid-cols-2 gap-3 text-sm">
+          <dt class="text-tk-ink-3">Enrolled</dt>
+          <dd class="font-mono text-xs text-tk-ink-2" data-field="mfa-enrolled-at">—</dd>
+          <dt class="text-tk-ink-3">Last used</dt>
+          <dd class="font-mono text-xs text-tk-ink-2" data-field="mfa-last-used">—</dd>
+          <dt class="text-tk-ink-3">Recovery codes</dt>
+          <dd class="text-xs text-tk-ink-2">
+            <span data-field="mfa-recovery-remaining">—</span> unused of 10
+          </dd>
+        </dl>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" data-button="mfa-regenerate" class="btn-secondary text-sm">
+            Regenerate recovery codes
+          </button>
+          <button type="button" data-button="mfa-disable" class="btn-secondary text-sm text-tk-err">
+            Disable two-factor
+          </button>
+        </div>
+        <p class="text-xs text-tk-ink-3">
+          Disabling clears your TOTP secret + invalidates all recovery codes.
+          Requires a fresh authenticator code (step-up reauth) to confirm.
+        </p>
+      </div>
+
+      <!-- Step-up reauth modal-ish prompt. -->
+      <div class="mt-6 hidden rounded-lg border border-tk-accent/30 bg-tk-accent/10 p-4" data-section="mfa-step-up">
+        <p class="text-sm font-medium text-oxblood-900">
+          Confirm with your authenticator
+        </p>
+        <p class="mt-1 text-xs text-oxblood-900">
+          Enter a fresh 6-digit code (or a recovery code) to continue.
+        </p>
+        <div class="mt-3 flex items-center gap-2">
+          <input
+            data-field="mfa-step-up-code"
+            type="text"
+            inputmode="numeric"
+            maxlength="11"
+            placeholder="123456 or recovery"
+            aria-label="MFA step-up code"
+            class="w-44 rounded-md border border-tk-accent/40 px-3 py-2 font-mono text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
+          />
+          <button type="button" data-button="mfa-step-up-submit" class="btn-primary text-sm">
+            Confirm
+          </button>
+          <button type="button" data-button="mfa-step-up-cancel" class="btn-secondary text-sm">
+            Cancel
+          </button>
+        </div>
+        <p
+          data-field="mfa-step-up-error"
+          class="mt-2 hidden rounded border border-tk-err/30 bg-tk-err/10 px-2 py-1 text-xs text-tk-err"
+        ></p>
+      </div>
+    </section>
+
+    <!-- Sessions / devices (V-355) -->
+    <section class="dashboard-card mt-6" data-region="web-sessions">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
+          </svg>
+        </span>
+        Active sign-ins
+      </h2>
+      <p class="mt-2 text-sm text-tk-ink-3">
+        Browser sessions where you're signed in to the dashboard. Distinct
+        from the automation sessions you run in the Driftstack desktop app.
+      </p>
+      <ul class="mt-6 divide-y divide-tk-border" data-list="web-sessions">
+        <li class="py-3 text-sm text-tk-ink-3" data-field="web-sessions-empty">
+          Sign in to load your active sessions.
+        </li>
+      </ul>
+      <div class="mt-4 flex items-center justify-between gap-3 border-t border-tk-border pt-4">
+        <p
+          data-field="web-sessions-status"
+          class="text-xs text-tk-ink-3"
+        ></p>
+        <button
+          type="button"
+          data-button="web-sessions-revoke-all"
+          class="btn-secondary text-sm text-tk-err"
+          hidden
+        >
+          Sign out everywhere else
+        </button>
+      </div>
+      <p class="mt-3 text-xs text-tk-ink-3">
+        IP omitted for privacy. The "current" session is the one you're using
+        right now and can't be revoked from this list — sign out from the menu
+        instead.
+      </p>
+    </section>
+
+    <!-- Connected accounts (V-667.C-followup — live-wired) -->
+    <section class="dashboard-card mt-6" data-region="oauth-links">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+          </svg>
+        </span>
+        Connected accounts
+      </h2>
+      <p class="mt-2 text-sm text-tk-ink-3">
+        IDPs (Google / GitHub) linked to your account. Each link lets you
+        sign in via that provider. Revoking the link on the provider side
+        (e.g. Google → Security → Third-party access) automatically marks
+        it inactive here on next sign-in attempt; password sign-in
+        continues to work either way.
+      </p>
+      <ul class="mt-6 divide-y divide-tk-border" data-list="oauth-links">
+        <li class="py-3 text-sm text-tk-ink-3" data-field="oauth-links-empty">
+          Sign in to load your linked accounts.
+        </li>
+      </ul>
+      <p class="mt-3 text-xs text-tk-ink-3" data-field="oauth-links-disabled" hidden>
+        Sign-in-with-Google / GitHub isn't configured on this server.
+        Password sign-in continues to work.
+      </p>
+    </section>
+
+    <!-- Audit log (V-216 — live-wired) -->
+    <section class="dashboard-card mt-6" data-region="audit-log">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+          </svg>
+        </span>
+        Recent activity
+      </h2>
+      <p class="mt-2 text-sm text-tk-ink-3">
+        API key mints + revokes, session lifecycle events, and other account
+        changes. Newest first; filtered to your own account.
+      </p>
+      <ul class="mt-6 divide-y divide-tk-border" data-list="audit-log">
+        <li class="py-3 text-sm text-tk-ink-3" data-field="audit-empty">
+          Sign in to load recent activity.
+        </li>
+      </ul>
+    </section>
+
+    <!-- Danger zone -->
+    <section id="danger-zone" class="mt-10 rounded-lg border border-tk-err/30 bg-tk-err/10 p-6">
+      <h2 class="text-lg font-semibold text-tk-err">Danger zone</h2>
+      <p class="mt-2 text-sm text-tk-err">
+        Account deletion is irreversible. All sessions, profiles, API keys,
+        and webhook endpoints are immediately revoked. Recordings are hard-
+        deleted from R2 within your configured retention window (default 30
+        days). Invoice history retained per Dutch tax law (7 years) — not
+        deletable on request.
+      </p>
+      <p class="mt-3 text-xs text-tk-err">
+        Deletion is currently processed by emailing
+        <a
+          href="mailto:support@driftstack.dev?subject=Account%20deletion%20request"
+          class="underline">support@driftstack.dev</a
+        > so we can confirm + walk the data-portability export with
+        you before the irreversible step.
+      </p>
+    </section>
+  </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="security"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const token = localStorage.getItem('ds_web_session_token');
+      // Captured from the /v1/account/me load below so the change-password
+      // flow doesn't re-prompt the signed-in customer for an email they
+      // could mistype (a typo silently fails — the server returns
+      // { sent: true } for ANY address as anti-enumeration).
+      let accountEmail = null;
+
+      function showBanner(text) {
+        if (!banner) return;
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+      function hideBanner() {
+        if (!banner) return;
+        banner.classList.add('hidden');
+      }
+      function escapeHtml(s) {
+        return String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c],
+        );
+      }
+      function fmtIso(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      }
+
+      // Load the account identity (GET /v1/account/me).
+      if (token) {
+        fetch(apiBaseUrl + '/v1/account/me', {
+          headers: { authorization: 'Bearer ' + token },
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((me) => {
+            if (!me) return;
+            // Capture the account email for the change-password flow so we
+            // don't re-prompt the customer for an address we already know.
+            if (me.email) accountEmail = me.email;
+            // Populate the header account-id from live data (mirrors
+            // settings.astro — audit w2flmiw48 #3).
+            if (me.id) {
+              const headerAcct = document.querySelector('[data-field="header-account"]');
+              if (headerAcct) headerAcct.textContent = 'Account · ' + me.id.slice(0, 16) + '…';
+            }
+          })
+          .catch(() => {
+            /* leave the header as-is */
+          });
+      }
+
+      function authedFetch(path, init = {}) {
+        return fetch(apiBaseUrl + path, {
+          ...init,
+          headers: {
+            ...(init.headers || {}),
+            authorization: 'Bearer ' + token,
+            'content-type': 'application/json',
+            // V-331b — act-as header for team-scoped requests.
+            ...(typeof window.driftstackActAsHeaders === 'function'
+              ? window.driftstackActAsHeaders()
+              : {}),
+          },
+          credentials: 'include',
+        });
+      }
+
+      // V-216 — audit log live wire.
+      const auditList = root.querySelector('[data-list="audit-log"]');
+
+      function fmtAction(action) {
+        return action.replace(/[._]/g, ' ');
+      }
+
+      function renderAudit(entries) {
+        if (!auditList) return;
+        if (entries.length === 0) {
+          auditList.innerHTML =
+            '<li class="py-3 text-sm text-tk-ink-3">No recent activity yet — your first key mint, session create, or other account event will appear here.</li>';
+          return;
+        }
+        auditList.innerHTML = entries
+          .map((entry) => {
+            const targetFrag = entry.target_resource_id
+              ? '<p class="mt-1 font-mono text-[11px] text-tk-ink-3">' +
+                escapeHtml(entry.target_resource_id) +
+                '</p>'
+              : '';
+            return (
+              '<li class="flex items-start justify-between gap-4 py-3">' +
+              '<div class="min-w-0">' +
+              '<p class="font-mono text-xs text-tk-ink-3">' +
+              escapeHtml(fmtIso(entry.timestamp)) +
+              '</p>' +
+              '<p class="mt-1 text-sm text-tk-ink">' +
+              '<code class="font-mono text-xs text-tk-accent">' +
+              escapeHtml(entry.action) +
+              '</code>' +
+              '</p>' +
+              targetFrag +
+              '</div>' +
+              '<span class="text-xs text-tk-ink-3">' +
+              escapeHtml(fmtAction(entry.actor_type)) +
+              '</span></li>'
+            );
+          })
+          .join('');
+      }
+
+      function loadAudit() {
+        if (!token || !auditList) return;
+        authedFetch('/v1/account/audit-log?limit=20', { method: 'GET' })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => renderAudit(body.data || []))
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't load audit log (" + msg + ').');
+          });
+      }
+
+      // V-667.C-followup — connected accounts live wire.
+      // Calls /v1/account/me/oauth-links; route returns 404 when the
+      // server hasn't yet been wired with OAUTH_CLIENT_* env vars,
+      // which we surface as the "not yet enabled" empty state rather
+      // than a banner.
+      const oauthLinksList = root.querySelector('[data-list="oauth-links"]');
+      const oauthLinksDisabled = root.querySelector('[data-field="oauth-links-disabled"]');
+
+      function providerLabel(p) {
+        if (p === 'google') return 'Google';
+        if (p === 'github') return 'GitHub';
+        return p;
+      }
+
+      // Upstream revoke/manage URL per provider. Customer-side
+      // revocation flows go through the provider's own permissions
+      // page; Driftstack just observes the revoke on next sign-in
+      // attempt and stamps last_revoked_at. Deep-linking here saves
+      // the customer hunting through the provider's settings.
+      function providerManageUrl(p) {
+        if (p === 'google') return 'https://myaccount.google.com/permissions';
+        if (p === 'github') return 'https://github.com/settings/applications';
+        return null;
+      }
+
+      function renderOauthLinks(links) {
+        if (!oauthLinksList) return;
+        if (links.length === 0) {
+          oauthLinksList.innerHTML =
+            '<li class="py-3 text-sm text-tk-ink-3">No third-party sign-in linked yet. Sign in with Google or GitHub from /login to link.</li>';
+          return;
+        }
+        oauthLinksList.innerHTML = links
+          .map((link) => {
+            const lastLogin = link.last_login_at
+              ? 'last sign-in ' + escapeHtml(fmtRelative(link.last_login_at))
+              : 'never used';
+            const revokedFrag = link.last_revoked_at
+              ? ' · <span class="text-tk-busy">revoked upstream — sign in to re-link</span>'
+              : '';
+            const manageUrl = providerManageUrl(link.provider);
+            const manageFrag = manageUrl
+              ? '<a href="' +
+                escapeHtml(manageUrl) +
+                '" target="_blank" rel="noopener noreferrer" class="shrink-0 text-xs text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft">Manage on ' +
+                escapeHtml(providerLabel(link.provider)) +
+                ' ↗</a>'
+              : '';
+            return (
+              '<li class="flex items-start justify-between gap-4 py-3">' +
+              '<div class="min-w-0">' +
+              '<p class="text-sm font-medium text-tk-ink">' +
+              escapeHtml(providerLabel(link.provider)) +
+              '</p>' +
+              '<p class="mt-1 text-xs text-tk-ink-3">' +
+              escapeHtml(link.provider_email || '(email withheld by provider)') +
+              ' · linked ' +
+              escapeHtml(fmtIso(link.linked_at)) +
+              ' · ' +
+              lastLogin +
+              revokedFrag +
+              '</p>' +
+              '</div>' +
+              manageFrag +
+              '</li>'
+            );
+          })
+          .join('');
+      }
+
+      function loadOauthLinks() {
+        if (!token || !oauthLinksList) return;
+        authedFetch('/v1/account/me/oauth-links', { method: 'GET' })
+          .then((r) => {
+            if (r.status === 404) {
+              // Route not registered — operator hasn't wired
+              // OAUTH_CLIENT_* yet. Surface a quiet hint, hide the list.
+              if (oauthLinksList) oauthLinksList.hidden = true;
+              if (oauthLinksDisabled) oauthLinksDisabled.hidden = false;
+              return null;
+            }
+            if (!r.ok) return Promise.reject(new Error('HTTP ' + r.status));
+            return r.json();
+          })
+          .then((body) => {
+            if (body) renderOauthLinks(body.data || []);
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't load connected accounts (" + msg + ').');
+          });
+      }
+
+      // V-355 — active sign-ins live wire.
+      const webSessionsList = root.querySelector('[data-list="web-sessions"]');
+      const webSessionsEmpty = root.querySelector('[data-field="web-sessions-empty"]');
+      const webSessionsStatus = root.querySelector('[data-field="web-sessions-status"]');
+      const webSessionsRevokeAllBtn = root.querySelector(
+        '[data-button="web-sessions-revoke-all"]',
+      );
+
+      function fmtRelative(iso) {
+        if (!iso) return '—';
+        const t = new Date(iso).getTime();
+        const ms = Date.now() - t;
+        if (ms < 60_000) return 'just now';
+        const min = Math.floor(ms / 60_000);
+        if (min < 60) return min + 'm ago';
+        const hr = Math.floor(min / 60);
+        if (hr < 24) return hr + 'h ago';
+        const d = Math.floor(hr / 24);
+        return d + 'd ago';
+      }
+
+      function renderWebSessions(sessions) {
+        if (!webSessionsList) return;
+        if (sessions.length === 0) {
+          webSessionsList.innerHTML =
+            '<li class="py-3 text-sm text-tk-ink-3">No active sign-ins.</li>';
+          if (webSessionsRevokeAllBtn) webSessionsRevokeAllBtn.hidden = true;
+          if (webSessionsStatus) webSessionsStatus.textContent = '';
+          return;
+        }
+
+        // 2026-05-19 — collapse multiple sessions from the same
+        // (os, browser) into a single row. Each browser-tab login
+        // mints a fresh web_sessions row (one token per login), so
+        // signing in twice from the same Mac shows two rows. The
+        // server-side token rows stay distinct (each has its own
+        // revoke + expiry); the UI presents them as ONE device with
+        // a (+N older) indicator. Revoking the row revokes the most-
+        // recent token; "Revoke all others" still hits every non-
+        // current row server-side.
+        const groups = new Map();
+        for (const s of sessions) {
+          const key = (s.os || 'Unknown OS') + '\x00' + (s.browser || 'Unknown browser');
+          const existing = groups.get(key);
+          if (!existing) {
+            groups.set(key, { primary: s, hiddenIds: [], count: 1 });
+          } else {
+            existing.count += 1;
+            // Prefer the "current" one as primary; otherwise the
+            // most-recently-used.
+            const primary = existing.primary;
+            const sNewer =
+              new Date(s.last_used_at || s.created_at || 0).getTime() >
+              new Date(primary.last_used_at || primary.created_at || 0).getTime();
+            if (s.current || (!primary.current && sNewer)) {
+              existing.hiddenIds.push(primary.id);
+              existing.primary = s;
+            } else {
+              existing.hiddenIds.push(s.id);
+            }
+          }
+        }
+        const collapsed = Array.from(groups.values());
+
+        webSessionsList.innerHTML = collapsed
+          .map((g) => {
+            const s = g.primary;
+            const dupNote = g.count > 1 ? ' (+' + (g.count - 1).toString() + ' older)' : '';
+            const label =
+              escapeHtml(s.os) +
+              ' · ' +
+              escapeHtml(s.browser) +
+              (s.current ? ' · current' : '') +
+              escapeHtml(dupNote);
+            const meta =
+              'Last used ' +
+              escapeHtml(fmtRelative(s.last_used_at)) +
+              ' · expires ' +
+              escapeHtml(fmtIso(s.expires_at));
+            const action = s.current
+              ? '<span class="rounded-full bg-tk-ready/10 px-2 py-1 text-xs font-medium text-tk-ready">current</span>'
+              : '<button type="button" class="btn-secondary text-sm text-tk-err" data-revoke-id="' +
+                escapeHtml(s.id) +
+                '">Revoke</button>';
+            return (
+              '<li class="flex items-start justify-between gap-6 py-3">' +
+              '<div><p class="text-sm font-medium text-tk-ink">' +
+              label +
+              '</p><p class="mt-1 text-xs text-tk-ink-3">' +
+              meta +
+              '</p></div>' +
+              action +
+              '</li>'
+            );
+          })
+          .join('');
+        const others = sessions.filter((s) => !s.current).length;
+        if (webSessionsRevokeAllBtn) webSessionsRevokeAllBtn.hidden = others === 0;
+        if (webSessionsStatus)
+          webSessionsStatus.textContent =
+            collapsed.length +
+            (collapsed.length === 1 ? ' device' : ' devices') +
+            ' · ' +
+            sessions.length +
+            ' active session' +
+            (sessions.length === 1 ? '' : 's');
+      }
+
+      function loadWebSessions() {
+        if (!token || !webSessionsList) return;
+        if (webSessionsEmpty) webSessionsEmpty.classList.add('hidden');
+        authedFetch('/v1/account/web-sessions', { method: 'GET' })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => renderWebSessions(body.data || []))
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't load active sign-ins (" + msg + ').');
+          });
+      }
+
+      function revokeWebSession(id) {
+        authedFetch('/v1/account/web-sessions/' + encodeURIComponent(id), {
+          method: 'DELETE',
+        })
+          .then((r) => {
+            if (r.status === 204 || r.ok) return null;
+            return Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then(() => {
+            showBanner('Session revoked.');
+            setTimeout(hideBanner, 2000);
+            loadWebSessions();
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't revoke session (" + msg + ').');
+          });
+      }
+
+      if (webSessionsList) {
+        webSessionsList.addEventListener('click', async (ev) => {
+          const target = ev.target;
+          if (!target || !target.closest) return;
+          const btn = target.closest('[data-revoke-id]');
+          if (!btn) return;
+          const id = btn.getAttribute('data-revoke-id');
+          if (!id) return;
+          if (
+            !(await window.driftstackConfirm(
+              'Revoke this sign-in? It will need to sign in again.',
+              { confirmLabel: 'Revoke' },
+            ))
+          )
+            return;
+          revokeWebSession(id);
+        });
+      }
+
+      if (webSessionsRevokeAllBtn) {
+        webSessionsRevokeAllBtn.addEventListener('click', async () => {
+          if (
+            !(await window.driftstackConfirm(
+              'Sign out of every other browser? You will stay signed in here.',
+              { confirmLabel: 'Sign out others' },
+            ))
+          )
+            return;
+          authedFetch('/v1/account/web-sessions?keep=current', { method: 'DELETE' })
+            .then((r) =>
+              r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)),
+            )
+            .then((body) => {
+              showBanner('Signed out of ' + (body.revoked || 0) + ' other sessions.');
+              setTimeout(hideBanner, 3000);
+              loadWebSessions();
+            })
+            .catch((err) => {
+              const msg = err && err.message ? err.message : 'network error';
+              showBanner("Couldn't bulk-revoke (" + msg + ').');
+            });
+        });
+      }
+
+      // V-079 — change password trigger via password-reset request.
+      async function changePassword() {
+        if (!token) {
+          showBanner('Sign in to change password.');
+          return;
+        }
+        // The page already knows the signed-in customer's email (captured
+        // from /v1/account/me on load), so send the reset link straight to
+        // it — no re-prompt. Re-prompting was a footgun: the server returns
+        // { sent: true } for ANY address (anti-enumeration), so a typo'd
+        // email silently "succeeds" but no usable email ever arrives.
+        // Defensive fallback: if /account/me hasn't resolved yet (e.g. the
+        // profile inputs were absent so the load was gated out), prompt
+        // with whatever email we have pre-filled.
+        let email = accountEmail;
+        if (!email) {
+          const entered = await window.driftstackPrompt(
+            'Confirm your account email to send the password-reset link:',
+            {
+              placeholder: 'you@example.com',
+              confirmLabel: 'Send link',
+              defaultValue: accountEmail || '',
+            },
+          );
+          if (!entered || !entered.trim()) return;
+          email = entered.trim();
+        }
+        showBanner('Sending password-reset email…');
+        fetch(apiBaseUrl + '/v1/auth/password-reset/request', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email: email }),
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then(() => {
+            showBanner('Password-reset email sent. Check your inbox.');
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't send password-reset (" + msg + ').');
+          });
+      }
+
+      root.addEventListener('click', (ev) => {
+        const target = ev.target;
+        if (!target || !target.closest) return;
+        const btn = target.closest('[data-action="change-password"]');
+        if (!btn) return;
+        ev.preventDefault();
+        changePassword();
+      });
+
+      // V-353h — MFA section live wire.
+      const mfaStatusBadge = root.querySelector('[data-field="mfa-status-badge"]');
+      const mfaEnrollSection = root.querySelector('[data-section="mfa-enroll"]');
+      const mfaEnrollStep = root.querySelector('[data-section="mfa-enroll-step"]');
+      const mfaRecoverySection = root.querySelector('[data-section="mfa-recovery"]');
+      const mfaEnrolledSection = root.querySelector('[data-section="mfa-enrolled"]');
+      const mfaStepUpSection = root.querySelector('[data-section="mfa-step-up"]');
+      const mfaQrTarget = root.querySelector('[data-field="mfa-qr"]');
+      const mfaSecretEl = root.querySelector('[data-field="mfa-secret-base32"]');
+      const mfaVerifyInput = root.querySelector('[data-field="mfa-verify-code"]');
+      const mfaError = root.querySelector('[data-field="mfa-error"]');
+      const mfaRecoveryList = root.querySelector('[data-list="mfa-recovery-codes"]');
+      const mfaEnrolledAt = root.querySelector('[data-field="mfa-enrolled-at"]');
+      const mfaLastUsed = root.querySelector('[data-field="mfa-last-used"]');
+      const mfaRecoveryRemaining = root.querySelector('[data-field="mfa-recovery-remaining"]');
+      const mfaStepUpInput = root.querySelector('[data-field="mfa-step-up-code"]');
+      const mfaStepUpError = root.querySelector('[data-field="mfa-step-up-error"]');
+
+      let pendingStepUpAction = null; // 'disable' | 'regenerate' | null
+
+      function showHidden(el, hidden) {
+        if (!el) return;
+        if (hidden) el.classList.add('hidden');
+        else el.classList.remove('hidden');
+      }
+      function showMfaError(msg) {
+        if (!mfaError) return;
+        mfaError.textContent = msg;
+        mfaError.classList.remove('hidden');
+      }
+      function clearMfaError() {
+        if (!mfaError) return;
+        mfaError.textContent = '';
+        mfaError.classList.add('hidden');
+      }
+      function showStepUpError(msg) {
+        if (!mfaStepUpError) return;
+        mfaStepUpError.textContent = msg;
+        mfaStepUpError.classList.remove('hidden');
+      }
+      function clearStepUpError() {
+        if (!mfaStepUpError) return;
+        mfaStepUpError.textContent = '';
+        mfaStepUpError.classList.add('hidden');
+      }
+
+      // ── Offline QR encoder — byte mode, EC level M, versions 1–10 ──────
+      // SECURITY: the enrolment QR is rendered ENTIRELY in-browser so the
+      // TOTP secret embedded in the otpauth:// URI never leaves this origin.
+      // (Previously the URI was handed to api.qrserver.com to draw the image,
+      // which leaked the MFA seed to a third party.) Byte mode encodes any
+      // text and is universally scannable; this output is verified bit-for-bit
+      // against the `qrcode` reference encoder. No network, no dependency.
+      const dsQrSvg = (function () {
+        const EXP = new Array(512);
+        const LOG = new Array(256);
+        (function () {
+          let x = 1;
+          for (let i = 0; i < 255; i++) {
+            EXP[i] = x;
+            LOG[x] = i;
+            x <<= 1;
+            if (x & 0x100) x ^= 0x11d;
+          }
+          for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+        })();
+        const gfMul = (a, b) => (a === 0 || b === 0 ? 0 : EXP[LOG[a] + LOG[b]]);
+        function rsDivisor(degree) {
+          const result = new Array(degree).fill(0);
+          result[degree - 1] = 1;
+          let root = 1;
+          for (let i = 0; i < degree; i++) {
+            for (let j = 0; j < result.length; j++) {
+              result[j] = gfMul(result[j], root);
+              if (j + 1 < result.length) result[j] ^= result[j + 1];
+            }
+            root = gfMul(root, 0x02);
+          }
+          return result;
+        }
+        function rsRemainder(data, divisor) {
+          const result = new Array(divisor.length).fill(0);
+          for (const b of data) {
+            const factor = b ^ result.shift();
+            result.push(0);
+            for (let i = 0; i < result.length; i++) result[i] ^= gfMul(divisor[i], factor);
+          }
+          return result;
+        }
+        // [ecPerBlock, g1Blocks, g1DataCW, g2Blocks, g2DataCW] for EC level M.
+        const M_BLOCKS = {
+          1: [10, 1, 16, 0, 0],
+          2: [16, 1, 28, 0, 0],
+          3: [26, 1, 44, 0, 0],
+          4: [18, 2, 32, 0, 0],
+          5: [24, 2, 43, 0, 0],
+          6: [16, 4, 27, 0, 0],
+          7: [18, 4, 31, 0, 0],
+          8: [22, 2, 38, 2, 39],
+          9: [22, 3, 36, 2, 37],
+          10: [26, 4, 43, 1, 44],
+        };
+        const totalDataCW = (v) => {
+          const b = M_BLOCKS[v];
+          return b[1] * b[2] + b[3] * b[4];
+        };
+        const ALIGN = {
+          1: [],
+          2: [6, 18],
+          3: [6, 22],
+          4: [6, 26],
+          5: [6, 30],
+          6: [6, 34],
+          7: [6, 22, 38],
+          8: [6, 24, 42],
+          9: [6, 26, 46],
+          10: [6, 28, 50],
+        };
+        const VERSION_INFO = { 7: 0x07c94, 8: 0x085bc, 9: 0x09a99, 10: 0x0a4d3 };
+        const charCountBits = (version) => (version <= 9 ? 8 : 16);
+        function chooseVersion(byteLen) {
+          for (let v = 1; v <= 10; v++) {
+            if (4 + charCountBits(v) + byteLen * 8 <= totalDataCW(v) * 8) return v;
+          }
+          throw new Error('data too long for v1..10 at EC level M');
+        }
+        function encodeData(bytes, version) {
+          const bits = [];
+          const push = (val, len) => {
+            for (let i = len - 1; i >= 0; i--) bits.push((val >>> i) & 1);
+          };
+          push(0b0100, 4);
+          push(bytes.length, charCountBits(version));
+          for (const b of bytes) push(b, 8);
+          const capacityBits = totalDataCW(version) * 8;
+          push(0, Math.min(4, capacityBits - bits.length)); // terminator
+          while (bits.length % 8 !== 0) bits.push(0);
+          const pads = [0xec, 0x11];
+          let pi = 0;
+          while (bits.length < capacityBits) {
+            push(pads[pi % 2], 8);
+            pi++;
+          }
+          const cw = [];
+          for (let i = 0; i < bits.length; i += 8) {
+            let byte = 0;
+            for (let j = 0; j < 8; j++) byte = (byte << 1) | bits[i + j];
+            cw.push(byte);
+          }
+          return cw;
+        }
+        function interleave(dataCW, version) {
+          const b = M_BLOCKS[version];
+          const ecPerBlock = b[0];
+          const divisor = rsDivisor(ecPerBlock);
+          const layout = [];
+          for (let i = 0; i < b[1]; i++) layout.push(b[2]);
+          for (let i = 0; i < b[3]; i++) layout.push(b[4]);
+          const blocks = [];
+          let p = 0;
+          for (const dlen of layout) {
+            const data = dataCW.slice(p, p + dlen);
+            p += dlen;
+            blocks.push({ data, ec: rsRemainder(data, divisor) });
+          }
+          const out = [];
+          const maxData = Math.max.apply(null, layout);
+          for (let i = 0; i < maxData; i++)
+            for (const blk of blocks) if (i < blk.data.length) out.push(blk.data[i]);
+          for (let i = 0; i < ecPerBlock; i++) for (const blk of blocks) out.push(blk.ec[i]);
+          return out;
+        }
+        function buildMatrix(version) {
+          const size = 17 + 4 * version;
+          const mods = Array.from({ length: size }, () => new Array(size).fill(null));
+          const fn = Array.from({ length: size }, () => new Array(size).fill(false));
+          const set = (r, c, v) => {
+            mods[r][c] = v ? 1 : 0;
+            fn[r][c] = true;
+          };
+          const placeFinder = (rr, cc) => {
+            for (let dr = -1; dr <= 7; dr++)
+              for (let dc = -1; dc <= 7; dc++) {
+                const r = rr + dr;
+                const c = cc + dc;
+                if (r < 0 || r >= size || c < 0 || c >= size) continue;
+                const inRing =
+                  (dr >= 0 && dr <= 6 && (dc === 0 || dc === 6)) ||
+                  (dc >= 0 && dc <= 6 && (dr === 0 || dr === 6));
+                const inCore = dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4;
+                set(r, c, inRing || inCore);
+              }
+          };
+          placeFinder(0, 0);
+          placeFinder(0, size - 7);
+          placeFinder(size - 7, 0);
+          for (let i = 0; i < size; i++) {
+            if (!fn[6][i]) set(6, i, i % 2 === 0);
+            if (!fn[i][6]) set(i, 6, i % 2 === 0);
+          }
+          const centers = ALIGN[version];
+          for (const r of centers)
+            for (const c of centers) {
+              if ((r === 6 && c === 6) || (r === 6 && c === size - 7) || (r === size - 7 && c === 6))
+                continue;
+              for (let dr = -2; dr <= 2; dr++)
+                for (let dc = -2; dc <= 2; dc++)
+                  set(r + dr, c + dc, Math.max(Math.abs(dr), Math.abs(dc)) !== 1);
+            }
+          set(4 * version + 9, 8, true); // dark module
+          for (let i = 0; i <= 8; i++) {
+            fn[8][i] = true;
+            fn[i][8] = true;
+          }
+          for (let i = 0; i < 8; i++) {
+            fn[8][size - 1 - i] = true;
+            fn[size - 1 - i][8] = true;
+          }
+          if (version >= 7)
+            for (let i = 0; i < 18; i++) {
+              const a = Math.floor(i / 3);
+              const bb = i % 3;
+              fn[size - 11 + bb][a] = true;
+              fn[a][size - 11 + bb] = true;
+            }
+          return { mods, fn, size };
+        }
+        function placeData(matrix, codewords) {
+          const mods = matrix.mods;
+          const fn = matrix.fn;
+          const size = matrix.size;
+          const bits = [];
+          for (const cw of codewords) for (let i = 7; i >= 0; i--) bits.push((cw >>> i) & 1);
+          let bi = 0;
+          let upward = true;
+          for (let col = size - 1; col > 0; col -= 2) {
+            if (col === 6) col = 5;
+            for (let i = 0; i < size; i++) {
+              const row = upward ? size - 1 - i : i;
+              for (let j = 0; j < 2; j++) {
+                const c = col - j;
+                if (!fn[row][c]) {
+                  mods[row][c] = bi < bits.length ? bits[bi] : 0;
+                  bi++;
+                }
+              }
+            }
+            upward = !upward;
+          }
+        }
+        const MASKS = [
+          (r, c) => (r + c) % 2 === 0,
+          (r) => r % 2 === 0,
+          (_r, c) => c % 3 === 0,
+          (r, c) => (r + c) % 3 === 0,
+          (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0,
+          (r, c) => ((r * c) % 2) + ((r * c) % 3) === 0,
+          (r, c) => (((r * c) % 2) + ((r * c) % 3)) % 2 === 0,
+          (r, c) => (((r + c) % 2) + ((r * c) % 3)) % 2 === 0,
+        ];
+        function applyMask(matrix, maskIdx) {
+          const mods = matrix.mods;
+          const fn = matrix.fn;
+          const size = matrix.size;
+          const fnMask = MASKS[maskIdx];
+          for (let r = 0; r < size; r++)
+            for (let c = 0; c < size; c++) if (!fn[r][c] && fnMask(r, c)) mods[r][c] ^= 1;
+        }
+        function formatBits(maskIdx) {
+          const data = (0b00 << 3) | maskIdx; // EC level M = 0b00
+          let rem = data;
+          for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+          return ((data << 10) | rem) ^ 0x5412;
+        }
+        function placeFormat(matrix, maskIdx) {
+          const mods = matrix.mods;
+          const size = matrix.size;
+          const bits = formatBits(maskIdx);
+          for (let i = 0; i < 15; i++) {
+            const mod = (bits >> i) & 1;
+            if (i < 6) mods[i][8] = mod;
+            else if (i < 8) mods[i + 1][8] = mod;
+            else mods[size - 15 + i][8] = mod;
+            if (i < 8) mods[8][size - i - 1] = mod;
+            else if (i < 9) mods[8][15 - i - 1 + 1] = mod;
+            else mods[8][15 - i - 1] = mod;
+          }
+          mods[size - 8][8] = 1;
+        }
+        function placeVersion(matrix, version) {
+          if (version < 7) return;
+          const mods = matrix.mods;
+          const size = matrix.size;
+          const bits = VERSION_INFO[version];
+          for (let i = 0; i < 18; i++) {
+            const bit = (bits >> i) & 1;
+            const a = Math.floor(i / 3);
+            const bb = i % 3;
+            mods[size - 11 + bb][a] = bit;
+            mods[a][size - 11 + bb] = bit;
+          }
+        }
+        function penalty(mods, size) {
+          let p = 0;
+          const runScore = (line) => {
+            let s = 0;
+            let run = 1;
+            for (let i = 1; i < line.length; i++) {
+              if (line[i] === line[i - 1]) {
+                run++;
+                if (run === 5) s += 3;
+                else if (run > 5) s += 1;
+              } else run = 1;
+            }
+            return s;
+          };
+          for (let r = 0; r < size; r++) p += runScore(mods[r]);
+          for (let c = 0; c < size; c++) p += runScore(mods.map((row) => row[c]));
+          for (let r = 0; r < size - 1; r++)
+            for (let c = 0; c < size - 1; c++) {
+              const v = mods[r][c];
+              if (v === mods[r][c + 1] && v === mods[r + 1][c] && v === mods[r + 1][c + 1]) p += 3;
+            }
+          const pat1 = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0];
+          const pat2 = [0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1];
+          const matches = (line, i, pat) => {
+            for (let k = 0; k < pat.length; k++) if (line[i + k] !== pat[k]) return false;
+            return true;
+          };
+          for (let r = 0; r < size; r++)
+            for (let c = 0; c <= size - 11; c++)
+              if (matches(mods[r], c, pat1) || matches(mods[r], c, pat2)) p += 40;
+          for (let c = 0; c < size; c++) {
+            const col = mods.map((row) => row[c]);
+            for (let r = 0; r <= size - 11; r++)
+              if (matches(col, r, pat1) || matches(col, r, pat2)) p += 40;
+          }
+          let dark = 0;
+          for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) dark += mods[r][c];
+          const k = Math.abs(Math.ceil(((dark * 100) / (size * size)) / 5) - 10);
+          p += k * 10;
+          return p;
+        }
+        function encodeQr(text) {
+          const bytes = Array.from(new TextEncoder().encode(text));
+          const version = chooseVersion(bytes.length);
+          const codewords = interleave(encodeData(bytes, version), version);
+          let best = null;
+          for (let mask = 0; mask < 8; mask++) {
+            const m = buildMatrix(version);
+            placeData(m, codewords);
+            applyMask(m, mask);
+            placeFormat(m, mask);
+            placeVersion(m, version);
+            const pen = penalty(m.mods, m.size);
+            if (best === null || pen < best.pen) best = { pen, mods: m.mods, size: m.size };
+          }
+          return { matrix: best.mods, size: best.size };
+        }
+        return function qrSvg(text, opts) {
+          opts = opts || {};
+          const quiet = opts.quiet != null ? opts.quiet : 4;
+          const enc = encodeQr(text);
+          const matrix = enc.matrix;
+          const size = enc.size;
+          const dim = size + quiet * 2;
+          let path = '';
+          for (let r = 0; r < size; r++)
+            for (let c = 0; c < size; c++)
+              if (matrix[r][c]) path += 'M' + (c + quiet) + ' ' + (r + quiet) + 'h1v1h-1z';
+          return (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 ' +
+            dim +
+            ' ' +
+            dim +
+            '" shape-rendering="crispEdges" role="img" aria-label="MFA QR code">' +
+            '<rect width="' +
+            dim +
+            '" height="' +
+            dim +
+            '" fill="#fff"/><path d="' +
+            path +
+            '" fill="#000"/></svg>'
+          );
+        };
+      })();
+
+      function renderQrFor(otpauthUri) {
+        if (!mfaQrTarget) return;
+        // Render the QR entirely in-browser — the otpauth URI carries the TOTP
+        // secret and must never be sent to a third party. The manual secret is
+        // also shown below, so any authenticator that can't scan still works.
+        try {
+          mfaQrTarget.innerHTML = dsQrSvg(otpauthUri);
+        } catch (_err) {
+          mfaQrTarget.innerHTML =
+            '<span class="px-2 text-center text-xs text-tk-ink-3">Couldn’t draw the QR — enter the manual key shown below.</span>';
+        }
+      }
+
+      function setMfaState(status) {
+        if (mfaStatusBadge) {
+          if (status.enrolled) {
+            mfaStatusBadge.textContent = 'enrolled';
+            mfaStatusBadge.classList.remove('bg-tk-surface', 'text-tk-ink-2');
+            mfaStatusBadge.classList.add('bg-tk-ready/10', 'text-tk-ready');
+          } else {
+            mfaStatusBadge.textContent = 'not enrolled';
+            mfaStatusBadge.classList.add('bg-tk-surface', 'text-tk-ink-2');
+            mfaStatusBadge.classList.remove('bg-tk-ready/10', 'text-tk-ready');
+          }
+        }
+        showHidden(mfaEnrollSection, status.enrolled);
+        showHidden(mfaEnrolledSection, !status.enrolled);
+        if (status.enrolled) {
+          if (mfaEnrolledAt)
+            mfaEnrolledAt.textContent = status.enrolled_at
+              ? fmtIso(status.enrolled_at)
+              : '—';
+          if (mfaLastUsed)
+            mfaLastUsed.textContent = status.last_used_at
+              ? fmtIso(status.last_used_at)
+              : 'never';
+          if (mfaRecoveryRemaining)
+            mfaRecoveryRemaining.textContent = String(status.unused_recovery_codes);
+        }
+      }
+
+      function loadMfa() {
+        if (!token) return;
+        authedFetch('/v1/account/mfa', { method: 'GET' })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then(setMfaState)
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't load MFA status (" + msg + ').');
+          });
+      }
+
+      function startEnrollment() {
+        clearMfaError();
+        authedFetch('/v1/account/mfa/enroll', { method: 'POST' })
+          .then((r) =>
+            r.ok
+              ? r.json()
+              : r
+                  .json()
+                  .catch(() => ({}))
+                  .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+          )
+          .then((body) => {
+            renderQrFor(body.otpauth_uri);
+            if (mfaSecretEl) mfaSecretEl.textContent = body.secret_base32;
+            showHidden(mfaEnrollStep, false);
+            if (mfaVerifyInput) mfaVerifyInput.value = '';
+          })
+          .catch((err) => showMfaError(err.message || 'Enroll failed.'));
+      }
+
+      function verifyEnrollment() {
+        // Guard against a double-click firing two POSTs with the same
+        // TOTP code while the first is still in flight — the second
+        // would replay-fail ("Verify failed") even though enrollment
+        // already succeeded. Same disabled-while-pending pattern as
+        // profileSaveBtn / byokTestBtn above.
+        if (mfaVerifyBtn && mfaVerifyBtn.disabled) return;
+        clearMfaError();
+        const code = (mfaVerifyInput && mfaVerifyInput.value || '').trim();
+        if (!/^\d{6}$/.test(code)) {
+          showMfaError('Enter a 6-digit code from your authenticator.');
+          return;
+        }
+        if (mfaVerifyBtn) {
+          mfaVerifyBtn.disabled = true;
+          mfaVerifyBtn.textContent = 'Verifying…';
+        }
+        authedFetch('/v1/account/mfa/verify', {
+          method: 'POST',
+          body: JSON.stringify({ code }),
+        })
+          .then((r) =>
+            r.ok
+              ? r.json()
+              : r
+                  .json()
+                  .catch(() => ({}))
+                  .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+          )
+          .then((body) => {
+            // Render recovery codes once.
+            if (mfaRecoveryList) {
+              mfaRecoveryList.innerHTML = (body.recovery_codes || [])
+                .map(
+                  (c) =>
+                    '<li class="rounded bg-tk-surface px-2 py-1 ring-1 ring-amber-200">' +
+                    escapeHtml(c) +
+                    '</li>',
+                )
+                .join('');
+            }
+            showHidden(mfaRecoverySection, false);
+            showHidden(mfaEnrollStep, true);
+          })
+          .catch((err) => showMfaError(err.message || 'Verify failed.'))
+          .finally(() => {
+            if (mfaVerifyBtn) {
+              mfaVerifyBtn.disabled = false;
+              mfaVerifyBtn.textContent = 'Confirm + finish';
+            }
+          });
+      }
+
+      function copyRecoveryCodes() {
+        if (!mfaRecoveryList) return;
+        const codes = Array.from(
+          mfaRecoveryList.querySelectorAll('li'),
+        ).map((li) => li.textContent || '');
+        navigator.clipboard
+          .writeText(codes.join('\n'))
+          .then(() => showBanner('Recovery codes copied to clipboard.'))
+          .catch(() => showBanner("Copy failed. Select + copy manually."));
+      }
+
+      function downloadRecoveryCodes() {
+        if (!mfaRecoveryList) return;
+        const codes = Array.from(
+          mfaRecoveryList.querySelectorAll('li'),
+        ).map((li) => li.textContent || '');
+        const text =
+          'Driftstack — MFA recovery codes\n' +
+          'Generated ' +
+          new Date().toISOString() +
+          '\n\nEach code works once. Store somewhere safe.\n\n' +
+          codes.join('\n') +
+          '\n';
+        const blob = new Blob([text], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'driftstack-recovery-codes.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      function acknowledgeRecoveryCodes() {
+        showHidden(mfaRecoverySection, true);
+        if (mfaRecoveryList) mfaRecoveryList.innerHTML = '';
+        loadMfa();
+      }
+
+      function openStepUp(action) {
+        pendingStepUpAction = action;
+        clearStepUpError();
+        if (mfaStepUpInput) mfaStepUpInput.value = '';
+        showHidden(mfaStepUpSection, false);
+      }
+      function closeStepUp() {
+        pendingStepUpAction = null;
+        clearStepUpError();
+        showHidden(mfaStepUpSection, true);
+      }
+
+      function submitStepUp() {
+        clearStepUpError();
+        const raw = (mfaStepUpInput && mfaStepUpInput.value || '').trim();
+        if (!raw) {
+          showStepUpError('Enter a 6-digit code or recovery code.');
+          return;
+        }
+        const isCode = /^\d{6}$/.test(raw);
+        const body = isCode ? { code: raw } : { recovery_code: raw };
+        authedFetch('/v1/auth/mfa/step-up', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        })
+          .then((r) =>
+            r.ok
+              ? r.json()
+              : r
+                  .json()
+                  .catch(() => ({}))
+                  .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+          )
+          .then(() => {
+            const action = pendingStepUpAction;
+            closeStepUp();
+            if (action === 'disable') performDisable();
+            else if (action === 'regenerate') performRegenerate();
+          })
+          .catch((err) => showStepUpError(err.message || 'Step-up failed.'));
+      }
+
+      function performDisable() {
+        authedFetch('/v1/account/mfa', {
+          method: 'DELETE',
+          body: JSON.stringify({ confirm: 'disable-mfa' }),
+        })
+          .then((r) => {
+            if (r.status === 204 || r.ok) return null;
+            return r
+              .json()
+              .catch(() => ({}))
+              .then((b) => {
+                if (b && b.requires_mfa_step_up) {
+                  openStepUp('disable');
+                  throw new Error('__step_up__');
+                }
+                throw new Error(b.detail || 'HTTP ' + r.status);
+              });
+          })
+          .then(() => {
+            showBanner('Two-factor authentication disabled.');
+            loadMfa();
+          })
+          .catch((err) => {
+            if (err && err.message === '__step_up__') return;
+            showBanner('Disable failed: ' + (err && err.message ? err.message : 'network'));
+          });
+      }
+
+      function performRegenerate() {
+        authedFetch('/v1/account/mfa/recovery-codes/regenerate', { method: 'POST' })
+          .then((r) =>
+            r.ok
+              ? r.json()
+              : r
+                  .json()
+                  .catch(() => ({}))
+                  .then((b) => {
+                    if (b && b.requires_mfa_step_up) {
+                      openStepUp('regenerate');
+                      throw new Error('__step_up__');
+                    }
+                    throw new Error(b.detail || 'HTTP ' + r.status);
+                  }),
+          )
+          .then((body) => {
+            if (mfaRecoveryList) {
+              mfaRecoveryList.innerHTML = (body.recovery_codes || [])
+                .map(
+                  (c) =>
+                    '<li class="rounded bg-tk-surface px-2 py-1 ring-1 ring-amber-200">' +
+                    escapeHtml(c) +
+                    '</li>',
+                )
+                .join('');
+            }
+            showHidden(mfaRecoverySection, false);
+            loadMfa();
+          })
+          .catch((err) => {
+            if (err && err.message === '__step_up__') return;
+            showBanner('Regenerate failed: ' + (err && err.message ? err.message : 'network'));
+          });
+      }
+
+      // Wire MFA buttons.
+      const mfaStart = root.querySelector('[data-button="mfa-start"]');
+      if (mfaStart) mfaStart.addEventListener('click', startEnrollment);
+      const mfaVerifyBtn = root.querySelector('[data-button="mfa-verify"]');
+      if (mfaVerifyBtn) mfaVerifyBtn.addEventListener('click', verifyEnrollment);
+      const mfaDisable = root.querySelector('[data-button="mfa-disable"]');
+      if (mfaDisable)
+        mfaDisable.addEventListener('click', async () => {
+          if (
+            !(await window.driftstackConfirm(
+              'Disable two-factor authentication? You will be asked for a fresh code first.',
+              { confirmLabel: 'Disable 2FA' },
+            ))
+          )
+            return;
+          performDisable();
+        });
+      const mfaRegen = root.querySelector('[data-button="mfa-regenerate"]');
+      if (mfaRegen)
+        mfaRegen.addEventListener('click', async () => {
+          if (
+            !(await window.driftstackConfirm(
+              'Regenerate recovery codes? Old codes are invalidated immediately.',
+              { confirmLabel: 'Regenerate' },
+            ))
+          )
+            return;
+          performRegenerate();
+        });
+      const mfaCopy = root.querySelector('[data-button="mfa-recovery-copy"]');
+      if (mfaCopy) mfaCopy.addEventListener('click', copyRecoveryCodes);
+      const mfaDownload = root.querySelector('[data-button="mfa-recovery-download"]');
+      if (mfaDownload) mfaDownload.addEventListener('click', downloadRecoveryCodes);
+      const mfaAck = root.querySelector('[data-button="mfa-recovery-acknowledge"]');
+      if (mfaAck) mfaAck.addEventListener('click', acknowledgeRecoveryCodes);
+      const mfaStepUpSubmit = root.querySelector('[data-button="mfa-step-up-submit"]');
+      if (mfaStepUpSubmit) mfaStepUpSubmit.addEventListener('click', submitStepUp);
+      const mfaStepUpCancel = root.querySelector('[data-button="mfa-step-up-cancel"]');
+      if (mfaStepUpCancel) mfaStepUpCancel.addEventListener('click', closeStepUp);
+
+      if (!token) {
+        showBanner('Sign in to see live security status + recent activity.');
+        return;
+      }
+
+      loadAudit();
+      loadWebSessions();
+      loadMfa();
+      loadOauthLinks();
+      // 2026-05-21 — opacity-gate signal. Four loaders fire in parallel
+      // without returning promises (legacy shape). Fire the reveal in
+      // a microtask so the first paint happens after the network
+      // requests are scheduled; far better UX than waiting the 1200ms
+      // safety cap. Fields populate as each request resolves.
+      queueMicrotask(function () {
+        if (typeof window.dashboardHydrated === 'function') {
+          window.dashboardHydrated();
+        }
+      });
+    })();
+  </script>
+</DashboardLayout>

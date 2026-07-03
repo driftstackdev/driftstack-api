@@ -1,12 +1,13 @@
-// W324.C — drift guard for /settings page route citations. The
-// page is a compound view that hits multiple endpoints:
-//   GET/PATCH /v1/account/me                 — profile load/edit
-//   POST      /v1/account/me/avatar          — avatar upload
-//   DELETE    /v1/account/me/avatar          — clear avatar
-//   GET/PUT   /v1/account/email-preferences  — toggles
-// All must be registered server-side. The security-surface routes
-// (audit-log / web-sessions) moved to /security with the 2026-07-03
-// design-system v2 split — see security-page-route-parity.test.ts.
+// W324.C-security — drift guard for /security page route citations.
+// The page is a compound view that hits multiple endpoints:
+//   GET       /v1/account/me                 — accountEmail capture
+//   GET       /v1/account/audit-log          — recent events
+//   GET       /v1/account/web-sessions       — list signed-in devices
+//   DELETE    /v1/account/web-sessions/:id   — revoke a session
+//   DELETE    /v1/account/web-sessions?keep=current — revoke all others
+// All must be registered server-side. These routes lived on /settings
+// until the 2026-07-03 design-system v2 split moved the security
+// surfaces to /security.
 
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +16,7 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const PAGE = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/settings.astro');
+const PAGE = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/security.astro');
 const ROUTES = resolve(REPO_ROOT, 'apps/server/src/routes');
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -32,9 +33,14 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-const REQUIRED_PATHS = ['/v1/account/me', '/v1/account/me/avatar', '/v1/account/email-preferences'];
+const REQUIRED_PATHS = [
+  '/v1/account/me',
+  '/v1/account/audit-log',
+  '/v1/account/web-sessions',
+  '/v1/account/web-sessions/:id',
+];
 
-describe('W324.C /settings ↔ route parity', () => {
+describe('W324.C-security /security ↔ route parity', () => {
   const page = read(PAGE);
   const allRouteBodies = walk(ROUTES)
     .filter((f) => /\.ts$/.test(f))

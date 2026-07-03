@@ -63,7 +63,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/const fullTitle = `\$\{title\} · Driftstack`;/);
   });
 
-  it('8 navItems pinned in canonical order (2026-07-02 account-portal IA, dashboard redesign slice 2: the operational surfaces — /profiles /snapshots /sessions /agent-sessions /recipes /proxies — moved to the desktop GUI; /subscription left the nav ahead of its slice-3 merge into /billing but stays routable via the billing-page link). Sections: General / Developers / Account; parser scans navSections for (href, label) entries.', () => {
+  it('9 navItems pinned in canonical order (2026-07-02 account-portal IA, dashboard redesign slice 2: the operational surfaces — /profiles /snapshots /sessions /agent-sessions /recipes /proxies — moved to the desktop GUI; /subscription left the nav ahead of its slice-3 merge into /billing but stays routable via the billing-page link; 2026-07-03 slice added /security — the Privacy & security page split out of /settings). Sections: General / Developers / Account; parser scans navSections for (href, label) entries.', () => {
     // Scan the navSections array. Items carry an `icon` field; match
     // (href, label) pairs across all sections, preserving encounter order.
     const block = body.match(/const navSections: NavSection\[\] = \[([\s\S]+?)\];/);
@@ -81,6 +81,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
       { href: '/billing', label: 'Billing' },
       { href: '/audit-log', label: 'Audit log' },
       { href: '/team', label: 'Team' },
+      { href: '/security', label: 'Privacy & security' },
       { href: '/settings', label: 'Settings' },
     ]);
   });
@@ -171,7 +172,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     );
   });
 
-  it('all 8 navItem targets exist as pages (no dangling sidebar links; 2026-07-02 account-portal IA — the operational pages moved to the desktop GUI)', () => {
+  it('all 9 navItem targets exist as pages (no dangling sidebar links; 2026-07-02 account-portal IA — the operational pages moved to the desktop GUI)', () => {
     const dir = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages');
     expect(existsSync(resolve(dir, 'index.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'api-keys.astro'))).toBe(true);
@@ -180,6 +181,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(existsSync(resolve(dir, 'billing.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'audit-log.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'team.astro'))).toBe(true);
+    expect(existsSync(resolve(dir, 'security.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'settings.astro'))).toBe(true);
     // The retired operational pages must be GONE (they now 404→/ via _redirects).
     for (const gone of [

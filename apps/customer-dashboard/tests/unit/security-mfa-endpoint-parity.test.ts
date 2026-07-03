@@ -1,5 +1,6 @@
-// W343.B — drift guard for /settings page MFA lifecycle endpoints.
-// The settings page hits 6 distinct MFA routes:
+// W343.B — drift guard for /security page MFA lifecycle endpoints
+// (moved from /settings with the 2026-07-03 design-system v2 split).
+// The security page hits 6 distinct MFA routes:
 //
 //   GET    /v1/account/mfa                          (status)
 //   POST   /v1/account/mfa/enroll                   (start TOTP enroll)
@@ -18,7 +19,7 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const PAGE = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/settings.astro');
+const PAGE = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/security.astro');
 const ACCOUNT_MFA_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/account-mfa.ts');
 const AUTH_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/auth.ts');
 
@@ -26,7 +27,7 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-describe('W343.B /settings MFA endpoint parity', () => {
+describe('W343.B /security MFA endpoint parity', () => {
   const page = read(PAGE);
   const mfaRoute = read(ACCOUNT_MFA_ROUTE);
   const authRoute = read(AUTH_ROUTE);
@@ -47,7 +48,7 @@ describe('W343.B /settings MFA endpoint parity', () => {
   });
 
   it('disable issues DELETE /v1/account/mfa (the GET path is reused with method DELETE)', () => {
-    // The settings inline script reuses the same path string for
+    // The security inline script reuses the same path string for
     // GET and DELETE; verify both ends agree.
     expect(page).toMatch(/method:\s*'DELETE'/);
     expect(mfaRoute).toContain("'/v1/account/mfa'");

@@ -1,12 +1,12 @@
-// Local integration test for the /settings page's MFA (2FA) flow,
+// Local integration test for the /security page's MFA (2FA) flow,
 // focused on DISABLE — the most security-sensitive MFA action (turning
 // OFF two-factor must be confirm-gated AND step-up-gated). Covers the
 // enrolled/not-enrolled status render, the direct disable
 // (DELETE /v1/account/mfa → done), the step-up-required disable (DELETE
 // 403 {requires_mfa_step_up} → reveal the step-up form → POST
 // /v1/auth/mfa/step-up → retry DELETE → done), and disable-cancelled.
-// The settings page loads ~7 account endpoints concurrently, so this
-// uses a permissive stateful router with a mutable MFA holder.
+// The security page loads several account endpoints concurrently, so
+// this uses a permissive stateful router with a mutable MFA holder.
 //
 // Mirrors settings-byok-page.test.ts (route-based; stubs driftstackConfirm).
 
@@ -17,8 +17,8 @@ import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'settings', 'index.html');
-const PAGE_URL = 'https://app.driftstack.dev/settings/';
+const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'security', 'index.html');
+const PAGE_URL = 'https://app.driftstack.dev/security/';
 
 interface MockFetchCall {
   url: string;
@@ -63,8 +63,8 @@ function setUpDom(
   // @ts-expect-error — driftstackConfirm is injected by DashboardLayout
   window.driftstackConfirm = () => Promise.resolve(cr);
 
-  const pageScript = scriptBodies.find((s) => s.includes('data-page="settings"'));
-  if (!pageScript) throw new Error('settings inline script not found');
+  const pageScript = scriptBodies.find((s) => s.includes('data-page="security"'));
+  if (!pageScript) throw new Error('security inline script not found');
   // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
   return { window: window as JSDOM['window'], fetchCalls };
@@ -133,7 +133,7 @@ function newMfa(over: Partial<MfaState> = {}): MfaState {
   return { enrolled: true, requireStepUp: false, steppedUp: false, ...over };
 }
 
-describe('settings page — MFA (2FA) disable', () => {
+describe('security page — MFA (2FA) disable', () => {
   let win: JSDOM['window'] | null = null;
   afterEach(() => {
     win?.close?.();
@@ -225,7 +225,7 @@ describe('settings page — MFA (2FA) disable', () => {
   });
 });
 
-describe('settings page — MFA (2FA) enrollment verify', () => {
+describe('security page — MFA (2FA) enrollment verify', () => {
   let win: JSDOM['window'] | null = null;
   afterEach(() => {
     win?.close?.();

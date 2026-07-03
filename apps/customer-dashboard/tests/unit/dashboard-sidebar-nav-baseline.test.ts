@@ -59,6 +59,7 @@ describe('W335.C DashboardLayout sidebar nav baseline', () => {
       '/billing',
       '/audit-log',
       '/team',
+      '/security',
       '/settings',
     ]) {
       expect(navHrefs).toContain(expected);

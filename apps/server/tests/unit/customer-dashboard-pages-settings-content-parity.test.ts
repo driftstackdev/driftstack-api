@@ -1,23 +1,20 @@
 // W497.C — drift guard for apps/customer-dashboard/src/pages/settings.astro.
-// V-217 + V-079 + V-204 + V-216 + V-298a + V-298b + V-352 + V-352b +
-// V-353h + V-355 settings page. Drift here either drops the
-// V-353h MFA section (would break the recovery-codes shown-ONCE
-// contract) or breaks the V-204 EMAIL_EVENTS 8-entry list
-// (customers couldn't opt out of lifecycle emails matching the
-// server-side OptOutableEmailEventSchema).
+// V-217 + V-204 + V-298a + V-298b + V-352 + V-352b settings page.
+// The security surfaces (V-079 change-password, V-353h MFA, V-355
+// web-sessions, V-216 audit teaser, danger zone) moved to /security
+// with the 2026-07-03 design-system v2 split — their pins live in
+// customer-dashboard-pages-security-content-parity.test.ts. Drift
+// here breaks the V-204 EMAIL_EVENTS list (customers couldn't opt
+// out of lifecycle emails matching the server-side
+// OptOutableEmailEventSchema) or the V-352 profile editor.
 //
-//   • V-217 progressive-enhancement framing.
-//   • V-204 EMAIL_EVENTS 8-entry list mirroring
+//   • V-217 progressive-enhancement framing (V-204 live wire).
+//   • V-204 EMAIL_EVENTS 6-entry list mirroring
 //     OptOutableEmailEventSchema.
-//   • V-353h MFA enroll + verify + recovery codes + step-up reauth.
 //   • V-352 + V-352b + V-298a + V-298b profile form (name +
 //     timezone + slug + region + avatar).
-//   • V-355 active sign-ins (web-sessions list + revoke).
-//   • V-079 change-password via password-reset request.
-//   • V-216 audit log live wire (last 20 entries).
 //   • V-331b act-as header in authedFetch.
-//   • Danger-zone: 10-year EU tax law invoice retention +
-//     support@driftstack.dev pre-launch deletion.
+//   • The moved-to-/security header cross-link.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -35,9 +32,9 @@ function read(p: string): string {
 describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-217 framing pinned: 'progressive-enhancement live wiring against: /v1/account/email-preferences (V-204) — list + PUT per-event toggles / /v1/account/audit-log (V-216) — recent customer-visible events / /v1/auth/password-reset/request (V-079) — change-password trigger' — pinned so the 3-endpoint live-wire scope + the V-204/V-216/V-079 provenance survive", () => {
+  it("V-217 framing pinned: 'progressive-enhancement live wiring against: /v1/account/email-preferences (V-204) — list + PUT per-event toggles' — pinned so the remaining live-wire scope + the V-204 provenance survive (the V-216/V-079 wires moved to security.astro with the 2026-07-03 split)", () => {
     expect(body).toMatch(
-      /\/\/ V-217 — progressive-enhancement live wiring against:\s*\n?\s*\/\/ {3}- \/v1\/account\/email-preferences \(V-204\) — list \+ PUT per-event toggles\s*\n?\s*\/\/ {3}- \/v1\/account\/audit-log \(V-216\) — recent customer-visible events\s*\n?\s*\/\/ {3}- \/v1\/auth\/password-reset\/request \(V-079\) — change-password trigger/,
+      /\/\/ V-217 — progressive-enhancement live wiring against:\s*\n?\s*\/\/ {3}- \/v1\/account\/email-preferences \(V-204\) — list \+ PUT per-event toggles/,
     );
   });
 
@@ -55,28 +52,6 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
   it("Security-vs-lifecycle email framing pinned: 'Security + financial emails (signup verification, password reset, billing failure, subscription cancellation, support replies) always go out. Below are the optional lifecycle emails — toggle off any you don't want.' — pinned so the must-deliver vs. opt-outable distinction stays explicit (drift to dropping the security/financial framing would let customers think they can opt out of billing-failure or password-reset emails, breaking the security model)", () => {
     expect(body).toMatch(
       /Security \+ financial emails \(signup verification, password reset,\s*\n?\s*billing failure, subscription cancellation, support replies\) always\s*\n?\s*go out\. Below are the optional lifecycle emails — toggle off any\s*\n?\s*you don't want\./,
-    );
-  });
-
-  it('V-353h MFA enroll + verify + recovery contract: POST /v1/account/mfa/enroll → { otpauth_uri, secret_base32 } + POST /v1/account/mfa/verify { code } → { recovery_codes } — pinned so the 2-step enroll-then-verify flow + the recovery_codes response field stay correct (drift to a single-step enroll would skip the QR-scan verification; drift to dropping recovery_codes would orphan customers from the shown-ONCE backup-codes flow)', () => {
-    expect(body).toMatch(/authedFetch\('\/v1\/account\/mfa\/enroll', \{ method: 'POST' \}\)/);
-    expect(body).toMatch(
-      /authedFetch\('\/v1\/account\/mfa\/verify', \{\s*\n?\s*method: 'POST',\s*\n?\s*body: JSON\.stringify\(\{ code \}\),\s*\n?\s*\}\)/,
-    );
-    expect(body).toMatch(/body\.recovery_codes \|\| \[\]/);
-  });
-
-  it("MFA recovery codes shown-ONCE framing pinned: 'Save your recovery codes — these are shown ONCE' + 'Each code works once. Store them somewhere safe (password manager, printed copy, secure note). Without your authenticator AND these codes, account access requires support intervention.' — pinned so the shown-ONCE contract + support-intervention escape-hatch both survive (drift to dropping support-intervention would let lockout victims think there's no recovery path)", () => {
-    expect(body).toMatch(/Save your recovery codes — these are shown ONCE/);
-    expect(body).toMatch(
-      /Each code works once\. Store them somewhere safe \(password manager,\s*\n?\s*printed copy, secure note\)\. Without your authenticator AND these\s*\n?\s*codes, account access requires support intervention\./,
-    );
-  });
-
-  it("MFA step-up reauth framing: 'requires_mfa_step_up' response flag → openStepUp('disable') + POST /v1/auth/mfa/step-up { code | recovery_code } — pinned so the disable-needs-fresh-code security gate survives (drift to dropping step-up would let an attacker with a stolen session disable MFA without proving fresh possession of the authenticator)", () => {
-    expect(body).toMatch(/if \(b && b\.requires_mfa_step_up\) \{\s*\n?\s*openStepUp\('disable'\);/);
-    expect(body).toMatch(
-      /const body = isCode \? \{ code: raw \} : \{ recovery_code: raw \};\s*\n?\s*authedFetch\('\/v1\/auth\/mfa\/step-up', \{/,
     );
   });
 
@@ -110,49 +85,15 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
     );
   });
 
-  it("V-355 active sign-ins contract: GET /v1/account/web-sessions + DELETE /v1/account/web-sessions/:id + DELETE /v1/account/web-sessions?keep=current bulk-revoke — pinned so the 3-endpoint web-sessions contract stays correct (drift to dropping ?keep=current would let bulk-revoke kill the current session, signing the customer out of the page they're using)", () => {
-    expect(body).toMatch(/authedFetch\('\/v1\/account\/web-sessions', \{ method: 'GET' \}\)/);
-    expect(body).toMatch(
-      /authedFetch\('\/v1\/account\/web-sessions\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',\s*\n?\s*\}\)/,
-    );
-    expect(body).toMatch(
-      /authedFetch\('\/v1\/account\/web-sessions\?keep=current', \{ method: 'DELETE' \}\)/,
-    );
-  });
-
-  it("V-355 IP-omitted-for-privacy framing pinned: 'IP omitted for privacy. The \"current\" session is the one you're using right now and can't be revoked from this list — sign out from the menu instead.' — pinned so the privacy-by-default + don't-revoke-self framing stays explicit (drift to surfacing IP would change the privacy posture; drift to dropping the can't-revoke-self framing would confuse customers who try to revoke their current session)", () => {
-    expect(body).toMatch(
-      /IP omitted for privacy\. The "current" session is the one you're using\s*\n?\s*right now and can't be revoked from this list — sign out from the menu\s*\n?\s*instead\./,
-    );
-  });
-
-  it("V-079 change-password via password-reset request framing: 'We email you a magic link to confirm. The link expires after 60 minutes; old sessions stay signed in until they naturally expire.' + POST /v1/auth/password-reset/request { email } — pinned so the magic-link UX + the 60-min expiry (this flow issues AUTH_TOKEN_TTL_MS.passwordReset = 60min via requestPasswordReset, NOT the 15-min magicLink) + the old-sessions-stay-alive contract all survive (drift to revoke-on-reset would force customers to re-login everywhere on a routine password change)", () => {
-    expect(body).toMatch(
-      /We email you a magic link to confirm\. The link expires after 60\s*\n?\s*minutes; old sessions stay signed in until they naturally expire\./,
-    );
-    expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/password-reset\/request', \{\s*\n?\s*method: 'POST',/,
-    );
-  });
-
-  it("V-216 audit-log live wire: GET /v1/account/audit-log?limit=20 + actor_type + target_resource_id + action+timestamp render — pinned so the recent-activity card surfaces the latest 20 entries with full provenance (drift to dropping ?limit=20 would either over-fetch or default the server's larger limit; drift to dropping actor_type would hide whether the action was customer/system/staff-initiated)", () => {
-    expect(body).toMatch(
-      /authedFetch\('\/v1\/account\/audit-log\?limit=20', \{ method: 'GET' \}\)/,
-    );
-  });
-
-  it("Danger-zone framing pinned: 'Account deletion is irreversible. All sessions, profiles, API keys, and webhook endpoints are immediately revoked. Recordings are hard-deleted from R2 within your configured retention window (default 30 days). Invoice history retained per Dutch tax law (7 years) — not deletable on request.' + the support@driftstack.dev deletion-request mailto — pinned so the irreversibility + accurate 30d-default R2 retention + accurate 7y Dutch-tax retention (corrected 2026-07-01 from a stale 14-day/10-year mismatch vs docs/legal/privacy-policy.md's actual retention table) + the current email-request path all survive", () => {
-    expect(body).toMatch(
-      /All sessions, profiles, API keys,\s*\n?\s*and webhook endpoints are immediately revoked\. Recordings are hard-\s*\n?\s*deleted from R2 within your configured retention window \(default 30\s*\n?\s*days\)\. Invoice history retained per Dutch tax law \(7 years\) — not\s*\n?\s*deletable on request\./,
-    );
-    expect(body).toMatch(
-      /href="mailto:support@driftstack\.dev\?subject=Account%20deletion%20request"/,
-    );
-  });
-
-  it("V-331b act-as header in authedFetch — pinned so the team-scoped flow propagates to settings reads/writes (drift would let team managers accidentally modify their OWN email prefs / MFA when trying to manage a team-mate's account)", () => {
+  it("V-331b act-as header in authedFetch — pinned so the team-scoped flow propagates to settings reads/writes (drift would let team managers accidentally modify their OWN email prefs when trying to manage a team-mate's account)", () => {
     expect(body).toMatch(
       /\/\/ V-331b — act-as header for team-scoped requests\.\s*\n?\s*\.\.\.\(typeof window\.driftstackActAsHeaders === 'function'\s*\n?\s*\? window\.driftstackActAsHeaders\(\)\s*\n?\s*: \{\}\),/,
+    );
+  });
+
+  it('moved-to-/security header cross-link pinned: \'Security, sign-ins & danger zone moved to <a href="/security">Privacy & security</a>.\' — pinned so customers hunting the old surfaces get the pointer instead of reading the split as a feature removal', () => {
+    expect(body).toMatch(
+      /Security, sign-ins &amp; danger zone moved to\s*\n?\s*<a href="\/security" class="text-tk-accent underline">Privacy &amp; security<\/a>\./,
     );
   });
 

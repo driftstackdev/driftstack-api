@@ -1,11 +1,12 @@
 // Local integration test for the /settings page's inline script,
-// focused on the SECURITY-critical web-session management flow (revoke
-// a single sign-in / revoke all other sign-ins). A wiring bug here
-// means a customer can't kill a stolen session. The settings page is
-// large (loads ~7 account endpoints concurrently, each with its own
-// independent .catch), so this uses a permissive stateful URL router:
-// every loader resolves to a minimal response, web-sessions returns a
-// mutable list, and the DELETE mutations drive the assertions.
+// focused on the email notification preferences flow (V-204 toggles
+// with optimistic-update revert on save failure). The web-session
+// management flow moved to /security with the 2026-07-03 design-system
+// v2 split — see security-page.test.ts. The settings page loads its
+// account endpoints concurrently, each with its own independent
+// .catch, so this uses a permissive stateful URL router: every loader
+// resolves to a minimal response and the PUT mutations drive the
+// assertions.
 //
 // Mirrors profiles-page.test.ts (route-based). Confirmation is the
 // branded window.driftstackConfirm (injected by DashboardLayout, not
@@ -24,15 +25,6 @@ const PAGE_URL = 'https://app.driftstack.dev/settings/';
 interface MockFetchCall {
   url: string;
   init: RequestInit | undefined;
-}
-interface WebSession {
-  id: string;
-  os: string;
-  browser: string;
-  current: boolean;
-  last_used_at: string;
-  created_at: string;
-  expires_at: string;
 }
 interface SetUpOpts {
   confirmReturns?: boolean;
@@ -82,144 +74,9 @@ function json(obj: unknown, status = 200): Response {
     headers: { 'content-type': 'application/json' },
   });
 }
-function listText(window: JSDOM['window']): string {
-  return window.document.querySelector('[data-list="web-sessions"]')?.textContent ?? '';
-}
 async function flush(times = 6): Promise<void> {
   for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
 }
-
-function mkSession(over: Partial<WebSession> = {}): WebSession {
-  return {
-    id: 'sess_' + Math.random().toString(36).slice(2, 8),
-    os: 'macOS',
-    browser: 'Safari',
-    current: false,
-    last_used_at: '2026-05-29T10:00:00.000Z',
-    created_at: '2026-05-20T10:00:00.000Z',
-    expires_at: '2026-06-20T10:00:00.000Z',
-    ...over,
-  };
-}
-
-// Permissive router: every settings loader resolves to a minimal
-// shape so the independent sections hydrate without throwing; the
-// web-sessions list is mutable so revoke mutations are observable.
-function makeRouter(webSessions: WebSession[]): (c: MockFetchCall) => Response {
-  return (call: MockFetchCall): Response => {
-    const method = (call.init?.method || 'GET').toUpperCase();
-    const u = call.url.replace(/^https?:\/\/[^/]+/, '');
-    const single = u.match(/\/v1\/account\/web-sessions\/([^/?]+)$/);
-    if (single && method === 'DELETE') {
-      const i = webSessions.findIndex((s) => s.id === single[1]);
-      if (i >= 0) webSessions.splice(i, 1);
-      return new Response(null, { status: 204 });
-    }
-    if (/\/v1\/account\/web-sessions\?keep=current$/.test(u) && method === 'DELETE') {
-      const others = webSessions.filter((s) => !s.current).length;
-      for (let i = webSessions.length - 1; i >= 0; i--) {
-        if (!webSessions[i]!.current) webSessions.splice(i, 1);
-      }
-      return json({ revoked: others });
-    }
-    if (/\/v1\/account\/web-sessions$/.test(u) && method === 'GET') {
-      return json({ data: webSessions });
-    }
-    if (/\/v1\/account\/me$/.test(u) && method === 'GET') {
-      return json({ email: 'me@example.com', name: 'Me', slug: 'me', region: 'eu' });
-    }
-    if (/\/v1\/account\/email-preferences$/.test(u)) return json({ data: [] });
-    if (/\/v1\/account\/audit-log/.test(u)) return json({ data: [] });
-    // oauth-links / mfa / byok status return 404 when absent — the page
-    // handles those gracefully (independent .catch per section).
-    return json({}, 404);
-  };
-}
-
-describe('settings page — web-session management (security)', () => {
-  let win: JSDOM['window'] | null = null;
-  afterEach(() => {
-    win?.close?.();
-    win = null;
-  });
-  const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
-
-  it('renders active sign-ins: the non-current session gets a Revoke button; the current one shows the current badge', async () => {
-    const { window } = setUpDom(loadBuiltPage(), {
-      route: makeRouter([
-        mkSession({ id: 'sess_current', current: true, os: 'macOS', browser: 'Safari' }),
-        mkSession({ id: 'sess_other', current: false, os: 'iOS', browser: 'Safari' }),
-      ]),
-    });
-    win = window;
-    await flush();
-    expect(window.document.querySelector('[data-revoke-id="sess_other"]')).toBeTruthy();
-    // Current session has no revoke control.
-    expect(window.document.querySelector('[data-revoke-id="sess_current"]')).toBeNull();
-    expect(listText(window).toLowerCase()).toContain('current');
-  });
-
-  it('revoke single: confirm-gated DELETE /v1/account/web-sessions/:id then refresh drops it', async () => {
-    const sessions = [
-      mkSession({ id: 'sess_current', current: true }),
-      mkSession({ id: 'sess_other', current: false, os: 'iOS', browser: 'Safari' }),
-    ];
-    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
-      confirmReturns: true,
-      route: makeRouter(sessions),
-    });
-    win = window;
-    await flush();
-    (window.document.querySelector('[data-revoke-id="sess_other"]') as HTMLButtonElement).click();
-    await flush();
-    const del = fetchCalls.find(
-      (c) => c.init?.method === 'DELETE' && /\/web-sessions\/sess_other$/.test(c.url),
-    );
-    expect(del).toBeTruthy();
-    expect(window.document.querySelector('[data-revoke-id="sess_other"]')).toBeNull();
-  });
-
-  it('revoke cancelled: no DELETE fired, the session stays', async () => {
-    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
-      confirmReturns: false,
-      route: makeRouter([
-        mkSession({ id: 'sess_current', current: true }),
-        mkSession({ id: 'sess_other', current: false, os: 'iOS', browser: 'Safari' }),
-      ]),
-    });
-    win = window;
-    await flush();
-    (window.document.querySelector('[data-revoke-id="sess_other"]') as HTMLButtonElement).click();
-    await flush();
-    expect(
-      fetchCalls.some((c) => c.init?.method === 'DELETE' && /\/web-sessions\//.test(c.url)),
-    ).toBe(false);
-    expect(window.document.querySelector('[data-revoke-id="sess_other"]')).toBeTruthy();
-  });
-
-  it('revoke all others: confirm-gated DELETE /v1/account/web-sessions?keep=current', async () => {
-    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
-      confirmReturns: true,
-      route: makeRouter([
-        mkSession({ id: 'sess_current', current: true }),
-        mkSession({ id: 'sess_a', current: false }),
-        mkSession({ id: 'sess_b', current: false }),
-      ]),
-    });
-    win = window;
-    await flush();
-    const allBtn = window.document.querySelector(
-      '[data-button="web-sessions-revoke-all"]',
-    ) as HTMLButtonElement;
-    expect(allBtn.hidden).toBe(false);
-    allBtn.click();
-    await flush();
-    const del = fetchCalls.find(
-      (c) => c.init?.method === 'DELETE' && /\/web-sessions\?keep=current$/.test(c.url),
-    );
-    expect(del).toBeTruthy();
-  });
-});
 
 describe('settings page — email notification preferences', () => {
   let win: JSDOM['window'] | null = null;
@@ -239,11 +96,9 @@ describe('settings page — email notification preferences', () => {
       if (/\/v1\/account\/email-preferences$/.test(u) && method === 'GET') {
         return json({ data: [{ event_type: 'billing-receipt', opted_in: true }] });
       }
-      if (/\/v1\/account\/web-sessions$/.test(u)) return json({ data: [] });
       if (/\/v1\/account\/me$/.test(u) && method === 'GET') {
         return json({ email: 'me@example.com', name: 'Me', slug: 'me', region: 'eu' });
       }
-      if (/\/v1\/account\/audit-log/.test(u)) return json({ data: [] });
       return json({}, 404);
     };
   }

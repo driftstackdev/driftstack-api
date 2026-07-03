@@ -40,7 +40,7 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     expect(l).toMatch(/withSidebar = true,/);
   });
 
-  it('CRITICAL nav-item roster pinned (Overview/API keys/Webhooks/Usage/Billing/Audit log/Team/Settings). 2026-07-02 account-portal IA (redesign slice 2): the operational surfaces (Profiles/Snapshots/Sessions/Agent sessions/Recipes/Proxies) moved to the desktop GUI; Subscription left the nav ahead of its slice-3 merge into Billing. Items carry an icon field + group into navSections.', () => {
+  it('CRITICAL nav-item roster pinned (Overview/API keys/Webhooks/Usage/Billing/Audit log/Team/Privacy & security/Settings). 2026-07-02 account-portal IA (redesign slice 2): the operational surfaces (Profiles/Snapshots/Sessions/Agent sessions/Recipes/Proxies) moved to the desktop GUI; Subscription left the nav ahead of its slice-3 merge into Billing. 2026-07-03 — /security (Privacy & security) split out of /settings. Items carry an icon field + group into navSections.', () => {
     const l = read(LAYOUT);
 
     const expected: Array<[string, string]> = [
@@ -51,6 +51,7 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
       ['/billing', 'Billing'],
       ['/audit-log', 'Audit log'],
       ['/team', 'Team'],
+      ['/security', 'Privacy & security'],
       ['/settings', 'Settings'],
     ];
 

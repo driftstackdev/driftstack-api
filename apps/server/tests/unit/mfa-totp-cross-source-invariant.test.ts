@@ -12,9 +12,10 @@
 //     MfaStepUpRequest (both use /^\d{6}$/).
 //   - packages/api-types/src/auth.ts MfaChallengeResponse +
 //     MfaStepUpResponse (both use via: z.enum(['totp', 'recovery'])).
-//   - apps/customer-dashboard/src/pages/settings.astro MFA enroll
+//   - apps/customer-dashboard/src/pages/security.astro MFA enroll
 //     form (pattern="\d{6}" + maxlength="6" + inputmode="numeric"
-//     for the confirm input).
+//     for the confirm input; moved from settings.astro with the
+//     2026-07-03 design-system v2 /security split).
 //
 // Drift would silently break:
 //   * Auth server rejecting valid TOTP codes (wrong digit count).
@@ -93,15 +94,15 @@ describe('W870 V-353 MFA cross-source invariant', () => {
 
   // ─── Dashboard settings.astro MFA form attrs ─────────────────
 
-  it('CRITICAL apps/customer-dashboard/src/pages/settings.astro MFA enroll-confirm input has pattern="\\d{6}" + maxlength="6" + inputmode="numeric". The HTML5 attrs match the api-types Zod regex — drift would let the form accept invalid input.', () => {
-    const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/settings.astro'));
+  it('CRITICAL apps/customer-dashboard/src/pages/security.astro MFA enroll-confirm input has pattern="\\d{6}" + maxlength="6" + inputmode="numeric". The HTML5 attrs match the api-types Zod regex — drift would let the form accept invalid input.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/security.astro'));
     expect(p).toMatch(/inputmode="numeric"/);
     expect(p).toMatch(/pattern="\\d\{6\}"/);
     expect(p).toMatch(/maxlength="6"/);
   });
 
-  it("CRITICAL apps/customer-dashboard/src/pages/settings.astro pins the RFC 6238 TOTP defaults ('SHA-1 / 30s / 6-digit (RFC 6238 defaults; every authenticator app …)'). Drift would change authenticator-app interop.", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/settings.astro'));
+  it("CRITICAL apps/customer-dashboard/src/pages/security.astro pins the RFC 6238 TOTP defaults ('SHA-1 / 30s / 6-digit (RFC 6238 defaults; every authenticator app …)'). Drift would change authenticator-app interop.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/security.astro'));
     expect(p).toMatch(/SHA-1 \/ 30s \/ 6-digit \(RFC 6238 defaults; every authenticator app/);
   });
 
