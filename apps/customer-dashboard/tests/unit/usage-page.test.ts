@@ -235,4 +235,87 @@ describe('customer-dashboard Usage (usage.astro) behaviour', () => {
     expect(text(window, '[data-banner]')).toContain("Couldn't load live usage");
     expect(hydratedCount()).toBeGreaterThanOrEqual(1);
   });
+
+  it('daily chart: an all-zero series renders the honest empty state, not a fabricated chart (slice 3.4; expected until the V-014/V-015 usage writers land)', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter({
+        summary: {
+          period_start: '2026-06-01T00:00:00Z',
+          period_end: '2026-06-30T00:00:00Z',
+          tier: 'solo_manual',
+          totals: {},
+        },
+        series: {
+          buckets: [
+            { date: '2026-06-01', totals: {} },
+            { date: '2026-06-02', totals: { navigate: 0 } },
+          ],
+        },
+      }),
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-daily-empty]')).toBe(false);
+    expect(isHidden(window, '[data-daily-chart]')).toBe(true);
+  });
+
+  it('daily chart: non-zero buckets sum every usage type into one bar per day + a first/last-day legend', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter({
+        summary: {
+          period_start: '2026-06-01T00:00:00Z',
+          period_end: '2026-06-30T00:00:00Z',
+          tier: 'solo_manual',
+          totals: TOTALS,
+        },
+        series: {
+          buckets: [
+            { date: '2026-06-01', totals: { session_minute: 10, navigate: 5 } },
+            { date: '2026-06-02', totals: {} },
+            { date: '2026-06-03', totals: { interact: 40 } },
+          ],
+        },
+      }),
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-daily-chart]')).toBe(false);
+    const bars = window.document.querySelectorAll('[data-daily-chart] span');
+    expect(bars.length).toBe(3);
+    expect(text(window, '[data-daily-legend]')).toContain('2026-06-01');
+    expect(text(window, '[data-daily-legend]')).toContain('2026-06-03');
+  });
+
+  it('daily chart: the 7/30/90 window buttons re-fetch the series with the chosen days + toggle aria-pressed', async () => {
+    const calls: string[] = [];
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/usage\/series/.test(call.url)) {
+          calls.push(call.url);
+          return json({ buckets: [{ date: '2026-06-01', totals: { navigate: 3 } }] });
+        }
+        if (/\/v1\/usage$/.test(call.url))
+          return json({
+            period_start: '2026-06-01T00:00:00Z',
+            period_end: '2026-06-30T00:00:00Z',
+            tier: 'solo_manual',
+            totals: {},
+          });
+        return json({}, 404);
+      },
+    });
+    win = window;
+    await flush();
+    const btn7 = window.document.querySelector('[data-usage-days="7"]') as HTMLButtonElement;
+    btn7.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush();
+    expect(calls.some((u) => /days=7\b/.test(u))).toBe(true);
+    expect(btn7.getAttribute('aria-pressed')).toBe('true');
+    expect(
+      window.document.querySelector('[data-usage-days="30"]')?.getAttribute('aria-pressed'),
+    ).toBe('false');
+  });
 });
