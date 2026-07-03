@@ -53,6 +53,25 @@ describe('W337.C dashboard /index overview endpoint parity', () => {
     expect(routes).toContain("'/v1/billing'");
   });
 
+  it('cites GET /v1/usage + /v1/usage/series (Fleet v2 hours stat + 14-day chart) and both routes are registered server-side', () => {
+    expect(body).toContain("getJson('/v1/usage')");
+    expect(body).toContain("getJson('/v1/usage/series?days=14')");
+    expect(routes).toContain("'/v1/usage'");
+    expect(routes).toContain("'/v1/usage/series'");
+  });
+
+  it('cites GET /v1/team/members (onboarding team step; 403 hides the step) and the route is registered server-side', () => {
+    expect(body).toContain("getJson('/v1/team/members')");
+    expect(routes).toContain("'/v1/team/members'");
+  });
+
+  it('cites the PUBLIC GET /v1/status (status pill, NO Authorization header — plain fetch, not getJson) and the route is registered server-side', () => {
+    expect(body).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/status', \{ headers: \{ accept: 'application\/json' \} \}\)/,
+    );
+    expect(routes).toContain("'/v1/status'");
+  });
+
   it('reads the bearer token from the canonical ds_web_session_token key', () => {
     expect(body).toContain("localStorage.getItem('ds_web_session_token')");
   });

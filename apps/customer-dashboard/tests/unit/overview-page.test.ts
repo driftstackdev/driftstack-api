@@ -31,6 +31,9 @@ interface SetUpOpts {
   route: (call: MockFetchCall) => Response;
   /** Page URL override (e.g. the ?subscribed= post-checkout landing). */
   url?: string;
+  /** Extra localStorage entries seeded before the page script runs
+   *  (e.g. ds_onboarding_dismissed / ds_onboarding_app_clicked). */
+  storage?: Record<string, string>;
 }
 
 interface SetUpResult {
@@ -66,6 +69,7 @@ function setUpDom(html: string, opts: SetUpOpts): SetUpResult {
     return Promise.resolve(opts.route(call));
   };
   if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
+  for (const [k, v] of Object.entries(opts.storage ?? {})) window.localStorage.setItem(k, v);
   // Helpers DashboardLayout installs; stub so the page script behaves the same.
   let hydrated = 0;
   // @ts-expect-error — injected by DashboardLayout (not eval'd here)
@@ -108,6 +112,10 @@ interface RouterOpts {
   billing?: Record<string, unknown>;
   usage?: Record<string, unknown>;
   usageSeries?: Record<string, unknown>;
+  teamMembers?: Array<Record<string, unknown>>;
+  teamStatus?: number;
+  status?: Record<string, unknown>;
+  statusFails?: boolean;
 }
 
 function makeRouter(opts: RouterOpts): (c: MockFetchCall) => Response {
@@ -122,6 +130,14 @@ function makeRouter(opts: RouterOpts): (c: MockFetchCall) => Response {
     if (/\/v1\/billing$/.test(u)) return json(opts.billing ?? {});
     if (/\/v1\/usage$/.test(u)) return json(opts.usage ?? { totals: {} });
     if (/\/v1\/usage\/series\?days=14$/.test(u)) return json(opts.usageSeries ?? { buckets: [] });
+    if (/\/v1\/team\/members$/.test(u)) {
+      if (opts.teamStatus) return json({ detail: 'forbidden' }, opts.teamStatus);
+      return json({ data: opts.teamMembers ?? [] });
+    }
+    if (/\/v1\/status$/.test(u)) {
+      if (opts.statusFails) return json({}, 503);
+      return json(opts.status ?? { overall_status: 'operational', recent_incidents: [] });
+    }
     return json({}, 404);
   };
 }
@@ -416,5 +432,154 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
     expect(isHidden(window, '[data-banner]')).toBe(false);
     expect(text(window, '[data-banner]')).toContain(TIER_DISPLAY_NAMES['team_manual']);
     expect(text(window, '[data-banner]')).toContain('subscription is active');
+  });
+
+  it('onboarding: a fresh account (no keys, no sessions, zero usage) sees the checklist with app/key/session pending and team revealed-but-pending', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter({
+        me: { name: 'A', tier: 'team_manual' },
+        apiKeys: [],
+        sessions: [],
+        teamMembers: [{ id: 'm1' }],
+      }),
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-onboarding]')).toBe(false);
+    for (const step of ['app', 'key', 'session', 'team']) {
+      const li = window.document.querySelector(`[data-onboarding-step="${step}"]`);
+      expect(li?.getAttribute('data-step-done')).toBeNull();
+    }
+    expect(
+      window.document.querySelector('[data-onboarding-step="team"]')?.classList.contains('hidden'),
+    ).toBe(false);
+  });
+
+  it('onboarding: team fetch 403 (member / non-team tier) keeps the team step hidden without blocking the rest', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter({
+        me: { name: 'A', tier: 'solo_manual' },
+        apiKeys: [{ revoked_at: null }],
+        teamStatus: 403,
+      }),
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-onboarding]')).toBe(false);
+    expect(
+      window.document.querySelector('[data-onboarding-step="team"]')?.classList.contains('hidden'),
+    ).toBe(true);
+    // The key step derived done from the active API key.
+    expect(
+      window.document.querySelector('[data-onboarding-step="key"]')?.getAttribute('data-step-done'),
+    ).toBe('true');
+  });
+
+  it('onboarding: fully-onboarded account (app clicked, key, session, team) auto-hides the checklist', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      storage: { ds_onboarding_app_clicked: '1' },
+      route: makeRouter({
+        me: { name: 'A', tier: 'team_manual' },
+        apiKeys: [{ revoked_at: null }],
+        sessions: [{ id: 's1', status: 'destroyed', created_at: '2026-06-01T00:00:00Z' }],
+        teamMembers: [{ id: 'm1' }, { id: 'm2' }],
+      }),
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-onboarding]')).toBe(true);
+  });
+
+  it('onboarding: recorded usage alone (no session rows) also satisfies the first-session step', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter({
+        me: { name: 'A', tier: 'solo_manual' },
+        sessions: [],
+        usage: { totals: { session_minute: 12 } },
+        teamStatus: 403,
+      }),
+    });
+    win = window;
+    await flush();
+    expect(
+      window.document
+        .querySelector('[data-onboarding-step="session"]')
+        ?.getAttribute('data-step-done'),
+    ).toBe('true');
+  });
+
+  it('onboarding: ds_onboarding_dismissed suppresses the checklist entirely', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      storage: { ds_onboarding_dismissed: '1' },
+      route: makeRouter({ me: { name: 'A', tier: 'solo_manual' }, apiKeys: [], sessions: [] }),
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-onboarding]')).toBe(true);
+  });
+
+  it('onboarding: the Dismiss button hides the panel and persists ds_onboarding_dismissed', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter({ me: { name: 'A', tier: 'solo_manual' }, apiKeys: [], sessions: [] }),
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-onboarding]')).toBe(false);
+    (window.document.querySelector('[data-onboarding-dismiss]') as HTMLButtonElement).dispatchEvent(
+      new window.Event('click', { bubbles: true }),
+    );
+    await flush();
+    expect(isHidden(window, '[data-onboarding]')).toBe(true);
+    expect(window.localStorage.getItem('ds_onboarding_dismissed')).toBe('1');
+  });
+
+  it('status pill: operational renders the ready dot + label; the fetch carries NO Authorization header (public endpoint)', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter({
+        me: { name: 'A', tier: 'solo_manual' },
+        status: { overall_status: 'operational', recent_incidents: [] },
+      }),
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-status-widget]')).toBe(false);
+    expect(text(window, '[data-status-text]')).toBe('All systems operational');
+    const statusCall = fetchCalls.find((c) => /\/v1\/status$/.test(c.url));
+    expect(statusCall).toBeDefined();
+    const headers = (statusCall?.init?.headers ?? {}) as Record<string, string>;
+    expect(Object.keys(headers).map((h) => h.toLowerCase())).not.toContain('authorization');
+  });
+
+  it('status pill: major_outage + recent incidents renders the err dot and the incident count', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter({
+        me: { name: 'A', tier: 'solo_manual' },
+        status: { overall_status: 'major_outage', recent_incidents: [{ id: 'i1' }, { id: 'i2' }] },
+      }),
+    });
+    win = window;
+    await flush();
+    expect(text(window, '[data-status-text]')).toBe('Major outage · 2 recent incidents');
+    expect(
+      window.document.querySelector('[data-status-dot]')?.classList.contains('status-dot--err'),
+    ).toBe(true);
+  });
+
+  it('status pill: a failing /v1/status stays hidden (fail-open)', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter({ me: { name: 'A', tier: 'solo_manual' }, statusFails: true }),
+    });
+    win = window;
+    await flush();
+    expect(isHidden(window, '[data-status-widget]')).toBe(true);
   });
 });

@@ -10,6 +10,9 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 //   - GET /v1/usage (session-hours stat) + GET /v1/usage/series?days=14
 //     (the 14-day mini chart; honest empty state while the V-014/V-015
 //     usage_records writers are unwired and totals are all zero)
+//   - GET /v1/team/members (onboarding "invite your team" step; the
+//     account_owner gate 403s members/non-team tiers → step hidden)
+//   - GET /v1/status (PUBLIC status pill — no Authorization header)
 // Each call is independent; failures in one section don't blank the
 // rest. Render is client-side so the dashboard server stays static
 // (Astro's hybrid mode is intentionally avoided here).
@@ -51,6 +54,19 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           </h1>
         </div>
         <div class="flex items-center gap-3">
+          {/* Fleet v2 (2026-07-02) — platform-status pill. Hydrated from the
+              PUBLIC GET /v1/status (no Authorization header); stays hidden
+              on fetch failure (fail-open, matching the endpoint's posture). */}
+          <a
+            data-status-widget
+            href="https://status.driftstack.dev"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="hidden items-center gap-1.5 rounded-full border border-tk-border bg-tk-surface px-2.5 py-1 text-xs text-tk-ink-2 hover:text-tk-ink"
+          >
+            <span data-status-dot class="status-dot status-dot--ready"></span>
+            <span data-status-text>—</span>
+          </a>
           <span
             data-account-tier
             class="rounded-full border border-tk-accent/30 bg-tk-accent/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-tk-accent"
@@ -75,6 +91,69 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       role="status"
     >
     </div>
+
+    {/* Fleet v2 (2026-07-02) — onboarding checklist, mirroring the desktop
+        app's FirstRunWizard order: get the app → connect it (sign-in mints
+        an API key via /cli/authorize, or paste one from /api-keys) → run a
+        first session → invite the team. Steps derive from the fetches this
+        page already makes (+ /v1/team/members, hidden on 403 for non-team
+        tiers). Auto-hides once every visible step is done, or on dismiss
+        (localStorage ds_onboarding_dismissed). */}
+    <section data-onboarding class="panel mb-6 hidden">
+      <h2 class="panel-title">
+        Get set up
+        <span class="flex-1"></span>
+        <button
+          type="button"
+          data-onboarding-dismiss
+          class="text-xs font-normal text-tk-ink-3 hover:text-tk-ink"
+        >
+          Dismiss
+        </button>
+      </h2>
+      <ol class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <li data-onboarding-step="app" class="flex items-start gap-2.5 text-sm">
+          <span data-step-marker class="badge-count mt-0.5">1</span>
+          <span>
+            <a
+              href="https://docs.driftstack.dev/quickstart/"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-onboarding-app-link
+              class="font-medium text-tk-ink hover:text-tk-accent">Get the desktop app</a
+            >
+            <span class="mt-0.5 block text-xs text-tk-ink-3">Sessions are driven there.</span>
+          </span>
+        </li>
+        <li data-onboarding-step="key" class="flex items-start gap-2.5 text-sm">
+          <span data-step-marker class="badge-count mt-0.5">2</span>
+          <span>
+            <a href="/api-keys" class="font-medium text-tk-ink hover:text-tk-accent"
+              >Connect the app</a
+            >
+            <span class="mt-0.5 block text-xs text-tk-ink-3"
+              >Sign in from the app, or paste an API key.</span
+            >
+          </span>
+        </li>
+        <li data-onboarding-step="session" class="flex items-start gap-2.5 text-sm">
+          <span data-step-marker class="badge-count mt-0.5">3</span>
+          <span>
+            <span class="font-medium text-tk-ink">Run your first session</span>
+            <span class="mt-0.5 block text-xs text-tk-ink-3">An iPhone, on demand.</span>
+          </span>
+        </li>
+        <li data-onboarding-step="team" class="hidden items-start gap-2.5 text-sm">
+          <span data-step-marker class="badge-count mt-0.5">4</span>
+          <span>
+            <a href="/team" class="font-medium text-tk-ink hover:text-tk-accent"
+              >Invite your team</a
+            >
+            <span class="mt-0.5 block text-xs text-tk-ink-3">Roles + seats.</span>
+          </span>
+        </li>
+      </ol>
+    </section>
 
     {/* Fleet v2 (2026-07-02) — founder-locked stat row: Active sessions
         (with cap meter — per ADR-004 the concurrent cap is the ONLY
@@ -419,6 +498,79 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         /* greeting is best-effort */
       }
 
+      // Fleet v2 (2026-07-02) — onboarding checklist state. Mirrors the
+      // desktop FirstRunWizard order (app → connect → session → team).
+      // null = not yet known; the panel renders once key+session settle so
+      // there is no flash for fully-onboarded accounts. 'app' is not
+      // server-verifiable — a click on the download link marks it done
+      // (localStorage ds_onboarding_app_clicked).
+      const onboarding = { app: false, key: null, session: null, team: null };
+      let onboardingDismissed = false;
+      try {
+        onboarding.app = localStorage.getItem('ds_onboarding_app_clicked') === '1';
+        onboardingDismissed = localStorage.getItem('ds_onboarding_dismissed') === '1';
+      } catch (_) {
+        /* defaults */
+      }
+
+      function renderOnboarding() {
+        const panel = root.querySelector('[data-onboarding]');
+        if (!panel) return;
+        if (onboardingDismissed) {
+          panel.classList.add('hidden');
+          return;
+        }
+        // Wait for the server-derived steps before first paint.
+        if (onboarding.key === null || onboarding.session === null) return;
+        const done = { app: onboarding.app, key: onboarding.key, session: onboarding.session };
+        const teamKnown = onboarding.team !== null;
+        if (teamKnown) done.team = onboarding.team;
+        for (const step of ['app', 'key', 'session', 'team']) {
+          const li = panel.querySelector('[data-onboarding-step="' + step + '"]');
+          if (!li) continue;
+          if (step === 'team') {
+            if (!teamKnown) continue; // stays hidden (403 / non-team tier)
+            li.classList.remove('hidden');
+            li.classList.add('flex');
+          }
+          const marker = li.querySelector('[data-step-marker]');
+          if (marker && done[step]) {
+            marker.textContent = '✓';
+            marker.classList.add('bg-tk-ready/15', 'text-tk-ready');
+            li.setAttribute('data-step-done', 'true');
+          }
+        }
+        const allDone = Object.keys(done).every(function (k) {
+          return done[k];
+        });
+        panel.classList.toggle('hidden', allDone);
+      }
+
+      const onboardingDismissBtn = root.querySelector('[data-onboarding-dismiss]');
+      if (onboardingDismissBtn) {
+        onboardingDismissBtn.addEventListener('click', function () {
+          onboardingDismissed = true;
+          try {
+            localStorage.setItem('ds_onboarding_dismissed', '1');
+          } catch (_) {
+            /* session-only dismiss */
+          }
+          renderOnboarding();
+        });
+      }
+      const onboardingAppLink = root.querySelector('[data-onboarding-app-link]');
+      if (onboardingAppLink) {
+        onboardingAppLink.addEventListener('click', function () {
+          onboarding.app = true;
+          try {
+            localStorage.setItem('ds_onboarding_app_clicked', '1');
+          } catch (_) {
+            /* session-only */
+          }
+          renderOnboarding();
+        });
+      }
+
       // V-331 — pick up the X-Driftstack-Account header from the
       // shared helper installed by DashboardLayout. Self-scope returns
       // {} so the request behaves identically when not "acting as".
@@ -513,15 +665,24 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           }).length;
           const el = root.querySelector('[data-stat-api-keys]');
           if (el) el.textContent = String(active);
+          // Onboarding: any active key = the app can connect (the browser
+          // sign-in mints one; manual paste requires one).
+          onboarding.key = active > 0;
+          renderOnboarding();
         })
         .catch(function () {
-          /* leave dash */
+          onboarding.key = false;
+          renderOnboarding();
         });
 
       // ─── /v1/sessions ──────────────────────────────────────────────────
       getJson('/v1/sessions')
         .then(function (resp) {
           const all = Array.isArray(resp.data) ? resp.data : [];
+          // Onboarding: ANY session ever (terminal ones included) counts as
+          // "ran a first session"; non-zero usage below also satisfies it.
+          onboarding.session = onboarding.session === true || all.length > 0;
+          renderOnboarding();
           const active = all.filter(function (s) {
             return s.status !== 'destroyed' && s.status !== 'errored';
           });
@@ -558,6 +719,8 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           list.innerHTML = html;
         })
         .catch(function () {
+          onboarding.session = onboarding.session === true;
+          renderOnboarding();
           const empty = root.querySelector('[data-sessions-empty]');
           if (empty) {
             empty.textContent = 'Could not load sessions.';
@@ -604,6 +767,11 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           const minutes = Number(totals.session_minute);
           const el = root.querySelector('[data-stat-hours]');
           if (el) el.textContent = isFinite(minutes) ? (minutes / 60).toFixed(1) + ' h' : '0.0 h';
+          // Onboarding: recorded usage also proves a first session ran.
+          if (isFinite(minutes) && minutes > 0) {
+            onboarding.session = true;
+            renderOnboarding();
+          }
         })
         .catch(function () {
           /* leave dash */
@@ -656,6 +824,59 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         .catch(function () {
           const empty = root.querySelector('[data-usage-empty]');
           if (empty) empty.classList.remove('hidden');
+        });
+
+      // ─── /v1/team/members ──────────────────────────────────────────────
+      // Onboarding "invite your team" step. account_owner-gated: members
+      // on someone else's team + non-team tiers get 403 → the catch leaves
+      // onboarding.team null and the step stays hidden.
+      getJson('/v1/team/members')
+        .then(function (resp) {
+          const members = Array.isArray(resp.data) ? resp.data : [];
+          onboarding.team = members.length > 1;
+          renderOnboarding();
+        })
+        .catch(function () {
+          onboarding.team = null;
+          renderOnboarding();
+        });
+
+      // ─── /v1/status (PUBLIC — no Authorization header) ─────────────────
+      // Platform-status pill. Fail-open: any error leaves it hidden, the
+      // same posture as the endpoint itself.
+      fetch(apiBaseUrl + '/v1/status', { headers: { accept: 'application/json' } })
+        .then(function (r) {
+          return r.ok ? r.json() : null;
+        })
+        .then(function (s) {
+          if (!s || !s.overall_status) return;
+          const widget = root.querySelector('[data-status-widget]');
+          const dot = root.querySelector('[data-status-dot]');
+          const textEl = root.querySelector('[data-status-text]');
+          if (!widget || !dot || !textEl) return;
+          const LABEL = {
+            operational: 'All systems operational',
+            degraded: 'Degraded performance',
+            major_outage: 'Major outage',
+          };
+          const DOT = {
+            operational: 'status-dot--ready',
+            degraded: 'status-dot--busy',
+            major_outage: 'status-dot--err',
+          };
+          let label = LABEL[s.overall_status] || String(s.overall_status);
+          const incidents = Array.isArray(s.recent_incidents) ? s.recent_incidents.length : 0;
+          if (incidents > 0) {
+            label += ' · ' + incidents + ' recent incident' + (incidents > 1 ? 's' : '');
+          }
+          dot.classList.remove('status-dot--ready', 'status-dot--busy', 'status-dot--err');
+          dot.classList.add(DOT[s.overall_status] || 'status-dot--busy');
+          textEl.textContent = label;
+          widget.classList.remove('hidden');
+          widget.classList.add('inline-flex');
+        })
+        .catch(function () {
+          /* fail-open — pill stays hidden */
         });
     })();
   </script>
