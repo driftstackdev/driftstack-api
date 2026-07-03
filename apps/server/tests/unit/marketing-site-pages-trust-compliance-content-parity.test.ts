@@ -64,7 +64,7 @@ describe('W504.A apps/marketing-site/src/pages/trust/compliance.astro content pa
     expect(body).toMatch(/Executive summary \(PDF\)/);
     expect(body).toMatch(/Request under NDA/);
     expect(body).toMatch(
-      /<a href="mailto:security@driftstack\.dev" class="text-tk-accent underline"\s*\n?\s*>security@driftstack\.dev<\/a\s*\n?\s*> with your company name and use case\. We respond within\s*\n?\s*one business day with the NDA\. Approved requests receive a\s*\n?\s*7-day signed download URL\./,
+      /<a href="mailto:security@driftstack\.dev" class="text-tk-accent-text underline"\s*\n?\s*>security@driftstack\.dev<\/a\s*\n?\s*> with your company name and use case\. We respond within\s*\n?\s*one business day with the NDA\. Approved requests receive a\s*\n?\s*7-day signed download URL\./,
     );
   });
 

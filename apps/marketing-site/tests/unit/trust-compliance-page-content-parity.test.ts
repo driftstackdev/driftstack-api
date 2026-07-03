@@ -56,7 +56,7 @@ describe('W375.C marketing-site /trust/compliance page content parity', () => {
       /<span[\s\S]{0,40}class="inline-block rounded-full bg-emerald-50[\s\S]{0,80}>\s*In place\s*<\/span\s*>/,
     );
     expect(body).toMatch(
-      /<a href="\/legal\/dpa" class="text-tk-accent underline">\/legal\/dpa<\/a>/,
+      /<a href="\/legal\/dpa" class="text-tk-accent-text underline">\/legal\/dpa<\/a>/,
     );
   });
 
@@ -135,11 +135,11 @@ describe('W375.C marketing-site /trust/compliance page content parity', () => {
 
   it('audit-log retention cross-references ADR-006 + /docs/audit-log', () => {
     expect(body).toMatch(/Per ADR-006:/);
-    expect(body).toMatch(/<a href="\/docs\/audit-log" class="text-tk-accent underline"/);
+    expect(body).toMatch(/<a href="\/docs\/audit-log" class="text-tk-accent-text underline"/);
   });
 
-  it('hero copy pinned: "Compliance posture & disclosure"', () => {
-    expect(body).toMatch(/Compliance posture &amp; disclosure/);
+  it('hero copy pinned: "Compliance posture & disclosure" (Fleet v2 S10: hero renders via <PageHero> — the title lives in the title prop as a raw "&", HTML-escaped to &amp; at build time)', () => {
+    expect(body).toMatch(/title="Compliance posture & disclosure"/);
     expect(body).toMatch(/Where we are today, where we're going, and how to engage the\s+platform/);
   });
 });

@@ -113,13 +113,13 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     );
   });
 
-  it("CTA pinned: 'Bring the questionnaire. We'll fill it.' + 'CAIQ, VSAQ, custom enterprise vendor questionnaires — all welcome.' + mailto:support@driftstack.dev — pinned so the 'we fill questionnaires' commitment + the CAIQ/VSAQ scope + the support-team routing all survive (drift to dropping CAIQ/VSAQ specificity would let buyers question whether their format is supported; drift to dropping 'working day' implicit SLA would let response time slip)", () => {
-    expect(body).toMatch(/Bring the questionnaire\. We'll fill it\./);
+  it("CTA pinned: 'Bring the questionnaire. We'll fill it.' + 'CAIQ, VSAQ, custom enterprise vendor questionnaires — all welcome.' + mailto:support@driftstack.dev — pinned so the 'we fill questionnaires' commitment + the CAIQ/VSAQ scope + the support-team routing all survive (drift to dropping CAIQ/VSAQ specificity would let buyers question whether their format is supported; drift to dropping 'working day' implicit SLA would let response time slip). Fleet v2 (S10): the hand-rolled CTA section became a <CtaBand> — the btn-primary anchor now renders from the primaryHref/primaryLabel props, so the pin matches the prop form", () => {
+    expect(body).toMatch(/title="Bring the questionnaire\. We'll fill it\."/);
     expect(body).toMatch(
       /CAIQ, VSAQ, custom enterprise vendor questionnaires — all\s*\n?\s*welcome\./,
     );
     expect(body).toMatch(
-      /<a href="mailto:support@driftstack\.dev" class="btn-primary">Email us<\/a>/,
+      /primaryHref="mailto:support@driftstack\.dev"\s*\n?\s*primaryLabel="Email us"/,
     );
   });
 

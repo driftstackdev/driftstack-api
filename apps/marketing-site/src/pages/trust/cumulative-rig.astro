@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { CUMULATIVE_RIG } from '../../data/capabilities.ts';
 
 // V-668 — Cumulative rig methodology page. The homepage repeatedly
 // references /trust/cumulative-rig as "the full signal-by-signal
@@ -23,6 +24,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 //     this page is the methodology, not the dashboard).
 //   • Step-by-step detection-bypass tutorials (those help attackers,
 //     not customers).
+
+// S10 (2026-07-03) — the worked-example archetype renders from the
+// CUMULATIVE_RIG snapshot in src/data/capabilities.ts (the founder-
+// attested fact source) instead of a hardcoded literal. The page's
+// typographic register uses '·' separators; the data file stores the
+// parity-pinned '/' form, so derive the display strings here.
+const [archetypeDevice = '', archetypeOs = '', archetypeSafari = ''] =
+  CUMULATIVE_RIG.archetypeReference.split(' / ');
+const archetypeDisplay = [archetypeDevice, archetypeOs, archetypeSafari].join(' · ');
+const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
 ---
 
 <BaseLayout
@@ -53,8 +64,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         how, and against which reference.
       </p>
       <p class="mt-4 max-w-prose text-base text-tk-ink-2 leading-relaxed">
-        The table below shows the rig run against <strong>iPhone 16 Pro
-        · iOS 18.7 · Safari 26.4</strong> as a worked example. The
+        The table below shows the rig run against
+        <strong>{archetypeDisplay}</strong> as a worked example. The
         same methodology runs against every launch archetype — iPhone
         15 Pro, iPhone 16 Pro, and the current iPhone 17 lineup, on
         iOS 18.7 / Safari 26.4 and Safari 26.5. If any signal differs
@@ -118,7 +129,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
                 Stealth Chromium
               </th>
               <th class="px-4 py-3 text-left font-mono text-xs uppercase tracking-widest text-tk-accent">
-                Driftstack (iPhone 16 Pro · iOS 18.7)
+                Driftstack ({archetypeColumnLabel})
               </th>
             </tr>
           </thead>

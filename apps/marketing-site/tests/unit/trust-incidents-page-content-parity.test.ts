@@ -77,7 +77,7 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
   it('72-hour-advance maintenance window notice claim pinned', () => {
     expect(body).toMatch(/Notice at least 72 hours in advance/);
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/settings"\s*\n?\s*class="text-tk-accent underline">\/settings → email preferences<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.dev\/settings"\s*\n?\s*class="text-tk-accent-text underline">\/settings → email preferences<\/a>/,
     );
   });
 
@@ -109,17 +109,17 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
     );
   });
 
-  it('cross-link to /trust (back to trust center) pinned', () => {
-    expect(body).toMatch(/<a href="\/trust" class="btn-secondary">Back to trust center<\/a>/);
+  it('cross-link to /trust (back to trust center) pinned (Fleet v2 S10: the CTA section became a <CtaBand> — the btn-secondary anchor renders from the secondaryHref/secondaryLabel props)', () => {
+    expect(body).toMatch(/secondaryHref="\/trust"\s*\n?\s*secondaryLabel="Back to trust center"/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/trust/index.astro'))).toBe(
       true,
     );
   });
 
-  it("'Get notified' CTA + Manage notifications link to dashboard /settings", () => {
-    expect(body).toMatch(/Get notified when status changes\./);
+  it("'Get notified' CTA + Manage notifications link to dashboard /settings (Fleet v2 S10: btn-primary anchor renders from CtaBand primaryHref/primaryLabel props)", () => {
+    expect(body).toMatch(/title="Get notified when status changes\."/);
     expect(body).toMatch(
-      /<a\s*\n?\s*href="https:\/\/app\.driftstack\.dev\/settings"\s*\n?\s*class="btn-primary"\s*\n?\s*>\s*\n?\s*Manage notifications\s*\n?\s*<\/a>/,
+      /primaryHref="https:\/\/app\.driftstack\.dev\/settings"\s*\n?\s*primaryLabel="Manage notifications"/,
     );
   });
 

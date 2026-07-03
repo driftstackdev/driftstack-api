@@ -53,11 +53,11 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
     expect(body).toMatch(/case 'register_published':\s*\n?\s*return 'Register published';/);
   });
 
-  it('change-log color map pinned (emerald / red / amber / slate)', () => {
+  it('change-log color map pinned (emerald / red / amber / neutral token). Fleet v2 (S10): register_published moved from the legacy bg-slate-200 to the tokened neutral bg-tk-raised (same neutral visual intent, mode-aware)', () => {
     expect(body).toMatch(/case 'added':\s*\n?\s*return 'bg-emerald-100 text-emerald-800';/);
     expect(body).toMatch(/case 'removed':\s*\n?\s*return 'bg-red-100 text-red-800';/);
     expect(body).toMatch(/case 'material_change':\s*\n?\s*return 'bg-amber-100 text-amber-800';/);
-    expect(body).toMatch(/case 'register_published':\s*\n?\s*return 'bg-slate-200 text-tk-ink-2';/);
+    expect(body).toMatch(/case 'register_published':\s*\n?\s*return 'bg-tk-raised text-tk-ink-2';/);
   });
 
   it('"region preference vs region routing" honesty framing pinned', () => {
@@ -80,10 +80,10 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
   it('/legal/dpa Annex 3 cross-link pinned + DPA file exists', () => {
     // Astro wraps the closing `>` onto a new line; tolerate whitespace.
     expect(body).toMatch(
-      /<a href="\/legal\/dpa" class="text-tk-accent underline"\s*>\s*Annex 3 of the Data Processing Agreement\s*<\/a\s*>/,
+      /<a href="\/legal\/dpa" class="text-tk-accent-text underline"\s*>\s*Annex 3 of the Data Processing Agreement\s*<\/a\s*>/,
     );
     // Article 28(2) reference cross-link.
-    expect(body).toMatch(/<a href="\/legal\/dpa" class="text-tk-accent underline">DPA<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/dpa" class="text-tk-accent-text underline">DPA<\/a>/);
     expect(body).toMatch(/\(Article 28\(2\) — Sub-processor amendment\)/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal/dpa.md'))).toBe(true);
   });

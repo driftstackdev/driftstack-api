@@ -100,15 +100,15 @@ describe('W503.C apps/marketing-site/src/pages/trust/incidents.astro content par
     expect(body).toMatch(/<StatusBadge \/>/);
   });
 
-  it("Subscribe CTA pinned: 'Get notified when status changes.' + 'Future updates: status.driftstack.dev with email + RSS subscription.' + Manage notifications → app.driftstack.dev/settings + 'Back to trust center' → /trust — pinned so the email-subscription-now + future-status.driftstack.dev + RSS planning + dual-CTA navigation all survive (drift to dropping the future status.driftstack.dev mention would orphan the roadmap commitment; drift to dropping 'Back to trust center' would break the hub-and-spoke navigation)", () => {
-    expect(body).toMatch(/Get notified when status changes\./);
+  it("Subscribe CTA pinned: 'Get notified when status changes.' + 'Future updates: status.driftstack.dev with email + RSS subscription.' + Manage notifications → app.driftstack.dev/settings + 'Back to trust center' → /trust — pinned so the email-subscription-now + future-status.driftstack.dev + RSS planning + dual-CTA navigation all survive (drift to dropping the future status.driftstack.dev mention would orphan the roadmap commitment; drift to dropping 'Back to trust center' would break the hub-and-spoke navigation). Fleet v2 (S10): the hand-rolled CTA section became a <CtaBand> — both anchors render from the primary/secondary props, so the pins match the prop forms", () => {
+    expect(body).toMatch(/title="Get notified when status changes\."/);
     expect(body).toMatch(
       /Future updates: status\.driftstack\.dev with\s*\n?\s*email \+ RSS subscription\./,
     );
     expect(body).toMatch(
-      /<a\s*\n?\s*href="https:\/\/app\.driftstack\.dev\/settings"\s*\n?\s*class="btn-primary"\s*\n?\s*>\s*\n?\s*Manage notifications\s*\n?\s*<\/a>/,
+      /primaryHref="https:\/\/app\.driftstack\.dev\/settings"\s*\n?\s*primaryLabel="Manage notifications"/,
     );
-    expect(body).toMatch(/<a href="\/trust" class="btn-secondary">Back to trust center<\/a>/);
+    expect(body).toMatch(/secondaryHref="\/trust"\s*\n?\s*secondaryLabel="Back to trust center"/);
   });
 
   it('file exists at canonical path', () => {

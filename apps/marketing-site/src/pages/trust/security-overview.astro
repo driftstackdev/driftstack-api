@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHero from '../../components/PageHero.astro';
 
 // V-670 (V-550 follow-up) — public security overview as an evaluator
 // checklist. /security is the architecture deep-dive; this page is
@@ -13,24 +14,15 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   title="Security overview"
   description="Driftstack security claims, mapped one-to-one to their verifiable evidence. Code paths, tests, and public docs — so your security review can self-serve."
 >
-  <section class="relative overflow-hidden bg-gradient-to-b from-tk-bg to-tk-surface">
-    <div class="hero-glow" aria-hidden="true"></div>
-    <div class="mx-auto max-w-5xl px-6 pb-12 pt-20 md:pt-24">
-      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
-        Trust center · Security overview
-      </p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl">
-        Every claim, mapped to evidence.
-      </h1>
-      <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
-        Architecture deep-dive lives at
-        <a href="/security" class="text-tk-accent underline">/security</a>;
-        this page is what you skim before scheduling a vendor review
-        call. Each claim links to the code, test, or doc you can verify
-        for yourself.
-      </p>
-    </div>
-  </section>
+  <PageHero label="Trust center · Security overview" title="Every claim, mapped to evidence.">
+    <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">
+      Architecture deep-dive lives at
+      <a href="/security" class="text-tk-accent-text underline">/security</a>;
+      this page is what you skim before scheduling a vendor review
+      call. Each claim links to the code, test, or doc you can verify
+      for yourself.
+    </p>
+  </PageHero>
 
   <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-5xl px-6 py-16">
@@ -205,10 +197,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
               object storage (Cloudflare R2 EU jurisdiction). The
               iPhone Safari session-execution fleet runs on MacStadium
               hardware (US) under SCCs + EU-US DPF — see
-              <a href="/docs/data-residency" class="text-tk-accent underline"
+              <a href="/docs/data-residency" class="text-tk-accent-text underline"
                 >data residency</a
               >. Full sub-processor list at
-              <a href="/trust/sub-processors" class="text-tk-accent underline"
+              <a href="/trust/sub-processors" class="text-tk-accent-text underline"
                 >/trust/sub-processors</a
               >.
             </p>
@@ -223,7 +215,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
               server-side capture retention layer to configure.
               Session recordings + their retention controls land
               with V-540 — see
-              <a href="/docs/recordings" class="text-tk-accent underline"
+              <a href="/docs/recordings" class="text-tk-accent-text underline"
                 >/docs/recordings</a
               >.
             </p>
@@ -257,9 +249,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             <p class="mt-1 text-sm text-tk-ink-2">
               Customer-impacting outages are posted publicly within
               the incident-response SLA window. Live status at
-              <a href="https://status.driftstack.dev" class="text-tk-accent underline">status.driftstack.dev</a>;
+              <a href="https://status.driftstack.dev" class="text-tk-accent-text underline">status.driftstack.dev</a>;
               historical archive at
-              <a href="/trust/incidents" class="text-tk-accent underline">/trust/incidents</a>.
+              <a href="/trust/incidents" class="text-tk-accent-text underline">/trust/incidents</a>.
             </p>
           </div>
         </li>
@@ -273,7 +265,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
               Safe-harbour for good-faith research. Coordinated
               disclosure window: 90 days, extendable on agreement.
               Full policy at
-              <a href="/trust/compliance" class="text-tk-accent underline"
+              <a href="/trust/compliance" class="text-tk-accent-text underline"
                 >/trust/compliance</a
               >.
             </p>
@@ -308,10 +300,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Still need a deeper look?</h2>
           <p class="mt-3 max-w-prose text-tk-ink-2">
             The
-            <a href="/security" class="text-tk-accent underline">architecture deep-dive at /security</a>
+            <a href="/security" class="text-tk-accent-text underline">architecture deep-dive at /security</a>
             walks the five-pillar surface in detail. For pen-test
             evidence or compliance certifications, see
-            <a href="/trust/compliance" class="text-tk-accent underline"
+            <a href="/trust/compliance" class="text-tk-accent-text underline"
               >/trust/compliance</a
             >. Anything else, just email.
           </p>
