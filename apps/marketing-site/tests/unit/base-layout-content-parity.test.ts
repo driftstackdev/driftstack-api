@@ -5,8 +5,8 @@
 //
 //   • Props: title (req) + description (default) + pathname +
 //     ogImage + V-255 noindex (opt-in).
-//   • Default description: "iPhone Safari sessions, on demand.
-//     Premium fidelity for the device that matters."
+//   • Default description: the fleet register ("Real iPhone Safari
+//     in the cloud — ... just people on phones.", S15 2026-07-03).
 //   • fullTitle: "Driftstack" verbatim if title === 'Driftstack',
 //     else "${title} · Driftstack".
 //   • canonical = new URL(pathname, Astro.site).
@@ -57,9 +57,9 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
     );
   });
 
-  it('default description: "iPhone Safari sessions, on demand. Premium fidelity for the device that matters."', () => {
+  it('default description (S15 2026-07-03): the fleet register — "Real iPhone Safari in the cloud — to every website, they\'re just people on phones." (replaces the retired on-demand/premium-fidelity tagline)', () => {
     expect(body).toMatch(
-      /description = 'iPhone Safari sessions, on demand\. Premium fidelity for the device that matters\.',/,
+      /description =\s*\n?\s*"Real iPhone Safari in the cloud — to every website, they're just people on phones\. Drive them by hand, by code, or by AI\. Start free\.",/,
     );
   });
 
