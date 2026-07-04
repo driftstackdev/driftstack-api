@@ -59,8 +59,12 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
       const idx = body.indexOf(`href="${card.href}"`);
       expect(idx, `card href out of order: ${card.href}`).toBeGreaterThan(lastIdx);
       lastIdx = idx;
+      // Fleet v2 (2026-07-03): card labels re-pinned to the AA-safe
+      // accent-text tone (label text + card order unchanged).
       expect(body, `card label missing: ${card.label}`).toMatch(
-        new RegExp(`text-tk-accent">\\s*${card.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*<`),
+        new RegExp(
+          `text-tk-accent-text">\\s*${card.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*<`,
+        ),
       );
     }
   });
@@ -122,7 +126,7 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
   it('help banner: "Doc not landing?" + support@driftstack.dev mailto + same-business-day claim. 2026-05-23 — h2 wrapped with help-circle icon; pin loosened to label-presence.', () => {
     expect(body).toMatch(/Doc not landing\?/);
     expect(body).toMatch(
-      /<a\s+href="mailto:support@driftstack\.dev"\s+class="text-tk-accent underline">support@driftstack\.dev<\/a>/,
+      /<a\s+href="mailto:support@driftstack\.dev"\s+class="text-tk-accent-text underline">support@driftstack\.dev<\/a>/,
     );
     expect(body).toMatch(/We answer in writing,\s+usually same business day/);
     expect(body).toMatch(/with the URL you expected to find/);

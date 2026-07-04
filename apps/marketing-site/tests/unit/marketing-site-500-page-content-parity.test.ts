@@ -9,9 +9,8 @@
 //     Sentry-capture claim.
 //   • support@driftstack.dev escape-hatch CTA inline.
 //   • status.driftstack.dev cross-link (status-page CTA).
-//   • Twitter/X fallback framing ("Status page lives at
-//     status.driftstack.dev when it lands. Until then, check the
-//     Twitter/X account or email support").
+//   • R6 "Live status:" footer link (the status page is live; the
+//     old Twitter/X pre-launch fallback framing is long gone).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -36,9 +35,9 @@ describe('W379.C marketing-site /500.astro content parity', () => {
     );
   });
 
-  it('500 chip + H1 "Something went wrong on our end." pinned', () => {
+  it('500 chip + H1 "Something broke on our side." pinned (Fleet v2 2026-07-03 — plain-words heading; the SEO description keeps the original phrasing)', () => {
     expect(body).toMatch(/<p class="section-label">500<\/p>/);
-    expect(body).toMatch(/<h1[^>]*>\s*Something went wrong on our end\.\s*<\/h1>/);
+    expect(body).toMatch(/<h1[^>]*>\s*Something broke on our side\.\s*<\/h1>/);
   });
 
   it('"This is on us, not you." apology-framing pinned (load-bearing customer-trust posture)', () => {

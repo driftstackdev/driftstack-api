@@ -1,5 +1,13 @@
 ---
+// Fleet v2 (2026-07-03) — re-skin only: PageHero/Section shells, the
+// .card/.panel/IconTile recipes, AA-safe accent text, plus the
+// living-reference banner. Every endpoint listed, every error-table
+// row, every code sample and every substantive claim is byte-identical
+// to the pre-redesign page (the api-reference satellite suite pins them).
 import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHero from '../components/PageHero.astro';
+import Section from '../components/Section.astro';
+import IconTile from '../components/IconTile.astro';
 
 // V-127a placeholder — until the marketing-site build embeds the
 // Scalar UI bundle directly, this page links to the live API
@@ -18,293 +26,286 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
   title="API reference"
   description="Driftstack API reference. Every endpoint, every shape, generated from the same OpenAPI 3.1 spec the SDK codegen reads."
 >
-  <!-- Header -->
-  <section class="relative overflow-hidden bg-gradient-to-b from-tk-bg to-tk-surface">
-    {/* 2026-05-22 — hero-glow atmosphere matches the family. */}
-    <div class="hero-glow" aria-hidden="true"></div>
-    <div class="relative mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">API reference</p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-tk-ink md:text-5xl">
-        Every endpoint, every shape.
-      </h1>
-      <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
-        The Driftstack API is documented as an OpenAPI 3.1 spec generated
-        from the same Zod schemas the server uses at runtime. There is no
-        second source of truth — if a route exists, it's in the spec; if
-        it's in the spec, the SDK has typed bindings for it.
-      </p>
-      <div class="mt-8 flex flex-wrap items-center gap-4">
-        <a href={API_DOCS_URL} class="btn-primary">Open interactive reference →</a>
-        <a href={OPENAPI_JSON_URL} class="btn-secondary">Download openapi.json</a>
-      </div>
-      <p class="mt-3 text-xs text-tk-ink-3">
-        Interactive reference uses Scalar — try requests against your API
-        key directly in the browser.
-      </p>
+  <!-- Hero -->
+  <PageHero label="API reference" title="Every endpoint, every shape.">
+    <p class="mt-5 max-w-prose text-lg leading-8 text-tk-ink-2">
+      The Driftstack API is documented as an OpenAPI 3.1 spec generated
+      from the same Zod schemas the server uses at runtime. There is no
+      second source of truth — if a route exists, it's in the spec; if
+      it's in the spec, the SDK has typed bindings for it.
+    </p>
+    <div class="mt-8 flex flex-wrap items-center gap-4">
+      <a href={API_DOCS_URL} class="btn-primary">Open interactive reference →</a>
+      <a href={OPENAPI_JSON_URL} class="btn-secondary">Download openapi.json</a>
     </div>
-  </section>
+    <p class="mt-4 font-mono text-xs text-tk-ink-3">
+      Interactive reference uses Scalar — try requests against your API
+      key directly in the browser.
+    </p>
+  </PageHero>
+
+  <!-- Snapshot banner — the always-current reference lives on the docs
+       site; this page is a curated snapshot of the surface. -->
+  <div class="mx-auto max-w-6xl px-6 py-8">
+    <p class="panel text-sm text-tk-ink-2">
+      The living reference is <a href="https://docs.driftstack.dev" class="text-tk-accent-text underline" rel="noopener noreferrer">docs.driftstack.dev</a> — this page is a snapshot.
+    </p>
+  </div>
 
   <!-- Surface map -->
-  <section class="border-t border-tk-border bg-tk-surface">
-    <div class="mx-auto max-w-6xl px-6 py-16">
-      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Surface map</p>
-      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink">Routes, grouped.</h2>
-      <div class="mt-10 grid gap-6 md:grid-cols-2">
-        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
-          <div class="mb-3 flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
-            </svg>
-          </div>
-          <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent">
-            Sessions
-          </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
-            <li>POST /v1/sessions</li>
-            <li>GET /v1/sessions</li>
-            <li>GET /v1/sessions/:id</li>
-            <li>POST /v1/sessions/:id/navigate</li>
-            <li>POST /v1/sessions/:id/interact</li>
-            <li>POST /v1/sessions/:id/wait</li>
-            <li>GET /v1/sessions/:id/state</li>
-            <li>POST /v1/sessions/:id/capture</li>
-            <li>DELETE /v1/sessions/:id</li>
-          </ul>
-        </div>
+  <Section label="Surface map" title="Routes, grouped." class="bg-tk-surface">
+    <div class="mt-10 grid gap-6 md:grid-cols-2">
+      <div class="card p-6">
+        <IconTile class="mb-3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
+          </svg>
+        </IconTile>
+        <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent-text">
+          Sessions
+        </h3>
+        <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
+          <li>POST /v1/sessions</li>
+          <li>GET /v1/sessions</li>
+          <li>GET /v1/sessions/:id</li>
+          <li>POST /v1/sessions/:id/navigate</li>
+          <li>POST /v1/sessions/:id/interact</li>
+          <li>POST /v1/sessions/:id/wait</li>
+          <li>GET /v1/sessions/:id/state</li>
+          <li>POST /v1/sessions/:id/capture</li>
+          <li>DELETE /v1/sessions/:id</li>
+        </ul>
+      </div>
 
-        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
-          <div class="mb-3 flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-            </svg>
-          </div>
-          <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent">
-            Agent sessions
-          </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
-            <li>POST /v1/agent-sessions</li>
-            <li>GET /v1/agent-sessions/:id</li>
-            <li>POST /v1/agent-sessions/:id/message</li>
-            <li>POST /v1/agent-sessions/:id/mode</li>
-            <li>POST /v1/agent-sessions/:id/input-event</li>
-            <li>POST /v1/agent-sessions/:id/takeover</li>
-            <li>POST /v1/agent-sessions/:id/handback</li>
-            <li>POST /v1/agent-sessions/:id/livekit-token</li>
-            <li>GET /v1/agent-sessions/:id/transcript</li>
-            <li>GET /v1/agent-sessions/:id/gui-control-key</li>
-            <li>DELETE /v1/agent-sessions/:id</li>
-          </ul>
-        </div>
+      <div class="card p-6">
+        <IconTile class="mb-3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+          </svg>
+        </IconTile>
+        <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent-text">
+          Agent sessions
+        </h3>
+        <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
+          <li>POST /v1/agent-sessions</li>
+          <li>GET /v1/agent-sessions/:id</li>
+          <li>POST /v1/agent-sessions/:id/message</li>
+          <li>POST /v1/agent-sessions/:id/mode</li>
+          <li>POST /v1/agent-sessions/:id/input-event</li>
+          <li>POST /v1/agent-sessions/:id/takeover</li>
+          <li>POST /v1/agent-sessions/:id/handback</li>
+          <li>POST /v1/agent-sessions/:id/livekit-token</li>
+          <li>GET /v1/agent-sessions/:id/transcript</li>
+          <li>GET /v1/agent-sessions/:id/gui-control-key</li>
+          <li>DELETE /v1/agent-sessions/:id</li>
+        </ul>
+      </div>
 
-        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
-          <div class="mb-3 flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M2 12h20M2 12c0-5 4-9 10-9s10 4 10 9-4 9-10 9-10-4-10-9z" />
-            </svg>
-          </div>
-          <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent">
-            Recipes
-          </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
-            <li>POST /v1/recipes</li>
-          </ul>
-        </div>
+      <div class="card p-6">
+        <IconTile class="mb-3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2 12h20M2 12c0-5 4-9 10-9s10 4 10 9-4 9-10 9-10-4-10-9z" />
+          </svg>
+        </IconTile>
+        <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent-text">
+          Recipes
+        </h3>
+        <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
+          <li>POST /v1/recipes</li>
+        </ul>
+      </div>
 
-        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
-          <div class="mb-3 flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="7" r="4" /><path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
-            </svg>
-          </div>
-          <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent">
-            Profiles
-          </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
-            <li>POST /v1/profiles</li>
-            <li>GET /v1/profiles</li>
-            <li>GET /v1/profiles/:id</li>
-            <li>PATCH /v1/profiles/:id</li>
-            <li>DELETE /v1/profiles/:id</li>
-          </ul>
-        </div>
+      <div class="card p-6">
+        <IconTile class="mb-3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="7" r="4" /><path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
+          </svg>
+        </IconTile>
+        <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent-text">
+          Profiles
+        </h3>
+        <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
+          <li>POST /v1/profiles</li>
+          <li>GET /v1/profiles</li>
+          <li>GET /v1/profiles/:id</li>
+          <li>PATCH /v1/profiles/:id</li>
+          <li>DELETE /v1/profiles/:id</li>
+        </ul>
+      </div>
 
-        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
-          <div class="mb-3 flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="9" cy="12" r="7" /><path d="M16 12h6M19 9v6" />
-            </svg>
-          </div>
-          <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent">
-            API keys
-          </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
-            <li>POST /v1/api-keys</li>
-            <li>GET /v1/api-keys</li>
-            <li>POST /v1/api-keys/:id/rotate</li>
-            <li>DELETE /v1/api-keys/:id</li>
-          </ul>
-        </div>
+      <div class="card p-6">
+        <IconTile class="mb-3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="9" cy="12" r="7" /><path d="M16 12h6M19 9v6" />
+          </svg>
+        </IconTile>
+        <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent-text">
+          API keys
+        </h3>
+        <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
+          <li>POST /v1/api-keys</li>
+          <li>GET /v1/api-keys</li>
+          <li>POST /v1/api-keys/:id/rotate</li>
+          <li>DELETE /v1/api-keys/:id</li>
+        </ul>
+      </div>
 
-        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
-          <div class="mb-3 flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-            </svg>
-          </div>
-          <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent">
-            Webhooks
-          </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
-            <li>POST /v1/webhooks</li>
-            <li>GET /v1/webhooks</li>
-            <li>GET /v1/webhooks/:id</li>
-            <li>PATCH /v1/webhooks/:id</li>
-            <li>DELETE /v1/webhooks/:id</li>
-            <li>POST /v1/webhooks/:id/rotate-secret</li>
-            <li>POST /v1/webhooks/:id/test</li>
-            <li>GET /v1/webhooks/:id/deliveries</li>
-            <li>POST /v1/webhook-deliveries/:id/replay</li>
-          </ul>
-        </div>
+      <div class="card p-6">
+        <IconTile class="mb-3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+          </svg>
+        </IconTile>
+        <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent-text">
+          Webhooks
+        </h3>
+        <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
+          <li>POST /v1/webhooks</li>
+          <li>GET /v1/webhooks</li>
+          <li>GET /v1/webhooks/:id</li>
+          <li>PATCH /v1/webhooks/:id</li>
+          <li>DELETE /v1/webhooks/:id</li>
+          <li>POST /v1/webhooks/:id/rotate-secret</li>
+          <li>POST /v1/webhooks/:id/test</li>
+          <li>GET /v1/webhooks/:id/deliveries</li>
+          <li>POST /v1/webhook-deliveries/:id/replay</li>
+        </ul>
+      </div>
 
-        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
-          <div class="mb-3 flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="9" /><path d="M12 8a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 14c-2 0-6 1-6 4M12 14c2 0 6 1 6 4" />
-            </svg>
-          </div>
-          <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent">
-            Account
-          </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
-            <li>GET /v1/account/me</li>
-            <li>GET /v1/account/audit-log</li>
-            <li>GET /v1/account/audit-log/export</li>
-            <li>GET /v1/account/email-preferences</li>
-            <li>PUT /v1/account/email-preferences</li>
-            <li>GET /v1/account/rate-limits</li>
-            <li>GET /v1/account/me/byok-anthropic-key</li>
-            <li>PUT /v1/account/me/byok-anthropic-key</li>
-            <li>DELETE /v1/account/me/byok-anthropic-key</li>
-            <li>POST /v1/account/me/byok-anthropic-key/test</li>
-            <li>GET /v1/account/me/bundled-llm-settings</li>
-            <li>PATCH /v1/account/me/bundled-llm-settings</li>
-            <li>GET /v1/account/me/bundled-llm-status</li>
-          </ul>
-        </div>
+      <div class="card p-6">
+        <IconTile class="mb-3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" /><path d="M12 8a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 14c-2 0-6 1-6 4M12 14c2 0 6 1 6 4" />
+          </svg>
+        </IconTile>
+        <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent-text">
+          Account
+        </h3>
+        <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
+          <li>GET /v1/account/me</li>
+          <li>GET /v1/account/audit-log</li>
+          <li>GET /v1/account/audit-log/export</li>
+          <li>GET /v1/account/email-preferences</li>
+          <li>PUT /v1/account/email-preferences</li>
+          <li>GET /v1/account/rate-limits</li>
+          <li>GET /v1/account/me/byok-anthropic-key</li>
+          <li>PUT /v1/account/me/byok-anthropic-key</li>
+          <li>DELETE /v1/account/me/byok-anthropic-key</li>
+          <li>POST /v1/account/me/byok-anthropic-key/test</li>
+          <li>GET /v1/account/me/bundled-llm-settings</li>
+          <li>PATCH /v1/account/me/bundled-llm-settings</li>
+          <li>GET /v1/account/me/bundled-llm-status</li>
+        </ul>
+      </div>
 
-        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
-          <div class="mb-3 flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="9" cy="7" r="4" /><circle cx="17" cy="9" r="3" /><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2M16 14a4 4 0 0 1 4 4v3" />
-            </svg>
-          </div>
-          <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent">
-            Team
-          </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
-            <li>POST /v1/team/invites</li>
-            <li>GET /v1/team/invites</li>
-            <li>POST /v1/team/invites/accept</li>
-            <li>GET /v1/team/members</li>
-            <li>DELETE /v1/team/members/:id</li>
-          </ul>
-        </div>
+      <div class="card p-6">
+        <IconTile class="mb-3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="9" cy="7" r="4" /><circle cx="17" cy="9" r="3" /><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2M16 14a4 4 0 0 1 4 4v3" />
+          </svg>
+        </IconTile>
+        <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent-text">
+          Team
+        </h3>
+        <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
+          <li>POST /v1/team/invites</li>
+          <li>GET /v1/team/invites</li>
+          <li>POST /v1/team/invites/accept</li>
+          <li>GET /v1/team/members</li>
+          <li>DELETE /v1/team/members/:id</li>
+        </ul>
+      </div>
 
-        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
-          <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent">
-            Billing — crypto orders
-          </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
-            <li>POST /v1/billing/crypto-checkout</li>
-            <li>POST /v1/billing/crypto-checkout/quote</li>
-            <li>GET /v1/billing/crypto-orders</li>
-            <li>GET /v1/billing/crypto-orders/:id</li>
-            <li>PATCH /v1/billing/crypto-orders/:id</li>
-            <li>POST /v1/billing/crypto-orders/:id/cancel</li>
-            <li>GET /v1/billing/crypto-orders/:id/receipt</li>
-            <li>GET /v1/billing/crypto-orders/:id/receipt.txt</li>
-            <li>GET /v1/billing/crypto-orders/:id/receipt.pdf</li>
-          </ul>
-        </div>
+      <div class="card p-6">
+        <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent-text">
+          Billing — crypto orders
+        </h3>
+        <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
+          <li>POST /v1/billing/crypto-checkout</li>
+          <li>POST /v1/billing/crypto-checkout/quote</li>
+          <li>GET /v1/billing/crypto-orders</li>
+          <li>GET /v1/billing/crypto-orders/:id</li>
+          <li>PATCH /v1/billing/crypto-orders/:id</li>
+          <li>POST /v1/billing/crypto-orders/:id/cancel</li>
+          <li>GET /v1/billing/crypto-orders/:id/receipt</li>
+          <li>GET /v1/billing/crypto-orders/:id/receipt.txt</li>
+          <li>GET /v1/billing/crypto-orders/:id/receipt.pdf</li>
+        </ul>
+      </div>
 
-        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
-          <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent">
-            Status
-          </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
-            <li>GET /v1/status</li>
-            <li>GET /v1/status/stream</li>
-            <li>GET /v1/status/sla</li>
-            <li>POST /v1/status/subscribe</li>
-            <li>POST /v1/status/subscribe/confirm</li>
-            <li>POST /v1/status/subscribe/unsubscribe</li>
-          </ul>
-        </div>
+      <div class="card p-6">
+        <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent-text">
+          Status
+        </h3>
+        <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
+          <li>GET /v1/status</li>
+          <li>GET /v1/status/stream</li>
+          <li>GET /v1/status/sla</li>
+          <li>POST /v1/status/subscribe</li>
+          <li>POST /v1/status/subscribe/confirm</li>
+          <li>POST /v1/status/subscribe/unsubscribe</li>
+        </ul>
+      </div>
 
-        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
-          <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent">
-            Auth flows
-          </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
-            <li>POST /v1/auth/signup</li>
-            <li>POST /v1/auth/login</li>
-            <li>POST /v1/auth/logout</li>
-            <li>POST /v1/auth/verify-email</li>
-            <li>POST /v1/auth/magic-link/request</li>
-            <li>POST /v1/auth/magic-link/consume</li>
-            <li>POST /v1/auth/password-reset/request</li>
-            <li>POST /v1/auth/password-reset/confirm</li>
-            <li>POST /v1/auth/refresh</li>
-          </ul>
-        </div>
+      <div class="card p-6">
+        <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent-text">
+          Auth flows
+        </h3>
+        <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
+          <li>POST /v1/auth/signup</li>
+          <li>POST /v1/auth/login</li>
+          <li>POST /v1/auth/logout</li>
+          <li>POST /v1/auth/verify-email</li>
+          <li>POST /v1/auth/magic-link/request</li>
+          <li>POST /v1/auth/magic-link/consume</li>
+          <li>POST /v1/auth/password-reset/request</li>
+          <li>POST /v1/auth/password-reset/confirm</li>
+          <li>POST /v1/auth/refresh</li>
+        </ul>
+      </div>
 
-        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
-          <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent">
-            Billing
-          </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
-            <li>POST /v1/billing/checkout-session</li>
-            <li>POST /v1/billing/portal-session</li>
-            <li>GET /v1/billing</li>
-          </ul>
-        </div>
+      <div class="card p-6">
+        <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent-text">
+          Billing
+        </h3>
+        <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
+          <li>POST /v1/billing/checkout-session</li>
+          <li>POST /v1/billing/portal-session</li>
+          <li>GET /v1/billing</li>
+        </ul>
       </div>
     </div>
-  </section>
+  </Section>
 
   <!-- V-662 — Common patterns: side-by-side cURL / TS / Python / Go
        samples for the three most-used flows. Reduces the
        "what does it actually look like to call this?" friction
        that the route-list above doesn't answer on its own. -->
-  <section class="border-t border-tk-border bg-tk-surface">
-    <div class="mx-auto max-w-6xl px-6 py-16">
-      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Common patterns</p>
-      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink">Three flows, four languages.</h2>
-      <p class="mt-3 max-w-prose text-tk-ink-2">
-        Most integrations are built on the same three operations:
-        spin up a session, drive it, capture artifacts. Below: each
-        one in cURL, TypeScript, Python, and Go. Copy-paste straight
-        into a quickstart.
-      </p>
+  <Section label="Common patterns" title="Three flows, four languages." class="bg-tk-surface">
+    <p class="mt-4 max-w-prose text-tk-ink-2">
+      Most integrations are built on the same three operations:
+      spin up a session, drive it, capture artifacts. Below: each
+      one in cURL, TypeScript, Python, and Go. Copy-paste straight
+      into a quickstart.
+    </p>
 
-      <!-- Create a session -->
-      <div class="mt-10">
-        <h3 class="text-xl font-semibold text-tk-ink">1. Create a session</h3>
-        <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
-          The minimal "hello world" — provision an iPhone 17 Safari
-          session, return its id. Default archetype if you don't pass one.
-        </p>
-        <div class="mt-5 grid gap-4 md:grid-cols-2">
-          <pre
-            class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
+    <!-- Create a session -->
+    <div class="mt-10">
+      <h3 class="text-xl font-semibold text-tk-ink">1. Create a session</h3>
+      <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
+        The minimal "hello world" — provision an iPhone 17 Safari
+        session, return its id. Default archetype if you don't pass one.
+      </p>
+      <div class="mt-5 grid gap-4 md:grid-cols-2">
+        <pre
+          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
 curl -X POST https://api.driftstack.dev/v1/sessions \\
   -H "authorization: Bearer $DRIFTSTACK_API_KEY" \\
   -H "content-type: application/json" \\
   -d '{"archetype":"iphone17_ios18_7_safari26_4"}'
 `}</code></pre>
-          <pre
-            class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
+        <pre
+          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
 import { Driftstack } from "@driftstack/sdk";
 const client = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
 const session = await client.sessions.create({
@@ -312,15 +313,15 @@ const session = await client.sessions.create({
 });
 console.log(session.id);
 `}</code></pre>
-          <pre
-            class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
+        <pre
+          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
 from driftstack import Driftstack
 client = Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"])
 session = client.sessions.create({"archetype": "iphone17_ios18_7_safari26_4"})
 print(session.id)
 `}</code></pre>
-          <pre
-            class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
+        <pre
+          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
 client := driftstack.New(os.Getenv("DRIFTSTACK_API_KEY"))
 session, err := client.Sessions.Create(ctx, &driftstack.CreateSessionRequest{
     Archetype: "iphone17_ios18_7_safari26_4",
@@ -328,20 +329,20 @@ session, err := client.Sessions.Create(ctx, &driftstack.CreateSessionRequest{
 if err != nil { return err }
 fmt.Println(session.ID)
 `}</code></pre>
-        </div>
       </div>
+    </div>
 
-      <!-- Drive the session -->
-      <div class="mt-12">
-        <h3 class="text-xl font-semibold text-tk-ink">2. Drive the session</h3>
-        <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
-          Navigate, tap, wait. <code class="font-mono">interact</code>
-          handles taps, swipes, and key presses; <code class="font-mono">wait</code>
-          blocks until a DOM condition is met or a timeout fires.
-        </p>
-        <div class="mt-5 grid gap-4 md:grid-cols-2">
-          <pre
-            class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
+    <!-- Drive the session -->
+    <div class="mt-12">
+      <h3 class="text-xl font-semibold text-tk-ink">2. Drive the session</h3>
+      <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
+        Navigate, tap, wait. <code class="font-mono">interact</code>
+        handles taps, swipes, and key presses; <code class="font-mono">wait</code>
+        blocks until a DOM condition is met or a timeout fires.
+      </p>
+      <div class="mt-5 grid gap-4 md:grid-cols-2">
+        <pre
+          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
 curl -X POST $URL/navigate \\
   -d '{"url":"https://example.com"}' ...
 curl -X POST $URL/interact \\
@@ -349,8 +350,8 @@ curl -X POST $URL/interact \\
 curl -X POST $URL/wait \\
   -d '{"condition":{"kind":"selector","selector":"main"}}' ...
 `}</code></pre>
-          <pre
-            class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
+        <pre
+          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
 await client.sessions.navigate(session.id, { url: "https://example.com" });
 await client.sessions.interact(session.id, {
   action: { kind: "tap", selector: "button.cta" },
@@ -360,8 +361,8 @@ await client.sessions.wait(session.id, {
   timeout_ms: 5000,
 });
 `}</code></pre>
-          <pre
-            class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
+        <pre
+          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
 client.sessions.navigate(session.id, {"url": "https://example.com"})
 client.sessions.interact(session.id, {
     "action": {"kind": "tap", "selector": "button.cta"},
@@ -371,8 +372,8 @@ client.sessions.wait(session.id, {
     "timeout_ms": 5000,
 })
 `}</code></pre>
-          <pre
-            class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
+        <pre
+          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
 _, err = client.Sessions.Navigate(ctx, session.ID, &driftstack.NavigateRequest{
     URL: "https://example.com",
 })
@@ -380,170 +381,159 @@ _, err = client.Sessions.Interact(ctx, session.ID, &driftstack.InteractRequest{
     Action: driftstack.NewTapAction("button.cta"),
 })
 `}</code></pre>
-        </div>
       </div>
+    </div>
 
-      <!-- Capture artifacts -->
-      <div class="mt-12">
-        <h3 class="text-xl font-semibold text-tk-ink">3. Capture a screenshot</h3>
-        <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
-          <code class="font-mono">capture</code> takes one of four kinds:
-          <code class="font-mono">screenshot</code>, <code class="font-mono">dom</code>,
-          <code class="font-mono">pdf</code>, or <code class="font-mono">recording</code>.
-          The response carries a base64 <code class="font-mono">data</code> field
-          for the first three; recordings stream to R2 + return a
-          signed-URL handle.
-        </p>
-        <div class="mt-5 grid gap-4 md:grid-cols-2">
-          <pre
-            class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
+    <!-- Capture artifacts -->
+    <div class="mt-12">
+      <h3 class="text-xl font-semibold text-tk-ink">3. Capture a screenshot</h3>
+      <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
+        <code class="font-mono">capture</code> takes one of four kinds:
+        <code class="font-mono">screenshot</code>, <code class="font-mono">dom</code>,
+        <code class="font-mono">pdf</code>, or <code class="font-mono">recording</code>.
+        The response carries a base64 <code class="font-mono">data</code> field
+        for the first three; recordings stream to R2 + return a
+        signed-URL handle.
+      </p>
+      <div class="mt-5 grid gap-4 md:grid-cols-2">
+        <pre
+          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
 curl -X POST $URL/capture \\
   -d '{"kind":"screenshot"}' ...
 # response.data is base64 PNG
 `}</code></pre>
-          <pre
-            class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
+        <pre
+          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
 const shot = await client.sessions.capture(session.id, {
   kind: "screenshot",
 });
 fs.writeFileSync("out.png", Buffer.from(shot.data, "base64"));
 `}</code></pre>
-          <pre
-            class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
+        <pre
+          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
 shot = client.sessions.capture(session.id, {"kind": "screenshot"})
 Path("out.png").write_bytes(base64.b64decode(shot.data))
 `}</code></pre>
-          <pre
-            class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
+        <pre
+          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
 shot, _ := client.Sessions.Capture(ctx, session.ID, &driftstack.CaptureRequest{
     Kind: driftstack.CaptureScreenshot,
 })
 data, _ := base64.StdEncoding.DecodeString(shot.Data)
 os.WriteFile("out.png", data, 0644)
 `}</code></pre>
-        </div>
       </div>
     </div>
-  </section>
+  </Section>
 
   <!-- V-662 — Error taxonomy quick reference. The interactive Scalar
        UI documents each shape, but customers evaluating the platform
        often want one screen with "here's what can go wrong + how to
        react" before they pick the SDK. -->
-  <section class="border-t border-tk-border bg-tk-bg">
-    <div class="mx-auto max-w-6xl px-6 py-16">
-      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Error reference</p>
-      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink">What can go wrong, and what to do about it.</h2>
-      <p class="mt-3 max-w-prose text-tk-ink-2">
-        Every error is RFC 9457
-        <code class="font-mono">application/problem+json</code> with a
-        stable <code class="font-mono">type</code> URI. SDK clients
-        translate these into typed error classes; the cURL caller
-        gets the JSON straight.
-      </p>
-      <div class="mt-8 overflow-x-auto">
-        <table class="min-w-full text-sm">
-          <thead>
-            <tr class="border-b border-tk-border text-left">
-              <th class="py-2 pr-4 font-medium text-tk-ink">Status</th>
-              <th class="py-2 pr-4 font-medium text-tk-ink">Type URI</th>
-              <th class="py-2 pr-4 font-medium text-tk-ink">When</th>
-              <th class="py-2 font-medium text-tk-ink">SDK class</th>
-            </tr>
-          </thead>
-          <tbody class="font-mono text-xs">
-            <tr class="border-b border-tk-border">
-              <td class="py-2 pr-4">400</td>
-              <td class="py-2 pr-4">errors.driftstack.dev/validation-failed</td>
-              <td class="py-2 pr-4 font-sans">Zod schema mismatch on request body.</td>
-              <td class="py-2">ValidationError</td>
-            </tr>
-            <tr class="border-b border-tk-border">
-              <td class="py-2 pr-4">401</td>
-              <td class="py-2 pr-4">errors.driftstack.dev/unauthorized</td>
-              <td class="py-2 pr-4 font-sans">API key missing, malformed, or revoked.</td>
-              <td class="py-2">AuthError</td>
-            </tr>
-            <tr class="border-b border-tk-border">
-              <td class="py-2 pr-4">404</td>
-              <td class="py-2 pr-4">errors.driftstack.dev/not-found</td>
-              <td class="py-2 pr-4 font-sans">Resource id doesn't exist or isn't visible to this key.</td>
-              <td class="py-2">NotFoundError</td>
-            </tr>
-            <tr class="border-b border-tk-border">
-              <td class="py-2 pr-4">409</td>
-              <td class="py-2 pr-4">errors.driftstack.dev/conflict</td>
-              <td class="py-2 pr-4 font-sans">Resource state precludes the operation (e.g. subscription already active).</td>
-              <td class="py-2">ConflictError</td>
-            </tr>
-            <tr class="border-b border-tk-border">
-              <td class="py-2 pr-4">410</td>
-              <td class="py-2 pr-4">errors.driftstack.dev/session-destroyed</td>
-              <td class="py-2 pr-4 font-sans">Session was destroyed; create a new one.</td>
-              <td class="py-2">SessionDestroyedError</td>
-            </tr>
-            <tr class="border-b border-tk-border">
-              <td class="py-2 pr-4">429</td>
-              <td class="py-2 pr-4">errors.driftstack.dev/tier-limit</td>
-              <td class="py-2 pr-4 font-sans">Account hit a tier cap (profile count, api-keys per account).</td>
-              <td class="py-2">TierLimitError</td>
-            </tr>
-            <tr class="border-b border-tk-border">
-              <td class="py-2 pr-4">429</td>
-              <td class="py-2 pr-4">errors.driftstack.dev/rate-limited</td>
-              <td class="py-2 pr-4 font-sans">Per-account rate limit; <code>retry-after</code> header carries seconds.</td>
-              <td class="py-2">RateLimitError <em class="font-sans not-italic text-tk-ink-3">(retryable)</em></td>
-            </tr>
-            <tr class="border-b border-tk-border">
-              <td class="py-2 pr-4">429</td>
-              <td class="py-2 pr-4">errors.driftstack.dev/concurrency-limit</td>
-              <td class="py-2 pr-4 font-sans">Account hit its tier-bound concurrent-session cap.</td>
-              <td class="py-2">ConcurrencyLimitError</td>
-            </tr>
-            <tr class="border-b border-tk-border">
-              <td class="py-2 pr-4">500</td>
-              <td class="py-2 pr-4">errors.driftstack.dev/internal</td>
-              <td class="py-2 pr-4 font-sans">Server-side fault. Logged + alerted.</td>
-              <td class="py-2">DriftstackError (kind: <code>internal</code>) <em class="font-sans not-italic text-tk-ink-3">(retryable)</em></td>
-            </tr>
-            <tr>
-              <td class="py-2 pr-4">503</td>
-              <td class="py-2 pr-4">errors.driftstack.dev/feature-unavailable</td>
-              <td class="py-2 pr-4 font-sans">Feature disabled at deploy time (e.g. avatar upload without R2 bucket).</td>
-              <td class="py-2">FeatureUnavailableError <em class="font-sans not-italic text-tk-ink-3">(NOT retryable)</em></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="mt-4 text-xs text-tk-ink-3">
-        SDK consumers can use <code class="font-mono">isRetryable(err)</code>
-        (TypeScript) / equivalent predicates in Python + Go to filter
-        which errors to retry without re-implementing the mapping.
-      </p>
+  <Section label="Error reference" title="What can go wrong, and what to do about it.">
+    <p class="mt-4 max-w-prose text-tk-ink-2">
+      Every error is RFC 9457
+      <code class="font-mono">application/problem+json</code> with a
+      stable <code class="font-mono">type</code> URI. SDK clients
+      translate these into typed error classes; the cURL caller
+      gets the JSON straight.
+    </p>
+    <div class="panel mt-8 overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead>
+          <tr class="border-b border-tk-border text-left">
+            <th class="py-2 pr-4 font-medium text-tk-ink">Status</th>
+            <th class="py-2 pr-4 font-medium text-tk-ink">Type URI</th>
+            <th class="py-2 pr-4 font-medium text-tk-ink">When</th>
+            <th class="py-2 font-medium text-tk-ink">SDK class</th>
+          </tr>
+        </thead>
+        <tbody class="font-mono text-xs">
+          <tr class="border-b border-tk-border">
+            <td class="py-2 pr-4">400</td>
+            <td class="py-2 pr-4">errors.driftstack.dev/validation-failed</td>
+            <td class="py-2 pr-4 font-sans">Zod schema mismatch on request body.</td>
+            <td class="py-2">ValidationError</td>
+          </tr>
+          <tr class="border-b border-tk-border">
+            <td class="py-2 pr-4">401</td>
+            <td class="py-2 pr-4">errors.driftstack.dev/unauthorized</td>
+            <td class="py-2 pr-4 font-sans">API key missing, malformed, or revoked.</td>
+            <td class="py-2">AuthError</td>
+          </tr>
+          <tr class="border-b border-tk-border">
+            <td class="py-2 pr-4">404</td>
+            <td class="py-2 pr-4">errors.driftstack.dev/not-found</td>
+            <td class="py-2 pr-4 font-sans">Resource id doesn't exist or isn't visible to this key.</td>
+            <td class="py-2">NotFoundError</td>
+          </tr>
+          <tr class="border-b border-tk-border">
+            <td class="py-2 pr-4">409</td>
+            <td class="py-2 pr-4">errors.driftstack.dev/conflict</td>
+            <td class="py-2 pr-4 font-sans">Resource state precludes the operation (e.g. subscription already active).</td>
+            <td class="py-2">ConflictError</td>
+          </tr>
+          <tr class="border-b border-tk-border">
+            <td class="py-2 pr-4">410</td>
+            <td class="py-2 pr-4">errors.driftstack.dev/session-destroyed</td>
+            <td class="py-2 pr-4 font-sans">Session was destroyed; create a new one.</td>
+            <td class="py-2">SessionDestroyedError</td>
+          </tr>
+          <tr class="border-b border-tk-border">
+            <td class="py-2 pr-4">429</td>
+            <td class="py-2 pr-4">errors.driftstack.dev/tier-limit</td>
+            <td class="py-2 pr-4 font-sans">Account hit a tier cap (profile count, api-keys per account).</td>
+            <td class="py-2">TierLimitError</td>
+          </tr>
+          <tr class="border-b border-tk-border">
+            <td class="py-2 pr-4">429</td>
+            <td class="py-2 pr-4">errors.driftstack.dev/rate-limited</td>
+            <td class="py-2 pr-4 font-sans">Per-account rate limit; <code>retry-after</code> header carries seconds.</td>
+            <td class="py-2">RateLimitError <em class="font-sans not-italic text-tk-ink-3">(retryable)</em></td>
+          </tr>
+          <tr class="border-b border-tk-border">
+            <td class="py-2 pr-4">429</td>
+            <td class="py-2 pr-4">errors.driftstack.dev/concurrency-limit</td>
+            <td class="py-2 pr-4 font-sans">Account hit its tier-bound concurrent-session cap.</td>
+            <td class="py-2">ConcurrencyLimitError</td>
+          </tr>
+          <tr class="border-b border-tk-border">
+            <td class="py-2 pr-4">500</td>
+            <td class="py-2 pr-4">errors.driftstack.dev/internal</td>
+            <td class="py-2 pr-4 font-sans">Server-side fault. Logged + alerted.</td>
+            <td class="py-2">DriftstackError (kind: <code>internal</code>) <em class="font-sans not-italic text-tk-ink-3">(retryable)</em></td>
+          </tr>
+          <tr>
+            <td class="py-2 pr-4">503</td>
+            <td class="py-2 pr-4">errors.driftstack.dev/feature-unavailable</td>
+            <td class="py-2 pr-4 font-sans">Feature disabled at deploy time (e.g. avatar upload without R2 bucket).</td>
+            <td class="py-2">FeatureUnavailableError <em class="font-sans not-italic text-tk-ink-3">(NOT retryable)</em></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
-  </section>
+    <p class="mt-4 text-xs text-tk-ink-3">
+      SDK consumers can use <code class="font-mono">isRetryable(err)</code>
+      (TypeScript) / equivalent predicates in Python + Go to filter
+      which errors to retry without re-implementing the mapping.
+    </p>
+  </Section>
 
   <!-- Spec posture -->
-  <section class="border-t border-tk-border bg-tk-bg">
-    <div class="mx-auto max-w-6xl px-6 py-16">
-      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Spec posture</p>
-      <h2 class="mt-3 text-2xl font-semibold tracking-tight text-tk-ink">
-          Stable contract. Versioned. Auto-generated.
-        </h2>
-      <ul class="mt-6 space-y-3 max-w-prose text-tk-ink-2">
-        <li class="flex gap-3">
-          <span class="text-tk-accent">→</span>
-          <span>Every endpoint has Zod schemas for request + response. The OpenAPI 3.1 spec is generated from the schemas — there is no second source of truth.</span>
-        </li>
-        <li class="flex gap-3">
-          <span class="text-tk-accent">→</span>
-          <span>Every error case maps to an RFC 9457 <code class="font-mono">application/problem+json</code> response with a stable <code class="font-mono">type</code> URI.</span>
-        </li>
-        <li class="flex gap-3">
-          <span class="text-tk-accent">→</span>
-          <span>Breaking changes ship under a new path version. <code class="font-mono">/v1</code> stays stable; <code class="font-mono">/v2</code> would be a new prefix, not a silent shape change.</span>
-        </li>
-      </ul>
-    </div>
-  </section>
+  <Section label="Spec posture" title="Stable contract. Versioned. Auto-generated.">
+    <ul class="mt-6 space-y-3 max-w-prose text-tk-ink-2">
+      <li class="flex gap-3">
+        <span class="arrow-bullet">→</span>
+        <span>Every endpoint has Zod schemas for request + response. The OpenAPI 3.1 spec is generated from the schemas — there is no second source of truth.</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="arrow-bullet">→</span>
+        <span>Every error case maps to an RFC 9457 <code class="font-mono">application/problem+json</code> response with a stable <code class="font-mono">type</code> URI.</span>
+      </li>
+      <li class="flex gap-3">
+        <span class="arrow-bullet">→</span>
+        <span>Breaking changes ship under a new path version. <code class="font-mono">/v1</code> stays stable; <code class="font-mono">/v2</code> would be a new prefix, not a silent shape change.</span>
+      </li>
+    </ul>
+  </Section>
 </BaseLayout>

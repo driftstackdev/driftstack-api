@@ -103,8 +103,9 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
 
   it("Help banner: 'Doc not landing?' + mailto:support@driftstack.dev + 'We answer in writing, usually same business day.' + GitHub → https://github.com/driftstackdev — pinned so the support-channel + same-business-day SLA + the GitHub link all survive (drift to dropping the SLA would lose the response-time expectation; drift to a different github org would break the canonical org reference)", () => {
     expect(body).toMatch(/Doc not landing\?/);
+    // Fleet v2 (2026-07-03): link re-pinned to the AA-safe accent-text tone.
     expect(body).toMatch(
-      /<a\s*\n?\s*href="mailto:support@driftstack\.dev"\s*\n?\s*class="text-tk-accent underline">support@driftstack\.dev<\/a> with the URL you expected to find\. We answer in writing,\s*\n?\s*usually same business day\./,
+      /<a\s*\n?\s*href="mailto:support@driftstack\.dev"\s*\n?\s*class="text-tk-accent-text underline">support@driftstack\.dev<\/a> with the URL you expected to find\. We answer in writing,\s*\n?\s*usually same business day\./,
     );
     expect(body).toMatch(
       /<a href="https:\/\/github\.com\/driftstackdev" class="btn-secondary">GitHub →<\/a>/,

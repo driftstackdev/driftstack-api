@@ -1,14 +1,16 @@
 // W498.A — drift guard for apps/marketing-site/src/pages/404.astro.
 // Customer-facing 404 page. Drift here either drops the 'Back home'
-// button (would orphan customers who hit a stale link) or replaces
-// the 'See pricing' deflection (which converts mis-routed traffic
-// into pricing-page views, the lowest-funnel destination from a
-// 404).
+// button (would orphan customers who hit a stale link) or drops one
+// of the deflection links (pricing converts mis-routed traffic into
+// pricing-page views; docs + status catch the developer / is-it-down
+// arrivals). Fleet v2 2026-07-03: heading is the on-brand 'This page
+// drifted off.'; CTA row widened to the useful-links set.
 //
 //   • BaseLayout import + page title 'Page not found.' description.
-//   • 404 monogram + 'We couldn't find that.' heading.
+//   • 404 monogram + 'This page drifted off.' heading.
 //   • Body framing: 'has moved, doesn't exist, or never did.'
-//   • 2-button CTA row: Back home (/) + See pricing (/pricing).
+//   • Useful-links row: Back home (/) + See pricing (/pricing) +
+//     Read the docs (/docs) + System status (status.driftstack.dev).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -31,18 +33,22 @@ describe('W498.A apps/marketing-site/src/pages/404.astro content parity', () => 
     expect(body).toMatch(/<BaseLayout title="404 · Driftstack" description="Page not found\."/);
   });
 
-  it("404 monogram + 'We couldn't find that.' heading pinned — pinned so the typography hierarchy (small uppercase 404 monogram → large heading) survives (drift to dropping the 404 monogram would lose the at-a-glance error-code signal; drift to changing heading copy would change the tone from human to canned)", () => {
+  it("404 monogram + 'This page drifted off.' heading pinned — pinned so the typography hierarchy (small uppercase 404 monogram → large heading) survives (drift to dropping the 404 monogram would lose the at-a-glance error-code signal; drift to changing heading copy would change the tone from on-brand-human to canned)", () => {
     expect(body).toMatch(/<p class="section-label">404<\/p>/);
-    expect(body).toMatch(/We couldn't find that\./);
+    expect(body).toMatch(/This page drifted off\./);
   });
 
   it("Body framing: 'The page you were looking for has moved, doesn't exist, or never did.' — pinned so the 3-state framing (moved / doesn't exist / never did) survives (drift to a 1-state framing would lose the gentle 'or never did' acknowledgment that some stale links were never valid)", () => {
     expect(body).toMatch(/The page you were looking for has moved, doesn't exist, or never did\./);
   });
 
-  it("2-button CTA row: 'Back home' → '/' (primary) + 'See pricing' → '/pricing' (secondary) — pinned so the deflection vocabulary stays 2-button (drift to a single 'Back home' would lose the pricing-page funnel pull which is the most-converting destination from a 404; drift to adding more buttons would dilute the choice)", () => {
+  it("useful-links row: 'Back home' → '/' (primary) + 'See pricing' → '/pricing' + 'Read the docs' → '/docs' + 'System status' → status.driftstack.dev (secondary, rel=noopener) — pinned so every deflection path survives (drift to a single 'Back home' would lose the pricing funnel pull, the developer docs catch, and the is-it-down status check that each convert a different kind of mis-routed arrival)", () => {
     expect(body).toMatch(/<a href="\/" class="btn-primary">Back home<\/a>/);
     expect(body).toMatch(/<a href="\/pricing" class="btn-secondary">See pricing<\/a>/);
+    expect(body).toMatch(/<a href="\/docs" class="btn-secondary">Read the docs<\/a>/);
+    expect(body).toMatch(
+      /<a href="https:\/\/status\.driftstack\.dev" class="btn-secondary" rel="noopener noreferrer"/,
+    );
   });
 
   it('file exists at canonical path', () => {

@@ -142,10 +142,11 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
       'Auth flows',
       'Billing',
     ]) {
-      // Use the surface-map heading class to anchor.
+      // Use the surface-map heading class to anchor. Fleet v2
+      // (2026-07-03): headings re-pinned to the AA-safe accent-text tone.
       expect(body, `surface section missing: ${section}`).toMatch(
         new RegExp(
-          `<h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent">\\s*${section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*<\\/h3>`,
+          `<h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent-text">\\s*${section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*<\\/h3>`,
         ),
       );
     }

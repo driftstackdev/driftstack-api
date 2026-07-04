@@ -27,12 +27,16 @@
     <meta name="robots" content="noindex,nofollow" />
     <title>New Tab · Driftstack</title>
     <style>
+      /* Inline copy of the dark+oxblood tokens — keep the values in sync with
+         docs/internal/2026-07-03-design-system-v2-dashboard.md (marketing's
+         --ink-3 deliberately runs #8c8c96, not the dashboard's #73737f — AA
+         on #060608; see apps/marketing-site/src/styles/base.css). */
       :root {
         --bg: #060608;
         --surface: #0e0e12;
         --ink: #f5f5f7;
         --ink-2: #b0b0bb;
-        --ink-3: #73737f;
+        --ink-3: #8c8c96;
         --border: #1e1e26;
         --accent: #9b3b46;
         --accent-2: #c04b58;
@@ -215,7 +219,7 @@
       }
       .badge.off {
         color: var(--ink-3);
-        background: rgba(115, 115, 127, 0.14);
+        background: rgba(140, 140, 150, 0.14);
       }
       .muted {
         color: var(--ink-3);

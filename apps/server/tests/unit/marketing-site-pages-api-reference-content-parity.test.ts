@@ -57,40 +57,45 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     );
   });
 
+  // Fleet v2 (2026-07-03) — group headings re-pinned from text-tk-accent
+  // to the AA-safe text-tk-accent-text tone (accent-colored TEXT fails
+  // AA on the dark bg; heading text + grouping are unchanged).
   it('13-group surface map taxonomy: Sessions + Agent sessions + Recipes + Profiles + API keys + Webhooks + Account + Team + Billing — crypto orders + Status + Auth flows + Billing — pinned so the 13-group enumeration of canonical route prefixes stays complete (drift to dropping any group would orphan SDK readers from that route surface; drift to merging Billing + crypto-orders would lose the separate billing-paths distinction)', () => {
     expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent">\s*\n?\s*Sessions\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Sessions\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent">\s*\n?\s*Agent sessions\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Agent sessions\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent">\s*\n?\s*Recipes\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Recipes\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent">\s*\n?\s*Profiles\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Profiles\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent">\s*\n?\s*API keys\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*API keys\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent">\s*\n?\s*Webhooks\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Webhooks\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent">\s*\n?\s*Account\s*\n?\s*<\/h3>/,
-    );
-    expect(body).toMatch(/uppercase tracking-widest text-tk-accent">\s*\n?\s*Team\s*\n?\s*<\/h3>/);
-    expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent">\s*\n?\s*Billing — crypto orders\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Account\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent">\s*\n?\s*Status\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Team\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent">\s*\n?\s*Auth flows\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Billing — crypto orders\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /uppercase tracking-widest text-tk-accent">\s*\n?\s*Billing\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Status\s*\n?\s*<\/h3>/,
+    );
+    expect(body).toMatch(
+      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Auth flows\s*\n?\s*<\/h3>/,
+    );
+    expect(body).toMatch(
+      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Billing\s*\n?\s*<\/h3>/,
     );
   });
 

@@ -1,45 +1,42 @@
 ---
+// Fleet v2 (2026-07-03) — re-skin only: PageHero + the .card/IconTile
+// recipes, AA-safe accent text. Every card, href, and copy block is
+// byte-identical to the pre-redesign page (the docs-landing pair + the
+// 63 doc-parity chains pin them); no card added or removed (see the
+// W210 note below on the deliberately missing Recipe library card).
 import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHero from '../components/PageHero.astro';
+import IconTile from '../components/IconTile.astro';
 ---
 
 <BaseLayout
   title="Docs"
   description="Driftstack documentation: quickstart, SDK references for TypeScript / Python / Go, API reference, self-hosted setup, recipe library."
 >
-  <!-- Header -->
-  <section class="relative overflow-hidden bg-gradient-to-b from-tk-bg to-tk-surface">
-    {/* 2026-05-22 — hero-glow atmosphere matches the marketing
-        family. */}
-    <div class="hero-glow" aria-hidden="true"></div>
-    <div class="relative mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Docs</p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl text-tk-ink">Everything you need to drive a session.</h1>
-      <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
-        Quickstarts for every supported language, the full API reference,
-        SDK guides, self-hosted setup, and the recipe catalogue. Driftstack
-        is small enough to read end-to-end — start with the quickstart
-        and follow the link trail.
-      </p>
-    </div>
-  </section>
+  <!-- Hero -->
+  <PageHero label="Docs" title="Everything you need to drive a session.">
+    <p class="mt-5 max-w-prose text-lg leading-8 text-tk-ink-2">
+      Quickstarts for every supported language, the full API reference,
+      SDK guides, self-hosted setup, and the recipe catalogue. Driftstack
+      is small enough to read end-to-end — start with the quickstart
+      and follow the link trail.
+    </p>
+  </PageHero>
 
   <!-- Doc categories -->
-  <section class="border-t border-tk-border bg-tk-surface">
+  <section class="bg-tk-surface">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <div class="grid gap-6 md:grid-cols-3">
-        <a
-          href="/docs/api-quickstart"
-          class="group rounded-lg border border-tk-border bg-tk-surface p-6 shadow-sm transition hover:border-tk-accent"
-        >
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+        <a href="/docs/api-quickstart" class="group card p-6">
+          <IconTile class="mb-3">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M5 12l5 5L20 7" />
             </svg>
-          </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
+          </IconTile>
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">
             Quickstart
           </p>
-          <h2 class="mt-3 text-xl font-semibold text-tk-ink group-hover:text-tk-accent">
+          <h2 class="mt-3 text-xl font-semibold text-tk-ink transition-colors group-hover:text-tk-accent-text">
             Five minutes to first session →
           </h2>
           <p class="mt-3 text-sm text-tk-ink-2">
@@ -49,19 +46,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           </p>
         </a>
 
-        <a
-          href="/api-reference"
-          class="group rounded-lg border border-tk-border bg-tk-surface p-6 shadow-sm transition hover:border-tk-accent"
-        >
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+        <a href="/api-reference" class="group card p-6">
+          <IconTile class="mb-3">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
             </svg>
-          </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
+          </IconTile>
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">
             API reference
           </p>
-          <h2 class="mt-3 text-xl font-semibold text-tk-ink group-hover:text-tk-accent">
+          <h2 class="mt-3 text-xl font-semibold text-tk-ink transition-colors group-hover:text-tk-accent-text">
             Every endpoint, every shape →
           </h2>
           <p class="mt-3 text-sm text-tk-ink-2">
@@ -71,17 +65,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           </p>
         </a>
 
-        <a
-          href="/docs/sdk-typescript"
-          class="group rounded-lg border border-tk-border bg-tk-surface p-6 shadow-sm transition hover:border-tk-accent"
-        >
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+        <a href="/docs/sdk-typescript" class="group card p-6">
+          <IconTile class="mb-3">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
             </svg>
-          </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">SDKs</p>
-          <h2 class="mt-3 text-xl font-semibold text-tk-ink group-hover:text-tk-accent">
+          </IconTile>
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">SDKs</p>
+          <h2 class="mt-3 text-xl font-semibold text-tk-ink transition-colors group-hover:text-tk-accent-text">
             TypeScript · Python · Go →
           </h2>
           <p class="mt-3 text-sm text-tk-ink-2">
@@ -92,17 +83,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           </p>
         </a>
 
-        <a
-          href="/docs/webhooks"
-          class="group rounded-lg border border-tk-border bg-tk-surface p-6 shadow-sm transition hover:border-tk-accent"
-        >
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+        <a href="/docs/webhooks" class="group card p-6">
+          <IconTile class="mb-3">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
             </svg>
-          </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Webhooks</p>
-          <h2 class="mt-3 text-xl font-semibold text-tk-ink group-hover:text-tk-accent">
+          </IconTile>
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">Webhooks</p>
+          <h2 class="mt-3 text-xl font-semibold text-tk-ink transition-colors group-hover:text-tk-accent-text">
             Event types + signature verification →
           </h2>
           <p class="mt-3 text-sm text-tk-ink-2">
@@ -115,19 +103,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           </p>
         </a>
 
-        <a
-          href="/self-hosted"
-          class="group rounded-lg border border-tk-border bg-tk-surface p-6 shadow-sm transition hover:border-tk-accent"
-        >
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+        <a href="/self-hosted" class="group card p-6">
+          <IconTile class="mb-3">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="2" y="3" width="20" height="18" rx="2" /><path d="M2 9h20M8 14h.01M12 14h.01" />
             </svg>
-          </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
+          </IconTile>
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">
             Self-hosted
           </p>
-          <h2 class="mt-3 text-xl font-semibold text-tk-ink group-hover:text-tk-accent">
+          <h2 class="mt-3 text-xl font-semibold text-tk-ink transition-colors group-hover:text-tk-accent-text">
             Deploy on your own hardware →
           </h2>
           <p class="mt-3 text-sm text-tk-ink-2">
@@ -159,7 +144,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <div class="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 class="flex items-center gap-2 text-xl font-semibold text-tk-ink">
-            <span class="flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+            <span class="flex h-8 w-8 items-center justify-center rounded-md border border-tk-accent/20 bg-tk-accent/10 text-tk-accent-text" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="10" />
                 <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
@@ -171,7 +156,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
             Email <a
               href="mailto:support@driftstack.dev"
-              class="text-tk-accent underline">support@driftstack.dev</a> with the URL you expected to find. We answer in writing,
+              class="text-tk-accent-text underline">support@driftstack.dev</a> with the URL you expected to find. We answer in writing,
             usually same business day.
           </p>
         </div>

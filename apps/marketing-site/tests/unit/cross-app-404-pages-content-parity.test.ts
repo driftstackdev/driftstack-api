@@ -4,8 +4,9 @@
 // lands on; each carries app-specific load-bearing copy that must
 // not drift:
 //
-//   • marketing-site: BaseLayout + 404/"We couldn't find that." +
-//     Back-home + See-pricing CTAs.
+//   • marketing-site: BaseLayout + 404/"This page drifted off."
+//     (Fleet v2 2026-07-03) + useful-links row (home / pricing /
+//     docs / status).
 //   • customer-dashboard: DashboardLayout withSidebar={false} (so
 //     the layout doesn't render a broken-link sidebar on the
 //     fallback) + "Page not found." + Back-to-dashboard CTA.
@@ -42,14 +43,18 @@ describe('W379.B cross-app 404 pages content parity', () => {
       expect(body).toMatch(/<p class="section-label">404<\/p>/);
     });
 
-    it('marketing-specific copy: "We couldn\'t find that." + "moved, doesn\'t exist, or never did"', () => {
-      expect(body).toMatch(/We couldn't find that\./);
+    it('marketing-specific copy: "This page drifted off." + "moved, doesn\'t exist, or never did"', () => {
+      expect(body).toMatch(/This page drifted off\./);
       expect(body).toMatch(/The page you were looking for has moved, doesn't exist, or never did/);
     });
 
-    it('2 CTAs: Back home (primary) + See pricing (secondary)', () => {
+    it('useful-links row: Back home (primary) + See pricing / Read the docs / System status (secondary)', () => {
       expect(body).toMatch(/<a href="\/" class="btn-primary">Back home<\/a>/);
       expect(body).toMatch(/<a href="\/pricing" class="btn-secondary">See pricing<\/a>/);
+      expect(body).toMatch(/<a href="\/docs" class="btn-secondary">Read the docs<\/a>/);
+      expect(body).toMatch(
+        /<a href="https:\/\/status\.driftstack\.dev" class="btn-secondary" rel="noopener noreferrer"/,
+      );
     });
   });
 
