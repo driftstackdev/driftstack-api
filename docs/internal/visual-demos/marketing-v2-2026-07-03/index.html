@@ -80,32 +80,16 @@
     </style>
   </head>
   <body>
-    <h1>Marketing site v2 — vibe check (2026-07-03)</h1>
+    <h1>Marketing site v2 — FINAL review sheet (2026-07-03)</h1>
     <p class="note">
-      Foundation slices (S0–S4) of the marketing redesign, rendered from the built
-      <code>dist/</code>. Default is <strong>dark + oxblood</strong> with a light toggle coming in a
-      later slice. What shipped so far, all gated green (24,238 tests):
-    </p>
-    <ul class="note">
-      <li>
-        <strong>Self-hosted fonts</strong> — the whole public site now renders real Geist + JetBrains
-        Mono (it was system fallbacks since launch).
-      </li>
-      <li>
-        <strong>Design-system v2</strong> — flat CTAs, solid cards, calm ambient shadows (no more
-        glow-on-everything), a new AA-safe accent-text tone, legacy palettes retired.
-      </li>
-      <li>
-        <strong>Homepage rebuild</strong> — "Plain Words, Same Teeth": 22 sections → 13, jargon moved
-        off the top fold (the fleet mockup says "own connection" and "4 iPhones running · all healthy"
-        instead of SOCKS5/telemetry), a clearly-labelled <code>// for developers</code> band for the
-        code, and every price bound to the pricing data (no hand-typed dollars).
-      </li>
-    </ul>
-    <p class="note">
-      Pages other than the homepage (pricing / comparison / faq / api-reference / security / about /
-      self-hosted) are shown here only re-skinned by the v2 tokens — their content redesign is the
-      next batch of slices. The two code windows stay dark in both themes by design.
+      The complete redesign, rendered from the built <code>dist/</code>. Everything below is
+      committed and gated green; nothing is deployed. Highlights: real typography (self-hosted
+      fonts), design-system v2 (flat CTAs, solid cards, AA-safe accent text), the noob-friendly
+      homepage (22→13 sections, hero = fan of open iPhones matching the current GUI), a working
+      light/dark toggle (sun/moon in the header), the dark+oxblood social card, per-page content
+      redesigns (pricing decision fork, FAQ single-source + schema, plain-terms security), and six
+      NEW pages: /use-cases + three persona landings, /how-it-works, /glossary — all in the
+      funnel-first nav.
     </p>
 
     <h2>GUI mockups redrawn (S4.5 — founder feedback)</h2>
@@ -151,27 +135,27 @@
       </figure>
     </div>
 
-    <h2>Funnel + content pages (v2 tokens only — content redesign pending)</h2>
+    <h2>Redesigned content pages</h2>
     <div class="grid">
       <figure class="default">
         <img src="pricing-desktop-dark.png" alt="Pricing dark" />
-        <figcaption>Pricing</figcaption>
+        <figcaption>Pricing · decision fork + JSON-LD</figcaption>
       </figure>
       <figure>
         <img src="pricing-desktop-light.png" alt="Pricing light" />
         <figcaption>Pricing · light</figcaption>
       </figure>
       <figure class="default">
-        <img src="comparison-desktop-dark.png" alt="Comparison dark" />
-        <figcaption>Comparison</figcaption>
+        <img src="faq-desktop-dark.png" alt="FAQ dark" />
+        <figcaption>FAQ · single-source + schema + sticky nav</figcaption>
       </figure>
       <figure class="default">
-        <img src="faq-desktop-dark.png" alt="FAQ dark" />
-        <figcaption>FAQ</figcaption>
+        <img src="comparison-desktop-dark.png" alt="Comparison dark" />
+        <figcaption>Comparison · plain-language primer</figcaption>
       </figure>
       <figure class="default">
         <img src="security-desktop-dark.png" alt="Security dark" />
-        <figcaption>Security</figcaption>
+        <figcaption>Security · plain terms, every claim kept</figcaption>
       </figure>
       <figure class="default">
         <img src="about-desktop-dark.png" alt="About dark" />
@@ -183,11 +167,51 @@
       </figure>
       <figure class="default">
         <img src="api-reference-desktop-dark.png" alt="API reference dark" />
-        <figcaption>API reference</figcaption>
+        <figcaption>API reference · snapshot banner</figcaption>
+      </figure>
+      <figure class="default">
+        <img src="trust-desktop-dark.png" alt="Trust dark" />
+        <figcaption>Trust center hub</figcaption>
+      </figure>
+      <figure class="default">
+        <img src="roadmap-desktop-dark.png" alt="Roadmap dark" />
+        <figcaption>Roadmap · now in the footer</figcaption>
+      </figure>
+      <figure class="default">
+        <img src="changelog-desktop-dark.png" alt="Changelog dark" />
+        <figcaption>Changelog · with the redesign entry</figcaption>
       </figure>
       <figure>
         <img src="pricing-mobile-dark.png" alt="Pricing mobile dark" />
         <figcaption>Pricing · mobile</figcaption>
+      </figure>
+    </div>
+
+    <h2>NEW pages — the noob funnel + SEO surface</h2>
+    <div class="grid">
+      <figure class="default">
+        <img src="use-cases-desktop-dark.png" alt="Use cases hub dark" />
+        <figcaption>/use-cases hub</figcaption>
+      </figure>
+      <figure class="default">
+        <img src="use-cases-multi-account-desktop-dark.png" alt="Multi-account persona dark" />
+        <figcaption>/use-cases/multi-account</figcaption>
+      </figure>
+      <figure class="default">
+        <img src="use-cases-qa-testing-desktop-dark.png" alt="QA persona dark" />
+        <figcaption>/use-cases/qa-testing</figcaption>
+      </figure>
+      <figure class="default">
+        <img src="use-cases-web-scraping-desktop-dark.png" alt="Scraping persona dark" />
+        <figcaption>/use-cases/web-scraping</figcaption>
+      </figure>
+      <figure class="default">
+        <img src="how-it-works-desktop-dark.png" alt="How it works dark" />
+        <figcaption>/how-it-works · zero-code explainer</figcaption>
+      </figure>
+      <figure class="default">
+        <img src="glossary-desktop-dark.png" alt="Glossary dark" />
+        <figcaption>/glossary · 18 plain-words terms</figcaption>
       </figure>
     </div>
   </body>
