@@ -116,6 +116,14 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
     expect(body).toMatch(/<link rel="apple-touch-icon" href="\/apple-touch-icon\.png" \/>/);
   });
 
+  it('visitor mode toggle (S13 2026-07-03): pre-paint whitelisted ds_theme_mode script + [data-theme-toggle] delegated wiring + theme-color sync — plain-code is:inline bodies only', () => {
+    expect(body).toMatch(/var m = localStorage\.getItem\('ds_theme_mode'\);/);
+    expect(body).toMatch(/if \(m === 'light' \|\| m === 'dark'\) \{/);
+    expect(body).toMatch(/e\.target\.closest\('\[data-theme-toggle\]'\)/);
+    expect(body).toMatch(/localStorage\.setItem\('ds_theme_mode', next\);/);
+    expect(body).not.toMatch(/<script is:inline>\s*\{`/);
+  });
+
   it('self-hosted font preloads (Fleet v2 port 2026-07-03): GeistVF + JetBrainsMono-Regular woff2, as="font" + crossorigin, and both files ship in public/fonts/', () => {
     expect(body).toMatch(
       /<link rel="preload" href="\/fonts\/geist\/GeistVF\.woff2" as="font" type="font\/woff2" crossorigin \/>/,

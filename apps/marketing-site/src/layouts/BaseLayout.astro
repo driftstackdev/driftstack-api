@@ -107,6 +107,41 @@ const structuredData = {
          status-bar area near-white = a white strip above the dark page (founder
          2026-06-22, seen in the simulator on driftstack.dev). -->
     <meta name="theme-color" content="#060608" />
+    <script is:inline>
+      {
+        /*
+         * Fleet v2 (2026-07-03) — theme persistence, pre-paint. Applies the
+         * visitor's saved MODE before first paint so there is no flash of
+         * the default theme. Marketing exposes the mode axis only (dark ↔
+         * light; oxblood is the brand's face, the accent axis stays
+         * machinery) and the value is WHITELISTED — never write raw
+         * localStorage into a DOM attribute. Default (dark + oxblood,
+         * founder-locked 2026-06-15) lives on the <html> attrs; the
+         * [data-theme-toggle] buttons (wired at body end) write
+         * ds_theme_mode. Deliberately does NOT honor prefers-color-scheme —
+         * the dark first impression is the brand.
+         *
+         * NOTE: plain code in a brace-comment block — never a template
+         * literal inside an expression container: Astro emits that wrapper
+         * literally, turning the whole script into a no-op string
+         * expression (the 2026-07-02 dead-inline-script bug class).
+         */
+      }
+      (function () {
+        try {
+          var m = localStorage.getItem('ds_theme_mode');
+          if (m === 'light' || m === 'dark') {
+            document.documentElement.setAttribute('data-mode', m);
+            if (m === 'light') {
+              var mt = document.querySelector('meta[name="theme-color"]');
+              if (mt) mt.setAttribute('content', '#f2f3f6');
+            }
+          }
+        } catch (_) {
+          /* default theme */
+        }
+      })();
+    </script>
     <meta name="robots" content={noindex ? 'noindex,nofollow' : 'index,follow'} />
     <link rel="canonical" href={canonical} />
     <title>{fullTitle}</title>
@@ -165,5 +200,33 @@ const structuredData = {
       <slot />
     </main>
     <Footer />
+    <script is:inline>
+      {
+        /*
+         * Fleet v2 (2026-07-03) — mode-toggle wiring. One delegated
+         * listener covers every [data-theme-toggle] button (header +
+         * footer); flips data-mode, keeps the theme-color meta in sync
+         * (iOS Safari status bar), persists to ds_theme_mode. Plain code
+         * (see the pre-paint script note above re the template-literal
+         * dead-script trap).
+         */
+      }
+      (function () {
+        document.addEventListener('click', function (e) {
+          var btn = e.target instanceof Element ? e.target.closest('[data-theme-toggle]') : null;
+          if (!btn) return;
+          var next =
+            document.documentElement.getAttribute('data-mode') === 'dark' ? 'light' : 'dark';
+          document.documentElement.setAttribute('data-mode', next);
+          var mt = document.querySelector('meta[name="theme-color"]');
+          if (mt) mt.setAttribute('content', next === 'light' ? '#f2f3f6' : '#060608');
+          try {
+            localStorage.setItem('ds_theme_mode', next);
+          } catch (_) {
+            /* persistence unavailable — the toggle still works this visit */
+          }
+        });
+      })();
+    </script>
   </body>
 </html>

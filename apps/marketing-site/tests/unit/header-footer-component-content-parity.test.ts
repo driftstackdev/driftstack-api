@@ -217,6 +217,12 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
     ).toBe(true);
   });
 
+  it('S13 (2026-07-03): footer bottom row carries the "No trackers on this site." statement + a [data-theme-toggle] mode button (header has the primary one; wiring is BaseLayout-delegated)', () => {
+    expect(body).toMatch(/No trackers on this site\./);
+    expect(body).toMatch(/data-theme-toggle/);
+    expect(body).toMatch(/aria-label="Toggle light and dark theme"/);
+  });
+
   it('dynamic copyright: "© {year} Driftstack. All rights reserved."', () => {
     expect(body).toMatch(/&copy; \{year\} Driftstack\. All rights reserved\./);
   });

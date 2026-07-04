@@ -105,6 +105,13 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     );
   });
 
+  it('S13 mode toggle (2026-07-03): a [data-theme-toggle] button in the desktop nav cluster with the accessible label + sun/moon icons keyed off the dark: variant — the wiring lives in BaseLayout (delegated listener)', () => {
+    expect(body).toMatch(/data-theme-toggle/);
+    expect(body).toMatch(/aria-label="Toggle light and dark theme"/);
+    expect(body).toMatch(/class="hidden dark:block"/);
+    expect(body).toMatch(/class="block dark:hidden"/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

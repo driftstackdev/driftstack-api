@@ -110,6 +110,19 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
     expect(body).toMatch(/<link rel="apple-touch-icon" href="\/apple-touch-icon\.png" \/>/);
   });
 
+  it('visitor mode toggle pinned (S13 2026-07-03): a pre-paint is:inline script in <head> applies the WHITELISTED saved mode (ds_theme_mode, light|dark only — marketing does NOT expose the accent axis, and deliberately ignores prefers-color-scheme) + a body-end delegated listener wires every [data-theme-toggle] button and keeps the theme-color meta in sync. Both scripts are PLAIN CODE — the template-literal-in-expression-container form ships a dead no-op string (2026-07-02 bug class)', () => {
+    // pre-paint: whitelisted read + attribute set
+    expect(body).toMatch(/var m = localStorage\.getItem\('ds_theme_mode'\);/);
+    expect(body).toMatch(/if \(m === 'light' \|\| m === 'dark'\) \{/);
+    expect(body).toMatch(/document\.documentElement\.setAttribute\('data-mode', m\);/);
+    // wiring: delegated toggle + persistence + theme-color sync
+    expect(body).toMatch(/e\.target\.closest\('\[data-theme-toggle\]'\)/);
+    expect(body).toMatch(/localStorage\.setItem\('ds_theme_mode', next\);/);
+    expect(body).toMatch(/next === 'light' \? '#f2f3f6' : '#060608'/);
+    // the dead-script wrapper must never appear before either script body
+    expect(body).not.toMatch(/<script is:inline>\s*\{`/);
+  });
+
   it('self-hosted font preloads pinned (Fleet v2 port 2026-07-03): GeistVF + JetBrainsMono-Regular woff2 preloaded as="font" with crossorigin so first paint does not flash the system stack longer than needed (font-display: swap in base.css)', () => {
     expect(body).toMatch(
       /<link rel="preload" href="\/fonts\/geist\/GeistVF\.woff2" as="font" type="font\/woff2" crossorigin \/>/,
