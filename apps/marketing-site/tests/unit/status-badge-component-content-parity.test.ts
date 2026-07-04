@@ -91,11 +91,11 @@ describe('W383.A marketing-site StatusBadge.astro content parity', () => {
     expect(body).toMatch(/nothing is implied about uptime from\s*\n?\s*\/\/\s*a fetch error alone/);
   });
 
-  it('anchor: href=https://status.driftstack.dev + target=_blank + rel=noopener noreferrer + aria-label="Platform status"', () => {
+  it("anchor: href=https://status.driftstack.dev + target=_blank + rel=noopener noreferrer + conditional aria-label (S17 2026-07-04: the labeled variant's visible text is its accessible name; the static label applies only to the dot-only variant)", () => {
     expect(body).toMatch(
       /<a\s*\n?\s*href="https:\/\/status\.driftstack\.dev"\s*\n?\s*target="_blank"\s*\n?\s*rel="noopener noreferrer"/,
     );
-    expect(body).toMatch(/aria-label="Platform status"/);
+    expect(body).toMatch(/aria-label=\{withLabel \? undefined : 'Platform status'\}/);
   });
 
   it('Props: className override (default empty) + withLabel default true', () => {

@@ -101,8 +101,10 @@ describe('W382.C marketing-site Header.astro content parity', () => {
 
   it('R15 brand mark in header: /driftstack-mark.svg <img> (iPhone-D logo) + lowercase "driftstack" wordmark — replaces the prior bg-gradient-accent D-tile chip with the real SVG brand asset', () => {
     expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg(\?v=\d+)?"/);
+    // S17 2026-07-04: STACK on the AA accent-text tone (Lighthouse flagged
+    // raw accent at 2.99:1 on the dark bg).
     expect(body).toMatch(
-      /<span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK<\/span><\/span>/,
+      /<span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent-text">STACK<\/span><\/span>/,
     );
   });
 

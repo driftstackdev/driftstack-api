@@ -34,7 +34,7 @@ const apiBaseUrl = 'https://api.driftstack.dev';
     'driftstack-status-badge inline-flex items-center gap-2 rounded-full border border-tk-border bg-tk-surface px-3 py-1 text-xs text-tk-ink-2 hover:bg-tk-hover',
     className,
   ]}
-  aria-label="Platform status"
+  aria-label={withLabel ? undefined : 'Platform status'}
 >
   <span
     class="driftstack-status-dot inline-block h-2 w-2 shrink-0 rounded-full bg-slate-300"

@@ -43,6 +43,17 @@
 /*.woff2
   Cache-Control: public, max-age=31536000, immutable
 
+# ── Self-hosted fonts ─────────────────────────────────────────────────
+# Geist (variable) + JetBrains Mono, vendored under public/fonts/ with
+# their OFL.txt licenses. Needed EXPLICITLY: CF Pages /*.woff2 globs do
+# NOT match nested paths in production (measured max-age=14400 on
+# /fonts/** 2026-07-04 — Lighthouse flagged the ~180 KiB re-download).
+# Filenames are unversioned but the binaries only change on an
+# intentional font upgrade — treat as immutable. Mirrors the
+# customer-dashboard _headers section.
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+
 # ── Crawler artefacts ────────────────────────────────────────────────
 # Crawlers re-check robots + sitemaps periodically; 1h is the sweet
 # spot — fast enough that a fresh sitemap propagates the same day,

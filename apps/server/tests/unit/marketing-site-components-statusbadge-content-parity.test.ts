@@ -64,7 +64,10 @@ describe('W522.C apps/marketing-site/src/components/StatusBadge.astro content pa
     expect(body).toMatch(/href="https:\/\/status\.driftstack\.dev"/);
     expect(body).toMatch(/target="_blank"/);
     expect(body).toMatch(/rel="noopener noreferrer"/);
-    expect(body).toMatch(/aria-label="Platform status"/);
+    // S17 2026-07-04 (Lighthouse label-content-name-mismatch): the labeled
+    // variant's VISIBLE text is its accessible name; the static aria-label
+    // applies only to the dot-only variant (withLabel=false).
+    expect(body).toMatch(/aria-label=\{withLabel \? undefined : 'Platform status'\}/);
   });
 
   it("Initial-render dot + 'checking…' label framing pinned: 'driftstack-status-dot inline-block h-2 w-2 shrink-0 rounded-full bg-slate-300' + aria-hidden=\"true\" + '<span class=\"driftstack-status-label\">checking…</span>' (withLabel ? render : null) — pinned so the initial slate-300 dot + checking… loading-state label + aria-hidden-on-dot + withLabel-conditional commitment survives", () => {

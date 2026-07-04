@@ -77,8 +77,13 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     );
     expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg(\?v=\d+)?"/);
     expect(body).toMatch(/width="32"\s*\n?\s*height="32"/);
+    // S17 2026-07-04 (Lighthouse a11y): the mark img is decorative (alt="" —
+    // the wordmark beside it carries the name; alt="Driftstack" was flagged
+    // redundant), and STACK renders in the AA accent-text tone (raw accent
+    // is 2.99:1 on the dark bg; same oxblood family, brighter).
+    expect(body).toMatch(/alt=""/);
     expect(body).toMatch(
-      /<span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK<\/span><\/span>/,
+      /<span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent-text">STACK<\/span><\/span>/,
     );
   });
 

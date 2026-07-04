@@ -76,6 +76,14 @@ describe('W523.C apps/marketing-site/public/_headers content parity', () => {
     expect(body).toMatch(/^\/\*\.woff2$/m);
   });
 
+  it("Self-hosted fonts explicit-dir tier pinned (S17 2026-07-04): '── Self-hosted fonts ──' section + '/fonts/*' immutable-1y — needed EXPLICITLY because CF Pages /*.woff2 extension globs do NOT match nested paths in production (measured max-age=14400 on /fonts/** ; Lighthouse flagged the ~180 KiB font re-download). Mirrors the customer-dashboard _headers section", () => {
+    expect(body).toMatch(/# ── Self-hosted fonts ──/);
+    expect(body).toMatch(/do\s*\n?#?\s*NOT match nested paths in production/);
+    expect(body).toMatch(/^\/fonts\/\*$/m);
+    const fontsSection = body.match(/^\/fonts\/\*\n([^\n]+)/m);
+    expect(fontsSection?.[1]).toContain('Cache-Control: public, max-age=31536000, immutable');
+  });
+
   it("Crawler-artefact tier framing pinned: '── Crawler artefacts ──' section + 'Crawlers re-check robots + sitemaps periodically; 1h is the sweet spot — fast enough that a fresh sitemap propagates the same day, slow enough that we don't burn origin requests on every Googlebot visit.' + /robots.txt + /sitemap-index.xml + /sitemap-*.xml — all 'Cache-Control: public, max-age=3600' (1h) — pinned so the crawler-artefact-1h-cache + 3-path (robots + sitemap-index + sitemap-*) commitment survives", () => {
     expect(body).toMatch(/# ── Crawler artefacts ──/);
     expect(body).toMatch(
