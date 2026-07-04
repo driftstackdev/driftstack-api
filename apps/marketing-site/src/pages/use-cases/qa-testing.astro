@@ -1,0 +1,134 @@
+---
+// /use-cases/qa-testing (2026-07-03, S14 / D8) — persona page for
+// QA + engineering teams. This is a developer page, so code belongs
+// here: the CodeWindow reuses the homepage SDK snippet verbatim
+// (locked archetype slug 'iphone17_ios18_7_safari26_4' — registry-
+// enforced by the workspace archetype sweeps). Claim register:
+// homepage §4 card ("Test on the real thing" / the-bug-you-reproduce
+// line), §8 FOR DEVELOPERS (SDK trio + plain-HTTPS integrations),
+// faq.ts free-tier answer (free is manual-only; programmatic access
+// starts on the API ladder — stated honestly, not buried).
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHero from '../../components/PageHero.astro';
+import Section from '../../components/Section.astro';
+import Stat from '../../components/Stat.astro';
+import CodeWindow from '../../components/CodeWindow.astro';
+import CtaBand from '../../components/CtaBand.astro';
+---
+
+<BaseLayout
+  title="QA on real iPhone Safari"
+  description="Run end-to-end tests against the exact engine your iOS users run — real iPhone Safari sessions your CI starts with one API call. TypeScript, Python, and Go SDKs."
+>
+  <PageHero
+    label="Use cases · QA + engineering teams"
+    title="Test on the real thing."
+    lead="Your users are on iPhones. Your test grid probably isn't. Driftstack gives your suite the exact engine iOS users run — as a cloud session your CI starts with one API call."
+  />
+
+  <Section
+    label="The problem"
+    title="The bug you can't reproduce is on a phone."
+  >
+    <div class="mt-8 max-w-prose space-y-5 text-base leading-7 text-tk-ink-2">
+      <p>
+        Mobile Safari is its own world: its own rendering, its own JavaScript
+        timing, its own quirks. A desktop browser shrunk to 390 pixels doesn't
+        reproduce it — the layout break your iPhone users hit simply isn't
+        there, so your suite stays green while your users see a broken page.
+      </p>
+      <p>
+        Driftstack sessions run a browser built from Apple's WebKit source —
+        the same engine your iOS users actually run. Same rendering, same
+        JavaScript timing, same quirks: the bug you reproduce is the bug your
+        users hit, and the fix you verify is the fix they get. No hardware to
+        buy, nothing to install.
+      </p>
+    </div>
+    <div class="mt-10 grid gap-4 sm:grid-cols-3">
+      <Stat
+        plain="The engine, not an approximation"
+        technical="Built from Apple's WebKit source — same engine your iOS users actually run"
+      />
+      <Stat
+        plain="The iPhones your users hold"
+        technical="iPhone 15 Pro, 16 Pro, and the current 17 lineup — iOS 18.7 / Safari 26.4"
+      />
+      <Stat
+        plain="Ready when CI is"
+        technical="Sessions created per test run and destroyed after — no fleet to keep warm"
+      />
+    </div>
+  </Section>
+
+  <Section
+    label="// wire it into CI"
+    title="Your pipeline speaks HTTPS. So do we."
+    lead="First-party SDKs in TypeScript, Python, and Go — plus a plain HTTPS API any HTTP client can drive: Playwright test fixtures, n8n workflows, plain curl from a cron job. The snippet below is the whole session lifecycle."
+  >
+    <div class="mt-10 grid gap-10 md:grid-cols-2 md:items-center">
+      <CodeWindow title="driftstack-typescript-sdk" copyTargetId="qa-sdk-code">
+        <pre
+          class="text-[11px] leading-relaxed sm:text-xs md:text-sm"
+        ><code id="qa-sdk-code">{`import { Driftstack } from '@driftstack/sdk';
+
+const ds = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
+
+const session = await ds.sessions.create({
+  archetype: 'iphone17_ios18_7_safari26_4',
+  label: 'target-flow',
+});
+
+try {
+  await ds.sessions.navigate(session.id, { url: 'https://target.example' });
+  await ds.sessions.capture(session.id, { kind: 'screenshot' });
+  const state = await ds.sessions.getState(session.id);
+  console.log(state.url, state.title);
+} finally {
+  await ds.sessions.destroy(session.id);
+}`}</code></pre>
+      </CodeWindow>
+      <div class="space-y-4 text-base leading-7 text-tk-ink-2">
+        <p>
+          Create a session on the archetype you ship for, drive the flow with
+          structured actions (<code class="font-mono text-tk-accent-text">navigate</code>,
+          <code class="font-mono text-tk-accent-text">interact</code>,
+          <code class="font-mono text-tk-accent-text">capture</code>,
+          <code class="font-mono text-tk-accent-text">extract</code>), assert
+          on state and screenshots, destroy it in the teardown. Every run gets
+          a fresh, real iPhone Safari — or reuse a persistent profile when a
+          test needs logged-in state that survives between runs.
+        </p>
+        <p>
+          Sessions are metered on one number:
+          <strong class="text-tk-ink">concurrent</strong> — how many run at
+          the same time, like browser tabs. Parallelize your suite up to your
+          cap; hours and calls inside it are unmetered.
+        </p>
+      </div>
+    </div>
+  </Section>
+
+  <Section
+    label="Which plan"
+    title="Code calling → the API ladder."
+    lead="Programmatic access starts on the API ladder — SDK keys, session creation from CI, concurrent caps sized for parallel suites."
+  >
+    <div class="mt-8 flex flex-wrap items-center gap-4">
+      <a href="/pricing#api" class="btn-secondary">See API pricing →</a>
+      <p class="text-sm text-tk-ink-3">
+        The free tier is manual-only — use it to verify rendering and
+        fingerprint fidelity by hand before you wire up the SDK.
+      </p>
+    </div>
+  </Section>
+
+  <CtaBand
+    title="Green in CI. Green on the phone."
+    lead="Verify the rendering by hand on the free tier, then point your pipeline at the API ladder when you're convinced."
+    primaryHref="/pricing#free"
+    primaryLabel="Start free"
+    secondaryHref="https://docs.driftstack.dev"
+    secondaryLabel="Read the docs"
+  />
+</BaseLayout>

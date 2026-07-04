@@ -5,18 +5,27 @@
 // mobile and reveal via CSS-only <details> hamburger so we don't need
 // a client-side JS bundle for a pure-static marketing site.
 
+// S14 nav rework (2026-07-03, D8): the funnel pages lead — How it
+// works + Use cases take the first two slots; Self-hosted moves to
+// the footer Product column (it kept a mobile slot below). Still no
+// /roadmap in nav (F-3 / Issue 5 — no aspirational pages).
 const navItems = [
+  { href: '/how-it-works', label: 'How it works' },
+  { href: '/use-cases', label: 'Use cases' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/comparison', label: 'Compare' },
-  { href: '/self-hosted', label: 'Self-hosted' },
   { href: '/faq', label: 'FAQ' },
   { href: 'https://docs.driftstack.dev', label: 'Docs', external: true },
 ];
 
 // Mobile-menu list mirrors desktop + adds secondary pages that don't
-// earn a top-level desktop slot. Empty at launch (F-3 / Issue 5 —
-// /roadmap link removed; no aspirational pages in nav).
-const mobileExtraItems: Array<{ href: string; label: string }> = [];
+// earn a top-level desktop slot: Self-hosted (left the desktop roster
+// in the S14 rework; footer Product column carries it on desktop) and
+// the Glossary reference page.
+const mobileExtraItems: Array<{ href: string; label: string }> = [
+  { href: '/self-hosted', label: 'Self-hosted' },
+  { href: '/glossary', label: 'Glossary' },
+];
 const pathname = Astro.url.pathname;
 ---
 

@@ -1,0 +1,140 @@
+---
+// /use-cases/multi-account (2026-07-03, S14 / D8) — persona page for
+// operators + account teams. Band A: the problem in their words (bans
+// cascade through a shared device fingerprint), then how Driftstack
+// answers it, the plan pointer, and the FAQ groups they actually read.
+// Claim register: homepage §4 card ("Run many accounts, safely apart" /
+// persistent profiles / own physical phone), §5 cockpit, §9 egress-live
+// chip framing, pricing Manual card (10 to 200 profiles, browser tabs).
+// AUP discipline: capability description only — the page names the
+// boundary (/legal/aup) instead of encouraging anyone to cross it.
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHero from '../../components/PageHero.astro';
+import Section from '../../components/Section.astro';
+import Stat from '../../components/Stat.astro';
+import FaqList from '../../components/FaqList.astro';
+import CtaBand from '../../components/CtaBand.astro';
+import { FAQ_GROUPS } from '../../data/faq';
+
+// The two FAQ groups operators ask about before signing: whether the
+// iPhones are real, and where the acceptable-use line sits.
+const faqGroups = FAQ_GROUPS.filter((g) =>
+  ['Architecture + sessions', 'Acceptable use'].includes(g.title),
+);
+---
+
+<BaseLayout
+  title="Multi-account operations"
+  description="Run many accounts, safely apart. Persistent profiles give each account its own phone — separate identity, separate history, its own connection — managed from one desktop app."
+>
+  <PageHero
+    label="Use cases · Operators + account teams"
+    title="Run many accounts, safely apart."
+    lead="You run more than one account because the work demands it — client accounts at an agency, regional storefronts, seller profiles. The hard part isn't running them. It's keeping them apart."
+  />
+
+  <Section
+    label="The problem"
+    title="One shared fingerprint is all it takes."
+  >
+    <div class="mt-8 max-w-prose space-y-5 text-base leading-7 text-tk-ink-2">
+      <p>
+        Most services don't link accounts by name or email — they link them by
+        device. Every browser exposes a
+        <strong class="text-tk-ink">fingerprint</strong>: what a website can
+        measure about a visitor — screen, fonts, graphics quirks, dozens of
+        small signals that add up to <em>"this is the same machine again."</em>
+        Sign into ten accounts from one browser and the service quietly knows
+        those ten accounts share a device.
+      </p>
+      <p>
+        That's why bans cascade. One account trips a rule, the device gets
+        flagged, and every account that ever touched that device goes down
+        with it — including the ones that never put a foot wrong. Separate
+        Chrome profiles, incognito windows, a spreadsheet of logins: none of
+        it changes what the site can measure.
+      </p>
+    </div>
+  </Section>
+
+  <Section
+    label="How Driftstack answers it"
+    title="One account, one phone."
+    lead="A Driftstack profile is a persistent identity that lets each account look like its own physical phone — every session, every time."
+  >
+    <div class="mt-10 grid gap-4 sm:grid-cols-2">
+      <Stat
+        plain="Each account gets its own phone"
+        technical="Persistent profiles: separate cookies, storage, history, and device identity per profile"
+      />
+      <Stat
+        plain="Identities that hold up"
+        technical="Canvas + WebGL hashes match the real-iPhone population — not unique-per-session like every other API"
+      />
+      <Stat
+        plain="Its own corner of the world"
+        technical="Bring your own proxy or VPN, attached per profile — locale and timezone follow the exit"
+      />
+      <Stat
+        plain="It even moves like a person"
+        technical="Taps, swipes and keystrokes generated from human motor patterns, consistent per profile"
+      />
+    </div>
+    <p class="mt-10 max-w-prose text-base leading-7 text-tk-ink-2">
+      The desktop app is built for exactly this workday: keep 10 to 200
+      logged-in profiles open at once and switch between them like browser
+      tabs. Organize the fleet in folders, tag profiles by client, launch with
+      one click, and pop any account out into its own floating device window.
+      No code anywhere in the loop.
+    </p>
+  </Section>
+
+  <Section
+    label="Which plan"
+    title="This is what the Manual ladder is for."
+    lead="A person clicking → Manual. It's priced on one number: how many sessions you keep open at the same time."
+  >
+    <div class="mt-8 flex flex-wrap items-center gap-4">
+      <a href="/pricing#manual" class="btn-secondary">See Manual pricing →</a>
+      <p class="text-sm text-tk-ink-3">
+        Start free first — one profile, 20-minute sessions, no card required.
+      </p>
+    </div>
+    <p class="mt-8 max-w-prose text-sm leading-6 text-tk-ink-3">
+      One honest line before you build on us: Driftstack keeps accounts apart;
+      staying inside each service's rules stays your call. The boundary is
+      written down in plain words in the
+      <a href="/legal/aup" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">Acceptable Use Policy</a>
+      — read it before you sign up if you're unsure.
+    </p>
+  </Section>
+
+  <Section
+    label="Questions operators ask"
+    title="Before you ask — asked and answered."
+  >
+    <div class="mt-10 space-y-12">
+      {
+        faqGroups.map((group) => (
+          <div>
+            <h3 class="text-xl font-semibold tracking-tight text-tk-ink">{group.title}</h3>
+            <FaqList entries={group.entries} class="mt-5" />
+          </div>
+        ))
+      }
+    </div>
+    <p class="mt-8 text-sm text-tk-ink-3">
+      Everything else is on the
+      <a href="/faq" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">full FAQ</a>.
+    </p>
+  </Section>
+
+  <CtaBand
+    title="Keep them apart. Keep them alive."
+    lead="Open a real iPhone session on the free tier and watch a profile hold its identity across runs — no card required."
+    primaryHref="/pricing#free"
+    primaryLabel="Start free"
+    secondaryHref="/pricing#manual"
+    secondaryLabel="See Manual pricing"
+  />
+</BaseLayout>

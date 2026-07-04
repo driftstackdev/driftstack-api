@@ -1,0 +1,160 @@
+---
+// /glossary (2026-07-03, S14 / D8) — the quiet reference page: every
+// term the site uses, one honest plain paragraph each, with STABLE
+// anchor ids (Band-B small-print jargon links point here — treat the
+// ids as a public contract, never rename them). Definitions reuse the
+// site-wide metaphors verbatim in spirit: profile = saved iPhone
+// identity, concurrent = browser tabs, fingerprint = what a website
+// can measure about a visitor, egress = your own internet exit.
+// Honesty: the Warm-up Scheduler stays chip-labelled Roadmap; the
+// egress entry cross-links /trust/security-overview (the canonical
+// impl-state disclosure surface). No CtaBand — reference page.
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHero from '../components/PageHero.astro';
+import HonestyChip from '../components/HonestyChip.astro';
+
+interface GlossaryEntry {
+  /** Stable anchor id — a public contract for deep links. */
+  id: string;
+  term: string;
+  /** One honest paragraph; limited inline HTML (anchors, <strong>). */
+  def: string;
+  chip?: 'live' | 'rolling-out' | 'roadmap';
+}
+
+const GLOSSARY: GlossaryEntry[] = [
+  {
+    id: 'profile',
+    term: 'Profile',
+    def: 'A saved iPhone identity. A profile keeps its logins, cookies, and history across every run — so to a website, each profile looks like the same physical phone coming back, every session, every time.',
+  },
+  {
+    id: 'session',
+    term: 'Session',
+    def: "A profile, running live. Starting a session spins up a real iPhone Safari browser in the cloud with that profile's identity and history loaded. Stop it, and the profile remembers everything for next time.",
+  },
+  {
+    id: 'concurrent',
+    term: 'Concurrent',
+    def: 'Sessions running at the same time — think browser tabs open at once. Driftstack plans are priced on the concurrent cap and nothing else: within it, hours, clicks, and page visits are unmetered.',
+  },
+  {
+    id: 'proxy',
+    term: 'Proxy',
+    def: "A relay your session's traffic travels through, so a website sees the relay's address instead of ours. In Driftstack you attach your own proxy per profile — each phone browses from its own corner of the world.",
+  },
+  {
+    id: 'vpn',
+    term: 'VPN',
+    def: 'Like a proxy, a way to give traffic a different exit — but as an encrypted tunnel that carries everything the device sends. Driftstack profiles accept your own VPN configuration as an alternative to a proxy.',
+  },
+  {
+    id: 'egress',
+    term: 'Egress',
+    def: 'Your session\'s own internet exit — where its traffic actually leaves for the open web. Driftstack routes a session\'s traffic through the exit you attach (proxy or VPN), and locale and timezone follow the exit so nothing contradicts the address a website sees. What\'s live versus rolling out is documented at <a href="/trust/security-overview" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">/trust/security-overview</a>.',
+  },
+  {
+    id: 'fingerprint',
+    term: 'Fingerprint',
+    def: 'What a website can measure about a visitor — screen size, fonts, graphics quirks, dozens of small signals — combined into a picture stable enough to recognize a device it has seen before, even without cookies.',
+  },
+  {
+    id: 'canvas-hash',
+    term: 'Canvas hash',
+    def: "One fingerprint signal: a page asks the browser to draw an invisible picture, then boils the pixels down to one short value. Different engines draw slightly differently, so the value betrays what's really rendering. Driftstack sessions return the value a real iPhone returns, because the same engine draws the picture.",
+  },
+  {
+    id: 'user-agent',
+    term: 'User-agent',
+    def: 'The one-line introduction a browser sends with every request — "I\'m Safari on an iPhone." It\'s trivial to fake, which is exactly why serious detection systems don\'t trust it and measure the fingerprint instead.',
+  },
+  {
+    id: 'webkit',
+    term: 'WebKit',
+    def: "The browser engine Apple ships on every iPhone — Safari is built on it. Driftstack sessions are built from Apple's WebKit source, so what a website measures matches what a real iPhone would return.",
+  },
+  {
+    id: 'archetype',
+    term: 'Archetype',
+    def: 'A specific iPhone model + iOS version + Safari version combination — say, an iPhone 17 on iOS 18.7 with Safari 26.4. Every Driftstack profile is built on an archetype, so each measurable detail agrees with a phone Apple really shipped.',
+  },
+  {
+    id: 'anti-detect',
+    term: 'Anti-detect browser',
+    def: 'A browser built so websites can\'t link or block its users by fingerprint. Most anti-detect tools disguise a desktop browser as something else; Driftstack takes the other path — running the real iPhone engine, so there\'s no disguise to spot. The <a href="/comparison" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">comparison page</a> walks the difference signal by signal.',
+  },
+  {
+    id: 'headless-browser',
+    term: 'Headless browser',
+    def: 'A browser running without a visible window, driven by code — the standard tool for automation and data collection. Classic headless browsers leave measurable tells, and detection systems look for those tells specifically.',
+  },
+  {
+    id: 'emulator',
+    term: 'Emulator',
+    def: "Software pretending to be other hardware. Driftstack sessions are not emulated iPhones — they run Apple's real browser engine on Apple-silicon hardware, the same chip family as the iPhone, which is why the measurements come out right.",
+  },
+  {
+    id: 'sdk',
+    term: 'SDK',
+    def: 'A ready-made library for driving Driftstack from your own code — first-party in TypeScript, Python, and Go, on top of a plain HTTPS API any HTTP client can call. If you\'d rather not code, the desktop app does the same things with clicks.',
+  },
+  {
+    id: 'byok',
+    term: 'BYOK',
+    def: "Bring Your Own Key. Driftstack's optional AI agent can run against your own model-provider API key — your model spend goes to your provider account, with no Driftstack markup — instead of the bundled rate on one Driftstack invoice.",
+  },
+  {
+    id: 'self-hosted',
+    term: 'Self-hosted',
+    def: 'Running the Driftstack stack on Mac hardware you own. Session content stays inside your network; we supply the software, orchestration, and hands-on onboarding. The packages are on <a href="/self-hosted" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">/self-hosted</a>.',
+  },
+  {
+    id: 'warm-up',
+    term: 'Warm-up',
+    def: "Giving a fresh profile some ordinary browsing history before it goes to work, so it doesn't look brand-new the day it matters. Driftstack's Warm-up Scheduler will automate this on a curve — light touches first, deeper flows later.",
+    chip: 'roadmap',
+  },
+];
+---
+
+<BaseLayout
+  title="Glossary"
+  description="Every term this site uses — profile, session, concurrent, proxy, fingerprint, and more — defined in one honest plain paragraph each."
+>
+  <PageHero
+    label="Glossary"
+    title="The words, in plain words."
+    lead="Every term you'll meet on this site, one honest paragraph each. Link to any of them — the anchors are stable."
+  />
+
+  <section class="relative bg-tk-bg">
+    <div class="mx-auto max-w-6xl px-6 py-16 md:py-20">
+      <div class="grid gap-5 md:grid-cols-2">
+        {
+          GLOSSARY.map((entry) => (
+            <article id={entry.id} class="panel scroll-mt-24">
+              <div class="flex flex-wrap items-center gap-3">
+                <h2 class="text-base font-semibold leading-6 text-tk-ink">{entry.term}</h2>
+                {entry.chip ? <HonestyChip state={entry.chip} /> : null}
+                <a
+                  href={`#${entry.id}`}
+                  class="ml-auto font-mono text-xs text-tk-ink-3 hover:text-tk-accent-text"
+                  aria-label={`Link to the definition of ${entry.term}`}
+                >
+                  #{entry.id}
+                </a>
+              </div>
+              <p class="mt-2.5 text-sm leading-relaxed text-tk-ink-2" set:html={entry.def} />
+            </article>
+          ))
+        }
+      </div>
+      <p class="mt-10 max-w-prose text-sm leading-6 text-tk-ink-3">
+        Missing a word? Email
+        <a href="mailto:support@driftstack.dev" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">support@driftstack.dev</a>
+        and we'll add it. For how the pieces fit together, start at
+        <a href="/how-it-works" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">how it works</a>.
+      </p>
+    </div>
+  </section>
+</BaseLayout>

@@ -6,9 +6,12 @@
 //
 //   • V-133 doc-comment framing: mobile-responsiveness + 4-item nav
 //     overflow fix + CSS-only <details> hamburger + no client-side JS bundle.
-//   • 5-item navItems array: /pricing + /comparison + /self-hosted + /faq
-//     + https://docs.driftstack.dev (external).
-//   • Mobile-extra item: /roadmap (no top-level desktop slot).
+//   • 6-item navItems array (S14 nav rework 2026-07-03, D8): /how-it-works
+//     + /use-cases + /pricing + /comparison + /faq +
+//     https://docs.driftstack.dev (external). /self-hosted left the desktop
+//     roster (footer Product column carries it).
+//   • Mobile-extra items: /self-hosted + /glossary (no top-level desktop
+//     slot). Never /roadmap (F-3 / Issue 5 — no aspirational pages in nav).
 //   • Active-link styling on pathname match.
 //   • Sign in → https://app.driftstack.dev/login.
 //   • CTA → /pricing#free.
@@ -37,16 +40,26 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     );
   });
 
-  it("5-item navItems array pinned: /pricing Pricing + /comparison Compare + /self-hosted Self-hosted + /faq FAQ + https://docs.driftstack.dev Docs (external). F-3 (Issue 5): mobileExtraItems is now empty — /roadmap link removed because aspirational pages don't belong in nav at launch.", () => {
-    expect(body).toMatch(/\{ href: '\/pricing', label: 'Pricing' \},/);
-    expect(body).toMatch(/\{ href: '\/comparison', label: 'Compare' \},/);
-    expect(body).toMatch(/\{ href: '\/self-hosted', label: 'Self-hosted' \},/);
-    expect(body).toMatch(/\{ href: '\/faq', label: 'FAQ' \},/);
+  it("6-item navItems array pinned (S14 nav rework 2026-07-03, D8): /how-it-works How it works + /use-cases Use cases + /pricing Pricing + /comparison Compare + /faq FAQ + https://docs.driftstack.dev Docs (external), in that order (funnel pages lead). /self-hosted left the desktop roster (footer Product column carries it; mobile keeps a slot). mobileExtraItems: /self-hosted + /glossary. F-3 (Issue 5) stays binding: no /roadmap anywhere in nav — aspirational pages don't belong in nav at launch.", () => {
+    const navBlock = body.match(/const navItems = \[([\s\S]+?)\];/)?.[1] ?? '';
+    const order = [
+      "{ href: '/how-it-works', label: 'How it works' },",
+      "{ href: '/use-cases', label: 'Use cases' },",
+      "{ href: '/pricing', label: 'Pricing' },",
+      "{ href: '/comparison', label: 'Compare' },",
+      "{ href: '/faq', label: 'FAQ' },",
+      "{ href: 'https://docs.driftstack.dev', label: 'Docs', external: true },",
+    ];
+    let lastIdx = -1;
+    for (const item of order) {
+      const idx = navBlock.indexOf(item);
+      expect(idx, `nav item missing or out of order: ${item}`).toBeGreaterThan(lastIdx);
+      lastIdx = idx;
+    }
+    // Self-hosted is out of the desktop roster but keeps its mobile path.
+    expect(navBlock).not.toContain("{ href: '/self-hosted'");
     expect(body).toMatch(
-      /\{ href: 'https:\/\/docs\.driftstack\.dev', label: 'Docs', external: true \},/,
-    );
-    expect(body).toMatch(
-      /const mobileExtraItems: Array<\{ href: string; label: string \}> = \[\];/,
+      /const mobileExtraItems: Array<\{ href: string; label: string \}> = \[\s*\n?\s*\{ href: '\/self-hosted', label: 'Self-hosted' \},\s*\n?\s*\{ href: '\/glossary', label: 'Glossary' \},\s*\n?\s*\];/,
     );
     expect(body).not.toMatch(/\{ href: '\/roadmap',/);
   });

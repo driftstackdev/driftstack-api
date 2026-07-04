@@ -1,0 +1,88 @@
+---
+// /use-cases hub (2026-07-03, S14 / D8) — the persona funnel. Band A
+// throughout: each card is the persona's problem in their words, and
+// links the page that answers it. Copy stays inside the approved claim
+// register (the homepage §4 persona cards are the source phrases).
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHero from '../../components/PageHero.astro';
+import Section from '../../components/Section.astro';
+import IconTile from '../../components/IconTile.astro';
+import CtaBand from '../../components/CtaBand.astro';
+
+// The three persona pages this hub fans out to. Same order as the
+// homepage use-case cards: operators first.
+const personas = [
+  {
+    href: '/use-cases/multi-account',
+    label: 'Operators + account teams',
+    title: 'Run many accounts, safely apart',
+    body: 'Services link accounts by device fingerprint, so one ban can take down every account you run. Persistent profiles give each account its own phone — separate identity, separate history, separate connection.',
+  },
+  {
+    href: '/use-cases/qa-testing',
+    label: 'QA + engineering teams',
+    title: 'Test on the real thing',
+    body: "Mobile Safari has its own rendering, timing, and quirks — a desktop browser shrunk to phone size doesn't reproduce them. Run your suite against the exact engine your iOS users run, from CI.",
+  },
+  {
+    href: '/use-cases/web-scraping',
+    label: 'Data teams',
+    title: 'See what iPhone users see',
+    body: 'Many sites serve mobile Safari different content than desktop Chrome. If your collector looks like a bot — or like a desktop — you never see the mobile web your users actually get.',
+  },
+];
+---
+
+<BaseLayout
+  title="Use cases"
+  description="What people actually do with Driftstack: run many accounts safely apart, test on the exact engine iPhone users run, and see the mobile web the way iPhone visitors see it."
+>
+  <PageHero
+    label="Use cases"
+    title="Built for the work you actually do."
+    lead="Three kinds of teams keep real iPhones in the cloud. Find yours — each page walks through the problem, how Driftstack answers it, and which plan fits."
+  />
+
+  <Section
+    label="Pick your work"
+    title="Three teams, three pages."
+  >
+    <div class="mt-10 grid gap-6 md:grid-cols-3">
+      {
+        personas.map((p, i) => (
+          <a
+            href={p.href}
+            class="card group flex flex-col p-6 transition-colors hover:border-tk-accent/40"
+          >
+            <IconTile>
+              <span class="font-mono text-base font-semibold">{i + 1}</span>
+            </IconTile>
+            <p class="mt-4 font-mono text-xs uppercase tracking-[0.15em] text-tk-accent-text">
+              {p.label}
+            </p>
+            <h3 class="mt-2 text-lg font-semibold text-tk-ink">{p.title}</h3>
+            <p class="mt-2 text-sm leading-6 text-tk-ink-2">{p.body}</p>
+            <span class="mt-4 inline-flex items-center gap-1 text-sm font-medium text-tk-accent-text group-hover:text-tk-accent-2">
+              Read the {p.label.split(' ')[0]!.toLowerCase()} page →
+            </span>
+          </a>
+        ))
+      }
+    </div>
+    <p class="mt-10 max-w-prose text-sm leading-6 text-tk-ink-3">
+      Not sure where you land? If a person drives the sessions, start with the
+      operator page; if code does, start with QA or data. And if you'd rather
+      see the whole loop first, <a href="/how-it-works" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">how it works</a>
+      explains the product in three steps with zero jargon.
+    </p>
+  </Section>
+
+  <CtaBand
+    title="Whatever the work is, start free."
+    lead="One profile, 20-minute sessions, no card required — enough to point your own workflow at a real iPhone and decide on your own terms."
+    primaryHref="/pricing#free"
+    primaryLabel="Start free"
+    secondaryHref="/pricing"
+    secondaryLabel="See pricing"
+  />
+</BaseLayout>

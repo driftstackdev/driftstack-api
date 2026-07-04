@@ -1,0 +1,187 @@
+---
+// /how-it-works (2026-07-03, S14 / D8) — the zero-code explainer for
+// non-technical buyers. Band A only: the homepage's three steps,
+// expanded; profile · session · proxy in the same metaphors the
+// pricing page and faq.ts use (saved iPhone identity / browser tabs /
+// your own internet exit); a short desktop-app walkthrough with a
+// COMPACT static mockup reusing the homepage's phone-framed card idiom
+// (no invented UI). Hard rule: NO code blocks on this page — the
+// developer story lives on /use-cases/qa-testing and the docs.
+// The homepage hero's "#how-it-works" anchor CTA is untouched — that
+// stays an in-page anchor; this page is the nav-level entry.
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHero from '../components/PageHero.astro';
+import Section from '../components/Section.astro';
+import Card from '../components/Card.astro';
+import IconTile from '../components/IconTile.astro';
+import CtaBand from '../components/CtaBand.astro';
+
+// Compact fleet strip — the same phone-framed profile cards the
+// desktop app renders (and the homepage cockpit mockup draws):
+// name bar with Live/Idle, page skeleton, exit flag. example.com only.
+const walkthroughProfiles = [
+  { name: 'amsterdam-shopper', flag: '🇳🇱', cc: 'NL', live: true, center: true },
+  { name: 'us-retail-qa', flag: '🇺🇸', cc: 'US', live: true, center: false },
+  { name: 'jp-market', flag: '🇯🇵', cc: 'JP', live: false, center: false },
+];
+---
+
+<BaseLayout
+  title="How it works"
+  description="The whole product in three steps, no code anywhere: pick an iPhone profile, start a session in the cloud, and drive it yourself or in plain English."
+>
+  <PageHero
+    label="How it works"
+    title="Pick a profile. Start a session. Drive it your way."
+    lead="The whole product in three steps — and not a line of code anywhere on this page. Five minutes here and the rest of the site reads itself."
+  />
+
+  <Section
+    label="Three words first"
+    title="Learn three words and everything else makes sense."
+  >
+    <div class="mt-10 grid gap-5 md:grid-cols-3">
+      <div class="panel">
+        <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Profile</p>
+        <p class="mt-3 text-sm leading-7 text-tk-ink-2">
+          A <strong class="text-tk-ink">saved iPhone identity</strong> that
+          keeps its logins and history. Close it tonight, open it tomorrow —
+          to a website it's the same phone coming back, not a stranger.
+        </p>
+      </div>
+      <div class="panel">
+        <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Session</p>
+        <p class="mt-3 text-sm leading-7 text-tk-ink-2">
+          A profile, running live — a real iPhone browser in the cloud with
+          that identity loaded. <strong class="text-tk-ink">Concurrent</strong>
+          means sessions running at the same time — think browser tabs — and
+          it's the one number plans are priced on.
+        </p>
+      </div>
+      <div class="panel">
+        <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Proxy</p>
+        <p class="mt-3 text-sm leading-7 text-tk-ink-2">
+          Your session's <strong class="text-tk-ink">own internet exit</strong>.
+          Attach one per profile and that phone browses from its own corner of
+          the world — Amsterdam, New York, Tokyo — instead of from a data
+          center.
+        </p>
+      </div>
+    </div>
+    <p class="mt-8 text-sm text-tk-ink-3">
+      Every other term on this site is one honest paragraph away in the
+      <a href="/glossary" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">glossary</a>.
+    </p>
+  </Section>
+
+  <Section
+    label="The three steps"
+    title="From nothing to a live iPhone, in minutes."
+  >
+    <div class="mt-10 grid gap-6 md:grid-cols-3">
+      <Card title="Pick an iPhone profile">
+        <IconTile slot="icon"><span class="font-mono text-base font-semibold">1</span></IconTile>
+        Start with the default iPhone, or create your own. Make one per
+        account, per client, or per job. Each profile remembers its logins,
+        cookies, and history across every run — set it up once, and it stays
+        set up.
+      </Card>
+      <Card title="Start a session">
+        <IconTile slot="icon"><span class="font-mono text-base font-semibold">2</span></IconTile>
+        One click in the desktop app and a real iPhone browser opens in the
+        cloud, ready in seconds. No hardware to buy, nothing to install, no
+        setup wizard — the phone appears in its own window, already being the
+        profile you picked.
+      </Card>
+      <Card title="Drive it your way">
+        <IconTile slot="icon"><span class="font-mono text-base font-semibold">3</span></IconTile>
+        Tap, scroll, and type yourself, like any phone. When a task is
+        repetitive, describe it in plain English and the agent drives while
+        you watch. And if your team writes code, the same sessions can be
+        driven from it — that story lives on the
+        <a href="/use-cases/qa-testing" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">QA page</a>.
+      </Card>
+    </div>
+  </Section>
+
+  <Section
+    label="The cockpit"
+    title="One window for the whole fleet."
+    lead="The desktop app keeps every iPhone one click away. Here's the shape of it — each profile is a little phone card that tells you at a glance whether it's live, and where in the world it exits."
+  >
+    <div class="mt-10 grid gap-10 md:grid-cols-2 md:items-center">
+      <!-- Compact fleet strip — the homepage's phone-framed card idiom,
+           reduced to three cards. Static mockup, no live-session claim. -->
+      <div class="flex items-start justify-center gap-3">
+        {
+          walkthroughProfiles.map((p) => (
+            <div class="w-[104px] shrink-0 sm:w-[118px]">
+              <div
+                class={`overflow-hidden rounded-[16px] p-[3px] ${p.center ? 'ring-1 ring-tk-accent shadow-glow-accent' : 'ring-1 ring-tk-border'}`}
+                style="background: linear-gradient(160deg, #161b24, #0a0e14);"
+              >
+                <div class="flex items-center gap-1 rounded-t-[13px] bg-[#1d1e24] px-1.5 py-1">
+                  <span class="truncate font-sans text-[7px] font-semibold text-white/85">
+                    {p.name}
+                  </span>
+                  <span
+                    class={`ml-auto flex shrink-0 items-center gap-0.5 text-[6px] font-bold uppercase ${p.live ? 'text-tk-ready' : 'text-tk-ink-3'}`}
+                  >
+                    {p.live ? (
+                      <span class="live-dot h-1 w-1 rounded-full bg-tk-ready" />
+                    ) : (
+                      <span class="h-1 w-1 rounded-full border border-tk-ink-3" />
+                    )}
+                    {p.live ? 'Live' : 'Idle'}
+                  </span>
+                </div>
+                <div class="relative aspect-[9/13] overflow-hidden rounded-b-[13px] bg-black">
+                  <div class="absolute left-1/2 top-1 z-10 h-1.5 w-6 -translate-x-1/2 rounded-full bg-black ring-1 ring-white/10" />
+                  {p.live ? (
+                    <div class="absolute inset-0 flex flex-col bg-gradient-to-b from-white to-slate-100 pt-3.5">
+                      <div class="mx-1 h-4 rounded-sm bg-gradient-to-br from-slate-800 to-slate-600" />
+                      <div class="mx-1 mt-1 grid grid-cols-2 gap-0.5">
+                        <div class="h-3 rounded-sm bg-white ring-1 ring-slate-200" />
+                        <div class="h-3 rounded-sm bg-white ring-1 ring-slate-200" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div class="absolute inset-0 bg-tk-bg" />
+                  )}
+                  <div class="absolute bottom-1 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/60 px-1 font-mono text-[6px] text-white/80">
+                    {p.flag} {p.cc}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+      <div class="space-y-4 text-base leading-7 text-tk-ink-2">
+        <p>
+          Profiles live in folders — by client, by region, by job — with tags
+          for anything folders don't cover. A green
+          <strong class="text-tk-ready">Live</strong> dot means that phone is
+          running right now; the flag says where it exits. Click a card and
+          the session pops out into its own floating device window, so two
+          accounts sit side by side without sharing anything.
+        </p>
+        <p>
+          When a task is repetitive — check these listings, fill this form,
+          collect these screenshots — type what you want in plain English and
+          the agent drives while you watch. You can take over any time,
+          mid-task, with a click.
+        </p>
+      </div>
+    </div>
+  </Section>
+
+  <CtaBand
+    title="Try the whole loop in five minutes."
+    lead="The free tier is the tour: one profile, 20-minute sessions, no card required. Pick a profile, start a session, drive it — and decide on your own terms."
+    primaryHref="/pricing#free"
+    primaryLabel="Start free"
+    secondaryHref="/pricing"
+    secondaryLabel="See pricing"
+  />
+</BaseLayout>

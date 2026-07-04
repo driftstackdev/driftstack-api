@@ -16,9 +16,12 @@
 //
 // Header:
 //   • V-133 mobile-responsive framing pinned in comment.
-//   • 5 desktop navItems in canonical order: Pricing / Compare /
-//     Self-hosted / FAQ / Docs(external).
-//   • mobileExtraItems is now an empty array (F-3).
+//   • 6 desktop navItems in canonical order (S14 nav rework
+//     2026-07-03, D8): How it works / Use cases / Pricing / Compare /
+//     FAQ / Docs(external). Self-hosted left the desktop roster —
+//     footer Product column carries it on desktop.
+//   • mobileExtraItems: Self-hosted + Glossary (S14 — mobile users
+//     keep those paths). Never /roadmap (F-3 / Issue 5).
 //   • V-219* D-badge + lowercase font-mono "driftstack".
 //   • "Sign in" link to https://app.driftstack.dev/login.
 //   • "Start free" btn-primary to /pricing#free.
@@ -68,21 +71,30 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     );
   });
 
-  it('5 desktop navItems pinned in canonical order (Pricing / Compare / Self-hosted / FAQ / Docs[external])', () => {
+  it('6 desktop navItems pinned in canonical order (S14 nav rework 2026-07-03: How it works / Use cases / Pricing / Compare / FAQ / Docs[external]; Self-hosted → footer Product column)', () => {
     const block = body.match(/const navItems = \[([\s\S]+?)\];/);
     expect(block).not.toBeNull();
-    expect(body).toMatch(/\{ href: '\/pricing', label: 'Pricing' \}/);
-    expect(body).toMatch(/\{ href: '\/comparison', label: 'Compare' \}/);
-    expect(body).toMatch(/\{ href: '\/self-hosted', label: 'Self-hosted' \}/);
-    expect(body).toMatch(/\{ href: '\/faq', label: 'FAQ' \}/);
-    expect(body).toMatch(
-      /\{ href: 'https:\/\/docs\.driftstack\.dev', label: 'Docs', external: true \}/,
-    );
+    const navBlock = block![1]!;
+    const order = [
+      "{ href: '/how-it-works', label: 'How it works' },",
+      "{ href: '/use-cases', label: 'Use cases' },",
+      "{ href: '/pricing', label: 'Pricing' },",
+      "{ href: '/comparison', label: 'Compare' },",
+      "{ href: '/faq', label: 'FAQ' },",
+      "{ href: 'https://docs.driftstack.dev', label: 'Docs', external: true },",
+    ];
+    let lastIdx = -1;
+    for (const item of order) {
+      const idx = navBlock.indexOf(item);
+      expect(idx, `nav item missing or out of order: ${item}`).toBeGreaterThan(lastIdx);
+      lastIdx = idx;
+    }
+    expect(navBlock).not.toContain("{ href: '/self-hosted'");
   });
 
-  it('mobileExtraItems: empty array (F-3 — /roadmap removed per Issue 5)', () => {
+  it('mobileExtraItems: Self-hosted + Glossary (S14 — mobile keeps the paths that left/never had a desktop slot; /roadmap stays banned per F-3 Issue 5)', () => {
     expect(body).toMatch(
-      /const mobileExtraItems: Array<\{ href: string; label: string \}> = \[\];/,
+      /const mobileExtraItems: Array<\{ href: string; label: string \}> = \[\s*\n?\s*\{ href: '\/self-hosted', label: 'Self-hosted' \},\s*\n?\s*\{ href: '\/glossary', label: 'Glossary' \},\s*\n?\s*\];/,
     );
     expect(body).not.toMatch(/\{ href: '\/roadmap', label: 'Roadmap' \}/);
   });

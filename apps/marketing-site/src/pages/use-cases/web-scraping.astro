@@ -1,0 +1,132 @@
+---
+// /use-cases/web-scraping (2026-07-03, S14 / D8) — persona page for
+// data teams. Claim register: homepage §4 card ("See what iPhone users
+// see" / mobile-vs-desktop divergence / no please-use-our-app
+// redirects), §6 proof section ("One iPhone among millions", costume
+// metaphor, population-stable hashes — reused verbatim in spirit, no
+// new percentages or scale claims), §8 SDK trio. AUP discipline: the
+// scraping boundary is named plainly with the /legal/aup link —
+// capability description, never encouragement.
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHero from '../../components/PageHero.astro';
+import Section from '../../components/Section.astro';
+import Stat from '../../components/Stat.astro';
+import FaqList from '../../components/FaqList.astro';
+import CtaBand from '../../components/CtaBand.astro';
+import { FAQ_GROUPS } from '../../data/faq';
+
+// The two FAQ groups data teams read before switching: how migration
+// from the Chromium vendors works, and where the acceptable-use line is.
+const faqGroups = FAQ_GROUPS.filter((g) =>
+  ['Migrating from another vendor', 'Acceptable use'].includes(g.title),
+);
+---
+
+<BaseLayout
+  title="Mobile web data collection"
+  description="Many sites serve mobile Safari different content than desktop Chrome. Driftstack collectors are real iPhone Safari sessions, so you gather what an iPhone visitor actually sees."
+>
+  <PageHero
+    label="Use cases · Data teams"
+    title="See what iPhone users see."
+    lead="Many sites serve mobile Safari a different site than desktop Chrome — different layouts, different flows, different content. If your collector isn't an iPhone, you're not collecting what iPhone users get."
+  />
+
+  <Section
+    label="The problem"
+    title="The mobile web is a different web."
+  >
+    <div class="mt-8 max-w-prose space-y-5 text-base leading-7 text-tk-ink-2">
+      <p>
+        Point a desktop collector at a mobile-first site and you get the
+        desktop version — or worse, a "please use our app" interstitial
+        instead of the page. Fake the phone's user-agent string and you get
+        the next problem: detection. Websites have gotten very good at
+        spotting a desktop browser wearing a phone costume, because the
+        disguise only covers the surfaces a stealth plugin remembered to
+        paint.
+      </p>
+      <p>
+        Driftstack doesn't wear a costume. Every session runs the browser
+        Apple ships on the iPhone, so what your collector sees is what an
+        iPhone visitor would see — the mobile layout, the mobile flow, no
+        app-steering redirects.
+      </p>
+    </div>
+  </Section>
+
+  <Section
+    label="Why it holds up"
+    title="One iPhone among millions."
+    lead="Detection systems read hundreds of small signals. Driftstack sessions return the real iPhone value on every one of them — so your session lands in the iPhone bucket with millions of others."
+  >
+    <div class="mt-10 grid gap-4 sm:grid-cols-3">
+      <Stat
+        plain="Looks human to every website"
+        technical="Canvas + WebGL hashes match the real-iPhone population — not unique-per-session like every other API"
+      />
+      <Stat
+        plain="Stable across sessions"
+        technical="Hash uniqueness: population-stable, where stealth Chromium reads 100% unique"
+      />
+      <Stat
+        plain="Any country you need"
+        technical="Bring your own proxy or VPN, attached per profile — locale and timezone follow the exit"
+      />
+    </div>
+    <p class="mt-8 max-w-prose text-sm leading-6 text-tk-ink-3">
+      The signal-by-signal detail — what a detector measures and what each
+      side returns — is on the
+      <a href="/comparison" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">comparison page</a>.
+    </p>
+  </Section>
+
+  <Section
+    label="Which plan"
+    title="Collectors are code — take the API ladder."
+    lead="Drive sessions from the TypeScript, Python, or Go SDK — or any HTTP client — with structured actions: navigate, interact, capture, extract. One concurrent cap, unmetered hours inside it."
+  >
+    <div class="mt-8 flex flex-wrap items-center gap-4">
+      <a href="/pricing#api" class="btn-secondary">See API pricing →</a>
+      <p class="text-sm text-tk-ink-3">
+        Migrating from a Chromium vendor? The FAQ below covers what changes.
+      </p>
+    </div>
+    <p class="mt-8 max-w-prose text-sm leading-6 text-tk-ink-3">
+      Collect responsibly: the
+      <a href="/legal/aup" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">Acceptable Use Policy</a>
+      draws the line in plain words — market research and price monitoring
+      are what this page is about; scraping that bypasses authentication or
+      reasonable rate limits is not allowed.
+    </p>
+  </Section>
+
+  <Section
+    label="Questions data teams ask"
+    title="Before you switch — asked and answered."
+  >
+    <div class="mt-10 space-y-12">
+      {
+        faqGroups.map((group) => (
+          <div>
+            <h3 class="text-xl font-semibold tracking-tight text-tk-ink">{group.title}</h3>
+            <FaqList entries={group.entries} class="mt-5" />
+          </div>
+        ))
+      }
+    </div>
+    <p class="mt-8 text-sm text-tk-ink-3">
+      Everything else is on the
+      <a href="/faq" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">full FAQ</a>.
+    </p>
+  </Section>
+
+  <CtaBand
+    title="Collect the web your users actually see."
+    lead="Run a free manual session next to your current vendor and compare the output on your own flows — no card required."
+    primaryHref="/pricing#free"
+    primaryLabel="Start free"
+    secondaryHref="/pricing#api"
+    secondaryLabel="See API pricing"
+  />
+</BaseLayout>
