@@ -49,11 +49,11 @@ describe('W792 docs/public configs + cross-app brand-SVG parity', () => {
     expect(p).toMatch(/3\. Crawler artefacts \(1h\)/);
   });
 
-  it("CRITICAL Cloudflare Pages first-match-wins + ordering-matters framing pinned. The 'Cloudflare Pages copies public/_headers verbatim into the deploy and applies these per-path. First match wins; ordering matters. More-specific patterns above broader ones' wording is the canonical config-rule explanation.", () => {
+  it("CRITICAL Cloudflare Pages header-merge semantics framing pinned (S17 2026-07-04 CORRECTION: the prior 'first match wins' claim was FALSE — measured live, ALL matching rules apply and broad matches merge onto specific ones, which is why the /* catch-all must never carry Cache-Control).", () => {
     const p = read(DOCS_HEADERS);
 
     expect(p).toMatch(
-      /Cloudflare Pages copies public\/_headers verbatim into the deploy and\s*\n#\s+applies these per-path\. First match wins; ordering matters\. More-\s*\n#\s+specific patterns above broader ones\./,
+      /Cloudflare Pages copies public\/_headers verbatim into the deploy and\s*\n#\s+applies these per-path\. ⚠️ ALL matching rules apply and later\/broad\s*\n#\s+matches MERGE onto earlier ones \(there is no first-match-wins\) — so\s*\n#\s+the `\/\*` catch-all must never set Cache-Control\. More-\s*\n#\s+specific patterns above broader ones\./,
     );
   });
 

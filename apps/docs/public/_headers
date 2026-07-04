@@ -7,7 +7,9 @@
 #   3. Crawler artefacts (1h)                — robots.txt, sitemaps
 #
 # Cloudflare Pages copies public/_headers verbatim into the deploy and
-# applies these per-path. First match wins; ordering matters. More-
+# applies these per-path. ⚠️ ALL matching rules apply and later/broad
+# matches MERGE onto earlier ones (there is no first-match-wins) — so
+# the `/*` catch-all must never set Cache-Control. More-
 # specific patterns above broader ones.
 #
 # Format reference:
@@ -73,8 +75,12 @@
 # Catch-all for HTML pages — Cloudflare Pages serves /pricing/index.html
 # at /pricing, /faq/index.html at /faq, etc. The `/*` pattern
 # (last-resort) covers any HTML response not already matched.
+# ⚠️ SECURITY HEADERS ONLY on the catch-all: CF Pages merges `/*` headers
+# onto every path — a Cache-Control here silently degrades all the
+# immutable asset tiers above to the ~4h zone TTL (measured live on the
+# marketing site 2026-07-04; same bug existed here). Non-home HTML takes
+# the zone default; the edge is purged on every deploy.
 /*
-  Cache-Control: public, max-age=300, s-maxage=86400, stale-while-revalidate=86400
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

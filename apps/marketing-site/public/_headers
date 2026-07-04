@@ -7,7 +7,9 @@
 #   3. Crawler artefacts (1h)                — robots.txt, sitemaps
 #
 # Cloudflare Pages copies public/_headers verbatim into the deploy and
-# applies these per-path. First match wins; ordering matters. More-
+# applies these per-path. ⚠️ ALL matching rules apply and later/broad
+# matches MERGE onto earlier ones (there is no first-match-wins) — so
+# the `/*` catch-all must never set Cache-Control. More-
 # specific patterns above broader ones.
 #
 # Format reference:
@@ -81,11 +83,17 @@
 /index.html
   Cache-Control: public, max-age=300, s-maxage=86400, stale-while-revalidate=86400
 
-# Catch-all for HTML pages — Cloudflare Pages serves /pricing/index.html
-# at /pricing, /faq/index.html at /faq, etc. The `/*` pattern
-# (last-resort) covers any HTML response not already matched.
+# Catch-all — SECURITY HEADERS ONLY (matches the customer-dashboard
+# pattern). ⚠️ Deliberately NO Cache-Control here: CF Pages does not give
+# earlier, more-specific rules precedence — a Cache-Control on `/*` merges
+# into EVERY response, so the immutable asset tiers above never took
+# effect (measured 2026-07-04: /_astro/* hashed assets, fonts, and og
+# cards all served browser max-age=14400 instead of 1y; Lighthouse
+# flagged the ~180 KiB font re-download). HTML pages other than `/` now
+# take the zone-default browser TTL (~4h) — acceptable for a static
+# marketing site whose edge cache is purged on every deploy; the
+# homepage keeps its explicit 5-min rule above.
 /*
-  Cache-Control: public, max-age=300, s-maxage=86400, stale-while-revalidate=86400
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

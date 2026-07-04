@@ -12,8 +12,10 @@
 //     immutable.
 //   • Crawler-artefact tier: /robots.txt + /sitemap-index.xml +
 //     /sitemap-*.xml — 1h max-age.
-//   • Marketing-pages tier: / + /index.html + /* — 5m max-age + 1d
-//     s-maxage + 1d stale-while-revalidate.
+//   • Marketing-pages tier: / + /index.html ONLY — 5m max-age + 1d
+//     s-maxage + 1d SWR. The /* catch-all is security-headers-only
+//     (S17 2026-07-04: CF merges /* onto every path; a Cache-Control
+//     there silently degraded all immutable tiers — measured live).
 //   • Security headers on HTML responses: X-Frame-Options: DENY +
 //     X-Content-Type-Options: nosniff + Referrer-Policy:
 //     strict-origin-when-cross-origin.
@@ -34,7 +36,7 @@ function read(p: string): string {
 describe('W523.C apps/marketing-site/public/_headers content parity', () => {
   const body = read(LIB);
 
-  it("V-221 framing + 3-tier-strategy framing pinned: 'V-221 — Cloudflare Pages cache headers for the marketing site.' + 'Strategy in detail at docs/deployment/cdn-strategy.md.' + 'Three tiers:' + '1. Hashed assets (immutable, 1y)        — /_astro/*, fonts, images' + '2. Marketing pages (medium, 5m / 1d edge) — html' + '3. Crawler artefacts (1h)                — robots.txt, sitemaps' + 'Cloudflare Pages copies public/_headers verbatim into the deploy and applies these per-path. First match wins; ordering matters. More-specific patterns above broader ones.' + 'Format reference: https://developers.cloudflare.com/pages/configuration/headers/' — pinned so the V-221 anchor + 3-tier-cache-strategy + first-match-wins + Cloudflare-Pages-format-reference commitment survives", () => {
+  it("V-221 framing + 3-tier-strategy framing pinned: 'V-221 — Cloudflare Pages cache headers for the marketing site.' + 'Strategy in detail at docs/deployment/cdn-strategy.md.' + 'Three tiers:' + '1. Hashed assets (immutable, 1y)        — /_astro/*, fonts, images' + '2. Marketing pages (medium, 5m / 1d edge) — html' + '3. Crawler artefacts (1h)                — robots.txt, sitemaps' + 'Cloudflare Pages copies public/_headers verbatim into the deploy and applies these per-path. ALL matching rules MERGE — no first-match-wins (S17 2026-07-04 correction; measured live).' + 'Format reference: https://developers.cloudflare.com/pages/configuration/headers/' — pinned so the V-221 anchor + 3-tier-cache-strategy + merge-semantics + Cloudflare-Pages-format-reference commitment survives", () => {
     expect(body).toMatch(/# V-221 — Cloudflare Pages cache headers for the marketing site\./);
     expect(body).toMatch(/# Strategy in detail at docs\/deployment\/cdn-strategy\.md\./);
     expect(body).toMatch(/# Three tiers:/);
@@ -44,7 +46,7 @@ describe('W523.C apps/marketing-site/public/_headers content parity', () => {
     expect(body).toMatch(/# {3}2\. Marketing pages \(medium, 5m \/ 1d edge\) — html/);
     expect(body).toMatch(/# {3}3\. Crawler artefacts \(1h\) {16}— robots\.txt, sitemaps/);
     expect(body).toMatch(
-      /# Cloudflare Pages copies public\/_headers verbatim into the deploy and\s*\n?\s*# applies these per-path\. First match wins; ordering matters\. More-\s*\n?\s*# specific patterns above broader ones\./,
+      /# Cloudflare Pages copies public\/_headers verbatim into the deploy and\s*\n?\s*# applies these per-path\. ⚠️ ALL matching rules apply and later\/broad\s*\n?\s*# matches MERGE onto earlier ones \(there is no first-match-wins\) — so\s*\n?\s*# the `\/\*` catch-all must never set Cache-Control\. More-\s*\n?\s*# specific patterns above broader ones\./,
     );
     expect(body).toMatch(
       /#\s+https:\/\/developers\.cloudflare\.com\/pages\/configuration\/headers\//,
@@ -95,7 +97,7 @@ describe('W523.C apps/marketing-site/public/_headers content parity', () => {
     expect(body).toMatch(/^ {2}Cache-Control: public, max-age=3600$/m);
   });
 
-  it("Marketing-pages tier + 5m/1d/1d-SWR framing pinned: '── Marketing pages (HTML) ──' section + '5min in the customer's browser, 1d at the edge, 1d stale-while-revalidate. Means: customers see fresh-ish content (max 5min stale on a return visit), edge keeps a hot copy for 24h, and during a re-fetch the edge can serve stale-but-fresh while revalidating in the background. Optimised for \"we deploy a few times a week and want fast page loads in between.\"' + 3-path (/ + /index.html + /*) + 'Cache-Control: public, max-age=300, s-maxage=86400, stale-while-revalidate=86400' — pinned so the 5m-max-age + 1d-s-maxage + 1d-SWR + 3-html-path commitment survives", () => {
+  it("Marketing-pages tier + 5m/1d/1d-SWR framing pinned: '── Marketing pages (HTML) ──' section + 2-path (/ + /index.html) + 'Cache-Control: public, max-age=300, s-maxage=86400, stale-while-revalidate=86400'. S17 2026-07-04: the tier is 2-path, NOT 3 — the `/*` catch-all must never carry Cache-Control (CF Pages merges `/*` headers onto EVERY path, which silently degraded all immutable asset tiers to the ~4h zone TTL; measured live). Non-home HTML takes the zone default; the edge is purged on every deploy", () => {
     expect(body).toMatch(/# ── Marketing pages \(HTML\) ──/);
     expect(body).toMatch(
       /# 5min in the customer's browser, 1d at the edge, 1d\s*\n?\s*# stale-while-revalidate\. Means: customers see fresh-ish content \(max\s*\n?\s*# 5min stale on a return visit\), edge keeps a hot copy for 24h, and\s*\n?\s*# during a re-fetch the edge can serve stale-but-fresh while\s*\n?\s*# revalidating in the background\. Optimised for "we deploy a few\s*\n?\s*# times a week and want fast page loads in between\."/,
@@ -106,11 +108,15 @@ describe('W523.C apps/marketing-site/public/_headers content parity', () => {
     expect(body).toMatch(
       /^ {2}Cache-Control: public, max-age=300, s-maxage=86400, stale-while-revalidate=86400$/m,
     );
+    // the catch-all block must stay Cache-Control-free: from the /* line to
+    // the end of file, no Cache-Control may appear
+    const catchAll = body.slice(body.lastIndexOf('\n/*\n'));
+    expect(catchAll).not.toMatch(/Cache-Control/);
   });
 
-  it("Catch-all /* + security-header framing pinned: 'Catch-all for HTML pages — Cloudflare Pages serves /pricing/index.html at /pricing, /faq/index.html at /faq, etc. The `/*` pattern (last-resort) covers any HTML response not already matched.' + X-Frame-Options: DENY + X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin + Permissions-Policy (sensor/payment deny) — pinned so the catch-all-HTML-coverage + 4-security-header commitment survives (drift to dropping any security header would weaken the marketing-site security posture)", () => {
+  it("Catch-all /* — SECURITY HEADERS ONLY (S17 2026-07-04, matches the customer-dashboard pattern; the prior 'Catch-all for HTML pages' Cache-Control was the bug that defeated every immutable tier): X-Frame-Options: DENY + X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin + Permissions-Policy (sensor/payment deny) — pinned so the 4-security-header commitment survives (drift to dropping any security header would weaken the marketing-site security posture)", () => {
     expect(body).toMatch(
-      /# Catch-all for HTML pages — Cloudflare Pages serves \/pricing\/index\.html\s*\n?\s*# at \/pricing, \/faq\/index\.html at \/faq, etc\. The `\/\*` pattern\s*\n?\s*# \(last-resort\) covers any HTML response not already matched\./,
+      /# Catch-all — SECURITY HEADERS ONLY \(matches the customer-dashboard\s*\n?\s*# pattern\)\./,
     );
     expect(body).toMatch(/^ {2}X-Frame-Options: DENY$/m);
     expect(body).toMatch(/^ {2}X-Content-Type-Options: nosniff$/m);
