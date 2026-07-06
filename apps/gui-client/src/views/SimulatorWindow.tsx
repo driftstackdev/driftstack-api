@@ -151,6 +151,24 @@ function isBlankTabUrl(url: string): boolean {
   const normalized = url.replace(/\/$/, '');
   return normalized === 'https://driftstack.dev/newtab';
 }
+/** #135 — normalize a URL for nav-target comparison (drop trailing slash + fragment,
+ *  lowercase), so a box page_state 'errored'/'loaded' frame can be matched to the
+ *  current navigation target despite trailing-slash / case / #hash differences. A3
+ *  confirmed page_state.errored is emitted ONLY for a MAIN-FRAME nav failure and
+ *  carries the failing url — so matching the frame's url against the current target
+ *  drops a STALE 'errored' from a page the operator already navigated away from (the
+ *  founder's repeated "PAGE FAILED TO LOAD" on an open, fine page). Empty ⇒ untracked. */
+function normalizeNavUrl(url: unknown): string {
+  if (typeof url !== 'string' || url.trim().length === 0) return '';
+  const raw = url.trim();
+  try {
+    const p = new URL(raw);
+    p.hash = '';
+    return p.toString().replace(/\/$/, '').toLowerCase();
+  } catch {
+    return raw.replace(/[/#]+$/, '').toLowerCase();
+  }
+}
 /** The branded new-tab page hard-depends on driftstack.dev being reachable THROUGH the
  *  customer proxy — a geo-block / CF challenge / marketing outage makes the box report
  *  it 'errored'. A blank new tab must never read as a navigation FAILURE (about:blank
@@ -3196,6 +3214,14 @@ export function SimulatorWindow(): JSX.Element {
   // set true when a 'loaded' frame arrives. A ref (not state): the data-channel + poll
   // callbacks read it synchronously and it must never itself trigger a re-render.
   const pageReachedLoadedRef = useRef(false);
+  // #135 — the current top-level nav target (normalized), so a stale/superseded
+  // page_state frame from a DIFFERENT page can't drive the load-gate or error overlay.
+  // Set on an operator navigate + on each box 'loading' frame (which tracks link-clicks
+  // + redirects the box commits to); '' = untracked (then we don't over-suppress).
+  // Honor 'errored' + set 'loaded' ONLY when the frame's url matches this (or ''). Kills
+  // the founder's stale "PAGE FAILED TO LOAD" over a working page AND the inverse
+  // (a stale 'loaded' from the old page suppressing a real new-page failure — audit #2).
+  const currentNavTargetRef = useRef<string>('');
   // Browser-style page TABS (doc-150 item 4; locked A2↔A3 contract). The GUI owns the
   // tab model; each tab is a page the harness keeps a renderer for, and `activeTabId`
   // is the one currently published into the video. We seed exactly one tab on mount so
@@ -3377,6 +3403,9 @@ export function SimulatorWindow(): JSX.Element {
     // #72 — a switched-to / freshly-opened tab is a new navigation; until IT reaches
     // 'loaded', an 'errored' frame is a real top-level failure (so re-arm the gate).
     pageReachedLoadedRef.current = false;
+    // #135 — untrack the nav target on a switch; the new tab's next box 'loading' frame
+    // sets it (until then '' ⇒ don't over-suppress its first real failure).
+    currentNavTargetRef.current = '';
     clearLoadWatchdog();
   }, []);
   useEffect(() => {
@@ -3613,24 +3642,31 @@ export function SimulatorWindow(): JSX.Element {
           lastDataChannelStateAtRef.current = Date.now();
           applyStalledState(msg.state === 'stalled');
         }
-        // #72 — track when THIS navigation reaches a painted 'loaded' state. A later
-        // 'errored' after that is a sub-resource / late-request failure, not a
-        // top-level nav failure → it must NOT pop the full-screen overlay (which would
-        // nuke a working page + invite a "Try again" full refresh).
-        if (msg.state === 'loaded' && !isNewTabLoadError(msg.url)) {
+        // #72 + #135 — track when the CURRENT navigation reaches 'loaded'. navTargetOk
+        // gates on the frame's url matching the current nav target so a STALE 'loaded'
+        // from a page the operator already left can't flip the gate (which would then
+        // suppress the NEW page's real failure — audit #2). '' target ⇒ untracked → we
+        // don't over-suppress (fall back to the #72 loaded-gate alone).
+        const navTargetOk =
+          currentNavTargetRef.current === '' ||
+          normalizeNavUrl(msg.url) === currentNavTargetRef.current;
+        if (msg.state === 'loaded' && !isNewTabLoadError(msg.url) && navTargetOk) {
           pageReachedLoadedRef.current = true;
         }
         // W616 — a page-NAVIGATION error: surface the per-kind error overlay (the
         // failure must not read as a blank successful load). Any other harness
         // state means the page is loading/loaded/responsive → clear it.
         if (isHarnessState) {
-          // #72 — only honor 'errored' as a REAL navigation failure BEFORE the page
-          // ever loaded. Once loaded, suppress it (late sub-resource error) — keep the
-          // working page on screen, no overlay, no refresh.
+          // #72 — honor 'errored' as a REAL failure only BEFORE the page loaded; #135 —
+          // AND only when the frame is for the CURRENT nav target (drop a STALE 'errored'
+          // from a superseded page = the founder's false "PAGE FAILED TO LOAD" over a
+          // working, open page). A3 confirmed errored is main-frame-only, so url-match
+          // never hides a real sub-resource-vs-toplevel distinction.
           if (
             msg.state === 'errored' &&
             !isNewTabLoadError(msg.url) &&
-            !pageReachedLoadedRef.current
+            !pageReachedLoadedRef.current &&
+            navTargetOk
           ) {
             setPageError(typeof msg.error === 'object' && msg.error !== null ? msg.error : {});
           } else {
@@ -3638,6 +3674,26 @@ export function SimulatorWindow(): JSX.Element {
             // through the proxy, OR a late post-load sub-resource error (#72) → clear/
             // never show the hard error (keep the page that already opened).
             setPageError(null);
+          }
+        }
+        // #135 — the box committing to a 'loading' of a url IS the current nav target
+        // (covers link-clicks + redirects the operator never typed). Track it so the
+        // following 'loaded'/'errored' for THAT page matches, while a stale frame from a
+        // page already left does not.
+        if (
+          isHarnessState &&
+          msg.state === 'loading' &&
+          typeof msg.url === 'string' &&
+          msg.url.length > 0 &&
+          !isNewTabLoadError(msg.url)
+        ) {
+          const norm = normalizeNavUrl(msg.url);
+          if (norm !== currentNavTargetRef.current) {
+            // a NEW top-level page the box committed to (a link-click / redirect the
+            // operator never typed) → re-arm the load-gate so THIS page's real failure
+            // can surface (the gate otherwise only reset on operator navigate/switch).
+            currentNavTargetRef.current = norm;
+            pageReachedLoadedRef.current = false;
           }
         }
         const loading = isHarnessState ? msg.state === 'loading' : msg.loading;
@@ -3736,10 +3792,28 @@ export function SimulatorWindow(): JSX.Element {
           const liveFrameFresh =
             Date.now() - lastDataChannelStateAtRef.current < PAGE_STATE_GRACE_MS;
           if (!liveFrameFresh) applyStalledState(ps.state === 'stalled');
+          // #135 — mirror the data-channel: a 'loading' poll tracks the current nav
+          // target; the loaded/errored gates match against it so a stale poll frame from
+          // a page already left can't drive the overlay / load-gate.
+          if (
+            ps.state === 'loading' &&
+            typeof ps.url === 'string' &&
+            ps.url.length > 0 &&
+            !isNewTabLoadError(ps.url)
+          ) {
+            const pnorm = normalizeNavUrl(ps.url);
+            if (pnorm !== currentNavTargetRef.current) {
+              currentNavTargetRef.current = pnorm;
+              pageReachedLoadedRef.current = false; // #135 — new box-driven page → re-arm gate
+            }
+          }
+          const pollNavTargetOk =
+            currentNavTargetRef.current === '' ||
+            normalizeNavUrl(ps.url) === currentNavTargetRef.current;
           // #72 — same painted-'loaded' gate as the data-channel path: once this
           // navigation has loaded, a later 'errored' poll is a sub-resource failure,
           // not a top-level nav failure → don't pop the overlay over a working page.
-          if (ps.state === 'loaded' && !isNewTabLoadError(ps.url)) {
+          if (ps.state === 'loaded' && !isNewTabLoadError(ps.url) && pollNavTargetOk) {
             pageReachedLoadedRef.current = true;
           }
           // W616 — surface/clear the page-navigation error from the poll too (same
@@ -3747,7 +3821,10 @@ export function SimulatorWindow(): JSX.Element {
           // the page ever loaded (#72), any other state clears it. A blank new-tab
           // whose branded page couldn't load through the proxy is graceful (no overlay).
           setPageError((prev) =>
-            ps.state === 'errored' && !isNewTabLoadError(ps.url) && !pageReachedLoadedRef.current
+            ps.state === 'errored' &&
+            !isNewTabLoadError(ps.url) &&
+            !pageReachedLoadedRef.current &&
+            pollNavTargetOk
               ? // #7 — within the post-navigate / post-switch grace window a stale
                 // 'errored' from the un-correlated store must NOT re-raise the overlay
                 // the operator just dismissed (keep `prev`); the live data-channel push
@@ -4365,6 +4442,7 @@ export function SimulatorWindow(): JSX.Element {
     // (bad proxy / dead start URL / DNS — box emits 'errored' before any 'loaded')
     // would be SUPPRESSED as a "late sub-resource error" → reads as a blank success.
     pageReachedLoadedRef.current = false;
+    currentNavTargetRef.current = ''; // #135 — untrack; the new session's first box frame sets it
     // Drop the prior session's cookies/downloads so the new session doesn't briefly
     // render the OLD session's jar (the retain-refs would otherwise hold them through
     // the new session's first transient tick).
@@ -5085,6 +5163,9 @@ export function SimulatorWindow(): JSX.Element {
     // reaches 'loaded', an 'errored' frame is a real failure worth the overlay (after
     // it loads, a later 'errored' is a sub-resource failure and stays suppressed).
     pageReachedLoadedRef.current = false;
+    // #135 — this typed url is the new current nav target; a stale 'errored' for the
+    // page we just left will no longer match → no false "PAGE FAILED TO LOAD".
+    currentNavTargetRef.current = normalizeNavUrl(url);
     lastNavAtRef.current = Date.now();
     clearLoadWatchdog();
     loadWatchdogRef.current = window.setTimeout(() => {
@@ -5110,6 +5191,9 @@ export function SimulatorWindow(): JSX.Element {
     // sub-resource error after it loads stays suppressed. Clear any stale overlay too.
     setPageError(null);
     pageReachedLoadedRef.current = false;
+    // #135 — history nav's target is box-determined; untrack, the box's next 'loading'
+    // frame for the resulting page sets it.
+    currentNavTargetRef.current = '';
     lastNavAtRef.current = Date.now();
     // Finding #2 — back/forward is enabled (BACK_FORWARD_ENABLED) but gave zero loading
     // feedback, so a click read as a dead button (and a cached/instant step never lit
