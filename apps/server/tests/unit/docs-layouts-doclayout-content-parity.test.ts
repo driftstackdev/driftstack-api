@@ -1,6 +1,9 @@
 // Drift guard for apps/docs/src/layouts/DocLayout.astro. Pins the
 // V-254 doc-comment + the frontmatter Props contract + the DOC_NAV
-// sidebar pattern + the R11 prose-invert dark-surface styling.
+// sidebar pattern + the tk-token prose styling + (S22.2 2026-07-06,
+// Stoplight relayout) the three-pane shell: left collapsible tree,
+// center article with breadcrumbs + prev/next, right sticky
+// "On this page" scroll-spy rail.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -22,11 +25,13 @@ describe('docs layouts/DocLayout content parity', () => {
     expect(existsSync(PAGE)).toBe(true);
   });
 
-  it('V-254 doc-comment framing pinned: doc-page layout wraps BaseLayout with sidebar + content. Drift would orphan the engineering anchor for the doc-layout split', () => {
+  it('V-254 doc-comment framing pinned: doc-page layout wraps BaseLayout with sidebar + content; S22.2 three-pane framing pinned (Stoplight pattern — left tree / center article / right rail)', () => {
     expect(body).toMatch(/\/\/ V-254 — doc-page layout\. Wraps BaseLayout with a sidebar nav/);
     expect(body).toMatch(
       /Used as `layout:` frontmatter\s*\n?\s*\/\/ in `\.md` doc pages so markdown content renders into the slot/,
     );
+    expect(body).toMatch(/S22\.2 \(2026-07-06\) — Stoplight-style three-pane relayout/);
+    expect(body).toMatch(/rendered by the LAYOUT, never injected into the \.md sources/);
   });
 
   it("Frontmatter Props contract pinned: title (required) + description (optional, overrides BaseLayout default). Drift to a different shape would break every .md page's frontmatter that targets DocLayout", () => {
@@ -45,7 +50,7 @@ describe('docs layouts/DocLayout content parity', () => {
     );
   });
 
-  it('DOC_NAV sidebar pattern pinned: imports from data/nav + renders section.label + nested items with isActive() highlighting. Drift to a different nav source would break the doc-site IA', () => {
+  it('DOC_NAV sidebar pattern pinned: imports from data/nav + renders section.label + nested items with isActive() highlighting. Drift to a different nav source would break the doc-site IA (DOC_NAV stays the SINGLE source — breadcrumbs and prev/next derive from it too)', () => {
     expect(body).toMatch(/import \{ DOC_NAV \} from '\.\.\/data\/nav';/);
     expect(body).toMatch(/DOC_NAV\.map\(\(section\) =>/);
     expect(body).toMatch(/isActive\(item\.href\)/);
@@ -55,9 +60,56 @@ describe('docs layouts/DocLayout content parity', () => {
     expect(body).toMatch(/pathname === href \|\| pathname === href\.replace\(\/\\\/\$\/, ''\)/);
   });
 
-  it('tk-token prose styling pinned (S22.1 2026-07-06, brand-parity port — SUPERSEDES the R11 "prose-slate + prose-pre:bg-[#16171c]" pin): single `prose` class set whose color hooks are un-layered --tw-prose-* overrides in base.css reading the mode-scoped tk tokens. Still NOT prose-invert (no mode-flip class swap), and fenced code stays a DARK terminal in BOTH modes via --tw-prose-pre-bg: var(--code-bg) — the founder flagged light code backgrounds as ugly, so that invariant carries over from the light theme unchanged', () => {
+  it('S22.2 three-pane shell pinned: 90rem canvas + md 2-col grid (16rem tree) + xl 3-col grid (15rem rail) — supersedes the max-w-6xl two-column flex shell', () => {
+    expect(body).toMatch(
+      /mx-auto w-full max-w-\[90rem\] px-6 py-8 md:grid md:grid-cols-\[16rem_minmax\(0,1fr\)\] md:gap-10 xl:grid-cols-\[16rem_minmax\(0,1fr\)_15rem\]/,
+    );
+    expect(body).not.toMatch(/max-w-6xl gap-8/);
+  });
+
+  it('S22.2 left tree pinned: sticky independently-scrolling pane (md-scoped so the mobile overlay stays the scroll container) + <details open> collapsible sections with chevron summary (no-JS-safe) + active item nudged into the pane view (block: nearest)', () => {
+    expect(body).toMatch(/md:sticky md:top-6 md:max-h-\[calc\(100vh-3rem\)\] md:overflow-y-auto/);
+    expect(body).toMatch(/<details open class="group" data-nav-section>/);
+    expect(body).toMatch(/\[&::-webkit-details-marker\]:hidden/);
+    expect(body).toMatch(/group-open:rotate-90/);
+    expect(body).toMatch(/aside\[data-doc-mobile-nav\] a\[aria-current="page"\]/);
+    expect(body).toMatch(/scrollIntoView\(\{ block: 'nearest' \}\)/);
+  });
+
+  it('S22.2 breadcrumbs pinned: layout-rendered "section › page" from the DOC_NAV lookup, above the article (never injected into .md)', () => {
+    expect(body).toMatch(/const flatNav = DOC_NAV\.flatMap\(\(section\) =>/);
+    expect(body).toMatch(
+      /const activeIndex = flatNav\.findIndex\(\(item\) => isActive\(item\.href\)\);/,
+    );
+    expect(body).toMatch(/aria-label="Breadcrumb"/);
+    expect(body).toMatch(/\{active\.section\}/);
+    expect(body).toMatch(/\{active\.label\}/);
+  });
+
+  it('S22.2 prev/next pager pinned: flattened DOC_NAV order, tk-styled cards at the article foot', () => {
+    expect(body).toMatch(
+      /const prevItem = activeIndex > 0 \? flatNav\[activeIndex - 1\] : undefined;/,
+    );
+    expect(body).toMatch(
+      /activeIndex !== -1 && activeIndex < flatNav\.length - 1 \? flatNav\[activeIndex \+ 1\] : undefined;/,
+    );
+    expect(body).toMatch(/aria-label="Previous and next pages"/);
+    expect(body).toMatch(/\{prevItem\.label\}/);
+    expect(body).toMatch(/\{nextItem\.label\}/);
+  });
+
+  it('S22.2 right rail pinned: sticky ≥xl "On this page" nav ([data-toc]) populated by the scroll-spy script — REPLACES the old inline-injected TOC box (insertBefore into the article must NOT come back)', () => {
+    expect(body).toMatch(/data-toc\s*\n?\s*aria-label="On this page"/);
+    expect(body).toMatch(/sticky top-6 hidden max-h-\[calc\(100vh-3rem\)\] overflow-y-auto/);
+    expect(body).toMatch(/data-toc-list/);
+    expect(body).toMatch(/IntersectionObserver/);
+    expect(body).toMatch(/prefers-reduced-motion: reduce/);
+    expect(body).not.toMatch(/article\.insertBefore\(nav, firstH2\)/);
+  });
+
+  it('tk-token prose styling pinned (S22.1 2026-07-06, brand-parity port — SUPERSEDES the R11 "prose-slate + prose-pre:bg-[#16171c]" pin; S22.2 dropped flex-1 since the grid column sizes the pane): single `prose` class set whose color hooks are un-layered --tw-prose-* overrides in base.css reading the mode-scoped tk tokens. Still NOT prose-invert (no mode-flip class swap), and fenced code stays a DARK terminal in BOTH modes via --tw-prose-pre-bg: var(--code-bg) — the founder flagged light code backgrounds as ugly, so that invariant carries over from the light theme unchanged', () => {
     expect(body).toMatch(/S22\.1 \(2026-07-06, brand-parity port\) — tk-token-driven prose/);
-    expect(body).toMatch(/prose max-w-3xl flex-1/);
+    expect(body).toMatch(/prose max-w-3xl/);
     expect(body).not.toMatch(/prose-invert/);
     expect(body).not.toMatch(/prose-slate/);
     // inline code = accent-soft WASH chip (background token only, never text).

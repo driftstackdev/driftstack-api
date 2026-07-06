@@ -27,12 +27,18 @@ describe('docs layout DX affordances (copy button + section anchors)', () => {
     expect(body).toMatch(/window\.location\.origin \+ window\.location\.pathname/);
   });
 
-  it('builds an "On this page" TOC from the h2 sections (only on pages with enough sections), inserted before the first section', () => {
-    expect(body).toMatch(/querySelectorAll\(['"]h2\[id\]['"]\)/);
-    expect(body).toMatch(/headings\.length < 3/); // skip short docs
+  it('S22.2 (2026-07-06, Stoplight relayout — SUPERSEDES the inline-injected TOC box that was inserted before the first h2): populates the sticky right "On this page" rail ([data-toc]) from the h2 + h3 ids, skips short docs, scroll-spies via IntersectionObserver, and smooth-scrolls unless prefers-reduced-motion', () => {
+    expect(body).toMatch(/querySelectorAll\(['"]h2\[id\], h3\[id\]['"]\)/);
+    expect(body).toMatch(/h2Count < 2/); // skip short docs
     expect(body).toMatch(/On this page/);
-    expect(body).toMatch(/aria-label['"], ['"]On this page/);
-    expect(body).toMatch(/article\.insertBefore\(nav, firstH2\)/);
+    expect(body).toMatch(/aria-label="On this page"/);
+    expect(body).toMatch(/data-toc-list/);
+    expect(body).toMatch(/toc\.classList\.remove\(['"]hidden['"]\)/);
+    expect(body).toMatch(/new IntersectionObserver/);
+    expect(body).toMatch(/prefers-reduced-motion: reduce/);
+    expect(body).toMatch(/behavior: reduce \? 'auto' : 'smooth'/);
+    // the old in-article injection must NOT come back (duplicate TOCs).
+    expect(body).not.toMatch(/article\.insertBefore\(nav, firstH2\)/);
   });
 
   it('mounts a clipboard-copy button on every article <pre> (Clipboard-API-guarded, keyboard-accessible)', () => {

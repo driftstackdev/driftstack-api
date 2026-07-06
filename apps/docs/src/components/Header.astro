@@ -23,7 +23,10 @@ function isActive(href: string): boolean {
 ---
 
 <header class="border-b border-tk-border bg-tk-surface">
-  <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
+  {/* S22.2 — container widened from max-w-6xl to track the three-pane
+      doc shell (DocLayout max-w-[90rem]) so the brand + nav align with
+      the left tree edge. */}
+  <div class="mx-auto flex max-w-[90rem] items-center justify-between gap-4 px-6 py-4">
     <a href="/" class="flex items-center gap-2 font-mono text-base font-semibold text-tk-ink">
       <img
         src="/driftstack-mark.svg?v=4"

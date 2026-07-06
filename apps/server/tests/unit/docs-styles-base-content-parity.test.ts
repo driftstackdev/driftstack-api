@@ -207,6 +207,18 @@ describe('docs styles/base content parity', () => {
     expect(body).toMatch(/fenced code stays a DARK terminal in\s*\n?\s*BOTH modes/);
   });
 
+  it('S22.2 (2026-07-06, Stoplight relayout) — blockquote info-callout pinned: raised surface + rounded right edge + normal weight at the prose level (accent-2 left rule comes from the --tw-prose-quote-borders hook), and the typography plugin auto quote marks removed — ZERO .md edits, every markdown `>` note renders as a callout', () => {
+    expect(body).toMatch(/S22\.2 \(2026-07-06, Stoplight relayout\) — blockquote = info callout/);
+    expect(body).toMatch(
+      /\.prose blockquote \{\s*\n\s*background: var\(--raised\);\s*\n\s*border-top-right-radius: 0\.5rem;\s*\n\s*border-bottom-right-radius: 0\.5rem;\s*\n\s*padding: 0\.75rem 1\.25rem;\s*\n\s*font-weight: 400;\s*\n\}/,
+    );
+    expect(body).toMatch(
+      /\.prose blockquote p:first-of-type::before,\s*\n\s*\.prose blockquote p:last-of-type::after \{\s*\n\s*content: none;\s*\n\}/,
+    );
+    // the accent-2 quote-border hook the callout rule leans on.
+    expect(body).toMatch(/--tw-prose-quote-borders: var\(--accent-2\);/);
+  });
+
   it('cross-app token-value parity: every dark/light ladder hex + all 6 accent-text pairs in the docs file also appear in the marketing source of truth (S22.1 byte-identical port)', () => {
     const marketing = read(MARKETING);
     for (const token of [

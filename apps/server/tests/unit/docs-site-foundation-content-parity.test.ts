@@ -119,7 +119,13 @@ describe('W599 apps/docs foundation modules content parity', () => {
     // base.css as un-layered .prose --tw-prose-* overrides reading the
     // mode-scoped tk tokens; still NOT prose-invert, and fenced code
     // stays a DARK terminal in BOTH modes (--code-bg; founder-pinned).
-    expect(body).toMatch(/prose max-w-3xl flex-1/);
+    // S22.2 (2026-07-06, Stoplight three-pane relayout) — flex-1
+    // dropped from the article class (the grid column sizes the pane);
+    // max-w-3xl keeps the reading measure. Shell/tree/rail pins live in
+    // docs-layouts-doclayout-content-parity.
+    expect(body).toMatch(/prose max-w-3xl/);
+    expect(body).toMatch(/max-w-\[90rem\]/);
+    expect(body).toMatch(/<details open class="group" data-nav-section>/);
     expect(body).not.toMatch(/prose-invert/);
     expect(body).not.toMatch(/prose-slate/);
     expect(body).toMatch(/prose-code:bg-tk-accent-soft/);

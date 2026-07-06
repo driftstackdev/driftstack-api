@@ -6,6 +6,17 @@
 //
 // Frontmatter contract: pages set `title` (required), optionally
 // `description` (overrides BaseLayout default).
+//
+// S22.2 (2026-07-06) — Stoplight-style three-pane relayout (founder:
+// docs were "pretty unclear"; reference = developer.payoneer.com).
+// LEFT: the full DOC_NAV tree (all 50 routes) in a sticky,
+// independently-scrolling pane with collapsible <details> sections
+// (no-JS-safe). CENTER: breadcrumbs + the article at a ~72ch reading
+// measure + prev/next cards from the flattened DOC_NAV order — all
+// rendered by the LAYOUT, never injected into the .md sources.
+// RIGHT (≥xl): a sticky "On this page" rail with h2+h3 depth and
+// IntersectionObserver scroll-spy, replacing the old inline-injected
+// TOC box.
 import BaseLayout from './BaseLayout.astro';
 import { DOC_NAV } from '../data/nav';
 
@@ -28,6 +39,19 @@ function isActive(href: string): boolean {
   // Match exact or trailing-slash variant.
   return pathname === href || pathname === href.replace(/\/$/, '');
 }
+
+// S22.2 — breadcrumb + prev/next derive from the SAME nav source
+// (DOC_NAV stays the single source of truth): flatten the tree in
+// section order so prev/next walk the sidebar's reading order, and
+// the breadcrumb is "section › page" for the active item.
+const flatNav = DOC_NAV.flatMap((section) =>
+  section.items.map((item) => ({ section: section.label, href: item.href, label: item.label })),
+);
+const activeIndex = flatNav.findIndex((item) => isActive(item.href));
+const active = activeIndex === -1 ? undefined : flatNav[activeIndex];
+const prevItem = activeIndex > 0 ? flatNav[activeIndex - 1] : undefined;
+const nextItem =
+  activeIndex !== -1 && activeIndex < flatNav.length - 1 ? flatNav[activeIndex + 1] : undefined;
 ---
 
 <BaseLayout title={title} description={description}>
@@ -87,16 +111,43 @@ function isActive(href: string): boolean {
       </svg>
     </button>
   </div>
-  <div class="mx-auto flex max-w-6xl gap-8 px-6 py-8">
-    <aside data-doc-mobile-nav class="hidden w-56 shrink-0 md:block">
-      <nav class="sticky top-6">
+  {/* S22.2 — three-pane shell: 16rem tree · fluid article column ·
+      15rem "On this page" rail (rail mounts ≥xl only). Wider 90rem
+      canvas replaces the two-column max-w-6xl flex shell. */}
+  <div
+    class="mx-auto w-full max-w-[90rem] px-6 py-8 md:grid md:grid-cols-[16rem_minmax(0,1fr)] md:gap-10 xl:grid-cols-[16rem_minmax(0,1fr)_15rem]"
+  >
+    <aside data-doc-mobile-nav class="hidden md:block">
+      {/* Sticky, independently-scrolling tree pane (desktop only — in
+          the mobile overlay the aside itself is the scroll container,
+          so the md: prefixes keep it a plain block there). Sections
+          are <details open> groups: collapsible without JS, and every
+          section defaults open so the active item is always visible. */}
+      <nav
+        aria-label="Docs navigation"
+        class="md:sticky md:top-6 md:max-h-[calc(100vh-3rem)] md:overflow-y-auto md:pb-10 md:pr-3"
+      >
         {
           DOC_NAV.map((section) => (
-            <div class="mb-5">
-              <p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">
+            <details open class="group" data-nav-section>
+              <summary class="flex cursor-pointer select-none list-none items-center justify-between gap-2 rounded-sm px-2 py-1.5 font-mono text-xs uppercase tracking-wide text-tk-ink-3 hover:text-tk-ink [&::-webkit-details-marker]:hidden">
                 {section.label}
-              </p>
-              <ul class="mt-2 space-y-1">
+                <svg
+                  viewBox="0 0 16 16"
+                  width="12"
+                  height="12"
+                  aria-hidden="true"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="shrink-0 transition-transform group-open:rotate-90"
+                >
+                  <path d="m6 4 4 4-4 4" />
+                </svg>
+              </summary>
+              <ul class="mb-4 mt-1 space-y-0.5">
                 {section.items.map((item) => (
                   <li>
                     <a
@@ -120,44 +171,115 @@ function isActive(href: string): boolean {
                   </li>
                 ))}
               </ul>
-            </div>
+            </details>
           ))
         }
       </nav>
     </aside>
-    <!-- S22.1 (2026-07-06, brand-parity port) — tk-token-driven prose.
-         SUPERSEDES the R11 slate-prose LIGHT-surface stack: the color
-         hooks now live in base.css as un-layered `.prose`
-         --tw-prose-* overrides reading the mode-scoped tk custom
-         properties (single class set, still NOT the dark-inverted
-         prose variant — no mode-flip class swap), so body copy /
-         headings / links / bullets follow <html data-mode>. Kept here
-         explicitly:
-           - links: --accent-text via base.css (AA-safe accent TEXT
-             tone — never the raw accent, never a wash token as text)
-           - inline code: accent-soft WASH chip (background token
-             only) with tk-ink text
-           - fenced pre: a DARK code surface in BOTH modes
-             (--tw-prose-pre-bg: var(--code-bg) — #16171c light /
-             #0c0c11 dark; founder-pinned: light code backgrounds were
-             flagged "ugly / barely readable", so fenced code stays a
-             dark terminal even on the light docs theme)
-           - tables/hr: tk-border via the base.css hooks -->
-    <article
-      class="prose max-w-3xl flex-1
-             prose-headings:font-semibold
-             prose-a:no-underline prose-a:hover:underline
-             prose-code:font-mono prose-code:text-[0.875em] prose-code:rounded-sm
-             prose-code:bg-tk-accent-soft prose-code:px-1.5 prose-code:py-0.5
-             prose-code:before:content-none
-             prose-code:after:content-none
-             prose-pre:border prose-pre:border-tk-border
-             prose-pre:shadow-inset-divider
-             prose-blockquote:not-italic
-             prose-th:bg-tk-surface"
-    >
-      <slot />
-    </article>
+    <div class="min-w-0">
+      {/* S22.2 — breadcrumb (section › page) from the DOC_NAV lookup;
+          layout-rendered above the article's h1, never injected into
+          the .md sources. */}
+      {
+        active && (
+          <nav aria-label="Breadcrumb" class="mb-4 flex items-center gap-1.5 text-xs">
+            <span class="font-mono uppercase tracking-wide text-tk-ink-3">{active.section}</span>
+            <span aria-hidden="true" class="text-tk-ink-3">
+              ›
+            </span>
+            <span class="font-medium text-tk-ink-2">{active.label}</span>
+          </nav>
+        )
+      }
+      <!-- S22.1 (2026-07-06, brand-parity port) — tk-token-driven prose.
+           SUPERSEDES the R11 slate-prose LIGHT-surface stack: the color
+           hooks now live in base.css as un-layered `.prose`
+           --tw-prose-* overrides reading the mode-scoped tk custom
+           properties (single class set, still NOT the dark-inverted
+           prose variant — no mode-flip class swap), so body copy /
+           headings / links / bullets follow <html data-mode>. Kept here
+           explicitly:
+             - links: --accent-text via base.css (AA-safe accent TEXT
+               tone — never the raw accent, never a wash token as text)
+             - inline code: accent-soft WASH chip (background token
+               only) with tk-ink text
+             - fenced pre: a DARK code surface in BOTH modes
+               (--tw-prose-pre-bg: var(--code-bg) — #16171c light /
+               #0c0c11 dark; founder-pinned: light code backgrounds were
+               flagged "ugly / barely readable", so fenced code stays a
+               dark terminal even on the light docs theme)
+             - tables/hr: tk-border via the base.css hooks
+           S22.2 — flex-1 dropped (the grid column sizes the pane now);
+           max-w-3xl keeps the ~72ch reading measure inside the wider
+           shell. Blockquote callout restyle lives in base.css. -->
+      <article
+        class="prose max-w-3xl
+               prose-headings:font-semibold
+               prose-a:no-underline prose-a:hover:underline
+               prose-code:font-mono prose-code:text-[0.875em] prose-code:rounded-sm
+               prose-code:bg-tk-accent-soft prose-code:px-1.5 prose-code:py-0.5
+               prose-code:before:content-none
+               prose-code:after:content-none
+               prose-pre:border prose-pre:border-tk-border
+               prose-pre:shadow-inset-divider
+               prose-blockquote:not-italic
+               prose-th:bg-tk-surface"
+      >
+        <slot />
+      </article>
+      {/* S22.2 — prev/next pager from the flattened DOC_NAV order
+          (layout-rendered, tk-styled cards). */}
+      {
+        (prevItem || nextItem) && (
+          <nav
+            aria-label="Previous and next pages"
+            class="mt-12 grid max-w-3xl gap-3 border-t border-tk-border pt-6 sm:grid-cols-2"
+          >
+            {prevItem ? (
+              <a
+                href={prevItem.href}
+                class="group rounded-lg border border-tk-border bg-tk-surface px-4 py-3 transition-colors hover:border-tk-ink-3 hover:bg-tk-hover"
+              >
+                <span class="block text-xs text-tk-ink-3">
+                  <span aria-hidden="true">←</span> Previous
+                </span>
+                <span class="mt-1 block text-sm font-medium text-tk-ink-2 transition-colors group-hover:text-tk-ink">
+                  {prevItem.label}
+                </span>
+              </a>
+            ) : (
+              <span class="hidden sm:block" aria-hidden="true" />
+            )}
+            {nextItem && (
+              <a
+                href={nextItem.href}
+                class="group rounded-lg border border-tk-border bg-tk-surface px-4 py-3 text-right transition-colors hover:border-tk-ink-3 hover:bg-tk-hover"
+              >
+                <span class="block text-xs text-tk-ink-3">
+                  Next <span aria-hidden="true">→</span>
+                </span>
+                <span class="mt-1 block text-sm font-medium text-tk-ink-2 transition-colors group-hover:text-tk-ink">
+                  {nextItem.label}
+                </span>
+              </a>
+            )}
+          </nav>
+        )
+      }
+    </div>
+    {/* S22.2 — right "On this page" rail (≥xl). Starts hidden; the
+        scroll-spy script below populates it from the article's h2/h3
+        ids and reveals it when the page has enough sections. */}
+    <aside class="hidden xl:block">
+      <nav
+        data-toc
+        aria-label="On this page"
+        class="sticky top-6 hidden max-h-[calc(100vh-3rem)] overflow-y-auto pb-10"
+      >
+        <p class="mb-2 text-xs font-medium uppercase tracking-widest text-tk-ink-3">On this page</p>
+        <ul data-toc-list class="space-y-0.5 border-l border-tk-border text-sm"></ul>
+      </nav>
+    </aside>
   </div>
   <script is:inline>
     (function () {
@@ -192,6 +314,12 @@ function isActive(href: string): boolean {
           setOpen(false);
         }
       });
+      /* S22.2 — with all 50 routes in the tree the active item can sit
+         below the fold of the sidebar's own scroll pane; nudge it into
+         view (block: nearest = no page jump, only the nearest scrollable
+         ancestor moves). */
+      var current = document.querySelector('aside[data-doc-mobile-nav] a[aria-current="page"]');
+      if (current && current.scrollIntoView) current.scrollIntoView({ block: 'nearest' });
     })();
   </script>
   <script is:inline>
@@ -256,26 +384,32 @@ function isActive(href: string): boolean {
     })();
   </script>
   <script is:inline>
-    {/* "On this page" table of contents — long API-reference pages need
-        section navigation. Built from the h2 ids (already anchor-able) and
-        inserted before the first section; only shown when there are enough
-        sections to be worth it. Reads each heading's first text node so the
-        appended "#" anchor link isn't included in the label. */}
+    {/* S22.2 — "On this page" sticky rail (REPLACES the old inline TOC
+        box that was inserted before the first h2). Populates the ≥xl
+        right rail from the article's h2 + h3 ids, scroll-spies the
+        current section with IntersectionObserver, and smooth-scrolls
+        anchor jumps unless the visitor prefers reduced motion. Reads
+        each heading's first text node so the appended "#" anchor link
+        isn't included in the label. Plain raw code — never a template
+        literal inside an expression container (the dead-inline-script
+        trap: Astro would emit the wrapper literally as a no-op string). */}
     (function () {
       var article = document.querySelector('article');
-      if (!article) return;
-      var headings = article.querySelectorAll('h2[id]');
-      if (headings.length < 3) return;
-      var nav = document.createElement('nav');
-      nav.setAttribute('aria-label', 'On this page');
-      nav.className =
-        'not-prose mb-8 rounded-lg border border-tk-border bg-tk-surface px-5 py-4';
-      var title = document.createElement('p');
-      title.className = 'mb-2 text-xs font-medium uppercase tracking-widest text-tk-ink-3';
-      title.textContent = 'On this page';
-      nav.appendChild(title);
-      var ul = document.createElement('ul');
-      ul.className = 'space-y-1.5';
+      var toc = document.querySelector('[data-toc]');
+      var list = document.querySelector('[data-toc-list]');
+      if (!article || !toc || !list) return;
+      var headings = Array.prototype.slice.call(article.querySelectorAll('h2[id], h3[id]'));
+      var h2Count = headings.filter(function (h) {
+        return h.tagName === 'H2';
+      }).length;
+      if (h2Count < 2) return;
+      var base =
+        'block -ml-px border-l border-transparent py-1 pr-2 text-tk-ink-2 ' +
+        'no-underline transition-colors hover:text-tk-ink';
+      var activeCls =
+        'block -ml-px border-l border-tk-accent py-1 pr-2 font-medium ' +
+        'text-tk-accent-text no-underline transition-colors';
+      var linkById = {};
       headings.forEach(function (h) {
         var label = ((h.firstChild ? h.firstChild.textContent : h.textContent) || '')
           .replace(/#$/, '')
@@ -284,14 +418,64 @@ function isActive(href: string): boolean {
         var a = document.createElement('a');
         a.href = '#' + h.id;
         a.textContent = label;
-        a.className = 'text-sm text-tk-ink-2 no-underline hover:text-tk-accent-text';
+        a.setAttribute('data-toc-depth', h.tagName === 'H3' ? '3' : '2');
+        a.className = base + (h.tagName === 'H3' ? ' pl-6 text-[0.8125rem]' : ' pl-3');
+        a.addEventListener('click', function (e) {
+          e.preventDefault();
+          var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          h.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+          history.pushState(null, '', '#' + h.id);
+        });
         li.appendChild(a);
-        ul.appendChild(li);
+        list.appendChild(li);
+        linkById[h.id] = a;
       });
-      nav.appendChild(ul);
-      var firstH2 = article.querySelector('h2');
-      if (firstH2) article.insertBefore(nav, firstH2);
-      else article.appendChild(nav);
+      toc.classList.remove('hidden');
+      var currentId = null;
+      function setActive(id) {
+        if (id === currentId) return;
+        if (currentId && linkById[currentId]) {
+          var prev = linkById[currentId];
+          prev.className = base + (prev.getAttribute('data-toc-depth') === '3' ? ' pl-6 text-[0.8125rem]' : ' pl-3');
+        }
+        if (linkById[id]) {
+          var next = linkById[id];
+          next.className =
+            activeCls + (next.getAttribute('data-toc-depth') === '3' ? ' pl-6 text-[0.8125rem]' : ' pl-3');
+        }
+        currentId = id;
+      }
+      if (!('IntersectionObserver' in window)) return;
+      var inView = {};
+      var observer = new IntersectionObserver(
+        function (entries) {
+          entries.forEach(function (entry) {
+            inView[entry.target.id] = entry.isIntersecting;
+          });
+          var current = null;
+          for (var i = 0; i < headings.length; i++) {
+            if (inView[headings[i].id]) {
+              current = headings[i].id;
+              break;
+            }
+          }
+          if (!current) {
+            /* Nothing intersecting the band (mid-section scroll) — spy the
+               last heading that has scrolled above it. */
+            for (var j = headings.length - 1; j >= 0; j--) {
+              if (headings[j].getBoundingClientRect().top < 96) {
+                current = headings[j].id;
+                break;
+              }
+            }
+          }
+          if (current) setActive(current);
+        },
+        { rootMargin: '-64px 0px -70% 0px' },
+      );
+      headings.forEach(function (h) {
+        observer.observe(h);
+      });
     })();
   </script>
 </BaseLayout>

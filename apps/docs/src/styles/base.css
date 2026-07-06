@@ -237,6 +237,26 @@
   --tw-prose-td-borders: var(--border);
 }
 
+/* S22.2 (2026-07-06, Stoplight relayout) — blockquote = info callout.
+   Docs .md pages use plain markdown `>` blockquotes for notes/caveats;
+   the default typography treatment (bare left rule + auto curly quote
+   marks) read as pull-quotes, not callouts. Restyled at the prose level
+   so ZERO .md edits are needed: accent-2 left rule (the
+   --tw-prose-quote-borders hook above), raised surface, rounded right
+   edge, normal weight, and the plugin's open/close quote marks removed.
+   Un-layered for the same reason as the .prose hook block. */
+.prose blockquote {
+  background: var(--raised);
+  border-top-right-radius: 0.5rem;
+  border-bottom-right-radius: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  font-weight: 400;
+}
+.prose blockquote p:first-of-type::before,
+.prose blockquote p:last-of-type::after {
+  content: none;
+}
+
 /* Global reduced-motion baseline (marketing parity). Un-layered +
    !important so it wins over Tailwind's transition utilities —
    motion-sensitive visitors get near-instant transitions. */
