@@ -104,6 +104,7 @@ import { ClaudeAgentDecomposer } from '../services/agent-decomposer-claude.js';
 import { DeterministicAgentDecomposer } from '../services/agent-decomposer-deterministic.js';
 import type { AgentDecomposer } from '../services/agent-decomposer.js';
 import { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
+import { InMemoryExitIdentityCache } from '../services/exit-identity-cache.js';
 import { RedisMfaChallengeStore } from '../services/mfa-challenge-store.js';
 import { UsageService } from '../services/usage.js';
 import { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
@@ -965,6 +966,11 @@ export async function createProductionDeps(
   // unconditionally so the route can stash decrypted plaintexts
   // on session-create when byokAnthropicService is also wired.
   const byokKeyCache = new InMemoryByokKeyCache();
+  // #128 — per-proxy exit-identity cache. Pure in-memory; wired unconditionally so
+  // the pre-launch proxy probe can stash the observed exit identity for the dispatch
+  // build to emit as exit_identity (box new-tab IP panel). A cold cache (restart) or
+  // a probe that saw no identity simply omits the optional block.
+  const exitIdentityCache = new InMemoryExitIdentityCache();
 
   // V-079: user-facing auth flows.
   const authFlowsRepo = new DrizzleAuthFlowsRepo(dbHandle);
@@ -1803,6 +1809,7 @@ export async function createProductionDeps(
     agentRuntime,
     agentSessionsRepo,
     byokKeyCache,
+    exitIdentityCache,
     agentDecomposerKind,
     // Arc 2 sub-slice 8.3 (v2-#8) — SSE transcript bus wired
     // unconditionally; route registration is gated on agentRuntime

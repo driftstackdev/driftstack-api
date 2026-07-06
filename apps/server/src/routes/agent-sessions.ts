@@ -48,6 +48,7 @@ import { parseProfileId } from '../lib/profile-id.js';
 import { parseSessionId } from '../lib/session-id.js';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
+import type { InMemoryExitIdentityCache } from '../services/exit-identity-cache.js';
 import type { BundledLlmService } from '../services/bundled-llm.js';
 import type { BundledTurnConcurrencyLimiter } from '../services/bundled-turn-concurrency.js';
 import type { AgentSessionEventBus } from '../services/agent-session-event-bus.js';
@@ -408,6 +409,10 @@ export interface AgentSessionsRoutesDeps {
   /** Q.1.c — required when byokService is wired. The in-memory
    *  cache that holds plaintexts for the session lifetime. */
   byokKeyCache?: InMemoryByokKeyCache;
+  /** #128 — in-memory bridge from the create-time proxy probe's observed exit
+   *  identity to the dispatch-time exit_identity emission (box new-tab IP panel).
+   *  Optional: absent → dispatch omits exit_identity (today's behaviour). */
+  exitIdentityCache?: InMemoryExitIdentityCache;
   /** Q.1 — which decomposer impl bootstrap wired. Defaults to
    *  'deterministic'. The ByokAnthropicRequired 502 only fires
    *  when this is 'claude' (deterministic ignores keys entirely
@@ -780,6 +785,10 @@ export async function dispatchSessionAssignOnCreate(args: {
   // injects it as the inlineProxyConfig instead of the operator default.
   proxyId?: string;
   accountProxiesService?: AccountProxiesService;
+  // #128 — the create-time proxy probe stashes the observed exit identity here
+  // keyed by (accountId, proxyId); this dispatch reads it back to emit the
+  // exit_identity block (box new-tab IP panel). A miss omits the optional block.
+  exitIdentityCache?: InMemoryExitIdentityCache;
   // Worker-disconnect fix (2026-06-19, migration 0086) — when wired, the
   // dispatch persists session→node (agent_sessions.node_id) so the
   // worker-disconnect reaper can close THIS node's active sessions if the node
@@ -826,6 +835,7 @@ export async function dispatchSessionAssignOnCreate(args: {
     r2,
     proxyId,
     accountProxiesService,
+    exitIdentityCache,
     agentSessions,
     accountRegion,
     initialUrl,
@@ -985,6 +995,33 @@ export async function dispatchSessionAssignOnCreate(args: {
       }
       inlineProxyConfig = resolved;
     }
+    // #128 — emit the exit_identity block (box new-tab IP panel) when the create-time
+    // proxy probe observed one for THIS (accountId, proxyId). Keyed by proxy, so a
+    // miss (probe found no identity / cache cold after a restart / operator-default
+    // egress with no proxyId) just omits the optional block — the box keeps today's
+    // behaviour. quic_ok is derived from the RESOLVED egress: a VPN wire tunnels all
+    // IP incl. UDP → QUIC works; a socks5 proxy needs UDP ASSOCIATE actually verified
+    // through it (#46 udp_capable), not merely requested (udp_associate is a wish).
+    const cachedExit =
+      accountId !== undefined && proxyId !== undefined && exitIdentityCache !== undefined
+        ? exitIdentityCache.get(accountId, proxyId)
+        : undefined;
+    const exitIdentity =
+      cachedExit !== undefined
+        ? {
+            ip: cachedExit.identity.ip,
+            country: cachedExit.identity.country,
+            region: cachedExit.identity.region,
+            city: cachedExit.identity.city,
+            timezone: cachedExit.identity.timezone,
+            quicOk:
+              'type' in inlineProxyConfig &&
+              (inlineProxyConfig.type === 'openvpn' || inlineProxyConfig.type === 'wireguard')
+                ? true
+                : (inlineProxyConfig as { udp_capable?: boolean | null }).udp_capable === true,
+            probedAt: cachedExit.probedAt,
+          }
+        : undefined;
     const assign = serializeSessionAssign({
       sessionId,
       archetype: profileArchetype ?? sessionDispatch.archetype,
@@ -1003,6 +1040,7 @@ export async function dispatchSessionAssignOnCreate(args: {
       ...(idleTimeoutSeconds !== undefined ? { idleTimeoutSeconds } : {}),
       ...(maxDurationSeconds !== undefined ? { maxDurationSeconds } : {}),
       ...(geolocation !== undefined ? { geolocation } : {}),
+      ...(exitIdentity !== undefined ? { exitIdentity } : {}),
     });
     const dispatchedNodeId = mac.nodeId ?? mac.id;
     // Worker-disconnect fix (2026-06-19) — persist session→node so the disconnect
@@ -1142,8 +1180,12 @@ export async function runProxyPrelaunchGate(args: {
   proxyId: string;
   accountId: string;
   logger?: { info: (obj: unknown, msg: string) => void; warn: (obj: unknown, msg: string) => void };
+  /** #128 — cache the probe's observed exit identity (keyed by accountId+proxyId) so
+   *  the dispatch build can emit the exit_identity block for the box new-tab IP panel. */
+  exitIdentityCache?: InMemoryExitIdentityCache;
 }): Promise<void> {
-  const { probe, enabled, accountProxiesService, proxyId, accountId, logger } = args;
+  const { probe, enabled, accountProxiesService, proxyId, accountId, logger, exitIdentityCache } =
+    args;
   if (probe === undefined || !enabled) return;
 
   // Resolve to the decrypted dispatch config (owner-scoped + SSRF re-guard).
@@ -1211,6 +1253,14 @@ export async function runProxyPrelaunchGate(args: {
       reason: result.reason ?? 'unreachable',
       ...(result.detail !== undefined ? { detail: result.detail } : {}),
     });
+  }
+  // #128 — the probe observed the exit identity the world sees THROUGH this proxy
+  // (present only on a clean 200 echo-body tail; absent otherwise). Stash it keyed
+  // by (accountId, proxyId) so the later dispatch build can emit exit_identity for
+  // the box new-tab IP panel. Best-effort + peek-only upstream: it can never have
+  // affected the pass/fail verdict, and a miss just omits the optional block.
+  if (result.exitIdentity !== undefined) {
+    exitIdentityCache?.set(accountId, proxyId, result.exitIdentity);
   }
   logger?.info(
     { component: 'proxy-prelaunch-probe', proxyId, host: descriptor.host },
@@ -1356,6 +1406,7 @@ export function registerAgentSessionsRoutes(
     sessions,
     byokService,
     byokKeyCache,
+    exitIdentityCache,
     agentDecomposerKind = 'deterministic',
     deploymentFallbackKey,
     allowFallbackForUnconfiguredCustomers,
@@ -1748,6 +1799,9 @@ export function registerAgentSessionsRoutes(
           proxyId,
           accountId: ownerAccountId,
           logger: req.log,
+          // #128 — SET the observed exit identity here (keyed by owner+proxy) for
+          // the later dispatch build to emit as exit_identity (new-tab IP panel).
+          exitIdentityCache,
         });
       }
 
@@ -1921,6 +1975,9 @@ export function registerAgentSessionsRoutes(
           // resolves the customer proxy (owner-scoped) into the inlineProxyConfig.
           ...(proxyId !== undefined ? { proxyId } : {}),
           ...(accountProxiesService !== undefined ? { accountProxiesService } : {}),
+          // #128 — GET the exit identity the gate stashed above (same owner+proxy key)
+          // and emit it as exit_identity for the box new-tab IP panel.
+          ...(exitIdentityCache !== undefined ? { exitIdentityCache } : {}),
           ...(r2 !== undefined ? { r2 } : {}),
           // Worker-disconnect fix (2026-06-19) — persist session→node so the
           // disconnect reaper can free this node's slot if the node drops.

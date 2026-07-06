@@ -10,7 +10,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { runProxyPrelaunchGate } from '../../src/routes/agent-sessions.js';
 import { ProxyValidationFailedError } from '../../src/lib/errors.js';
 import type { AccountProxiesService } from '../../src/services/account-proxies.js';
-import type { ProxyConnectivityProbe } from '../../src/services/proxy-connectivity-probe.js';
+import type {
+  ProbeExitIdentity,
+  ProxyConnectivityProbe,
+} from '../../src/services/proxy-connectivity-probe.js';
+import { InMemoryExitIdentityCache } from '../../src/services/exit-identity-cache.js';
+
+const PROBED_IDENTITY: ProbeExitIdentity = {
+  ip: '203.0.113.7',
+  country: 'US',
+  region: 'California',
+  city: 'San Jose',
+  timezone: 'America/Los_Angeles',
+};
 
 function logger() {
   return { info: vi.fn(), warn: vi.fn() };
@@ -138,5 +150,63 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
       }),
     ).resolves.toBeUndefined();
     expect(probeFn).toHaveBeenCalledTimes(1);
+  });
+
+  // #128 — the gate is the WRITE side of the exit-identity bridge: on a clean probe
+  // that observed the exit identity, it stashes it keyed by (accountId, proxyId) so
+  // the later dispatch build can emit exit_identity for the box new-tab IP panel.
+  it('SETs the exit-identity cache when the probe observed one (bridge write side)', async () => {
+    const probeFn = vi.fn().mockResolvedValue({ ok: true, exitIdentity: PROBED_IDENTITY });
+    const probe = { probe: probeFn } as unknown as ProxyConnectivityProbe;
+    const { service } = makeService({ host: '203.0.113.7', port: 1080 });
+    const cache = new InMemoryExitIdentityCache();
+    await runProxyPrelaunchGate({
+      probe,
+      enabled: true,
+      accountProxiesService: service,
+      proxyId: 'prx_ok',
+      accountId: 'acc_1',
+      logger: logger(),
+      exitIdentityCache: cache,
+    });
+    expect(cache.get('acc_1', 'prx_ok')?.identity).toEqual(PROBED_IDENTITY);
+  });
+
+  it('does NOT cache when the probe passed but observed no exit identity (optional block stays absent)', async () => {
+    const { probe } = makeOkProbe(); // resolves { ok: true } — no exitIdentity
+    const { service } = makeService({ host: '203.0.113.7', port: 1080 });
+    const cache = new InMemoryExitIdentityCache();
+    await runProxyPrelaunchGate({
+      probe,
+      enabled: true,
+      accountProxiesService: service,
+      proxyId: 'prx_ok',
+      accountId: 'acc_1',
+      logger: logger(),
+      exitIdentityCache: cache,
+    });
+    expect(cache.get('acc_1', 'prx_ok')).toBeUndefined();
+    expect(cache.size()).toBe(0);
+  });
+
+  it('does NOT cache on a probe FAILURE even if an identity rode along (a blocked launch caches nothing)', async () => {
+    const probeFn = vi
+      .fn()
+      .mockResolvedValue({ ok: false, reason: 'unreachable', exitIdentity: PROBED_IDENTITY });
+    const probe = { probe: probeFn } as unknown as ProxyConnectivityProbe;
+    const { service } = makeService({ host: '203.0.113.7', port: 1080 });
+    const cache = new InMemoryExitIdentityCache();
+    await expect(
+      runProxyPrelaunchGate({
+        probe,
+        enabled: true,
+        accountProxiesService: service,
+        proxyId: 'prx_down',
+        accountId: 'acc_1',
+        logger: logger(),
+        exitIdentityCache: cache,
+      }),
+    ).rejects.toBeInstanceOf(ProxyValidationFailedError);
+    expect(cache.size()).toBe(0);
   });
 });

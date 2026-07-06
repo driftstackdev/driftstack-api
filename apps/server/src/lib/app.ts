@@ -57,6 +57,7 @@ import type { AgentRuntime } from '../services/agent-runtime.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { RecipesRepo } from '../services/recipes.js';
 import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
+import type { InMemoryExitIdentityCache } from '../services/exit-identity-cache.js';
 import type { FleetNodeAuth } from '../services/fleet-node-auth.js';
 import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import { registerMacNodesRoutes } from '../routes/mac-nodes-register.js';
@@ -403,6 +404,12 @@ export interface AppDeps {
    * route still works via header > deployment-fallback path.
    */
   byokKeyCache?: InMemoryByokKeyCache;
+  /**
+   * #128 — in-memory bridge carrying the create-time proxy probe's observed
+   * exit identity to the dispatch-time exit_identity emission (box new-tab IP
+   * panel). Wired unconditionally in bootstrap; absence just omits the block.
+   */
+  exitIdentityCache?: InMemoryExitIdentityCache;
   /**
    * Q.1 — which decomposer impl bootstrap wired. The route layer
    * uses this to decide whether to enforce the
@@ -1406,6 +1413,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         ? { byokService: deps.byokAnthropicService }
         : {}),
       ...(deps.byokKeyCache !== undefined ? { byokKeyCache: deps.byokKeyCache } : {}),
+      ...(deps.exitIdentityCache !== undefined
+        ? { exitIdentityCache: deps.exitIdentityCache }
+        : {}),
       // Q.1 — decomposer kind drives whether the ByokAnthropicRequired
       // 502 fires. Default 'deterministic' matches the safe-default
       // branch of bootstrap's selectAgentDecomposer when neither key

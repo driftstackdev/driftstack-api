@@ -20,6 +20,8 @@ import type { ProfilesService } from '../../src/services/profiles.js';
 import type { R2 } from '../../src/lib/r2.js';
 import type { AccountProxiesService } from '../../src/services/account-proxies.js';
 import { UnsafeProxyHostError } from '../../src/services/account-proxies.js';
+import { InMemoryExitIdentityCache } from '../../src/services/exit-identity-cache.js';
+import type { ProbeExitIdentity } from '../../src/services/proxy-connectivity-probe.js';
 
 const KEY = Buffer.alloc(32, 7).toString('base64');
 const NODE_ID = 'local-mac-dev-001';
@@ -845,6 +847,177 @@ describe('dispatchSessionAssignOnCreate', () => {
     ).resolves.toBeUndefined();
     expect(sent).toHaveLength(0);
     expect(log.warn).toHaveBeenCalled();
+  });
+
+  // #128 — the dispatch is the READ side of the exit-identity bridge: when the gate
+  // stashed an exit identity for (accountId, proxyId), the assign carries an
+  // exit_identity block so the box can render the new-tab IP panel. quic_ok is
+  // derived from the RESOLVED egress, not the cached identity.
+  const EXIT: ProbeExitIdentity = {
+    ip: '203.0.113.7',
+    country: 'US',
+    region: 'California',
+    city: 'San Jose',
+    timezone: 'America/Los_Angeles',
+  };
+  function proxySvc(resolved: unknown): AccountProxiesService {
+    return {
+      resolveForDispatch: () => Promise.resolve(resolved),
+    } as unknown as AccountProxiesService;
+  }
+
+  it('emits exit_identity from the cache; quic_ok=true when the resolved socks5 is UDP-verified', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const cache = new InMemoryExitIdentityCache();
+    cache.set('acc_1', 'prx_1', EXIT);
+
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_exit1',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      accountId: 'acc_1',
+      proxyId: 'prx_1',
+      accountProxiesService: proxySvc({
+        host: '203.0.113.7',
+        port: 1080,
+        udp_associate: true,
+        require_remote_dns: true,
+        udp_capable: true, // #46 pre-detection confirmed UDP through this proxy
+      }),
+      exitIdentityCache: cache,
+      logger: logger(),
+    });
+
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame.exit_identity).toMatchObject({
+      ip: '203.0.113.7',
+      country: 'US',
+      region: 'California',
+      city: 'San Jose',
+      timezone: 'America/Los_Angeles',
+      quic_ok: true,
+    });
+    // probed_at is a valid ISO string the panel can show.
+    expect(
+      Number.isNaN(Date.parse((frame.exit_identity as Record<string, string>).probed_at)),
+    ).toBe(false);
+  });
+
+  it('quic_ok=false when the resolved socks5 proxy was NOT UDP-verified (udp_associate is a wish, not proof)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const cache = new InMemoryExitIdentityCache();
+    cache.set('acc_1', 'prx_1', EXIT);
+
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_exit2',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      accountId: 'acc_1',
+      proxyId: 'prx_1',
+      // udp_associate:true requested, but no udp_capable → not verified → no QUIC.
+      accountProxiesService: proxySvc({
+        host: '203.0.113.7',
+        port: 1080,
+        udp_associate: true,
+        require_remote_dns: true,
+      }),
+      exitIdentityCache: cache,
+      logger: logger(),
+    });
+
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect((frame.exit_identity as Record<string, unknown>).quic_ok).toBe(false);
+  });
+
+  it('quic_ok=true for a resolved VPN wire (full IP tunnel carries UDP/QUIC)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const cache = new InMemoryExitIdentityCache();
+    cache.set('acc_1', 'prx_vpn', EXIT);
+
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_exit3',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      accountId: 'acc_1',
+      proxyId: 'prx_vpn',
+      accountProxiesService: proxySvc({
+        type: 'wireguard',
+        private_key: 'k',
+        peer_public_key: 'p',
+        endpoint: '198.51.100.1:51820',
+        allowed_ips: '0.0.0.0/0',
+        address: '10.0.0.2/32',
+      }),
+      exitIdentityCache: cache,
+      logger: logger(),
+    });
+
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect((frame.exit_identity as Record<string, unknown>).quic_ok).toBe(true);
+  });
+
+  it('omits exit_identity on a cache MISS (probe saw none / cold after restart) — box keeps default behaviour', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const cache = new InMemoryExitIdentityCache(); // empty
+
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_exit4',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      accountId: 'acc_1',
+      proxyId: 'prx_1',
+      accountProxiesService: proxySvc({
+        host: '203.0.113.7',
+        port: 1080,
+        udp_associate: true,
+        require_remote_dns: true,
+      }),
+      exitIdentityCache: cache,
+      logger: logger(),
+    });
+
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame.exit_identity).toBeUndefined();
+  });
+
+  it('omits exit_identity for an operator-default egress (no proxyId → nothing keyed → block absent)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const cache = new InMemoryExitIdentityCache();
+    // Even a stale cache entry can't leak in: with no proxyId the dispatch never
+    // reads the cache (the key requires both accountId AND proxyId).
+    cache.set('acc_1', 'prx_1', EXIT);
+
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_exit5',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      accountId: 'acc_1',
+      exitIdentityCache: cache,
+      logger: logger(),
+    });
+
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame.exit_identity).toBeUndefined();
   });
 });
 
