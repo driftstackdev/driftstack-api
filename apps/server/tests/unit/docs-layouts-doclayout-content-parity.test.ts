@@ -3,7 +3,11 @@
 // sidebar pattern + the tk-token prose styling + (S22.2 2026-07-06,
 // Stoplight relayout) the three-pane shell: left collapsible tree,
 // center article with breadcrumbs + prev/next, right sticky
-// "On this page" scroll-spy rail.
+// "On this page" scroll-spy rail + (S22.4 2026-07-06, Stoplight
+// reference furniture) the per-endpoint sub-nodes with method chips
+// (active resource page only) and the client-side language-tabs
+// is:inline script (allowlisted pairwise-distinct runs, json stays
+// outside, ds_docs_lang persistence, tablist keyboard semantics).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -126,5 +130,48 @@ describe('docs layouts/DocLayout content parity', () => {
     expect(body).toMatch(/'text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink'/);
     expect(body).toMatch(/background: rgb\(var\(--bg-rgb\) \/ 0\.95\);/);
     expect(body).not.toMatch(/rgba\(11, 11, 13/);
+  });
+
+  it('S22.4 (2026-07-06) — per-endpoint sub-nodes pinned: DOC_NAV children render under the parent ONLY while it is the active page (Stoplight behavior), each with a base.css .method-chip badge (chip text is real content, screen readers announce "GET List") + a truncating label; breadcrumbs/prev-next stay top-level-only (flatNav maps section.items untouched)', () => {
+    expect(body).toMatch(/item\.children && isActive\(item\.href\) && \(/);
+    expect(body).toMatch(/data-nav-endpoints/);
+    expect(body).toMatch(/item\.children\.map\(\(child\) => \(/);
+    expect(body).toMatch(/'method-chip method-chip--' \+ child\.method\.toLowerCase\(\)/);
+    expect(body).toMatch(/\{child\.method\}/);
+    expect(body).toMatch(/<span class="min-w-0 truncate">\{child\.label\}<\/span>/);
+    // flatNav (breadcrumbs + prev/next source) still walks top-level
+    // items only — children must never leak into the pager.
+    expect(body).toMatch(
+      /section\.items\.map\(\(item\) => \(\{ section: section\.label, href: item\.href, label: item\.label \}\)\)/,
+    );
+  });
+
+  it('S22.4 (2026-07-06) — language-tabs is:inline script pinned: allowlist canon (ts/typescript, js, python/py, go, bash/sh, http — json NOT allowlisted so response blocks stay outside), pairwise-distinct runs (duplicate language ends the run), single **Lang:** label paragraphs absorbed+hidden, role=tablist/tab/tabpanel with arrow-key selection, ds_docs_lang localStorage persistence applied page-wide, runs AFTER the copy-button script so moved pres keep their buttons, and PLAIN RAW code (dead-inline-script trap documented)', () => {
+    expect(body).toMatch(/S22\.4 — client-side language tabs/);
+    expect(body).toMatch(/var CANON = \{/);
+    expect(body).toMatch(/ts: 'TypeScript',/);
+    expect(body).toMatch(/typescript: 'TypeScript',/);
+    expect(body).toMatch(/python: 'Python',/);
+    expect(body).toMatch(/py: 'Python',/);
+    expect(body).toMatch(/go: 'Go',/);
+    expect(body).toMatch(/bash: 'bash',/);
+    expect(body).toMatch(/sh: 'bash',/);
+    expect(body).toMatch(/http: 'HTTP',/);
+    expect(body).not.toMatch(/json: '/); // json must never join the allowlist
+    expect(body).toMatch(/var STORE_KEY = 'ds_docs_lang';/);
+    expect(body).toMatch(/getAttribute\('data-language'\)/);
+    expect(body).toMatch(/if \(seen\[nl\]\) break;/); // pairwise-distinct
+    expect(body).toMatch(/isLangLabelFor/);
+    expect(body).toMatch(/r\.label\.hidden = true;/);
+    expect(body).toMatch(/setAttribute\('role', 'tablist'\)/);
+    expect(body).toMatch(/setAttribute\('role', 'tab'\)/);
+    expect(body).toMatch(/setAttribute\('role', 'tabpanel'\)/);
+    expect(body).toMatch(/aria-label', 'Code sample language'/);
+    expect(body).toMatch(/e\.key === 'ArrowRight'/);
+    expect(body).toMatch(/e\.key === 'ArrowLeft'/);
+    expect(body).toMatch(/data-langtabs/);
+    expect(body).toMatch(/if \(run\.length < 2\) return;/); // zero multi-lang runs → no tab UI
+    expect(body).toMatch(/Runs in document order AFTER the copy-button script/);
+    expect(body).toMatch(/dead-inline-script\s*\n?\s*\**\s*trap/);
   });
 });

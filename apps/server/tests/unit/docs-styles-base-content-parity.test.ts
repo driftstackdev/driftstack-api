@@ -219,6 +219,47 @@ describe('docs styles/base content parity', () => {
     expect(body).toMatch(/--tw-prose-quote-borders: var\(--accent-2\);/);
   });
 
+  it('S22.4 (2026-07-06, Stoplight reference furniture) — .method-chip recipes pinned: tiny mono uppercase badges; wash = 15%-alpha rgb() of the mode status token (NOT color-mix — its Lightning-CSS fallback degrades to a solid same-color background on pre-color-mix browsers); text = readable direction per mode, all pairs AA-verified ≥4.5:1 over BOTH --bg and --hover composites (dark uses raw bright tokens except DELETE #ff7d74; light needs darker-than-token tones). POST wash hardcodes the --sync triplets because no --sync-rgb exists and the mode blocks stay byte-identical to marketing', () => {
+    expect(body).toMatch(
+      /S22\.4 \(2026-07-06, Stoplight reference furniture\) — HTTP method chips/,
+    );
+    expect(body).toMatch(
+      /\.method-chip \{\s*\n\s*display: inline-block;\s*\n\s*flex-shrink: 0;\s*\n\s*min-width: 2\.75rem;/,
+    );
+    expect(body).toMatch(/font-size: 0\.625rem;/);
+    expect(body).toMatch(/text-transform: uppercase;/);
+    // Dark (default) text tones + rgb()/alpha washes.
+    expect(body).toMatch(
+      /\.method-chip--get \{\s*\n\s*color: var\(--ready\);\s*\n\s*background: rgb\(var\(--ready-rgb\) \/ 0\.15\);/,
+    );
+    expect(body).toMatch(
+      /\.method-chip--post \{\s*\n\s*color: var\(--sync\);\s*\n\s*background: rgb\(96 165 250 \/ 0\.15\);/,
+    );
+    expect(body).toMatch(
+      /\.method-chip--put,\s*\n\s*\.method-chip--patch \{\s*\n\s*color: var\(--busy\);\s*\n\s*background: rgb\(var\(--busy-rgb\) \/ 0\.15\);/,
+    );
+    // DELETE lightens --err (raw #ff6b61 is 4.35:1 over a hovered row).
+    expect(body).toMatch(
+      /\.method-chip--delete \{\s*\n\s*color: #ff7d74;\s*\n\s*background: rgb\(var\(--err-rgb\) \/ 0\.15\);/,
+    );
+    // Light-mode readable-direction overrides (raw light status tokens
+    // measure only 2.3–3.8:1 as text) + the light POST wash triplet.
+    expect(body).toMatch(/\[data-mode='light'\] \.method-chip--get \{\s*\n\s*color: #06663d;/);
+    expect(body).toMatch(/\[data-mode='light'\] \.method-chip--post \{\s*\n\s*color: #1d4ed8;/);
+    expect(body).toMatch(
+      /\[data-mode='light'\] \.method-chip--put,\s*\n\s*\[data-mode='light'\] \.method-chip--patch \{\s*\n\s*color: #7a540b;/,
+    );
+    expect(body).toMatch(/\[data-mode='light'\] \.method-chip--delete \{\s*\n\s*color: #a23028;/);
+    expect(body).toMatch(
+      /\[data-mode='light'\] \.method-chip--post \{\s*\n\s*background: rgb\(37 99 235 \/ 0\.15\);/,
+    );
+    // The AA evidence table ships in the comment.
+    expect(body).toMatch(/dark : GET var\(--ready\) #2fe39a 9\.49\/6\.50/);
+    expect(body).toMatch(/light: GET #06663d 5\.40\/5\.35/);
+    // color-mix must not come back for the chip washes.
+    expect(body).not.toMatch(/color-mix\([^)]*--ready/);
+  });
+
   it('cross-app token-value parity: every dark/light ladder hex + all 6 accent-text pairs in the docs file also appear in the marketing source of truth (S22.1 byte-identical port)', () => {
     const marketing = read(MARKETING);
     for (const token of [

@@ -17,6 +17,18 @@
 // RIGHT (≥xl): a sticky "On this page" rail with h2+h3 depth and
 // IntersectionObserver scroll-spy, replacing the old inline-injected
 // TOC box.
+//
+// S22.4 (2026-07-06) — Stoplight reference furniture:
+//   - Per-endpoint SUB-NODES in the left tree: DOC_NAV children
+//     (anchor href + colored .method-chip method badge) render
+//     indented under their resource entry, ONLY while that entry is
+//     the active page (Stoplight behavior — the tree stays scannable;
+//     other resources show just their label). Children are anchors,
+//     not pages: breadcrumbs + prev/next keep walking top-level items.
+//   - Client-side LANGUAGE TABS (zero .md churn): the last is:inline
+//     script groups runs of adjacent multi-language code samples into
+//     a keyboard-accessible tab group and remembers the picked
+//     language in localStorage (ds_docs_lang).
 import BaseLayout from './BaseLayout.astro';
 import { DOC_NAV } from '../data/nav';
 
@@ -168,6 +180,34 @@ const nextItem =
                     >
                       {item.label}
                     </a>
+                    {/* S22.4 — per-endpoint anchor sub-nodes with method
+                        chips, rendered ONLY for the active resource page
+                        (Stoplight behavior). The chip text is real content
+                        (screen readers announce "GET List"), styled by the
+                        base.css .method-chip recipes (AA-verified per
+                        mode). */}
+                    {item.children && isActive(item.href) && (
+                      <ul
+                        data-nav-endpoints
+                        class="mb-1.5 ml-2 mt-0.5 space-y-px border-l border-tk-border pl-2"
+                      >
+                        {item.children.map((child) => (
+                          <li>
+                            <a
+                              href={child.href}
+                              class="flex items-center gap-2 rounded-sm px-2 py-0.5 text-[0.8125rem] text-tk-ink-2 transition-colors hover:bg-tk-hover hover:text-tk-ink"
+                            >
+                              {child.method && (
+                                <span class={'method-chip method-chip--' + child.method.toLowerCase()}>
+                                  {child.method}
+                                </span>
+                              )}
+                              <span class="min-w-0 truncate">{child.label}</span>
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -476,6 +516,218 @@ const nextItem =
       headings.forEach(function (h) {
         observer.observe(h);
       });
+    })();
+  </script>
+  <script is:inline>
+    /* S22.4 — client-side language tabs (Stoplight look, ZERO .md churn).
+       Multi-language samples in the docs are runs of adjacent fenced
+       blocks (Astro emits data-language on each astro-code <pre>). This
+       groups a run of 2+ sibling <pre> elements whose languages are
+       pairwise-DISTINCT members of an allowlist (ts/typescript, js,
+       python/py, go, bash/sh, http) into one tab group: a
+       role=tablist/tab/tabpanel bar (arrow-key accessible) above a single
+       visible panel. A run may be interleaved with the docs' bold
+       "**Python:**"-style label paragraphs — a <p><strong>…:</strong></p>
+       naming the NEXT block's language joins the run and is hidden (the
+       tab bar replaces it); any other content breaks the run. json is NOT
+       allowlisted, so a JSON response block following a request sample
+       stays OUTSIDE the group. The picked language persists in
+       localStorage (ds_docs_lang) and applies to every group on the page.
+       Runs in document order AFTER the copy-button script, so each moved
+       <pre> carries its copy button along. Plain raw code — never a
+       template literal inside an expression container (the
+       dead-inline-script trap: Astro would emit the wrapper literally as
+       a no-op string). */
+    (function () {
+      var article = document.querySelector('article');
+      if (!article) return;
+      var CANON = {
+        ts: 'TypeScript',
+        typescript: 'TypeScript',
+        js: 'JavaScript',
+        javascript: 'JavaScript',
+        python: 'Python',
+        py: 'Python',
+        go: 'Go',
+        bash: 'bash',
+        sh: 'bash',
+        http: 'HTTP',
+      };
+      var STORE_KEY = 'ds_docs_lang';
+      var TAB_BASE =
+        'rounded-md border border-transparent px-2.5 py-1 font-mono text-xs font-medium ' +
+        'text-tk-ink-2 transition-colors hover:bg-tk-hover hover:text-tk-ink ' +
+        'focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+        'focus-visible:outline-tk-accent';
+      var TAB_ACTIVE =
+        'rounded-md border border-tk-border bg-tk-raised px-2.5 py-1 font-mono text-xs ' +
+        'font-medium text-tk-ink transition-colors ' +
+        'focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+        'focus-visible:outline-tk-accent';
+      function langOf(el) {
+        if (!el || el.tagName !== 'PRE') return null;
+        var raw = el.getAttribute('data-language');
+        if (!raw) return null;
+        return Object.prototype.hasOwnProperty.call(CANON, raw) ? CANON[raw] : null;
+      }
+      /* A <p><strong>Lang…:</strong></p> paragraph that NAMES the given
+         language (the run-label convention in the .md sources). Anything
+         else — e.g. "**Response:**" before a json block, prose, tables —
+         is NOT absorbed and breaks the run. */
+      function isLangLabelFor(el, lang) {
+        if (!el || el.tagName !== 'P' || el.children.length !== 1) return false;
+        var strong = el.children[0];
+        if (strong.tagName !== 'STRONG') return false;
+        var text = (el.textContent || '').trim();
+        if (text !== (strong.textContent || '').trim()) return false;
+        if (text.slice(-1) !== ':') return false;
+        return text.toLowerCase().indexOf(lang.toLowerCase()) === 0;
+      }
+      function readStored() {
+        try {
+          return window.localStorage.getItem(STORE_KEY);
+        } catch (e) {
+          return null;
+        }
+      }
+      function writeStored(lang) {
+        try {
+          window.localStorage.setItem(STORE_KEY, lang);
+        } catch (e) {
+          /* storage unavailable (private mode) — tabs still work per-page */
+        }
+      }
+      var groups = [];
+      var groupSeq = 0;
+      function applyEverywhere(lang) {
+        groups.forEach(function (g) {
+          g.select(lang, false);
+        });
+      }
+      function buildGroup(run, langs) {
+        var id = ++groupSeq;
+        var wrapper = document.createElement('div');
+        wrapper.className = 'my-6';
+        wrapper.setAttribute('data-langtabs', '');
+        var bar = document.createElement('div');
+        bar.setAttribute('role', 'tablist');
+        bar.setAttribute('aria-label', 'Code sample language');
+        bar.className =
+          'flex flex-wrap items-center gap-1 rounded-t-lg border border-b-0 ' +
+          'border-tk-border bg-tk-surface px-2 py-1.5';
+        wrapper.appendChild(bar);
+        var first = run[0].pre;
+        first.parentNode.insertBefore(wrapper, first);
+        var tabs = [];
+        var panels = [];
+        run.forEach(function (r, i) {
+          var lang = langs[i];
+          var tab = document.createElement('button');
+          tab.type = 'button';
+          tab.setAttribute('role', 'tab');
+          tab.id = 'langtab-' + id + '-' + i;
+          tab.setAttribute('aria-controls', 'langpanel-' + id + '-' + i);
+          tab.setAttribute('data-lang', lang);
+          tab.textContent = lang;
+          bar.appendChild(tab);
+          tabs.push(tab);
+          var panel = document.createElement('div');
+          panel.setAttribute('role', 'tabpanel');
+          panel.id = 'langpanel-' + id + '-' + i;
+          panel.setAttribute('aria-labelledby', tab.id);
+          panel.setAttribute('tabindex', '0');
+          /* Inside a group the pre loses its own vertical margins (the
+             wrapper carries them) and its top radius (it sits flush
+             under the tab bar). */
+          r.pre.classList.add('my-0', 'rounded-t-none');
+          panel.appendChild(r.pre);
+          wrapper.appendChild(panel);
+          panels.push(panel);
+          if (r.label) r.label.hidden = true;
+          tab.addEventListener('click', function () {
+            applyEverywhere(lang);
+            writeStored(lang);
+          });
+        });
+        var group = {
+          select: function (lang, focus) {
+            var idx = langs.indexOf(lang);
+            if (idx === -1) return;
+            tabs.forEach(function (t, i) {
+              var on = i === idx;
+              t.setAttribute('aria-selected', on ? 'true' : 'false');
+              t.tabIndex = on ? 0 : -1;
+              t.className = on ? TAB_ACTIVE : TAB_BASE;
+              panels[i].hidden = !on;
+            });
+            if (focus) tabs[idx].focus();
+          },
+        };
+        bar.addEventListener('keydown', function (e) {
+          var current = tabs.indexOf(document.activeElement);
+          if (current === -1) return;
+          var target = -1;
+          if (e.key === 'ArrowRight') target = (current + 1) % tabs.length;
+          else if (e.key === 'ArrowLeft') target = (current - 1 + tabs.length) % tabs.length;
+          else if (e.key === 'Home') target = 0;
+          else if (e.key === 'End') target = tabs.length - 1;
+          if (target === -1) return;
+          e.preventDefault();
+          applyEverywhere(langs[target]);
+          group.select(langs[target], true);
+          writeStored(langs[target]);
+        });
+        groups.push(group);
+        group.select(langs[0], false);
+      }
+      /* Collect maximal runs. "Adjacent" = consecutive element siblings —
+         nothing between them except an absorbable language-label
+         paragraph. A duplicate (already-seen) language ends the run: two
+         bash blocks in a row are separate examples, not alternatives. */
+      var pres = Array.prototype.slice.call(article.querySelectorAll('pre[data-language]'));
+      var taken = [];
+      pres.forEach(function (pre) {
+        if (taken.indexOf(pre) !== -1) return;
+        var lang = langOf(pre);
+        if (!lang) return;
+        var run = [{ pre: pre, label: null }];
+        var langs = [lang];
+        var seen = {};
+        seen[lang] = true;
+        var node = pre.nextElementSibling;
+        var pendingLabel = null;
+        while (node) {
+          var nl = langOf(node);
+          if (nl) {
+            if (seen[nl]) break;
+            run.push({ pre: node, label: pendingLabel });
+            langs.push(nl);
+            seen[nl] = true;
+            pendingLabel = null;
+            node = node.nextElementSibling;
+            continue;
+          }
+          if (!pendingLabel) {
+            var next = node.nextElementSibling;
+            var nextLang = langOf(next);
+            if (nextLang && !seen[nextLang] && isLangLabelFor(node, nextLang)) {
+              pendingLabel = node;
+              node = next;
+              continue;
+            }
+          }
+          break;
+        }
+        if (run.length < 2) return;
+        var lead = pre.previousElementSibling;
+        if (lead && isLangLabelFor(lead, langs[0])) run[0].label = lead;
+        run.forEach(function (r) {
+          taken.push(r.pre);
+        });
+        buildGroup(run, langs);
+      });
+      var stored = readStored();
+      if (stored) applyEverywhere(stored);
     })();
   </script>
 </BaseLayout>

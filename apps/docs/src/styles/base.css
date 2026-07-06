@@ -412,3 +412,79 @@
 [data-mode='light'][data-accent='teal'] {
   --accent-text: #0c7d69;
 }
+
+/* ── S22.4 (2026-07-06, Stoplight reference furniture) — HTTP method chips.
+   Tiny mono uppercase method badges on the docs tree's per-endpoint
+   sub-nodes. Wash background = 15%-alpha of the mode's status token
+   (plain rgb()/alpha compositing — matches the AA computation below);
+   text follows the readable direction per mode:
+     - DARK uses the raw bright status tokens, except DELETE which
+       lightens --err to #ff7d74 (raw #ff6b61 is 4.35:1 over a hovered
+       row — just under AA for this tiny text).
+     - LIGHT needs DARKER tones than the raw tokens (raw
+       ready/busy/err/sync measure only 2.3–3.8:1 as text on the light
+       bg — they are fill tokens, not text tokens).
+   All pairs verified ≥4.5:1 against the wash composited over BOTH
+   --bg and --hover (chips sit on hoverable rows):
+     dark : GET var(--ready) #2fe39a 9.49/6.50 · POST var(--sync)
+            #60a5fa 6.60/4.63 · PUT/PATCH var(--busy) #ffc24d
+            9.76/6.64 · DELETE #ff7d74 6.91/4.88
+     light: GET #06663d 5.40/5.35 · POST #1d4ed8 4.92/4.91 ·
+            PUT/PATCH #7a540b 5.32/5.27 · DELETE #a23028 5.21/5.16
+   GET = ready tint · POST = sync/blue tint · PUT/PATCH = busy/amber
+   tint · DELETE = err/red tint. Defaults below are the DARK
+   (shipped-default) text tones; [data-mode='light'] overrides them. */
+.method-chip {
+  display: inline-block;
+  flex-shrink: 0;
+  min-width: 2.75rem;
+  border-radius: 0.25rem;
+  padding: 0.0625rem 0.25rem;
+  font-family: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-transform: uppercase;
+}
+/* Washes ride the mode-scoped --*-rgb triplets (rgb()/alpha — NOT
+   color-mix, whose Lightning-CSS fallback degrades to a SOLID status
+   background with same-color text on pre-color-mix browsers). The two
+   axes have no --sync-rgb triplet (and the docs mode blocks stay
+   byte-identical to marketing's, so none is added here); the POST wash
+   hardcodes the --sync hex triplets per mode (#60a5fa dark / #2563eb
+   light — same values customer-dashboard exposes as --sync-rgb). */
+.method-chip--get {
+  color: var(--ready);
+  background: rgb(var(--ready-rgb) / 0.15);
+}
+.method-chip--post {
+  color: var(--sync);
+  background: rgb(96 165 250 / 0.15);
+}
+.method-chip--put,
+.method-chip--patch {
+  color: var(--busy);
+  background: rgb(var(--busy-rgb) / 0.15);
+}
+.method-chip--delete {
+  color: #ff7d74;
+  background: rgb(var(--err-rgb) / 0.15);
+}
+[data-mode='light'] .method-chip--post {
+  background: rgb(37 99 235 / 0.15);
+}
+[data-mode='light'] .method-chip--get {
+  color: #06663d;
+}
+[data-mode='light'] .method-chip--post {
+  color: #1d4ed8;
+}
+[data-mode='light'] .method-chip--put,
+[data-mode='light'] .method-chip--patch {
+  color: #7a540b;
+}
+[data-mode='light'] .method-chip--delete {
+  color: #a23028;
+}

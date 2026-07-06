@@ -27,6 +27,23 @@
 //     proxies), then account + access control, then billing, then the
 //     remaining surfaces.
 //   • Total href count = 50 (one per route; slugs frozen).
+//
+// S22.4 SUPERSESSION (2026-07-06, Stoplight reference furniture) —
+// per-endpoint anchor SUB-NODES went live: the 24 API-reference
+// resource entries now carry `children` (108 `{ href, label, method }`
+// endpoint anchors, extracted from the api/*.md h2 sections; the
+// apps/docs docs-nav-endpoint-children-integrity suite re-derives that
+// data from the .md sources and deep-equals it, so THIS suite pins
+// structure/order, not the endpoint census). Superseded postures this
+// replaces:
+//   • DocNavItem.method was "(reserved) … UNUSED in S22.2" — now LIVE
+//     via the new DocNavChild shape.
+//   • API-reference entries were single-line `{ href, label }` — the
+//     24 with children are now multi-line objects, so the grouped-order
+//     pins below match by ordered top-level href extraction (children
+//     hrefs all carry a '#' and are excluded).
+//   • Total-count pin split: 50 top-level route hrefs + 108 children
+//     anchor hrefs.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -41,7 +58,7 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes tree)', () => {
+describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes tree + S22.4 endpoint children)', () => {
   const body = read(LIB);
 
   it("V-254 framing pinned: 'V-254 — central doc-site navigation. Single source of truth for the sidebar; pages reference this so adding a topic = one edit here.'", () => {
@@ -62,15 +79,30 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     expect(body).toMatch(/page slugs are FROZEN/);
   });
 
-  it('DocNavItem interface: href + label + OPTIONAL method (S22.4-reserved GET/POST badge field, explicitly UNUSED in S22.2) + DocNavSection 2-field (label + items DocNavItem[])', () => {
+  it('DocNavItem interface (S22.4 — method chip LIVE, was "(reserved)/UNUSED in S22.2"): href + label + OPTIONAL method + OPTIONAL children (DocNavChild[] anchor sub-nodes; anchors not pages — breadcrumbs/prev-next walk top-level only) + DocNavChild 3-field + DocNavSection 2-field', () => {
     expect(body).toMatch(
       /export interface DocNavItem \{\s*\n?\s*href: string;\s*\n?\s*label: string;/,
     );
-    expect(body).toMatch(/S22\.4 \(reserved\) — HTTP method badge/);
+    expect(body).toMatch(/S22\.4 — HTTP method chip \(GET\/POST\/PUT\/PATCH\/DELETE\)/);
     expect(body).toMatch(/method\?: 'GET' \| 'POST' \| 'PUT' \| 'PATCH' \| 'DELETE';/);
-    expect(body).toMatch(/UNUSED in S22\.2/);
+    expect(body).not.toMatch(/UNUSED in S22\.2/);
+    expect(body).toMatch(/S22\.4 — per-endpoint anchor sub-nodes/);
+    expect(body).toMatch(/only while the parent is the ACTIVE page/);
+    expect(body).toMatch(
+      /breadcrumbs \+ prev\/next keep walking top-level items only\. \*\/\s*\n?\s*children\?: DocNavChild\[\];/,
+    );
+    expect(body).toMatch(
+      /export interface DocNavChild \{\s*\n?\s*href: string;\s*\n?\s*label: string;\s*\n?\s*method\?: DocNavItem\['method'\];\s*\n?\s*\}/,
+    );
     expect(body).toMatch(
       /export interface DocNavSection \{\s*\n?\s*label: string;\s*\n?\s*items: DocNavItem\[\];\s*\n?\s*\}/,
+    );
+    // The S22.4 header framing (extraction rules + lockstep integrity
+    // suite pointer) is pinned so the regeneration contract survives.
+    expect(body).toMatch(/S22\.4 \(2026-07-06, Stoplight reference furniture\) — per-endpoint/);
+    expect(body).toMatch(/docs-nav-endpoint-children-integrity/);
+    expect(body).toMatch(
+      /children render only for\s*\n?\s*\/\/ the ACTIVE resource page \(Stoplight behavior\)/,
     );
   });
 
@@ -105,24 +137,108 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     );
   });
 
-  it('API reference head: overview pair then the core automation resources in order (sessions → agent-sessions → recipes → profiles → profile-snapshots → proxies)', () => {
-    expect(body).toMatch(
-      /\{\s*\n?\s*label: 'API reference',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/api\/', label: 'API overview' \},\s*\n?\s*\{ href: '\/api\/versioning\/', label: 'Versioning policy' \},\s*\n?\s*\/\/ Core automation resources\.\s*\n?\s*\{ href: '\/api\/sessions\/', label: 'Sessions' \},\s*\n?\s*\{ href: '\/api\/agent-sessions\/', label: 'Agent sessions' \},\s*\n?\s*\{ href: '\/api\/recipes\/', label: 'Recipes' \},\s*\n?\s*\{ href: '\/api\/profiles\/', label: 'Profiles' \},\s*\n?\s*\{ href: '\/api\/profile-snapshots\/', label: 'Profile snapshots' \},\s*\n?\s*\{ href: '\/api\/proxies\/', label: 'Account proxies' \},/,
-    );
+  // S22.4 — the 24 resource entries became multi-line objects carrying
+  // `children`, so the three grouped-order pins below extract the ordered
+  // TOP-LEVEL hrefs of the API-reference section (children anchors all
+  // contain '#' and are filtered out) instead of regexing single-line
+  // `{ href, label }` literals.
+  const apiSlice = body.slice(
+    body.indexOf("label: 'API reference',"),
+    body.indexOf("label: 'Webhooks',"),
+  );
+  const apiTopHrefs = [...apiSlice.matchAll(/href: '([^']+)',/g)]
+    .map((m) => m[1]!)
+    .filter((h) => !h.includes('#'));
+
+  it('API reference: 26 top-level entries in the S22.2 grouped order (overview pair → core automation resources → account + access control → billing + spend → remaining surfaces), group comments intact', () => {
+    expect(apiTopHrefs).toEqual([
+      '/api/',
+      '/api/versioning/',
+      '/api/sessions/',
+      '/api/agent-sessions/',
+      '/api/recipes/',
+      '/api/profiles/',
+      '/api/profile-snapshots/',
+      '/api/proxies/',
+      '/api/account/',
+      '/api/auth/',
+      '/api/mfa/',
+      '/api/oauth/',
+      '/api/api-keys/',
+      '/api/team/',
+      '/api/usage/',
+      '/api/audit-log/',
+      '/api/billing/',
+      '/api/billing-crypto/',
+      '/api/cost-monitoring/',
+      '/api/bundled-llm/',
+      '/api/byok-anthropic/',
+      '/api/account-notifications/',
+      '/api/account-rate-limits/',
+      '/api/email-preferences/',
+      '/api/status/',
+      '/api/legal/',
+    ]);
+    for (const comment of [
+      '// Core automation resources.',
+      '// Account + access control.',
+      '// Billing + spend.',
+      '// Remaining surfaces.',
+    ]) {
+      expect(apiSlice).toContain(comment);
+    }
   });
 
-  it('API reference account + access-control group pinned in order: account → auth → mfa → oauth → api-keys → team → usage → audit-log', () => {
-    expect(body).toMatch(
-      /\/\/ Account \+ access control\.\s*\n?\s*\{ href: '\/api\/account\/', label: 'Account' \},\s*\n?\s*\{ href: '\/api\/auth\/', label: 'Authentication' \},\s*\n?\s*\{ href: '\/api\/mfa\/', label: 'Two-factor auth \(MFA\)' \},\s*\n?\s*\{ href: '\/api\/oauth\/', label: 'OAuth \(third-party clients\)' \},\s*\n?\s*\{ href: '\/api\/api-keys\/', label: 'API keys' \},\s*\n?\s*\{ href: '\/api\/team\/', label: 'Teams & access control' \},\s*\n?\s*\{ href: '\/api\/usage\/', label: 'Usage \+ quotas' \},\s*\n?\s*\{ href: '\/api\/audit-log\/', label: 'Audit log' \},/,
-    );
+  it('API reference labels pinned (plain-words rule; page slugs frozen): overview pair + the 24 resource labels', () => {
+    for (const [href, label] of [
+      ['/api/', 'API overview'],
+      ['/api/versioning/', 'Versioning policy'],
+      ['/api/sessions/', 'Sessions'],
+      ['/api/agent-sessions/', 'Agent sessions'],
+      ['/api/recipes/', 'Recipes'],
+      ['/api/profiles/', 'Profiles'],
+      ['/api/profile-snapshots/', 'Profile snapshots'],
+      ['/api/proxies/', 'Account proxies'],
+      ['/api/account/', 'Account'],
+      ['/api/auth/', 'Authentication'],
+      ['/api/mfa/', 'Two-factor auth (MFA)'],
+      ['/api/oauth/', 'OAuth (third-party clients)'],
+      ['/api/api-keys/', 'API keys'],
+      ['/api/team/', 'Teams & access control'],
+      ['/api/usage/', 'Usage + quotas'],
+      ['/api/audit-log/', 'Audit log'],
+      ['/api/billing/', 'Billing'],
+      ['/api/billing-crypto/', 'Crypto checkout'],
+      ['/api/cost-monitoring/', 'Cost monitoring'],
+      ['/api/bundled-llm/', 'Bundled LLM'],
+      ['/api/byok-anthropic/', 'Bring your own Anthropic key'],
+      ['/api/account-notifications/', 'Account notifications (SSE)'],
+      ['/api/account-rate-limits/', 'Account rate limits'],
+      ['/api/email-preferences/', 'Email preferences'],
+      ['/api/status/', 'Status page API'],
+      ['/api/legal/', 'Legal documents'],
+    ] as const) {
+      // Multi-line (children-carrying) and single-line forms both render
+      // href then label as consecutive fields.
+      const re = new RegExp(
+        `href: '${href.replace(/[/]/g, '\\/')}',\\s*\\n?\\s*label: '${label
+          .replace(/[()]/g, '\\$&')
+          .replace(/\+/g, '\\+')}',?`,
+      );
+      expect(body).toMatch(re);
+    }
   });
 
-  it('API reference billing group + remaining surfaces pinned: billing → billing-crypto → cost-monitoring, then bundled-llm → byok-anthropic → account-notifications → account-rate-limits → email-preferences → status → legal', () => {
+  it('S22.4 children shape spot-checks: sessions carries its 12 endpoint anchors in page order (full census + md lockstep live in the apps/docs docs-nav-endpoint-children-integrity suite)', () => {
     expect(body).toMatch(
-      /\/\/ Billing \+ spend\.\s*\n?\s*\{ href: '\/api\/billing\/', label: 'Billing' \},\s*\n?\s*\{ href: '\/api\/billing-crypto\/', label: 'Crypto checkout' \},\s*\n?\s*\{ href: '\/api\/cost-monitoring\/', label: 'Cost monitoring' \},/,
+      /href: '\/api\/sessions\/',\s*\n?\s*label: 'Sessions',\s*\n?\s*children: \[\s*\n?\s*\{ href: '\/api\/sessions\/#create', label: 'Create', method: 'POST' \},\s*\n?\s*\{ href: '\/api\/sessions\/#list', label: 'List', method: 'GET' \},/,
     );
     expect(body).toMatch(
-      /\/\/ Remaining surfaces\.\s*\n?\s*\{ href: '\/api\/bundled-llm\/', label: 'Bundled LLM' \},\s*\n?\s*\{ href: '\/api\/byok-anthropic\/', label: 'Bring your own Anthropic key' \},\s*\n?\s*\{ href: '\/api\/account-notifications\/', label: 'Account notifications \(SSE\)' \},\s*\n?\s*\{ href: '\/api\/account-rate-limits\/', label: 'Account rate limits' \},\s*\n?\s*\{ href: '\/api\/email-preferences\/', label: 'Email preferences' \},\s*\n?\s*\{ href: '\/api\/status\/', label: 'Status page API' \},\s*\n?\s*\{ href: '\/api\/legal\/', label: 'Legal documents' \},/,
+      /\{ href: '\/api\/sessions\/#login', label: 'Login', method: 'POST' \},\s*\n?\s*\{ href: '\/api\/sessions\/#destroy', label: 'Destroy', method: 'DELETE' \},\s*\n?\s*\],/,
+    );
+    // status.md's heading-embedded format lands as clean labels.
+    expect(body).toMatch(
+      /\{ href: '\/api\/status\/#snapshot--get-v1status', label: 'Snapshot', method: 'GET' \},/,
     );
   });
 
@@ -138,13 +254,17 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     );
   });
 
-  it('total tree size = 50 hrefs (one per route under src/pages; a drop below 50 means a page went orphaned again, a rise means a new page landed — extend the tree AND this pin together)', () => {
-    const hrefs = [...body.matchAll(/\{ href: '([^']+)', label: /g)].map((m) => m[1]);
-    expect(hrefs).toHaveLength(50);
-    // No duplicate hrefs (the apps/docs doc-nav-section-label-baseline
-    // suite enforces this at runtime too; mirrored here so a server-only
-    // run still catches it).
-    expect(new Set(hrefs).size).toBe(50);
+  it('total tree size (S22.4 split): 50 top-level route hrefs (a drop below 50 means a page went orphaned again) + 108 children anchor hrefs (the endpoint census; md lockstep enforced by docs-nav-endpoint-children-integrity)', () => {
+    const hrefs = [...body.matchAll(/href: '([^']+)',/g)].map((m) => m[1]!);
+    const topLevel = hrefs.filter((h) => !h.includes('#'));
+    const anchors = hrefs.filter((h) => h.includes('#'));
+    expect(topLevel).toHaveLength(50);
+    expect(anchors).toHaveLength(108);
+    // No duplicate hrefs at either level (the apps/docs
+    // doc-nav-section-label-baseline suite enforces the top-level rule at
+    // runtime too; mirrored here so a server-only run still catches it).
+    expect(new Set(topLevel).size).toBe(50);
+    expect(new Set(anchors).size).toBe(108);
   });
 
   it('the 22 previously-orphaned routes are all present (6 reference + 5 sdk/api spillover checks kept explicit for the highest-traffic ones)', () => {
