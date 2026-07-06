@@ -57,6 +57,12 @@ export function useLatencyPing(opts: UseLatencyPingOpts): LatencyState {
   const [state, setState] = useState<LatencyState>({ rttMs: null, lastSeenAt: null });
 
   useEffect(() => {
+    // audit wb1w3015f — drop the reading on EVERY room/enabled change (mirrors
+    // useConnectionStats' setStats(EMPTY)). A freeze-recovery rebuild or manual
+    // Reconnect swaps in a NEW Room; without this the badge + Copy-diagnostics kept
+    // showing the DEAD room's RTT (e.g. a healthy '80ms') until the 6s staleness
+    // sweep expired it — a stuck healthy number that actively lies in a bug report.
+    setState({ rttMs: null, lastSeenAt: null });
     if (room === null || !enabled) return;
 
     let cancelled = false;

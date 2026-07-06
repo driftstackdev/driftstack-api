@@ -4056,6 +4056,12 @@ export function SimulatorWindow(): JSX.Element {
   // until A3's fork download-delegate populates it → "No downloads yet".
   const [downloads, setDownloads] = useState<SessionDownloadEntry[] | null>(null);
   const [downloadsNote, setDownloadsNote] = useState<string | null>(null);
+  // Twin of hasCookiesRef (#134) — audit wb1w3015f found the downloads poll had the
+  // IDENTICAL flicker (blanked the list + the browser-bar count badge on every
+  // timeout/gated/transient tick) but never got the cookies retention fix. Retain
+  // the last-known list through transient states; the note shows only when nothing
+  // has been fetched yet.
+  const hasDownloadsRef = useRef(false);
   const [downloadingName, setDownloadingName] = useState<string | null>(null);
   // The browser-bar download indicator (GUI chrome — like the address bar; never
   // touches the rendered iPhone/fingerprint) shows a count badge whenever there are
@@ -4086,18 +4092,19 @@ export function SimulatorWindow(): JSX.Element {
         .then((res) => {
           if (cancelled) return;
           if (res.status === 'ok') {
-            setDownloads(res.files ?? []);
+            const files = res.files ?? [];
+            setDownloads(files);
+            hasDownloadsRef.current = files.length > 0;
             setDownloadsNote(null);
             backoff = 3000; // reset cadence on a real success
           } else if (res.status === 'timeout') {
-            // Twin of the cookies-poll fix just above — see that comment. The
-            // server already held the request ~10s waiting for the device;
-            // don't ALSO double the client's own retry delay on top of it.
-            setDownloads(null);
-            setDownloadsNote('waiting for the device…');
+            // RETAIN the list — the server held the request ~30s for a merely-slow
+            // device; blanking the panel + count badge on that soft status was the
+            // (un-fixed) twin of the cookies flicker. Note only when nothing yet.
+            setDownloadsNote(hasDownloadsRef.current ? null : 'waiting for the device…');
           } else {
-            setDownloads(null);
-            setDownloadsNote(friendlyUnavailableNote(res.reason));
+            // RETAIN through a degraded/gated/WSS-reconnect (failAll) tick.
+            setDownloadsNote(hasDownloadsRef.current ? null : friendlyUnavailableNote(res.reason));
             backoff = Math.min(backoff * 2, 30000); // genuinely degraded → back off
           }
         })
@@ -4114,17 +4121,20 @@ export function SimulatorWindow(): JSX.Element {
           //         never a 404 — so "appear once a page saves" would be the wrong copy).
           //   503 → the downloads route is gated off on this deployment.
           //   else (network / 5xx) → a genuine transient gap we retry on the next tick.
-          setDownloads(null);
           const status = err instanceof AgentSessionControlError ? err.status : 0;
-          setDownloadsNote(
+          // RETAIN the last-known list through a transient/gated failure (never blank
+          // a populated panel + count badge). Note only when nothing fetched yet;
+          // EXCEPT 401/403 (creds expired → can't refresh) keeps its actionable note.
+          const note =
             status === 401 || status === 403
               ? 'Session control credential expired — reopen the session to refresh.'
               : status === 404
                 ? 'Session is no longer live.'
                 : status === 503
                   ? "downloads aren't enabled on this deployment"
-                  : "couldn't reach the device for downloads — retrying",
-          );
+                  : "couldn't reach the device for downloads — retrying";
+          const credsExpired = status === 401 || status === 403;
+          setDownloadsNote(hasDownloadsRef.current && !credsExpired ? null : note);
           backoff = Math.min(backoff * 2, 30000); // failure → back off
         })
         .finally(() => {
@@ -4349,6 +4359,21 @@ export function SimulatorWindow(): JSX.Element {
     // Clear any page-navigation error so a prior session's error overlay can't
     // persist over the new session's first frame (mirrors the pageStalled reset).
     setPageError(null);
+    // audit wb1w3015f — RE-ARM the load-error gate on an in-place session swap. The
+    // swap keeps the Room (no remount) so pageReachedLoadedRef persists from the OLD
+    // session; if it stayed true, the NEW session's genuine first-page load failure
+    // (bad proxy / dead start URL / DNS — box emits 'errored' before any 'loaded')
+    // would be SUPPRESSED as a "late sub-resource error" → reads as a blank success.
+    pageReachedLoadedRef.current = false;
+    // Drop the prior session's cookies/downloads so the new session doesn't briefly
+    // render the OLD session's jar (the retain-refs would otherwise hold them through
+    // the new session's first transient tick).
+    setCookies(null);
+    hasCookiesRef.current = false;
+    setCookiesNote(null);
+    setDownloads(null);
+    hasDownloadsRef.current = false;
+    setDownloadsNote(null);
     // Reset the per-session TAB model + title to a clean single-seed state. The
     // in-place relaunch swaps sessionId WITHOUT remounting (to keep the Room), so
     // tabs/activeTabId/liveTitle would otherwise carry the OLD session's tabs into
