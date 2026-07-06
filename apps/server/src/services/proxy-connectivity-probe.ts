@@ -55,11 +55,63 @@ export const DEFAULT_PROBE_TIMEOUT_MS = 12_000;
  *  failure can reuse the same vocabulary. */
 export type ProxyProbeReason = 'unreachable' | 'auth_failed' | 'timeout' | 'egress_blocked';
 
+/** #128 — the exit identity the world sees THROUGH the proxy, parsed best-effort
+ *  from a clean 200 /v1/egress/echo body. Feeds the box-local new-tab IP panel
+ *  (exit_identity dispatch block). `country` is ISO-3166 alpha-2 or 'XX' (the echo
+ *  returns null for unknown; we normalise to 'XX' to match the wire contract);
+ *  region/city/timezone are best-effort (null when the CF edge couldn't resolve). */
+export interface ProbeExitIdentity {
+  ip: string;
+  country: string;
+  region: string | null;
+  city: string | null;
+  timezone: string | null;
+}
+
 export interface ProxyProbeResult {
   ok: boolean;
   reason?: ProxyProbeReason;
   /** Human one-liner for logs / the 422 detail. Never contains credentials. */
   detail?: string;
+  /** #128 best-effort exit identity captured from the echo round-trip. Present
+   *  ONLY when the proxy returned a clean, fully-buffered 200 JSON body; undefined
+   *  otherwise. Capture is PEEK-ONLY (no extra await) so it can NEVER delay or flip
+   *  the ok/reason connectivity verdict — a launch is never blocked by its absence. */
+  exitIdentity?: ProbeExitIdentity;
+}
+
+/** Pure, no-I/O parse of the exit identity from the already-buffered HTTP response
+ *  tail (everything after the status line). Returns undefined on ANY deviation —
+ *  incomplete buffer, no Content-Length, oversize, non-JSON, missing ip. Never
+ *  throws. Kept a free function so it's unit-testable without a socket. */
+export function parseExitIdentityFromResponseTail(tail: Buffer): ProbeExitIdentity | undefined {
+  try {
+    const sep = tail.indexOf('\r\n\r\n'); // byte-wise; header block is ASCII
+    if (sep === -1) return undefined; // headers not fully buffered
+    const headerBlock = tail.subarray(0, sep).toString('utf8');
+    const clMatch = /content-length:\s*(\d+)/i.exec(headerBlock);
+    if (!clMatch) return undefined;
+    const len = Number(clMatch[1]);
+    if (!Number.isInteger(len) || len <= 0 || len > 4096) return undefined; // echo body is tiny
+    const bodyStart = sep + 4;
+    if (tail.length - bodyStart < len) return undefined; // body not fully buffered yet
+    const parsed: unknown = JSON.parse(tail.subarray(bodyStart, bodyStart + len).toString('utf8'));
+    if (typeof parsed !== 'object' || parsed === null) return undefined;
+    const o = parsed as Record<string, unknown>;
+    if (typeof o.ip !== 'string' || o.ip.length === 0) return undefined;
+    const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
+    const country =
+      typeof o.country === 'string' && /^[A-Z]{2}$/.test(o.country) ? o.country : 'XX';
+    return {
+      ip: o.ip,
+      country,
+      region: str(o.region),
+      city: str(o.city),
+      timezone: str(o.timezone),
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 /** The minimal resolved-proxy shape the probe needs. A superset of
@@ -434,6 +486,15 @@ export class ProxyConnectivityProbe {
     // 403/503 CF challenge) from the target endpoint proves connectivity just as
     // much as a 2xx does; the proxy is fine even if our echo endpoint throttled or
     // challenged this exit IP.
+    if (status === 200) {
+      // #128 — best-effort, PEEK-ONLY capture of the exit identity from the echo
+      // body. A tiny Connection:close response arrives in one TCP segment, so by
+      // the time the status line parsed the body is already buffered; we read it
+      // WITHOUT awaiting (snapshot), so this can never delay the round-trip or flip
+      // the already-decided PASS. Absent/partial/non-200 ⇒ no identity, ok unchanged.
+      const exitIdentity = parseExitIdentityFromResponseTail(streamReader.snapshot());
+      return exitIdentity ? { ok: true, exitIdentity } : { ok: true };
+    }
     if (status > 0) {
       return { ok: true };
     }
@@ -486,6 +547,13 @@ class SocketReader {
     const w = this.waiter;
     this.waiter = null;
     w?.();
+  }
+
+  /** #128 — non-consuming peek of the currently-buffered bytes (no await). Lets the
+   *  exit-identity capture read the already-arrived echo body without extending the
+   *  deadline-raced path, so it can never delay/flip the connectivity verdict. */
+  snapshot(): Buffer {
+    return this.buf;
   }
 
   /** Read EXACTLY n bytes (consuming them from the buffer). */

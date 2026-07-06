@@ -15,8 +15,79 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   ProxyConnectivityProbe,
   ProbeDialError,
+  parseExitIdentityFromResponseTail,
   type ProbeProxyDescriptor,
 } from '../../src/services/proxy-connectivity-probe.js';
+
+// #128 — the pure exit-identity parse used by the PEEK-ONLY capture. Given the
+// buffered HTTP response tail (everything after the status line), it returns the
+// identity or undefined; it must NEVER throw and never partially-accept.
+describe('parseExitIdentityFromResponseTail (#128 new-tab panel capture)', () => {
+  const resp = (body: string, extraHeaders = ''): Buffer =>
+    Buffer.from(
+      `Content-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n${extraHeaders}\r\n${body}`,
+    );
+
+  it('captures ip/country/region/city/timezone from a complete 200 body', () => {
+    const body = JSON.stringify({
+      ip: '203.0.113.7',
+      country: 'NL',
+      region: 'North Holland',
+      city: 'Amsterdam',
+      timezone: 'Europe/Amsterdam',
+    });
+    expect(parseExitIdentityFromResponseTail(resp(body))).toEqual({
+      ip: '203.0.113.7',
+      country: 'NL',
+      region: 'North Holland',
+      city: 'Amsterdam',
+      timezone: 'Europe/Amsterdam',
+    });
+  });
+
+  it("normalises country null/absent → 'XX' and missing geo → null (matches the wire contract)", () => {
+    expect(
+      parseExitIdentityFromResponseTail(resp(JSON.stringify({ ip: '1.2.3.4', country: null }))),
+    ).toEqual({
+      ip: '1.2.3.4',
+      country: 'XX',
+      region: null,
+      city: null,
+      timezone: null,
+    });
+  });
+
+  it('handles a multi-byte city name (byte-correct body slice)', () => {
+    const body = JSON.stringify({ ip: '9.9.9.9', country: 'BR', city: 'São Paulo' });
+    expect(parseExitIdentityFromResponseTail(resp(body))?.city).toBe('São Paulo');
+  });
+
+  it('returns undefined (never throws) on partial body, no content-length, oversize, non-JSON, or missing ip', () => {
+    const full = JSON.stringify({ ip: '1.2.3.4', country: 'US' });
+    // body not fully buffered (Content-Length says more than present)
+    expect(
+      parseExitIdentityFromResponseTail(Buffer.from(`Content-Length: 999\r\n\r\n${full}`)),
+    ).toBeUndefined();
+    // no content-length
+    expect(
+      parseExitIdentityFromResponseTail(Buffer.from(`Content-Type: x\r\n\r\n${full}`)),
+    ).toBeUndefined();
+    // headers not terminated yet
+    expect(parseExitIdentityFromResponseTail(Buffer.from('Content-Length: 5\r\n'))).toBeUndefined();
+    // oversize declared
+    expect(
+      parseExitIdentityFromResponseTail(Buffer.from(`Content-Length: 99999\r\n\r\n${full}`)),
+    ).toBeUndefined();
+    // non-JSON body
+    expect(parseExitIdentityFromResponseTail(resp('not json at all'))).toBeUndefined();
+    // JSON but missing ip
+    expect(
+      parseExitIdentityFromResponseTail(resp(JSON.stringify({ country: 'US' }))),
+    ).toBeUndefined();
+    // empty
+    expect(parseExitIdentityFromResponseTail(Buffer.alloc(0))).toBeUndefined();
+  });
+});
 
 // Plaintext HTTP target (useTls=false) so the egress round-trip stays on the raw
 // tunneled socket — no TLS upgrade in unit tests.
