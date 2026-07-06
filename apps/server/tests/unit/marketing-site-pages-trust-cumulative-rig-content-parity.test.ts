@@ -31,14 +31,21 @@ describe('marketing-site trust/cumulative-rig content parity', () => {
 
   it("launch-blocker policy framing pinned: 'any drift from the reference phone is a launch-blocking bug' — the load-bearing commitment the page reinforces. Drift would weaken Driftstack's positioning vs Chromium-stealth tools", () => {
     expect(body).toMatch(
-      /launch-blocking bug and fix the engine — not a JavaScript\s+wrapper over it/,
+      /launch-blocking bug and fix the engine — not a\s+JavaScript\s+wrapper over it/,
     );
-    expect(body).toMatch(/we treat it as a/);
+    expect(body).toMatch(/we treat\s+it as a launch-blocking bug/);
   });
 
-  it('M.6 multi-archetype framing pinned: iPhone 15 Pro + 16 Pro + 17 lineup on iOS 18.7 / Safari 26.4 + 26.5. Drift to single-archetype framing would re-introduce the v1.0 scope mismatch slice 121 already corrected on roadmap.astro', () => {
-    expect(body).toMatch(/iPhone\s*\n?\s*15 Pro, iPhone 16 Pro, and the current iPhone 17 lineup/);
-    expect(body).toMatch(/iOS 18\.7 \/ Safari 26\.4 and Safari 26\.5/);
+  it("full-catalog framing BOUND to DEVICE_SUPPORT (S18b 2026-07-04 accuracy fix: the prior 'every launch archetype — iPhone 15 Pro, 16 Pro, 17 lineup' read as exhaustive but named the curated flagship subset; the catalog floor is iPhone 13. On the trust surface the claim now interpolates the registry-derived facts — 81 profiles, iPhone 13 → 17 Pro Max — so it is exhaustive AND drift-proof). Drift back to single-archetype or hand-typed enumerations would re-introduce the scope mismatch", () => {
+    expect(body).toMatch(/every archetype in the catalog —/);
+    expect(body).toMatch(
+      /\{DEVICE_SUPPORT\.archetypeCount\} profiles, \{DEVICE_SUPPORT\.deviceFamilies\}/,
+    );
+    expect(body).toMatch(
+      /iOS \{DEVICE_SUPPORT\.iosVersions\}, Safari \{DEVICE_SUPPORT\.safariVersions\}/,
+    );
+    // the subset-as-exhaustive phrasing must not return
+    expect(body).not.toMatch(/every launch archetype — iPhone/);
   });
 
   it('signal-table 10-row sampling (drift to dropping any signal would weaken the cumulative-rig claim that EVERY signal must match the iPhone): userAgent / platform / Canvas 2D / WebGL renderer / AudioContext / Font metrics / JS engine timing / TLS ClientHello / Touch-event / Screen dimensions', () => {

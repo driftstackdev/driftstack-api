@@ -22,11 +22,19 @@
 //   • Item titles pinned for each bucket (verbatim).
 //   • "Email us — concrete demand reorders the deck" customer-
 //     prioritization affordance pinned.
+//   • S18 (2026-07-04): the fingerprint-parity title interpolates
+//     DEVICE_SUPPORT (src/data/capabilities.ts, derived from the
+//     api-types ARCHETYPE_REGISTRY). The template source is pinned
+//     AND rendered here against the canonical claim string, and the
+//     literal body/LATER spans are cross-checked against
+//     DEVICE_SUPPORT so registry drift fails this test instead of
+//     silently diverging from the prose.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { DEVICE_SUPPORT } from '../../src/data/capabilities.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -39,7 +47,15 @@ function read(p: string): string {
 function extractList(src: string, name: 'NOW' | 'NEXT' | 'LATER'): string[] {
   const m = src.match(new RegExp(`const ${name}: RoadmapItem\\[\\] = \\[([\\s\\S]*?)\\];`));
   if (m === null) throw new Error(`${name} list not found`);
-  return Array.from(m[1]!.matchAll(/title: '([^']+)'/g)).map((mm) => mm[1] as string);
+  // Titles are single-quoted literals or (S18) backtick templates
+  // interpolating DEVICE_SUPPORT; templates are rendered with the
+  // real imported values so the pinned list stays the CLAIM text.
+  return Array.from(m[1]!.matchAll(/title: (?:'([^']+)'|`([^`]+)`)/g)).map((mm) => {
+    const raw = (mm[1] ?? mm[2]) as string;
+    return raw.replace(/\$\{DEVICE_SUPPORT\.(\w+)\}/g, (_, field: string) =>
+      String(DEVICE_SUPPORT[field as keyof typeof DEVICE_SUPPORT]),
+    );
+  });
 }
 
 describe('W369.A marketing-site /roadmap page content parity', () => {
@@ -57,7 +73,7 @@ describe('W369.A marketing-site /roadmap page content parity', () => {
   it('Now bucket has exactly 10 items (canonical foundation + promoted-from-NEXT v1.0 surface)', () => {
     const titles = extractList(body, 'NOW');
     expect(titles.length).toBe(10);
-    // Each title pinned verbatim.
+    // Each title pinned verbatim (templates rendered via DEVICE_SUPPORT).
     expect(titles).toEqual([
       'iPhone family fingerprint parity (81 profiles, iPhone 13 → 17 Pro Max)',
       'TypeScript · Python · Go SDKs',
@@ -70,6 +86,26 @@ describe('W369.A marketing-site /roadmap page content parity', () => {
       'Recipe library (capture + manage at v1.0)',
       'Agent sessions — natural-language automation with AI / manual / pair modes',
     ]);
+  });
+
+  it('S18 fingerprint-parity title is BOUND to DEVICE_SUPPORT (template source pinned; the page imports the fact registry)', () => {
+    expect(body).toMatch(/import \{ DEVICE_SUPPORT \} from '\.\.\/data\/capabilities\.ts';/);
+    expect(body).toMatch(
+      /title: `iPhone family fingerprint parity \(\$\{DEVICE_SUPPORT\.archetypeCount\} profiles, \$\{DEVICE_SUPPORT\.deviceFamilies\}\)`,/,
+    );
+  });
+
+  it('S18 cross-source invariant: the literal device-catalog prose (NOW body + LATER parenthetical) matches DEVICE_SUPPORT — registry drift must fail here, not silently strand the copy', () => {
+    // NOW body keeps the span as literal prose (W317.B / W297.A /
+    // W262.A pin those fragments in source); bind each fragment to
+    // the registry-derived fact registry.
+    expect(body).toContain(`across ${DEVICE_SUPPORT.archetypeCount} device profiles`);
+    expect(body).toContain(`on iOS ${DEVICE_SUPPORT.iosVersions} and Safari 18.6 through 26.5`);
+    expect(body).toContain(
+      `The ${DEVICE_SUPPORT.archetypeCount}-profile ${DEVICE_SUPPORT.deviceFamilies} catalog (iOS ${DEVICE_SUPPORT.iosVersions}, Safari ${DEVICE_SUPPORT.safariVersions})`,
+    );
+    // Sanity: the Safari span endpoints of the prose match the registry span.
+    expect(DEVICE_SUPPORT.safariVersions).toBe('18.6–26.5');
   });
 
   it('Next bucket has exactly 3 items (active engineering)', () => {

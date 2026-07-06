@@ -20,11 +20,20 @@
 //   • Probes-with-iPhone-reference denominator framing pinned
 //     (raw includes ref=None pinned post-V-141 and is NOT
 //     the marketing-surface number).
+//
+// S18 (2026-07-04) additive extension — DEVICE_SUPPORT, the device-
+// support fact registry derived from the api-types ARCHETYPE_REGISTRY
+// (customer-selectable catalog = status 'launch' | 'available').
+// Cross-source invariants below import the registry itself so a
+// catalog change fails here instead of silently stranding the
+// marketing numbers.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ARCHETYPE_REGISTRY } from '@driftstack/api-types';
+import { DEVICE_SUPPORT } from '../../src/data/capabilities.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -105,5 +114,64 @@ describe('W384.A marketing-site src/data/capabilities.ts CUMULATIVE_RIG content 
 
   it('data file exists at canonical path', () => {
     expect(existsSync(DATA)).toBe(true);
+  });
+});
+
+describe('S18 marketing-site src/data/capabilities.ts DEVICE_SUPPORT fact registry', () => {
+  const body = read(DATA);
+  const catalog = ARCHETYPE_REGISTRY.filter(
+    (a) => a.status === 'launch' || a.status === 'available',
+  );
+
+  it('derivation-source comment names the api-types ARCHETYPE_REGISTRY + the catalog scope + the derivation date', () => {
+    expect(body).toMatch(/Derivation source: packages\/api-types\/src\/common\.ts/);
+    expect(body).toMatch(/ARCHETYPE_REGISTRY — the customer-selectable catalog \(entries with/);
+    expect(body).toMatch(/status 'launch' \| 'available'/);
+    expect(body).toMatch(/Values re-derived from the registry on 2026-07-04\./);
+  });
+
+  it('homepage curated-subset note pinned (the proof section intentionally names the flagship subset; it is NOT bound to DEVICE_SUPPORT)', () => {
+    expect(body).toMatch(/NB the homepage proof section/);
+    expect(body).toMatch(
+      /intentionally names the flagship\s*\n?\s*\/\/\s*subset as curated marketing copy; it is NOT bound to this constant\./,
+    );
+  });
+
+  it('exports DEVICE_SUPPORT as a const-asserted readonly object with 5 fields', () => {
+    expect(body).toMatch(/export const DEVICE_SUPPORT = \{/);
+    expect(body).toMatch(/archetypeCount: 81,/);
+    expect(body).toMatch(/deviceFamilies: 'iPhone 13 → 17 Pro Max',/);
+    expect(body).toMatch(/iosVersions: '18\.6 \/ 18\.7',/);
+    expect(body).toMatch(/safariVersions: '18\.6–26\.5',/);
+    expect(body).toMatch(/derivedOn: '2026-07-04',/);
+  });
+
+  it('cross-source invariant: archetypeCount matches the api-types registry customer-selectable catalog (status launch | available)', () => {
+    expect(DEVICE_SUPPORT.archetypeCount).toBe(catalog.length);
+  });
+
+  it('cross-source invariant: deviceFamilies endpoints are real catalog devices (iPhone 13 floor, iPhone 17 Pro Max ceiling)', () => {
+    const devices = new Set(catalog.map((a) => a.device));
+    expect(devices.has('iPhone 13')).toBe(true);
+    expect(devices.has('iPhone 17 Pro Max')).toBe(true);
+    expect(DEVICE_SUPPORT.deviceFamilies).toBe('iPhone 13 → 17 Pro Max');
+  });
+
+  it('cross-source invariant: iosVersions covers exactly the iOS versions present in the catalog', () => {
+    const ios = [...new Set(catalog.map((a) => a.iosVersion))].sort();
+    expect(ios).toEqual(['18.6', '18.7']);
+    expect(DEVICE_SUPPORT.iosVersions).toBe(ios.join(' / '));
+  });
+
+  it('cross-source invariant: safariVersions span endpoints match the min/max Safari versions in the catalog', () => {
+    const safari = [...new Set(catalog.map((a) => a.safariVersion))].sort(
+      (a, b) => Number(a) - Number(b),
+    );
+    expect(safari).toEqual(['18.6', '26.0', '26.3', '26.4', '26.5']);
+    expect(DEVICE_SUPPORT.safariVersions).toBe(`${safari[0]}–${safari[safari.length - 1]}`);
+  });
+
+  it('CUMULATIVE_RIG lastUpdated is NOT restamped by the DEVICE_SUPPORT derivation (the rig snapshot stays founder-attested 2026-05-03)', () => {
+    expect(body).toMatch(/lastUpdated: '2026-05-03',/);
   });
 });

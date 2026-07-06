@@ -6,6 +6,7 @@
 // the pre-redesign page.
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHero from '../components/PageHero.astro';
+import { DEVICE_SUPPORT } from '../data/capabilities.ts';
 
 // V-473 — public roadmap. Sourced selectively from the internal V-294
 // catalog; internal V-NNN tags are intentionally NOT exposed (they
@@ -24,7 +25,13 @@ interface RoadmapItem {
 
 const NOW: RoadmapItem[] = [
   {
-    title: 'iPhone family fingerprint parity (81 profiles, iPhone 13 → 17 Pro Max)',
+    // S18 (2026-07-04) — the catalog figures interpolate from
+    // DEVICE_SUPPORT (src/data/capabilities.ts, derived from the
+    // api-types ARCHETYPE_REGISTRY) so this title can't drift from
+    // what the registry actually ships. The body keeps the same span
+    // as literal prose (the roadmap baselines pin those fragments in
+    // source); the parity tests cross-check it against DEVICE_SUPPORT.
+    title: `iPhone family fingerprint parity (${DEVICE_SUPPORT.archetypeCount} profiles, ${DEVICE_SUPPORT.deviceFamilies})`,
     body: 'Bit-identical fingerprint parity across 81 device profiles spanning the iPhone 13 through 17 Pro Max families, on iOS 18.6 / 18.7 and Safari 18.6 through 26.5. Every measured signal matches the real phone or the build is blocked. This is the platform foundation; everything else builds on top.',
   },
   {
