@@ -112,4 +112,53 @@ describe('docs layouts/BaseLayout content parity', () => {
     expect(body).toMatch(/href="\/fonts\/jetbrains-mono\/JetBrainsMono-Regular\.woff2"/);
     expect(body).toMatch(/<body class="flex min-h-screen flex-col bg-tk-bg text-tk-ink">/);
   });
+
+  it('S22.3 (2026-07-06) — Pagefind search modal markup pinned: hidden-by-default [data-search-modal] overlay with a [data-search-backdrop] scrim, role=dialog aria-modal=true dialog, and the combobox/listbox pattern (role=combobox input with aria-controls + aria-activedescendant + aria-autocomplete=list; role=listbox results ul restyling Pagefind <mark> highlights to the accent wash + AA accent-text via [&_mark] variants; role=status live line). Drift on the ARIA shape would break screen-reader operability of search', () => {
+    expect(body).toMatch(/<div data-search-modal hidden class="fixed inset-0 z-50">/);
+    expect(body).toMatch(/data-search-backdrop/);
+    expect(body).toMatch(
+      /role="dialog"\s*\n?\s*aria-modal="true"\s*\n?\s*aria-label="Search documentation"/,
+    );
+    expect(body).toMatch(/data-search-input\s*\n?\s*type="text"\s*\n?\s*role="combobox"/);
+    expect(body).toMatch(/aria-controls="docs-search-results"/);
+    expect(body).toMatch(/aria-activedescendant=""/);
+    expect(body).toMatch(/aria-autocomplete="list"/);
+    expect(body).toMatch(
+      /id="docs-search-results"\s*\n?\s*data-search-results\s*\n?\s*role="listbox"/,
+    );
+    expect(body).toMatch(/\[&_mark\]:bg-tk-accent-soft/);
+    expect(body).toMatch(/\[&_mark\]:text-tk-accent-text/);
+    expect(body).toMatch(/data-search-status\s*\n?\s*role="status"/);
+    expect(body).toMatch(/Type to search the docs\./);
+  });
+
+  it('S22.3 (2026-07-06) — search script behavior pinned: LAZY native dynamic import of /pagefind/pagefind.js on first open (fully local — the index is emitted by the postbuild `pagefind --site dist` step; no external hosts, no tracker), astro-dev grace (failed import → "index is generated when the site builds" empty state, never a throw), ⌘K/Ctrl-K toggle + "/" shortcut outside editable fields, focus trap (Tab refocuses the input) + focus restore to the opener, ArrowUp/ArrowDown + Enter keyboard result navigation, Esc + backdrop-click close, and section context derived from the result URL. Body must be RAW code — a template-literal-wrapped body ships as a dead no-op string (2026-07-02 bug class; the not-match guards in the S22.1 pre-paint pin above cover every is:inline script in this file)', () => {
+    expect(body).toMatch(/import\('\/pagefind\/pagefind\.js'\)/);
+    expect(body).toMatch(/loadFailed = true;/);
+    expect(body).toMatch(
+      /The search index is generated when the site builds — run a full build to search here\./,
+    );
+    expect(body).toMatch(
+      /\(e\.metaKey \|\| e\.ctrlKey\) && !e\.altKey && !e\.shiftKey && \(e\.key === 'k' \|\| e\.key === 'K'\)/,
+    );
+    expect(body).toMatch(/e\.key === '\/' && !e\.metaKey && !e\.ctrlKey && !e\.altKey/);
+    expect(body).toMatch(
+      /tag === 'INPUT' \|\| tag === 'TEXTAREA' \|\| tag === 'SELECT' \|\| \(t && t\.isContentEditable\)/,
+    );
+    expect(body).toMatch(/lastFocus = document\.activeElement;/);
+    expect(body).toMatch(/if \(lastFocus && lastFocus\.focus\) lastFocus\.focus\(\);/);
+    expect(body).toMatch(/if \(e\.key === 'Tab'\) \{/);
+    expect(body).toMatch(/if \(e\.key === 'ArrowDown'\) \{/);
+    expect(body).toMatch(/if \(e\.key === 'ArrowUp'\) \{/);
+    expect(body).toMatch(/setActive\(\(activeIndex \+ 1\) % items\.length\)/);
+    expect(body).toMatch(/setActive\(\(activeIndex - 1 \+ items\.length\) % items\.length\)/);
+    expect(body).toMatch(/input\.setAttribute\('aria-activedescendant', el\.id\);/);
+    expect(body).toMatch(/backdrop\.addEventListener\('click', close\);/);
+    expect(body).toMatch(/pf\.search\(query\)/);
+    expect(body).toMatch(/\.slice\(0, 10\)/);
+    expect(body).toMatch(/excerpt\.innerHTML = data\.excerpt \|\| '';/);
+    expect(body).toMatch(/function sectionOf\(url\)/);
+    // The [data-search-kbd] hint swaps to Ctrl K off-Apple platforms.
+    expect(body).toMatch(/k\.textContent = 'Ctrl K';/);
+  });
 });

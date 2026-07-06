@@ -174,4 +174,8 @@ describe('docs layouts/DocLayout content parity', () => {
     expect(body).toMatch(/Runs in document order AFTER the copy-button script/);
     expect(body).toMatch(/dead-inline-script\s*\n?\s*\**\s*trap/);
   });
+
+  it('S22.3 (2026-07-06) — data-pagefind-body on the ARTICLE pinned: scopes the Pagefind search index to article content only (once any page carries the attribute, everything without it — header, tree, TOC rail, footer, breadcrumbs, prev/next, the 404 page — stays out of the index, so chrome text never pollutes search results). Drift to dropping it would silently flip Pagefind to whole-page indexing of every route', () => {
+    expect(body).toMatch(/<article\s*\n?\s*data-pagefind-body\s*\n?\s*class="prose max-w-3xl/);
+  });
 });

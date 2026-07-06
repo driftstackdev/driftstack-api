@@ -11,6 +11,14 @@
 //     tailwind + @tailwindcss/typography (for prose-heavy docs pages
 //     — distinct from dashboard+admin which deliberately exclude it)
 //     + astro + tailwindcss + typescript.
+//   • S22.3 (2026-07-06): build chains `pagefind --site dist` after
+//     `astro build` — the fully-local search index (dist/pagefind/) is
+//     emitted INSIDE the workspace build script so both
+//     scripts/deploy-frontend.sh docs and .github/workflows/
+//     deploy-docs.yml (`npm run build --workspace apps/docs`) pick it
+//     up with zero pipeline changes; pagefind is the docs app's only
+//     devDependency (build-time indexer, never shipped as app code —
+//     the runtime bundle it emits is static + self-contained).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -33,16 +41,22 @@ describe('W537.B apps/docs/package.json content parity', () => {
     type: string;
     scripts: Record<string, string>;
     dependencies: Record<string, string>;
+    devDependencies: Record<string, string>;
   };
 
-  it("Identity + Astro-app shape framing pinned: 'name: @driftstack/docs' + 'private: true' + 'type: module' + 4-script Astro pipeline (dev/build/preview/typecheck via astro check) — pinned so the monorepo-scoped name + standard Astro-app shape (parity with marketing-site + customer-dashboard + admin-panel + status-site) commitment survives", () => {
+  it("Identity + Astro-app shape framing pinned: 'name: @driftstack/docs' + 'private: true' + 'type: module' + 4-script Astro pipeline (dev/build/preview/typecheck via astro check). S22.3 (2026-07-06): build = 'astro build && pagefind --site dist' — the Pagefind index step is chained INSIDE the workspace build script so deploy-frontend.sh and deploy-docs.yml (both run `npm run build --workspace`) emit dist/pagefind/ with zero pipeline edits; drift back to bare 'astro build' would silently ship a docs site whose search modal finds nothing", () => {
     expect(pkg.name).toBe('@driftstack/docs');
     expect(pkg.private).toBe(true);
     expect(pkg.type).toBe('module');
     expect(pkg.scripts.dev).toBe('astro dev');
-    expect(pkg.scripts.build).toBe('astro build');
+    expect(pkg.scripts.build).toBe('astro build && pagefind --site dist');
     expect(pkg.scripts.preview).toBe('astro preview');
     expect(pkg.scripts.typecheck).toBe('astro check');
+  });
+
+  it('S22.3 (2026-07-06) — pagefind devDependency pinned: the static-search indexer lives in devDependencies (build-time tool — the runtime bundle it emits into dist/pagefind/ is fully local + self-contained, so the app ships zero new runtime deps and zero external calls), NOT in dependencies. Drift to dropping it would break the build script chain above; drift into dependencies would misstate it as shipped app code', () => {
+    expect(pkg.devDependencies).toHaveProperty('pagefind');
+    expect(pkg.dependencies).not.toHaveProperty('pagefind');
   });
 
   it('Critical-dep + typography-plugin framing pinned: @astrojs/check + @astrojs/sitemap (for V-250 docs sitemap) + @tailwindcss/postcss (W368 — Tailwind v4 engine via PostCSS, replaced the v3 @astrojs/tailwind integration) + @tailwindcss/typography (load-bearing for prose-heavy long-form docs — distinct from dashboard+admin which deliberately exclude it for forms/tables-only surface) + astro + tailwindcss + typescript + NO @sentry/astro (parity with docs astro.config no-Sentry posture) — pinned so the dep set with typography-plugin commitment survives (drift to dropping @tailwindcss/typography would break prose rendering on docs.driftstack.dev pages; drift to dropping @astrojs/sitemap would break crawler discovery of docs pages)', () => {

@@ -109,6 +109,80 @@ const canonical = new URL(pathname, Astro.site).toString();
       <slot />
     </main>
     <Footer />
+    {/* S22.3 (2026-07-06) — Pagefind search modal. Fully-local static
+        search: the index is emitted into dist/pagefind/ by the postbuild
+        `pagefind --site dist` step (apps/docs package.json build script),
+        zero external calls. Opened by the Header [data-search-open]
+        buttons or ⌘K / Ctrl-K / "/" (wired in the script at body end,
+        which also lazy-imports /pagefind/pagefind.js on first open).
+        ARIA: dialog + the combobox/listbox aria-activedescendant pattern
+        — focus stays trapped in the input; arrows drive the results. */}
+    <div data-search-modal hidden class="fixed inset-0 z-50">
+      <div data-search-backdrop class="absolute inset-0 bg-black/60"></div>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Search documentation"
+        class="relative mx-auto mt-[10vh] flex max-h-[70vh] w-[min(40rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-tk-border bg-tk-surface shadow-ambient-lg"
+      >
+        <div class="flex items-center gap-3 border-b border-tk-border px-4">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            class="shrink-0 text-tk-ink-3"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.35-4.35"></path>
+          </svg>
+          <input
+            data-search-input
+            type="text"
+            role="combobox"
+            aria-expanded="false"
+            aria-controls="docs-search-results"
+            aria-activedescendant=""
+            aria-autocomplete="list"
+            aria-label="Search the docs"
+            autocomplete="off"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck="false"
+            placeholder="Search the docs…"
+            class="h-12 w-full min-w-0 bg-transparent text-sm text-tk-ink outline-none placeholder:text-tk-ink-3"
+          />
+          <kbd
+            class="shrink-0 rounded-sm border border-tk-border bg-tk-raised px-1.5 py-0.5 font-mono text-[0.625rem] text-tk-ink-3"
+            >Esc</kbd
+          >
+        </div>
+        {/* Result rows are built by the search script; [&_mark] restyles
+            Pagefind's term-highlight marks from the UA yellow to the
+            accent wash + AA accent-text tone. */}
+        <ul
+          id="docs-search-results"
+          data-search-results
+          role="listbox"
+          aria-label="Search results"
+          class="overflow-y-auto p-2 empty:hidden [&_mark]:rounded-sm [&_mark]:bg-tk-accent-soft [&_mark]:px-0.5 [&_mark]:font-medium [&_mark]:text-tk-accent-text"
+        >
+        </ul>
+        <p
+          data-search-status
+          role="status"
+          class="border-t border-tk-border px-4 py-2.5 text-xs text-tk-ink-3"
+        >
+          Type to search the docs.
+        </p>
+      </div>
+    </div>
     <script is:inline>
       {
         /*
@@ -134,6 +208,297 @@ const canonical = new URL(pathname, Astro.site).toString();
           } catch (_) {
             /* persistence unavailable — the toggle still works this visit */
           }
+        });
+      })();
+    </script>
+    <script is:inline>
+      {
+        /*
+         * S22.3 (2026-07-06) — Pagefind search. Fully local: the Pagefind
+         * bundle + index live under /pagefind/ in the built site (postbuild
+         * `pagefind --site dist`) and are LAZY-loaded via a native dynamic
+         * import on first open — no external hosts, no tracker, nothing on
+         * pages where search is never opened. In `astro dev` there is no
+         * /pagefind/ (the index is generated at build time), so the failed
+         * import degrades to a friendly empty state instead of throwing.
+         *
+         * Interaction contract:
+         *   - open: Header [data-search-open] buttons, ⌘K / Ctrl-K
+         *     (toggles), or "/" outside editable fields
+         *   - a11y: role=dialog aria-modal + the combobox/listbox
+         *     aria-activedescendant pattern — focus is trapped in the input
+         *     (Tab refocuses it), ArrowUp/ArrowDown walk results, Enter
+         *     opens the active one, Esc / backdrop click close, and focus
+         *     returns to the opener on close
+         *   - excerpts keep Pagefind's <mark> term highlights (same-origin
+         *     page text); section context derives from the result URL's
+         *     first path segment
+         *
+         * Plain code in a brace-comment block — never a template literal
+         * inside an expression container: Astro emits that wrapper
+         * literally, turning the whole script into a no-op string
+         * expression (the 2026-07-02 dead-inline-script bug class).
+         */
+      }
+      (function () {
+        var modal = document.querySelector('[data-search-modal]');
+        var input = document.querySelector('[data-search-input]');
+        var list = document.querySelector('[data-search-results]');
+        var status = document.querySelector('[data-search-status]');
+        var backdrop = document.querySelector('[data-search-backdrop]');
+        if (!modal || !input || !list || !status) return;
+
+        var IDLE_MSG = 'Type to search the docs.';
+        var DEV_MSG =
+          'The search index is generated when the site builds — run a full build to search here.';
+
+        /* Platform-aware shortcut hint on the Header pill. */
+        if (!/Mac|iPhone|iPad|iPod/.test(navigator.platform || '')) {
+          document.querySelectorAll('[data-search-kbd]').forEach(function (k) {
+            k.textContent = 'Ctrl K';
+          });
+        }
+
+        var loadPromise = null;
+        var loadFailed = false;
+        function loadPagefind() {
+          if (!loadPromise) {
+            loadPromise = import('/pagefind/pagefind.js').then(
+              function (mod) {
+                return mod;
+              },
+              function () {
+                /* astro dev / index missing — graceful empty state. */
+                loadFailed = true;
+                status.textContent = DEV_MSG;
+                return null;
+              },
+            );
+          }
+          return loadPromise;
+        }
+
+        var lastFocus = null;
+        var items = [];
+        var activeIndex = -1;
+        var seq = 0;
+        var debounceTimer = null;
+
+        function isOpen() {
+          return !modal.hidden;
+        }
+
+        function setActive(idx) {
+          if (activeIndex >= 0 && items[activeIndex]) {
+            items[activeIndex].el.classList.remove('bg-tk-hover');
+            items[activeIndex].el.setAttribute('aria-selected', 'false');
+          }
+          activeIndex = idx;
+          if (idx >= 0 && items[idx]) {
+            var el = items[idx].el;
+            el.classList.add('bg-tk-hover');
+            el.setAttribute('aria-selected', 'true');
+            input.setAttribute('aria-activedescendant', el.id);
+            if (el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+          } else {
+            input.setAttribute('aria-activedescendant', '');
+          }
+        }
+
+        function clearResults(message) {
+          list.textContent = '';
+          items = [];
+          setActive(-1);
+          input.setAttribute('aria-expanded', 'false');
+          if (message) status.textContent = message;
+        }
+
+        /* Section context from the result URL — cheap and stable (the
+           first path segment IS the docs IA section). */
+        var SECTIONS = {
+          api: 'API',
+          sdk: 'SDKs',
+          guides: 'Guides',
+          reference: 'Reference',
+          webhooks: 'Webhooks',
+        };
+        function sectionOf(url) {
+          var seg = String(url).replace(/^\//, '').split('/')[0];
+          return SECTIONS[seg] || 'Docs';
+        }
+
+        function renderResults(datas, query) {
+          clearResults(null);
+          if (!datas.length) {
+            status.textContent = 'No results for “' + query + '”.';
+            return;
+          }
+          datas.forEach(function (data, i) {
+            var li = document.createElement('li');
+            li.id = 'docs-search-result-' + i;
+            li.setAttribute('role', 'option');
+            li.setAttribute('aria-selected', 'false');
+            li.className = 'rounded-md';
+            var a = document.createElement('a');
+            a.href = data.url;
+            a.tabIndex = -1;
+            a.className = 'block rounded-md px-3 py-2.5 no-underline hover:bg-tk-hover';
+            var top = document.createElement('div');
+            top.className = 'flex items-baseline justify-between gap-3';
+            var title = document.createElement('span');
+            title.className = 'min-w-0 truncate text-sm font-medium text-tk-ink';
+            title.textContent = (data.meta && data.meta.title) || data.url;
+            var section = document.createElement('span');
+            section.className =
+              'shrink-0 font-mono text-[0.625rem] uppercase tracking-wide text-tk-ink-3';
+            section.textContent = sectionOf(data.url);
+            top.appendChild(title);
+            top.appendChild(section);
+            var excerpt = document.createElement('p');
+            excerpt.className = 'mt-1 text-xs leading-5 text-tk-ink-2';
+            /* Pagefind excerpts are the page's OWN text with <mark> around
+               matched terms — same-origin content rendered as-is so the
+               highlights survive. */
+            excerpt.innerHTML = data.excerpt || '';
+            a.appendChild(top);
+            a.appendChild(excerpt);
+            li.appendChild(a);
+            list.appendChild(li);
+            items.push({ el: li, url: data.url });
+          });
+          input.setAttribute('aria-expanded', 'true');
+          status.textContent =
+            datas.length + (datas.length === 1 ? ' result' : ' results') + ' — ↑↓ to navigate, Enter to open';
+          setActive(0);
+        }
+
+        function runSearch(query) {
+          var mySeq = ++seq;
+          loadPagefind().then(function (pf) {
+            if (!pf || mySeq !== seq) return;
+            pf.search(query).then(function (search) {
+              if (mySeq !== seq) return;
+              var top = search.results.slice(0, 10);
+              Promise.all(
+                top.map(function (r) {
+                  return r.data();
+                }),
+              ).then(function (datas) {
+                if (mySeq !== seq) return;
+                renderResults(datas, query);
+              });
+            });
+          });
+        }
+
+        function open() {
+          if (isOpen()) {
+            input.focus();
+            return;
+          }
+          lastFocus = document.activeElement;
+          modal.hidden = false;
+          document.documentElement.style.overflow = 'hidden';
+          input.value = '';
+          clearResults(loadFailed ? DEV_MSG : IDLE_MSG);
+          input.focus();
+          /* Warm the (tiny) entry module while the visitor types. */
+          loadPagefind();
+        }
+
+        function close() {
+          if (!isOpen()) return;
+          modal.hidden = true;
+          document.documentElement.style.overflow = '';
+          seq++;
+          if (debounceTimer) window.clearTimeout(debounceTimer);
+          if (lastFocus && lastFocus.focus) lastFocus.focus();
+          lastFocus = null;
+        }
+
+        document.addEventListener('click', function (e) {
+          var btn = e.target instanceof Element ? e.target.closest('[data-search-open]') : null;
+          if (btn) {
+            e.preventDefault();
+            open();
+          }
+        });
+        if (backdrop) backdrop.addEventListener('click', close);
+        /* Result click: navigation proceeds; close explicitly so a
+           same-page #anchor jump doesn't leave the modal up. */
+        list.addEventListener('click', function (e) {
+          var a = e.target instanceof Element ? e.target.closest('a') : null;
+          if (a) close();
+        });
+
+        document.addEventListener('keydown', function (e) {
+          if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && (e.key === 'k' || e.key === 'K')) {
+            e.preventDefault();
+            if (isOpen()) close();
+            else open();
+            return;
+          }
+          if (!isOpen()) {
+            if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+              var t = e.target;
+              var tag = t && t.tagName ? t.tagName : '';
+              var editable =
+                tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable);
+              if (!editable) {
+                e.preventDefault();
+                open();
+              }
+            }
+            return;
+          }
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            close();
+            return;
+          }
+          if (e.key === 'Tab') {
+            /* Single-field dialog: keep focus trapped in the input; the
+               results are driven via aria-activedescendant, not Tab. */
+            e.preventDefault();
+            input.focus();
+            return;
+          }
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (items.length) setActive((activeIndex + 1) % items.length);
+            return;
+          }
+          if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (items.length) setActive((activeIndex - 1 + items.length) % items.length);
+            return;
+          }
+          if (e.key === 'Enter') {
+            if (activeIndex >= 0 && items[activeIndex]) {
+              e.preventDefault();
+              var url = items[activeIndex].url;
+              close();
+              window.location.href = url;
+            }
+          }
+        });
+
+        input.addEventListener('input', function () {
+          var q = input.value.trim();
+          if (debounceTimer) window.clearTimeout(debounceTimer);
+          if (!q) {
+            seq++;
+            clearResults(IDLE_MSG);
+            return;
+          }
+          if (loadFailed) {
+            clearResults(DEV_MSG);
+            return;
+          }
+          status.textContent = 'Searching…';
+          debounceTimer = window.setTimeout(function () {
+            runSearch(q);
+          }, 120);
         });
       })();
     </script>

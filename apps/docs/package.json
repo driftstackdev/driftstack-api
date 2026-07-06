@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "astro build && pagefind --site dist",
     "preview": "astro preview",
     "typecheck": "astro check"
   },
@@ -17,5 +17,8 @@
     "astro": "^6.0.0",
     "tailwindcss": "^4.3.0",
     "typescript": "^5.7.0"
+  },
+  "devDependencies": {
+    "pagefind": "^1.5.2"
   }
 }

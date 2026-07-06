@@ -251,8 +251,16 @@ const nextItem =
              - tables/hr: tk-border via the base.css hooks
            S22.2 — flex-1 dropped (the grid column sizes the pane now);
            max-w-3xl keeps the ~72ch reading measure inside the wider
-           shell. Blockquote callout restyle lives in base.css. -->
+           shell. Blockquote callout restyle lives in base.css.
+           S22.3 (2026-07-06) — data-pagefind-body scopes the Pagefind
+           index to the ARTICLE only: once any page carries the
+           attribute, pages/regions without it stay out of the index, so
+           the header/tree/TOC/footer chrome (and the 404 page, which
+           wraps BaseLayout directly) never pollute search results. Page
+           title metadata = Pagefind's default first-h1 capture (every
+           doc page has one — docs-page-h1-presence guards it). -->
       <article
+        data-pagefind-body
         class="prose max-w-3xl
                prose-headings:font-semibold
                prose-a:no-underline prose-a:hover:underline

@@ -67,4 +67,16 @@ describe('docs components/Header content parity', () => {
     expect(body).toMatch(/<details class="relative">/);
     expect(body).toMatch(/aria-label="Open navigation menu"/);
   });
+
+  it('S22.3 (2026-07-06) — search triggers pinned: [data-search-open] buttons in BOTH the desktop nav (input-style pill with a [data-search-kbd] ⌘K hint the BaseLayout script swaps to "Ctrl K" off-Apple) and the mobile cluster (icon-only), each aria-label="Search docs" + aria-haspopup="dialog". They open the BaseLayout Pagefind modal — drift to dropping either button would strand a form factor without search', () => {
+    // Attribute lines only (the S22.3 doc comment also names the hook).
+    expect(body.match(/^\s+data-search-open$/gm)?.length).toBe(2);
+    expect(body.match(/aria-label="Search docs"/g)?.length).toBe(2);
+    expect(body.match(/aria-haspopup="dialog"/g)?.length).toBe(2);
+    expect(body).toMatch(/aria-keyshortcuts="Meta\+K Control\+K \/"/);
+    expect(body).toMatch(/data-search-kbd/);
+    expect(body).toMatch(/>⌘K<\/kbd/);
+    // Both triggers carry the magnifier icon (11,11 r=8 lens + handle).
+    expect(body.match(/<circle cx="11" cy="11" r="8"><\/circle>/g)?.length).toBe(2);
+  });
 });
