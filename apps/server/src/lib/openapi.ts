@@ -4693,14 +4693,21 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/egress/echo',
-    summary: 'Echo the caller exit IP (+ country when resolvable) — proxy-probe support',
+    summary: 'Echo the caller exit IP (+ best-effort CF-edge geo) — proxy-probe support',
     tags: ['egress'],
     responses: {
       200: {
-        description: 'The IP (and CF-edge country, null when unknown) this request arrived from.',
+        description:
+          'The IP + best-effort geo (CF-edge country/region/city/timezone, each null when unknown) this request arrived from.',
         content: {
           'application/json': {
-            schema: z.object({ ip: z.string(), country: z.string().nullable() }),
+            schema: z.object({
+              ip: z.string(),
+              country: z.string().nullable(),
+              region: z.string().nullable(),
+              city: z.string().nullable(),
+              timezone: z.string().nullable(),
+            }),
           },
         },
       },

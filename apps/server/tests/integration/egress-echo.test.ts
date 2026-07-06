@@ -40,6 +40,41 @@ describe('GET /v1/egress/echo', () => {
     }
   });
 
+  it('#128 exit geo — region/city/timezone from CF location headers; absent ⇒ null (never invented)', async () => {
+    fx = await buildTestApp();
+    const withGeo = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/egress/echo',
+      headers: {
+        'cf-region': 'North Holland',
+        'cf-ipcity': 'Amsterdam',
+        'cf-timezone': 'Europe/Amsterdam',
+      },
+    });
+    expect(withGeo.statusCode).toBe(200);
+    const g = withGeo.json<{
+      region: string | null;
+      city: string | null;
+      timezone: string | null;
+    }>();
+    expect(g.region).toBe('North Holland');
+    expect(g.city).toBe('Amsterdam');
+    expect(g.timezone).toBe('Europe/Amsterdam');
+    // blank header trims to empty ⇒ null
+    const blank = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/egress/echo',
+      headers: { 'cf-region': '   ' },
+    });
+    expect(blank.json<{ region: string | null }>().region).toBeNull();
+    // absent (transform off) ⇒ null
+    const noGeo = await fx.app.inject({ method: 'GET', url: '/v1/egress/echo' });
+    const n = noGeo.json<{ region: string | null; city: string | null; timezone: string | null }>();
+    expect(n.region).toBeNull();
+    expect(n.city).toBeNull();
+    expect(n.timezone).toBeNull();
+  });
+
   it('429 after the IP bucket drains (capacity 12)', async () => {
     fx = await buildTestApp();
     let last = 0;

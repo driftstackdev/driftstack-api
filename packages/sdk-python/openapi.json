@@ -23458,11 +23458,11 @@
     },
     "/v1/egress/echo": {
       "get": {
-        "summary": "Echo the caller exit IP (+ country when resolvable) — proxy-probe support",
+        "summary": "Echo the caller exit IP (+ best-effort CF-edge geo) — proxy-probe support",
         "tags": ["egress"],
         "responses": {
           "200": {
-            "description": "The IP (and CF-edge country, null when unknown) this request arrived from.",
+            "description": "The IP + best-effort geo (CF-edge country/region/city/timezone, each null when unknown) this request arrived from.",
             "content": {
               "application/json": {
                 "schema": {
@@ -23473,9 +23473,18 @@
                     },
                     "country": {
                       "type": ["string", "null"]
+                    },
+                    "region": {
+                      "type": ["string", "null"]
+                    },
+                    "city": {
+                      "type": ["string", "null"]
+                    },
+                    "timezone": {
+                      "type": ["string", "null"]
                     }
                   },
-                  "required": ["ip", "country"]
+                  "required": ["ip", "country", "region", "city", "timezone"]
                 }
               }
             }

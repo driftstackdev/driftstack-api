@@ -34,6 +34,16 @@ import { ipRateLimit } from '../middleware/ip-rate-limit.js';
 
 export const EGRESS_ECHO_IP_LIMIT = { capacity: 12, refillPerSecond: 12 / 60 };
 
+/** #128 — best-effort read of a Cloudflare visitor-location header (added by the
+ *  "Add visitor location headers" managed transform). A non-empty trimmed string,
+ *  else null. Absent when the transform is off or the edge couldn't resolve the
+ *  exit IP — surfaced as null, never invented. */
+function cfLocationHeader(raw: string | string[] | undefined): string | null {
+  if (typeof raw !== 'string') return null;
+  const v = raw.trim();
+  return v.length > 0 ? v : null;
+}
+
 export function registerEgressEchoRoutes(
   app: FastifyInstance,
   deps: { rateLimitStore: RateLimitStore },
@@ -49,9 +59,18 @@ export function registerEgressEchoRoutes(
       typeof rawCountry === 'string' && /^[A-Z]{2}$/.test(rawCountry) && rawCountry !== 'XX'
         ? rawCountry
         : null;
+    // #128 new-tab IP panel: best-effort exit geo from Cloudflare's location
+    // headers. The server pre-launch probe reads these back THROUGH the proxy
+    // (req.ip = proxy EXIT IP) to populate the box-local new-tab panel's
+    // exit_identity. Absent (transform off / edge unresolved) ⇒ null. Additive
+    // to the existing {ip,country} shape — device-side probe consumers ignore
+    // the new fields.
     return {
       ip: req.ip,
       country,
+      region: cfLocationHeader(req.headers['cf-region']),
+      city: cfLocationHeader(req.headers['cf-ipcity']),
+      timezone: cfLocationHeader(req.headers['cf-timezone']),
     };
   });
 }
