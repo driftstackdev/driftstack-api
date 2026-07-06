@@ -177,6 +177,19 @@ export function serializeSessionAssign(args: {
    *  present ⇒ the fork's location provider serves exactly these coordinates.
    *  accuracy is meters; omitted → harness default 35.0. */
   geolocation?: { latitude: number; longitude: number; accuracy?: number };
+  /** #128 new-tab IP panel — CP-probed exit identity for the box-local new-tab
+   *  page. camelCase in; emitted as the snake_case wire block (quic_ok/probed_at).
+   *  Absent ⇒ box keeps today's behaviour. region/city/timezone null when the
+   *  geo lookup can't resolve them. */
+  exitIdentity?: {
+    ip: string;
+    country: string;
+    region: string | null;
+    city: string | null;
+    timezone: string | null;
+    quicOk: boolean;
+    probedAt: string;
+  };
 }): SessionAssign {
   let inlineProxyConfig: string | undefined;
   if (args.inlineProxyConfig !== undefined) {
@@ -255,6 +268,19 @@ export function serializeSessionAssign(args: {
             ...(args.geolocation.accuracy !== undefined
               ? { accuracy: args.geolocation.accuracy }
               : {}),
+          },
+        }
+      : {}),
+    ...(args.exitIdentity !== undefined
+      ? {
+          exit_identity: {
+            ip: args.exitIdentity.ip,
+            country: args.exitIdentity.country,
+            region: args.exitIdentity.region,
+            city: args.exitIdentity.city,
+            timezone: args.exitIdentity.timezone,
+            quic_ok: args.exitIdentity.quicOk,
+            probed_at: args.exitIdentity.probedAt,
           },
         }
       : {}),

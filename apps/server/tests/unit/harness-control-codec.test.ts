@@ -366,6 +366,72 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
       serializeSessionAssign({ ...base, geolocation: { latitude: 0, longitude: 181 } }),
     ).toThrow();
   });
+
+  it('exit_identity (#128 new-tab panel) — camelCase in → snake_case wire; null geo passthrough; absent → omitted', () => {
+    const full = serializeSessionAssign({
+      ...base,
+      exitIdentity: {
+        ip: '203.0.113.7',
+        country: 'NL',
+        region: 'North Holland',
+        city: 'Amsterdam',
+        timezone: 'Europe/Amsterdam',
+        quicOk: true,
+        probedAt: '2026-07-06T10:00:00.000Z',
+      },
+    });
+    expect(full.exit_identity).toEqual({
+      ip: '203.0.113.7',
+      country: 'NL',
+      region: 'North Holland',
+      city: 'Amsterdam',
+      timezone: 'Europe/Amsterdam',
+      quic_ok: true,
+      probed_at: '2026-07-06T10:00:00.000Z',
+    });
+    // Unresolved best-effort geo rides as null (present, NOT omitted) so the box
+    // decoder always sees the key — distinct from the whole block being absent.
+    const nullGeo = serializeSessionAssign({
+      ...base,
+      exitIdentity: {
+        ip: '198.51.100.4',
+        country: 'XX',
+        region: null,
+        city: null,
+        timezone: null,
+        quicOk: false,
+        probedAt: '2026-07-06T10:00:00.000Z',
+      },
+    });
+    expect(nullGeo.exit_identity).toEqual({
+      ip: '198.51.100.4',
+      country: 'XX',
+      region: null,
+      city: null,
+      timezone: null,
+      quic_ok: false,
+      probed_at: '2026-07-06T10:00:00.000Z',
+    });
+    // absent → omitted (box keeps today's no-local-panel behaviour)
+    expect(serializeSessionAssign(base).exit_identity).toBeUndefined();
+  });
+
+  it('exit_identity country must be exactly ISO-3166 alpha-2 (2 chars) — wire schema bound', () => {
+    expect(() =>
+      serializeSessionAssign({
+        ...base,
+        exitIdentity: {
+          ip: '1.2.3.4',
+          country: 'NLD',
+          region: null,
+          city: null,
+          timezone: null,
+          quicOk: true,
+          probedAt: '2026-07-06T10:00:00.000Z',
+        },
+      }),
+    ).toThrow();
+  });
 });
 
 describe('serializeSessionEnd (ControlInbound teardown)', () => {

@@ -301,6 +301,29 @@ export const SessionAssignGeolocationSchema = z
   })
   .strict();
 
+// #128 new-tab IP panel (A2↔A3 bus 2026-07-06). The box serves the new-tab page
+// LOCALLY (no proxy hop → instant, reliable even when the proxy can't reach
+// driftstack.dev/newtab) and renders the IP/geo/tz/QUIC panel from THIS block —
+// the CP-probed exit identity, authoritative because it's what the world sees
+// through the customer's proxy — instead of a proxied /cdn-cgi/trace fetch that
+// Cloudflare challenges. snake_case wire keys mirror the livekit/profile block
+// convention (A3 matches this decoder byte-for-byte). Absent ⇒ box keeps today's
+// behaviour (no local panel data / falls back). `country` is ISO-3166 alpha-2 or
+// 'XX' (unknown); region/city/timezone are best-effort (null when the geo lookup
+// can't resolve them); `quic_ok` is the CP UDP/QUIC pre-detection for the proxy
+// (drives the panel's "HTTP/3" indicator); `probed_at` is ISO8601 freshness.
+export const SessionAssignExitIdentitySchema = z
+  .object({
+    ip: z.string().min(1),
+    country: z.string().length(2),
+    region: z.string().min(1).nullable(),
+    city: z.string().min(1).nullable(),
+    timezone: z.string().min(1).nullable(),
+    quic_ok: z.boolean(),
+    probed_at: z.string().min(1),
+  })
+  .strict();
+
 export const SessionAssignSchema = z
   .object({
     type: z.literal('sessionAssign'),
@@ -337,10 +360,14 @@ export const SessionAssignSchema = z
     // Explicit geolocation override (optional; absent ⇒ harness auto-derives
     // from the proxy-exit IP — see SessionAssignGeolocationSchema above).
     geolocation: SessionAssignGeolocationSchema.optional(),
+    // #128 new-tab IP panel: CP-probed exit identity for the box-local new-tab
+    // page (optional; absent ⇒ box keeps today's behaviour).
+    exit_identity: SessionAssignExitIdentitySchema.optional(),
   })
   .strict();
 export type SessionAssign = z.infer<typeof SessionAssignSchema>;
 export type SessionAssignGeolocation = z.infer<typeof SessionAssignGeolocationSchema>;
+export type SessionAssignExitIdentity = z.infer<typeof SessionAssignExitIdentitySchema>;
 
 // ── ControlInbound.sessionEnd (server → harness) ──────────────────────
 // The trivial teardown envelope (W122 ControlInbound set: sessionAssign /
