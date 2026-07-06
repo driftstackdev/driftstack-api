@@ -76,4 +76,40 @@ describe('docs layouts/BaseLayout content parity', () => {
       /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=4" \/>/,
     );
   });
+
+  it('S22.1 (2026-07-06) — Fleet mode/accent axes LIVE on <html>: dark+oxblood founder-locked default + dark theme-color meta (#060608; iOS Safari status-bar tint). Drift to dropping either attribute would strand every tk-* token on its fallback', () => {
+    expect(body).toMatch(/<html lang="en" data-mode="dark" data-accent="oxblood">/);
+    expect(body).toMatch(/<meta name="theme-color" content="#060608" \/>/);
+  });
+
+  it('S22.1 — pre-paint theme script pinned: is:inline, reads ds_theme_mode, WHITELISTED value check (never raw localStorage into a DOM attribute), swaps theme-color to #f2f3f6 on light, no prefers-color-scheme (dark first impression is the brand). Body must be RAW code — a template-literal-wrapped body ships as a dead no-op string (2026-07-02 bug class)', () => {
+    expect(body).toMatch(/<script is:inline>/);
+    expect(body).toMatch(/var m = localStorage\.getItem\('ds_theme_mode'\);/);
+    expect(body).toMatch(/if \(m === 'light' \|\| m === 'dark'\) \{/);
+    expect(body).toMatch(/document\.documentElement\.setAttribute\('data-mode', m\);/);
+    expect(body).toMatch(/mt\.setAttribute\('content', '#f2f3f6'\);/);
+    // The dead-inline-script trap: no template-literal expression wrapper.
+    expect(body).not.toMatch(/<script is:inline>\s*\{`/);
+    expect(body).not.toMatch(/is:inline>\s*\{\s*`/);
+  });
+
+  it('S22.1 — mode-toggle wiring pinned: one delegated [data-theme-toggle] listener at body end flips data-mode, syncs the theme-color meta, persists to ds_theme_mode (try/catch — persistence-unavailable still toggles this visit)', () => {
+    expect(body).toMatch(/e\.target\.closest\('\[data-theme-toggle\]'\)/);
+    expect(body).toMatch(
+      /document\.documentElement\.getAttribute\('data-mode'\) === 'dark' \? 'light' : 'dark';/,
+    );
+    expect(body).toMatch(/document\.documentElement\.setAttribute\('data-mode', next\);/);
+    expect(body).toMatch(
+      /mt\.setAttribute\('content', next === 'light' \? '#f2f3f6' : '#060608'\);/,
+    );
+    expect(body).toMatch(/localStorage\.setItem\('ds_theme_mode', next\);/);
+  });
+
+  it('S22.1 — self-hosted font preloads pinned (Geist VF + JetBrains Mono Regular, crossorigin — fonts always need it even same-origin) + tk token body classes. Drift to dropping a preload re-introduces the system-font flash on first paint', () => {
+    expect(body).toMatch(
+      /<link rel="preload" href="\/fonts\/geist\/GeistVF\.woff2" as="font" type="font\/woff2" crossorigin \/>/,
+    );
+    expect(body).toMatch(/href="\/fonts\/jetbrains-mono\/JetBrainsMono-Regular\.woff2"/);
+    expect(body).toMatch(/<body class="flex min-h-screen flex-col bg-tk-bg text-tk-ink">/);
+  });
 });

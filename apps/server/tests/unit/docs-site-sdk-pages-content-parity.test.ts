@@ -39,21 +39,21 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
       expect(body).toMatch(/<code>@driftstack\/api-types<\/code>/);
     });
 
-    it('TypeScript card — @driftstack/sdk, npm install command + status "published, pre-1.0" (the only one of the 3 SDKs in actual public production). Drift here would mislead customers about which SDK is safe to depend on today.', () => {
+    it('TypeScript card — @driftstack/sdk, npm install command + status "published, pre-1.0" (the only one of the 3 SDKs in actual public production). S22.1 (2026-07-06): card chrome re-pinned on tk-* tokens (tk-border/tk-surface/tk-ink ladder + ambient shadow). Drift here would mislead customers about which SDK is safe to depend on today.', () => {
       expect(body).toMatch(
-        /<article class="rounded-md border border-white\/10 bg-surface-raised p-5">\s*\n\s*<p class="font-mono text-xs uppercase tracking-wide text-ink-muted">TypeScript<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-ink-primary">@driftstack\/sdk<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-ink-secondary">npm install @driftstack\/sdk<\/p>\s*\n\s*<p class="mt-3 text-xs text-ink-muted">Status: published, pre-1\.0<\/p>\s*\n\s*<\/article>/,
+        /<article class="rounded-md border border-tk-border bg-tk-surface p-5 shadow-ambient">\s*\n\s*<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">TypeScript<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">@driftstack\/sdk<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2">npm install @driftstack\/sdk<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: published, pre-1\.0<\/p>\s*\n\s*<\/article>/,
       );
     });
 
     it('Python card — driftstack-sdk, pip install command + status "alpha; PyPI tag pending". The "PyPI tag pending" framing is load-bearing because it tells customers the install will need to come from a git ref or wheel during alpha, not pip\'s package index.', () => {
       expect(body).toMatch(
-        /<p class="font-mono text-xs uppercase tracking-wide text-ink-muted">Python<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-ink-primary">driftstack-sdk<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-ink-secondary">pip install driftstack-sdk<\/p>\s*\n\s*<p class="mt-3 text-xs text-ink-muted">Status: alpha; PyPI tag pending<\/p>/,
+        /<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">Python<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">driftstack-sdk<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2">pip install driftstack-sdk<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: alpha; PyPI tag pending<\/p>/,
       );
     });
 
     it('Go card — sdk-go, go get github.com/driftstackdev/... + status "alpha; first tag pending". "First tag pending" framing tells customers the SDK is still pin-to-sha territory during alpha (no semver tag yet).', () => {
       expect(body).toMatch(
-        /<p class="font-mono text-xs uppercase tracking-wide text-ink-muted">Go<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-ink-primary">sdk-go<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-ink-secondary">go get github\.com\/driftstackdev\/\.\.\.<\/p>\s*\n\s*<p class="mt-3 text-xs text-ink-muted">Status: alpha; first tag pending<\/p>/,
+        /<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">Go<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">sdk-go<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2">go get github\.com\/driftstackdev\/\.\.\.<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: alpha; first tag pending<\/p>/,
       );
     });
 

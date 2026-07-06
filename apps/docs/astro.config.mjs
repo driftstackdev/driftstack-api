@@ -15,6 +15,16 @@ export default defineConfig({
       filter: (page) => !page.includes('/404'),
     }),
   ],
+  markdown: {
+    // S22.1 (2026-07-06) — the default github-dark theme's comment token
+    // (#6A737D on its inline #24292e block bg) measures ~2.9:1, below
+    // WCAG AA; github-dark-default (GitHub's current production dark
+    // code theme) keeps the founder-pinned dark-terminal look with
+    // AA-readable comments (#8b949e ≈ 6.2:1 on #0d1117).
+    shikiConfig: {
+      theme: 'github-dark-default',
+    },
+  },
   build: {
     inlineStylesheets: 'auto',
   },

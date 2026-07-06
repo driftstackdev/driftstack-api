@@ -55,11 +55,24 @@ describe('docs layouts/DocLayout content parity', () => {
     expect(body).toMatch(/pathname === href \|\| pathname === href\.replace\(\/\\\/\$\/, ''\)/);
   });
 
-  it('Fleet light prose styling pinned: plain prose-slate (no prose-invert) + DARK fenced code (#16171c) — the founder flagged light code backgrounds as ugly, so fenced code stays dark on the light docs theme', () => {
-    expect(body).toMatch(/Fleet rebrand — prose styling for the LIGHT surface/);
-    expect(body).toMatch(/prose prose-slate/);
+  it('tk-token prose styling pinned (S22.1 2026-07-06, brand-parity port — SUPERSEDES the R11 "prose-slate + prose-pre:bg-[#16171c]" pin): single `prose` class set whose color hooks are un-layered --tw-prose-* overrides in base.css reading the mode-scoped tk tokens. Still NOT prose-invert (no mode-flip class swap), and fenced code stays a DARK terminal in BOTH modes via --tw-prose-pre-bg: var(--code-bg) — the founder flagged light code backgrounds as ugly, so that invariant carries over from the light theme unchanged', () => {
+    expect(body).toMatch(/S22\.1 \(2026-07-06, brand-parity port\) — tk-token-driven prose/);
+    expect(body).toMatch(/prose max-w-3xl flex-1/);
     expect(body).not.toMatch(/prose-invert/);
-    expect(body).toMatch(/prose-code:bg-oxblood-100/);
-    expect(body).toMatch(/prose-pre:bg-\[#16171c\]/);
+    expect(body).not.toMatch(/prose-slate/);
+    // inline code = accent-soft WASH chip (background token only, never text).
+    expect(body).toMatch(/prose-code:bg-tk-accent-soft/);
+    // fenced code dark in BOTH modes (hook lives in base.css; the layout
+    // documents it and must not reintroduce a light pre background).
+    expect(body).toMatch(/--tw-prose-pre-bg: var\(--code-bg\)/);
+    expect(body).toMatch(/prose-pre:border prose-pre:border-tk-border/);
+    expect(body).not.toMatch(/prose-pre:bg-\[#f/);
+  });
+
+  it('S22.1 (2026-07-06) — tk sidebar + mobile chrome pinned: active item = accent-soft wash bg + AA-safe accent-text ink (never raw accent as text); inactive hover = tk-hover; mode-aware mobile overlay scrim rgb(var(--bg-rgb) / 0.95) (was a baked near-black rgba)', () => {
+    expect(body).toMatch(/'bg-tk-accent-soft text-tk-accent-text'/);
+    expect(body).toMatch(/'text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink'/);
+    expect(body).toMatch(/background: rgb\(var\(--bg-rgb\) \/ 0\.95\);/);
+    expect(body).not.toMatch(/rgba\(11, 11, 13/);
   });
 });

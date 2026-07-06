@@ -2,6 +2,11 @@
 // V-250 — docs site header. Mirrors marketing-site Header pattern
 // for brand consistency: oxblood D-badge + lowercase font-mono
 // "driftstack" wordmark, "docs" subtitle to disambiguate cross-app.
+//
+// S22.1 (2026-07-06) — tk-* token migration (dark+oxblood default +
+// light toggle): legacy border-white/ink-*/glow-red classes swapped for
+// the two-axis tokens; theme-toggle button added (marketing pattern —
+// active nav text uses tk-accent-text, the AA-safe accent text tone).
 
 const navItems = [
   { href: '/', label: 'Overview' },
@@ -17,9 +22,9 @@ function isActive(href: string): boolean {
 }
 ---
 
-<header class="border-b border-white/10 bg-surface-raised">
+<header class="border-b border-tk-border bg-tk-surface">
   <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-    <a href="/" class="flex items-center gap-2 font-mono text-base font-semibold text-ink-primary">
+    <a href="/" class="flex items-center gap-2 font-mono text-base font-semibold text-tk-ink">
       <img
         src="/driftstack-mark.svg?v=4"
         alt="Driftstack"
@@ -27,8 +32,8 @@ function isActive(href: string): boolean {
         height="28"
         class="inline-block h-7 w-7"
       />
-      <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-ink-primary">STACK</span></span>
-      <span class="ml-1 text-xs text-ink-muted">docs</span>
+      <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent-text">STACK</span></span>
+      <span class="ml-1 text-xs text-tk-ink-3">docs</span>
     </a>
 
     <nav class="hidden items-center gap-6 md:flex">
@@ -36,7 +41,7 @@ function isActive(href: string): boolean {
         navItems.map((item) => (
           <a
             href={item.href}
-            class:list={['nav-link', isActive(item.href) && 'text-glow-red font-medium']}
+            class:list={['nav-link', isActive(item.href) && 'text-tk-accent-text font-medium']}
             target={item.external ? '_blank' : undefined}
             rel={item.external ? 'noopener noreferrer' : undefined}
           >
@@ -44,12 +49,41 @@ function isActive(href: string): boolean {
           </a>
         ))
       }
+      <span aria-hidden="true" class="h-4 w-px bg-tk-hover"></span>
+      <button
+        type="button"
+        data-theme-toggle
+        class="flex h-9 w-9 items-center justify-center rounded-md border border-tk-border text-tk-ink-2 transition-colors hover:border-tk-ink-3/40 hover:text-tk-ink"
+        aria-label="Toggle light and dark theme"
+      >
+        <svg class="hidden dark:block" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"></circle>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+        </svg>
+        <svg class="block dark:hidden" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
     </nav>
 
     <div class="flex items-center gap-3 md:hidden">
+      <button
+        type="button"
+        data-theme-toggle
+        class="flex h-9 w-9 items-center justify-center rounded-md border border-tk-border text-tk-ink-2 transition-colors hover:border-tk-ink-3/40 hover:text-tk-ink"
+        aria-label="Toggle light and dark theme"
+      >
+        <svg class="hidden dark:block" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"></circle>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+        </svg>
+        <svg class="block dark:hidden" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
       <details class="relative">
         <summary
-          class="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border border-white/10 text-ink-secondary [&::-webkit-details-marker]:hidden"
+          class="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border border-tk-border text-tk-ink-2 [&::-webkit-details-marker]:hidden"
           aria-label="Open navigation menu"
         >
           <svg
@@ -69,15 +103,15 @@ function isActive(href: string): boolean {
           </svg>
         </summary>
         <nav
-          class="absolute right-0 top-12 z-20 flex w-56 flex-col gap-1 rounded-md border border-white/10 bg-surface-raised p-3 shadow-lg"
+          class="absolute right-0 top-12 z-20 flex w-56 flex-col gap-1 rounded-md border border-tk-border bg-tk-surface p-3 shadow-ambient-lg"
         >
           {
             navItems.map((item) => (
               <a
                 href={item.href}
                 class:list={[
-                  'rounded-sm px-3 py-2 text-sm text-ink-secondary hover:bg-white/10',
-                  isActive(item.href) && 'text-glow-red font-medium',
+                  'rounded-sm px-3 py-2 text-sm text-tk-ink-2 hover:bg-tk-hover',
+                  isActive(item.href) && 'text-tk-accent-text font-medium',
                 ]}
                 target={item.external ? '_blank' : undefined}
                 rel={item.external ? 'noopener noreferrer' : undefined}

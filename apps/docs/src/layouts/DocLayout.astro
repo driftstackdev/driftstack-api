@@ -44,18 +44,19 @@ function isActive(href: string): boolean {
       z-index: 30;
       overflow-y: auto;
       padding: 1.5rem;
-      background: rgba(11, 11, 13, 0.95);
+      /* S22.1 — mode-aware overlay scrim (was a baked near-black rgba). */
+      background: rgb(var(--bg-rgb) / 0.95);
       backdrop-filter: blur(8px);
     }
   </style>
-  <div class="md:hidden flex items-center justify-between border-b border-white/10 px-4 py-3">
-    <span class="font-mono text-xs uppercase tracking-widest text-ink-muted">Docs</span>
+  <div class="md:hidden flex items-center justify-between border-b border-tk-border px-4 py-3">
+    <span class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Docs</span>
     <button
       type="button"
       data-doc-mobile-nav-toggle
       aria-label="Toggle docs navigation"
       aria-expanded="false"
-      class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/10 text-ink-secondary hover:text-ink-primary"
+      class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-tk-border text-tk-ink-2 hover:text-tk-ink"
     >
       <svg
         data-doc-mobile-nav-icon="closed"
@@ -92,7 +93,7 @@ function isActive(href: string): boolean {
         {
           DOC_NAV.map((section) => (
             <div class="mb-5">
-              <p class="font-mono text-xs uppercase tracking-wide text-ink-muted">
+              <p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">
                 {section.label}
               </p>
               <ul class="mt-2 space-y-1">
@@ -107,9 +108,11 @@ function isActive(href: string): boolean {
                         // inactive; otherwise clicking shifted other
                         // items (same fix as DashboardLayout 50b0dd7a).
                         'block rounded-sm px-2 py-1 text-sm font-medium transition-colors',
+                        // S22.1 — active = accent-soft WASH bg (background
+                        // token only) + AA-safe accent-text ink.
                         isActive(item.href)
-                          ? 'bg-glow-red/15 text-glow-red'
-                          : 'text-ink-secondary hover:bg-white/5 hover:text-ink-primary',
+                          ? 'bg-tk-accent-soft text-tk-accent-text'
+                          : 'text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink',
                       ]}
                     >
                       {item.label}
@@ -122,39 +125,36 @@ function isActive(href: string): boolean {
         }
       </nav>
     </aside>
-    <!-- Fleet rebrand — prose styling for the LIGHT surface. Plain
-         `prose-slate` (NOT the dark-inverted variant) with the load-bearing tokens
-         overridden explicitly:
-           - body copy: ink-secondary (dark) on light surfaces
-           - headings: ink-primary, semibold
-           - links: glow-* accent (now violet) — reads on light
-           - inline code: light violet chip (oxblood-100, now violet)
-             with ink-primary text so it pops without looking like a
-             button
-           - fenced pre: a DARK code surface (#16171c) with light text
-             (slate-100) — terminal-style, high-contrast; the founder
-             flagged light code backgrounds as "ugly / barely readable",
-             so fenced code stays dark even on the light docs theme
-           - blockquote: violet (oxblood-300, now violet) left rule
-           - tables/hr: surface-divider light borders -->
+    <!-- S22.1 (2026-07-06, brand-parity port) — tk-token-driven prose.
+         SUPERSEDES the R11 slate-prose LIGHT-surface stack: the color
+         hooks now live in base.css as un-layered `.prose`
+         --tw-prose-* overrides reading the mode-scoped tk custom
+         properties (single class set, still NOT the dark-inverted
+         prose variant — no mode-flip class swap), so body copy /
+         headings / links / bullets follow <html data-mode>. Kept here
+         explicitly:
+           - links: --accent-text via base.css (AA-safe accent TEXT
+             tone — never the raw accent, never a wash token as text)
+           - inline code: accent-soft WASH chip (background token
+             only) with tk-ink text
+           - fenced pre: a DARK code surface in BOTH modes
+             (--tw-prose-pre-bg: var(--code-bg) — #16171c light /
+             #0c0c11 dark; founder-pinned: light code backgrounds were
+             flagged "ugly / barely readable", so fenced code stays a
+             dark terminal even on the light docs theme)
+           - tables/hr: tk-border via the base.css hooks -->
     <article
-      class="prose prose-slate max-w-3xl flex-1
-             prose-headings:font-semibold prose-headings:text-ink-primary
-             prose-p:text-ink-secondary prose-li:text-ink-secondary
-             prose-strong:text-ink-primary
-             prose-a:text-glow-red prose-a:no-underline prose-a:hover:underline
+      class="prose max-w-3xl flex-1
+             prose-headings:font-semibold
+             prose-a:no-underline prose-a:hover:underline
              prose-code:font-mono prose-code:text-[0.875em] prose-code:rounded-sm
-             prose-code:bg-oxblood-100 prose-code:px-1.5 prose-code:py-0.5
-             prose-code:text-ink-primary prose-code:before:content-none
+             prose-code:bg-tk-accent-soft prose-code:px-1.5 prose-code:py-0.5
+             prose-code:before:content-none
              prose-code:after:content-none
-             prose-pre:bg-[#16171c] prose-pre:border prose-pre:border-black/10
-             prose-pre:text-slate-100 prose-pre:shadow-inset-divider
-             prose-blockquote:border-l-oxblood-300 prose-blockquote:text-ink-secondary
+             prose-pre:border prose-pre:border-tk-border
+             prose-pre:shadow-inset-divider
              prose-blockquote:not-italic
-             prose-th:bg-surface-raised prose-th:text-ink-primary
-             prose-td:text-ink-secondary
-             prose-th:border-surface-divider prose-td:border-surface-divider
-             prose-hr:border-surface-divider"
+             prose-th:bg-tk-surface"
     >
       <slot />
     </article>
@@ -210,9 +210,9 @@ function isActive(href: string): boolean {
         btn.setAttribute('aria-label', 'Copy code to clipboard');
         btn.textContent = 'Copy';
         btn.className =
-          'absolute right-2 top-2 rounded-sm border border-white/15 bg-surface-raised ' +
-          'px-2 py-1 text-xs font-medium text-ink-muted opacity-70 transition ' +
-          'hover:text-ink-primary hover:opacity-100 focus-visible:opacity-100';
+          'absolute right-2 top-2 rounded-sm border border-tk-border bg-tk-raised ' +
+          'px-2 py-1 text-xs font-medium text-tk-ink-3 opacity-70 transition ' +
+          'hover:text-tk-ink hover:opacity-100 focus-visible:opacity-100';
         btn.addEventListener('click', function () {
           var code = pre.querySelector('code');
           var text = (code ? code.textContent : pre.textContent) || '';
@@ -242,8 +242,8 @@ function isActive(href: string): boolean {
         a.setAttribute('aria-label', 'Link to this section');
         a.textContent = '#';
         a.className =
-          'ml-2 inline-block font-normal text-ink-muted no-underline opacity-0 ' +
-          'transition-opacity hover:text-glow-red focus-visible:opacity-100 group-hover:opacity-100';
+          'ml-2 inline-block font-normal text-tk-ink-3 no-underline opacity-0 ' +
+          'transition-opacity hover:text-tk-accent-text focus-visible:opacity-100 group-hover:opacity-100';
         a.addEventListener('click', function () {
           if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(
@@ -269,9 +269,9 @@ function isActive(href: string): boolean {
       var nav = document.createElement('nav');
       nav.setAttribute('aria-label', 'On this page');
       nav.className =
-        'not-prose mb-8 rounded-lg border border-white/10 bg-surface-raised px-5 py-4';
+        'not-prose mb-8 rounded-lg border border-tk-border bg-tk-surface px-5 py-4';
       var title = document.createElement('p');
-      title.className = 'mb-2 text-xs font-medium uppercase tracking-widest text-ink-muted';
+      title.className = 'mb-2 text-xs font-medium uppercase tracking-widest text-tk-ink-3';
       title.textContent = 'On this page';
       nav.appendChild(title);
       var ul = document.createElement('ul');
@@ -284,7 +284,7 @@ function isActive(href: string): boolean {
         var a = document.createElement('a');
         a.href = '#' + h.id;
         a.textContent = label;
-        a.className = 'text-sm text-ink-secondary no-underline hover:text-glow-red';
+        a.className = 'text-sm text-tk-ink-2 no-underline hover:text-tk-accent-text';
         li.appendChild(a);
         ul.appendChild(li);
       });

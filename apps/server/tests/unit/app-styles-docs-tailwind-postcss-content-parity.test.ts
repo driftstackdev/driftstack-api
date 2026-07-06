@@ -94,44 +94,58 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     );
   });
 
-  it('R11 docs/src/styles/base.css: Tailwind base + light color-scheme + bg-surface-base light body + Geist+Berkeley font stack + 3 brand atoms (btn-primary + btn-secondary + nav-link). Flipped to the Fleet light+violet palette (color-scheme: light) so the docs read as one product with driftstack.dev', () => {
+  it('S22.1 docs/src/styles/base.css (2026-07-06 brand-parity port — supersedes the R11 light+violet pins): Tailwind v4 @import + mode-axis color-scheme + tk token bg + Geist/JetBrains-Mono self-hosted fonts + 3 utility atoms (btn-primary flat accent + btn-secondary solid + nav-link accent-text hover) so the docs read as one product with driftstack.dev (dark+oxblood default, light toggle)', () => {
     const body = read('apps/docs/src/styles/base.css');
     // W368 — Tailwind v4: @import + typography @plugin (was the 3-directive header);
-    // component atoms are now @utility (was @layer components).
+    // component atoms are @utility (was @layer components).
     expect(body).toMatch(/@import 'tailwindcss';/);
     expect(body).toMatch(/@plugin '@tailwindcss\/typography';/);
     expect(body).toMatch(/^@layer base \{$/m);
     expect(body).toMatch(/color-scheme: light;/);
-    expect(body).toMatch(/@apply bg-surface-base text-ink-primary;/);
+    expect(body).toMatch(/\[data-mode='dark'\] \{\s*\n\s*color-scheme: dark;/);
+    expect(body).toMatch(/@apply bg-tk-bg text-tk-ink;/);
     expect(body).toMatch(/font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;/);
-    expect(body).toMatch(/font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;/);
-    expect(body).toMatch(/@apply bg-oxblood-700 text-white;/);
+    expect(body).toMatch(
+      /font-family: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;/,
+    );
     expect(body).toMatch(/@utility btn-primary \{/);
+    expect(body).toMatch(/bg-tk-accent/);
+    expect(body).toMatch(/hover:bg-tk-accent-strong/);
     expect(body).toMatch(/@utility btn-secondary \{/);
+    expect(body).toMatch(/border border-tk-border/);
     expect(body).toMatch(/@utility nav-link \{/);
+    expect(body).toMatch(
+      /@apply text-sm text-tk-ink-2 transition-colors hover:text-tk-accent-text;/,
+    );
+    // Fleet v2 accent discipline: no glow ring / hover lift on default chrome.
+    expect(body).not.toMatch(/shadow-glow-red/);
+    expect(body).not.toMatch(/hover:-translate-y-0\.5/);
+    // Self-hosted fonts (OFL): Geist variable + JetBrains Mono, vendored
+    // under public/fonts/ — Berkeley Mono is licensed and never vendored.
+    expect(body).toMatch(/url\('\/fonts\/geist\/GeistVF\.woff2'\)/);
+    expect(body).toMatch(/url\('\/fonts\/jetbrains-mono\/JetBrainsMono-Regular\.woff2'\)/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/docs/src/styles/base.css'))).toBe(true);
   });
 
-  it('apps/docs/src/styles/base.css @theme (W368 — was tailwind.config.mjs, migrated to Tailwind v4 CSS-first): V-254 typography @plugin + oxblood ramp flipped to violet (Fleet rebrand; #6d5efc base at 500) + slate scale + Geist/Berkeley font vars + prose 65ch container. The v3 JS config (content glob, JS palette, plugins:[typography]) became @plugin + @theme --color-*/--font-*/--container-* tokens; values unchanged', () => {
+  it('apps/docs/src/styles/base.css @theme (S22.1 — the W368 legacy palette ramps are RETIRED: the violet-valued oxblood ladder + baked slate scale are gone; the Tailwind v4 CSS-first adaptation now maps the Fleet two-axis custom properties into the tk namespace via @theme inline, values byte-identical to marketing). Geist/Berkeley+JetBrains font vars + prose 65ch container + 14px card radius pinned', () => {
     const body = read('apps/docs/src/styles/base.css');
     expect(body).toMatch(/@plugin '@tailwindcss\/typography';/);
-    // oxblood 11-shade palette (v4 @theme --color-* vars, lowercase hex)
-    expect(body).toMatch(/--color-oxblood-50: #f1effe;/);
-    expect(body).toMatch(/--color-oxblood-100: #e6e1fd;/);
-    expect(body).toMatch(/--color-oxblood-200: #cfc7fb;/);
-    expect(body).toMatch(/--color-oxblood-300: #ada0f8;/);
-    expect(body).toMatch(/--color-oxblood-400: #8b7dff;/);
-    expect(body).toMatch(/--color-oxblood-500: #6d5efc;/);
-    expect(body).toMatch(/--color-oxblood-600: #5847e0;/);
-    expect(body).toMatch(/--color-oxblood-700: #4a39c4;/); // violet base (Fleet rebrand)
-    expect(body).toMatch(/--color-oxblood-800: #3d2fa0;/);
-    expect(body).toMatch(/--color-oxblood-900: #332a80;/);
-    expect(body).toMatch(/--color-oxblood-950: #1f1a4d;/);
-    expect(body).toMatch(/--color-slate-50: #f8fafc;/);
-    expect(body).toMatch(/--color-slate-950: #020617;/);
+    // Legacy single-axis ramps are gone (tk-* replaces them).
+    expect(body).not.toMatch(/--color-oxblood-/);
+    expect(body).not.toMatch(/--color-glow-red/);
+    expect(body).not.toMatch(/--color-surface-base/);
+    expect(body).not.toMatch(/--color-ink-primary/);
+    // tk namespace maps to the mode-scoped two-axis custom properties.
+    expect(body).toMatch(/@theme inline \{/);
+    expect(body).toMatch(/--color-tk-bg: var\(--bg\);/);
+    expect(body).toMatch(/--color-tk-ink: var\(--ink\);/);
+    expect(body).toMatch(/--color-tk-accent-text: var\(--accent-text\);/);
     expect(body).toMatch(/--font-sans: Geist, ui-sans-serif, system-ui, sans-serif;/);
-    expect(body).toMatch(/--font-mono: Berkeley Mono, ui-monospace, SFMono-Regular, monospace;/);
+    expect(body).toMatch(
+      /--font-mono: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;/,
+    );
     expect(body).toMatch(/--container-prose: 65ch;/);
+    expect(body).toMatch(/--radius-card: 14px;/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/docs/src/styles/base.css'))).toBe(true);
   });
 

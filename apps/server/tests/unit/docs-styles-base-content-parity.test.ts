@@ -1,6 +1,12 @@
-// Drift guard for apps/docs/src/styles/base.css. Pins the R11
-// dark-mode-synced-with-marketing posture + the F-1 mobile-scroll
-// prevention + the 3 components-layer utility classes.
+// Drift guard for apps/docs/src/styles/base.css.
+//
+// S22.1 (2026-07-06, brand-parity port) — SUPERSEDES the R11 static
+// light+violet pins: docs now ships the Fleet two-axis tk-* token system
+// (dark+oxblood default, light toggle, S20 dark surface ladder) with
+// values byte-identical to apps/marketing-site/src/styles/base.css,
+// adapted to Tailwind v4 CSS-first (@theme inline tk namespace). Pins
+// the token values + the F-1 mobile-scroll prevention + the 3 utility
+// atoms + the self-hosted fonts + the tk-driven prose hooks.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/docs/src/styles/base.css');
+const MARKETING = resolve(REPO_ROOT, 'apps/marketing-site/src/styles/base.css');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -27,11 +34,126 @@ describe('docs styles/base content parity', () => {
     expect(body).toMatch(/@plugin '@tailwindcss\/typography';/);
   });
 
-  it("R11/Fleet light+violet-synced posture pinned: 'light+violet docs surface synced with marketing/dashboard/admin Fleet tokens so the product reads as one site.' Drift to a different palette would break cross-app brand consistency", () => {
-    expect(body).toMatch(/R11 \/ Fleet rebrand — light\+violet docs surface\. Synced with the/);
-    expect(body).toMatch(/marketing-site \+ customer-dashboard \+ admin Fleet tokens/);
-    expect(body).toMatch(/the product reads as one site/);
+  it('S22.1 dark: variant follows the data-mode axis (was the scaffold .dark class, which nothing set) — the theme-toggle icons (hidden dark:block) depend on it', () => {
+    expect(body).toMatch(
+      /@custom-variant dark \(&:where\(\[data-mode='dark'\], \[data-mode='dark'\] \*\)\);/,
+    );
+    expect(body).not.toMatch(/&:is\(\.dark \*\)/);
+  });
+
+  it('S22.1 two-axis posture pinned: dark+oxblood default synced with marketing/dashboard Fleet tokens, color-scheme follows the mode axis. Drift back to a static single-mode palette would break cross-app brand consistency', () => {
+    expect(body).toMatch(/Fleet two-axis tk-\* token port/);
     expect(body).toMatch(/color-scheme: light;/);
+    expect(body).toMatch(/\[data-mode='dark'\] \{\s*\n\s*color-scheme: dark;/);
+    expect(body).toMatch(/@apply bg-tk-bg text-tk-ink;/);
+  });
+
+  it('S22.1 @theme inline tk namespace pinned (Tailwind v4 CSS-first adaptation of the marketing v3 JS-config tk table): every tk color token resolves to a mode-scoped custom property', () => {
+    expect(body).toMatch(/@theme inline \{/);
+    expect(body).toMatch(/--color-tk-bg: var\(--bg\);/);
+    expect(body).toMatch(/--color-tk-surface: var\(--surface\);/);
+    expect(body).toMatch(/--color-tk-raised: var\(--raised\);/);
+    expect(body).toMatch(/--color-tk-hover: var\(--hover\);/);
+    expect(body).toMatch(/--color-tk-ink: var\(--ink\);/);
+    expect(body).toMatch(/--color-tk-ink-2: var\(--ink-2\);/);
+    expect(body).toMatch(/--color-tk-ink-3: var\(--ink-3\);/);
+    expect(body).toMatch(/--color-tk-border: var\(--border\);/);
+    expect(body).toMatch(/--color-tk-accent: var\(--accent\);/);
+    expect(body).toMatch(/--color-tk-accent-strong: var\(--accent-strong\);/);
+    expect(body).toMatch(/--color-tk-accent-soft: var\(--accent-soft\);/);
+    expect(body).toMatch(/--color-tk-accent-text: var\(--accent-text\);/);
+  });
+
+  it('S20 dark surface ladder pinned BYTE-IDENTICAL to marketing (bg #060608 / surface #14141a / raised #1c1c24 / hover #24252f / border #2c2c38 + rgb triplets + ink ladder + AA ink-3 unification note — S21 unified #8c8c96 across all three apps). Drift would fork the brand dark theme across apps', () => {
+    expect(body).toMatch(/--bg: #060608;/);
+    expect(body).toMatch(/--surface: #14141a;/);
+    expect(body).toMatch(/--raised: #1c1c24;/);
+    expect(body).toMatch(/--hover: #24252f;/);
+    expect(body).toMatch(/--border: #2c2c38;/);
+    expect(body).toMatch(/--ink: #f5f5f7;/);
+    expect(body).toMatch(/--ink-2: #b0b0bb;/);
+    expect(body).toMatch(/--ink-3: #8c8c96;/);
+    expect(body).toMatch(/--bg-rgb: 6 6 8;/);
+    expect(body).toMatch(/--surface-rgb: 20 20 26;/);
+    expect(body).toMatch(/--raised-rgb: 28 28 36;/);
+    expect(body).toMatch(/--border-rgb: 44 44 56;/);
+    expect(body).toMatch(/surface 1\.10:1 \/ raised 1\.20:1 vs bg \/ border 1\.47:1/);
+    expect(body).toMatch(/#8c8c96 clears WCAG AA on #060608/);
+  });
+
+  it('light-mode block pinned BYTE-IDENTICAL to marketing (bg #f2f3f6 / surface #fff / ink #0f1014 / border #e4e6ec) — the light toggle target', () => {
+    expect(body).toMatch(/--bg: #f2f3f6;/);
+    expect(body).toMatch(/--ink: #0f1014;/);
+    expect(body).toMatch(/--ink-2: #474a55;/);
+    expect(body).toMatch(/--ink-3: #8a8d99;/);
+    expect(body).toMatch(/--border: #e4e6ec;/);
+    expect(body).toMatch(/--bg-rgb: 242 243 246;/);
+  });
+
+  it('3 accent axes pinned (oxblood is the shipped default; violet/teal stay selectable machinery): raw accent + accent-soft wash + glow per axis', () => {
+    expect(body).toMatch(/\[data-accent='oxblood'\] \{/);
+    expect(body).toMatch(/--accent: #9b3b46;/);
+    expect(body).toMatch(/--accent-strong: #722f37;/);
+    expect(body).toMatch(/--accent-soft: rgba\(155, 59, 70, 0\.13\);/);
+    expect(body).toMatch(/--glow: rgba\(155, 59, 70, 0\.32\);/);
+    expect(body).toMatch(/\[data-accent='violet'\] \{/);
+    expect(body).toMatch(/--accent: #6d5efc;/);
+    expect(body).toMatch(/\[data-accent='teal'\] \{/);
+    expect(body).toMatch(/--accent: #109a82;/);
+  });
+
+  it('all 6 AA-safe --accent-text mode × accent pairs pinned (raw accent ≈3.0:1 on the dark bg fails AA as text; these are the readable tones, all ≥4.5:1 verified). Accent-colored TEXT must consume tk-accent-text, never the raw accent', () => {
+    expect(body).toMatch(
+      /\[data-mode='dark'\]\[data-accent='oxblood'\] \{\s*\n\s*--accent-text: #d4626e;/,
+    );
+    expect(body).toMatch(
+      /\[data-mode='dark'\]\[data-accent='violet'\] \{\s*\n\s*--accent-text: #8b7dff;/,
+    );
+    expect(body).toMatch(
+      /\[data-mode='dark'\]\[data-accent='teal'\] \{\s*\n\s*--accent-text: #1bc7a8;/,
+    );
+    expect(body).toMatch(
+      /\[data-mode='light'\]\[data-accent='oxblood'\] \{\s*\n\s*--accent-text: #8d2c3e;/,
+    );
+    expect(body).toMatch(
+      /\[data-mode='light'\]\[data-accent='violet'\] \{\s*\n\s*--accent-text: #5847e0;/,
+    );
+    expect(body).toMatch(
+      /\[data-mode='light'\]\[data-accent='teal'\] \{\s*\n\s*--accent-text: #0c7d69;/,
+    );
+    expect(body).toMatch(/The accent-soft wash is a BACKGROUND token only — never text\./);
+  });
+
+  it('S20 mode-aware ambient shadows pinned: light = the original gray ambients; dark = lit-top-rim + true-black drop (gray shadows measured a 1.0000:1 no-op on near-black). Exposed as @utility shadow-ambient/-lg reading the mode-scoped vars', () => {
+    expect(body).toMatch(
+      /--shadow-ambient: 0 1px 2px rgb\(15 16 20 \/ 0\.04\), 0 10px 28px -18px rgb\(15 16 20 \/ 0\.12\);/,
+    );
+    expect(body).toMatch(
+      /--shadow-ambient: inset 0 1px 0 rgb\(255 255 255 \/ 0\.05\), 0 10px 28px -18px rgb\(0 0 0 \/ 0\.7\);/,
+    );
+    expect(body).toMatch(/@utility shadow-ambient \{\s*\n\s*box-shadow: var\(--shadow-ambient\);/);
+    expect(body).toMatch(
+      /@utility shadow-ambient-lg \{\s*\n\s*box-shadow: var\(--shadow-ambient-lg\);/,
+    );
+  });
+
+  it('S22.1 self-hosted fonts pinned: Geist VF + JetBrains Mono Regular/Bold @font-face at public/fonts/ (OFL, license files ship alongside); Berkeley Mono first in the mono stack but NEVER vendored (commercial). Sans stack Geist-first', () => {
+    expect(body).toMatch(/url\('\/fonts\/geist\/GeistVF\.woff2'\) format\('woff2'\)/);
+    expect(body).toMatch(
+      /url\('\/fonts\/jetbrains-mono\/JetBrainsMono-Regular\.woff2'\) format\('woff2'\)/,
+    );
+    expect(body).toMatch(
+      /url\('\/fonts\/jetbrains-mono\/JetBrainsMono-Bold\.woff2'\) format\('woff2'\)/,
+    );
+    expect(body).toMatch(/font-display: swap;/);
+    expect(body).toMatch(/NEVER vendored/);
+    expect(body).toMatch(/--font-sans: Geist, ui-sans-serif, system-ui, sans-serif;/);
+    expect(body).toMatch(
+      /--font-mono: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;/,
+    );
+    expect(body).toMatch(
+      /font-family: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;/,
+    );
   });
 
   it('F-1 code-overflow containment pinned: base.css keeps code/pre from pushing the page width (overflow-wrap:anywhere + pre overflow-x:auto) — the iPhone-Safari horizontal-scroll guard', () => {
@@ -47,21 +169,68 @@ describe('docs styles/base content parity', () => {
     expect(body).toMatch(/max-width: 100vw;/);
   });
 
-  it('Body backdrop radial-gradient pinned (the subtle oxblood glow at the top of every docs page that ties the brand together). Drift would either soften (less brand presence) or amplify (visually distracting) the glow', () => {
-    expect(body).toMatch(/background-image: radial-gradient\(/);
-    expect(body).toMatch(/rgba\(226, 56, 71, 0\.05\)/);
+  it('S22.1 accent-axis body wash pinned (replaces the static red rgba radial): two ambient radials reading var(--glow) + var(--accent-soft), background-attachment fixed. Any reintroduced baked-red rgba(226,56,71) would fork the brand', () => {
+    expect(body).toMatch(
+      /radial-gradient\(ellipse 90% 60% at 50% -10%, var\(--glow\), transparent 70%\)/,
+    );
+    expect(body).toMatch(
+      /radial-gradient\(ellipse 80% 50% at 50% 100%, var\(--accent-soft\), transparent 75%\)/,
+    );
     expect(body).toMatch(/background-attachment: fixed;/);
+    expect(body).not.toMatch(/226, 56, 71/);
   });
 
-  it('3 component utility classes pinned: btn-primary + btn-secondary + nav-link (W368 — v4 @utility, was @layer components). Drift to dropping any would break the docs-site button/nav rendering', () => {
+  it('3 utility atoms pinned: btn-primary (flat accent, ambient shadow, NO glow ring / NO hover lift — Fleet v2 accent discipline) + btn-secondary (solid surface) + nav-link (hover = AA-safe tk-accent-text)', () => {
     expect(body).toMatch(/@utility btn-primary \{/);
+    expect(body).toMatch(/bg-tk-accent/);
+    expect(body).toMatch(/hover:bg-tk-accent-strong/);
     expect(body).toMatch(/@utility btn-secondary \{/);
+    expect(body).toMatch(/border border-tk-border bg-tk-surface/);
     expect(body).toMatch(/@utility nav-link \{/);
+    expect(body).toMatch(
+      /@apply text-sm text-tk-ink-2 transition-colors hover:text-tk-accent-text;/,
+    );
+    // Fleet v2 accent discipline: the R11 glow ring + hover lift are gone.
+    expect(body).not.toMatch(/shadow-glow-red/);
+    expect(body).not.toMatch(/hover:-translate-y-0\.5/);
   });
 
-  it('btn-primary hover lift pattern pinned: -translate-y-0.5 + active:translate-y-0 + shadow-glow-red-lg. Drift would lose the load-bearing tactile-feedback on the docs CTAs', () => {
-    expect(body).toMatch(/hover:-translate-y-0\.5/);
-    expect(body).toMatch(/active:translate-y-0/);
-    expect(body).toMatch(/shadow-glow-red-lg/);
+  it('S22.1 tk-driven prose hooks pinned: un-layered .prose --tw-prose-* overrides read the mode-scoped tokens (single class set, no prose-invert flip); links = --accent-text; fenced pre bg = var(--code-bg) so code stays a DARK terminal in BOTH modes (founder-pinned)', () => {
+    expect(body).toMatch(/\.prose \{/);
+    expect(body).toMatch(/--tw-prose-body: var\(--ink-2\);/);
+    expect(body).toMatch(/--tw-prose-headings: var\(--ink\);/);
+    expect(body).toMatch(/--tw-prose-links: var\(--accent-text\);/);
+    expect(body).toMatch(/--tw-prose-pre-bg: var\(--code-bg\);/);
+    expect(body).toMatch(/--tw-prose-th-borders: var\(--border\);/);
+    expect(body).toMatch(/--code-bg: #16171c;/);
+    expect(body).toMatch(/--code-bg: #0c0c11;/);
+    expect(body).toMatch(/fenced code stays a DARK terminal in\s*\n?\s*BOTH modes/);
+  });
+
+  it('cross-app token-value parity: every dark/light ladder hex + all 6 accent-text pairs in the docs file also appear in the marketing source of truth (S22.1 byte-identical port)', () => {
+    const marketing = read(MARKETING);
+    for (const token of [
+      '--bg: #060608;',
+      '--surface: #14141a;',
+      '--raised: #1c1c24;',
+      '--hover: #24252f;',
+      '--border: #2c2c38;',
+      '--ink: #f5f5f7;',
+      '--ink-2: #b0b0bb;',
+      '--ink-3: #8c8c96;',
+      '--bg: #f2f3f6;',
+      '--accent: #9b3b46;',
+      '--accent-text: #d4626e;',
+      '--accent-text: #8d2c3e;',
+      '--accent-text: #8b7dff;',
+      '--accent-text: #5847e0;',
+      '--accent-text: #1bc7a8;',
+      '--accent-text: #0c7d69;',
+      '--code-bg: #16171c;',
+      '--code-bg: #0c0c11;',
+    ]) {
+      expect(body).toContain(token);
+      expect(marketing).toContain(token);
+    }
   });
 });

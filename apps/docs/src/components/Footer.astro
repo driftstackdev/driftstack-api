@@ -3,14 +3,17 @@
 // (no "Product/Company/Trust/Legal" full grid) since docs.driftstack.dev
 // is a focused reference surface; primary navigation is the docs tree.
 // Cross-links back to marketing for the full company navigation.
+//
+// S22.1 (2026-07-06) — tk-* token migration + theme-toggle button in the
+// meta row (marketing Footer parity).
 const year = new Date().getUTCFullYear();
 ---
 
-<footer class="border-t border-white/10 bg-surface-raised">
+<footer class="border-t border-tk-border bg-tk-surface">
   <div class="mx-auto max-w-6xl px-6 py-8">
     <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div>
-        <div class="flex items-center gap-2 font-mono text-sm font-semibold text-ink-primary">
+        <div class="flex items-center gap-2 font-mono text-sm font-semibold text-tk-ink">
           <img
             src="/driftstack-mark.svg?v=4"
             alt="Driftstack"
@@ -18,14 +21,14 @@ const year = new Date().getUTCFullYear();
             height="24"
             class="inline-block h-6 w-6"
           />
-          <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-ink-primary">STACK</span></span>
-          <span class="ml-1 text-xs text-ink-muted">docs</span>
+          <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent-text">STACK</span></span>
+          <span class="ml-1 text-xs text-tk-ink-3">docs</span>
         </div>
-        <p class="mt-2 max-w-prose text-sm text-ink-secondary">
+        <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
           Reference + guides for the Driftstack API, SDKs, and self-hosted client.
         </p>
       </div>
-      <nav class="flex flex-wrap gap-4 text-sm text-ink-secondary">
+      <nav class="flex flex-wrap gap-4 text-sm text-tk-ink-2">
         <a href="https://driftstack.dev" class="nav-link" target="_blank" rel="noopener noreferrer"
           >Marketing site</a
         >
@@ -38,8 +41,24 @@ const year = new Date().getUTCFullYear();
         <a href="mailto:support@driftstack.dev" class="nav-link">support@driftstack.dev</a>
       </nav>
     </div>
-    <div class="mt-6 border-t border-white/10 pt-4 text-xs text-ink-muted">
+    <div
+      class="mt-6 flex items-center justify-between gap-3 border-t border-tk-border pt-4 text-xs text-tk-ink-3"
+    >
       <p>&copy; {year} Driftstack.</p>
+      <button
+        type="button"
+        data-theme-toggle
+        class="flex h-7 w-7 items-center justify-center rounded-md border border-tk-border text-tk-ink-3 transition-colors hover:border-tk-ink-3/40 hover:text-tk-ink"
+        aria-label="Toggle light and dark theme"
+      >
+        <svg class="hidden dark:block" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"></circle>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+        </svg>
+        <svg class="block dark:hidden" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
     </div>
   </div>
 </footer>

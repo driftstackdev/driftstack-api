@@ -35,11 +35,12 @@ describe('W775 docs /sdk index content parity', () => {
   it('CRITICAL 3-language card set pinned with install commands. npm install @driftstack/sdk + pip install driftstack-sdk + go get github.com/driftstackdev/... Drift to a different package name would break SDK adopters.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/<p class="mt-2 text-sm font-medium text-ink-primary">@driftstack\/sdk<\/p>/);
+    // S22.1 (2026-07-06) — card ink migrated to tk tokens (text-tk-ink).
+    expect(p).toMatch(/<p class="mt-2 text-sm font-medium text-tk-ink">@driftstack\/sdk<\/p>/);
     expect(p).toMatch(/npm install @driftstack\/sdk/);
-    expect(p).toMatch(/<p class="mt-2 text-sm font-medium text-ink-primary">driftstack-sdk<\/p>/);
+    expect(p).toMatch(/<p class="mt-2 text-sm font-medium text-tk-ink">driftstack-sdk<\/p>/);
     expect(p).toMatch(/pip install driftstack-sdk/);
-    expect(p).toMatch(/<p class="mt-2 text-sm font-medium text-ink-primary">sdk-go<\/p>/);
+    expect(p).toMatch(/<p class="mt-2 text-sm font-medium text-tk-ink">sdk-go<\/p>/);
     expect(p).toMatch(/go get github\.com\/driftstackdev\/\.\.\./);
   });
 

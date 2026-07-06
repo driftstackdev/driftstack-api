@@ -27,10 +27,19 @@ describe('docs components/Header content parity', () => {
     expect(body).toMatch(/for brand consistency/);
   });
 
-  it('Brand wordmark pinned: W2 DRIFTSTACK two-tone (Fleet rebrand) + "docs" subtitle, matching marketing/admin/dashboard', () => {
-    expect(body).toContain('DRIFT<span class="text-ink-primary">STACK</span>');
-    expect(body).toMatch(/<span class="ml-1 text-xs text-ink-muted">docs<\/span>/);
-    expect(body).toMatch(/font-mono text-base font-semibold text-ink-primary/);
+  it('Brand wordmark pinned: W2 DRIFTSTACK two-tone + "docs" subtitle, matching marketing/admin/dashboard. S22.1 (2026-07-06): tk-* tokens — STACK carries the AA-safe accent-text tone (marketing parity; was the flat text-ink-primary of the static light theme)', () => {
+    expect(body).toContain('DRIFT<span class="text-tk-accent-text">STACK</span>');
+    expect(body).toMatch(/<span class="ml-1 text-xs text-tk-ink-3">docs<\/span>/);
+    expect(body).toMatch(/font-mono text-base font-semibold text-tk-ink/);
+  });
+
+  it('S22.1 (2026-07-06) — tk chrome + theme toggle pinned: tk-border/tk-surface header shell, active nav = tk-accent-text (AA-safe; NEVER the raw accent as text on dark), [data-theme-toggle] buttons in desktop nav + mobile cluster with mode-keyed sun/moon icons (hidden dark:block)', () => {
+    expect(body).toMatch(/<header class="border-b border-tk-border bg-tk-surface">/);
+    expect(body).toMatch(/isActive\(item\.href\) && 'text-tk-accent-text font-medium'/);
+    expect(body).toMatch(/data-theme-toggle/);
+    expect(body).toMatch(/aria-label="Toggle light and dark theme"/);
+    expect(body).toMatch(/class="hidden dark:block"/);
+    expect(body).toMatch(/class="block dark:hidden"/);
   });
 
   it('5-item nav pinned: Overview / API / SDKs / Guides / Marketing site (external). Drift to dropping any would break the docs-site IA + the marketing-site cross-link', () => {

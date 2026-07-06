@@ -2,61 +2,102 @@
 
 @plugin '@tailwindcss/typography';
 
-@custom-variant dark (&:is(.dark *));
+/* S22.1 (2026-07-06) — `dark:` variants follow the data-mode axis set on
+   <html> (was the scaffold-era `.dark` class variant, which nothing set). */
+@custom-variant dark (&:where([data-mode='dark'], [data-mode='dark'] *));
+
+/* S22.1 (2026-07-06) — Fleet two-axis tk-* token port. The R11 static
+   light+violet surface (legacy 'oxblood'/'glow-red' token names carrying
+   violet values) is RETIRED; docs now consumes the same two-axis token
+   system as apps/marketing-site + apps/customer-dashboard (dark+oxblood
+   default, light toggle, S20 dark surface ladder) so the product reads
+   as one site. Token VALUES are byte-identical to
+   apps/marketing-site/src/styles/base.css (post-S20); the Tailwind v4
+   CSS-first adaptation maps them into the `tk` utility namespace via
+   `@theme inline` below (docs has no tailwind.config — marketing's v3 JS
+   config `tk` color table becomes --color-tk-* theme vars here). */
+
+/* Self-hosted font faces (Fleet v2 port, S22.1 2026-07-06): Geist VF +
+   JetBrains Mono Regular/Bold vendored at public/fonts/ (both
+   OFL-licensed; license files ship alongside). Berkeley Mono stays first
+   in the mono stack for licensed local installs but is NEVER vendored
+   (commercial license) — JetBrains Mono is what actually ships.
+   font-display: swap so text renders in the system fallback until the
+   woff2 arrives. */
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/geist/GeistVF.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono/JetBrainsMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono/JetBrainsMono-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 @theme {
-  /* Fleet rebrand: the 'oxblood' accent ramp now resolves VIOLET (the
-     locked light+violet direction). Token NAMES kept so markup + ~all
-     content-parity pins stay green; only the values flip. */
-  --color-oxblood-50: #f1effe;
-  --color-oxblood-100: #e6e1fd;
-  --color-oxblood-200: #cfc7fb;
-  --color-oxblood-300: #ada0f8;
-  --color-oxblood-400: #8b7dff;
-  --color-oxblood-500: #6d5efc;
-  --color-oxblood-600: #5847e0;
-  --color-oxblood-700: #4a39c4;
-  --color-oxblood-800: #3d2fa0;
-  --color-oxblood-900: #332a80;
-  --color-oxblood-950: #1f1a4d;
-
-  --color-slate-50: #f8fafc;
-  --color-slate-100: #f1f5f9;
-  --color-slate-200: #e2e8f0;
-  --color-slate-300: #cbd5e1;
-  --color-slate-400: #94a3b8;
-  --color-slate-500: #64748b;
-  --color-slate-600: #475569;
-  --color-slate-700: #334155;
-  --color-slate-800: #1e293b;
-  --color-slate-900: #0f172a;
-  --color-slate-950: #020617;
-
-  /* Fleet light surfaces (match apps/marketing-site light+violet tokens). */
-  --color-surface-base: #f2f3f6;
-  --color-surface-raised: #ffffff;
-  --color-surface-elevated: #f1f2f5;
-  --color-surface-inset: #f2f3f6;
-  --color-surface-divider: #e4e6ec;
-
-  --color-ink-primary: #0f1014;
-  --color-ink-secondary: #474a55;
-  --color-ink-muted: #8a8d99;
-  --color-ink-inverted: #ffffff;
-
-  /* glow-* accent now violet (was oxblood→red). */
-  --color-glow-red: #6d5efc;
-  --color-glow-red-soft: #8b7dff;
-  --color-glow-red-deep: #5847e0;
-
   --font-sans: Geist, ui-sans-serif, system-ui, sans-serif;
-  --font-mono: Berkeley Mono, ui-monospace, SFMono-Regular, monospace;
+  --font-mono: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 
   --container-prose: 65ch;
 
-  --shadow-glow-red: 0 0 0 1px rgba(226, 56, 71, 0.3), 0 6px 20px -8px rgba(226, 56, 71, 0.35);
-  --shadow-glow-red-lg: 0 0 0 1px rgba(226, 56, 71, 0.4), 0 12px 40px -12px rgba(226, 56, 71, 0.5);
+  /* Fleet card radius (spec §3: 12–16px cards; blueprint uses 14px). */
+  --radius-card: 14px;
+
   --shadow-inset-divider: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Fleet token namespace (2026-06-12 rework — see
+   docs/internal/2026-06-12-design-system-spec.md). Resolves to the
+   two-axis CSS custom properties below, so tk-* classes flip with
+   <html data-mode>/<html data-accent>. `@theme inline` makes the
+   utilities reference the mode-scoped vars directly (bg-tk-surface →
+   background-color: var(--surface)); opacity modifiers (e.g.
+   border-tk-accent/40) resolve via color-mix. */
+@theme inline {
+  --color-tk-bg: var(--bg);
+  --color-tk-surface: var(--surface);
+  --color-tk-raised: var(--raised);
+  --color-tk-hover: var(--hover);
+  --color-tk-ink: var(--ink);
+  --color-tk-ink-2: var(--ink-2);
+  --color-tk-ink-3: var(--ink-3);
+  --color-tk-border: var(--border);
+  --color-tk-accent: var(--accent);
+  --color-tk-accent-2: var(--accent-2);
+  --color-tk-accent-strong: var(--accent-strong);
+  --color-tk-accent-ink: var(--accent-ink);
+  --color-tk-accent-soft: var(--accent-soft);
+  --color-tk-ready: var(--ready);
+  --color-tk-busy: var(--busy);
+  --color-tk-err: var(--err);
+  /* AA-safe accent-toned TEXT (mode × accent pair; see the
+     --accent-text blocks below). */
+  --color-tk-accent-text: var(--accent-text);
+}
+
+/* Fleet v2 — calm ambient card shadows. S20: mode-aware vars — the
+   original gray shadows are a measured no-op on the near-black dark bg
+   (composite to 1.0000:1), so dark mode supplies a lit top rim +
+   true-black drop instead (values live in the data-mode blocks below).
+   Custom @utility rather than a --shadow-* theme key so the utility
+   tracks the mode-scoped var without a self-referential theme token. */
+@utility shadow-ambient {
+  box-shadow: var(--shadow-ambient);
+}
+@utility shadow-ambient-lg {
+  box-shadow: var(--shadow-ambient-lg);
 }
 
 /*
@@ -77,43 +118,54 @@
   }
 }
 
+/* Primary CTA — flat accent, Fleet v2: calm ambient shadow instead of
+   the glow ring + hover lift. Color change only on hover keeps it
+   tactile without motion. */
 @utility btn-primary {
-  @apply inline-flex items-center justify-center rounded-md bg-oxblood-700
-           px-4 py-2 text-sm font-medium text-white shadow-glow-red
-           transition-all duration-200
-           hover:bg-oxblood-800 hover:shadow-glow-red-lg hover:-translate-y-0.5
+  @apply inline-flex items-center justify-center rounded-lg bg-tk-accent
+           px-4 py-2 text-sm font-semibold text-tk-accent-ink
+           transition-colors duration-150
+           hover:bg-tk-accent-strong
            focus-visible:outline-solid focus-visible:outline-2
-           focus-visible:outline-offset-2 focus-visible:outline-glow-red
-           active:translate-y-0;
+           focus-visible:outline-offset-2 focus-visible:outline-tk-accent;
+  box-shadow: var(--shadow-ambient);
 }
 
+/* Secondary CTA — solid surface (Fleet v2: glass/backdrop-blur retired)
+   with subtle border + soft hover. */
 @utility btn-secondary {
-  @apply inline-flex items-center justify-center rounded-md
-           border border-white/10 bg-white/5 px-4 py-2 text-sm
-           font-medium text-ink-primary backdrop-blur-xs
-           transition-all duration-200
-           hover:border-white/20 hover:bg-white/10
+  @apply inline-flex items-center justify-center rounded-lg
+           border border-tk-border bg-tk-surface px-4 py-2 text-sm
+           font-medium text-tk-ink
+           transition-colors duration-150
+           hover:border-tk-ink-3 hover:bg-tk-hover
            focus-visible:outline-solid focus-visible:outline-2
-           focus-visible:outline-offset-2 focus-visible:outline-glow-red;
+           focus-visible:outline-offset-2 focus-visible:outline-tk-accent;
 }
 
+/* Nav link — muted by default, readable accent on hover (accent-text
+   is the AA-safe text tone; raw --accent is ~3.0:1 on the dark bg). */
 @utility nav-link {
-  @apply text-sm text-ink-secondary transition-colors hover:text-glow-red;
+  @apply text-sm text-tk-ink-2 transition-colors hover:text-tk-accent-text;
 }
 
-/* R11 / Fleet rebrand — light+violet docs surface. Synced with the
-   marketing-site + customer-dashboard + admin Fleet tokens (light
-   surfaces, violet accent) so the product reads as one site. The
-   'oxblood'/'glow-red' token NAMES are retained (values flipped to
-   violet) to keep markup + content-parity pins stable across the port. */
+/* S22.1 / Fleet brand-parity port (2026-07-06) — dark+oxblood default +
+   light toggle. Synced with the marketing-site + customer-dashboard
+   Fleet two-axis tokens so the product reads as one site. Supersedes
+   the R11 light+violet posture (legacy 'oxblood'/'glow-red' names are
+   gone; markup consumes tk-* utilities). */
 
 @layer base {
   :root {
+    /* Fleet rework: color-scheme follows the data-mode axis (set on <html>). */
     color-scheme: light;
+  }
+  [data-mode='dark'] {
+    color-scheme: dark;
   }
 
   html {
-    @apply bg-surface-base text-ink-primary;
+    @apply bg-tk-bg text-tk-ink;
     font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
     font-feature-settings: 'cv11', 'ss01';
     -webkit-font-smoothing: antialiased;
@@ -127,18 +179,19 @@
     @apply min-h-screen flex flex-col;
     max-width: 100vw;
     overflow-x: clip;
-    background-image: radial-gradient(
-      ellipse 90% 60% at 50% -10%,
-      rgba(226, 56, 71, 0.05),
-      transparent 70%
-    );
+    /* S22.1 — the brand wash follows the accent axis (was a static red
+       rgba radial left over from the pre-Fleet palette); marketing's
+       ambient pattern: accent glow at the top, accent-soft at the foot. */
+    background-image:
+      radial-gradient(ellipse 90% 60% at 50% -10%, var(--glow), transparent 70%),
+      radial-gradient(ellipse 80% 50% at 50% 100%, var(--accent-soft), transparent 75%);
     background-attachment: fixed;
   }
 
   code,
   pre,
   kbd {
-    font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;
+    font-family: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
     font-feature-settings: normal;
     /* F-1 — long unbreakable strings wrap or scroll internally. */
     overflow-wrap: anywhere;
@@ -151,6 +204,191 @@
   }
 
   ::selection {
-    @apply bg-oxblood-700 text-white;
+    /* Fleet rework: selection follows the accent axis. */
+    @apply bg-tk-accent-strong text-white;
   }
+}
+
+/* S22.1 — tk-token-driven prose (single class set, no prose-invert
+   mode-flip): the typography plugin's color hooks read the mode-scoped
+   custom properties, so body copy / headings / links / bullets flip
+   with <html data-mode> while fenced code stays a DARK terminal in
+   BOTH modes (--code-bg; founder-pinned — light code backgrounds were
+   flagged "ugly / barely readable"). Un-layered so it wins over the
+   plugin's utilities-layer prose defaults. Links use --accent-text
+   (the AA-safe tone), never the raw accent. */
+.prose {
+  --tw-prose-body: var(--ink-2);
+  --tw-prose-headings: var(--ink);
+  --tw-prose-lead: var(--ink-2);
+  --tw-prose-links: var(--accent-text);
+  --tw-prose-bold: var(--ink);
+  --tw-prose-counters: var(--ink-3);
+  --tw-prose-bullets: var(--ink-3);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--ink-2);
+  --tw-prose-quote-borders: var(--accent-2);
+  --tw-prose-captions: var(--ink-3);
+  --tw-prose-kbd: var(--ink);
+  --tw-prose-code: var(--ink);
+  --tw-prose-pre-code: #f1f5f9;
+  --tw-prose-pre-bg: var(--code-bg);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
+}
+
+/* Global reduced-motion baseline (marketing parity). Un-layered +
+   !important so it wins over Tailwind's transition utilities —
+   motion-sensitive visitors get near-instant transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Fleet design-system token layer (2026-06-12 rework; token contract per
+   docs/internal/2026-06-12-design-system-spec.md). Two independent axes on
+   <html>: data-mode (light|dark) × data-accent (violet|oxblood|teal). Fleet
+   markup consumes these via the `tk` utility namespace. The shipped default
+   is dark+oxblood ("Fleet Mission Control — Dark + Red", founder-locked
+   2026-06-15) — set on <html> in BaseLayout.astro; the other axis values
+   stay selectable machinery. Values byte-identical to
+   apps/marketing-site/src/styles/base.css (S22.1 brand-parity port). */
+[data-accent='violet'] {
+  --accent-rgb: 109 94 252;
+  --accent-2-rgb: 139 125 255;
+  --accent-strong-rgb: 88 71 224;
+  --accent: #6d5efc;
+  --accent-2: #8b7dff;
+  --accent-strong: #5847e0;
+  --accent-ink: #fff;
+  --accent-soft: rgba(109, 94, 252, 0.13);
+  --glow: rgba(109, 94, 252, 0.32);
+}
+[data-accent='oxblood'] {
+  --accent-rgb: 155 59 70;
+  --accent-2-rgb: 192 75 88;
+  --accent-strong-rgb: 114 47 55;
+  --accent: #9b3b46;
+  --accent-2: #c04b58;
+  --accent-strong: #722f37;
+  --accent-ink: #fff;
+  --accent-soft: rgba(155, 59, 70, 0.13);
+  --glow: rgba(155, 59, 70, 0.32);
+}
+[data-accent='teal'] {
+  --accent-rgb: 16 154 130;
+  --accent-2-rgb: 27 199 168;
+  --accent-strong-rgb: 12 125 105;
+  --accent: #109a82;
+  --accent-2: #1bc7a8;
+  --accent-strong: #0c7d69;
+  --accent-ink: #fff;
+  --accent-soft: rgba(16, 154, 130, 0.13);
+  --glow: rgba(16, 154, 130, 0.28);
+}
+[data-mode='light'] {
+  --bg-rgb: 242 243 246;
+  --surface-rgb: 255 255 255;
+  --raised-rgb: 255 255 255;
+  --hover-rgb: 241 242 245;
+  --ink-rgb: 15 16 20;
+  --ink-2-rgb: 71 74 85;
+  --ink-3-rgb: 138 141 153;
+  --border-rgb: 228 230 236;
+  --ready-rgb: 12 154 93;
+  --busy-rgb: 201 138 18;
+  --err-rgb: 216 69 60;
+  --bg: #f2f3f6;
+  --surface: #fff;
+  --raised: #fff;
+  --hover: #f1f2f5;
+  --ink: #0f1014;
+  --ink-2: #474a55;
+  --ink-3: #8a8d99;
+  --border: #e4e6ec;
+  --ready: #0c9a5d;
+  --busy: #c98a12;
+  --err: #d8453c;
+  --sync: #2563eb;
+  --code-bg: #16171c;
+  /* S20 — mode-aware elevation: the light values are the original v2
+     ambient shadows (they work on light surfaces). */
+  --shadow-ambient: 0 1px 2px rgb(15 16 20 / 0.04), 0 10px 28px -18px rgb(15 16 20 / 0.12);
+  --shadow-ambient-lg: 0 2px 4px rgb(15 16 20 / 0.05), 0 24px 56px -24px rgb(15 16 20 / 0.2);
+}
+[data-mode='dark'] {
+  --bg-rgb: 6 6 8;
+  --surface-rgb: 20 20 26;
+  --raised-rgb: 28 28 36;
+  --hover-rgb: 36 37 47;
+  --ink-rgb: 245 245 247;
+  --ink-2-rgb: 176 176 187;
+  --ink-3-rgb: 140 140 150;
+  --border-rgb: 44 44 56;
+  --ready-rgb: 47 227 154;
+  --busy-rgb: 255 194 77;
+  --err-rgb: 255 107 97;
+  --bg: #060608;
+  /* S20 2026-07-06 (founder: "boxes might not even be visible") — the dark
+     surface ladder was compressed ~4x below the GUI's (surface vs bg was
+     1.05:1, below perceptibility; every layer boundary hung on a 1.16:1
+     hairline border). Bumped for SEPARATION while the near-black brand bg
+     stays locked: surface 1.10:1 / raised 1.20:1 vs bg / border 1.47:1. */
+  --surface: #14141a;
+  --raised: #1c1c24;
+  --hover: #24252f;
+  --ink: #f5f5f7;
+  --ink-2: #b0b0bb;
+  /* ink-3 carries small muted print at reading distance;
+     #8c8c96 clears WCAG AA on #060608 where the old dashboard #73737f
+     (≈4.2:1) did not. Unified across marketing + dashboard + docs as of
+     S21/S22.1 (2026-07-06). */
+  --ink-3: #8c8c96;
+  --border: #2c2c38;
+  --ready: #2fe39a;
+  --busy: #ffc24d;
+  --err: #ff6b61;
+  --sync: #60a5fa;
+  --code-bg: #0c0c11;
+  /* S20 — dark elevation: the light-mode gray shadows composite to
+     EXACTLY the bg on near-black (a mathematical no-op, measured
+     1.0000:1), so dark cards had zero elevation cue. Dark uses the
+     standard dark-UI cue instead: a lit top rim (inset white ~5%)
+     + a true-black drop for overlap depth. */
+  --shadow-ambient: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 10px 28px -18px rgb(0 0 0 / 0.7);
+  --shadow-ambient-lg: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 24px 56px -24px rgb(0 0 0 / 0.85);
+}
+
+/* ── AA-safe accent-toned TEXT (Fleet v2 2026-07-03). The raw --accent fails
+   WCAG AA as text on the dark bg (oxblood #9b3b46 on #060608 ≈ 3.0:1 — fine
+   for button FILLS with white ink, not for colored text). --accent-text is
+   the readable tone per mode × accent pair (all ≥4.5:1 on --bg, verified):
+   dark oxblood #d4626e 5.56 / violet #8b7dff 6.24 / teal #1bc7a8 9.43;
+   light oxblood #8d2c3e 7.39 / violet #5847e0 5.58 / teal #0c7d69 4.56.
+   Text-on-background accent roles (nav-link hover, prose links, active
+   sidebar items) use tk-accent-text; fills/borders keep the raw accent.
+   The accent-soft wash is a BACKGROUND token only — never text. */
+[data-mode='dark'][data-accent='violet'] {
+  --accent-text: #8b7dff;
+}
+[data-mode='dark'][data-accent='oxblood'] {
+  --accent-text: #d4626e;
+}
+[data-mode='dark'][data-accent='teal'] {
+  --accent-text: #1bc7a8;
+}
+[data-mode='light'][data-accent='violet'] {
+  --accent-text: #5847e0;
+}
+[data-mode='light'][data-accent='oxblood'] {
+  --accent-text: #8d2c3e;
+}
+[data-mode='light'][data-accent='teal'] {
+  --accent-text: #0c7d69;
 }

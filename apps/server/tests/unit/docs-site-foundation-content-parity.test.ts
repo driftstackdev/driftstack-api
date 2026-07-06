@@ -33,8 +33,9 @@ describe('W599 apps/docs foundation modules content parity', () => {
     );
     expect(body).toMatch(/\/\/ Cross-links back to marketing for the full company navigation\./);
     expect(body).toMatch(/^const year = new Date\(\)\.getUTCFullYear\(\);$/m);
-    expect(body).toMatch(/DRIFT<span class="text-ink-primary">STACK<\/span>/);
-    expect(body).toMatch(/<span class="ml-1 text-xs text-ink-muted">docs<\/span>/);
+    // S22.1 (2026-07-06) — tk-* tokens: STACK = AA-safe accent-text tone.
+    expect(body).toMatch(/DRIFT<span class="text-tk-accent-text">STACK<\/span>/);
+    expect(body).toMatch(/<span class="ml-1 text-xs text-tk-ink-3">docs<\/span>/);
     expect(body).toMatch(
       /Reference \+ guides for the Driftstack API, SDKs, and self-hosted client\./,
     );
@@ -113,16 +114,17 @@ describe('W599 apps/docs foundation modules content parity', () => {
       /return pathname === href \|\| pathname === href\.replace\(\/\\\/\$\/, ''\);/,
     );
     expect(body).toMatch(/DOC_NAV\.map\(\(section\) => \(/);
-    // R11 — dark-themed prose stack. `prose-invert` flips the
-    // typography defaults to light text on dark, then we override
-    // tokens explicitly so links read against slate-900 (glow-red
-    // not oxblood-700, which was too dark on the new graphite
-    // surface) and code blocks land on surface-inset (slate-950).
-    expect(body).toMatch(/prose prose-slate max-w-3xl flex-1/);
-    expect(body).toMatch(/prose-a:text-glow-red/);
-    expect(body).toMatch(/prose-code:bg-oxblood-100/);
-    expect(body).toMatch(/prose-pre:bg-\[#16171c\]/);
-    expect(body).toMatch(/prose-pre:text-slate-100/);
+    // S22.1 (2026-07-06, brand-parity port) — tk-token-driven prose
+    // (supersedes the R11 prose-slate stack): color hooks live in
+    // base.css as un-layered .prose --tw-prose-* overrides reading the
+    // mode-scoped tk tokens; still NOT prose-invert, and fenced code
+    // stays a DARK terminal in BOTH modes (--code-bg; founder-pinned).
+    expect(body).toMatch(/prose max-w-3xl flex-1/);
+    expect(body).not.toMatch(/prose-invert/);
+    expect(body).not.toMatch(/prose-slate/);
+    expect(body).toMatch(/prose-code:bg-tk-accent-soft/);
+    expect(body).toMatch(/--tw-prose-pre-bg: var\(--code-bg\)/);
+    expect(body).toMatch(/'bg-tk-accent-soft text-tk-accent-text'/);
     expect(existsSync(DOC)).toBe(true);
   });
 
@@ -130,14 +132,13 @@ describe('W599 apps/docs foundation modules content parity', () => {
     const body = read(NOT_FOUND);
     expect(body).toMatch(/^import BaseLayout from '\.\.\/layouts\/BaseLayout\.astro';$/m);
     expect(body).toMatch(/<BaseLayout title="Page not found">/);
-    expect(body).toMatch(
-      /<h1 class="text-4xl font-semibold text-ink-primary">Page not found<\/h1>/,
-    );
+    expect(body).toMatch(/<h1 class="text-4xl font-semibold text-tk-ink">Page not found<\/h1>/);
     expect(body).toMatch(
       /The page you're looking for might have moved as the docs site is built out\./,
     );
-    // R11 — link colour swapped to glow-red for dark-mode readability.
-    expect(body).toMatch(/<a href="\/" class="text-glow-red hover:underline">overview<\/a>/);
+    // S22.1 (2026-07-06) — links use tk-accent-text (the AA-safe accent
+    // text tone per mode; was the legacy glow-red alias).
+    expect(body).toMatch(/<a href="\/" class="text-tk-accent-text hover:underline">overview<\/a>/);
     expect(body).toMatch(
       /href="https:\/\/github\.com\/driftstackdev\/driftstack-api\/tree\/main\/docs"/,
     );

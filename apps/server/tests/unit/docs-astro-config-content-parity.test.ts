@@ -55,6 +55,10 @@ describe('W536.C apps/docs/astro.config.mjs content parity', () => {
     expect(body).not.toMatch(/sentry\(/);
   });
 
+  it('S22.1 shiki theme pinned: github-dark-default (AA-readable comment token #8b949e ≈ 6.2:1 on #0d1117; the old default github-dark measured ~2.9:1) — the docs code blocks stay a dark terminal in BOTH modes (founder-pinned) while comments stay readable', () => {
+    expect(body).toMatch(/shikiConfig: \{\s*\n\s*theme: 'github-dark-default',/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

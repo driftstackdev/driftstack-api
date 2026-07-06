@@ -169,11 +169,13 @@ describe('W784 docs top-level index + 404 content parity', () => {
   it("CRITICAL 404 framing pinned. The 'The page you\\'re looking for might have moved as the docs site is built out. Try the overview, or check the repository docs/ tree for canonical references' wording is the canonical no-route fallback message.", () => {
     const p = read(NOTFOUND);
 
-    expect(p).toMatch(/<h1 class="text-4xl font-semibold text-ink-primary">Page not found<\/h1>/);
+    // S22.1 (2026-07-06) — tk-* tokens: heading ink + AA-safe accent-text
+    // links (was text-ink-primary / the legacy glow-red alias).
+    expect(p).toMatch(/<h1 class="text-4xl font-semibold text-tk-ink">Page not found<\/h1>/);
     expect(p).toMatch(
       /The page you're looking for might have moved as the docs site is built out\. Try the/,
     );
-    expect(p).toMatch(/<a href="\/" class="text-glow-red hover:underline">overview<\/a>/);
+    expect(p).toMatch(/<a href="\/" class="text-tk-accent-text hover:underline">overview<\/a>/);
     expect(p).toMatch(
       /href="https:\/\/github\.com\/driftstackdev\/driftstack-api\/tree\/main\/docs"/,
     );
