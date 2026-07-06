@@ -33,7 +33,9 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
 
   it('Start-free card framing pinned: $0 · no card + already-on-free-plan + go-to-dashboard CTA (2026-07-02: CTA moved off the deleted /first-session onto the dashboard home — sessions launch in the desktop app)', () => {
     expect(body).toMatch(
-      /<span class="font-mono text-sm text-tk-accent-soft">\$0 · no card<\/span>/,
+      // S21 2026-07-06: text-tk-accent-text (was text-tk-accent-soft — the
+      // 13%-alpha WASH token misused as a text color; ~1.2:1, invisible).
+      /<span class="font-mono text-sm text-tk-accent-text">\$0 · no card<\/span>/,
     );
     expect(body).toMatch(
       /Your account is already on the free plan: 1 profile, 1 concurrent\s*\n?\s*session of up to 20 minutes\. No subscription, no expiry/,

@@ -73,7 +73,9 @@ describe('W753 dashboard /webhooks page V-181 + V-475 parity', () => {
     // 2026-05-23 — h2 wrapped with icon (rotate-arrow); pin loosened
     // to label-presence + heading shape.
     expect(p).toMatch(/Signing secret rotated/);
-    expect(p).toMatch(/text-lg font-semibold text-tk-accent-soft/);
+    // S21 2026-07-06: text-tk-accent-text (was text-tk-accent-soft — the
+    // 13%-alpha WASH token misused as a text color; ~1.2:1, invisible).
+    expect(p).toMatch(/text-lg font-semibold text-tk-accent-text/);
     expect(p).toMatch(/data-rotate-endpoint-id/);
     expect(p).toMatch(/data-rotate-secret/);
     expect(p).toMatch(/data-rotate-grace-expires/);

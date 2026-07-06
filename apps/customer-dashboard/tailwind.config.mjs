@@ -81,6 +81,8 @@ export default {
           err: 'rgb(var(--err-rgb) / <alpha-value>)',
           sync: 'rgb(var(--sync-rgb) / <alpha-value>)',
           'code-bg': 'rgb(var(--code-bg-rgb) / <alpha-value>)',
+          // AA-safe accent-toned TEXT (mode × accent pair; see base.css).
+          'accent-text': 'var(--accent-text)',
         },
       },
       fontFamily: {
@@ -104,8 +106,13 @@ export default {
         'glow-red-lg': '0 0 0 1px rgba(226, 56, 71, 0.4), 0 12px 40px -12px rgba(226, 56, 71, 0.5)',
         'inset-divider': 'inset 0 1px 0 rgba(255, 255, 255, 0.06)',
         // Fleet v2 — calm ambient card shadows (replace glow-on-everything).
-        ambient: '0 1px 2px rgb(15 16 20 / 0.04), 0 10px 28px -18px rgb(15 16 20 / 0.12)',
-        'ambient-lg': '0 2px 4px rgb(15 16 20 / 0.05), 0 24px 56px -24px rgb(15 16 20 / 0.2)',
+        // S21 2026-07-06 (port of marketing's S20): mode-aware vars — the
+        // original gray shadows are a measured no-op on the near-black dark
+        // bg (composite to 1.0000:1), so dark mode supplies a lit top rim +
+        // true-black drop instead (values live in styles/base.css per
+        // data-mode block).
+        ambient: 'var(--shadow-ambient)',
+        'ambient-lg': 'var(--shadow-ambient-lg)',
       },
       backgroundImage: {
         'glow-radial-red':

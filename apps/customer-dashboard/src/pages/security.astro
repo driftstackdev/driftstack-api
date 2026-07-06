@@ -206,16 +206,16 @@ const apiBaseUrl = resolveApiBaseUrl();
 
         <!-- Hidden until /verify returns 10 recovery codes. -->
         <div class="hidden rounded-lg border border-tk-accent/30 bg-tk-accent/10 p-4" data-section="mfa-recovery">
-          <p class="text-sm font-medium text-tk-accent-soft">
+          <p class="text-sm font-medium text-tk-accent-text">
             Save your recovery codes — these are shown ONCE
           </p>
-          <p class="mt-1 text-xs text-tk-accent-soft">
+          <p class="mt-1 text-xs text-tk-accent-text">
             Each code works once. Store them somewhere safe (password manager,
             printed copy, secure note). Without your authenticator AND these
             codes, account access requires support intervention.
           </p>
           <ul
-            class="mt-3 grid grid-cols-2 gap-2 font-mono text-sm text-tk-accent-soft"
+            class="mt-3 grid grid-cols-2 gap-2 font-mono text-sm text-tk-accent-text"
             data-list="mfa-recovery-codes"
           ></ul>
           <div class="mt-3 flex flex-wrap gap-2">
@@ -587,7 +587,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             const manageFrag = manageUrl
               ? '<a href="' +
                 escapeHtml(manageUrl) +
-                '" target="_blank" rel="noopener noreferrer" class="shrink-0 text-xs text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft">Manage on ' +
+                '" target="_blank" rel="noopener noreferrer" class="shrink-0 text-xs text-tk-accent underline underline-offset-4 hover:text-tk-accent-text">Manage on ' +
                 escapeHtml(providerLabel(link.provider)) +
                 ' ↗</a>'
               : '';

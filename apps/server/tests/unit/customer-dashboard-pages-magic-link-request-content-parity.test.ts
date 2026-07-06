@@ -63,7 +63,9 @@ describe('customer-dashboard/pages/auth/magic-link-request content parity', () =
 
   it("Check-your-inbox card copy pinned: 'If <span data-success-email…> matches a Driftstack account, a one-shot sign-in link is on the way. The link expires in <span data-success-window…>15 minutes</span>.' — pinned so the 15-minute-default expiry text + 'if matches' anti-enumeration phrasing (NOT 'we sent to') contract stays documented", () => {
     expect(body).toMatch(
-      /If <span data-success-email class="font-mono text-tk-accent-soft"><\/span> matches a Driftstack\s*\n?\s*account, a one-shot sign-in link is on the way\. The link expires in <span\s*\n?\s*data-success-window\s*\n?\s*class="font-mono">15 minutes<\/span\s*\n?\s*>\./,
+      // S21 2026-07-06: text-tk-accent-text (was text-tk-accent-soft — the
+      // 13%-alpha WASH token misused as a text color; ~1.2:1, invisible).
+      /If <span data-success-email class="font-mono text-tk-accent-text"><\/span> matches a Driftstack\s*\n?\s*account, a one-shot sign-in link is on the way\. The link expires in <span\s*\n?\s*data-success-window\s*\n?\s*class="font-mono">15 minutes<\/span\s*\n?\s*>\./,
     );
   });
 

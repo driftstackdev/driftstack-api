@@ -147,7 +147,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         Already have an account? <a
           data-login-link
           href="/login"
-          class="text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft">Sign in</a
+          class="text-tk-accent underline underline-offset-4 hover:text-tk-accent-text">Sign in</a
         >.
       </p>
     </div>
@@ -213,14 +213,14 @@ const apiBaseUrl = resolveApiBaseUrl();
         const signIn = document.createElement('a');
         signIn.href = '/login' + q;
         signIn.className =
-          'text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft';
+          'text-tk-accent underline underline-offset-4 hover:text-tk-accent-text';
         signIn.textContent = 'Sign in';
         const sep = document.createElement('span');
         sep.textContent = ' or ';
         const reset = document.createElement('a');
         reset.href = '/forgot-password' + q;
         reset.className =
-          'text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft';
+          'text-tk-accent underline underline-offset-4 hover:text-tk-accent-text';
         reset.textContent = 'reset your password';
         const tail = document.createElement('span');
         tail.textContent = '.';
