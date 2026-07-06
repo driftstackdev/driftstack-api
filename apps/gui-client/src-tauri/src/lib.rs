@@ -34,8 +34,56 @@ const KEYRING_SERVICE: &str = "dev.driftstack.gui";
 /// multi-account support lands, this becomes a per-account-id key.
 const KEYRING_USER: &str = "default";
 
+/// #137 — native crash breadcrumb. The founder reported the GUI window "just
+/// closing on its own even if the browser remains open." main.tsx already
+/// fails-visible on every JS `error` + `unhandledrejection` (with a RootErrorBoundary
+/// + a fatal overlay), so a SILENT window vanish is a NATIVE tear-down — a Rust panic
+/// (e.g. in a spawned proxy-probe thread or the event loop) or a webview-process
+/// crash — not a JS fault. This panic hook persists the panic's location + message to
+/// a stable log file BEFORE the process unwinds, turning an un-diagnosable "it just
+/// disappeared" into a concrete report the founder can hand back. Best-effort +
+/// append-only; the hook never itself panics, and it CHAINS the default hook so the
+/// stderr backtrace still prints for a terminal/Console.app launch.
+fn install_crash_logger() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        // ~/Library/Logs/Driftstack/crash.log on macOS (HOME-relative elsewhere) —
+        // a location the founder can `cat` without dev tooling.
+        if let Ok(home) = std::env::var("HOME") {
+            let dir = std::path::Path::new(&home).join("Library/Logs/Driftstack");
+            let _ = std::fs::create_dir_all(&dir);
+            let loc = info
+                .location()
+                .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+                .unwrap_or_else(|| "<unknown location>".to_string());
+            let msg = info
+                .payload()
+                .downcast_ref::<&str>()
+                .map(|s| (*s).to_string())
+                .or_else(|| info.payload().downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "<non-string panic payload>".to_string());
+            let secs = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let line = format!("[unix {secs}] PANIC at {loc}: {msg}\n");
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(dir.join("crash.log"))
+            {
+                let _ = f.write_all(line.as_bytes());
+            }
+        }
+        // Preserve default behaviour (stderr backtrace) so nothing is lost.
+        default_hook(info);
+    }));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // #137 — install the crash breadcrumb before anything else can panic.
+    install_crash_logger();
     tauri::Builder::default()
         // Single-instance guard (founder-hit 2026-06-13: two stacked
         // instances wedged into a "not responding" window). MUST be the
