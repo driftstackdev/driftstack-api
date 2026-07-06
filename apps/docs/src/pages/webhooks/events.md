@@ -286,7 +286,7 @@ the staleness threshold). These are the three values
 `CryptoOrdersService` emits; the underlying NowPayments sub-status
 (timeout / refunded / cancelled) is collapsed into `ipn`.
 
-See [Crypto checkout API](../api/billing-crypto) for the full
+See [Crypto checkout API](/api/billing-crypto) for the full
 order lifecycle + status state machine. The webhook event mirrors
 the same `events[]` log shape returned by `GET /v1/billing/crypto-
 orders`.
