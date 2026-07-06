@@ -65,12 +65,13 @@ const pathname = Astro.url.pathname;
             class:list={[
               // 2026-05-21 — font-medium on base class so width stays
               // constant across active/inactive; active state distinguished
-              // by text-tk-accent only. Same fix as the dashboard +
+              // by accent tone only. Same fix as the dashboard +
               // admin-panel sidebars (50b0dd7a / 3331f410). Otherwise
               // clicking nav items shifts neighbours horizontally as the
-              // text bolds.
+              // text bolds. S24: the active tone is TEXT → tk-accent-text
+              // (raw accent is ~3.0:1 on the dark bg — a fill tone).
               'nav-link font-medium',
-              pathname === item.href && 'text-tk-accent',
+              pathname === item.href && 'text-tk-accent-text',
             ]}
             target={item.external ? '_blank' : undefined}
             rel={item.external ? 'noopener noreferrer' : undefined}
@@ -133,9 +134,10 @@ const pathname = Astro.url.pathname;
                 class:list={[
                   // 2026-05-21 — same constant-font-weight pattern as the
                   // desktop nav (above) so the mobile popup doesn't reflow
-                  // when the active item is tapped.
+                  // when the active item is tapped. S24: same AA-safe
+                  // accent-text active tone as the desktop nav.
                   'rounded px-3 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink',
-                  pathname === item.href && 'text-tk-accent',
+                  pathname === item.href && 'text-tk-accent-text',
                 ]}
                 target={'external' in item && item.external ? '_blank' : undefined}
                 rel={'external' in item && item.external ? 'noopener noreferrer' : undefined}

@@ -111,7 +111,12 @@ const cockpitProfiles = [
              (phone-framed, LIVE/IDLE, dark+oxblood). Band A: cities spelled
              out, "own connection", example.com pages only. -->
         <div class="relative">
-          <div class="flex items-end justify-center pt-2">
+          {/* S24 — data-contrast-decorative: the fan is an ILLUSTRATION of
+              the GUI (miniature window chrome, 6–8px faux print, no real
+              links/CTAs inside), exempt from the contrast scanner per
+              WCAG 1.4.3 "incidental" text-in-a-picture. The caption strip
+              BELOW the fan is real copy and stays scanned. */}
+          <div class="flex items-end justify-center pt-2" data-contrast-decorative>
             {
               heroFleet.map((p) => (
                 <div class={`relative w-[118px] shrink-0 sm:w-[128px] ${p.wrap}`}>
@@ -166,9 +171,9 @@ const cockpitProfiles = [
             🇺🇸 New York · 🇳🇱 Amsterdam · 🇯🇵 Tokyo — each on its own connection
           </p>
           <div class="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 font-mono text-[10px] text-tk-ink-3">
-            <span><b class="text-tk-ready">4 iPhones</b> in your fleet</span>
+            <span><b class="text-tk-ready-text">4 iPhones</b> in your fleet</span>
             <span>each with <b class="text-tk-ink-2">its own identity</b></span>
-            <span>all <b class="text-tk-ready">healthy</b></span>
+            <span>all <b class="text-tk-ready-text">healthy</b></span>
           </div>
         </div>
       </div>
@@ -301,7 +306,13 @@ const cockpitProfiles = [
     title="Point and click — or just say what you want."
     lead="The desktop app keeps every iPhone one click away — folders, tags, floating device windows. And when a task is repetitive, type it in plain English and the built-in AI agent drives while you watch."
   >
-      <div class="mt-10 relative">
+      {/* S24 — data-contrast-decorative: the whole cockpit block (window +
+          floating simulator) is an ILLUSTRATION of the desktop GUI — every
+          "control" inside is a span/div, none of it is site UI a visitor
+          must read — so it's exempt from the contrast scanner per WCAG
+          1.4.3 "incidental" text-in-a-picture. The explanatory copy below
+          it stays scanned. */}
+      <div class="mt-10 relative" data-contrast-decorative>
         <div class="rounded-2xl border border-tk-border bg-tk-surface shadow-ambient-lg overflow-hidden">
           <!-- window chrome — matches the current GUI titlebar: brand +
                · cloud, a Connected pill on the right. -->
@@ -332,7 +343,7 @@ const cockpitProfiles = [
             <!-- profiles pane — phone-framed cards (the current GUI look) -->
             <div class="p-4">
               <div class="mb-3 flex items-center justify-between">
-                <span class="font-mono text-[11px] text-tk-ink-2"><b class="text-tk-ready">4 live</b> · 98% proxy health</span>
+                <span class="font-mono text-[11px] text-tk-ink-2"><b class="text-tk-ready-text">4 live</b> · 98% proxy health</span>
                 <span class="rounded-md bg-tk-accent px-2 py-0.5 text-[10px] font-semibold text-tk-accent-ink">+ New profile</span>
               </div>
               <div class="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">

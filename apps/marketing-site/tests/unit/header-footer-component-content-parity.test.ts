@@ -130,8 +130,8 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     expect(body).toMatch(/rel=\{item\.external \? 'noopener noreferrer' : undefined\}/);
   });
 
-  it('active-route highlighting: pathname === item.href → text-tk-accent (Fleet token; was text-tk-accent). 2026-05-21 — font-medium moved from active-only to the base class (constant width prevents click-induced horizontal nudge as the active text bolds; same fix as the dashboard 50b0dd7a + admin-panel 3331f410 sidebars).', () => {
-    expect(body).toMatch(/pathname === item\.href && 'text-tk-accent'/);
+  it('active-route highlighting: pathname === item.href → text-tk-accent-text (S24 2026-07-06: the active tone is TEXT, so it reads the AA-safe accent-text pair — the raw accent is ~3.0:1 on the dark bg, a fill tone). 2026-05-21 — font-medium moved from active-only to the base class (constant width prevents click-induced horizontal nudge as the active text bolds; same fix as the dashboard 50b0dd7a + admin-panel 3331f410 sidebars).', () => {
+    expect(body).toMatch(/pathname === item\.href && 'text-tk-accent-text'/);
     expect(body).toMatch(/'nav-link font-medium'/);
   });
 });

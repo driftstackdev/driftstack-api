@@ -85,6 +85,10 @@
   /* AA-safe accent-toned TEXT (mode × accent pair; see the
      --accent-text blocks below). */
   --color-tk-accent-text: var(--accent-text);
+  /* S24 — AA-safe status-toned TEXT (per data-mode block below). */
+  --color-tk-ready-text: var(--ready-text);
+  --color-tk-busy-text: var(--busy-text);
+  --color-tk-err-text: var(--err-text);
 }
 
 /* Fleet v2 — calm ambient card shadows. S20: mode-aware vars — the
@@ -341,6 +345,20 @@
   --ready: #0c9a5d;
   --busy: #c98a12;
   --err: #d8453c;
+  /* S24 2026-07-06 — AA-safe status-toned TEXT (the S22.4 method-chip
+     precedent promoted to shared tokens; values byte-identical with
+     marketing/dashboard base.css). The raw status tokens above are FILL
+     tones and fail WCAG AA as small text in light mode (--err #d8453c
+     3.91/4.34/3.88 on bg/surface/hover; --ready #0c9a5d 3.27/3.62/3.24;
+     --busy #c98a12 2.66/2.95/2.63). Status-colored TEXT consumes the
+     *-text pair; dots/fills/washes/borders keep the raw tokens. All three
+     verified ≥4.5:1 on --bg #f2f3f6 / --surface #fff / --hover #f1f2f5
+     AND over their own 15%-alpha washes (the method chips below ride
+     them): ready-text #097245 5.40/5.99/5.35 · busy-text #845a09
+     5.49/6.09/5.44 · err-text #ad3229 5.80/6.43/5.75. */
+  --ready-text: #097245;
+  --busy-text: #845a09;
+  --err-text: #ad3229;
   --sync: #2563eb;
   --code-bg: #16171c;
   /* S20 — mode-aware elevation: the light values are the original v2
@@ -380,6 +398,17 @@
   --ready: #2fe39a;
   --busy: #ffc24d;
   --err: #ff6b61;
+  /* S24 2026-07-06 — AA-safe status-toned TEXT (see the light block). The
+     dark raw ready/busy tones already clear AA as text everywhere, so the
+     pairs reuse them (ready-text #2fe39a 12.12/10.99/9.11 on
+     bg/surface/hover; busy-text #ffc24d 12.61/11.42/9.47). Raw --err
+     #ff6b61 passes plain surfaces (7.26/6.58/5.45) but measures 4.35:1
+     over its own 15% wash on a hovered row (the S22.4 DELETE-chip
+     finding), so err-text lifts to #ff7d74: 8.13/7.37/6.11 plain,
+     6.91/4.88 over the wash on bg/hover. */
+  --ready-text: #2fe39a;
+  --busy-text: #ffc24d;
+  --err-text: #ff7d74;
   --sync: #60a5fa;
   --code-bg: #0c0c11;
   /* S20 — dark elevation: the light-mode gray shadows composite to
@@ -430,16 +459,21 @@
      - LIGHT needs DARKER tones than the raw tokens (raw
        ready/busy/err/sync measure only 2.3–3.8:1 as text on the light
        bg — they are fill tokens, not text tokens).
-   All pairs verified ≥4.5:1 against the wash composited over BOTH
-   --bg and --hover (chips sit on hoverable rows):
-     dark : GET var(--ready) #2fe39a 9.49/6.50 · POST var(--sync)
-            #60a5fa 6.60/4.63 · PUT/PATCH var(--busy) #ffc24d
-            9.76/6.64 · DELETE #ff7d74 6.91/4.88
-     light: GET #06663d 5.40/5.35 · POST #1d4ed8 4.92/4.91 ·
-            PUT/PATCH #7a540b 5.32/5.27 · DELETE #a23028 5.21/5.16
+   S24 2026-07-06 — this chip precedent got promoted to the shared
+   --ready-text/--busy-text/--err-text tokens (per data-mode blocks
+   above), so GET/PUT/PATCH/DELETE now consume the tokens and flip per
+   mode with no light overrides. POST stays hardcoded (no --sync-text
+   token; sync is docs-chip-only). Light GET/PUT/DELETE tones moved to
+   the shared token values (#06663d→#097245 · #7a540b→#845a09 ·
+   #a23028→#ad3229), re-verified ≥4.5:1 against the wash composited
+   over BOTH --bg and --hover (chips sit on hoverable rows):
+     dark : GET var(--ready-text) #2fe39a 9.49/6.50 · POST var(--sync)
+            #60a5fa 6.60/4.63 · PUT/PATCH var(--busy-text) #ffc24d
+            9.76/6.64 · DELETE var(--err-text) #ff7d74 6.91/4.88
+     light: GET #097245 4.58/4.54 · POST #1d4ed8 4.92/4.91 ·
+            PUT/PATCH #845a09 4.79/4.74 · DELETE #ad3229 4.77/4.72
    GET = ready tint · POST = sync/blue tint · PUT/PATCH = busy/amber
-   tint · DELETE = err/red tint. Defaults below are the DARK
-   (shipped-default) text tones; [data-mode='light'] overrides them. */
+   tint · DELETE = err/red tint. */
 .method-chip {
   display: inline-block;
   flex-shrink: 0;
@@ -462,7 +496,7 @@
    hardcodes the --sync hex triplets per mode (#60a5fa dark / #2563eb
    light — same values customer-dashboard exposes as --sync-rgb). */
 .method-chip--get {
-  color: var(--ready);
+  color: var(--ready-text);
   background: rgb(var(--ready-rgb) / 0.15);
 }
 .method-chip--post {
@@ -471,26 +505,16 @@
 }
 .method-chip--put,
 .method-chip--patch {
-  color: var(--busy);
+  color: var(--busy-text);
   background: rgb(var(--busy-rgb) / 0.15);
 }
 .method-chip--delete {
-  color: #ff7d74;
+  color: var(--err-text);
   background: rgb(var(--err-rgb) / 0.15);
 }
 [data-mode='light'] .method-chip--post {
   background: rgb(37 99 235 / 0.15);
 }
-[data-mode='light'] .method-chip--get {
-  color: #06663d;
-}
 [data-mode='light'] .method-chip--post {
   color: #1d4ed8;
-}
-[data-mode='light'] .method-chip--put,
-[data-mode='light'] .method-chip--patch {
-  color: #7a540b;
-}
-[data-mode='light'] .method-chip--delete {
-  color: #a23028;
 }

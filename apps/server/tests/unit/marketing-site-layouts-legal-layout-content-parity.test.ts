@@ -56,10 +56,10 @@ describe('W523.B apps/marketing-site/src/layouts/LegalLayout.astro content parit
     expect(body).toMatch(/\{ href: '\/trust\/sub-processors', label: 'Sub-processors' \},/);
   });
 
-  it("BaseLayout wrap + header section framing pinned: '<BaseLayout title={title} description={description}>' + 'Legal' mono-uppercase eyebrow + title h1 (3xl→4xl on md) + optional description prose-paragraph — pinned so the BaseLayout-pass-through + Legal-eyebrow + responsive-h1 + conditional-description commitment survives", () => {
+  it("BaseLayout wrap + header section framing pinned: '<BaseLayout title={title} description={description}>' + 'Legal' mono-uppercase eyebrow (S24 2026-07-06: eyebrow is TEXT → the AA-safe tk-accent-text tone; raw accent is ~3.0:1 on the dark bg) + title h1 (3xl→4xl on md) + optional description prose-paragraph — pinned so the BaseLayout-pass-through + Legal-eyebrow + responsive-h1 + conditional-description commitment survives", () => {
     expect(body).toMatch(/<BaseLayout title=\{title\} description=\{description\}>/);
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Legal<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">Legal<\/p>/,
     );
     // 2026-05-22 — h1 keeps the same size classes; ink-primary
     // color moved onto a gradient-text span (matches the rest of
@@ -70,9 +70,10 @@ describe('W523.B apps/marketing-site/src/layouts/LegalLayout.astro content parit
     );
   });
 
-  it("Prose styling framing pinned (dark-theme): 'prose max-w-none' + 'prose-h1:hidden' + 'prose-a:text-tk-accent prose-a:no-underline hover:prose-a:underline hover:prose-a:text-tk-accent-2' + 'prose-blockquote:border-l-tk-accent prose-blockquote:not-italic prose-blockquote:text-tk-ink-2' — Fleet rework: prose-invert dropped (light default) + token anchors.", () => {
+  it("Prose styling framing pinned (dark-theme): 'prose max-w-none' + 'prose-h1:hidden' + 'prose-a:text-tk-accent-text prose-a:no-underline hover:prose-a:underline hover:prose-a:text-tk-accent-2' (S24 2026-07-06: link base tone is TEXT → the AA-safe accent-text pair, matching the S23 link pattern; accent-2 stays the hover) + 'prose-blockquote:border-l-tk-accent prose-blockquote:not-italic prose-blockquote:text-tk-ink-2' — Fleet rework: prose-invert dropped (light default) + token anchors.", () => {
     expect(body).toMatch(/prose max-w-none/);
     expect(body).toMatch(/prose-h1:hidden/);
+    expect(body).toMatch(/prose-a:text-tk-accent-text prose-a:no-underline/);
     expect(body).toMatch(/prose-a:text-tk-accent-2/);
     expect(body).toMatch(/prose-a:no-underline/);
     expect(body).toMatch(/hover:prose-a:underline/);
@@ -82,14 +83,14 @@ describe('W523.B apps/marketing-site/src/layouts/LegalLayout.astro content parit
     expect(body).toMatch(/prose-blockquote:text-tk-ink-2/);
   });
 
-  it("Other-legal-documents nav framing pinned: 'aria-label=\"Other legal documents\"' + 'Other legal documents' eyebrow paragraph + 'mt-3 grid gap-1 sm:grid-cols-2' ul + 'text-sm text-tk-accent hover:underline' link styling — pinned so the cross-doc-nav + aria-label + 2-col-on-sm-and-up grid + oxblood-link-styling commitment survives", () => {
+  it("Other-legal-documents nav framing pinned: 'aria-label=\"Other legal documents\"' + 'Other legal documents' eyebrow paragraph + 'mt-3 grid gap-1 sm:grid-cols-2' ul + 'text-sm text-tk-accent-text hover:underline' link styling (S24 2026-07-06: links are TEXT → the AA-safe accent-text tone) — pinned so the cross-doc-nav + aria-label + 2-col-on-sm-and-up grid + accent-link-styling commitment survives", () => {
     expect(body).toMatch(/aria-label="Other legal documents"/);
     expect(body).toMatch(
       /<p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">\s*\n?\s*Other legal documents\s*\n?\s*<\/p>/,
     );
     expect(body).toMatch(/<ul class="mt-3 grid gap-1 sm:grid-cols-2">/);
     expect(body).toMatch(
-      /<a href=\{l\.href\} class="text-sm text-tk-accent hover:underline">\{l\.label\}<\/a>/,
+      /<a href=\{l\.href\} class="text-sm text-tk-accent-text hover:underline">\{l\.label\}<\/a>/,
     );
   });
 

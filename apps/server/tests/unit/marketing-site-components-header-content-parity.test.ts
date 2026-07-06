@@ -64,10 +64,14 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     expect(body).not.toMatch(/\{ href: '\/roadmap',/);
   });
 
-  it("Active-link styling + pathname-match framing pinned: 'pathname === item.href && text-tk-accent (Fleet token)' + Astro.url.pathname source-of-truth — pinned so the active-link styling pattern + pathname source commitment survives (drift to claiming external active state would mislead users about their current location)", () => {
+  it("Active-link styling + pathname-match framing pinned: 'pathname === item.href && text-tk-accent-text' (S24 2026-07-06: the active tone is TEXT, so it reads the AA-safe accent-text pair — the raw accent is ~3.0:1 on the dark bg, a fill tone) + Astro.url.pathname source-of-truth — pinned so the active-link styling pattern + pathname source commitment survives (drift to claiming external active state would mislead users about their current location; drift back to the raw accent would fail WCAG AA)", () => {
     expect(body).toMatch(/const pathname = Astro\.url\.pathname;/);
     expect(body).toMatch(
-      /class:list=\{\[\s*(?:\/\/[^\n]*\n\s*)*'nav-link font-medium',\s*pathname === item\.href && 'text-tk-accent',?\s*\]\}/,
+      /class:list=\{\[\s*(?:\/\/[^\n]*\n\s*)*'nav-link font-medium',\s*(?:\/\/[^\n]*\n\s*)*pathname === item\.href && 'text-tk-accent-text',?\s*\]\}/,
+    );
+    // the mobile popup active item carries the same AA-safe tone.
+    expect(body).toMatch(
+      /'rounded px-3 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink',\s*(?:\/\/[^\n]*\n\s*)*pathname === item\.href && 'text-tk-accent-text',?\s*\]\}/,
     );
   });
 

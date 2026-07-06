@@ -221,7 +221,7 @@ describe('docs styles/base content parity', () => {
     expect(body).toMatch(/--tw-prose-quote-borders: var\(--accent-2\);/);
   });
 
-  it('S22.4 (2026-07-06, Stoplight reference furniture) — .method-chip recipes pinned: tiny mono uppercase badges; wash = 15%-alpha rgb() of the mode status token (NOT color-mix — its Lightning-CSS fallback degrades to a solid same-color background on pre-color-mix browsers); text = readable direction per mode, all pairs AA-verified ≥4.5:1 over BOTH --bg and --hover composites (dark uses raw bright tokens except DELETE #ff7d74; light needs darker-than-token tones). POST wash hardcodes the --sync triplets because no --sync-rgb exists and the mode blocks stay byte-identical to marketing', () => {
+  it('S22.4 (2026-07-06, Stoplight reference furniture) — .method-chip recipes pinned: tiny mono uppercase badges; wash = 15%-alpha rgb() of the mode status token (NOT color-mix — its Lightning-CSS fallback degrades to a solid same-color background on pre-color-mix browsers); text = readable direction per mode, all pairs AA-verified ≥4.5:1 over BOTH --bg and --hover composites. S24 2026-07-06: the chip precedent got promoted to the shared --ready-text/--busy-text/--err-text tokens, so GET/PUT/PATCH/DELETE consume the tokens and flip per mode with NO light overrides (light tones moved to the shared values #097245/#845a09/#ad3229, re-verified over the washes). POST stays hardcoded per mode (no --sync-text token; sync is docs-chip-only, and no --sync-rgb exists because the mode blocks stay byte-identical to marketing)', () => {
     expect(body).toMatch(
       /S22\.4 \(2026-07-06, Stoplight reference furniture\) — HTTP method chips/,
     );
@@ -230,39 +230,39 @@ describe('docs styles/base content parity', () => {
     );
     expect(body).toMatch(/font-size: 0\.625rem;/);
     expect(body).toMatch(/text-transform: uppercase;/);
-    // Dark (default) text tones + rgb()/alpha washes.
+    // S24 — status-text tokens carry the text tone; washes stay rgb()/alpha.
     expect(body).toMatch(
-      /\.method-chip--get \{\s*\n\s*color: var\(--ready\);\s*\n\s*background: rgb\(var\(--ready-rgb\) \/ 0\.15\);/,
+      /\.method-chip--get \{\s*\n\s*color: var\(--ready-text\);\s*\n\s*background: rgb\(var\(--ready-rgb\) \/ 0\.15\);/,
     );
     expect(body).toMatch(
       /\.method-chip--post \{\s*\n\s*color: var\(--sync\);\s*\n\s*background: rgb\(96 165 250 \/ 0\.15\);/,
     );
     expect(body).toMatch(
-      /\.method-chip--put,\s*\n\s*\.method-chip--patch \{\s*\n\s*color: var\(--busy\);\s*\n\s*background: rgb\(var\(--busy-rgb\) \/ 0\.15\);/,
+      /\.method-chip--put,\s*\n\s*\.method-chip--patch \{\s*\n\s*color: var\(--busy-text\);\s*\n\s*background: rgb\(var\(--busy-rgb\) \/ 0\.15\);/,
     );
-    // DELETE lightens --err (raw #ff6b61 is 4.35:1 over a hovered row).
+    // DELETE rides --err-text (raw #ff6b61 is 4.35:1 over a hovered row —
+    // the S22.4 finding that seeded the token).
     expect(body).toMatch(
-      /\.method-chip--delete \{\s*\n\s*color: #ff7d74;\s*\n\s*background: rgb\(var\(--err-rgb\) \/ 0\.15\);/,
+      /\.method-chip--delete \{\s*\n\s*color: var\(--err-text\);\s*\n\s*background: rgb\(var\(--err-rgb\) \/ 0\.15\);/,
     );
-    // Light-mode readable-direction overrides (raw light status tokens
-    // measure only 2.3–3.8:1 as text) + the light POST wash triplet.
-    expect(body).toMatch(/\[data-mode='light'\] \.method-chip--get \{\s*\n\s*color: #06663d;/);
+    // POST keeps its per-mode hardcoded pair (wash triplet + text tone);
+    // the GET/PUT/PATCH/DELETE light overrides are GONE (tokens flip).
     expect(body).toMatch(/\[data-mode='light'\] \.method-chip--post \{\s*\n\s*color: #1d4ed8;/);
-    expect(body).toMatch(
-      /\[data-mode='light'\] \.method-chip--put,\s*\n\s*\[data-mode='light'\] \.method-chip--patch \{\s*\n\s*color: #7a540b;/,
-    );
-    expect(body).toMatch(/\[data-mode='light'\] \.method-chip--delete \{\s*\n\s*color: #a23028;/);
     expect(body).toMatch(
       /\[data-mode='light'\] \.method-chip--post \{\s*\n\s*background: rgb\(37 99 235 \/ 0\.15\);/,
     );
-    // The AA evidence table ships in the comment.
-    expect(body).toMatch(/dark : GET var\(--ready\) #2fe39a 9\.49\/6\.50/);
-    expect(body).toMatch(/light: GET #06663d 5\.40\/5\.35/);
+    expect(body).not.toMatch(/\[data-mode='light'\] \.method-chip--get/);
+    expect(body).not.toMatch(/\[data-mode='light'\] \.method-chip--delete/);
+    expect(body).not.toMatch(/color: #06663d;/);
+    // The AA evidence table ships in the comment (S24 values).
+    expect(body).toMatch(/dark : GET var\(--ready-text\) #2fe39a 9\.49\/6\.50/);
+    expect(body).toMatch(/light: GET #097245 4\.58\/4\.54/);
+    expect(body).toMatch(/DELETE var\(--err-text\) #ff7d74 6\.91\/4\.88/);
     // color-mix must not come back for the chip washes.
     expect(body).not.toMatch(/color-mix\([^)]*--ready/);
   });
 
-  it('cross-app token-value parity: every dark/light ladder hex + all 6 accent-text pairs in the docs file also appear in the marketing source of truth (S22.1 byte-identical port)', () => {
+  it('cross-app token-value parity: every dark/light ladder hex + all 6 accent-text pairs + all 6 S24 status-text pairs in the docs file also appear in the marketing source of truth (S22.1 byte-identical port)', () => {
     const marketing = read(MARKETING);
     for (const token of [
       '--bg: #060608;',
@@ -284,11 +284,32 @@ describe('docs styles/base content parity', () => {
       '--accent-text: #5847e0;',
       '--accent-text: #1bc7a8;',
       '--accent-text: #0c7d69;',
+      // S24 2026-07-06 — AA status-text pairs (light needs darker-than-token
+      // tones; dark reuses ready/busy and lifts err to the S22.4 DELETE
+      // value), unified same-commit in all three apps.
+      '--ready-text: #097245;',
+      '--busy-text: #845a09;',
+      '--err-text: #ad3229;',
+      '--ready-text: #2fe39a;',
+      '--busy-text: #ffc24d;',
+      '--err-text: #ff7d74;',
       '--code-bg: #16171c;',
       '--code-bg: #0c0c11;',
     ]) {
       expect(body).toContain(token);
       expect(marketing).toContain(token);
     }
+  });
+
+  it('S24 (2026-07-06) — AA-safe status-toned TEXT tokens pinned: --ready-text/--busy-text/--err-text per data-mode block (raw ready/busy/err are FILL tones — light err #d8453c is 3.91:1 on --bg, ready 3.27:1, busy 2.66:1 as small text; dark err #ff6b61 is 4.35:1 over its 15% wash on hover) + the @theme inline tk mapping so text-tk-*-text utilities exist. Status-colored TEXT consumes the *-text pair; dots/fills/washes/borders keep the raw tokens', () => {
+    expect(body).toMatch(
+      /--ready-text: #097245;\s*\n\s*--busy-text: #845a09;\s*\n\s*--err-text: #ad3229;/,
+    );
+    expect(body).toMatch(
+      /--ready-text: #2fe39a;\s*\n\s*--busy-text: #ffc24d;\s*\n\s*--err-text: #ff7d74;/,
+    );
+    expect(body).toMatch(/--color-tk-ready-text: var\(--ready-text\);/);
+    expect(body).toMatch(/--color-tk-busy-text: var\(--busy-text\);/);
+    expect(body).toMatch(/--color-tk-err-text: var\(--err-text\);/);
   });
 });

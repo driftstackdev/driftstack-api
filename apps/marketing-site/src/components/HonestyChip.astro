@@ -14,8 +14,11 @@ const LABELS: Record<ChipState, string> = {
   roadmap: 'Roadmap',
 };
 const TONES: Record<ChipState, string> = {
-  live: 'text-tk-ready border-tk-ready/30',
-  'rolling-out': 'text-tk-busy border-tk-busy/30',
+  // S24: chip LABELS are text → the AA-safe status-text tones (raw
+  // ready/busy are fill tones, 2.7–3.3:1 as light-mode text); the 30%
+  // borders keep the raw status tint.
+  live: 'text-tk-ready-text border-tk-ready/30',
+  'rolling-out': 'text-tk-busy-text border-tk-busy/30',
   // S20: roadmap chips floated as bare words on dark (no fill, 1.16:1
   // border) — a raised fill makes the chip read as a chip.
   roadmap: 'bg-tk-raised text-tk-ink-3 border-tk-border',

@@ -494,6 +494,19 @@
      clearly lighter than ink-2 #474a55 (7.96:1) so hierarchy holds. */
   --ink-3: #6a6d7a;
   --border: #e4e6ec;
+  /* S24 2026-07-06 — AA-safe status-toned TEXT (values byte-identical with
+     marketing/docs base.css). The raw status tokens (--*-rgb above) are
+     FILL tones and fail WCAG AA as small light-mode text (err #d8453c
+     3.91/4.34/3.88 on bg/surface/hover; ready #0c9a5d 3.27/3.62/3.24;
+     busy #c98a12 2.66/2.95/2.63). Status-colored TEXT consumes the *-text
+     pair; dots/fills/washes/borders keep the raw tokens. All three
+     verified ≥4.5:1 on --bg #f2f3f6 / --surface #fff / --hover #f1f2f5
+     and over their own 15%-alpha washes: ready-text #097245
+     5.40/5.99/5.35 · busy-text #845a09 5.49/6.09/5.44 · err-text #ad3229
+     5.80/6.43/5.75. */
+  --ready-text: #097245;
+  --busy-text: #845a09;
+  --err-text: #ad3229;
   --sync: #2563eb;
   --code-bg: #16171c;
   /* S20/S21 — mode-aware elevation: the light values are the original v2
@@ -537,6 +550,17 @@
      the sidebar count chips render ink-3 directly on bg-tk-hover). */
   --ink-3: #8c8c96;
   --border: #2c2c38;
+  /* S24 2026-07-06 — AA-safe status-toned TEXT (see the light block). The
+     dark raw ready/busy tones already clear AA as text everywhere, so the
+     pairs reuse them (ready-text #2fe39a 12.12/10.99/9.11 on
+     bg/surface/hover; busy-text #ffc24d 12.61/11.42/9.47). Raw err
+     #ff6b61 passes plain surfaces (7.26/6.58/5.45) but measures 4.35:1
+     over its own 15% wash on a hovered row (the S22.4 DELETE-chip
+     finding), so err-text lifts to #ff7d74: 8.13/7.37/6.11 plain,
+     6.91/4.88 over the wash on bg/hover. */
+  --ready-text: #2fe39a;
+  --busy-text: #ffc24d;
+  --err-text: #ff7d74;
   --sync: #60a5fa;
   --code-bg: #0c0c11;
   /* S20 — dark elevation: the light-mode gray shadows composite to

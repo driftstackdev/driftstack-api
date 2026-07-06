@@ -71,9 +71,9 @@ describe('W381.A marketing-site LegalLayout.astro content parity', () => {
     ]);
   });
 
-  it('hero strip: mono-uppercase "Legal" chip + H1 from {title}. 2026-05-22 — H1 size/weight pinned; ink color moved onto gradient span (visual family with rest of site).', () => {
+  it('hero strip: mono-uppercase "Legal" chip + H1 from {title}. 2026-05-22 — H1 size/weight pinned; ink color moved onto gradient span (visual family with rest of site). S24 2026-07-06 — the eyebrow is TEXT → the AA-safe tk-accent-text tone (raw accent is ~3.0:1 on the dark bg).', () => {
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Legal<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">Legal<\/p>/,
     );
     expect(body).toMatch(/<h1 class="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">/);
     expect(body).toMatch(/\{title\}/);
@@ -83,8 +83,10 @@ describe('W381.A marketing-site LegalLayout.astro content parity', () => {
     expect(body).toMatch(/prose-h1:hidden/);
   });
 
-  it('prose link styling: tk-accent + hover-underline (Fleet light tokens; prose-invert dropped with the light default)', () => {
-    expect(body).toMatch(/prose-a:text-tk-accent prose-a:no-underline hover:prose-a:underline/);
+  it('prose link styling: tk-accent-text + hover-underline (S24 2026-07-06: link base tone is the AA-safe accent-text pair, S23 link pattern; prose-invert dropped with the light default)', () => {
+    expect(body).toMatch(
+      /prose-a:text-tk-accent-text prose-a:no-underline hover:prose-a:underline/,
+    );
   });
 
   it('prose code styling: surface-inset background + mono + rounded + ink-primary text + no before/after pseudo-content', () => {
@@ -104,9 +106,9 @@ describe('W381.A marketing-site LegalLayout.astro content parity', () => {
     );
   });
 
-  it('secondary nav renders 2-column grid + oxblood-700 hover-underline links', () => {
+  it('secondary nav renders 2-column grid + accent-text hover-underline links (S24: AA-safe text tone)', () => {
     expect(body).toMatch(/grid gap-1 sm:grid-cols-2/);
-    expect(body).toMatch(/text-sm text-tk-accent hover:underline/);
+    expect(body).toMatch(/text-sm text-tk-accent-text hover:underline/);
     expect(body).toMatch(/legalLinks\.map\(\(l\)/);
   });
 

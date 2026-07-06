@@ -76,6 +76,12 @@ describe('W525.B apps/marketing-site/tailwind.config.mjs content parity', () => 
     expect(body).toMatch(/accent: 'rgb\(var\(--accent-rgb\) \/ <alpha-value>\)',/);
     expect(body).toMatch(/'accent-strong': 'rgb\(var\(--accent-strong-rgb\) \/ <alpha-value>\)',/);
     expect(body).toMatch(/'accent-text': 'var\(--accent-text\)',/);
+    // S24 2026-07-06 — AA-safe status-toned TEXT trio (raw ready/busy/err
+    // are FILL tones, 2.7–4.3:1 as small light-mode text; base.css carries
+    // the per-mode values + computed ratios).
+    expect(body).toMatch(/'ready-text': 'var\(--ready-text\)',/);
+    expect(body).toMatch(/'busy-text': 'var\(--busy-text\)',/);
+    expect(body).toMatch(/'err-text': 'var\(--err-text\)',/);
     expect(body).toMatch(/'glow-accent': '0 0 0 1px var\(--accent\), 0 0 26px var\(--glow\)',/);
     // S20 2026-07-06 — ambient shadows became mode-aware vars: the original
     // gray shadows composite to a measured 1.0000:1 on the near-black dark

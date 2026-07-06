@@ -11,20 +11,15 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Oxblood — locked accent per founder direction (#722F37).
-        oxblood: {
-          50: '#fbf3f4',
-          100: '#f5e1e3',
-          200: '#ebbfc4',
-          300: '#dc939c',
-          400: '#c8606e',
-          500: '#a83b4d',
-          600: '#8d2c3e',
-          700: '#722F37', // base — primary accent, locked
-          800: '#5e2730',
-          900: '#4f242b',
-          950: '#2b0f15',
-        },
+        // S24 2026-07-06 — legacy oxblood ladder RETIRED (same supersession
+        // marketing-site applied 2026-07-03): the last two utility users
+        // (security.astro's text-oxblood-900 step-up prompt) moved onto the
+        // two-axis tk-* tokens, and the locked #722F37 accent lives on as
+        // --accent-strong in the [data-accent='oxblood'] axis
+        // (styles/base.css) per the 2026-06-15 "Fleet Mission Control —
+        // Dark + Red" verdict. The remaining legacy sets below still have
+        // live consumers (security.astro ring-slate-200, settings.astro
+        // placeholder-ink-muted) and stay until their own sweep.
         slate: {
           50: '#f8fafc',
           100: '#f1f5f9',
@@ -83,6 +78,12 @@ export default {
           'code-bg': 'rgb(var(--code-bg-rgb) / <alpha-value>)',
           // AA-safe accent-toned TEXT (mode × accent pair; see base.css).
           'accent-text': 'var(--accent-text)',
+          // S24 — AA-safe status-toned TEXT (per data-mode block; the raw
+          // ready/busy/err tokens above are FILL tones and fail AA as
+          // small light-mode text).
+          'ready-text': 'var(--ready-text)',
+          'busy-text': 'var(--busy-text)',
+          'err-text': 'var(--err-text)',
         },
       },
       fontFamily: {

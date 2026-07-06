@@ -44,6 +44,12 @@ export default {
           err: 'rgb(var(--err-rgb) / <alpha-value>)',
           // AA-safe accent-toned TEXT (mode × accent pair; see base.css).
           'accent-text': 'var(--accent-text)',
+          // S24 — AA-safe status-toned TEXT (per data-mode block; the raw
+          // ready/busy/err tokens above are FILL tones and fail AA as
+          // small light-mode text).
+          'ready-text': 'var(--ready-text)',
+          'busy-text': 'var(--busy-text)',
+          'err-text': 'var(--err-text)',
         },
       },
       borderRadius: {

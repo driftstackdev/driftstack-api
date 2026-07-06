@@ -6,7 +6,8 @@
 // between marketing pages and the dashboard.
 //
 //   • Shared-with-marketing framing comment.
-//   • Locked oxblood 50→950 palette anchored at #722F37 700-base.
+//   • S24 2026-07-06: legacy oxblood ladder RETIRED (supersession note
+//     pinned; #722F37 lives on as --accent-strong on the oxblood axis).
 //   • Slate 50→950 base palette (no comment header on dashboard variant,
 //     matching marketing values verbatim).
 //   • fontFamily: sans=Geist + system fallback, mono=Berkeley Mono +
@@ -39,20 +40,13 @@ describe('W526.B apps/customer-dashboard/tailwind.config.mjs content parity', ()
     expect(body).toMatch(/content: \['\.\/src\/\*\*\/\*\.\{astro,html,js,jsx,md,mdx,ts,tsx\}'\],/);
   });
 
-  it("Oxblood palette parity-with-marketing framing pinned: 'Oxblood — locked accent per founder direction (#722F37).' + 11-step palette: 50=#fbf3f4 / 100=#f5e1e3 / 200=#ebbfc4 / 300=#dc939c / 400=#c8606e / 500=#a83b4d / 600=#8d2c3e / 700=#722F37 (base — primary accent, locked) / 800=#5e2730 / 900=#4f242b / 950=#2b0f15 — pinned so the cross-app oxblood-palette parity (verbatim with marketing-site) commitment survives", () => {
-    expect(body).toMatch(/\/\/ Oxblood — locked accent per founder direction \(#722F37\)\./);
-    expect(body).toMatch(/oxblood: \{/);
-    expect(body).toMatch(/50: '#fbf3f4',/);
-    expect(body).toMatch(/100: '#f5e1e3',/);
-    expect(body).toMatch(/200: '#ebbfc4',/);
-    expect(body).toMatch(/300: '#dc939c',/);
-    expect(body).toMatch(/400: '#c8606e',/);
-    expect(body).toMatch(/500: '#a83b4d',/);
-    expect(body).toMatch(/600: '#8d2c3e',/);
-    expect(body).toMatch(/700: '#722F37', \/\/ base — primary accent, locked/);
-    expect(body).toMatch(/800: '#5e2730',/);
-    expect(body).toMatch(/900: '#4f242b',/);
-    expect(body).toMatch(/950: '#2b0f15',/);
+  it("S24 2026-07-06 — legacy oxblood ladder RETIRED (supersedes the old verbatim 11-step palette pin; marketing-site applied the same supersession 2026-07-03): the last two utility users (security.astro text-oxblood-900) moved onto the tk-* tokens, and the locked #722F37 accent lives on as --accent-strong in the [data-accent='oxblood'] axis (styles/base.css) per the 2026-06-15 'Fleet Mission Control — Dark + Red' verdict. Pinned so the ladder doesn't silently return and the supersession note keeps the provenance", () => {
+    expect(body).toMatch(/S24 2026-07-06 — legacy oxblood ladder RETIRED/);
+    expect(body).toMatch(/#722F37 accent lives on as/);
+    expect(body).toMatch(/--accent-strong in the \[data-accent='oxblood'\] axis/);
+    expect(body).not.toMatch(/oxblood: \{/);
+    expect(body).not.toMatch(/'#2b0f15'/);
+    expect(body).not.toMatch(/\/\/ base — primary accent, locked/);
   });
 
   it('Slate palette parity-with-marketing framing pinned: 11-step (50→950) palette: 50=#f8fafc / 100=#f1f5f9 / 200=#e2e8f0 / 300=#cbd5e1 / 400=#94a3b8 / 500=#64748b / 600=#475569 / 700=#334155 / 800=#1e293b / 900=#0f172a / 950=#020617 — pinned so the cross-app slate-palette parity (verbatim with marketing-site) commitment survives', () => {
@@ -80,6 +74,12 @@ describe('W526.B apps/customer-dashboard/tailwind.config.mjs content parity', ()
     );
     expect(body).toMatch(/maxWidth: \{\s*\n?\s*prose: '65ch',\s*\n?\s*\},/);
     expect(body).toMatch(/plugins: \[\],/);
+  });
+
+  it("S24 2026-07-06 — AA-safe status-toned TEXT trio pinned in the tk table: 'ready-text'/'busy-text'/'err-text' → var(--*-text) (per data-mode values + computed ratios live in styles/base.css; the raw ready/busy/err tokens are FILL tones, 2.7–4.3:1 as small light-mode text). Drift to dropping these would silently revert status-colored text to the failing raw tones", () => {
+    expect(body).toMatch(/'ready-text': 'var\(--ready-text\)',/);
+    expect(body).toMatch(/'busy-text': 'var\(--busy-text\)',/);
+    expect(body).toMatch(/'err-text': 'var\(--err-text\)',/);
   });
 
   it('file exists at canonical path', () => {

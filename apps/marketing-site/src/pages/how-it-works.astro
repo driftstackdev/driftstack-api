@@ -112,8 +112,12 @@ const walkthroughProfiles = [
   >
     <div class="mt-10 grid gap-10 md:grid-cols-2 md:items-center">
       <!-- Compact fleet strip — the homepage's phone-framed card idiom,
-           reduced to three cards. Static mockup, no live-session claim. -->
-      <div class="flex items-start justify-center gap-3">
+           reduced to three cards. Static mockup, no live-session claim.
+           S24 — data-contrast-decorative: illustration of the GUI (6-7px
+           faux print, no real links/CTAs inside), exempt from the contrast
+           scanner per WCAG 1.4.3 "incidental" text-in-a-picture; the real
+           copy beside it stays scanned. -->
+      <div class="flex items-start justify-center gap-3" data-contrast-decorative>
         {
           walkthroughProfiles.map((p) => (
             <div class="w-[104px] shrink-0 sm:w-[118px]">
@@ -162,7 +166,7 @@ const walkthroughProfiles = [
         <p>
           Profiles live in folders — by client, by region, by job — with tags
           for anything folders don't cover. A green
-          <strong class="text-tk-ready">Live</strong> dot means that phone is
+          <strong class="text-tk-ready-text">Live</strong> dot means that phone is
           running right now; the flag says where it exits. Click a card and
           the session pops out into its own floating device window, so two
           accounts sit side by side without sharing anything.

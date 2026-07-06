@@ -87,14 +87,14 @@ describe('W529 marketing-site Fleet v2 component kit content parity', () => {
     expect(body).toMatch(/font-mono text-xs leading-5 text-tk-ink-3/);
   });
 
-  it("HonestyChip: EXACTLY three states with verbatim labels — live→'Live' (tk-ready), rolling-out→'Rolling out' (tk-busy), roadmap→'Roadmap' (muted). These are contract strings; rewording requires a deliberate re-pin", () => {
+  it("HonestyChip: EXACTLY three states with verbatim labels — live→'Live' (tk-ready family), rolling-out→'Rolling out' (tk-busy family), roadmap→'Roadmap' (muted). These are contract strings; rewording requires a deliberate re-pin. S24 2026-07-06: the LABEL text reads the AA-safe status-text tones (raw ready/busy are fill tones, 2.7–3.3:1 as small light-mode text); the /30 borders keep the raw status tint", () => {
     const body = read('HonestyChip.astro');
     expect(body).toMatch(/type ChipState = 'live' \| 'rolling-out' \| 'roadmap';/);
     expect(body).toMatch(/live: 'Live',/);
     expect(body).toMatch(/'rolling-out': 'Rolling out',/);
     expect(body).toMatch(/roadmap: 'Roadmap',/);
-    expect(body).toMatch(/live: 'text-tk-ready border-tk-ready\/30',/);
-    expect(body).toMatch(/'rolling-out': 'text-tk-busy border-tk-busy\/30',/);
+    expect(body).toMatch(/live: 'text-tk-ready-text border-tk-ready\/30',/);
+    expect(body).toMatch(/'rolling-out': 'text-tk-busy-text border-tk-busy\/30',/);
   });
 
   it('FeatureRow: copy + media two-column grid with optional HonestyChip and reverse ordering', () => {

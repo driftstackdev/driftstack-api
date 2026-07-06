@@ -148,13 +148,13 @@ describe('W499.B apps/marketing-site/src/pages/roadmap.astro content parity', ()
     expect(body).not.toMatch(/BYOK Anthropic ships from \/settings → BYOK Anthropic/);
   });
 
-  it("3-section header taxonomy: Now (tk-ready, 'Live and supported today.') + Next (tk-busy, 'In active engineering.') + Later (muted, 'On the deck.') — pinned so the 3-bucket visual hierarchy (green = shipped / warm = active / muted = on deck) survives (drift to flattening the visual color would lose the at-a-glance 'this is live, this is coming, this is later' signal). 2026-07-03 v2 re-skin — the raw emerald/oxblood palette classes moved onto the design-system status tokens (tk-ready / tk-busy) so the lane colors track the theme.", () => {
+  it("3-section header taxonomy: Now (tk-ready family, 'Live and supported today.') + Next (tk-busy family, 'In active engineering.') + Later (muted, 'On the deck.') — pinned so the 3-bucket visual hierarchy (green = shipped / warm = active / muted = on deck) survives (drift to flattening the visual color would lose the at-a-glance 'this is live, this is coming, this is later' signal). 2026-07-03 v2 re-skin — the raw emerald/oxblood palette classes moved onto the design-system status tokens; S24 2026-07-06 — the chip LABELS read the AA-safe status-text tones (raw ready/busy are fill tones, 2.7–3.3:1 as small light-mode text) while the /30 borders keep the raw tint.", () => {
     expect(body).toMatch(
-      /class="rounded-full border border-tk-ready\/30 px-3 py-1 font-mono text-xs uppercase tracking-widest text-tk-ready"\s*\n?\s*>\s*\n?\s*Now/,
+      /class="rounded-full border border-tk-ready\/30 px-3 py-1 font-mono text-xs uppercase tracking-widest text-tk-ready-text"\s*\n?\s*>\s*\n?\s*Now/,
     );
     expect(body).toMatch(/Live and supported today\./);
     expect(body).toMatch(
-      /class="rounded-full border border-tk-busy\/30 px-3 py-1 font-mono text-xs uppercase tracking-widest text-tk-busy"\s*\n?\s*>\s*\n?\s*Next/,
+      /class="rounded-full border border-tk-busy\/30 px-3 py-1 font-mono text-xs uppercase tracking-widest text-tk-busy-text"\s*\n?\s*>\s*\n?\s*Next/,
     );
     expect(body).toMatch(/In active engineering\./);
     expect(body).toMatch(/On the deck\./);
