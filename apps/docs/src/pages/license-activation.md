@@ -10,7 +10,7 @@ The Driftstack desktop GUI client (Tauri 2.x — macOS, Windows, Linux) doesn't 
 
 ## What you need
 
-- The desktop app installed. Download links land at [driftstack.dev/download](https://driftstack.dev/download) once the first signed builds publish.
+- The desktop app installed. Signed download builds will be published at `driftstack.dev/download` once the first ones ship (the page is not live yet during rollout).
 - An API key from [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys). Same shape as the API key your SDK calls use.
 - Your tier supports GUI client access. Cloud customers on any Manual or API tier (or the Free tier) can activate; self-hosted Solo/Pro/Enterprise customers point at their own server URL.
 

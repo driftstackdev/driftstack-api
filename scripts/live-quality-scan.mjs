@@ -114,7 +114,14 @@ function extractLinks(html, baseUrl) {
     )
       continue;
     try {
-      out.push(new URL(raw, baseUrl).toString());
+      const resolved = new URL(raw, baseUrl);
+      // Cloudflare's "Email Address Obfuscation" rewrites mailto: into
+      // /cdn-cgi/l/email-protection#<hash> links that only resolve via CF's edge JS
+      // decoder; a raw GET (fragments never reach the server) 404s BY DESIGN, yet a
+      // real user with JS gets the decoded mailto and never navigates there. These
+      // are CF-managed, not our links — never crawl/report them as broken.
+      if (resolved.pathname.startsWith('/cdn-cgi/')) continue;
+      out.push(resolved.toString());
     } catch {
       /* malformed href — the crawl reports it via the page it sits on if it 0s */
     }
@@ -182,7 +189,12 @@ while (queue.length && pages.size < MAX_PAGES) {
     addIssue('placeholder-title', norm, `title="${title}"`, from);
 
   if (depth < MAX_DEPTH) {
-    for (const link of extractLinks(clean, norm)) {
+    // Resolve relative hrefs against the FINAL (post-redirect) URL, exactly like a
+    // browser does. A page fetched at /legal/privacy that 308s to /legal/privacy/
+    // must resolve `dpa.md` to /legal/privacy/dpa.md — resolving against the
+    // requested `/legal/privacy` mislocates it to /legal/dpa.md, misreporting the
+    // path of an otherwise-real broken link.
+    for (const link of extractLinks(clean, r.finalUrl || norm)) {
       const lnorm = link.split('#')[0];
       const linkInternal = origins.has(new URL(lnorm).origin);
       if (linkInternal && !pages.has(lnorm))
