@@ -100,9 +100,11 @@ describe('Arc 6 docs.live-video — guides/live-video.md parity', () => {
     expect(body).toMatch(/\/api\/agent-sessions\//);
   });
 
-  it('linked from docs landing (index.astro guides section)', () => {
+  it('reachable from the docs landing via the DOC_NAV Guides section (S22.5 2026-07-06: the landing renders section cards derived from DOC_NAV instead of a hand-kept card grid, so the guide is reachable iff its tree entry exists — pinned here in nav.ts, in lockstep with docs-data-nav-content-parity)', () => {
     const idx = readFileSync(resolve(REPO_ROOT, 'apps/docs/src/pages/index.astro'), 'utf8');
-    expect(idx).toMatch(/\/guides\/live-video\//);
-    expect(idx).toMatch(/Live video for agent sessions/);
+    expect(idx).toMatch(/import \{ DOC_NAV \} from '\.\.\/data\/nav';/);
+    expect(idx).toMatch(/const sections = DOC_NAV\.map\(/);
+    const nav = readFileSync(resolve(REPO_ROOT, 'apps/docs/src/data/nav.ts'), 'utf8');
+    expect(nav).toMatch(/\{ href: '\/guides\/live-video\/', label: 'Live video' \}/);
   });
 });

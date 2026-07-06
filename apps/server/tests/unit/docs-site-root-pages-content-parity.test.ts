@@ -17,7 +17,15 @@ function read(p: string): string {
 }
 
 describe('W600 apps/docs root pages content parity', () => {
-  it('index.astro: V-254/V-257 framing + 3 onboarding cards (Quickstart + SDK installation + License activation) + 2 concept guides (Profile management + Session lifecycle) + 6 reference cards + GitHub docs/ + marketing cross-links pinned', () => {
+  // S22.5 (2026-07-06, Stoplight redesign final slice) — the landing's
+  // hand-kept onboarding/guides/reference card grids are superseded by
+  // a "pick your path" band + DOC_NAV-derived section cards (labels /
+  // hrefs / page counts come from src/data/nav.ts, the tree source).
+  // The superseded per-card facts stay pinned with their own pages:
+  // 24h key-rotation grace → /api/api-keys/ pins
+  // (api-keys-rotation-grace-parity + docs-api-api-keys-parity); team
+  // invite/accept/list/remove + roles → /api/team/ pins.
+  it('index.astro: V-254/V-257 + S22.5 framing, plain-words hero + CTA/search pair, 3-path band (by hand / from code / look up), DOC_NAV-derived section cards + GitHub docs/ + marketing cross-links pinned', () => {
     const body = read(INDEX);
     expect(body).toMatch(/\/\/ V-254 \/ V-257 — docs site landing page\./);
     expect(body).toMatch(
@@ -29,26 +37,21 @@ describe('W600 apps/docs root pages content parity', () => {
       /\/\/ "Quickstart" leads, then per-topic deep dives, then reference at the/,
     );
     expect(body).toMatch(/\/\/ bottom\./);
-    expect(body).toMatch(/^const onboarding = \[/m);
-    expect(body).toMatch(/label: 'Quickstart',/);
-    expect(body).toMatch(/href: '\/quickstart\/',/);
-    expect(body).toMatch(/label: 'SDK installation',/);
-    expect(body).toMatch(/href: '\/sdk\/installation\/',/);
-    expect(body).toMatch(/label: 'License activation',/);
+    expect(body).toMatch(/\/\/ S22\.5 \(2026-07-06, Stoplight redesign final slice\)/);
+    expect(body).toMatch(/import \{ DOC_NAV \} from '\.\.\/data\/nav';/);
+    expect(body).toMatch(/^const paths = \[/m);
+    expect(body).toMatch(/label: 'Drive it by hand',/);
     expect(body).toMatch(/href: '\/license-activation\/',/);
-    expect(body).toMatch(/^const guides = \[/m);
-    expect(body).toMatch(/label: 'Profile management',/);
-    expect(body).toMatch(/href: '\/guides\/profile-management\/',/);
-    expect(body).toMatch(/label: 'Session lifecycle',/);
-    expect(body).toMatch(/^const reference = \[/m);
-    expect(body).toMatch(/label: 'API versioning',/);
-    expect(body).toMatch(/label: 'Webhook events',/);
-    expect(body).toMatch(/label: 'SDK versioning',/);
-    expect(body).toMatch(/label: 'API keys',/);
-    expect(body).toMatch(/Mint, list, rotate, revoke\. 24h grace period on rotation\./);
-    expect(body).toMatch(/label: 'Webhook replay',/);
-    expect(body).toMatch(/label: 'Team RBAC',/);
-    expect(body).toMatch(/Invite, accept, list, remove\. Owner \/ admin \/ member roles\./);
+    expect(body).toMatch(/label: 'Drive it from code',/);
+    expect(body).toMatch(/href: '\/quickstart\/',/);
+    expect(body).toMatch(/label: 'Look something up',/);
+    expect(body).toMatch(/href: '\/api\/',/);
+    expect(body).toMatch(/^const sectionIntros: Record<string, string> = \{/m);
+    expect(body).toMatch(/const sections = DOC_NAV\.map\(\(s\) => \(\{/);
+    expect(body).toMatch(/count: s\.items\.length,/);
+    expect(body).toMatch(/Driftstack gives you real iPhones in the cloud\./);
+    expect(body).toMatch(/class="btn-primary"/);
+    expect(body).toMatch(/data-search-open/);
     expect(body).toMatch(/<DocLayout title="Driftstack docs">/);
     expect(body).toMatch(/<h1>Driftstack docs<\/h1>/);
     expect(body).toMatch(
@@ -63,8 +66,12 @@ describe('W600 apps/docs root pages content parity', () => {
 
   it('quickstart.md: signup-to-first-session-in-5-min + 3-language coverage (TS/Python/Go) + API key DRIFTSTACK_API_KEY env + ds_live_ prefix + per-tier concurrent caps (1/2/8/24) + 5-section structure pinned', () => {
     const body = read(QUICK);
+    // S22.5 (2026-07-06) — description re-worded plain-words-first
+    // (names the concrete thing: an iPhone Safari session; "about five
+    // minutes" now matches the body's "Allow about five minutes").
+    // layout/title stay lines 2–3 in that order (anchored).
     expect(body).toMatch(
-      /^---\nlayout: \.\.\/layouts\/DocLayout\.astro\ntitle: Quickstart\ndescription: Get from signup to your first Driftstack session in under five minutes — TypeScript, Python, or Go\.\n---$/m,
+      /^---\nlayout: \.\.\/layouts\/DocLayout\.astro\ntitle: Quickstart\ndescription: From signup to your first iPhone Safari session in about five minutes — working examples in TypeScript, Python, or Go\.\n---$/m,
     );
     expect(body).toMatch(/^# Quickstart$/m);
     expect(body).toMatch(

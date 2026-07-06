@@ -2,9 +2,10 @@
 // hundred-tenth in the cross-SDK drift-guard series. Pins the top-
 // level docs landing + 404 fallback.
 //
-// Drift to the V-254 / V-257 onboarding-path framing or the
-// 3-section TOC (Get started + Concept guides + Reference) would
-// erode the customer-discovery flow.
+// Drift to the V-254 / V-257 onboarding-path framing (kept as the
+// historical layout-rationale comment) or the S22.5 landing structure
+// (plain-words hero + pick-your-path band + DOC_NAV-derived section
+// cards) would erode the customer-discovery flow.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -49,80 +50,102 @@ describe('W784 docs top-level index + 404 content parity', () => {
     );
   });
 
-  it('CRITICAL onboarding 3-card array pinned — Quickstart + SDK installation + License activation. The 3-card set matches W780 guides/index Get-started + W775 SDK index + V-266/V-267 license activation.', () => {
+  // S22.5 (2026-07-06, Stoplight redesign final slice) — the V-257
+  // onboarding/guides/reference card grids are SUPERSEDED by a
+  // "pick your path" band + DOC_NAV-derived section cards. The three
+  // V-257 destinations (quickstart / SDK / license activation) stay
+  // first-click reachable: quickstart + license-activation as path
+  // cards + the hero CTA, the SDK pages via the SDKs section card
+  // (/sdk/ links installation) and the left tree on every page. The
+  // per-card facts kept their pins with their pages (24h key-rotation
+  // grace → /api/api-keys/ pins; team roles → /api/team/ pins; recipes
+  // v1.0/v1.1 scope → /api/ index, see
+  // docs-pages-homepage-index-content-parity).
+
+  it("CRITICAL S22.5 pick-your-path band pinned — 'Drive it by hand' (/license-activation/) + 'Drive it from code' (/quickstart/) + 'Look something up' (/api/), plain words leading with a mono aside naming the technical resource. Supersedes the V-257 onboarding 3-card set.", () => {
     const p = read(INDEX);
 
-    // Quickstart entry.
-    expect(p).toMatch(/label: 'Quickstart',/);
-    expect(p).toMatch(
-      /Signup → API key → first session in five minutes\. TypeScript, Python, Go\./,
-    );
+    expect(p).toMatch(/^const paths = \[/m);
+
+    // By hand → GUI client / license activation.
+    expect(p).toMatch(/label: 'Drive it by hand',/);
+    expect(p).toMatch(/mono: 'GUI client · license activation',/);
+    expect(p).toMatch(/href: '\/license-activation\/',/);
+
+    // From code → quickstart / SDK.
+    expect(p).toMatch(/label: 'Drive it from code',/);
+    expect(p).toMatch(/mono: 'quickstart · @driftstack\/sdk',/);
     expect(p).toMatch(/href: '\/quickstart\/',/);
 
-    // SDK installation.
-    expect(p).toMatch(/label: 'SDK installation',/);
-    expect(p).toMatch(
-      /Install \+ configure @driftstack\/sdk \(TS\), driftstack-sdk \(Python\), or sdk-go\./,
-    );
-    expect(p).toMatch(/href: '\/sdk\/installation\/',/);
-
-    // License activation.
-    expect(p).toMatch(/label: 'License activation',/);
-    expect(p).toMatch(
-      /Activate the desktop GUI client against cloud or self-hosted control planes\./,
-    );
-    expect(p).toMatch(/href: '\/license-activation\/',/);
+    // Look something up → API reference (+ the ⌘K search gloss).
+    expect(p).toMatch(/label: 'Look something up',/);
+    expect(p).toMatch(/mono: 'API reference · \/v1\/\*',/);
+    expect(p).toMatch(/href: '\/api\/',/);
+    expect(p).toMatch(/press ⌘K anywhere and search every page at once\./);
   });
 
-  it('CRITICAL guides 2-card array pinned — Profile management + Session lifecycle. Matches W782 + W781 guides anchors.', () => {
+  it('CRITICAL S22.5 DOC_NAV-derived section cards pinned — index imports DOC_NAV, maps every section (label/href/page-count from the tree source), and sectionIntros carries a plain one-liner for all 7 tree sections. Supersedes the hand-kept guides/reference card grids; lockstep with doc-nav-section-label-baseline.', () => {
     const p = read(INDEX);
 
-    expect(p).toMatch(/label: 'Profile management',/);
-    expect(p).toMatch(/Persistent identities — cookies, storage, stealth state across sessions\./);
-    expect(p).toMatch(/label: 'Session lifecycle',/);
-    expect(p).toMatch(/States, concurrency caps, idle timeout, error shapes, recovery semantics\./);
+    expect(p).toMatch(/import \{ DOC_NAV \} from '\.\.\/data\/nav';/);
+    expect(p).toMatch(/const sections = DOC_NAV\.map\(\(s\) => \(\{/);
+    expect(p).toMatch(/count: s\.items\.length,/);
+    expect(p).toMatch(/intro: sectionIntros\[s\.label\] \?\? '',/);
+
+    // Every DOC_NAV section label has a plain description entry.
+    expect(p).toMatch(/^const sectionIntros: Record<string, string> = \{/m);
+    expect(p).toMatch(/^\s+Overview: '/m);
+    expect(p).toMatch(/^\s+'Get started':/m);
+    expect(p).toMatch(/^\s+Guides:\n?\s*'/m);
+    expect(p).toMatch(/^\s+SDKs: '/m);
+    expect(p).toMatch(/^\s+'API reference': '/m);
+    expect(p).toMatch(/^\s+Webhooks:\n?\s*'/m);
+    expect(p).toMatch(/^\s+'Platform reference':/m);
+
+    // The intro-tier gloss discipline: idempotency never ships unglossed.
+    expect(p).toMatch(/safe retries \(idempotency\)/);
   });
 
-  it('CRITICAL reference 6-card array pinned — API versioning + Webhook events + SDK versioning + API keys + Webhook replay + Team RBAC. Matches W760 /api index + W762 + W772 + W777 cross-references.', () => {
-    const p = read(INDEX);
-
-    const refs: Array<[string, string]> = [
-      ['API versioning', '/api/versioning/'],
-      ['Webhook events', '/webhooks/events/'],
-      ['SDK versioning', '/sdk/versioning/'],
-      ['API keys', '/api/api-keys/'],
-      ['Webhook replay', '/webhooks/replay/'],
-      ['Team RBAC', '/api/team/'],
-    ];
-    for (const [label, href] of refs) {
-      expect(p, `reference ${label}`).toMatch(new RegExp(`label: '${label}'`));
-      expect(p, `reference href ${href}`).toMatch(
-        new RegExp(`href: '${href.replace(/\//g, '\\/')}'`),
-      );
-    }
-  });
-
-  it("CRITICAL header copy pinned. The 'Reference and guides for integrating with the Driftstack API, using the SDKs, and running the desktop GUI client against cloud or self-hosted control planes' wording is the canonical top-level promise.", () => {
+  it('CRITICAL S22.5 hero affordances pinned — Quickstart CTA (btn-primary → /quickstart/) + search button ([data-search-open], reusing the S22.3 BaseLayout Pagefind modal — NOT a second search implementation) with the [data-search-kbd] ⌘K hint the BaseLayout script swaps to "Ctrl K" off-Apple.', () => {
     const p = read(INDEX);
 
     expect(p).toMatch(
-      /Reference and guides for integrating with the Driftstack API, using the SDKs, and running\s*\n?\s+the desktop GUI client against cloud or self-hosted control planes\./,
+      /<a href="\/quickstart\/" class="btn-primary">Start in about five minutes<\/a>/,
     );
+    expect(p).toMatch(/data-search-open/);
+    expect(p).toMatch(/aria-label="Search docs"/);
+    expect(p).toMatch(/aria-haspopup="dialog"/);
+    expect(p).toMatch(/data-search-kbd/);
+    expect(p).toMatch(/<span>Search the docs<\/span>/);
   });
 
-  it('CRITICAL 3-section heading set pinned — Get started + Concept guides + Reference. Drift would break the V-257 onboarding-path layout.', () => {
+  it("CRITICAL S22.5 plain-words hero copy pinned. 'Driftstack gives you real iPhones in the cloud. These docs show you how to drive them…' — plain words lead (intro-tier plain-language mandate), matching the marketing-site 'real iPhones in the cloud' register; the AI path names the precise resource (agent sessions). Supersedes the 'Reference and guides for integrating…' header copy.", () => {
     const p = read(INDEX);
 
-    expect(p).toMatch(/<h2>Get started<\/h2>/);
-    expect(p).toMatch(/<h2>Concept guides<\/h2>/);
-    expect(p).toMatch(/<h2>Reference<\/h2>/);
+    expect(p).toMatch(
+      /Driftstack gives you real iPhones in the cloud\. These docs show you how to drive them —/,
+    );
+    expect(p).toMatch(/by hand from the desktop app, from code in TypeScript, Python, or Go,/);
+    expect(p).toMatch(/an AI agent \(<a href="\/api\/agent-sessions\/">agent sessions<\/a>\)\./);
+  });
+
+  it('CRITICAL S22.5 3-section heading set pinned — Pick your path + Browse the docs + Looking for something else?. Supersedes the V-257 Get started / Concept guides / Reference set.', () => {
+    const p = read(INDEX);
+
+    expect(p).toMatch(/<h2>Pick your path<\/h2>/);
+    expect(p).toMatch(/<h2>Browse the docs<\/h2>/);
     expect(p).toMatch(/<h2>Looking for something else\?<\/h2>/);
   });
 
-  it("CRITICAL 'If you have an API key, start here.' framing pinned. Drift would lose the load-bearing get-started anchor.", () => {
+  it("CRITICAL S22.5 band lead-ins pinned. 'Three ways people arrive here. Start with the one that sounds like you.' + 'Every page on this site, grouped the same way as the sidebar tree.' — supersedes the 'If you have an API key, start here.' anchor.", () => {
     const p = read(INDEX);
 
-    expect(p).toMatch(/<p>If you have an API key, start here\.<\/p>/);
+    expect(p).toMatch(
+      /<p>Three ways people arrive here\. Start with the one that sounds like you\.<\/p>/,
+    );
+    expect(p).toMatch(
+      /<p>Every page on this site, grouped the same way as the sidebar tree\.<\/p>/,
+    );
   });
 
   it("CRITICAL repo-docs/-tree fallback pinned. The 'The canonical source for anything not yet rendered here is the repository docs/ tree' wording matches W780 guides/index pre-launch in-repo cross-reference.", () => {

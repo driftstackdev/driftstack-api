@@ -1,12 +1,14 @@
 ---
 layout: ../layouts/DocLayout.astro
 title: Quickstart
-description: Get from signup to your first Driftstack session in under five minutes — TypeScript, Python, or Go.
+description: From signup to your first iPhone Safari session in about five minutes — working examples in TypeScript, Python, or Go.
 ---
 
 # Quickstart
 
-This guide takes you from a fresh signup to your first iPhone Safari session. Allow about five minutes. You will need:
+This guide takes you from a fresh signup to your first iPhone Safari session. Allow about five minutes. A session is a phone browser running in Driftstack's cloud — your code tells it where to go and what to do, and it reports back what it sees.
+
+You will need:
 
 - A Driftstack account ([sign up](https://app.driftstack.dev/signup) or [sign in](https://app.driftstack.dev/login))
 - An API key (created in the dashboard under **API keys**)

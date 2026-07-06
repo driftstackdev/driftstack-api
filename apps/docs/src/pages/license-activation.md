@@ -1,12 +1,12 @@
 ---
 layout: ../layouts/DocLayout.astro
 title: License activation (GUI client)
-description: Activate the Driftstack desktop GUI client by pasting your API key — works for both cloud and self-hosted deployments.
+description: Unlock the Driftstack desktop app (the GUI client) with the API key you already have — no separate license key, for both cloud and self-hosted deployments.
 ---
 
 # License activation (GUI client)
 
-The Driftstack desktop GUI client (Tauri 2.x — macOS, Windows, Linux) doesn't use a separate license-key system. It activates against the same API key you use for SDK calls, and points at either the cloud control plane or your own self-hosted instance.
+You don't need to find or buy a license key — the API key you already have is the activation. The Driftstack desktop GUI client (Tauri 2.x — macOS, Windows, Linux) doesn't use a separate license-key system. It activates against the same API key you use for SDK calls, and points at either the cloud control plane or your own self-hosted instance.
 
 ## What you need
 

@@ -29,8 +29,12 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     const p = read(QS);
 
     expect(p).toMatch(/^---\nlayout: \.\.\/layouts\/DocLayout\.astro\ntitle: Quickstart\n/);
+    // S22.5 (2026-07-06) — plain-words-first description: names the
+    // concrete thing (an iPhone Safari session) and matches the body's
+    // "about five minutes"; the signup→first-session-in-~5-min +
+    // 3-language facts all survive.
     expect(p).toMatch(
-      /description: Get from signup to your first Driftstack session in under five minutes — TypeScript, Python, or Go\./,
+      /description: From signup to your first iPhone Safari session in about five minutes — working examples in TypeScript, Python, or Go\./,
     );
   });
 
@@ -138,8 +142,12 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     expect(p).toMatch(
       /^---\nlayout: \.\.\/layouts\/DocLayout\.astro\ntitle: License activation \(GUI client\)\n/,
     );
+    // S22.5 (2026-07-06) — plain-words-first description: leads with
+    // what you do (unlock with the key you already have) and keeps the
+    // no-separate-license-key + cloud/self-hosted facts, with the
+    // precise term (GUI client) in the parenthetical gloss.
     expect(p).toMatch(
-      /description: Activate the Driftstack desktop GUI client by pasting your API key — works for both cloud and self-hosted deployments\./,
+      /description: Unlock the Driftstack desktop app \(the GUI client\) with the API key you already have — no separate license key, for both cloud and self-hosted deployments\./,
     );
   });
 

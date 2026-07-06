@@ -8,177 +8,155 @@
 // bottom. Pre-launch the per-topic pages migrate in incrementally;
 // nav stays stable so deep-link bookmarks survive future content
 // additions.
+//
+// S22.5 (2026-07-06, Stoplight redesign final slice) — landing rebuilt
+// as the front door to the three-pane docs, per the standing
+// plain-language mandate for the intro tier. Structure: plain-words
+// hero + Quickstart CTA + a search button that reuses the S22.3
+// [data-search-open] Pagefind modal (no second search implementation);
+// a "pick your path" band matching the three real arrival intents
+// (drive it by hand / drive it from code / look something up) with
+// plain words leading and a mono aside naming the technical resource;
+// and one card per DOC_NAV section — labels, hrefs, and page counts
+// derive from DOC_NAV itself so the landing can never drift from the
+// tree (only the one-line plain descriptions live here). The old
+// hand-kept onboarding/guides/reference card grids are superseded:
+// every route sits in the left tree on every page, and each section
+// card leads to a section index listing its pages. The V-257
+// deep-link promise holds — no slugs changed.
 import DocLayout from '../layouts/DocLayout.astro';
+import { DOC_NAV } from '../data/nav';
 
-const onboarding = [
+// "Pick your path" — the three ways people actually arrive at these
+// docs. Plain words lead; the mono line names the technical resource.
+const paths = [
   {
-    label: 'Quickstart',
-    description: 'Signup → API key → first session in five minutes. TypeScript, Python, Go.',
-    href: '/quickstart/',
-  },
-  {
-    label: 'SDK installation',
-    description: 'Install + configure @driftstack/sdk (TS), driftstack-sdk (Python), or sdk-go.',
-    href: '/sdk/installation/',
-  },
-  {
-    label: 'License activation',
-    description: 'Activate the desktop GUI client against cloud or self-hosted control planes.',
+    label: 'Drive it by hand',
+    plain:
+      'Install the desktop app, paste in your API key, and control a cloud iPhone with your mouse and keyboard — no code needed.',
+    mono: 'GUI client · license activation',
     href: '/license-activation/',
+    cta: 'Set up the desktop app',
+  },
+  {
+    label: 'Drive it from code',
+    plain:
+      'Start your first iPhone Safari session from a few lines of TypeScript, Python, or Go — the quickstart has copy-paste examples.',
+    mono: 'quickstart · @driftstack/sdk',
+    href: '/quickstart/',
+    cta: 'Follow the quickstart',
+  },
+  {
+    label: 'Look something up',
+    plain:
+      'Find the exact request, field, or error you need — or press ⌘K anywhere and search every page at once.',
+    mono: 'API reference · /v1/*',
+    href: '/api/',
+    cta: 'Open the API reference',
   },
 ];
 
-const guides = [
-  {
-    label: 'Profile management',
-    description: 'Persistent identities — cookies, storage, stealth state across sessions.',
-    href: '/guides/profile-management/',
-  },
-  {
-    label: 'Session lifecycle',
-    description: 'States, concurrency caps, idle timeout, error shapes, recovery semantics.',
-    href: '/guides/session-lifecycle/',
-  },
-  {
-    label: 'Team RBAC — invite, accept, act-as',
-    description:
-      'End-to-end multi-user team setup: invite + accept flow, X-Driftstack-Account header, owner / admin / member roles, audit-log review.',
-    href: '/guides/team-rbac/',
-  },
-  {
-    label: 'Live video for agent sessions',
-    description:
-      'Subscribe to the LiveKit room hosting an agent session and render the video. Token mint, connect, input forwarding, reconnect.',
-    href: '/guides/live-video/',
-  },
-];
+// One-line plain descriptions for the DOC_NAV sections. Labels, hrefs,
+// and page counts come from DOC_NAV (single source of truth) — only
+// the plain-words gloss lives here, keyed by section label so a
+// renamed or added section surfaces as a card with a missing
+// description (and trips the S22.5 re-pins, which assert every
+// section label has an entry).
+const sectionIntros: Record<string, string> = {
+  Overview: 'This page — the front door to everything below.',
+  'Get started':
+    'Create your account, get a key, and run your first session — from code or from the desktop app.',
+  Guides:
+    'Longer reads on how the moving parts fit together — profiles, sessions, teams, live video.',
+  SDKs: 'The official code libraries for TypeScript, Python, and Go, and how to install them.',
+  'API reference': 'Every request the API accepts, with fields, examples, and error shapes.',
+  Webhooks:
+    'Messages Driftstack sends your server when something happens — payloads, signatures, retries.',
+  'Platform reference':
+    'The ground rules every request follows — errors, rate limits, paging, safe retries (idempotency), key scopes, metrics.',
+};
 
-const reference = [
-  {
-    label: 'API versioning',
-    description: 'Additive vs breaking, deprecation cycle, when /v2/* is justified.',
-    href: '/api/versioning/',
-  },
-  {
-    label: 'Webhook events',
-    description: 'Event types, payload shape, signature verification, retry policy.',
-    href: '/webhooks/events/',
-  },
-  {
-    label: 'SDK versioning',
-    description: 'How SDKs version independently of the HTTP API contract.',
-    href: '/sdk/versioning/',
-  },
-  {
-    label: 'API keys',
-    description: 'Mint, list, rotate, revoke. 24h grace period on rotation.',
-    href: '/api/api-keys/',
-  },
-  {
-    label: 'Webhook replay',
-    description: 'Replay a single delivery on demand — same idempotency key, fresh attempt.',
-    href: '/webhooks/replay/',
-  },
-  {
-    label: 'Team RBAC',
-    description: 'Invite, accept, list, remove. Owner / admin / member roles.',
-    href: '/api/team/',
-  },
-  {
-    label: 'Agent sessions',
-    description:
-      'Natural-language decompose-and-execute on top of driver sessions. AI / manual / pair modes; live SSE transcript.',
-    href: '/api/agent-sessions/',
-  },
-  {
-    label: 'BYOK Anthropic',
-    description: 'Bring your own Anthropic API key — encrypted at rest, decrypted in-memory only.',
-    href: '/api/byok-anthropic/',
-  },
-  {
-    label: 'Bundled LLM',
-    description:
-      'Opt-in deployment-managed Anthropic budget for accounts that don\'t want to manage their own key.',
-    href: '/api/bundled-llm/',
-  },
-  {
-    label: 'Recipes',
-    description:
-      'Snapshot a finished agent-session into a replayable recipe — intent_log + transcript without re-paying decompose cost. Create / list / read / delete ship at v1.0; only execute (replay) lands at v1.1.',
-    href: '/api/recipes/',
-  },
-  {
-    label: 'OAuth 2.0',
-    description:
-      'Third-party clients acting on a customer\'s behalf — Authorization Code with PKCE.',
-    href: '/api/oauth/',
-  },
-  {
-    label: 'Idempotency keys',
-    description: 'Stripe-pattern `Idempotency-Key` header for safe retries on create-style POSTs.',
-    href: '/reference/idempotency/',
-  },
-  {
-    label: 'Pagination',
-    description:
-      'Cursor-based pagination across every list endpoint; request + response shape, opaque-cursor semantics, drive-to-completion loops.',
-    href: '/reference/pagination/',
-  },
-  {
-    label: 'Prometheus metrics',
-    description: 'Operator-facing GET /metrics catalogue + suggested PromQL alerts.',
-    href: '/reference/metrics/',
-  },
-];
+const sections = DOC_NAV.map((s) => ({
+  label: s.label,
+  href: s.items[0]?.href ?? '/',
+  count: s.items.length,
+  intro: sectionIntros[s.label] ?? '',
+}));
 ---
 
 <DocLayout title="Driftstack docs">
   <h1>Driftstack docs</h1>
   <p>
-    Reference and guides for integrating with the Driftstack API, using the SDKs, and running
-    the desktop GUI client against cloud or self-hosted control planes. Looking for product
-    info? <a href="https://driftstack.dev">driftstack.dev</a> has pricing, security, and the rest.
+    Driftstack gives you real iPhones in the cloud. These docs show you how to drive them —
+    by hand from the desktop app, from code in TypeScript, Python, or Go, or by handing the
+    wheel to an AI agent (<a href="/api/agent-sessions/">agent sessions</a>).
   </p>
 
-  <h2>Get started</h2>
-  <p>If you have an API key, start here.</p>
+  <div class="not-prose mt-6 flex flex-wrap items-center gap-3">
+    <a href="/quickstart/" class="btn-primary">Start in about five minutes</a>
+    <button
+      type="button"
+      data-search-open
+      aria-label="Search docs"
+      aria-haspopup="dialog"
+      aria-keyshortcuts="Meta+K Control+K /"
+      class="btn-secondary gap-2"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+      </svg>
+      <span>Search the docs</span>
+      <kbd
+        data-search-kbd
+        class="rounded-sm border border-tk-border bg-tk-raised px-1 font-mono text-[0.625rem] leading-4 text-tk-ink-3"
+        >⌘K</kbd
+      >
+    </button>
+  </div>
+
+  <h2>Pick your path</h2>
+  <p>Three ways people arrive here. Start with the one that sounds like you.</p>
   <ul class="not-prose mt-4 grid gap-4 md:grid-cols-3">
     {
-      onboarding.map((s) => (
-        <li class="rounded-md border border-tk-border bg-tk-surface p-4 shadow-ambient transition-colors hover:border-tk-accent/40">
-          <a href={s.href} class="block">
-            <p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">{s.label}</p>
-            <p class="mt-1 text-sm text-tk-ink-2">{s.description}</p>
+      paths.map((p) => (
+        <li class="rounded-md border border-tk-border bg-tk-surface shadow-ambient transition-colors hover:border-tk-accent/40">
+          <a href={p.href} class="flex h-full flex-col p-4">
+            <p class="text-sm font-semibold text-tk-ink">{p.label}</p>
+            <p class="mt-1 text-sm text-tk-ink-2">{p.plain}</p>
+            <p class="mt-3 font-mono text-xs text-tk-ink-3">{p.mono}</p>
+            <p class="mt-auto pt-3 text-sm font-medium text-tk-accent-text">{p.cta} →</p>
           </a>
         </li>
       ))
     }
   </ul>
 
-  <h2>Concept guides</h2>
-  <p>What changes when you start running real workloads.</p>
+  <h2>Browse the docs</h2>
+  <p>Every page on this site, grouped the same way as the sidebar tree.</p>
   <ul class="not-prose mt-4 grid gap-4 md:grid-cols-2">
     {
-      guides.map((s) => (
-        <li class="rounded-md border border-tk-border bg-tk-surface p-4 shadow-ambient transition-colors hover:border-tk-accent/40">
-          <a href={s.href} class="block">
-            <p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">{s.label}</p>
-            <p class="mt-1 text-sm text-tk-ink-2">{s.description}</p>
-          </a>
-        </li>
-      ))
-    }
-  </ul>
-
-  <h2>Reference</h2>
-  <p>Spec-level depth for the contracts you build against.</p>
-  <ul class="not-prose mt-4 grid gap-4 md:grid-cols-3">
-    {
-      reference.map((s) => (
-        <li class="rounded-md border border-tk-border bg-tk-surface p-4 shadow-ambient transition-colors hover:border-tk-accent/40">
-          <a href={s.href} class="block">
-            <p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">{s.label}</p>
-            <p class="mt-1 text-sm text-tk-ink-2">{s.description}</p>
+      sections.map((s) => (
+        <li class="rounded-md border border-tk-border bg-tk-surface shadow-ambient transition-colors hover:border-tk-accent/40">
+          <a href={s.href} class="block h-full p-4">
+            <div class="flex items-baseline justify-between gap-3">
+              <p class="text-sm font-semibold text-tk-ink">{s.label}</p>
+              <p class="shrink-0 font-mono text-xs text-tk-ink-3">
+                {s.count} {s.count === 1 ? 'page' : 'pages'}
+              </p>
+            </div>
+            <p class="mt-1 text-sm text-tk-ink-2">{s.intro}</p>
           </a>
         </li>
       ))
