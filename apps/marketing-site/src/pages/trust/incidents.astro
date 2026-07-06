@@ -77,28 +77,31 @@ function severityClass(s: Incident['severity']): string {
   <!-- What we publish -->
   <Section label="What we publish" title="Public-incident bar." class="bg-tk-surface">
     <ul class="mt-6 grid gap-4 md:grid-cols-2">
-      <li class="card p-5">
+      <li class="card bg-tk-raised p-5">
         <p class="text-sm font-medium text-tk-ink">
           Customer-impacting downtime
         </p>
         <p class="mt-2 text-sm text-tk-ink-2">
-          Any period during which the API or dashboard returned non-2xx to
-          real customer requests, including partial degradations
-          (e.g. one Hetzner region affected; one Sub-processor leg
-          unavailable).
+          Any period during which the API or dashboard returned errors
+          (technically: non-2xx responses) to
+          real customer requests — including partial problems, e.g.
+          one hosting region (Hetzner) affected, or one of our
+          vendors (a sub-processor) down.
         </p>
       </li>
-      <li class="card p-5">
+      <li class="card bg-tk-raised p-5">
         <p class="text-sm font-medium text-tk-ink">
           Security events
         </p>
         <p class="mt-2 text-sm text-tk-ink-2">
-          Any unauthorized access, data exposure, or cryptographic
-          integrity event. Notice within the legal-required window;
-          details once forensic analysis is complete.
+          Any unauthorized access, data exposure, or compromise of our
+          encryption or signing keys (a cryptographic integrity
+          event). We post notice within the legally required
+          notification window; full details follow once forensic
+          analysis is complete.
         </p>
       </li>
-      <li class="card p-5">
+      <li class="card bg-tk-raised p-5">
         <p class="text-sm font-medium text-tk-ink">
           Sub-processor incidents
         </p>
@@ -109,13 +112,15 @@ function severityClass(s: Incident['severity']): string {
           link the upstream report.
         </p>
       </li>
-      <li class="card p-5">
+      <li class="card bg-tk-raised p-5">
         <p class="text-sm font-medium text-tk-ink">
           Maintenance windows
         </p>
         <p class="mt-2 text-sm text-tk-ink-2">
-          Pre-announced windows for migrations, schema changes, or
-          certificate rotations. Notice at least 72 hours in advance;
+          Pre-announced windows for planned work — database upgrades
+          or restructuring (migrations, schema changes) and
+          security-certificate renewals (certificate rotations).
+          Notice at least 72 hours in advance;
           customers can subscribe to advance notifications via
           <a href="https://app.driftstack.dev/settings"
             class="text-tk-accent-text underline">/settings → email preferences</a>.
@@ -128,12 +133,13 @@ function severityClass(s: Incident['severity']): string {
   <Section label="History" title="Posted incidents.">
     {
       INCIDENTS.length === 0 ? (
-        <div class="mt-8 rounded-card border border-dashed border-tk-border bg-tk-surface px-6 py-16 text-center">
+        <div class="mt-8 rounded-card border border-dashed border-tk-ink-3/30 bg-tk-surface px-6 py-16 text-center">
           <p class="text-base font-medium text-tk-ink">
             No customer-impacting incidents to date.
           </p>
           <p class="mt-2 max-w-prose text-sm text-tk-ink-2 mx-auto">
-            We've kept this list honest by entering it pre-launch — every
+            This list started before launch, so it can't quietly omit
+            anything — every
             incident from the first paying customer onward will land here.
             The live platform status above always reflects the current
             moment.

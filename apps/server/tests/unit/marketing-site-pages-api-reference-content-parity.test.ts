@@ -53,7 +53,10 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
   it("Hero framing: 'Every endpoint, every shape.' + 'The Driftstack API is documented as an OpenAPI 3.1 spec generated from the same Zod schemas the server uses at runtime. There is no second source of truth — if a route exists, it's in the spec; if it's in the spec, the SDK has typed bindings for it.' — pinned so the OpenAPI 3.1 + Zod single-source-of-truth + SDK typed-bindings narrative survives (drift to dropping the 'no second source of truth' would weaken the spec-as-contract claim)", () => {
     expect(body).toMatch(/Every endpoint, every shape\./);
     expect(body).toMatch(
-      /The Driftstack API is documented as an OpenAPI 3\.1 spec generated\s*\n?\s*from the same Zod schemas the server uses at runtime\. There is no\s*\n?\s*second source of truth — if a route exists, it's in the spec; if\s*\n?\s*it's in the spec, the SDK has typed bindings for it\./,
+      // S20c 2026-07-06 plain-language pass: OpenAPI 3.1 + Zod +
+      // no-second-source + typed-bindings all survive, plain words
+      // lead with the precise terms in parens.
+      /The Driftstack API is documented in a standard machine-readable\s+format \(an OpenAPI 3\.1 spec\), generated from the exact same\s+validation rules \(Zod schemas\) the server itself enforces at\s+runtime\. There is no\s+second source of truth — if a route exists, it's in the spec; if\s+it's in the spec, the SDKs already know its exact shapes \(typed\s+bindings\)\./,
     );
   });
 
@@ -189,7 +192,8 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
       /Every endpoint has Zod schemas for request \+ response\. The OpenAPI 3\.1 spec is generated from the schemas — there is no second source of truth\./,
     );
     expect(body).toMatch(
-      /Every error case maps to an RFC 9457 <code class="font-mono">application\/problem\+json<\/code> response with a stable <code class="font-mono">type<\/code> URI\./,
+      // S20c 2026-07-06 plain-language pass: rule 2 said plainly.
+      /Every error case maps to the web standard for machine-readable errors — an RFC 9457 <code class="font-mono">application\/problem\+json<\/code> response with a stable <code class="font-mono">type<\/code> URI \(a link that explains the error\)\./,
     );
     expect(body).toMatch(
       /Breaking changes ship under a new path version\. <code class="font-mono">\/v1<\/code> stays stable; <code class="font-mono">\/v2<\/code> would be a new prefix, not a silent shape change\./,

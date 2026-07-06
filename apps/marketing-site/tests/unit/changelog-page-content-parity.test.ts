@@ -94,7 +94,7 @@ describe('W370.A marketing-site /changelog page content parity', () => {
 
   it('"Engineering-internal lives in verification log" scope framing pinned', () => {
     expect(body).toMatch(
-      /Engineering-internal changes\s+\(refactors, test fixtures, observability work\) live in the\s+verification log inside the repo, not here/,
+      /Internal engineering changes\s+\(code restructuring, test tooling, monitoring work\) are\s+tracked in our internal logs, not here/, // S20c 2026-07-06: same customer-facing-only scope, plain words,
     );
   });
 

@@ -50,8 +50,12 @@ describe('W248.A roadmap doc parity', () => {
   });
 
   it('HMAC-SHA256 + 5-minute tolerance phrasing matches webhook-signing config', () => {
+    // S20c 2026-07-06 plain-language pass: "5-minute timestamp tolerance"
+    // reworded to "5-minute clock-difference allowance (timestamp
+    // tolerance)" — both facts (the 5-minute window + the timestamp-
+    // tolerance term matching the server webhook-signing config) survive.
     expect(doc).toMatch(/HMAC-SHA256/);
-    expect(doc).toMatch(/5-minute timestamp tolerance/);
+    expect(doc).toMatch(/5-minute clock-difference allowance \(timestamp\s+tolerance\)/);
   });
 
   it('Live-session WebRTC stream lives in NEXT or LATER, not NOW', () => {

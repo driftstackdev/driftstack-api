@@ -57,7 +57,9 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
     expect(body).toMatch(/case 'added':\s*\n?\s*return 'bg-emerald-100 text-emerald-800';/);
     expect(body).toMatch(/case 'removed':\s*\n?\s*return 'bg-red-100 text-red-800';/);
     expect(body).toMatch(/case 'material_change':\s*\n?\s*return 'bg-amber-100 text-amber-800';/);
-    expect(body).toMatch(/case 'register_published':\s*\n?\s*return 'bg-tk-raised text-tk-ink-2';/);
+    expect(body).toMatch(
+      /case 'register_published':\s*\n?\s*return 'border border-tk-border bg-tk-raised text-tk-ink-2';/,
+    );
   });
 
   it('"region preference vs region routing" honesty framing pinned', () => {
@@ -93,8 +95,10 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
   });
 
   it('"cosmetic edits not logged" honesty claim pinned', () => {
+    // S20c 2026-07-06 plain-language pass: immutability said plainly
+    // ("never edited or removed"); cosmetic-edits exclusion survives.
     expect(body).toMatch(
-      /Cosmetic edits \(rewording, typo fixes\) don't qualify and\s+aren't logged\./,
+      /entries are never edited or removed \(an immutable\s+record\)\. Cosmetic edits \(rewording, typo fixes\) don't qualify\s+and aren't logged\./,
     );
   });
 
@@ -107,8 +111,10 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
     expect(body).toMatch(/<th class="py-4 pr-4 font-medium text-tk-ink-2">Sub-processor<\/th>/);
     expect(body).toMatch(/<th class="px-4 py-4 font-medium text-tk-ink-2">Region<\/th>/);
     expect(body).toMatch(/<th class="px-4 py-4 font-medium text-tk-ink-2">Purpose<\/th>/);
+    // S20c 2026-07-06 plain-language pass: the column header now
+    // glosses the GDPR term inline for non-lawyers.
     expect(body).toMatch(
-      /<th class="px-4 py-4 font-medium text-tk-ink-2">Transfer mechanism<\/th>/,
+      /<th class="px-4 py-4 font-medium text-tk-ink-2">Transfer mechanism \(legal basis for any data leaving the EU\)<\/th>/,
     );
   });
 

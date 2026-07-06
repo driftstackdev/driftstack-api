@@ -103,14 +103,20 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
   });
 
   it('scrypt-hashed-at-rest + 24-hour rotation grace claim pinned (aligned with /security)', () => {
-    expect(body).toMatch(/Keys are scrypt-hashed at rest\./);
-    expect(body).toMatch(/A database breach surfaces\s+hashes, not keys/);
-    expect(body).toMatch(/rotate via the dashboard's\s+24-hour grace flow/);
+    // S20c 2026-07-06 plain-language pass: same scrypt + breach +
+    // 24-hour-grace facts, plain words lead.
+    expect(body).toMatch(/Keys are stored only as one-way scrypt hashes/);
+    expect(body).toMatch(/staff,\s+and even a database thief, see scrambled values, not keys/);
+    expect(body).toMatch(
+      /rotate it in the dashboard; the old key\s+keeps working for 24 hours \(the grace window\) so nothing\s+breaks mid-switch/,
+    );
   });
 
   it('"session traffic exits through your egress" + "Driftstack orchestrates; proxy carries the bytes" framing pinned', () => {
+    // S20c 2026-07-06 plain-language pass: same no-URL-visibility +
+    // customer-egress facts, plain words lead.
     expect(body).toMatch(
-      /Session traffic exits through your egress \(the SOCKS5 \/\s+OpenVPN \/ WireGuard proxies you configure\)\. Driftstack\s+orchestrates the session; the proxy carries the bytes\./,
+      /Session traffic leaves for the web through the exit you\s+configure \(your egress\) — your own SOCKS5 proxy or OpenVPN \/\s+WireGuard VPN\. Driftstack starts and manages the session;\s+your proxy carries the actual browsing traffic, so the\s+addresses you visit don't pass through us\./,
     );
   });
 
@@ -118,24 +124,38 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
     // Astro wraps the <a> tag awkwardly; check the substantive
     // copy fragments separately.
     expect(body).toMatch(/The DPA at <a href="\/legal\/dpa"/);
-    expect(body).toMatch(/is pre-signed by Driftstack; counter-signing acceptance closes/);
-    expect(body).toMatch(/Standard SCCs apply for any non-EU\s+transfer named in Annex 3/);
+    // S20c 2026-07-06 plain-language pass: pre-signed + SCC facts,
+    // plain words lead.
+    expect(body).toMatch(/is already signed by Driftstack — sign your side and it's\s+in force/);
+    expect(body).toMatch(
+      /The EU's Standard Contractual Clauses \(SCCs\) cover\s+any transfer of data outside the EU listed in Annex 3 \(the\s+vendor list attached to the DPA\)/,
+    );
   });
 
   it('F-5 (Issue 5) self-serve-tier SLA honesty pinned: "Self-serve tiers operate without a contractual uptime SLA" (was "Pre-launch we don\'t publish a contractual SLA" — reframed per Issue 5 to drop the launch-window label; same scope-limit on the SLA promise)', () => {
     // Load-bearing honesty claim — contractual SLAs only on Self-
     // hosted SKUs + Enterprise. A future "we have an SLA"
     // softening must update this copy first.
+    // S20c 2026-07-06 plain-language pass: SLA glossed ("uptime
+    // guarantee"), SKU glossed ("packages"); same scope-limit.
     expect(body).toMatch(
-      /Self-serve tiers operate without a contractual uptime SLA —\s+we publish incidents at/,
+      /Self-serve plans come without a contractual uptime guarantee\s+\(an SLA\) —\s+we publish incidents at/,
     );
-    expect(body).toMatch(/Self-hosted SKUs and Enterprise\s+tiers carry contractual SLA terms/);
+    expect(body).toMatch(
+      /Self-hosted packages \(SKUs\) and\s+Enterprise\s+tiers carry contractual SLA terms/,
+    );
     expect(body).not.toMatch(/Pre-launch we don't publish a contractual SLA/);
   });
 
   it('CAIQ / VSAQ / vendor-portal questionnaire-welcome claim pinned', () => {
-    expect(body).toMatch(/CAIQ \/\s+VSAQ \/ vendor portals all welcome/);
-    expect(body).toMatch(/CAIQ, VSAQ, custom enterprise vendor questionnaires/);
+    // S20c 2026-07-06 plain-language pass: CAIQ/VSAQ named as what
+    // they are (standard security-questionnaire formats).
+    expect(body).toMatch(
+      /Standard\s+security-questionnaire formats \(CAIQ \/ VSAQ\), custom\s+spreadsheets, and vendor portals all welcome/,
+    );
+    expect(body).toMatch(
+      /Standard security-questionnaire formats \(CAIQ, VSAQ\) and custom enterprise vendor questionnaires/,
+    );
   });
 
   it('mailto:support@driftstack.dev escape hatch pinned (questionnaire fill-out)', () => {

@@ -105,7 +105,7 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
   it('empty-state UX pinned ("No customer-impacting incidents to date.")', () => {
     expect(body).toMatch(/No customer-impacting incidents to date\./);
     expect(body).toMatch(
-      /We've kept this list honest by entering it pre-launch — every\s+incident from the first paying customer onward will land here\./,
+      /This list started before launch, so it can't quietly omit\s+anything — every\s+incident from the first paying customer onward will land here\./, // S20c 2026-07-06: same honesty framing, plain words
     );
   });
 

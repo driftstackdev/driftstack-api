@@ -58,7 +58,7 @@ describe('marketing-site trust/cumulative-rig content parity', () => {
     expect(body).toMatch(/JavaScript engine timing/);
     expect(body).toMatch(/TLS ClientHello fingerprint/);
     expect(body).toMatch(/Touch-event support flag/);
-    expect(body).toMatch(/Screen dimensions \+ DPR/);
+    expect(body).toMatch(/Screen dimensions \+ pixel density \(DPR\)/); // S20c 2026-07-06: DPR glossed
   });
 
   it("population-stable-vs-unique-per-session contrast pinned: the load-bearing visual signal (Driftstack = population-stable, stealth Chromium = unique-per-session). Drift would weaken the cumulative-rig argument that Driftstack 'returns the same value as millions of other iPhones'", () => {

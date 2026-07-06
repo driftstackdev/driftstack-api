@@ -84,14 +84,15 @@ describe('W503.C apps/marketing-site/src/pages/trust/incidents.astro content par
 
   it("Maintenance windows framing pinned: 'Pre-announced windows for migrations, schema changes, or certificate rotations. Notice at least 72 hours in advance' — pinned so the 72-hour-advance-notice commitment + the 3-state maintenance scope (migrations/schema-changes/cert-rotations) survive (drift to dropping the 72h window would let maintenance land without customer warning; drift to dropping cert-rotations would orphan TLS-renewal windows from the policy)", () => {
     expect(body).toMatch(
-      /Pre-announced windows for migrations, schema changes, or\s*\n?\s*certificate rotations\. Notice at least 72 hours in advance/,
+      /Pre-announced windows for planned work — database upgrades\s+or restructuring \(migrations, schema changes\) and\s+security-certificate renewals \(certificate rotations\)\.\s+Notice at least 72 hours in advance/, // S20c 2026-07-06: same 3-state scope + 72h notice, plain words lead
     );
   });
 
   it("Empty-list panel pinned: 'No customer-impacting incidents to date.' + 'We've kept this list honest by entering it pre-launch — every incident from the first paying customer onward will land here.' — pinned so the empty-state honest-framing (it's empty because nothing happened, not because we're hiding) survives (drift to dropping 'kept this list honest by entering it pre-launch' would let the empty state read as suspicious rather than intentional)", () => {
     expect(body).toMatch(/No customer-impacting incidents to date\./);
     expect(body).toMatch(
-      /We've kept this list honest by entering it pre-launch — every\s*\n?\s*incident from the first paying customer onward will land here\./,
+      // S20c 2026-07-06: same empty-because-nothing-happened framing, plain words lead.
+      /This list started before launch, so it can't quietly omit\s+anything — every\s+incident from the first paying customer onward will land here\./,
     );
   });
 

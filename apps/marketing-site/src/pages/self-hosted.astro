@@ -81,9 +81,11 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
     <p class="mt-4 max-w-2xl text-base leading-7 text-tk-ink-2">
       Same SDK, same archetypes, same iPhone Safari fidelity — just running
       on hardware you own and inside a network you control. Driftstack
-      handles the orchestration, you handle the metal. Any Apple
-      Silicon Mac works; the SKU you choose maps to how many concurrent
-      sessions you need to run at once, not a software-feature ladder.
+      runs the software that coordinates everything (the
+      orchestration); you supply the machines. Any Apple
+      Silicon Mac works; the package you choose (the SKU) is about how
+      many sessions you need running at once, not about unlocking
+      software features.
     </p>
     <div class="mt-8 flex flex-wrap items-center gap-4">
       <a href="mailto:sales@driftstack.dev?subject=Self-Hosted%20inquiry" class="btn-primary"
@@ -91,7 +93,12 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
       >
       <a href="/pricing#self-hosted" class="btn-secondary">See pricing</a>
     </div>
-    <p class="mt-4 font-mono text-xs text-tk-ink-3">
+    <p class="mt-4 text-sm text-tk-ink-2">
+      You can start today by emailing sales; the finished, generally
+      available (GA) self-hosted release ships within 6 months of the
+      API's public launch.
+    </p>
+    <p class="mt-2 font-mono text-xs text-tk-ink-3">
       Available "Contact Sales" from day 0. Self-hosted GA within 6 months
       of API public launch.
     </p>
@@ -104,8 +111,10 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
   >
     <p class="mt-4 max-w-2xl text-base leading-7 text-tk-ink-2">
       Self-hosted is one piece of Driftstack software running on Mac
-      hardware you own. The control plane orchestrates sessions, exposes
-      the SDK + GUI, and never holds your session content.
+      hardware you own. Driftstack's coordination service (the
+      "control plane") starts and manages sessions and gives you the
+      developer kit (SDK) and the desktop app (GUI) — and it never
+      holds what happens inside your sessions.
     </p>
 
     <div class="panel mt-10 overflow-x-auto p-8 font-mono text-sm leading-6 text-tk-ink">
@@ -131,8 +140,9 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
 
     <p class="mt-6 max-w-prose text-sm text-tk-ink-3">
       Session content (URLs, form data, captures, recordings) stays inside
-      your network. Driftstack's control plane sees license + session
-      metadata, never the session itself.
+      your network. Driftstack's control plane sees your license and
+      basic session details — when a session started, which profile
+      ran (session metadata) — never the session itself.
     </p>
   </Section>
 
@@ -148,10 +158,11 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">Privacy</p>
         <h3 class="mt-3 text-xl font-semibold text-tk-ink">Sessions never leave your perimeter</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          For workloads where session content (URLs, form data, captures,
-          recordings) must not transit any vendor infrastructure beyond
-          your own. Self-hosted runs the WebKit engine + control plane on
-          your Mac mini / Mac Studio; nothing leaves your network.
+          For work where session content (URLs, form data, captures,
+          recordings) must never pass through anyone's servers but
+          your own. Self-hosted runs the browser engine (WebKit) and
+          Driftstack's coordination software (the control plane) on
+          your own Mac mini or Mac Studio; nothing leaves your network.
         </p>
       </div>
       <div>
@@ -166,10 +177,12 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         </h3>
         <p class="mt-3 text-sm text-tk-ink-2">
           When your fleet runs at consistently high concurrent-session
-          counts (sustained 10+ concurrent across the month), owned
-          hardware unit economics flip favorably against equivalent
-          cloud-tier subscriptions. We'll model the break-even with your
-          team based on your actual concurrency profile.
+          counts (sustained 10+ concurrent across the month), owning
+          the hardware works out cheaper than renting the equivalent
+          cloud plan. We'll work out with your team, from your actual
+          usage — how many sessions you run at once, and for how long
+          — the exact point where buying beats renting (the
+          break-even).
         </p>
       </div>
       <div>
@@ -181,10 +194,13 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">Sovereignty</p>
         <h3 class="mt-3 text-xl font-semibold text-tk-ink">Full control over recordings + state</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          Recordings, screenshots, request artefacts — all stored on your
-          own R2-compatible bucket (or local NAS) with retention policies
-          you set. No Driftstack-side copies, no shared sub-processor
-          access, no DPA addendum required for your security review.
+          Recordings, screenshots, saved request files — all stored on
+          storage you own: an S3-style cloud bucket (R2-compatible) or
+          a local network drive (NAS), with you deciding how long
+          anything is kept (the retention policy). Driftstack keeps no
+          copies, no outside vendor (sub-processor) has shared access,
+          and there's no extra data-processing-agreement (DPA) add-on
+          for your security review.
         </p>
       </div>
     </div>
@@ -194,7 +210,7 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
   <Section
     label="Configurations"
     title="Three configurations."
-    lead="Each SKU pairs a Mac configuration with a Driftstack license tier. Hardware is customer-purchased; Driftstack provisions the control plane + orchestration layer on your gear."
+    lead="Each package (SKU) pairs a Mac configuration with a Driftstack license tier. You buy the hardware; we install and set up the Driftstack software that runs everything on it (the control plane + orchestration layer)."
   >
     <div class="mt-10 grid gap-6 md:grid-cols-3">
       {SELF_HOSTED_SKUS.map((sku) => (
@@ -249,13 +265,13 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
               <dd class="text-right text-tk-ink-2">{SELF_HOSTED_SOURCE_ACCESS[sku.id]}</dd>
             </div>
             <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-              <dt class="text-tk-ink-3">Custom archetype dev</dt>
+              <dt class="text-tk-ink-3">Custom device profiles built for you (archetype dev)</dt>
               <dd class="text-right text-tk-ink-2">
                 {fmtCustomArchetypeDev(sku.customArchetypeDevelopment)}
               </dd>
             </div>
             <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-              <dt class="text-tk-ink-3">Source escrow</dt>
+              <dt class="text-tk-ink-3">Source-code escrow (a third party holds a copy)</dt>
               <dd class="text-right text-tk-ink-2">{sku.sourceEscrow ? 'Yes' : 'No'}</dd>
             </div>
             <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
@@ -288,8 +304,10 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">01</p>
         <h3 class="mt-3 font-semibold text-tk-ink">Contact sales</h3>
         <p class="mt-2 text-sm text-tk-ink-2">
-          Email <a href="mailto:sales@driftstack.dev" class="text-tk-accent-text underline">sales@driftstack.dev</a> with workload shape + concurrent-session profile.
-          We'll model fit + break-even.
+          Email <a href="mailto:sales@driftstack.dev" class="text-tk-accent-text underline">sales@driftstack.dev</a> with what the work is and how many
+          sessions you need going at once (your workload shape +
+          concurrent-session profile). We'll set out in writing
+          whether self-hosting fits and where owning beats renting.
         </p>
       </li>
       <li>
@@ -301,9 +319,11 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">02</p>
         <h3 class="mt-3 font-semibold text-tk-ink">Procure hardware</h3>
         <p class="mt-2 text-sm text-tk-ink-2">
-          You buy the Mac configuration matching your SKU — Mini M4, Studio
-          M4 Max, or Studio Ultra / Mac Pro / multi-node. We provide
-          provisioning specs.
+          You buy the Mac configuration matching your package — Mini
+          M4, Studio
+          M4 Max, or Studio Ultra / Mac Pro / multi-node. We tell you
+          exactly what to buy and how it should be set up (the
+          provisioning specs).
         </p>
       </li>
       <li>
@@ -315,9 +335,9 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">03</p>
         <h3 class="mt-3 font-semibold text-tk-ink">Onboard</h3>
         <p class="mt-2 text-sm text-tk-ink-2">
-          We deploy the Driftstack stack to your hardware, wire your team
-          to the admin console, run a joint smoke test against your
-          workload.
+          We install the Driftstack software on your hardware, set
+          your team up in the admin console, and run a first live test
+          together (a joint smoke test) on your real workload.
         </p>
       </li>
       <li>
@@ -329,9 +349,11 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">04</p>
         <h3 class="mt-3 font-semibold text-tk-ink">Run</h3>
         <p class="mt-2 text-sm text-tk-ink-2">
-          Same SDK as cloud Driftstack — change one config field and your
-          existing code points at the self-hosted control plane. Support
-          via the SLA matching your SKU.
+          Same SDK as cloud Driftstack — change one settings value (a
+          config field) and your
+          existing code talks to your own installation instead of our
+          cloud. Support response times (the SLA) match the package
+          you chose.
         </p>
       </li>
     </ol>
@@ -352,7 +374,7 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
   <!-- Final CTA -->
   <CtaBand
     title="Talk to us about self-hosting."
-    lead="Email what you're running — workload shape and concurrent-session profile — and we'll model fit and break-even in writing."
+    lead="Email what you're running — what the work is and how many sessions you need going at once — and we'll set out in writing whether self-hosting fits and where owning beats renting."
     primaryHref="mailto:sales@driftstack.dev?subject=Self-Hosted%20inquiry"
     primaryLabel="Contact sales"
     secondaryHref="/pricing#self-hosted"

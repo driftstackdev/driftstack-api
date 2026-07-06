@@ -77,14 +77,19 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
 
   it("Architecture framing pinned: 'Two boxes. One secure channel. Your hardware, our orchestration.' + 'Self-hosted is one piece of Driftstack software running on Mac hardware you own. The control plane orchestrates sessions, exposes the SDK + GUI, and never holds your session content.' — pinned so the two-box architecture metaphor + the 'we orchestrate, you hold session content' division of responsibility survive (drift to dropping 'never holds your session content' would weaken the privacy promise)", () => {
     expect(body).toMatch(/Two boxes\. One secure channel\. Your hardware, our orchestration\./);
+    // S20c 2026-07-06 plain-language pass: control plane glossed as
+    // "Driftstack's coordination service"; the never-holds-content
+    // promise survives verbatim-in-intent.
     expect(body).toMatch(
-      /The control plane orchestrates sessions, exposes\s*\n?\s*the SDK \+ GUI, and never holds your session content\./,
+      /Driftstack's coordination service \(the\s+"control plane"\) starts and manages sessions and gives you the\s+developer kit \(SDK\) and the desktop app \(GUI\) — and it never\s+holds what happens inside your sessions\./,
     );
   });
 
   it("Session-content-stays-inside-perimeter framing pinned: 'Session content (URLs, form data, captures, recordings) stays inside your network. Driftstack's control plane sees license + session metadata, never the session itself.' — pinned so the explicit 4-state scope (URLs / form data / captures / recordings) + the control-plane-sees-only-metadata commitment survive (drift to dropping the explicit scope would let customers question what 'session content' means)", () => {
+    // S20c 2026-07-06 plain-language pass: metadata said plainly,
+    // term kept in parens; 4-state scope + never-the-session survive.
     expect(body).toMatch(
-      /Session content \(URLs, form data, captures, recordings\) stays inside\s*\n?\s*your network\. Driftstack's control plane sees license \+ session\s*\n?\s*metadata, never the session itself\./,
+      /Session content \(URLs, form data, captures, recordings\) stays inside\s+your network\. Driftstack's control plane sees your license and\s+basic session details — when a session started, which profile\s+ran \(session metadata\) — never the session itself\./,
     );
   });
 
@@ -101,8 +106,10 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
     );
     expect(body).toMatch(/Procure hardware<\/h3>/);
     expect(body).toMatch(/Onboard<\/h3>/);
+    // S20c 2026-07-06 plain-language pass: config field glossed as a
+    // settings value; same one-change migration promise.
     expect(body).toMatch(
-      /Same SDK as cloud Driftstack — change one config field and your\s*\n?\s*existing code points at the self-hosted control plane\./,
+      /Same SDK as cloud Driftstack — change one settings value \(a\s+config field\) and your\s+existing code talks to your own installation instead of our\s+cloud\./,
     );
   });
 

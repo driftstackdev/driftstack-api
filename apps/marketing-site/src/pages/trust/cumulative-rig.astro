@@ -69,6 +69,9 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
       same methodology runs against every archetype in the catalog —
       {DEVICE_SUPPORT.archetypeCount} profiles, {DEVICE_SUPPORT.deviceFamilies},
       on iOS {DEVICE_SUPPORT.iosVersions}, Safari {DEVICE_SUPPORT.safariVersions}.
+      (An archetype is one specific iPhone model + iOS version +
+      Safari version combination — see
+      <a href="/glossary#archetype" class="text-tk-accent-text underline">the glossary</a>.)
       If any signal differs from what the real phone sends, we treat
       it as a launch-blocking bug and fix the engine — not a
       JavaScript wrapper over it.
@@ -83,14 +86,20 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
       <p class="mt-6 max-w-prose text-base text-tk-ink-2 leading-relaxed">
         A stealth Chromium tool can spoof the user-agent string in five
         minutes. It can fake the screen size in another five. But the
-        canvas hash, the WebGL renderer, the AudioContext fingerprint,
-        the Core Text font-metric output, the JavaScript engine timing
+        deeper measurements — how the browser draws an invisible test
+        image (the canvas hash), which graphics engine it reports (the
+        WebGL renderer), how its audio system rounds numbers (the
+        AudioContext fingerprint), how its fonts measure on screen
+        (the Core Text font-metric output), even the timing rhythm of
+        its JavaScript engine
         — those leak the underlying Chromium engine in the next layer
         of measurement.
       </p>
       <p class="mt-4 max-w-prose text-base text-tk-ink-2 leading-relaxed">
         Detection systems combine many signals into one score. A
-        single mismatch — UA says iPhone, canvas hash says Blink —
+        single mismatch — the browser introduces itself as an iPhone
+        (its user-agent, "UA"), but its drawing output betrays
+        Chrome's engine (the canvas hash says Blink) —
         flags the session as inauthentic. Driftstack's claim isn't
         "we got the user-agent right." It's "every signal in the rig,
         at the same time, returns the iPhone value."
@@ -109,8 +118,10 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
         "Stealth Chromium" column is what a representative
         Chromium-with-stealth-plugin tool returns. Cells marked
         <code class="font-mono text-tk-accent-text">unique-per-session</code>
-        are the load-bearing leak: a real iPhone returns the same
-        value as millions of other iPhones, so any tool that returns
+        are the giveaway that matters most: a real iPhone returns the same
+        value as millions of other iPhones — that is what
+        population-stable means in the Driftstack column — so any
+        tool that returns
         a hash unique to its own session has already given itself
         away.
       </p>
@@ -184,7 +195,7 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
               <td class="px-4 py-3 font-mono text-tk-accent-text">native</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-tk-ink">Screen dimensions + DPR</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Screen dimensions + pixel density (DPR)</td>
               <td class="px-4 py-3 text-tk-ink-3">configurable</td>
               <td class="px-4 py-3 font-mono text-tk-accent-text">393x852 @ 3x (iPhone 16 Pro)</td>
             </tr>
@@ -199,7 +210,10 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
               <td class="px-4 py-3 font-mono text-tk-accent-text">absent (Safari)</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-tk-ink">Hash uniqueness across sessions</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">
+                Same fingerprint, session after session?
+                <span class="mt-0.5 block font-normal text-xs text-tk-ink-3">Hash uniqueness across sessions</span>
+              </td>
               <td class="px-4 py-3 text-tk-ink-3">100% unique</td>
               <td class="px-4 py-3 font-mono text-tk-accent-text">population-stable</td>
             </tr>
@@ -209,8 +223,9 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
 
       <p class="mt-6 max-w-prose text-sm text-tk-ink-3">
         14 signals shown above. The internal rig measures 60+ signals
-        across every session built; the published subset is the
-        load-bearing ones that flip categorical-detection decisions.
+        across every session built; the published subset is the ones
+        that most decide whether a detection system classifies a
+        session as real or fake.
       </p>
     </div>
   </section>
@@ -224,15 +239,18 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
         Every Driftstack engine build runs the cumulative rig against
         the reference iPhone. If any signal differs from what the
         reference returns, the build does not ship. We don't paper
-        over individual signals with JavaScript shims — that's the
+        over individual signals with JavaScript patches ("shims")
+        layered on top — that's the
         approach every stealth-plugin tool takes, and it's exactly
         what the rig catches.
       </p>
       <p class="mt-4 max-w-prose text-base text-tk-ink-2 leading-relaxed">
-        When iOS releases a new Safari version, the reference moves
-        and the engine has to catch up. Until it does, the prior
-        reference stays the customer-facing archetype; the engine
-        targets the prior iOS, not a half-built blend.
+        When Apple ships a new iOS or Safari version, our target (the
+        reference) moves and the engine has to catch up. Until it
+        fully matches the new version, we keep offering the previous
+        version's profiles — a phone Apple really shipped — as the
+        customer-facing archetype; the engine
+        targets the prior iOS, not a half-built blend of old and new.
       </p>
     </div>
   </section>
@@ -247,7 +265,8 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
             /trust/security-overview
           </h3>
           <p class="mt-3 text-sm text-tk-ink-2">
-            the live security posture across the four shipped pillars.
+            the live security checklist — every security claim mapped
+            to its evidence.
           </p>
         </a>
         <a href="/comparison" class="card group p-6">

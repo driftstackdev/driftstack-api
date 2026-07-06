@@ -104,10 +104,16 @@ describe('W385.A marketing-site src/data/sub-processors.ts content parity', () =
     // BYOK transient-proxy framing AND the bundled-LLM opt-in
     // framing so future drift can't quietly drop either mode's
     // disclosure.
-    expect(body).toMatch(/BYOK proxy — when the customer has supplied their own Anthropic API key/);
-    expect(body).toMatch(/Bundled-LLM rail — opt-in only/);
+    // S20c 2026-07-06 plain-language pass: both modes' disclosures
+    // survive with plain words leading (BYOK spelled out; "rail"
+    // dropped for plain "Bundled"); transient-proxy framing kept.
     expect(body).toMatch(
-      /Session data flows to Anthropic only when one of these two modes is engaged/,
+      /Bring your own key \(BYOK\) — the customer supplies their own Anthropic API key/,
+    );
+    expect(body).toMatch(/a transient proxy/);
+    expect(body).toMatch(/Bundled — opt-in only/);
+    expect(body).toMatch(
+      /Session data flows to Anthropic only when one of these two modes is actually used in a given AI step/, // S20c 2026-07-06
     );
   });
 
@@ -116,19 +122,25 @@ describe('W385.A marketing-site src/data/sub-processors.ts content parity', () =
     expect(body).toMatch(
       /Cryptocurrency payment processing \(BTC, LTC, USDT, USDC, ETH, XMR\)\. Engaged only when a customer opts to pay with cryptocurrency at checkout; bypassed entirely for Stripe-paying customers/,
     );
-    expect(body).toMatch(/EEA-internal — no transfer mechanism required\./);
+    expect(body).toMatch(
+      /Inside the EEA \(the EU plus Iceland, Liechtenstein, and Norway\) — no transfer mechanism required\./,
+    ); // S20c 2026-07-06
   });
 
   it('LiveKit opt-in framing pinned (WebRTC live-session, disabled by default)', () => {
+    // S20c 2026-07-06 plain-language pass: plain video-stream words
+    // lead; the precise WebRTC/signaling/SFU terms stay in parens.
     expect(body).toMatch(
-      /WebRTC live-session signaling and media SFU for the optional "live session" feature/,
+      /Carries the live video stream \(WebRTC; LiveKit provides the connection setup and video relay servers — signaling and media SFU\) for the optional "live session" feature/,
     );
     expect(body).toMatch(/Disabled by default; engaged only when explicitly initiated\./);
   });
 
   it('Stripe row: BYOK metered billing + BTW reverse-charge via Stripe Tax', () => {
+    // S20c 2026-07-06 plain-language pass: BYOK spelled out, BTW
+    // identified as Dutch VAT; all four purposes survive.
     expect(body).toMatch(
-      /Payment processing, subscription management, BYOK metered billing, BTW reverse-charge handling via Stripe Tax/,
+      /Payment processing, subscription management, usage-based billing for the bring-your-own-key \(BYOK\) AI option, and VAT \(Dutch BTW\) reverse-charge handling via Stripe Tax/,
     );
     expect(body).toMatch(/Stripe Payments Europe Ltd \(Ireland\)/);
   });

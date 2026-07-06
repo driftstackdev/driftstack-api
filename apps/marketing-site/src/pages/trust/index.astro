@@ -21,7 +21,8 @@ import StatusBadge from '../../components/StatusBadge.astro';
     <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">
       Security architecture, sub-processor list, legal agreements,
       and incident history — published in one place. Buyer
-      evaluations and ongoing GDPR/DPA reviews can start here without
+      evaluations and ongoing GDPR / data-processing-agreement (DPA)
+      reviews can start here without
       an email chain.
     </p>
     <div class="mt-6">
@@ -46,11 +47,15 @@ import StatusBadge from '../../components/StatusBadge.astro';
             Architecture + posture →
           </h2>
           <p class="mt-3 text-sm text-tk-ink-2">
-            Five pillars shipped today: scrypt-hashed API keys at rest,
-            HMAC-signed webhooks, no-customer-data-access enforcement,
-            EU-resident infrastructure, and customer-configurable
-            egress per profile (SOCKS5 with UDP/QUIC/WebRTC, plus
-            OpenVPN + WireGuard). The live posture across each pillar is
+            Five pillars shipped today: API keys stored only as
+            one-way scrypt hashes (unreadable even to us), webhooks
+            cryptographically signed so you can prove each message
+            came from us (HMAC), a design that keeps our staff from
+            ever seeing your session content, EU-resident
+            infrastructure, and each profile bringing its own internet
+            exit — your SOCKS5 proxy (including UDP/QUIC/WebRTC
+            traffic) or your OpenVPN / WireGuard VPN. The live posture
+            across each pillar is
             on the security overview (its own card below).
           </p>
         </a>
@@ -68,10 +73,13 @@ import StatusBadge from '../../components/StatusBadge.astro';
             Live list + regions →
           </h2>
           <p class="mt-3 text-sm text-tk-ink-2">
-            Every organisation that processes customer data on Driftstack's
-            behalf, with region, purpose, and transfer mechanism. Source of
-            truth for Article 28(2) amendment notices; mirrored in DPA
-            Annex 3.
+            Every outside company that handles customer data for us
+            (our sub-processors), with where it runs, what it does,
+            and the legal basis for any data leaving the EU (the
+            transfer mechanism). This list is the official source for
+            the 30-day change notices GDPR Article 28(2) requires, and
+            it appears verbatim as Annex 3 of our data-processing
+            agreement (DPA).
           </p>
         </a>
 
@@ -109,8 +117,11 @@ import StatusBadge from '../../components/StatusBadge.astro';
           </h2>
           <p class="mt-3 text-sm text-tk-ink-2">
             Standard agreements ready to sign on the customer side: Data
-            Processing Agreement (Article 28 + SCCs), Privacy Policy
-            (Article 13–15 disclosures), Terms of Service, Acceptable Use
+            Processing Agreement (GDPR Article 28, including the EU's
+            Standard Contractual Clauses — SCCs — for data sent
+            abroad), Privacy Policy (the GDPR Article 13–15
+            disclosures: what we collect and your rights over it),
+            Terms of Service, Acceptable Use
             Policy.
           </p>
         </a>
@@ -128,9 +139,12 @@ import StatusBadge from '../../components/StatusBadge.astro';
             Certifications + pen-test + disclosure →
           </h2>
           <p class="mt-3 text-sm text-tk-ink-2">
-            Honest current state: certifications in place + in progress,
-            pen-test access workflow, vulnerability-disclosure policy +
-            safe-harbour, sub-processor change SLA, audit-log retention.
+            Honest current state: which certifications are in place or
+            in progress, how to get our penetration-test reports (paid
+            ethical hackers attacking the platform), how to report a
+            security hole — and our promise not to sue good-faith
+            researchers ("safe harbour") — how much warning you get
+            before we change vendors, and how long logs are kept.
           </p>
         </a>
 
@@ -148,7 +162,8 @@ import StatusBadge from '../../components/StatusBadge.astro';
           </h2>
           <p class="mt-3 text-sm text-tk-ink-2">
             Every security claim mapped to the code path, test, or
-            doc that backs it up. The page a prospect's CISO skims
+            doc that backs it up. The page your security lead (CISO)
+            skims
             before scheduling a vendor review call.
           </p>
         </a>
@@ -166,10 +181,12 @@ import StatusBadge from '../../components/StatusBadge.astro';
             Signal-by-signal methodology →
           </h2>
           <p class="mt-3 text-sm text-tk-ink-2">
-            The full set of fingerprint signals Driftstack measures
-            against the reference iPhone, with Stealth-Chromium-vs-
-            Driftstack contrast values. The methodology behind the
-            indistinguishability claim.
+            Every measurable fingerprint signal — the details a
+            website can read about a browser — checked one by one
+            against a real reference iPhone, shown side by side with
+            what a typical disguised-Chromium ("stealth") tool
+            returns. The evidence behind our claim that sessions
+            can't be told apart from a real iPhone.
           </p>
         </a>
       </div>
@@ -196,17 +213,21 @@ import StatusBadge from '../../components/StatusBadge.astro';
       <div>
         <dt class="text-sm font-medium text-tk-ink">Do you see our destination URLs?</dt>
         <dd class="mt-1 text-sm text-tk-ink-2">
-          No. Session traffic exits through your egress (the SOCKS5 /
-          OpenVPN / WireGuard proxies you configure). Driftstack
-          orchestrates the session; the proxy carries the bytes.
+          No. Session traffic leaves for the web through the exit you
+          configure (your egress) — your own SOCKS5 proxy or OpenVPN /
+          WireGuard VPN. Driftstack starts and manages the session;
+          your proxy carries the actual browsing traffic, so the
+          addresses you visit don't pass through us.
         </dd>
       </div>
       <div>
         <dt class="text-sm font-medium text-tk-ink">Are API keys recoverable by staff?</dt>
         <dd class="mt-1 text-sm text-tk-ink-2">
-          No. Keys are scrypt-hashed at rest. A database breach surfaces
-          hashes, not keys. If a key leaks, rotate via the dashboard's
-          24-hour grace flow.
+          No. Keys are stored only as one-way scrypt hashes — staff,
+          and even a database thief, see scrambled values, not keys.
+          If a key leaks, rotate it in the dashboard; the old key
+          keeps working for 24 hours (the grace window) so nothing
+          breaks mid-switch.
         </dd>
       </div>
       <div>
@@ -214,19 +235,22 @@ import StatusBadge from '../../components/StatusBadge.astro';
         <dd class="mt-1 text-sm text-tk-ink-2">
           The DPA at <a href="/legal/dpa" class="text-tk-accent-text underline"
             >/legal/dpa</a
-          > is pre-signed by Driftstack; counter-signing acceptance closes
-          on the customer side. Standard SCCs apply for any non-EU
-          transfer named in Annex 3.
+          > is already signed by Driftstack — sign your side and it's
+          in force. The EU's Standard Contractual Clauses (SCCs) cover
+          any transfer of data outside the EU listed in Annex 3 (the
+          vendor list attached to the DPA).
         </dd>
       </div>
       <div>
         <dt class="text-sm font-medium text-tk-ink">What's the incident-response SLA?</dt>
         <dd class="mt-1 text-sm text-tk-ink-2">
-          Self-serve tiers operate without a contractual uptime SLA —
+          Self-serve plans come without a contractual uptime guarantee
+          (an SLA) —
           we publish incidents at
           <a href="/trust/incidents" class="text-tk-accent-text underline"
             >/trust/incidents</a
-          > and the live status above. Self-hosted SKUs and Enterprise
+          > and the live status above. Self-hosted packages (SKUs) and
+          Enterprise
           tiers carry contractual SLA terms.
         </dd>
       </div>
@@ -235,8 +259,9 @@ import StatusBadge from '../../components/StatusBadge.astro';
         <dd class="mt-1 text-sm text-tk-ink-2">
           Email <a href="mailto:support@driftstack.dev" class="text-tk-accent-text underline"
             >support@driftstack.dev</a
-          > with the document; we'll fill it line-by-line. CAIQ /
-          VSAQ / vendor portals all welcome.
+          > with the document; we'll fill it line-by-line. Standard
+          security-questionnaire formats (CAIQ / VSAQ), custom
+          spreadsheets, and vendor portals all welcome.
         </dd>
       </div>
     </dl>
@@ -246,7 +271,7 @@ import StatusBadge from '../../components/StatusBadge.astro';
   <CtaBand
     label="Compliance review"
     title="Bring the questionnaire. We'll fill it."
-    lead="CAIQ, VSAQ, custom enterprise vendor questionnaires — all welcome. Most answers come out of the pages linked above; the rest we write line-by-line within a working day."
+    lead="Standard security-questionnaire formats (CAIQ, VSAQ) and custom enterprise vendor questionnaires — all welcome. Most answers come out of the pages linked above; the rest we write line-by-line within a working day."
     primaryHref="mailto:support@driftstack.dev"
     primaryLabel="Email us"
   />

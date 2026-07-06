@@ -63,14 +63,17 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
 
   it('"session content never leaves your perimeter" privacy framing pinned', () => {
     expect(body).toMatch(/Sessions never leave your perimeter/);
+    // S20c 2026-07-06 plain-language pass: same 4-state scope + the
+    // nothing-through-vendor-servers promise, plain words lead.
     expect(body).toMatch(
-      /session content \(URLs, form data, captures,\s+recordings\) must not transit any vendor infrastructure beyond\s+your own/,
+      /session content \(URLs, form data, captures,\s+recordings\) must never pass through anyone's servers but\s+your own/,
     );
   });
 
   it('control-plane scope claim pinned (sees license + metadata, never session itself)', () => {
+    // S20c 2026-07-06 plain-language pass: metadata glossed inline.
     expect(body).toMatch(
-      /Driftstack's control plane sees license \+ session\s+metadata, never the session itself/,
+      /Driftstack's control plane sees your license and\s+basic session details — when a session started, which profile\s+ran \(session metadata\) — never the session itself/,
     );
   });
 

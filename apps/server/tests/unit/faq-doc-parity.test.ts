@@ -42,7 +42,10 @@ describe('W247.B faq doc parity', () => {
     // Free tier is manual-only (GUI client); programmatic API/SDK access
     // starts on the API ladder. Old "API-within-free-limits" framing is
     // superseded (common.ts:76 "free $0 — manual-only (no API)").
-    expect(doc).toMatch(/The free tier is manual-only \(no programmatic API\/SDK access\)/);
+    // S20c 2026-07-06 plain-language pass: the parenthetical reworded
+    // "no programmatic API/SDK access" → "no API/SDK access from code"
+    // (same server-matching fact — manual-only, no code access).
+    expect(doc).toMatch(/The free tier is manual-only \(no API\/SDK access from code\)/);
     expect(doc).not.toMatch(/within the free limits/);
   });
 

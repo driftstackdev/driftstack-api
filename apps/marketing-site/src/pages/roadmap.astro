@@ -32,11 +32,11 @@ const NOW: RoadmapItem[] = [
     // as literal prose (the roadmap baselines pin those fragments in
     // source); the parity tests cross-check it against DEVICE_SUPPORT.
     title: `iPhone family fingerprint parity (${DEVICE_SUPPORT.archetypeCount} profiles, ${DEVICE_SUPPORT.deviceFamilies})`,
-    body: 'Bit-identical fingerprint parity across 81 device profiles spanning the iPhone 13 through 17 Pro Max families, on iOS 18.6 / 18.7 and Safari 18.6 through 26.5. Every measured signal matches the real phone or the build is blocked. This is the platform foundation; everything else builds on top.',
+    body: 'The fingerprint matches the real phone exactly — bit for bit (bit-identical parity) — across 81 device profiles spanning the iPhone 13 through 17 Pro Max families, on iOS 18.6 / 18.7 and Safari 18.6 through 26.5. Every signal a website can measure matches the real phone, or the build is blocked. This is the platform foundation; everything else builds on top.',
   },
   {
     title: 'TypeScript · Python · Go SDKs',
-    body: 'First-class clients in three languages, with idempotency keys, scope-based permission helpers, behavioural-preset selectors, proxy configuration helpers, and webhook signature verification. Wire-shape regression tested across all three.',
+    body: 'Ready-made client libraries in three languages, with duplicate-request protection (idempotency keys), helpers for permission scopes, behaviour presets, and proxy set-up, plus built-in webhook signature verification. All three are regression-tested to send and receive exactly the same data (wire-shape parity).',
   },
   {
     title: 'Customer dashboard at app.driftstack.dev',
@@ -44,11 +44,11 @@ const NOW: RoadmapItem[] = [
   },
   {
     title: 'Webhook delivery infrastructure',
-    body: 'HMAC-SHA256-signed events with 5-minute timestamp tolerance, configurable retries, dead-letter queue, and dashboard replay. Subscribe to session lifecycle, crypto-order, and API-key events.',
+    body: 'Events are cryptographically signed (HMAC-SHA256) so you can verify they really came from us, with a 5-minute clock-difference allowance (timestamp tolerance), retries you configure, a holding queue for deliveries that keep failing (the dead-letter queue), and one-click re-send from the dashboard. Subscribe to session lifecycle, crypto-order, and API-key events.',
   },
   {
     title: 'GUI client for human operators',
-    body: 'Tauri-based desktop client (macOS first) for the Manual ladder. Drive sessions yourself, manage 10–200 persistent profiles, no code required.',
+    body: 'Desktop app (built on Tauri; macOS first) for the Manual plans — Personal, Team, and Agency. Drive sessions yourself, manage 10–200 persistent profiles, no code required.',
   },
   {
     title: 'Public status page',
@@ -64,11 +64,11 @@ const NOW: RoadmapItem[] = [
   },
   {
     title: 'Recipe library (capture + manage at v1.0)',
-    body: 'Snapshot a finished agent-session into a replayable recipe — capture the structured intent_log + transcript without re-paying decompose cost. Create, list, read, and delete ship at v1.0; recipe execution lands at v1.1.',
+    body: 'Save a finished agent-session as a replayable recipe — it keeps the step-by-step action list (the structured intent_log) and the transcript, so replaying it doesn\'t spend AI budget working the steps out again. Create, list, read, and delete ship at v1.0; running a saved recipe (recipe execution) lands at v1.1.',
   },
   {
     title: 'Agent sessions — natural-language automation with AI / manual / pair modes',
-    body: 'Layer a chat-style decompose-and-execute loop on top of any driver session. AI mode (default) translates a user message into structured intents (navigate / interact / wait / capture) and the runtime executes them; manual mode is pass-through for clients driving their own UI; pair mode lets the customer take over from the AI and hand back. Live transcript via Server-Sent Events with Last-Event-ID resume. Bundled LLM is opt-in (deployment-managed Anthropic budget); BYOK Anthropic via PUT /v1/account/me/byok-anthropic-key (the dashboard surface lands at v1.1; the server route is live today and your stored key is forwarded to the agent runtime automatically).',
+    body: 'Tell any session what to do in plain language (a chat-style decompose-and-execute loop on top of any driver session). AI mode (the default) turns your message into concrete browser steps — go to a page, tap, wait, capture (structured intents: navigate / interact / wait / capture) — and carries them out; manual mode passes commands straight through when you drive from your own interface; pair mode lets you take over from the AI and hand back. Watch the live transcript as it runs (Server-Sent Events); if your connection drops, it resumes where it left off (Last-Event-ID resume). The built-in AI is opt-in and runs on an Anthropic budget we manage — or bring your own Anthropic key (BYOK) via PUT /v1/account/me/byok-anthropic-key: the server route is live today and your stored key is used automatically; the dashboard page for it lands at v1.1.',
   },
 ];
 
@@ -98,7 +98,7 @@ const LATER: RoadmapItem[] = [
   },
   {
     title: 'Hardware-key MFA (WebAuthn)',
-    body: 'YubiKey / Touch ID / platform authenticators in addition to TOTP recovery codes. Single sign-on integrations (SAML / OIDC) for team accounts.',
+    body: 'YubiKey, Touch ID, or your device\'s built-in unlock (platform authenticators), in addition to today\'s authenticator-app codes (TOTP) and recovery codes. Single sign-on for team accounts via the standards company identity systems use (SAML / OIDC).',
   },
   {
     title: 'Public benchmark page',
@@ -106,7 +106,7 @@ const LATER: RoadmapItem[] = [
   },
   {
     title: 'Self-hosted parity polish',
-    body: 'Same control plane as the SaaS — admin UI, dashboard, status surface — runnable inside a single VPC with zero outbound traffic to driftstack.dev.',
+    body: 'Same control plane as the SaaS — admin UI, dashboard, status surface — runnable entirely inside your own private cloud network (a single VPC) with zero outbound traffic to driftstack.dev.',
   },
 ];
 ---

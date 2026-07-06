@@ -125,7 +125,10 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
 
   it('RFC 9457 application/problem+json mapping pinned (stable type URI)', () => {
     expect(body).toMatch(
-      /RFC 9457\s+<code class="font-mono">application\/problem\+json<\/code> with a\s+stable <code class="font-mono">type<\/code> URI/,
+      // S20c 2026-07-06 plain-language pass: same RFC 9457 + stable-type
+      // facts, plain words lead ('web standard for machine-readable
+      // errors', the URI explained as a link).
+      /web standard for machine-readable\s+errors — RFC 9457\s+<code class="font-mono">application\/problem\+json<\/code> — and\s+carries a stable <code class="font-mono">type<\/code> URI: a\s+web link that identifies, and explains, the error kind/,
     );
   });
 
@@ -156,6 +159,9 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
     expect(body).toMatch(
       /capture<\/code> takes one of four kinds:\s*\n?\s*<code class="font-mono">screenshot<\/code>,\s*<code class="font-mono">dom<\/code>,\s*\n?\s*<code class="font-mono">pdf<\/code>, or <code class="font-mono">recording<\/code>/,
     );
-    expect(body).toMatch(/recordings stream to R2 \+ return a\s+signed-URL handle/);
+    // S20c 2026-07-06: same R2 + signed-URL facts, said plainly.
+    expect(body).toMatch(
+      /recordings are saved to cloud storage\s+\(Cloudflare R2\) and the response returns a private,\s+time-limited download link \(a signed-URL handle\)/,
+    );
   });
 });

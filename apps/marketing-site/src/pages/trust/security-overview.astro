@@ -39,9 +39,11 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
           <div>
             <p class="font-medium text-tk-ink">API keys are scrypt-hashed at rest</p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Keys never round-trip a plaintext value through any
-              storage layer. Hash params (N=2^15, r=8, p=1) live alongside
-              the hash so verification is straightforward. A database
+              The readable key is never written to any storage,
+              anywhere — it's one-way scrambled (scrypt) first. The
+              scrambler's strength settings (hash params N=2^15, r=8,
+              p=1) live alongside the hash so keys can be verified
+              without ever storing the key itself. A database
               breach surfaces hashes, not credentials.
             </p>
             <p class="mt-1 text-xs font-mono text-tk-ink-3">
@@ -54,9 +56,13 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
           <div>
             <p class="font-medium text-tk-ink">MFA: TOTP + recovery codes</p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              AES-256-GCM at-rest encryption of TOTP secrets. Recovery
-              codes are scrypt-hashed (mirroring API key handling). Step-up
-              gate (V-353e) requires MFA on destructive admin paths.
+              Two-factor login uses authenticator-app codes (TOTP).
+              The seed that generates your codes is stored encrypted
+              (AES-256-GCM at-rest encryption of TOTP secrets).
+              Recovery codes are scrypt-hashed — one-way scrambled,
+              mirroring API key handling. Dangerous admin actions
+              demand a fresh MFA check even if you're already signed
+              in (a "step-up" gate on destructive admin paths).
             </p>
             <p class="mt-1 text-xs font-mono text-tk-ink-3">
               apps/server/src/lib/mfa-totp.ts · apps/server/src/services/mfa.ts
@@ -68,10 +74,15 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
           <div>
             <p class="font-medium text-tk-ink">OAuth 2.0 (invite-only) with PKCE-S256</p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Third-party OAuth requires admin invitation (no self-service
-              client registration). PKCE-S256 mandatory; client_secret
-              sha256-hashed at rest; one-shot authorization codes; opaque
-              bearer tokens (no JWT).
+              Third-party app access (OAuth) requires admin invitation
+              (no self-service
+              client registration). Every connection uses PKCE-S256 —
+              an extra proof that the app finishing a login is the
+              same one that started it. App secrets (client_secret)
+              are sha256-hashed at rest; login codes work exactly once
+              (one-shot authorization codes); and access tokens are
+              opaque random strings (no JWT), so a stolen token
+              carries no readable data.
             </p>
             <p class="mt-1 text-xs font-mono text-tk-ink-3">
               apps/server/src/services/oauth.ts · apps/server/src/lib/oauth-pkce.ts
@@ -83,20 +94,23 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
           <div>
             <p class="font-medium text-tk-ink">BYOK Anthropic keys + gui_control_keys + Mac LiveKit secrets: AES-256-GCM at rest</p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Three classes of plaintext-equivalent secret material
+              Three kinds of secrets that would be as damaging as
+              passwords if leaked ("plaintext-equivalent" material)
               live in AES-256-GCM ciphertext under the same
               host-resident encryption key as MFA TOTP secrets:
-              (1) customer-supplied Anthropic API keys when used as
-              the BYOK LLM rail for agent sessions; (2) per-session
-              gui_control_keys (HMAC keys for the gui_control plane);
-              and (3) per-Mac LiveKit API secrets registered via
-              POST /v1/mac-nodes/register (LK.2 — used by the
-              control plane to mint the per-session JWTs that the
-              gui-client uses to subscribe to live video). All three
+              (1) your own Anthropic API key, if you bring one for
+              the AI agent (BYOK — bring your own key); (2) the
+              per-session keys that authenticate desktop-app control
+              commands (gui_control_keys — HMAC keys); and (3) the
+              LiveKit secrets each Mac in our fleet registers via
+              POST /v1/mac-nodes/register, which the platform uses
+              to create the short-lived video-access tokens (JWTs)
+              the desktop app needs to watch a live session. All three
               are decrypted in-memory only at execution time, never
-              logged, never echoed in responses. Pino-redact + Sentry-
-              scrub guard against accidental leak across both log
-              + error paths.
+              logged, never echoed in responses. Our logging and
+              error-reporting layers also scrub secrets automatically
+              (Pino-redact + Sentry-scrub) in case one ever ends up
+              inside a message.
             </p>
             <p class="mt-1 text-xs font-mono text-tk-ink-3">
               apps/server/src/services/byok-anthropic.ts · apps/server/src/lib/byok-anthropic-encryption.ts · apps/server/src/lib/livekit-secret-encryption.ts
@@ -116,10 +130,13 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
           <div>
             <p class="font-medium text-tk-ink">TLS 1.3 on every customer-facing path</p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Cloudflare edge enforces TLS 1.3 strict to the
+              Cloudflare, our edge network, enforces strict TLS 1.3
+              encryption all the way to our own servers behind
               <code class="font-mono">api.driftstack.dev</code> +
-              <code class="font-mono">app.driftstack.dev</code> origins.
-              No plaintext HTTP on any path; the deploy pipeline's TLS
+              <code class="font-mono">app.driftstack.dev</code> (the
+              origins). No unencrypted page (plaintext HTTP) exists on
+              any path — every release is automatically checked for
+              this before it ships; the deploy pipeline's TLS
               check rejects the release otherwise.
             </p>
           </div>
@@ -129,15 +146,20 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
           <div>
             <p class="font-medium text-tk-ink">Customer-configurable egress (per profile)</p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Each profile can attach its own egress: SOCKS5 with full
-              UDP/WebRTC/QUIC tunnelling, OpenVPN (.ovpn), or WireGuard
-              (.conf). Sessions bound to the profile dial the tunnel
-              before launching the browser; DNS leaks blocked.
+              Each profile can attach its own egress — its own exit
+              to the internet: a SOCKS5 proxy with full
+              UDP/WebRTC/QUIC tunnelling (the video-call and
+              modern-web traffic types many proxies drop), an OpenVPN
+              file (.ovpn), or a WireGuard file (.conf). A session
+              bound to the profile connects to your proxy or VPN
+              ("dials the tunnel") before the browser launches, and
+              address-lookup traffic can't slip out around it (DNS
+              leaks blocked).
               Without an attached config, session traffic exits via
               Driftstack's own EU network egress. Driftstack does
-              not log session-traffic payloads (destination URLs /
-              response bodies); the proxy layer forwards bytes
-              without persisting them.
+              not log session-traffic payloads (the destination URLs
+              you visit, the page content that comes back); the proxy
+              layer passes traffic through without storing it.
             </p>
           </div>
         </li>
@@ -156,11 +178,14 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
               Outbound webhooks are HMAC-SHA256 signed
             </p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Every webhook delivery carries
-              <code class="font-mono">X-Driftstack-Signature</code>
-              with timestamp + body HMAC. Customers verify via the
-              SDK helper; replay attacks rejected via timestamp
-              tolerance window.
+              A webhook is a message we send to your systems when
+              something happens. Every delivery carries
+              <code class="font-mono">X-Driftstack-Signature</code> —
+              a cryptographic signature (HMAC) over the timestamp +
+              message body. Your code verifies it via one SDK helper;
+              messages older than the allowed timestamp tolerance
+              window are rejected, so an intercepted copy can't be
+              re-sent later (replay attacks).
             </p>
             <p class="mt-1 text-xs font-mono text-tk-ink-3">
               apps/server/src/lib/webhook-signing.ts
@@ -175,10 +200,13 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
               before any state mutation
             </p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Stripe: V-080 timestamp+sha256 HMAC. NowPayments: V-487
-              HMAC-SHA512 on canonical-keyed JSON. Shared raw-body
-              parser ensures the bytes the signature was computed over
-              are the bytes the verifier sees.
+              Payment notifications must prove they're genuine before
+              we change anything on your account. Stripe: timestamp +
+              sha256 HMAC. NowPayments: HMAC-SHA512 over the
+              normalised (canonical-keyed) JSON. A shared raw-body
+              parser ensures the exact bytes the signature was
+              computed over are the bytes the verifier sees — nothing
+              can be altered in transit without detection.
             </p>
             <p class="mt-1 text-xs font-mono text-tk-ink-3">
               apps/server/src/lib/stripe-signing.ts ·
@@ -202,7 +230,9 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
               Compute (Hetzner Nuremberg), database (Neon Frankfurt),
               object storage (Cloudflare R2 EU jurisdiction). The
               iPhone Safari session-execution fleet runs on MacStadium
-              hardware (US) under SCCs + EU-US DPF — see
+              hardware (US) under SCCs (the EU's Standard Contractual
+              Clauses for lawful data transfer abroad) + the EU-US
+              Data Privacy Framework — see
               <a href="/docs/data-residency" class="text-tk-accent-text underline"
                 >data residency</a
               >. Full sub-processor list at
@@ -217,10 +247,12 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
           <div>
             <p class="font-medium text-tk-ink">Capture retention (roadmap)</p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Today's API returns capture bytes inline; there is no
-              server-side capture retention layer to configure.
-              Session recordings + their retention controls land
-              with V-540 — see
+              Today, screenshots and captures are returned directly
+              inside the API response (inline bytes) and are not kept
+              on our servers afterwards — so there is no retention
+              setting to configure yet. Stored session recordings,
+              with controls over how long they're kept, are on the
+              roadmap — see
               <a href="/docs/recordings" class="text-tk-accent-text underline"
                 >/docs/recordings</a
               >.
@@ -232,9 +264,11 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
           <div>
             <p class="font-medium text-tk-ink">Account deletion: 30-day grace, then hard delete</p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Cancellation triggers soft-delete with 30 days of
-              recovery. After that: hard delete of profile data,
-              sessions, captures. Per our DPA.
+              For 30 days after cancellation your data is only
+              flagged as deleted ("soft-delete") and can be restored
+              if you come back. After that it is permanently erased
+              (hard delete) — profile data, sessions, captures. Per
+              our DPA.
             </p>
           </div>
         </li>
@@ -265,11 +299,13 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
           <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
           <div>
             <p class="font-medium text-tk-ink">
-              Vulnerability disclosure: 2-day ack, 5-day triage
+              Vulnerability reports: acknowledged in 2 days, assessed in 5 (triage)
             </p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Safe-harbour for good-faith research. Coordinated
-              disclosure window: 90 days, extendable on agreement.
+              We won't take legal action against good-faith research
+              ("safe-harbour"). Reporters agree to keep a finding
+              private for 90 days while we fix it (the coordinated
+              disclosure window), extendable on agreement.
               Full policy at
               <a href="/trust/compliance" class="text-tk-accent-text underline"
                 >/trust/compliance</a
@@ -281,13 +317,15 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
           <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
           <div>
             <p class="font-medium text-tk-ink">
-              Chaos engineering rehearsal harness
+              We rehearse failures on purpose (chaos engineering)
             </p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Sub-processor outages, DB failover, Redis-down,
+              Vendor (sub-processor) outages, the database switching
+              to its backup (DB failover), the Redis cache going down,
               webhook-signature failures — all covered by scripted
               drills in <code class="font-mono">scripts/chaos/</code>.
-              Drills run dry-run by default; execute mode requires
+              Drills run as simulations by default (dry-run); actually
+              breaking things (execute mode) requires
               explicit operator opt-in.
             </p>
             <p class="mt-1 text-xs font-mono text-tk-ink-3">

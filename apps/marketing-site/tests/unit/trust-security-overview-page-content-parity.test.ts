@@ -61,7 +61,9 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
 
   it('API-key scrypt params (N=2^15, r=8, p=1) + code-path reference pinned', () => {
     expect(body).toMatch(/API keys are scrypt-hashed at rest/);
-    expect(body).toMatch(/Hash params \(N=2\^15, r=8, p=1\)/);
+    // S20c 2026-07-06 plain-language pass: params kept, glossed as
+    // the scrambler's strength settings.
+    expect(body).toMatch(/hash params N=2\^15, r=8,\s+p=1/);
     expect(body).toMatch(
       /apps\/server\/src\/lib\/api-keys\.ts · hashApiKey\(\) \/ verifyApiKey\(\)/,
     );
@@ -78,11 +80,13 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
 
   it('OAuth 2.0: invite-only + PKCE-S256 + sha256-hashed client_secret + opaque bearer (no JWT)', () => {
     expect(body).toMatch(/OAuth 2\.0 \(invite-only\) with PKCE-S256/);
+    // S20c 2026-07-06 plain-language pass: "Third-party app access
+    // (OAuth)" leads; invite-only + no-self-service preserved.
     expect(body).toMatch(
-      /Third-party OAuth requires admin invitation \(no self-service\s+client registration\)/,
+      /Third-party app access \(OAuth\) requires admin invitation\s+\(no self-service\s+client registration\)/,
     );
-    expect(body).toMatch(/client_secret\s+sha256-hashed at rest/);
-    expect(body).toMatch(/opaque\s+bearer tokens \(no JWT\)/);
+    expect(body).toMatch(/App secrets \(client_secret\)\s+are sha256-hashed at rest/); // S20c 2026-07-06
+    expect(body).toMatch(/access tokens are\s+opaque random strings \(no JWT\)/); // S20c 2026-07-06
   });
 
   it.skip('inbound webhook signing pinned: Stripe V-080 + NowPayments V-487 + shared raw-body parser', () => {
@@ -97,8 +101,8 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
     expect(body).toMatch(
       /<span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100[^>]*>✓<\/span>\s*\n?\s*<div>\s*\n?\s*<p class="font-medium text-tk-ink">Customer-configurable egress \(per profile\)<\/p>/,
     );
-    expect(body).toMatch(/SOCKS5 with full\s*\n?\s*UDP\/WebRTC\/QUIC tunnelling/);
-    expect(body).toMatch(/OpenVPN \(\.ovpn\)/);
+    expect(body).toMatch(/a SOCKS5 proxy with full\s+UDP\/WebRTC\/QUIC tunnelling/); // S20c 2026-07-06: plain gloss added around the tunnelling list
+    expect(body).toMatch(/an OpenVPN\s+file \(\.ovpn\)/); // S20c 2026-07-06
   });
 
   it('EU control plane: Hetzner Nuremberg / Neon Frankfurt / R2 EU jurisdiction, session-execution fleet on MacStadium US', () => {
@@ -110,22 +114,33 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
     expect(body).toMatch(
       /Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\),\s+object storage \(Cloudflare R2 EU jurisdiction\)/,
     );
+    // S20c 2026-07-06 plain-language pass: SCCs glossed inline (the
+    // EU's Standard Contractual Clauses), DPF spelled out.
     expect(body).toMatch(
-      /iPhone Safari session-execution fleet runs on MacStadium\s+hardware \(US\) under SCCs \+ EU-US DPF/,
+      /iPhone Safari session-execution fleet runs on MacStadium\s+hardware \(US\) under SCCs \(the EU's Standard Contractual\s+Clauses for lawful data transfer abroad\) \+ the EU-US\s+Data Privacy Framework/,
     );
   });
 
   it('account deletion: 30-day grace + hard delete per DPA', () => {
     expect(body).toMatch(/Account deletion: 30-day grace, then hard delete/);
+    // S20c 2026-07-06 plain-language pass: soft-delete/hard-delete
+    // said plainly, terms kept in parens; same 30-day + DPA facts.
     expect(body).toMatch(
-      /Cancellation triggers soft-delete with 30 days of\s+recovery\. After that: hard delete of profile data,\s+sessions, captures\. Per our DPA\./,
+      /For 30 days after cancellation your data is only\s+flagged as deleted \("soft-delete"\) and can be restored\s+if you come back\. After that it is permanently erased\s+\(hard delete\) — profile data, sessions, captures\. Per\s+our DPA\./,
     );
   });
 
   it('vulnerability disclosure: 2-day ack + 5-day triage + 90-day coordinated window (matches /trust/compliance)', () => {
-    expect(body).toMatch(/Vulnerability disclosure: 2-day ack, 5-day triage/);
-    expect(body).toMatch(/Coordinated\s+disclosure window: 90 days, extendable on agreement/);
-    expect(body).toMatch(/Safe-harbour for good-faith research/);
+    // S20c 2026-07-06 plain-language pass: ack/triage said plainly
+    // in the heading (terms kept), safe-harbour + 90-day window
+    // stated as what they mean.
+    expect(body).toMatch(/Vulnerability reports: acknowledged in 2 days, assessed in 5 \(triage\)/);
+    expect(body).toMatch(
+      /keep a finding\s+private for 90 days while we fix it \(the coordinated\s+disclosure window\), extendable on agreement/,
+    );
+    expect(body).toMatch(
+      /We won't take legal action against good-faith research\s+\("safe-harbour"\)/,
+    );
   });
 
   it.skip('chaos-engineering rehearsal harness: scripts/chaos/ + V-547 doc reference', () => {
@@ -161,11 +176,13 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
 
   it('TLS-1.3-strict deploy-gate claim pinned (no plaintext HTTP)', () => {
     expect(body).toMatch(/TLS 1\.3 on every customer-facing path/);
+    // S20c 2026-07-06 plain-language pass: same strict-TLS-1.3 +
+    // deploy-gate facts, plain words lead.
     expect(body).toMatch(
-      /Cloudflare edge enforces TLS 1\.3 strict to the\s+<code[^>]*>api\.driftstack\.dev<\/code>/,
+      /Cloudflare, our edge network, enforces strict TLS 1\.3\s+encryption all the way to our own servers behind\s+<code[^>]*>api\.driftstack\.dev<\/code>/,
     );
     expect(body).toMatch(
-      /No plaintext HTTP on any path; the deploy pipeline's TLS\s+check rejects the release otherwise/,
+      /No unencrypted page \(plaintext HTTP\) exists on\s+any path — every release is automatically checked for\s+this before it ships; the deploy pipeline's TLS\s+check rejects the release otherwise/,
     );
   });
 });

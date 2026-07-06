@@ -24,9 +24,12 @@ import CtaBand from '../components/CtaBand.astro';
     </p>
     <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">
       Driftstack ships iPhone Safari sessions on demand, built on
-      real WebKit — the same engine on every physical iPhone, with
-      nothing patched at runtime that detection systems could spot.
-      EU-resident infrastructure, deliberately narrow scope: one
+      real <a href="/glossary#webkit" class="text-tk-accent-text underline">WebKit</a>
+      — the same engine every physical iPhone runs — with nothing
+      quietly modified while the browser is running ("patched at
+      runtime"), so there's nothing for detection systems to spot.
+      Our servers and your data live in the EU (EU-resident
+      infrastructure), and the scope stays deliberately narrow: one
       product, two ways to use it, no land-grab.
     </p>
   </PageHero>
@@ -41,10 +44,14 @@ import CtaBand from '../components/CtaBand.astro';
           </p>
           <h2 class="mt-3 text-2xl font-semibold text-tk-ink">iPhone Safari fidelity, on demand.</h2>
           <p class="mt-3 text-tk-ink-2 leading-relaxed">
-            Most stealth browsers fake an iPhone by rewriting JavaScript
-            at runtime. Detection systems are built to catch exactly that —
-            the canvas and WebGL hashes those tools return are 100% unique
-            per session, the literal opposite of a real iPhone returning
+            Most stealth browsers fake an iPhone by patching the
+            browser's behaviour on the fly (rewriting JavaScript at
+            runtime). Detection systems are built to catch exactly that —
+            the fingerprint values those tools return, like the
+            <a href="/glossary#canvas-hash" class="text-tk-accent-text underline">canvas</a>
+            and WebGL hashes (values derived from how the browser draws
+            an invisible test image), come out 100% unique per session:
+            the literal opposite of a real iPhone, which returns
             the same hash as millions of other iPhones. Driftstack takes
             a different approach: we run Apple's WebKit source code, the
             same engine that ships on every real iPhone. Nothing is
@@ -59,17 +66,22 @@ import CtaBand from '../components/CtaBand.astro';
           </p>
           <h2 class="mt-3 text-2xl font-semibold text-tk-ink">Stealth browsing matures.</h2>
           <p class="mt-3 text-tk-ink-2 leading-relaxed">
-            For the last decade, the field has been a runtime-patching
-            arms race that always favoured the detector. We think the
-            next decade looks different: real browser engines, real
-            device profiles, transparent metering, customer-configurable
-            egress (SOCKS5 · WireGuard · OpenVPN — see
+            For the last decade, the field has been an arms race of
+            patching browsers on the fly (runtime patching) that always
+            favoured the detector. We think the next decade looks
+            different: real browser engines, real device profiles,
+            transparent metering (billing you can see and check), and
+            customer-configurable
+            egress (SOCKS5 · WireGuard · OpenVPN): session traffic
+            leaves for the web through an exit you control — your own
+            proxy or VPN (<a href="/glossary#egress" class="text-tk-accent-text underline">what's egress?</a>).
+            See
             <a
               href="/trust/security-overview"
               class="text-tk-accent-text underline underline-offset-4"
               >/trust/security-overview</a
             >
-            for the security posture). Driftstack ships that future for
+            for the security posture. Driftstack ships that future for
             iPhone Safari first, because that's the device that matters
             most for commerce, ticketing, and account workflows.
           </p>
@@ -88,14 +100,17 @@ import CtaBand from '../components/CtaBand.astro';
             <circle cx="12" cy="10" r="3" />
           </svg>
         </IconTile>
-        <h3 class="font-semibold text-tk-ink">EU-resident control plane</h3>
+        <h3 class="font-semibold text-tk-ink">Run from the EU (EU-resident control plane)</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
           Compute, database, and object storage all run in the EU.
           Session execution and a few processors (the Mac fleet, the
           optional AI agent, the live-view stream) transfer to the US
           under Standard Contractual Clauses + the EU-US Data Privacy
-          Framework — no undisclosed flows. Per-vendor breakdown,
-          region, and transfer mechanism live on
+          Framework — no undisclosed flows. Standard Contractual
+          Clauses are the EU's standard legal contract for sending
+          data abroad, and nothing is transferred that isn't disclosed.
+          The per-vendor breakdown — who runs where, doing what, on
+          which legal basis — lives on
           <a href="/trust/sub-processors" class="text-tk-accent-text underline">/trust/sub-processors</a>.
         </p>
       </div>
@@ -110,8 +125,10 @@ import CtaBand from '../components/CtaBand.astro';
         <p class="mt-3 text-sm text-tk-ink-2">
           We don't log your destination URLs, response bodies, or
           session content. We don't train models on your traffic. We
-          don't sell datasets. The control plane sees session metadata
-          and license validity — that's the entire surface we touch.
+          don't sell datasets. Our coordination service (the control
+          plane) sees only the basics about each session — its ID,
+          when it started and stopped (session metadata) — and whether
+          your license is valid. That's everything we touch.
         </p>
       </div>
       <div>
@@ -122,13 +139,16 @@ import CtaBand from '../components/CtaBand.astro';
         </IconTile>
         <h3 class="font-semibold text-tk-ink">Honest scope</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          We say no to things we can't ship well. The behavioural input
-          engine — human-derived touch, scroll, typing and per-profile
-          persona — ships at v1.0; we'll keep saying what's live and
-          what's roadmap, not the other way around. The recipe library
-          is live at v1.0 with create, list, read, and delete (snapshot
-          a finished agent-session into a replayable recipe); recipe
-          execution lands at v1.1. SOC 2 is a future-revenue
+          We say no to things we can't ship well. Touch, scroll, and
+          typing that come from real human recordings and move like a
+          real hand — each profile keeping its own habits (the
+          behavioural input engine, with a per-profile persona) — ship
+          at v1.0; we'll keep saying what's live and what's roadmap,
+          not the other way around. The recipe library
+          is live at v1.0: save a finished agent-session as a
+          replayable step-by-step recipe, then view, list, or delete
+          your saved recipes. Running a saved recipe (recipe
+          execution) lands at v1.1. SOC 2 is a future-revenue
           milestone, not today's marketing line.
         </p>
       </div>
@@ -148,7 +168,7 @@ import CtaBand from '../components/CtaBand.astro';
     class="bg-tk-surface"
   >
     <div class="mt-10 grid gap-6 md:grid-cols-2">
-      <div class="card p-6">
+      <div class="card bg-tk-raised p-6">
         <IconTile class="mb-3">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 2L4 5v6c0 5.5 3.8 10.7 8 11.8 4.2-1.1 8-6.3 8-11.8V5l-8-3z" /><path d="M9 12l2 2 4-4" />
@@ -159,71 +179,88 @@ import CtaBand from '../components/CtaBand.astro';
         </h3>
         <p class="mt-2 text-sm text-tk-ink-2">
           Every meaningful slice of code merged is re-audited
-          against the same six checks (scope-reach, plaintext-
-          leakage, idempotency, audit-log injection, account-
-          scope leakage, web-session-token security). Findings
+          against the same six questions before it ships: can an
+          API key reach more than it was granted (scope-reach)?
+          Could a secret end up stored or logged in readable form
+          (plaintext leakage)? Can a repeated request accidentally
+          run twice (idempotency)? Can log entries be forged
+          (audit-log injection)? Can one account see another's
+          data (account-scope leakage)? Can a dashboard login be
+          stolen (web-session-token security)? Findings
           with closure status published at
           <a href="/security" class="text-tk-accent-text underline">
             /security
-          </a>. A deeper pre-flight audit precedes each new
-          customer's first production billing cycle.
+          </a>. A deeper full audit ("pre-flight") runs before each
+          new customer's first paid month — their first production
+          billing cycle.
         </p>
       </div>
-      <div class="card p-6">
+      <div class="card bg-tk-raised p-6">
         <IconTile class="mb-3">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
           </svg>
         </IconTile>
         <h3 class="font-semibold text-tk-ink">
-          Disaster recovery, rehearseable on staging
+          Disaster recovery, rehearsed before it's needed
         </h3>
         <p class="mt-2 text-sm text-tk-ink-2">
-          Eleven DR scenarios documented with concrete recovery
-          commands — host loss, Postgres corruption, Redis loss,
-          R2 object loss, signing-key rotation under attack,
-          bad deploys, cert renewal failures, Cloudflare Pages
-          regressions, multi-day Hetzner regional outage. Every
-          scenario is rehearseable on staging before commercial
-          activation. Public-facing posture at
+          Eleven disaster-recovery (DR) scenarios documented with
+          concrete recovery commands — host loss (a dead server),
+          Postgres corruption (the database), Redis loss (the cache),
+          R2 object loss (stored files),
+          signing-key rotation under attack (replacing a compromised
+          key mid-incident), bad deploys, cert renewal failures
+          (expired security certificates), Cloudflare Pages
+          regressions (our website host breaking), and a
+          multi-day Hetzner regional outage (our hosting provider
+          losing a region for days). Every
+          scenario is rehearseable on staging — our test copy of the
+          platform — before commercial
+          activation. How incidents get published:
           <a href="/trust/incidents" class="text-tk-accent-text underline">
             /trust/incidents
           </a>.
         </p>
       </div>
-      <div class="card p-6">
+      <div class="card bg-tk-raised p-6">
         <IconTile class="mb-3">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" />
           </svg>
         </IconTile>
         <h3 class="font-semibold text-tk-ink">
-          Sub-processor change-log per Article 28(2)
+          30 days' warning before we change vendors — Article 28(2)
         </h3>
         <p class="mt-2 text-sm text-tk-ink-2">
-          Every change to our sub-processor list (additions,
+          Sub-processors are the outside companies that handle
+          customer data for us. Every change to our sub-processor
+          list (additions,
           removals, region migrations) is published 30 days
           before it takes effect at
           <a href="/trust/sub-processors" class="text-tk-accent-text underline">
             /trust/sub-processors
-          </a>. Customers get a right-of-objection window to
-          terminate the affected portion of service if a new
-          sub-processor doesn't meet their requirements.
+          </a>. If a new sub-processor doesn't meet your
+          requirements, those 30 days are your right-of-objection
+          window: you can object and terminate the affected portion
+          of service.
         </p>
       </div>
-      <div class="card p-6">
+      <div class="card bg-tk-raised p-6">
         <IconTile class="mb-3">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
         </IconTile>
         <h3 class="font-semibold text-tk-ink">
-          Source escrow for Enterprise + Self-hosted
+          If we ever shut down, you keep the software (source escrow)
         </h3>
         <p class="mt-2 text-sm text-tk-ink-2">
           Enterprise customers and Self-hosted licensees get
-          access to the WebKit fork + control-plane source
-          under a written escrow agreement. If Driftstack
+          access to our source code — the modified WebKit engine
+          (the WebKit fork) + the control-plane source —
+          under a written escrow agreement: a neutral third party
+          holds a copy. If Driftstack
           sunsets the cloud service, escrow releases the source
           so customers can continue running on their own
           hardware indefinitely. The

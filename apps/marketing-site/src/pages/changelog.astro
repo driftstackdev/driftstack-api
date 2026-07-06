@@ -31,7 +31,7 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-06-16',
     category: 'launch',
     title: 'Route sessions through your own proxies',
-    body: 'You can now register your own SOCKS5 proxies against your account and run a session through one, so it browses from your egress IP. Manage them in the desktop app under Proxies (set one as a profile default and launching routes through it automatically) or via the API at /v1/account/me/proxies — list, create, update, delete, and test reachability. Pass proxy_id when creating a session to choose the egress per run. Proxy passwords are encrypted at rest under your account key and are never returned, and hosts pointed at private or internal addresses are rejected. Documented at docs.driftstack.dev/api/proxies.',
+    body: 'You can now register your own SOCKS5 proxies against your account and run a session through one, so websites see your proxy\'s address as where the browsing comes from (your egress IP). Manage them in the desktop app under Proxies (set one as a profile default and launching routes through it automatically) or via the API at /v1/account/me/proxies — list, create, update, delete, and test reachability. Pass proxy_id when creating a session to choose the exit (egress) per run. Proxy passwords are stored encrypted while saved on our servers (encrypted at rest) under your account\'s own key and are never shown back to anyone, and hosts pointed at private or internal addresses are rejected. Documented at docs.driftstack.dev/api/proxies.',
   },
   {
     date: '2026-06-16',
@@ -55,13 +55,13 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-06-11',
     category: 'self-hosted',
     title: 'Self-hosted: sessions no longer require a proxy',
-    body: 'On self-hosted deployments, sessions egress from your own machine — so requiring a proxy on every session-create made no sense there. The new SESSION_PROXY_REQUIRED environment variable makes the egress safeguard explicit: leave it unset for the existing inferred behavior (required when an egress backend is wired — the cloud posture), set false on self-hosted boxes to create sessions proxy-free, or true to force-require. One env var, no code change.',
+    body: 'On self-hosted deployments, sessions reach the internet from your own machine — so requiring a proxy on every session-create made no sense there. The new SESSION_PROXY_REQUIRED environment variable makes the egress safeguard explicit: leave it unset to keep today\'s automatic behavior (a proxy is required whenever a proxy system — an egress backend — is connected, which is how our cloud runs), set false on self-hosted boxes to create sessions proxy-free, or true to force-require. One env var, no code change.',
   },
   {
     date: '2026-06-11',
     category: 'launch',
     title: 'Rate-limit caps now visible on the dashboard',
-    body: "The /usage page gained a Rate limits card showing every token bucket your account draws from — capacity, refill rate, and whether the value is your tier default or a staff-granted override (with the override's auto-revert date). Previously this data was only reachable by calling GET /v1/account/rate-limits from the SDK or curl. The endpoint stays available for programmatic reads.",
+    body: "The /usage page gained a Rate limits card showing every request allowance ('token bucket') your account draws from — how many requests it holds (capacity), how fast the allowance refills (refill rate), and whether the value is your tier default or a staff-granted override (with the date the override automatically expires). Previously this data was only reachable by calling GET /v1/account/rate-limits from the SDK or curl. The endpoint stays available for programmatic reads.",
   },
   {
     date: '2026-06-11',
@@ -103,13 +103,13 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-05-22',
     category: 'pricing',
     title: 'Crypto checkout is live via NowPayments',
-    body: 'The crypto payment rail previously deferred at launch is now live. Self-serve paid tiers ($79/mo and up) can pay with cryptocurrency (BTC, LTC, USDT, USDC, ETH, XMR) through NowPayments — open the crypto checkout from the billing dashboard, send the displayed amount, and the order moves pending → confirming → paid as on-chain confirmations land. crypto.order.paid and crypto.order.failed are emitted and subscribable via POST /v1/webhooks. Stripe remains the default rail; Enterprise settles via wire. Crypto payments are non-refundable. Full reference at docs.driftstack.dev/api/billing-crypto.',
+    body: 'The crypto payment option (the crypto rail) we postponed at launch is now live. Self-serve paid tiers ($79/mo and up) can pay with cryptocurrency (BTC, LTC, USDT, USDC, ETH, XMR) through NowPayments — open the crypto checkout from the billing dashboard, send the displayed amount, and the order moves pending → confirming → paid as on-chain confirmations land. crypto.order.paid and crypto.order.failed are emitted and subscribable via POST /v1/webhooks. Stripe remains the default way to pay (the default rail); Enterprise pays by bank wire. Crypto payments are non-refundable. Full reference at docs.driftstack.dev/api/billing-crypto.',
   },
   {
     date: '2026-05-20',
     category: 'launch',
     title: 'Account notification stream (SSE) — cost / incident / audit / session events',
-    body: "New GET /v1/account/me/notifications Server-Sent Events endpoint surfaces a single per-account stream of real-time events. Four kinds in v0: cost.threshold_alert (fires on tier-spend transitions; warn / critical / resolved), incident.broadcast (customer-visible status incidents with minor / major / outage severity), audit.high_severity (selective republish for high-severity audit actions like api_key.revoked / byok_anthropic.key_set / team.member_removed), and session.errored (driver-terminal errors before customer destroy). Each frame uses the SSE event: header as the discriminator so subscribers can route via EventSource.addEventListener('cost.threshold_alert', ...). The desktop GUI client ships with the wired panel: subscribeNotifications + useNotifications hook + NotificationToastStack overlay component already mounted at the App shell. Bus is in-memory v0 — no Last-Event-ID resume yet; native EventSource auto-reconnect (3s backoff) covers transient drops. Full reference at docs.driftstack.dev/api/account-notifications.",
+    body: "Your account now has a single live event feed — real-time alerts your code or the desktop app can listen to — via the new GET /v1/account/me/notifications Server-Sent Events (SSE) endpoint. Four kinds in v0: cost.threshold_alert (fires on tier-spend transitions; warn / critical / resolved), incident.broadcast (customer-visible status incidents with minor / major / outage severity), audit.high_severity (selective republish for high-severity audit actions like api_key.revoked / byok_anthropic.key_set / team.member_removed), and session.errored (driver-terminal errors before customer destroy). Each event is labelled by kind (the SSE event: header), so code can listen for only the kinds it cares about — EventSource.addEventListener('cost.threshold_alert', ...). The desktop GUI client ships with the wired panel: subscribeNotifications + useNotifications hook + NotificationToastStack overlay component already mounted at the App shell. First version: if the connection drops it reconnects itself after ~3 seconds (native EventSource auto-reconnect), but events sent while you were disconnected aren't replayed yet (in-memory bus, no Last-Event-ID resume). Full reference at docs.driftstack.dev/api/account-notifications.",
   },
   {
     date: '2026-05-20',
@@ -127,7 +127,7 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-05-18',
     category: 'launch',
     title: 'Agent sessions: natural-language automation with AI / manual / pair modes',
-    body: 'Layer a chat-style decompose-and-execute loop on top of any driver session. Send a user message ("open https://example.com and capture a screenshot"); the server\'s decomposer translates it into structured intents (navigate, interact, wait, capture); the runtime executes them. Three operational modes: AI (default — every message goes through decompose), manual (pass-through for clients driving via their own UI), and pair (interactive takeover state machine — AI drives by default, the customer can take over and hand back). Live transcript via Server-Sent Events on /v1/agent-sessions/{id}/transcript with Last-Event-ID resume. Full reference at docs.driftstack.dev/api/agent-sessions.',
+    body: 'Tell any session what to do in plain language (a chat-style decompose-and-execute loop layered on top of any driver session). Send a user message ("open https://example.com and capture a screenshot"); the server\'s decomposer translates it into concrete browser steps — structured intents (navigate, interact, wait, capture) — and the runtime executes them. Three operational modes: AI (default — every message goes through decompose), manual (pass-through for clients driving via their own UI), and pair (interactive takeover state machine — AI drives by default, the customer can take over and hand back). Live transcript via Server-Sent Events on /v1/agent-sessions/{id}/transcript with Last-Event-ID resume. Full reference at docs.driftstack.dev/api/agent-sessions.',
   },
   {
     date: '2026-05-18',
@@ -145,7 +145,7 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-05-16',
     category: 'launch',
     title: 'Sign in with Google or GitHub',
-    body: 'One-click sign-in + signup with Google or GitHub now live on /login and /signup. Existing-email collisions get a verify-merge email (60-minute single-use link) so the IDP-supplied email is confirmed against the existing password account before the link lands. Revoked IDP links surface a "re-link or sign in with password" prompt instead of silently failing. Avatar + display name pull from the first IDP linked and become user-overridable from /settings.',
+    body: 'One-click sign-in + signup with Google or GitHub now live on /login and /signup. If the email already has a password account, we first send that address a confirmation email (single-use link, valid 60 minutes) — so the email Google or GitHub supplies (the identity provider, IDP) is proven to be yours before the two accounts are merged. Revoked IDP links surface a "re-link or sign in with password" prompt instead of silently failing. Avatar + display name pull from the first IDP linked and become user-overridable from /settings.',
   },
   {
     date: '2026-05-09',
@@ -198,7 +198,7 @@ const ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-08',
     category: 'security',
-    title: 'Team RBAC end-to-end: members act on owner resources via X-Driftstack-Account',
+    title: 'Team roles end-to-end: members can act on the owner\'s account (RBAC)',
     body: 'A member of a team can scope any /v1/* request to the owner\'s resources by passing the X-Driftstack-Account header. Read endpoints accept both member and admin roles; write endpoints (POST/PATCH/DELETE/api-keys rotate) require admin role. Customer dashboard adds an "Acting as" picker in the sidebar; the active selection injects the header into every request automatically. Full reference at docs.driftstack.dev/api/team.',
   },
   {
@@ -247,8 +247,10 @@ const ENTRIES: readonly ChangelogEntry[] = [
 
 const CATEGORY_COLOR: Record<ChangelogEntry['category'], string> = {
   launch: 'bg-tk-accent text-white',
-  sdk: 'bg-tk-raised text-tk-ink',
-  docs: 'bg-tk-raised text-tk-ink',
+  // (bg-tk-raised on the card's bg-tk-surface was a near-invisible
+  // dark-on-dark pill on the dark theme; border gives the chip a shape.)
+  sdk: 'border border-tk-border bg-tk-raised text-tk-ink',
+  docs: 'border border-tk-border bg-tk-raised text-tk-ink',
   security: 'bg-red-100 text-red-900',
   // (was text-tk-accent-soft — the 13%-alpha WASH token misused as a text
   // color; rendered 1.21:1, effectively invisible. amber-900 matches the
@@ -267,9 +269,9 @@ const CATEGORY_COLOR: Record<ChangelogEntry['category'], string> = {
     <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
       Customer-facing changes, in reverse-chronological order. SDK
       releases, pricing changes, security posture updates,
-      self-hosted-tier adjustments. Engineering-internal changes
-      (refactors, test fixtures, observability work) live in the
-      verification log inside the repo, not here.
+      self-hosted-tier adjustments. Internal engineering changes
+      (code restructuring, test tooling, monitoring work) are
+      tracked in our internal logs, not here.
     </p>
     <p class="mt-3 max-w-prose text-base text-tk-ink-2">
       For what lands next, see the

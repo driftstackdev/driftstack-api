@@ -51,17 +51,27 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
   it("Security card pinned: 'Architecture + posture →' + 5-pillar shipped commitment. 2026-05-22 — customer-configurable egress flipped from roadmap to shipped (planning 133 Phase 1 + SocksProxyBackend wired in bootstrap); pillar count bumped 4→5; SOCKS5/UDP/QUIC/WebRTC/OpenVPN/WireGuard added.", () => {
     expect(body).toMatch(/Architecture \+ posture →/);
     expect(body).toMatch(/Five pillars shipped today/);
-    expect(body).toMatch(/scrypt-hashed API keys at rest/);
-    expect(body).toMatch(/HMAC-signed webhooks/);
-    expect(body).toMatch(/no-customer-data-access enforcement/);
-    expect(body).toMatch(/EU-resident infrastructure/);
-    expect(body).toMatch(/customer-configurable\s+egress per profile/);
+    // S20c 2026-07-06 plain-language pass: all five pillars survive
+    // with plain words leading and the precise terms in parens.
+    expect(body).toMatch(
+      /API keys stored only as\s+one-way scrypt hashes \(unreadable even to us\)/,
+    );
+    expect(body).toMatch(
+      /webhooks\s+cryptographically signed so you can prove each message\s+came from us \(HMAC\)/,
+    );
+    expect(body).toMatch(/a design that keeps our staff from\s+ever seeing your session content/);
+    expect(body).toMatch(/EU-resident\s+infrastructure/);
+    expect(body).toMatch(
+      /each profile bringing its own internet\s+exit — your SOCKS5 proxy \(including UDP\/QUIC\/WebRTC\s+traffic\) or your OpenVPN \/ WireGuard VPN/,
+    );
   });
 
   it("Sub-processors card pinned: 'Live list + regions →' + 'Source of truth for Article 28(2) amendment notices; mirrored in DPA Annex 3.' — pinned so the Article 28(2) + DPA-Annex-3 cross-reference survives in the hub-card too (consistent with the canonical /trust/sub-processors framing)", () => {
     expect(body).toMatch(/Live list \+ regions →/);
+    // S20c 2026-07-06 plain-language pass: same source-of-truth +
+    // Annex-3 mirror facts, plain words lead.
     expect(body).toMatch(
-      /Source of\s*\n?\s*truth for Article 28\(2\) amendment notices; mirrored in DPA\s*\n?\s*Annex 3\./,
+      /This list is the official source for\s+the 30-day change notices GDPR Article 28\(2\) requires, and\s+it appears verbatim as Annex 3 of our data-processing\s+agreement \(DPA\)\./,
     );
   });
 
@@ -74,15 +84,20 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
 
   it("Legal card pinned: 'DPA · Privacy · Terms · AUP →' + 'Data Processing Agreement (Article 28 + SCCs), Privacy Policy (Article 13–15 disclosures), Terms of Service, Acceptable Use Policy.' — pinned so the 4-legal-document scope + the GDPR-Article-anchoring (Article 28 / Article 13–15) survives (drift to dropping AUP would orphan acceptable-use rules; drift to dropping Article anchors would weaken the GDPR-grounding)", () => {
     expect(body).toMatch(/DPA · Privacy · Terms · AUP →/);
+    // S20c 2026-07-06 plain-language pass: same 4 documents + GDPR
+    // Article anchors, with SCCs + Article 13–15 glossed inline.
     expect(body).toMatch(
-      /Data\s*\n?\s*Processing Agreement \(Article 28 \+ SCCs\), Privacy Policy\s*\n?\s*\(Article 13–15 disclosures\), Terms of Service, Acceptable Use\s*\n?\s*Policy\./,
+      /Data\s+Processing Agreement \(GDPR Article 28, including the EU's\s+Standard Contractual Clauses — SCCs — for data sent\s+abroad\), Privacy Policy \(the GDPR Article 13–15\s+disclosures: what we collect and your rights over it\),\s+Terms of Service, Acceptable Use\s+Policy\./,
     );
   });
 
   it("Compliance card pinned: 'Certifications + pen-test + disclosure →' + 'Honest current state: certifications in place + in progress, pen-test access workflow, vulnerability-disclosure policy + safe-harbour' — pinned so the 'honest current state' framing + 4-state compliance scope survives (drift to claiming certs that aren't in place would invite buyer-pushback; drift to dropping 'safe-harbour' would weaken the vulnerability-disclosure protection)", () => {
     expect(body).toMatch(/Certifications \+ pen-test \+ disclosure →/);
+    // S20c 2026-07-06 plain-language pass: same 5-part compliance
+    // scope (certs / pen-test access / disclosure + safe-harbour /
+    // change notice / retention), each said plainly.
     expect(body).toMatch(
-      /Honest current state: certifications in place \+ in progress,\s*\n?\s*pen-test access workflow, vulnerability-disclosure policy \+\s*\n?\s*safe-harbour, sub-processor change SLA, audit-log retention\./,
+      /Honest current state: which certifications are in place or\s+in progress, how to get our penetration-test reports \(paid\s+ethical hackers attacking the platform\), how to report a\s+security hole — and our promise not to sue good-faith\s+researchers \("safe harbour"\) — how much warning you get\s+before we change vendors, and how long logs are kept\./,
     );
   });
 
@@ -102,21 +117,28 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
   });
 
   it("Destination-URL answer pinned: 'No. Session traffic exits through your egress (the SOCKS5 / OpenVPN / WireGuard proxies you configure). Driftstack orchestrates the session; the proxy carries the bytes.' — pinned so the no-we-don't-see-URLs + customer-egress posture survives (drift to softening 'No' would let buyers question what Driftstack actually sees; drift to dropping the SOCKS5/OpenVPN/WG list would lose the customer-controlled-egress specifics). Priority order SOCKS5 / OpenVPN / WireGuard per founder verdict 2026-05-16; matches the API server's user-facing 503 messages.", () => {
+    // S20c 2026-07-06 plain-language pass: hard 'No.' + the
+    // SOCKS5/OpenVPN/WireGuard priority order survive; plain words
+    // explain what 'egress' and 'carries the bytes' meant.
     expect(body).toMatch(
-      /No\. Session traffic exits through your egress \(the SOCKS5 \/\s*\n?\s*OpenVPN \/ WireGuard proxies you configure\)\. Driftstack\s*\n?\s*orchestrates the session; the proxy carries the bytes\./,
+      /No\. Session traffic leaves for the web through the exit you\s+configure \(your egress\) — your own SOCKS5 proxy or OpenVPN \/\s+WireGuard VPN\. Driftstack starts and manages the session;\s+your proxy carries the actual browsing traffic, so the\s+addresses you visit don't pass through us\./,
     );
   });
 
   it("API-keys-recoverable answer pinned: 'No. Keys are scrypt-hashed at rest. A database breach surfaces hashes, not keys. If a key leaks, rotate via the dashboard's 24-hour grace flow.' — pinned so the scrypt-hashing + breach-doesn't-leak-keys + 24-hour-rotation-grace commitments survive (drift to dropping 'scrypt-hashed' would lose the specific-algorithm signal; drift to dropping '24-hour grace' would obscure the rotation-policy)", () => {
+    // S20c 2026-07-06 plain-language pass: hard 'No.' + scrypt +
+    // 24-hour grace facts survive, plain words lead.
     expect(body).toMatch(
-      /No\. Keys are scrypt-hashed at rest\. A database breach surfaces\s*\n?\s*hashes, not keys\. If a key leaks, rotate via the dashboard's\s*\n?\s*24-hour grace flow\./,
+      /No\. Keys are stored only as one-way scrypt hashes — staff,\s+and even a database thief, see scrambled values, not keys\.\s+If a key leaks, rotate it in the dashboard; the old key\s+keeps working for 24 hours \(the grace window\) so nothing\s+breaks mid-switch\./,
     );
   });
 
   it("CTA pinned: 'Bring the questionnaire. We'll fill it.' + 'CAIQ, VSAQ, custom enterprise vendor questionnaires — all welcome.' + mailto:support@driftstack.dev — pinned so the 'we fill questionnaires' commitment + the CAIQ/VSAQ scope + the support-team routing all survive (drift to dropping CAIQ/VSAQ specificity would let buyers question whether their format is supported; drift to dropping 'working day' implicit SLA would let response time slip). Fleet v2 (S10): the hand-rolled CTA section became a <CtaBand> — the btn-primary anchor now renders from the primaryHref/primaryLabel props, so the pin matches the prop form", () => {
     expect(body).toMatch(/title="Bring the questionnaire\. We'll fill it\."/);
+    // S20c 2026-07-06 plain-language pass: CAIQ/VSAQ named as
+    // standard security-questionnaire formats.
     expect(body).toMatch(
-      /CAIQ, VSAQ, custom enterprise vendor questionnaires — all\s*\n?\s*welcome\./,
+      /Standard security-questionnaire formats \(CAIQ, VSAQ\) and custom enterprise vendor questionnaires — all welcome\./,
     );
     expect(body).toMatch(
       /primaryHref="mailto:support@driftstack\.dev"\s*\n?\s*primaryLabel="Email us"/,

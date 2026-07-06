@@ -50,14 +50,15 @@ describe('W499.A apps/marketing-site/src/pages/changelog.astro content parity', 
 
   it('CATEGORY_COLOR 6-entry styling map: launch accent / sdk raised-ink / docs raised-ink / security red-100/900 / pricing amber-100/900 / self-hosted emerald-100/900 — pinned so every category resolves to a real badge color. S20 2026-07-06: the pricing chip completed the -900 correction its siblings got — it still used text-tk-accent-soft (the 13%-alpha WASH token misused as a text color; rendered 1.21:1, effectively invisible).', () => {
     expect(body).toMatch(
-      /const CATEGORY_COLOR: Record<ChangelogEntry\['category'\], string> = \{\s*\n?\s*launch: 'bg-tk-accent text-white',\s*\n?\s*sdk: 'bg-tk-raised text-tk-ink',\s*\n?\s*docs: 'bg-tk-raised text-tk-ink',\s*\n?\s*security: 'bg-red-100 text-red-900',\s*\n?\s*(?:\s*\/\/[^\n]*)*\s*pricing: 'bg-amber-100 text-amber-900',\s*\n?\s*'self-hosted': 'bg-emerald-100 text-emerald-900',\s*\n?\s*\};/,
+      /const CATEGORY_COLOR: Record<ChangelogEntry\['category'\], string> = \{\s*\n?\s*launch: 'bg-tk-accent text-white',\s*\n?\s*(?:\s*\/\/[^\n]*)*\s*sdk: 'border border-tk-border bg-tk-raised text-tk-ink',\s*\n?\s*docs: 'border border-tk-border bg-tk-raised text-tk-ink',\s*\n?\s*security: 'bg-red-100 text-red-900',\s*\n?\s*(?:\s*\/\/[^\n]*)*\s*pricing: 'bg-amber-100 text-amber-900',\s*\n?\s*'self-hosted': 'bg-emerald-100 text-emerald-900',\s*\n?\s*\};/,
     );
   });
 
   it("Hero framing: 'What changed.' heading + 'Customer-facing changes, in reverse-chronological order. SDK releases, pricing changes, security posture updates, self-hosted-tier adjustments. Engineering-internal changes (refactors, test fixtures, observability work) live in the verification log inside the repo, not here.' — pinned so the customer-facing-only scope + the engineering-internal exclusion both survive (drift to including engineering-internal would clutter the changelog with noise customers don't care about)", () => {
     expect(body).toMatch(/What changed\./);
     expect(body).toMatch(
-      /Customer-facing changes, in reverse-chronological order\. SDK\s*\n?\s*releases, pricing changes, security posture updates,\s*\n?\s*self-hosted-tier adjustments\. Engineering-internal changes\s*\n?\s*\(refactors, test fixtures, observability work\) live in the\s*\n?\s*verification log inside the repo, not here\./,
+      // S20c 2026-07-06: same scope exclusion, plain words lead.
+      /Customer-facing changes, in reverse-chronological order\. SDK\s+releases, pricing changes, security posture updates,\s+self-hosted-tier adjustments\. Internal engineering changes\s+\(code restructuring, test tooling, monitoring work\) are\s+tracked in our internal logs, not here\./,
     );
   });
 

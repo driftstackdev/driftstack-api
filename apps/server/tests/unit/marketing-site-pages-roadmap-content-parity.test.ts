@@ -126,11 +126,20 @@ describe('W499.B apps/marketing-site/src/pages/roadmap.astro content parity', ()
 
   it("Agent sessions body framing in NOW pins the 3 operational modes (AI / manual / pair) + SSE transcript + bundled/BYOK billing — drift to dropping any mode would understate the v1.0 surface; drift to dropping the SSE transcript or BYOK mention would mismatch the changelog 2026-05-18 entry that customers will read alongside the roadmap. Slice 131 corrected the BYOK framing from the aspirational '/settings → BYOK Anthropic' shape (no such dashboard UI ships at v1.0) to the honest 'via PUT /v1/account/me/byok-anthropic-key, dashboard at v1.1' shape", () => {
     expect(body).toMatch(/AI \/ manual \/ pair modes/);
-    expect(body).toMatch(/AI mode \(default\)/);
-    expect(body).toMatch(/Server-Sent Events with Last-Event-ID resume/);
-    expect(body).toMatch(/Bundled LLM is opt-in/);
-    expect(body).toMatch(/BYOK Anthropic via PUT \/v1\/account\/me\/byok-anthropic-key/);
-    expect(body).toMatch(/the dashboard surface lands at v1\.1/);
+    // S20c 2026-07-06 plain-language pass: all 3 modes + SSE resume +
+    // opt-in AI + BYOK route + honest v1.1-dashboard state survive,
+    // plain words lead with the precise terms in parens.
+    expect(body).toMatch(/AI mode \(the default\) turns your message into concrete browser steps/);
+    expect(body).toMatch(
+      /\(Server-Sent Events\); if your connection drops, it resumes where it left off \(Last-Event-ID resume\)/,
+    );
+    expect(body).toMatch(/The built-in AI is opt-in and runs on an Anthropic budget we manage/);
+    expect(body).toMatch(
+      /bring your own Anthropic key \(BYOK\) via PUT \/v1\/account\/me\/byok-anthropic-key/,
+    );
+    expect(body).toMatch(
+      /the server route is live today and your stored key is used automatically; the dashboard page for it lands at v1\.1/,
+    );
     // Drift sentinel — the pre-slice-131 aspirational claim about a
     // dashboard "/settings → BYOK Anthropic" surface must NOT come
     // back until that UI actually ships. Pinning the regex prevents

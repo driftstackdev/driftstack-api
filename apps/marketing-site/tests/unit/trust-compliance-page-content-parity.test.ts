@@ -71,7 +71,7 @@ describe('W375.C marketing-site /trust/compliance page content parity', () => {
   it('SOC 2 Type II: status "Planned" + "Q1 2027"', () => {
     expect(body).toMatch(/<span class="font-medium text-tk-ink">SOC 2 Type II<\/span>/);
     expect(body).toMatch(
-      /<span[\s\S]{0,40}class="inline-block rounded-full bg-tk-raised[\s\S]{0,80}>\s*Planned\s*<\/span\s*>/,
+      /<span[\s\S]{0,40}class="inline-block rounded-full border border-tk-border bg-tk-raised[\s\S]{0,80}>\s*Planned\s*<\/span\s*>/, // S20c 2026-07-06: border added so the neutral pill is visible on dark,
     );
     expect(body).toMatch(/Q1 2027/);
   });
@@ -91,18 +91,22 @@ describe('W375.C marketing-site /trust/compliance page content parity', () => {
 
   it('pen-test NDA-gated full report: 1-business-day NDA response + 7-day signed download URL', () => {
     expect(body).toMatch(/Full report \(NDA-gated\)/);
+    // S20c 2026-07-06 plain-language pass: signed URL said plainly.
     expect(body).toMatch(
-      /We respond within\s+one business day with the NDA\. Approved requests receive a\s+7-day signed download URL\./,
+      /We respond within\s+one business day with the NDA\. Approved requests receive a\s+private download link that works for 7 days \(a signed\s+URL\)\./,
     );
     expect(body).toMatch(/mailto:security@driftstack\.dev/);
   });
 
   it('vulnerability disclosure: 2-day ack / 5-day triage / 14-day update cadence / 90-day coordinated window', () => {
     expect(body).toMatch(/Acknowledge receipt within 2 business days/);
-    expect(body).toMatch(/Triage \+ initial severity within 5 business days/);
-    expect(body).toMatch(/Status updates at least every 14 days until resolution/);
     expect(body).toMatch(
-      /Coordinated disclosure window: 90 days from report,\s+extendable on mutual agreement/,
+      /First assessment \(triage\) \+ an initial severity rating within 5 business days/,
+    ); // S20c 2026-07-06
+    expect(body).toMatch(/Status updates at least every 14 days until resolution/);
+    // S20c 2026-07-06 plain-language pass: window said plainly.
+    expect(body).toMatch(
+      /keep the finding private for 90\s+days from the report while we fix it \(the coordinated\s+disclosure window\), extendable on mutual agreement/,
     );
   });
 
@@ -111,8 +115,13 @@ describe('W375.C marketing-site /trust/compliance page content parity', () => {
     expect(body).toMatch(
       /good-faith security\s+research on the platform's public surface \(api\.driftstack\.dev,\s+driftstack\.dev, app\.driftstack\.dev\)/,
     );
-    expect(body).toMatch(/Don't access, modify, or exfiltrate other customers' data\./);
-    expect(body).toMatch(/Don't degrade service availability \(no load tests against prod\)\./);
+    // S20c 2026-07-06 plain-language pass: same 3 conditions.
+    expect(body).toMatch(
+      /Don't access, change, or copy out \(exfiltrate\) other customers' data\./,
+    );
+    expect(body).toMatch(
+      /Don't slow down or break the service for others — no load tests against the live platform \(prod\)\./,
+    );
     expect(body).toMatch(/Report findings privately before public disclosure\./);
   });
 
@@ -130,11 +139,17 @@ describe('W375.C marketing-site /trust/compliance page content parity', () => {
     expect(body).toMatch(/<span class="font-medium text-tk-ink">Admin audit log<\/span>/);
     expect(body).toMatch(/internal-only retention of 365 days for every privileged\s+admin action/);
     expect(body).toMatch(/<span class="font-medium text-tk-ink">Access logs<\/span>/);
-    expect(body).toMatch(/90 days hot, 1 year cold for forensic timeline reconstruction/);
+    // S20c 2026-07-06 plain-language pass: hot/cold said plainly.
+    expect(body).toMatch(
+      /kept 90 days in quick-access storage \("hot"\), then 1 year in\s+archive \("cold"\)/,
+    );
+    expect(body).toMatch(/forensic\s+timeline reconstruction/);
   });
 
   it('audit-log retention cross-references ADR-006 + /docs/audit-log', () => {
-    expect(body).toMatch(/Per ADR-006:/);
+    expect(body).toMatch(
+      /Per our written retention policy \(internal decision record\s+ADR-006\):/,
+    ); // S20c 2026-07-06
     expect(body).toMatch(/<a href="\/docs\/audit-log" class="text-tk-accent-text underline"/);
   });
 

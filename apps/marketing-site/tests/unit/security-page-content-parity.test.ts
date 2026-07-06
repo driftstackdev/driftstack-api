@@ -45,7 +45,7 @@ describe('W365.A marketing-site /security page parity', () => {
     expect(body).toMatch(/02 · Egress/);
     expect(body).toMatch(/03 · API keys/);
     expect(body).toMatch(/04 · Webhooks/);
-    expect(body).toMatch(/05 · Team RBAC/);
+    expect(body).toMatch(/05 · Team roles \(RBAC\)/); // S20c 2026-07-06: plain words lead, RBAC kept in parens
     expect(body).toMatch(/06 · No-customer-data-access posture/);
   });
 
@@ -58,17 +58,24 @@ describe('W365.A marketing-site /security page parity', () => {
 
   it('scrypt logN=15 + 30s sha256-keyed auth cache parameters pinned (falsifiable claims)', () => {
     expect(body).toMatch(/scrypt \(logN=15\)/);
-    expect(body).toMatch(/30-second sha256-keyed cache/);
+    // S20c 2026-07-06 plain-language pass: same 30s sha256-keyed cache
+    // fact, said plainly.
+    expect(body).toMatch(
+      /remembered for 30 seconds in a protected in-memory\s+cache \(sha256-keyed\)/,
+    );
     // The "Plaintext is returned exactly once" claim is the same
     // promise customer-dashboard /api-keys makes — load-bearing.
-    expect(body).toMatch(/Plaintext is returned exactly once, on creation/);
+    expect(body).toMatch(/The\s+readable key is shown exactly once, when you create it/);
   });
 
   it('webhook signature shape t=<timestamp>,v1=<hex> + 5-min replay window pinned (V-359)', () => {
     expect(body).toMatch(
       /Driftstack-Signature header[\s\S]{0,80}t=&lt;timestamp&gt;,v1=&lt;hex&gt;/,
     );
-    expect(body).toMatch(/default 5-minute timestamp\s+tolerance protects against replay/);
+    // S20c 2026-07-06: same 5-minute replay window, plain words lead.
+    expect(body).toMatch(
+      /Messages older than the default 5-minute timestamp\s+tolerance are rejected, so an intercepted copy can't be\s+re-sent later \("replay"\)/,
+    );
     expect(body).toMatch(/verifyWebhookSignature/);
   });
 
@@ -79,7 +86,10 @@ describe('W365.A marketing-site /security page parity', () => {
       /<strong class="block text-tk-ink">Data residency is EU-default\.<\/strong>/,
     );
     // EU-only stack disclosed.
-    expect(body).toMatch(/Hetzner FSN\s*\+ Neon EU \+ Upstash EU \+ Cloudflare R2 EU/);
+    // S20c 2026-07-06: FSN datacenter code spelled out for non-engineers.
+    expect(body).toMatch(
+      /Hetzner in\s+Falkenstein, Germany \+ Neon EU \+ Upstash EU \+ Cloudflare R2\s+EU/,
+    );
   });
 
   it('sub-processor list cited + cross-link to /trust/sub-processors resolves', () => {
@@ -121,7 +131,7 @@ describe('W365.A marketing-site /security page parity', () => {
 
   it('audit-log export pinned ↔ /v1/account/audit-log/export (GDPR Article 20)', () => {
     expect(body).toMatch(/<code class="font-mono">\/v1\/account\/audit-log\/export<\/code>/);
-    expect(body).toMatch(/\(GDPR Article 20\)/);
+    expect(body).toMatch(/your data-portability right under GDPR Article 20\)/); // S20c 2026-07-06
   });
 
   it('cross-account-lookup-404-never-403 design constraint pinned', () => {
@@ -138,8 +148,9 @@ describe('W365.A marketing-site /security page parity', () => {
   it('supply-chain section pinned: Node 22 LTS / Dependabot+Renovate / CycloneDX SBOM', () => {
     expect(body).toMatch(/Node 22 LTS/);
     expect(body).toMatch(/Dependabot \+ Renovate/);
-    expect(body).toMatch(/CycloneDX SBOM/);
+    // S20c 2026-07-06: SBOM said plainly (ingredients list), CycloneDX kept.
+    expect(body).toMatch(/an SBOM, in the standard\s+CycloneDX format/);
     // Signed container images pinned (deploy-pipeline-signs claim).
-    expect(body).toMatch(/Container images are signed/);
+    expect(body).toMatch(/container image\) is cryptographically signed/); // S20c 2026-07-06
   });
 });

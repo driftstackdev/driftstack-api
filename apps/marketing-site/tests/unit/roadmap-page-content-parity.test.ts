@@ -156,7 +156,11 @@ describe('W369.A marketing-site /roadmap page content parity', () => {
   });
 
   it('5-minute timestamp tolerance webhook claim aligns with /security V-359 contract', () => {
-    expect(body).toMatch(/HMAC-SHA256-signed events with 5-minute timestamp tolerance/);
+    // S20c 2026-07-06 plain-language pass: same HMAC-SHA256 + 5-minute
+    // tolerance facts, plain words lead.
+    expect(body).toMatch(
+      /cryptographically signed \(HMAC-SHA256\)[^']{0,80}5-minute clock-difference allowance \(timestamp tolerance\)/,
+    );
   });
 
   it('free-tier CTA cross-link points at /pricing#free (consistent with /about + /comparison)', () => {

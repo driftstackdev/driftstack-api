@@ -31,7 +31,7 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
     case 'material_change':
       return 'bg-amber-100 text-amber-800';
     case 'register_published':
-      return 'bg-tk-raised text-tk-ink-2';
+      return 'border border-tk-border bg-tk-raised text-tk-ink-2';
   }
 }
 ---
@@ -73,7 +73,7 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
               <th class="py-4 pr-4 font-medium text-tk-ink-2">Sub-processor</th>
               <th class="px-4 py-4 font-medium text-tk-ink-2">Region</th>
               <th class="px-4 py-4 font-medium text-tk-ink-2">Purpose</th>
-              <th class="px-4 py-4 font-medium text-tk-ink-2">Transfer mechanism</th>
+              <th class="px-4 py-4 font-medium text-tk-ink-2">Transfer mechanism (legal basis for any data leaving the EU)</th>
             </tr>
           </thead>
           <tbody>
@@ -126,9 +126,10 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
     <div class="mx-auto max-w-4xl px-6 py-16">
       <h2 class="text-2xl font-semibold text-tk-ink">Change log.</h2>
       <p class="mt-3 max-w-prose text-sm text-tk-ink-2">
-        Every material change to the register lands here as an immutable
-        entry. Cosmetic edits (rewording, typo fixes) don't qualify and
-        aren't logged.
+        Every meaningful change to this list is recorded here
+        permanently — entries are never edited or removed (an immutable
+        record). Cosmetic edits (rewording, typo fixes) don't qualify
+        and aren't logged.
       </p>
       <ol class="mt-8 space-y-4">
         {

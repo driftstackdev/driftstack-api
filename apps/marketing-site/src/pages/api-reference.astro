@@ -29,10 +29,13 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
   <!-- Hero -->
   <PageHero label="API reference" title="Every endpoint, every shape.">
     <p class="mt-5 max-w-prose text-lg leading-8 text-tk-ink-2">
-      The Driftstack API is documented as an OpenAPI 3.1 spec generated
-      from the same Zod schemas the server uses at runtime. There is no
+      The Driftstack API is documented in a standard machine-readable
+      format (an OpenAPI 3.1 spec), generated from the exact same
+      validation rules (Zod schemas) the server itself enforces at
+      runtime. There is no
       second source of truth — if a route exists, it's in the spec; if
-      it's in the spec, the SDK has typed bindings for it.
+      it's in the spec, the SDKs already know its exact shapes (typed
+      bindings).
     </p>
     <div class="mt-8 flex flex-wrap items-center gap-4">
       <a href={API_DOCS_URL} class="btn-primary">Open interactive reference →</a>
@@ -298,14 +301,14 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
       </p>
       <div class="mt-5 grid gap-4 md:grid-cols-2">
         <pre
-          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
+          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
 curl -X POST https://api.driftstack.dev/v1/sessions \\
   -H "authorization: Bearer $DRIFTSTACK_API_KEY" \\
   -H "content-type: application/json" \\
   -d '{"archetype":"iphone17_ios18_7_safari26_4"}'
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
+          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
 import { Driftstack } from "@driftstack/sdk";
 const client = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
 const session = await client.sessions.create({
@@ -314,14 +317,14 @@ const session = await client.sessions.create({
 console.log(session.id);
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
+          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
 from driftstack import Driftstack
 client = Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"])
 session = client.sessions.create({"archetype": "iphone17_ios18_7_safari26_4"})
 print(session.id)
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
+          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
 client := driftstack.New(os.Getenv("DRIFTSTACK_API_KEY"))
 session, err := client.Sessions.Create(ctx, &driftstack.CreateSessionRequest{
     Archetype: "iphone17_ios18_7_safari26_4",
@@ -342,7 +345,7 @@ fmt.Println(session.ID)
       </p>
       <div class="mt-5 grid gap-4 md:grid-cols-2">
         <pre
-          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
+          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
 curl -X POST $URL/navigate \\
   -d '{"url":"https://example.com"}' ...
 curl -X POST $URL/interact \\
@@ -351,7 +354,7 @@ curl -X POST $URL/wait \\
   -d '{"condition":{"kind":"selector","selector":"main"}}' ...
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
+          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
 await client.sessions.navigate(session.id, { url: "https://example.com" });
 await client.sessions.interact(session.id, {
   action: { kind: "tap", selector: "button.cta" },
@@ -362,7 +365,7 @@ await client.sessions.wait(session.id, {
 });
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
+          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
 client.sessions.navigate(session.id, {"url": "https://example.com"})
 client.sessions.interact(session.id, {
     "action": {"kind": "tap", "selector": "button.cta"},
@@ -373,7 +376,7 @@ client.sessions.wait(session.id, {
 })
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
+          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
 _, err = client.Sessions.Navigate(ctx, session.ID, &driftstack.NavigateRequest{
     URL: "https://example.com",
 })
@@ -391,31 +394,33 @@ _, err = client.Sessions.Interact(ctx, session.ID, &driftstack.InteractRequest{
         <code class="font-mono">capture</code> takes one of four kinds:
         <code class="font-mono">screenshot</code>, <code class="font-mono">dom</code>,
         <code class="font-mono">pdf</code>, or <code class="font-mono">recording</code>.
-        The response carries a base64 <code class="font-mono">data</code> field
-        for the first three; recordings stream to R2 + return a
-        signed-URL handle.
+        The response carries the file's contents directly as
+        base64-encoded text (the <code class="font-mono">data</code> field)
+        for the first three; recordings are saved to cloud storage
+        (Cloudflare R2) and the response returns a private,
+        time-limited download link (a signed-URL handle).
       </p>
       <div class="mt-5 grid gap-4 md:grid-cols-2">
         <pre
-          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
+          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
 curl -X POST $URL/capture \\
   -d '{"kind":"screenshot"}' ...
 # response.data is base64 PNG
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
+          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
 const shot = await client.sessions.capture(session.id, {
   kind: "screenshot",
 });
 fs.writeFileSync("out.png", Buffer.from(shot.data, "base64"));
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
+          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
 shot = client.sessions.capture(session.id, {"kind": "screenshot"})
 Path("out.png").write_bytes(base64.b64decode(shot.data))
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-tk-bg p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
+          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
 shot, _ := client.Sessions.Capture(ctx, session.ID, &driftstack.CaptureRequest{
     Kind: driftstack.CaptureScreenshot,
 })
@@ -432,11 +437,13 @@ os.WriteFile("out.png", data, 0644)
        react" before they pick the SDK. -->
   <Section label="Error reference" title="What can go wrong, and what to do about it.">
     <p class="mt-4 max-w-prose text-tk-ink-2">
-      Every error is RFC 9457
-      <code class="font-mono">application/problem+json</code> with a
-      stable <code class="font-mono">type</code> URI. SDK clients
-      translate these into typed error classes; the cURL caller
-      gets the JSON straight.
+      Every error follows the web standard for machine-readable
+      errors — RFC 9457
+      <code class="font-mono">application/problem+json</code> — and
+      carries a stable <code class="font-mono">type</code> URI: a
+      web link that identifies, and explains, the error kind. The
+      SDKs turn these into named error classes; the cURL caller
+      gets the same JSON straight.
     </p>
     <div class="panel mt-8 overflow-x-auto">
       <table class="min-w-full text-sm">
@@ -494,7 +501,7 @@ os.WriteFile("out.png", data, 0644)
           <tr class="border-b border-tk-border">
             <td class="py-2 pr-4">429</td>
             <td class="py-2 pr-4">errors.driftstack.dev/concurrency-limit</td>
-            <td class="py-2 pr-4 font-sans">Account hit its tier-bound concurrent-session cap.</td>
+            <td class="py-2 pr-4 font-sans">Your plan's limit on sessions running at the same time (the tier-bound concurrent-session cap) — end a session or wait for one to finish.</td>
             <td class="py-2">ConcurrencyLimitError</td>
           </tr>
           <tr class="border-b border-tk-border">
@@ -528,7 +535,7 @@ os.WriteFile("out.png", data, 0644)
       </li>
       <li class="flex gap-3">
         <span class="arrow-bullet">→</span>
-        <span>Every error case maps to an RFC 9457 <code class="font-mono">application/problem+json</code> response with a stable <code class="font-mono">type</code> URI.</span>
+        <span>Every error case maps to the web standard for machine-readable errors — an RFC 9457 <code class="font-mono">application/problem+json</code> response with a stable <code class="font-mono">type</code> URI (a link that explains the error).</span>
       </li>
       <li class="flex gap-3">
         <span class="arrow-bullet">→</span>

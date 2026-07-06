@@ -170,7 +170,11 @@ describe('W368.A marketing-site /faq page content parity', () => {
   });
 
   it('AUP link to /legal/aup + explicit prohibition list pinned (CSAM / fraud / sneaker bots)', () => {
-    expect(body).toMatch(/href="\/legal\/aup"/);
+    // S20c 2026-07-06: the S20b rewrite flipped this answer to a
+    // double-quoted data-file literal (it now contains apostrophes),
+    // so the href quotes appear escaped (href=\"...\") in source —
+    // accept both quote styles, same as the apostrophe note below.
+    expect(body).toMatch(/href=\\?"\/legal\/aup\\?"/);
     // Note: the data-file literal may or may not escape the apostrophe
     // (`don\'t`) depending on the string's quote style — accept both.
     expect(body).toMatch(/We don\\?'t allow attacks on third-party systems/);

@@ -53,15 +53,20 @@ import CtaBand from '../components/CtaBand.astro';
         <h3 class="mt-3 text-2xl font-semibold text-tk-ink">
           Everything between you and us travels encrypted.
         </h3>
-        <p class="mt-2 font-mono text-xs text-tk-ink-3">TLS 1.2 + 1.3, HSTS preload-eligible.</p>
+        <p class="mt-2 font-mono text-xs text-tk-ink-3">TLS 1.2 + 1.3, HSTS preload-eligible (browsers forced onto HTTPS).</p>
         <p class="mt-3 text-tk-ink-2">
-          All inbound traffic is HTTPS — Cloudflare terminates TLS
-          at the edge with full (strict) origin validation against
-          our Hetzner host. The API server speaks TLS 1.2 / 1.3
-          only and sets a 2-year HSTS header with
-          <code>includeSubDomains</code> + <code>preload</code>.
-          No plaintext HTTP on any customer-facing path.
-          Authentication is Bearer API key, not client-certificate.
+          All traffic to us is HTTPS — encrypted the whole way.
+          Cloudflare, our edge network, handles the encryption first
+          (terminating TLS at the edge) and strictly verifies it is
+          really talking to our own server at Hetzner (full "strict"
+          origin validation) before passing anything on. The API
+          server speaks TLS 1.2 / 1.3 only and sets a 2-year HSTS
+          header with <code>includeSubDomains</code> + <code>preload</code>
+          — an instruction that makes browsers refuse to ever connect
+          to us unencrypted. No unencrypted page (plaintext HTTP)
+          exists on any customer-facing path. You identify yourself by
+          sending your API key along with each request (a "Bearer"
+          key) — no client certificates to install.
         </p>
       </div>
 
@@ -80,13 +85,19 @@ import CtaBand from '../components/CtaBand.astro';
         </h3>
         <p class="mt-2 font-mono text-xs text-tk-ink-3">Customer-configurable egress, per profile.</p>
         <p class="mt-3 text-tk-ink-2">
-          Each profile can attach its own egress configuration —
-          SOCKS5 (with full UDP / WebRTC / QUIC tunnelling), OpenVPN
-          (.ovpn file), or WireGuard (.conf). Sessions bound to a
-          profile dial the tunnel before launching the browser; DNS
-          leaks blocked. Without an attached config, session traffic
+          Each profile can attach its own egress configuration — its
+          own exit to the internet
+          (<a href="/glossary#egress" class="text-tk-accent-text underline">egress</a>):
+          a SOCKS5 proxy — including the video-call and modern-web
+          traffic types (UDP / WebRTC / QUIC) that many proxies drop —
+          an OpenVPN file (.ovpn), or a WireGuard file (.conf). A
+          session bound to the profile connects to your proxy or VPN
+          ("dials the tunnel") before the browser even launches, and
+          address-lookup traffic can't slip out around it (DNS
+          leaks blocked). Without an attached config, session traffic
           exits via Driftstack-managed infrastructure. We never
-          store destination response bodies. See
+          store destination response bodies — the pages your
+          sessions visit. See
           <a href="/trust/security-overview" class="text-tk-accent-text underline">/trust/security-overview</a>
           for the full posture.
         </p>
@@ -105,14 +116,18 @@ import CtaBand from '../components/CtaBand.astro';
         <h3 class="mt-3 text-2xl font-semibold text-tk-ink">
           We couldn't read your keys if we tried.
         </h3>
-        <p class="mt-2 font-mono text-xs text-tk-ink-3">scrypt at rest, never in plaintext.</p>
+        <p class="mt-2 font-mono text-xs text-tk-ink-3">Stored only as one-way scrypt hashes — never readable.</p>
         <p class="mt-3 text-tk-ink-2">
-          API keys are hashed with scrypt (logN=15) before they touch
-          the database. Plaintext is returned exactly once, on creation;
-          after that there is no path — admin, support, ops — to recover
-          it. A database breach surfaces hashes, not keys. Auth runtime
-          uses a 30-second sha256-keyed cache so verification stays
-          fast without weakening at-rest strength.
+          API keys are scrambled one-way with scrypt (logN=15) — a
+          deliberately slow scrambling algorithm that makes guessing
+          impractical — before they ever touch the database. The
+          readable key is shown exactly once, when you create it;
+          after that there is no path — admin, support, ops — to
+          recover it. A database breach surfaces scrambled values
+          (hashes), not keys. To keep requests fast, a just-verified
+          key is remembered for 30 seconds in a protected in-memory
+          cache (sha256-keyed) — speed without weakening how keys are
+          stored.
         </p>
       </div>
 
@@ -129,14 +144,19 @@ import CtaBand from '../components/CtaBand.astro';
         <h3 class="mt-3 text-2xl font-semibold text-tk-ink">
           Every webhook proves it came from us.
         </h3>
-        <p class="mt-2 font-mono text-xs text-tk-ink-3">HMAC-SHA256, replay-windowed.</p>
+        <p class="mt-2 font-mono text-xs text-tk-ink-3">Signed (HMAC-SHA256) · stale messages rejected.</p>
         <p class="mt-3 text-tk-ink-2">
-          Outbound webhook deliveries carry an X-Driftstack-Signature header
+          A webhook is a message we send to your systems when
+          something happens — say, a session finishing. Every delivery
+          carries a signature proving it came from us and wasn't
+          altered: the X-Driftstack-Signature header,
           in the form <code class="font-mono">t=&lt;timestamp&gt;,v1=&lt;hex&gt;</code>.
-          Customers verify with the SDK's
-          <code class="font-mono">verifyWebhookSignature</code> helper
-          (constant-time compare). The default 5-minute timestamp
-          tolerance protects against replay; secrets rotate per-endpoint
+          Your code checks it with one SDK helper,
+          <code class="font-mono">verifyWebhookSignature</code>
+          (a constant-time compare, built to resist timing tricks).
+          Messages older than the default 5-minute timestamp
+          tolerance are rejected, so an intercepted copy can't be
+          re-sent later ("replay"); secrets rotate per-endpoint
           without touching the rest of your account.
         </p>
       </div>
@@ -149,18 +169,20 @@ import CtaBand from '../components/CtaBand.astro';
           </svg>
         </IconTile>
         <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">
-          05 · Team RBAC
+          05 · Team roles (RBAC)
         </p>
         <h3 class="mt-3 text-2xl font-semibold text-tk-ink">
           Your whole team can look. Only admins can change.
         </h3>
         <p class="mt-2 font-mono text-xs text-tk-ink-3">Admin / member roles, scope-gated writes.</p>
         <p class="mt-3 text-tk-ink-2">
-          Team members read the owner's resources but only admin-role
-          members can write. Sessions, profiles, webhooks, API keys,
-          email preferences — every write route enforces the role
-          check at the route layer + audit-logs the actor (member id)
-          separately from the resource owner. Team owners review who
+          Team members can see everything on the owner's account, but
+          only admin-role members can change anything (role-based
+          access control — RBAC). Sessions, profiles, webhooks, API
+          keys, email preferences — every change is permission-checked
+          before it runs (the role check sits at the route layer), and
+          the log records who did it (the member) separately from
+          whose account it was (the owner). Team owners review who
           did what on their account at any time via
           <code class="font-mono">/v1/account/audit-log</code>.
         </p>
@@ -186,10 +208,12 @@ import CtaBand from '../components/CtaBand.astro';
           Driftstack's control plane stores license metadata, session
           metadata (id, lifecycle status, timestamps), and aggregate
           usage counters. It does not store the session content itself.
-          URLs visited, form data submitted, screenshots captured, DOM
-          snapshots, browser cookies — these never reach our infra. For
+          URLs visited, form data submitted, screenshots captured,
+          copies of page content (DOM snapshots), browser cookies —
+          none of it ever reaches our servers. For
           self-hosted deployments, even the metadata stays inside your
-          network; only license-validity heartbeats reach our servers.
+          network; only license-validity heartbeats — periodic "is
+          this license still valid?" check-ins — reach our servers.
         </p>
       </div>
     </div>
@@ -198,7 +222,7 @@ import CtaBand from '../components/CtaBand.astro';
   <!-- What we don't claim -->
   <Section label="What we don't claim" title="Honest scope." class="bg-tk-surface">
     <ul class="mt-8 grid gap-4 md:grid-cols-2">
-      <li class="card p-6 text-sm text-tk-ink-2">
+      <li class="card bg-tk-raised p-6 text-sm text-tk-ink-2">
         <IconTile class="mb-3">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="10" />
@@ -206,12 +230,14 @@ import CtaBand from '../components/CtaBand.astro';
           </svg>
         </IconTile>
         <strong class="block text-tk-ink">No SOC 2.</strong>
-        SOC 2 is not yet certified. We'll start the audit when the
+        SOC 2 — the standard third-party security audit large
+        customers ask their vendors for — is not yet certified. We'll
+        start the audit when the
         audit cost matches the customer profile that asks for it.
         We say so plainly rather than implying compliance via vague
         "enterprise-grade" language.
       </li>
-      <li class="card p-6 text-sm text-tk-ink-2">
+      <li class="card bg-tk-raised p-6 text-sm text-tk-ink-2">
         <IconTile class="mb-3">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="10" />
@@ -219,10 +245,11 @@ import CtaBand from '../components/CtaBand.astro';
           </svg>
         </IconTile>
         <strong class="block text-tk-ink">No ISO 27001.</strong>
-        Same answer. The framework's posture matters; the certificate
-        itself follows when the audit fits the budget.
+        Same answer for this international security-management
+        standard: what matters is running the practices it describes;
+        the certificate itself follows when the audit fits the budget.
       </li>
-      <li class="card p-6 text-sm text-tk-ink-2">
+      <li class="card bg-tk-raised p-6 text-sm text-tk-ink-2">
         <IconTile class="mb-3">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -234,7 +261,7 @@ import CtaBand from '../components/CtaBand.astro';
         Anthropic, Moneybird, MacStadium. Full list with purpose +
         jurisdiction at <a href="/trust/sub-processors" class="text-tk-accent-text underline">/trust/sub-processors</a>.
       </li>
-      <li class="card p-6 text-sm text-tk-ink-2">
+      <li class="card bg-tk-raised p-6 text-sm text-tk-ink-2">
         <IconTile class="mb-3">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z" />
@@ -242,9 +269,11 @@ import CtaBand from '../components/CtaBand.astro';
           </svg>
         </IconTile>
         <strong class="block text-tk-ink">Data residency is EU-default.</strong>
-        Compute, database, object storage all in the EU (Hetzner FSN
-        + Neon EU + Upstash EU + Cloudflare R2 EU). Session execution
-        may run elsewhere under SCCs + EU-US DPF. Detail in the same
+        Compute, database, object storage all in the EU (Hetzner in
+        Falkenstein, Germany + Neon EU + Upstash EU + Cloudflare R2
+        EU). Session execution may run elsewhere under SCCs (the EU's
+        Standard Contractual Clauses for lawful data transfer abroad)
+        + the EU-US Data Privacy Framework. Detail in the same
         sub-processors list.
       </li>
     </ul>
@@ -287,14 +316,18 @@ import CtaBand from '../components/CtaBand.astro';
           Origin
         </p>
         <h3 class="mt-2 text-lg font-medium text-tk-ink">
-          nginx hardening + UFW + fail2ban
+          A locked-down server (nginx + UFW + fail2ban)
         </h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          Hetzner origin host runs nginx with TLS 1.2 + 1.3 only,
-          Mozilla intermediate cipher suite, HSTS preload-eligible. UFW
-          firewall locks the host to ports 22 (SSH), 80 (redirect to
-          443), 443 (TLS). fail2ban bans repeat-offender IPs at the
-          kernel level.
+          Our server at Hetzner runs the nginx web server with modern
+          encryption only (TLS 1.2 + 1.3, Mozilla's recommended
+          intermediate cipher suite, HSTS preload-eligible). A
+          firewall (UFW) leaves exactly three doors open: remote
+          administration (port 22, SSH), a redirect that bounces old
+          unencrypted requests (port 80) onto the encrypted door, and
+          the encrypted door itself (port 443, TLS). Repeat attackers
+          get their address banned automatically at the kernel level
+          (fail2ban).
         </p>
       </div>
       <div class="card p-6">
@@ -310,12 +343,15 @@ import CtaBand from '../components/CtaBand.astro';
           Auth gate + scope check + rate limit
         </h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          Every authenticated route runs through three middleware
-          layers: auth (validates the API key + loads account context),
-          scope check (enforces granular per-resource permissions like
-          <code class="font-mono">read:sessions</code>), rate limit (per-account token
-          buckets backed by Redis with Postgres fallback). Failures
-          short-circuit the request before it touches a service.
+          Every authenticated request passes three checks, in order:
+          is this API key real, and whose is it (auth)? Is this key
+          allowed to do this specific thing (scope check — granular
+          per-resource permissions like
+          <code class="font-mono">read:sessions</code>)? And has this
+          account sent too many requests too fast (rate limit —
+          per-account token buckets backed by Redis with Postgres
+          fallback)? A request that fails any check is refused on the
+          spot — it never reaches the rest of the system.
         </p>
       </div>
       <div class="card p-6">
@@ -331,13 +367,19 @@ import CtaBand from '../components/CtaBand.astro';
           Encryption at rest + isolation
         </h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          API keys are scrypt-hashed with per-key salts; recovery is
-          impossible by design. Account passwords use the same KDF.
-          MFA TOTP secrets, BYOK Anthropic keys, and gui_control_keys
-          all live in AES-256-GCM ciphertext under the same
-          host-resident encryption key, decrypted in-memory only at
-          execution time and never logged. Postgres + Redis carriers
-          provide encryption at rest by default at the storage layer.
+          API keys are one-way scrambled (scrypt-hashed) with a unique
+          random ingredient per key ("per-key salts"), so recovering
+          the original is impossible by design. Account passwords use
+          the same slow scrambler (KDF). Secrets that must stay
+          usable — two-factor login seeds (MFA TOTP secrets),
+          Anthropic API keys you bring for the AI agent (BYOK), and
+          the keys that authenticate desktop-app control commands
+          (gui_control_keys) — live encrypted in AES-256-GCM
+          ciphertext under an encryption key that exists only on our
+          server, decrypted in-memory only at
+          execution time and never logged. The database (Postgres)
+          and cache (Redis) providers additionally encrypt everything
+          they store ("encryption at rest").
         </p>
       </div>
       <div class="card p-6">
@@ -353,12 +395,13 @@ import CtaBand from '../components/CtaBand.astro';
           Append-only customer audit log
         </h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          Every customer-visible event lands in an append-only audit
-          log: API key lifecycle, MFA enrollment, profile changes,
-          webhook secret rotations, login + password changes. Customers
-          export the full log via the dashboard or
+          Every customer-visible event lands in an audit log that can
+          only ever be added to — never edited, never deleted
+          (append-only): API key lifecycle, MFA enrollment, profile
+          changes, webhook secret rotations, login + password changes.
+          Customers export the full log via the dashboard or
           <code class="font-mono">/v1/account/audit-log/export</code>
-          (GDPR Article 20).
+          (your data-portability right under GDPR Article 20).
         </p>
       </div>
       <div class="card p-6">
@@ -374,11 +417,13 @@ import CtaBand from '../components/CtaBand.astro';
           Sentry + structured logs
         </h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          Server errors land in Sentry (EU region) with PII scrubbed.
-          Request logs use Pino structured JSON; slow-query log fires
-          on Postgres queries past a configurable threshold. No customer
-          request body or response body is logged — only metadata
-          sufficient to reconstruct what happened.
+          Server errors go to Sentry, our error-tracking service (EU
+          region), with personal data scrubbed out first (PII
+          scrubbing). Request logs are machine-readable technical
+          records (Pino structured JSON), and unusually slow database
+          queries are flagged automatically (the slow-query log). No
+          customer request body or response body is logged — only
+          metadata sufficient to reconstruct what happened.
         </p>
       </div>
     </div>
@@ -401,33 +446,42 @@ import CtaBand from '../components/CtaBand.astro';
               <span class="text-tk-accent-text">•</span>
               <span>
                 <strong>API key compromise</strong> via leaked secret. Mitigation:
-                scrypt-hashed at rest; rotation flow with 24-hour grace;
-                granular per-resource scopes limit blast radius.
+                keys stored only as scrypt hashes; rotation flow with
+                24-hour grace (the old key keeps working for 24 hours
+                so nothing breaks mid-switch); granular per-resource
+                scopes mean a stolen key can only do what that key was
+                allowed to do (a limited blast radius).
               </span>
             </li>
             <li class="flex gap-3">
               <span class="text-tk-accent-text">•</span>
               <span>
                 <strong>Webhook signature forgery</strong>. Mitigation:
-                HMAC-SHA256 signed deliveries with 5-minute timestamp
-                tolerance; rotation flow dual-signs during grace.
+                every delivery is cryptographically signed
+                (HMAC-SHA256) and messages outside the 5-minute
+                timestamp tolerance are rejected; while you rotate a
+                secret we sign with both old and new (dual-signing
+                during the grace window), so verification never breaks.
               </span>
             </li>
             <li class="flex gap-3">
               <span class="text-tk-accent-text">•</span>
               <span>
                 <strong>Session hijacking</strong> via cross-site or
-                cross-account access. Mitigation: every route account-
-                scopes resources at the database layer; cross-account
-                lookups return 404, never 403.
+                cross-account access. Mitigation: every route restricts
+                lookups to your own account at the database layer; a
+                probe at another account's data gets a plain "not
+                found" (cross-account lookups return 404, never 403 —
+                the response never even confirms the thing exists).
               </span>
             </li>
             <li class="flex gap-3">
               <span class="text-tk-accent-text">•</span>
               <span>
                 <strong>Brute-force auth attempts</strong>. Mitigation:
-                per-IP rate limits on auth endpoints; fail2ban at the
-                origin host level.
+                per-IP rate limits on login and key-check endpoints;
+                automatic IP bans at the
+                origin host level (fail2ban).
               </span>
             </li>
             <li class="flex gap-3">
@@ -458,7 +512,8 @@ import CtaBand from '../components/CtaBand.astro';
               <span>
                 <strong>Detection-vendor cat-and-mouse evolution.</strong>
                 Our anti-detection posture is engine-level (Apple's
-                WebKit source, not a runtime JS shim) and continuously
+                WebKit source code, not a JavaScript patch layered on
+                top at run time — a "shim") and continuously
                 updated; we can't promise forever-perfect parity
                 against every detection vendor. See the
                 <a href="/trust/cumulative-rig" class="text-tk-accent-text underline">cumulative-rig
@@ -471,7 +526,8 @@ import CtaBand from '../components/CtaBand.astro';
                 <strong>Customer's keyboard / network at the endpoint.</strong>
                 We can't protect a leaked API key on a customer
                 developer's laptop or a webhook secret pasted into a
-                misconfigured CI runner.
+                build server that leaks its settings (a misconfigured
+                CI runner).
               </span>
             </li>
             <li class="flex gap-3">
@@ -497,25 +553,32 @@ import CtaBand from '../components/CtaBand.astro';
         <h3 class="text-base font-medium text-tk-ink">Locked stack</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
           Node 22 LTS, TypeScript strict, Fastify, Drizzle, Postgres 17,
-          Redis 7. The stack rarely changes; every dependency-bump PR
-          goes through `npm audit` review and a green test gate before
-          it lands.
+          Redis 7. The stack rarely changes; every update to an
+          outside software component (a dependency-bump PR) is
+          security-scanned (`npm audit` review) and must pass the full
+          test suite (a green test gate) before it lands.
         </p>
       </div>
       <div>
         <h3 class="text-base font-medium text-tk-ink">Dependabot + Renovate</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          Automated PRs for security advisories on direct + transitive
-          deps. Auto-merge gated on passing CI; high-severity advisories
-          page on-call within 24 hours of disclosure.
+          Automated update proposals whenever a security warning is
+          published for any component we use — including the
+          components our components use (direct + transitive
+          dependencies). They merge only when all automated tests
+          pass (CI); a high-severity advisory alerts the on-call
+          engineer within 24 hours of disclosure.
         </p>
       </div>
       <div>
         <h3 class="text-base font-medium text-tk-ink">SBOM + provenance</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          Each release builds a CycloneDX SBOM alongside the artifact.
-          Container images are signed; the deploy pipeline verifies the
-          signature before pulling into production.
+          Each release ships with a complete ingredients list of every
+          software component inside it (an SBOM, in the standard
+          CycloneDX format). Each release's deployable package (its
+          container image) is cryptographically signed; the deploy
+          pipeline verifies the signature before pulling anything
+          into production.
         </p>
       </div>
     </div>

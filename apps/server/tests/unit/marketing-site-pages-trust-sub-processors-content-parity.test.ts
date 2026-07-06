@@ -53,7 +53,9 @@ describe('W502.C apps/marketing-site/src/pages/trust/sub-processors.astro conten
     expect(body).toMatch(/case 'added':\s*\n?\s*return 'bg-emerald-100 text-emerald-800';/);
     expect(body).toMatch(/case 'removed':\s*\n?\s*return 'bg-red-100 text-red-800';/);
     expect(body).toMatch(/case 'material_change':\s*\n?\s*return 'bg-amber-100 text-amber-800';/);
-    expect(body).toMatch(/case 'register_published':\s*\n?\s*return 'bg-tk-raised text-tk-ink-2';/);
+    expect(body).toMatch(
+      /case 'register_published':\s*\n?\s*return 'border border-tk-border bg-tk-raised text-tk-ink-2';/,
+    );
   });
 
   it("Article 28(2) GDPR + 30-day-notice + /legal/dpa Annex 3 cross-reference framing pinned: 'This page is the customer-facing source of truth for sub-processor changes. Adding or removing an entry triggers a 30-day notice to all customers per Article 28(2) of the GDPR; the same content also lives in Annex 3 of the Data Processing Agreement' — pinned so the source-of-truth + Article 28(2) + 30-day-notice + DPA-Annex-3 4-state framing survives (drift to dropping Article 28(2) would lose the GDPR-anchored legal basis; drift to dropping the Annex 3 cross-reference would let the customer view drift from the contractual register)", () => {
@@ -70,8 +72,10 @@ describe('W502.C apps/marketing-site/src/pages/trust/sub-processors.astro conten
     expect(body).toMatch(/<th class="py-4 pr-4 font-medium text-tk-ink-2">Sub-processor<\/th>/);
     expect(body).toMatch(/<th class="px-4 py-4 font-medium text-tk-ink-2">Region<\/th>/);
     expect(body).toMatch(/<th class="px-4 py-4 font-medium text-tk-ink-2">Purpose<\/th>/);
+    // S20c 2026-07-06 plain-language pass: the column header now
+    // glosses the GDPR term inline for non-lawyers.
     expect(body).toMatch(
-      /<th class="px-4 py-4 font-medium text-tk-ink-2">Transfer mechanism<\/th>/,
+      /<th class="px-4 py-4 font-medium text-tk-ink-2">Transfer mechanism \(legal basis for any data leaving the EU\)<\/th>/,
     );
   });
 
@@ -94,8 +98,11 @@ describe('W502.C apps/marketing-site/src/pages/trust/sub-processors.astro conten
   it("V-478 change-log section pinned: 'Change log.' header + 'Every material change to the register lands here as an immutable entry. Cosmetic edits (rewording, typo fixes) don't qualify and aren't logged.' — pinned so the change-log immutability + cosmetic-edits-excluded framing survives (drift to logging cosmetic edits would dilute the signal; drift to dropping 'immutable' would let customers question whether entries get rewritten)", () => {
     expect(body).toMatch(/<!-- V-478 — sub-processor change-log -->/);
     expect(body).toMatch(/Change log\./);
+    // S20c 2026-07-06 plain-language pass: immutability said plainly
+    // ("recorded here permanently — never edited or removed"), the
+    // precise term kept in parens; cosmetic-edits exclusion survives.
     expect(body).toMatch(
-      /Every material change to the register lands here as an immutable\s*\n?\s*entry\. Cosmetic edits \(rewording, typo fixes\) don't qualify and\s*\n?\s*aren't logged\./,
+      /Every meaningful change to this list is recorded here\s+permanently — entries are never edited or removed \(an immutable\s+record\)\. Cosmetic edits \(rewording, typo fixes\) don't qualify\s+and aren't logged\./,
     );
   });
 

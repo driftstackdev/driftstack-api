@@ -41,8 +41,10 @@ function read(p: string): string {
 describe('W367.A marketing-site /about page content parity', () => {
   const body = read(PAGE);
 
-  it('posture 3-card section pinned: EU-resident / no-behavioural-data / honest-scope', () => {
-    expect(body).toMatch(/<h3 class="font-semibold text-tk-ink">EU-resident control plane<\/h3>/);
+  it('posture 3-card section pinned: EU-resident / no-behavioural-data / honest-scope (S20c 2026-07-06 plain-language pass: heading leads plain, precise term kept in parens)', () => {
+    expect(body).toMatch(
+      /<h3 class="font-semibold text-tk-ink">Run from the EU \(EU-resident control plane\)<\/h3>/,
+    );
     expect(body).toMatch(
       /<h3 class="font-semibold text-tk-ink">No behavioural data collection<\/h3>/,
     );
@@ -80,10 +82,13 @@ describe('W367.A marketing-site /about page content parity', () => {
 
   it('F-5 (Issue 5) V-506 operating-commitments 4 cards pinned (current-scale framing, no "Pre-launch" labels per Issue 5) + each has a verifiable public URL', () => {
     expect(body).toContain('Operating commitments');
+    // S20c 2026-07-06 plain-language pass: card titles lead with the
+    // plain promise; the precise terms (staging rehearsal, Article
+    // 28(2), source escrow) stay in the title or body.
     expect(body).toMatch(/Per-merge security audit, on a cadence/);
-    expect(body).toMatch(/Disaster recovery, rehearseable on staging/);
-    expect(body).toMatch(/Sub-processor change-log per Article 28\(2\)/);
-    expect(body).toMatch(/Source escrow for Enterprise \+ Self-hosted/);
+    expect(body).toMatch(/Disaster recovery, rehearsed before it's needed/);
+    expect(body).toMatch(/30 days' warning before we change vendors — Article 28\(2\)/);
+    expect(body).toMatch(/If we ever shut down, you keep the software \(source escrow\)/);
     // Each card cross-links to a verifiable public page.
     expect(body).toMatch(/href="\/security"/);
     expect(body).toMatch(/href="\/trust\/incidents"/);
@@ -94,8 +99,8 @@ describe('W367.A marketing-site /about page content parity', () => {
     expect(body).not.toMatch(/Disaster recovery rehearsed pre-launch/);
   });
 
-  it('DR runbook scope pinned: 11 rehearsable scenarios (host loss / Postgres / R2 / cert / multi-day Hetzner)', () => {
-    expect(body).toMatch(/Eleven DR scenarios documented/);
+  it('DR runbook scope pinned: 11 rehearsable scenarios (host loss / Postgres / R2 / cert / multi-day Hetzner) — S20c 2026-07-06: each scenario keeps its precise name with a plain gloss in parens', () => {
+    expect(body).toMatch(/Eleven disaster-recovery \(DR\) scenarios documented/);
     // Specific scenario callouts — a future copy edit that drops
     // any of these forces a discussion about coverage.
     for (const scenario of [
@@ -112,7 +117,7 @@ describe('W367.A marketing-site /about page content parity', () => {
 
   it('Article 28(2) sub-processor 30-day notice + right-of-objection window pinned', () => {
     expect(body).toMatch(/published 30 days\s+before it takes effect/);
-    expect(body).toMatch(/right-of-objection window/);
+    expect(body).toMatch(/right-of-objection\s+window/); // S20c 2026-07-06: whitespace-flexible (source reflow)
   });
 
   it('source-escrow framing: "Driftstack sunsets the cloud service" insurance commitment', () => {
@@ -146,8 +151,10 @@ describe('W367.A marketing-site /about page content parity', () => {
     expect(body).toMatch(/there's nothing for detection to\s+find/);
   });
 
-  it('R9 hero claim pinned: "One engine. One product. Engineered for fidelity." + capability-led "EU-resident infrastructure, deliberately narrow scope" — replaces the prior solo-Dutch-founder identity framing', () => {
+  it('R9 hero claim pinned: "One engine. One product. Engineered for fidelity." + capability-led EU-residency framing — S20c 2026-07-06: plain words lead ("Our servers and your data live in the EU"), the precise term (EU-resident infrastructure) kept in parens', () => {
     expect(body).toMatch(/One engine\. One product\. Engineered for fidelity\./);
-    expect(body).toMatch(/EU-resident infrastructure,\s*\n?\s*deliberately narrow scope/);
+    expect(body).toMatch(
+      /Our servers and your data live in the EU \(EU-resident\s*\n?\s*infrastructure\), and the scope stays deliberately narrow/,
+    );
   });
 });

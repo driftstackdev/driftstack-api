@@ -65,41 +65,53 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
     expect(body).toMatch(/02 · Egress/);
     expect(body).toMatch(/03 · API keys/);
     expect(body).toMatch(/04 · Webhooks/);
-    expect(body).toMatch(/05 · Team RBAC/);
+    expect(body).toMatch(/05 · Team roles \(RBAC\)/); // S20c 2026-07-06: plain words lead, RBAC kept
     expect(body).toMatch(/06 · No-customer-data-access posture/);
   });
 
   it("TLS 1.2 + 1.3 + HSTS framing pinned: 'All inbound traffic is HTTPS — Cloudflare terminates TLS at the edge with full (strict) origin validation against our Hetzner host. The API server speaks TLS 1.2 / 1.3 only and sets a 2-year HSTS header with includeSubDomains + preload.' — pinned so the TLS-1.2+1.3-only + Cloudflare-strict-origin-validation + 2-year HSTS with both directives stay explicit (drift to dropping the 2-year HSTS would weaken the preload-eligibility)", () => {
+    // S20c 2026-07-06 plain-language pass: same TLS 1.2/1.3-only +
+    // strict-origin-validation + 2-year HSTS facts; plain words lead,
+    // the precise terms ride in parens.
     expect(body).toMatch(
-      /All inbound traffic is HTTPS — Cloudflare terminates TLS\s*\n?\s*at the edge with full \(strict\) origin validation against\s*\n?\s*our Hetzner host\. The API server speaks TLS 1\.2 \/ 1\.3\s*\n?\s*only and sets a 2-year HSTS header with\s*\n?\s*<code>includeSubDomains<\/code> \+ <code>preload<\/code>\./,
+      /All traffic to us is HTTPS — encrypted the whole way\.\s+Cloudflare, our edge network, handles the encryption first\s+\(terminating TLS at the edge\) and strictly verifies it is\s+really talking to our own server at Hetzner \(full "strict"\s+origin validation\) before passing anything on\. The API\s+server speaks TLS 1\.2 \/ 1\.3 only and sets a 2-year HSTS\s+header with <code>includeSubDomains<\/code> \+ <code>preload<\/code>/,
     );
   });
 
   it("scrypt-at-rest framing pinned: 'API keys are hashed with scrypt (logN=15) before they touch the database. Plaintext is returned exactly once, on creation; after that there is no path — admin, support, ops — to recover it. A database breach surfaces hashes, not keys. Auth runtime uses a 30-second sha256-keyed cache so verification stays fast without weakening at-rest strength.' — pinned so the scrypt logN=15 + 30s sha256 cache + no-recovery-path framing all survive (drift to different scrypt parameters would create marketing↔implementation divergence)", () => {
+    // S20c 2026-07-06 plain-language pass: scrypt logN=15, the
+    // no-recovery-path, and the 30s sha256-keyed cache all survive;
+    // plain words lead ("scrambled one-way", "remembered for 30
+    // seconds").
     expect(body).toMatch(
-      /API keys are hashed with scrypt \(logN=15\) before they touch\s*\n?\s*the database\./,
+      /API keys are scrambled one-way with scrypt \(logN=15\) — a\s+deliberately slow scrambling algorithm that makes guessing\s+impractical — before they ever touch the database\./,
     );
     expect(body).toMatch(
-      /no path — admin, support, ops — to recover\s*\n?\s*it\. A database breach surfaces hashes, not keys\./,
+      /no path — admin, support, ops — to\s+recover it\. A database breach surfaces scrambled values\s+\(hashes\), not keys\./,
     );
     expect(body).toMatch(
-      /Auth runtime\s*\n?\s*uses a 30-second sha256-keyed cache so verification stays\s*\n?\s*fast without weakening at-rest strength\./,
+      /To keep requests fast, a just-verified\s+key is remembered for 30 seconds in a protected in-memory\s+cache \(sha256-keyed\) — speed without weakening how keys are\s+stored\./,
     );
   });
 
   it("HMAC-SHA256 webhook signature format pinned: 't=<timestamp>,v1=<hex>' + verifyWebhookSignature SDK helper + constant-time compare + 5-minute timestamp tolerance — pinned so the canonical signature format + the constant-time verification (anti-timing-attack) + the 5-min replay window all survive (drift to a different signature format would break customer verifiers; drift to dropping constant-time would re-introduce timing-attack risk)", () => {
     expect(body).toMatch(/<code class="font-mono">t=&lt;timestamp&gt;,v1=&lt;hex&gt;<\/code>/);
+    // S20c 2026-07-06 plain-language pass: constant-time compare and
+    // the 5-minute replay window kept, glossed inline.
     expect(body).toMatch(
-      /<code class="font-mono">verifyWebhookSignature<\/code> helper\s*\n?\s*\(constant-time compare\)\. The default 5-minute timestamp\s*\n?\s*tolerance protects against replay/,
+      /<code class="font-mono">verifyWebhookSignature<\/code>\s+\(a constant-time compare, built to resist timing tricks\)\.\s+Messages older than the default 5-minute timestamp\s+tolerance are rejected, so an intercepted copy can't be\s+re-sent later \("replay"\)/,
     );
   });
 
   it("No-customer-data-access posture: 'Driftstack's control plane stores license metadata, session metadata (id, lifecycle status, timestamps), and aggregate usage counters. It does not store the session content itself. URLs visited, form data submitted, screenshots captured, DOM snapshots, browser cookies — these never reach our infra.' + self-hosted-metadata-stays-inside-network — pinned so the explicit 5-state never-stored scope (URLs / form / screenshots / DOM / cookies) + the self-hosted-license-heartbeat-only flow survive (drift to dropping any item would weaken the no-collection commitment)", () => {
+    // S20c 2026-07-06 plain-language pass: all 5 never-stored items
+    // survive (DOM snapshots glossed as "copies of page content");
+    // license-validity heartbeats glossed as periodic check-ins.
     expect(body).toMatch(
-      /URLs visited, form data submitted, screenshots captured, DOM\s*\n?\s*snapshots, browser cookies — these never reach our infra\./,
+      /URLs visited, form data submitted, screenshots captured,\s+copies of page content \(DOM snapshots\), browser cookies —\s+none of it ever reaches our servers\./,
     );
     expect(body).toMatch(
-      /For\s*\n?\s*self-hosted deployments, even the metadata stays inside your\s*\n?\s*network; only license-validity heartbeats reach our servers\./,
+      /For\s+self-hosted deployments, even the metadata stays inside your\s+network; only license-validity heartbeats — periodic "is\s+this license still valid\?" check-ins — reach our servers\./,
     );
   });
 
@@ -120,7 +132,7 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
 
   it('V-503 defense-in-depth 6-layer pinned: Edge (Cloudflare TLS 1.3 + WAF) + Origin (nginx hardening + UFW + fail2ban) + Application (Auth gate + scope check + rate limit) + Data (Encryption at rest + isolation) + Audit (Append-only customer audit log) + Observability (Sentry + structured logs) — pinned so the 6-layer defense-in-depth narrative stays consistent (drift to dropping any layer would create a single-line-of-defense gap; drift to renaming would break the at-a-glance security-review story)', () => {
     expect(body).toMatch(/Cloudflare TLS 1\.3 \+ WAF/);
-    expect(body).toMatch(/nginx hardening \+ UFW \+ fail2ban/);
+    expect(body).toMatch(/A locked-down server \(nginx \+ UFW \+ fail2ban\)/); // S20c 2026-07-06
     expect(body).toMatch(/Auth gate \+ scope check \+ rate limit/);
     expect(body).toMatch(/Encryption at rest \+ isolation/);
     expect(body).toMatch(/Append-only customer audit log/);
@@ -139,8 +151,10 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
   });
 
   it("Cross-account 404-not-403 framing pinned: 'every route account-scopes resources at the database layer; cross-account lookups return 404, never 403.' — pinned so the explicit anti-enumeration framing (cross-account returns 404 to hide existence, not 403 to confirm) survives (drift to 403 would re-introduce the enumeration-via-status-code information disclosure)", () => {
+    // S20c 2026-07-06 plain-language pass: the 404-not-403
+    // anti-enumeration promise survives, stated plainly.
     expect(body).toMatch(
-      /every route account-\s*\n?\s*scopes resources at the database layer; cross-account\s*\n?\s*lookups return 404, never 403\./,
+      /every route restricts\s+lookups to your own account at the database layer; a\s+probe at another account's data gets a plain "not\s+found" \(cross-account lookups return 404, never 403 —\s+the response never even confirms the thing exists\)\./,
     );
   });
 
@@ -151,8 +165,10 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
     expect(body).toMatch(
       /<h3 class="text-base font-medium text-tk-ink">Dependabot \+ Renovate<\/h3>/,
     );
+    // S20c 2026-07-06 plain-language pass: SBOM = ingredients list;
+    // signed container image + pipeline verification survive.
     expect(body).toMatch(
-      /Each release builds a CycloneDX SBOM alongside the artifact\.\s*\n?\s*Container images are signed; the deploy pipeline verifies the\s*\n?\s*signature before pulling into production\./,
+      /Each release ships with a complete ingredients list of every\s+software component inside it \(an SBOM, in the standard\s+CycloneDX format\)\. Each release's deployable package \(its\s+container image\) is cryptographically signed; the deploy\s+pipeline verifies the signature before pulling anything\s+into production\./,
     );
   });
 

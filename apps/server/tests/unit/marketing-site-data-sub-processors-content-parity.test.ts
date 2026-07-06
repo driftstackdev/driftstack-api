@@ -92,7 +92,10 @@ describe('W463.C apps/marketing-site/src/data/sub-processors.ts content parity',
     expect(body).toMatch(
       /transferMechanism: '2021 Standard Contractual Clauses \+ EU-US Data Privacy Framework\.',/,
     );
-    expect(body).toMatch(/transferMechanism: 'EEA-internal — no transfer mechanism required\.',/);
+    // S20c 2026-07-06 plain-language pass: EEA spelled out inline.
+    expect(body).toMatch(
+      /transferMechanism:\s+'Inside the EEA \(the EU plus Iceland, Liechtenstein, and Norway\) — no transfer mechanism required\.',/,
+    );
     expect(body).toMatch(
       /transferMechanism: 'EU ingest region — no transfer required for error data\.',/,
     );

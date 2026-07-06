@@ -66,7 +66,7 @@ import IconTile from '../../components/IconTile.astro';
           <tr class="border-b border-tk-border">
             <td class="py-3 pr-4 align-top">
               <span class="font-medium text-tk-ink">SOC 2 Type I</span><br />
-              <span class="text-xs text-tk-ink-3">Trust Services Criteria (security)</span>
+              <span class="text-xs text-tk-ink-3">A third-party audit that checks our security controls exist and are designed right, at a point in time — Trust Services Criteria (security)</span>
             </td>
             <td class="py-3 pr-4 align-top">
               <span
@@ -79,11 +79,11 @@ import IconTile from '../../components/IconTile.astro';
           <tr class="border-b border-tk-border">
             <td class="py-3 pr-4 align-top">
               <span class="font-medium text-tk-ink">SOC 2 Type II</span><br />
-              <span class="text-xs text-tk-ink-3">After 6-month observation window</span>
+              <span class="text-xs text-tk-ink-3">The follow-up audit that watches those same controls actually operating over a 6-month observation window</span>
             </td>
             <td class="py-3 pr-4 align-top">
               <span
-                class="inline-block rounded-full bg-tk-raised px-2 py-0.5 text-xs font-medium text-tk-ink-2"
+                class="inline-block rounded-full border border-tk-border bg-tk-raised px-2 py-0.5 text-xs font-medium text-tk-ink-2"
                 >Planned</span
               >
             </td>
@@ -92,7 +92,7 @@ import IconTile from '../../components/IconTile.astro';
           <tr>
             <td class="py-3 pr-4 align-top">
               <span class="font-medium text-tk-ink">Independent pen-test</span><br />
-              <span class="text-xs text-tk-ink-3">Annual external assessment</span>
+              <span class="text-xs text-tk-ink-3">A penetration test: paid ethical hackers attack the platform to find holes before real attackers do — annual external assessment</span>
             </td>
             <td class="py-3 pr-4 align-top">
               <span
@@ -113,9 +113,10 @@ import IconTile from '../../components/IconTile.astro';
       <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Pen-test report access</h2>
       <p class="mt-3 max-w-prose text-tk-ink-2">
         The most recent pen-test executive summary is publicly
-        downloadable below. The full report — with remediation status
-        per finding and unredacted methodology — is available under NDA
-        to prospective customers under active security review.
+        downloadable below. The full report — including the fix status
+        of every finding and the complete testing method, nothing
+        blacked out — is available under NDA to prospective customers
+        who are actively evaluating us.
       </p>
 
       <div class="mt-8 grid gap-6 md:grid-cols-2">
@@ -138,7 +139,7 @@ import IconTile from '../../components/IconTile.astro';
             the engagement. No sensitive technical detail.
           </p>
           <p class="mt-4 text-sm">
-            <span class="inline-block rounded bg-tk-raised px-2 py-1 font-mono text-xs text-tk-ink-2">
+            <span class="inline-block rounded border border-tk-border bg-tk-raised px-2 py-1 font-mono text-xs text-tk-ink-2">
               Available after first engagement (Q3 2026)
             </span>
           </p>
@@ -162,7 +163,8 @@ import IconTile from '../../components/IconTile.astro';
               >security@driftstack.dev</a
             > with your company name and use case. We respond within
             one business day with the NDA. Approved requests receive a
-            7-day signed download URL.
+            private download link that works for 7 days (a signed
+            URL).
           </p>
         </div>
       </div>
@@ -185,8 +187,10 @@ import IconTile from '../../components/IconTile.astro';
           <dd class="mt-1 text-sm text-tk-ink-2">
             <a href="mailto:security@driftstack.dev" class="text-tk-accent-text underline"
               >security@driftstack.dev</a
-            >. Use PGP if your finding involves customer data exposure
-            (key fingerprint published on this page once available).
+            >. If your finding involves exposed customer data, encrypt
+            your report with PGP, the standard for encrypted email —
+            our public PGP key, and the fingerprint that lets you
+            verify it, will be published on this page once available.
           </dd>
         </div>
         <div>
@@ -194,13 +198,14 @@ import IconTile from '../../components/IconTile.astro';
           <dd class="mt-1 text-sm text-tk-ink-2">
             <ul class="list-inside list-disc space-y-1">
               <li>Acknowledge receipt within 2 business days.</li>
-              <li>Triage + initial severity within 5 business days.</li>
+              <li>First assessment (triage) + an initial severity rating within 5 business days.</li>
               <li>
                 Status updates at least every 14 days until resolution.
               </li>
               <li>
-                Coordinated disclosure window: 90 days from report,
-                extendable on mutual agreement.
+                We ask reporters to keep the finding private for 90
+                days from the report while we fix it (the coordinated
+                disclosure window), extendable on mutual agreement.
               </li>
               <li>
                 Public credit on this page (with reporter consent) once
@@ -216,8 +221,8 @@ import IconTile from '../../components/IconTile.astro';
             research on the platform's public surface (api.driftstack.dev,
             driftstack.dev, app.driftstack.dev) provided you:
             <ul class="mt-2 list-inside list-disc space-y-1">
-              <li>Don't access, modify, or exfiltrate other customers' data.</li>
-              <li>Don't degrade service availability (no load tests against prod).</li>
+              <li>Don't access, change, or copy out (exfiltrate) other customers' data.</li>
+              <li>Don't slow down or break the service for others — no load tests against the live platform (prod).</li>
               <li>Report findings privately before public disclosure.</li>
             </ul>
           </dd>
@@ -229,9 +234,11 @@ import IconTile from '../../components/IconTile.astro';
   <!-- Sub-processor change SLA -->
   <section class="border-t border-tk-border bg-tk-surface/40">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Sub-processor change SLA</h2>
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">How much warning you get before we change vendors (the sub-processor change SLA)</h2>
       <p class="mt-3 max-w-prose text-tk-ink-2">
-        Per GDPR Article 28(2) and DPA Annex 3, we provide 30 calendar
+        Sub-processors are the outside companies that handle customer
+        data for us. Per GDPR Article 28(2) and Annex 3 of our
+        data-processing agreement (DPA), we provide 30 calendar
         days' notice for any material change to the sub-processor list
         (additions or replacements). Customers can object via email to
         <a href="mailto:support@driftstack.dev" class="text-tk-accent-text underline"
@@ -242,8 +249,9 @@ import IconTile from '../../components/IconTile.astro';
         The live list is published at
         <a href="/trust/sub-processors" class="text-tk-accent-text underline"
           >/trust/sub-processors</a
-        > and material changes are emitted as an RSS feed (subscribe
-        from the same page when V-550.A lands).
+        > and material changes will also be available as an RSS feed
+        you can subscribe to — the subscribe link appears on that
+        page once the feed ships.
       </p>
     </div>
   </section>
@@ -253,7 +261,8 @@ import IconTile from '../../components/IconTile.astro';
     <div class="mx-auto max-w-4xl px-6 py-16">
       <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Audit log retention</h2>
       <p class="mt-3 max-w-prose text-tk-ink-2">
-        Per ADR-006:
+        Per our written retention policy (internal decision record
+        ADR-006):
       </p>
       <ul class="mt-4 max-w-prose list-inside list-disc space-y-2 text-tk-ink-2">
         <li>
@@ -263,8 +272,8 @@ import IconTile from '../../components/IconTile.astro';
             >/docs/audit-log</a>),
           surfaced via the dashboard +
           <code class="font-mono">GET /v1/account/audit-log</code>.
-          Includes every action the customer's account took (API
-          key mints, profile creates, billing changes).
+          Includes every action taken on the customer's account
+          (creating API keys, creating profiles, billing changes).
         </li>
         <li>
           <span class="font-medium text-tk-ink">Admin audit log</span> —
@@ -274,7 +283,10 @@ import IconTile from '../../components/IconTile.astro';
         </li>
         <li>
           <span class="font-medium text-tk-ink">Access logs</span> —
-          90 days hot, 1 year cold for forensic timeline reconstruction.
+          kept 90 days in quick-access storage ("hot"), then 1 year in
+          archive ("cold"), so investigators can reconstruct exactly
+          what happened if an incident is ever examined (forensic
+          timeline reconstruction).
           Read-restricted to the on-call engineer + compliance lead.
         </li>
       </ul>

@@ -31,13 +31,14 @@ export const SUB_PROCESSORS: SubProcessor[] = [
   {
     name: 'Neon',
     region: 'Frankfurt (EU)',
-    purpose: 'Managed Postgres for account, session, and audit data.',
+    purpose: 'Our managed database (Postgres) — stores account, session, and audit data.',
     transferMechanism: 'EU-resident — no transfer required.',
   },
   {
     name: 'Upstash',
     region: 'Frankfurt (EU)',
-    purpose: 'Managed Redis for auth-cache and rate-limit state.',
+    purpose:
+      'Fast temporary storage (managed Redis) — holds short-lived login-check (auth-cache) and rate-limit data.',
     transferMechanism: 'EU-resident — no transfer required.',
   },
   {
@@ -64,14 +65,14 @@ export const SUB_PROCESSORS: SubProcessor[] = [
     name: 'Stripe',
     region: 'Stripe Payments Europe Ltd (Ireland)',
     purpose:
-      'Payment processing, subscription management, BYOK metered billing, BTW reverse-charge handling via Stripe Tax.',
+      'Payment processing, subscription management, usage-based billing for the bring-your-own-key (BYOK) AI option, and VAT (Dutch BTW) reverse-charge handling via Stripe Tax.',
     transferMechanism: '2021 Standard Contractual Clauses + EU-US Data Privacy Framework.',
   },
   {
     name: 'Anthropic',
     region: 'United States',
     purpose:
-      "Large language model for the optional AI agent feature. Engaged in two modes: (1) BYOK proxy — when the customer has supplied their own Anthropic API key, Driftstack forwards the request and the customer's Anthropic account is the contractual counter-party; Driftstack acts only as a transient proxy. (2) Bundled-LLM rail — opt-in only; Driftstack uses a deployment-managed key and bills the customer at a markup. Session data flows to Anthropic only when one of these two modes is engaged on a given turn.",
+      "Large language model (LLM) behind the optional AI agent feature. Engaged in two modes: (1) Bring your own key (BYOK) — the customer supplies their own Anthropic API key; the customer's contract is with Anthropic directly, and Driftstack only passes the request through without keeping it (a transient proxy). (2) Bundled — opt-in only; Driftstack uses its own key (deployment-managed) and bills the customer at a markup. Session data flows to Anthropic only when one of these two modes is actually used in a given AI step.",
     transferMechanism: '2021 Standard Contractual Clauses + EU-US Data Privacy Framework.',
   },
   {
@@ -91,13 +92,14 @@ export const SUB_PROCESSORS: SubProcessor[] = [
     region: 'NowPayments OÜ (Estonia, EU)',
     purpose:
       'Cryptocurrency payment processing (BTC, LTC, USDT, USDC, ETH, XMR). Engaged only when a customer opts to pay with cryptocurrency at checkout; bypassed entirely for Stripe-paying customers.',
-    transferMechanism: 'EEA-internal — no transfer mechanism required.',
+    transferMechanism:
+      'Inside the EEA (the EU plus Iceland, Liechtenstein, and Norway) — no transfer mechanism required.',
   },
   {
     name: 'LiveKit',
     region: 'United States (regional endpoints; EU preferred)',
     purpose:
-      'WebRTC live-session signaling and media SFU for the optional "live session" feature, where customer or Driftstack support views an in-progress browser session in real time. Disabled by default; engaged only when explicitly initiated.',
+      'Carries the live video stream (WebRTC; LiveKit provides the connection setup and video relay servers — signaling and media SFU) for the optional "live session" feature, where the customer or Driftstack support watches an in-progress browser session in real time. Disabled by default; engaged only when explicitly initiated.',
     transferMechanism: '2021 Standard Contractual Clauses + EU-US Data Privacy Framework.',
   },
 ];
@@ -141,9 +143,10 @@ export const SUB_PROCESSOR_CHANGELOG: SubProcessorChangeLogEntry[] = [
     subject: '',
     summary:
       'Initial sub-processor register published as part of pre-launch ' +
-      'transparency. The register reflects the production sub-processor ' +
-      'list at /v1/status time of publication; future material changes ' +
-      'land here per the Article 28(2) notice cadence.',
+      'transparency. The register reflects the sub-processors in ' +
+      'production at the time of publication; future material changes ' +
+      'are recorded here, each with the 30-day notice GDPR ' +
+      'Article 28(2) requires.',
     effective_at: '2026-05-10',
   },
 ];
