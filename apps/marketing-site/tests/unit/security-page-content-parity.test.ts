@@ -145,12 +145,39 @@ describe('W365.A marketing-site /security page parity', () => {
     expect(body).toMatch(/no NDAs to read a one-paragraph\s+answer/);
   });
 
-  it('supply-chain section pinned: Node 22 LTS / Dependabot+Renovate / CycloneDX SBOM', () => {
+  // S26 2026-07-06 (#132) — re-pinned after the accuracy correction.
+  // The old pin locked FALSE controls: "Dependabot + Renovate" (no
+  // Renovate config exists) and the CycloneDX-SBOM + signed-image +
+  // signature-verifying-deploy claim (no cosign/syft anywhere; the
+  // deploy is a plain image build + pull). The pin now locks the
+  // honest replacements: Dependabot-only (weekly, CI-gated,
+  // patch-only auto-merge per .github/dependabot.yml +
+  // dependabot-auto-merge.yml) and the real deploy controls
+  // (lockfile-pinned installs, staging-first + manual prod approval,
+  // post-deploy health-check with automatic rollback, public
+  // /version SHA endpoint — deploy.yml / server-deploy.yml
+  // V-549.A/B / app.ts V-195).
+  it('supply-chain section pinned: Node 22 LTS / Dependabot (no Renovate) / locked installs + gated deploys', () => {
     expect(body).toMatch(/Node 22 LTS/);
-    expect(body).toMatch(/Dependabot \+ Renovate/);
-    // S20c 2026-07-06: SBOM said plainly (ingredients list), CycloneDX kept.
-    expect(body).toMatch(/an SBOM, in the standard\s+CycloneDX format/);
-    // Signed container images pinned (deploy-pipeline-signs claim).
-    expect(body).toMatch(/container image\) is cryptographically signed/); // S20c 2026-07-06
+    expect(body).toMatch(/<h3 class="text-base font-medium text-tk-ink">Dependabot<\/h3>/);
+    expect(body).toMatch(
+      /only\s+the smallest class of update \(bug-fix-only\s+patch releases\) may merge automatically/,
+    );
+    // The false SBOM/signed-image claims must stay gone. (The word
+    // "Renovate" may only appear inside the S26 explanatory comment;
+    // "cryptographically signed" legitimately remains for webhooks.)
+    expect(body).not.toMatch(/Dependabot \+ Renovate/);
+    expect(body).not.toMatch(/CycloneDX format/);
+    expect(body).not.toMatch(/container image\) is cryptographically signed/);
+    expect(body).not.toMatch(/SBOM, in the standard/);
+    // The honest deploy controls pinned.
+    expect(body).toMatch(/pinned in a lockfile checked\s+into the repository/);
+    expect(body).toMatch(
+      /staging first, then an explicit manual approval or\s+a deliberately cut release tag/,
+    );
+    expect(body).toMatch(/automatically rolls\s+back to the previous version if that check fails/);
+    expect(body).toMatch(
+      /which source-code revision\s+production is running via our public\s+\/version endpoint/,
+    );
   });
 });

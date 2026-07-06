@@ -178,9 +178,14 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     );
   });
 
-  it('bundled-or-BYOK AI claim pinned (Builder+ tier gate; S20b plain words, same gate)', () => {
+  // S26 2026-07-06 (#132) — re-pinned: the old wording's trailing
+  // "(API Builder and up)" misread as BYOK-gated-to-Builder, but per
+  // packages/api-types/src/common.ts TIER_FEATURES every API tier has
+  // the AI agent with BYOK (api_starter: llmBilling 'byok_only');
+  // only the bundled option starts at api_builder.
+  it('bundled-or-BYOK AI claim pinned (BYOK on every API tier; bundled = Builder+ gate)', () => {
     expect(body).toMatch(
-      /Optional bundled AI assistant — or connect your own Anthropic key and pay Anthropic directly, no Driftstack markup \(API Builder and up\)/,
+      /AI assistant on every API tier — connect your own Anthropic key and pay Anthropic directly, no Driftstack markup; an optional bundled assistant \(no key needed\) comes with API Builder and up/,
     );
   });
 

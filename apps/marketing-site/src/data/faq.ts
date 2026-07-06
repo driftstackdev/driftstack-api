@@ -196,7 +196,13 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'Where do my sessions actually run?',
-        a: 'Everything runs in one EU region. Customer data — accounts, profiles, audit logs, session recordings — stays in the EU. The <a href="/trust/sub-processors" class="text-tk-accent-text underline">sub-processor list</a> has the full breakdown with each provider\'s region. From EU locations, your commands typically reach our API in under 30 milliseconds, and a full round trip — your click going in, the live picture coming back — takes under 100. US and Asia-Pacific customers see proportionally longer round trips, since the sessions stay in the EU.',
+        // S26 2026-07-06 (#132) — accuracy fix (audit M5): the data
+        // list previously said "session recordings", but recordings
+        // are roadmap-only (docs/recordings.astro: planned, not
+        // live). "Session metadata" is what we actually store —
+        // mirrors the truthful export list in the
+        // business-continuity answer below.
+        a: 'Everything runs in one EU region. Customer data — accounts, profiles, audit logs, session metadata — stays in the EU. The <a href="/trust/sub-processors" class="text-tk-accent-text underline">sub-processor list</a> has the full breakdown with each provider\'s region. From EU locations, your commands typically reach our API in under 30 milliseconds, and a full round trip — your click going in, the live picture coming back — takes under 100. US and Asia-Pacific customers see proportionally longer round trips, since the sessions stay in the EU.',
       },
     ],
   },
@@ -242,7 +248,15 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'What if a session fails?',
-        a: 'You can see everything a session did, start to finish, in the dashboard or from the SDK. A failed session returns a clear, machine-readable error (RFC 9457 problem-types, for developers); recordings + state captures up to the failure point stay available. Sessions that fail on our side (a crash, no machine available) do not consume your concurrent slot — the slot frees immediately on failure detection.',
+        // S26 2026-07-06 (#132) — accuracy fix (audit M5): the answer
+        // previously said "recordings + state captures up to the
+        // failure point stay available", presenting recordings as a
+        // live feature. Recordings are roadmap-only
+        // (docs/recordings.astro: `record: true` is a no-op today;
+        // roadmap.astro lists "Workflow recording" under NEXT), and
+        // captures return inline for you to keep — we don't retain
+        // them server-side. Reworded to what exists today.
+        a: 'You can see everything a session did, start to finish, in the dashboard or from the SDK. A failed session returns a clear, machine-readable error (RFC 9457 problem-types, for developers), and any captures you took before the failure — screenshots, page snapshots, PDFs — are already in your hands, because capture results return to you the moment you take them. (Session video recording is on the <a href="/roadmap" class="text-tk-accent-text underline">roadmap</a>, not live yet.) Sessions that fail on our side (a crash, no machine available) do not consume your concurrent slot — the slot frees immediately on failure detection.',
       },
       {
         q: "What's the uptime target?",

@@ -148,12 +148,18 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).not.toMatch(/Personal \$79\/mo · Team \$249\/mo · Agency \$699\/mo/);
   });
 
-  it('API ladder framing BOUND from pricing.ts (W292.B): {apiLineup} + {apiCaps} concurrent; Enterprise custom + bundled-or-BYOK AI on Builder+. The $149/$499/$1,499 values are guarded by pricing-api-tier-figures-baseline.', () => {
+  // S26 2026-07-06 (#132) — re-pinned: the old wording's trailing
+  // "(API Builder and up)" misread as BYOK-gated-to-Builder, but per
+  // packages/api-types/src/common.ts TIER_FEATURES every API tier has
+  // the AI agent with BYOK (api_starter: llmBilling 'byok_only');
+  // only the bundled option starts at api_builder
+  // ('byok_or_bundled').
+  it('API ladder framing BOUND from pricing.ts (W292.B): {apiLineup} + {apiCaps} concurrent; Enterprise custom + BYOK on every API tier with bundled AI on Builder+. The $149/$499/$1,499 values are guarded by pricing-api-tier-figures-baseline.', () => {
     expect(body).toMatch(/const apiLineup = apiLadder/);
     expect(body).toMatch(/\{apiLineup\}/);
     expect(body).toMatch(/\{apiCaps\} concurrent sessions per tier; Enterprise custom/);
     expect(body).toMatch(
-      /Optional bundled AI assistant — or connect your own Anthropic key and pay Anthropic directly, no Driftstack markup \(API Builder and up\)/,
+      /AI assistant on every API tier — connect your own Anthropic key and pay Anthropic directly, no Driftstack markup; an optional bundled assistant \(no key needed\) comes with API Builder and up/,
     );
     expect(body).not.toMatch(/API Starter \$149\/mo · Builder \$499\/mo · Scale \$1,499\/mo/);
   });

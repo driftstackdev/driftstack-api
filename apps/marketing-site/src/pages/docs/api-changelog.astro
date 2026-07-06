@@ -548,12 +548,17 @@ B: when the user clicks the verification link in
     </ul>
 
     <h2>Subscribe</h2>
+    <!-- S26 2026-07-06 (#132) — accuracy fix (audit L3): the subscribe
+         link previously pointed at /settings/notifications, which
+         404s on the dashboard — no such route exists (only
+         apps/customer-dashboard/src/pages/settings.astro; the V-204
+         email-notification toggles live on bare /settings). -->
     <p>
       We post a summary of each month's changes to
       <a href="https://status.driftstack.dev">status.driftstack.dev</a>
       as a non-incident announcement, and email the
       <code>api-changes@</code> mailing list. Subscribe at
-      <a href="https://app.driftstack.dev/settings/notifications">app.driftstack.dev/settings/notifications</a>.
+      <a href="https://app.driftstack.dev/settings">app.driftstack.dev/settings</a>.
     </p>
 
     <h2>Related</h2>

@@ -48,22 +48,31 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     expect(body).toMatch(/<a\s*\n?\s*href="\/trust\/security-overview"/);
   });
 
-  it("Security card pinned: 'Architecture + posture →' + 5-pillar shipped commitment. 2026-05-22 — customer-configurable egress flipped from roadmap to shipped (planning 133 Phase 1 + SocksProxyBackend wired in bootstrap); pillar count bumped 4→5; SOCKS5/UDP/QUIC/WebRTC/OpenVPN/WireGuard added.", () => {
+  // S26 2026-07-06 (#132) — re-pinned: the card said "Five pillars"
+  // while /security (the page this card links to) renders SIX
+  // (01 Transport / 02 Egress / 03 API keys / 04 Webhooks /
+  // 05 Team roles / 06 No-customer-data-access). The enumeration now
+  // matches the real six; EU-resident infrastructure (true, but not
+  // one of the /security pillars) rides as its own sentence.
+  it("Security card pinned: 'Architecture + posture →' + 6-pillar shipped commitment matching /security's rendered pillars (01–06). History: 2026-05-22 egress flipped roadmap→shipped (4→5); S26 2026-07-06 count corrected 5→6 to match /security.", () => {
     expect(body).toMatch(/Architecture \+ posture →/);
-    expect(body).toMatch(/Five pillars shipped today/);
-    // S20c 2026-07-06 plain-language pass: all five pillars survive
-    // with plain words leading and the precise terms in parens.
+    expect(body).toMatch(/Six pillars shipped today/);
+    expect(body).not.toMatch(/Five pillars shipped today/);
+    // All six pillars, plain words leading, precise terms in parens.
+    expect(body).toMatch(/everything between you and us\s+travelling encrypted \(TLS\)/);
+    expect(body).toMatch(
+      /each profile bringing its own internet\s+exit — your SOCKS5 proxy \(including UDP\/QUIC\/WebRTC\s+traffic\) or your OpenVPN \/ WireGuard VPN/,
+    );
     expect(body).toMatch(
       /API keys stored only as\s+one-way scrypt hashes \(unreadable even to us\)/,
     );
     expect(body).toMatch(
       /webhooks\s+cryptographically signed so you can prove each message\s+came from us \(HMAC\)/,
     );
+    expect(body).toMatch(/team roles where your whole team can\s+look but only admins can change/);
     expect(body).toMatch(/a design that keeps our staff from\s+ever seeing your session content/);
-    expect(body).toMatch(/EU-resident\s+infrastructure/);
-    expect(body).toMatch(
-      /each profile bringing its own internet\s+exit — your SOCKS5 proxy \(including UDP\/QUIC\/WebRTC\s+traffic\) or your OpenVPN \/ WireGuard VPN/,
-    );
+    // EU residency stays claimed (its own sentence, not a pillar).
+    expect(body).toMatch(/All of it runs on EU-resident\s+infrastructure\./);
   });
 
   it("Sub-processors card pinned: 'Live list + regions →' + 'Source of truth for Article 28(2) amendment notices; mirrored in DPA Annex 3.' — pinned so the Article 28(2) + DPA-Annex-3 cross-reference survives in the hub-card too (consistent with the canonical /trust/sub-processors framing)", () => {

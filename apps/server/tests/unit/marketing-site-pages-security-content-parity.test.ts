@@ -21,7 +21,10 @@
 //     (Sentry EU + Pino structured).
 //   • V-503 threat model: 5 in-scope + 4 out-of-scope.
 //   • V-503 supply chain: Node 22 LTS + Postgres 17 + Redis 7 +
-//     Dependabot + Renovate + CycloneDX SBOM + signed images.
+//     Dependabot (weekly, CI-gated, patch-only auto-merge) + locked
+//     installs + gated deploys with auto-rollback + public /version
+//     SHA. (S26 2026-07-06 (#132): retracted the false Renovate +
+//     CycloneDX-SBOM + signed-image claims this header used to list.)
 //   • Sub-processor list 10-vendor: Hetzner + Neon + Upstash +
 //     Cloudflare + Postmark + Sentry + Stripe + Anthropic + Moneybird
 //     + MacStadium.
@@ -158,18 +161,44 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
     );
   });
 
-  it("V-503 supply-chain framing pinned: 'Node 22 LTS, TypeScript strict, Fastify, Drizzle, Postgres 17, Redis 7.' + 'Dependabot + Renovate' + 'Each release builds a CycloneDX SBOM alongside the artifact. Container images are signed; the deploy pipeline verifies the signature before pulling into production.' — pinned so the locked-stack versions + the SBOM + signed-image + signature-verify pipeline stay explicit (drift to dropping any would weaken the supply-chain narrative compliance reviewers compare against the SLSA + sigstore patterns)", () => {
+  // S26 2026-07-06 (#132) — re-pinned after the accuracy correction.
+  // The previous revision of this pin locked FALSE supply-chain
+  // controls: a Renovate config that does not exist (only
+  // .github/dependabot.yml does) and a CycloneDX-SBOM + signed-image
+  // + signature-verifying-deploy story with no implementation behind
+  // it (no cosign/syft anywhere in the repo; server-deploy.yml is a
+  // plain image build + `docker compose pull`). Locking the string
+  // gave the false claim a "verified" feel — the pin now locks the
+  // controls that actually exist: lockfile-pinned installs
+  // (package-lock.json + `npm ci` in ci.yml), staging-first + manual
+  // prod approval (deploy.yml), V-549.A pre-deploy smoke + V-549.B
+  // post-deploy health-check with automatic rollback
+  // (server-deploy.yml), and the public /version git-SHA endpoint
+  // (apps/server/src/lib/app.ts V-195).
+  it("V-503 supply-chain framing pinned: 'Node 22 LTS, TypeScript strict, Fastify, Drizzle, Postgres 17, Redis 7.' + Dependabot-only card (weekly, CI-gated, patch-only auto-merge) + honest deploy controls (lockfile installs, staging-first gated pipeline, auto-rollback health-check, public /version SHA) — pinned so the corrected S26 wording survives and the retracted SBOM/signed-image claims cannot silently return", () => {
     expect(body).toMatch(
       /Node 22 LTS, TypeScript strict, Fastify, Drizzle, Postgres 17,\s*\n?\s*Redis 7\./,
     );
+    expect(body).toMatch(/<h3 class="text-base font-medium text-tk-ink">Dependabot<\/h3>/);
     expect(body).toMatch(
-      /<h3 class="text-base font-medium text-tk-ink">Dependabot \+ Renovate<\/h3>/,
+      /Nothing merges unless the full automated test suite\s+passes \(CI\); only the smallest class of update \(bug-fix-only\s+patch releases\) may merge automatically/,
     );
-    // S20c 2026-07-06 plain-language pass: SBOM = ingredients list;
-    // signed container image + pipeline verification survive.
     expect(body).toMatch(
-      /Each release ships with a complete ingredients list of every\s+software component inside it \(an SBOM, in the standard\s+CycloneDX format\)\. Each release's deployable package \(its\s+container image\) is cryptographically signed; the deploy\s+pipeline verifies the signature before pulling anything\s+into production\./,
+      /Every dependency version is pinned in a lockfile checked\s+into the repository, and CI installs exactly those pinned\s+versions\./,
     );
+    expect(body).toMatch(
+      /staging first, then an explicit manual approval or\s+a deliberately cut release tag\./,
+    );
+    expect(body).toMatch(/automatically rolls\s+back to the previous version if that check fails/);
+    expect(body).toMatch(
+      /verify exactly which\s+source-code revision\s+production is running via our public\s+\/version endpoint/,
+    );
+    // Retracted false claims must stay gone (allowing only the S26
+    // explanatory comment, which avoids these exact phrasings).
+    expect(body).not.toMatch(/Dependabot \+ Renovate/);
+    expect(body).not.toMatch(/CycloneDX format/);
+    expect(body).not.toMatch(/SBOM, in the standard/);
+    expect(body).not.toMatch(/container image\) is cryptographically signed/);
   });
 
   it("security@driftstack.dev contact framing pinned: 'Email security@driftstack.dev with the question. We answer everything in writing — no NDAs to read a one-paragraph answer about scrypt parameters or TLS cipher suites.' — pinned so the no-NDA-for-security-questions commitment survives (drift to dropping would create friction for security-team buyers; drift to a different email would orphan canonical contact)", () => {

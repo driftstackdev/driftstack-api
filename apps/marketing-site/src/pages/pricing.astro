@@ -45,14 +45,22 @@ function fmtArchetypes(max: number | null): string {
   return max === 1 ? '1 archetype' : `${max.toString()} archetypes`;
 }
 
+// S26 2026-07-06 (#132) — accuracy fix (audit M1): this formatter
+// previously rendered a tiered 48h/12h/1h reply ladder that
+// contradicted /self-hosted. Per the 2026-05-19 founder verdict
+// (see self-hosted.astro) the tiered SLA ladder was dropped
+// (theatre for a small operation): single best-effort 48h target
+// across all SKUs; Slack Connect available on request
+// post-paid-subscription. Wording now mirrors self-hosted.astro's
+// fmtSupportTier byte-for-byte.
 function fmtSupportTier(tier: 'email_48h' | 'email_slack_12h' | 'dedicated_csm_1h'): string {
   switch (tier) {
     case 'email_48h':
-      return 'Email · reply within 48h (SLA)';
+      return 'Email · 48h target';
     case 'email_slack_12h':
-      return 'Email + Slack Connect · reply within 12h (SLA)';
+      return 'Email + Slack Connect · 48h target';
     case 'dedicated_csm_1h':
-      return 'Dedicated customer-success manager · reply within 1h (SLA)';
+      return 'Email + Slack Connect · 48h target';
   }
 }
 
@@ -159,10 +167,17 @@ const pricingStructuredData = {
               <a href="/glossary#webkit" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">WebKit</a>.
               Not an emulator, and nothing patched on top to fake it.
             </li>
+            <!-- S26 2026-07-06 (#132) — accuracy fix (audit M2): this
+                 bullet previously promised the "same code library
+                 (SDK) as the paid tiers", but the free tier is
+                 manual-only — apiAccess: false in
+                 packages/api-types/src/common.ts TIER_FEATURES (no
+                 usable API keys, no REST/SDK access from code).
+                 Wording now matches the faq.ts free-tier answer. -->
             <li class="flex gap-2">
-              <span class="arrow-bullet">›</span> Same desktop app and same code library (SDK) as the
-              paid tiers — upgrade later without changing anything you've
-              built.
+              <span class="arrow-bullet">›</span> Same desktop app as the paid tiers — but manual-only:
+              access from code (the API and SDKs) starts on the API
+              ladder.
             </li>
             <li class="flex gap-2">
               <span class="arrow-bullet">›</span> Perpetual — no expiry, no credit to run down.
