@@ -1,0 +1,54 @@
+---
+// Breadcrumbs — visible up-navigation trail for deep hierarchy pages
+// (use-cases personas, trust subpages) PLUS the matching BreadcrumbList
+// JSON-LD for search rich-results. One source: the same `items` array
+// drives the rendered trail and the schema, so they can never diverge.
+// The last item is the current page (rendered as plain text, no link,
+// aria-current); earlier items link up the tree.
+interface Crumb {
+  name: string;
+  /** `/`-rooted path; omitted/empty on the final (current) crumb. */
+  href?: string;
+}
+interface Props {
+  items: Crumb[];
+  class?: string;
+}
+const { items, class: className = '' } = Astro.props;
+
+// schema.org BreadcrumbList — absolute item URLs resolved against
+// Astro.site. Only crumbs WITH an href carry an `item` (Google drops the
+// current page's URL anyway); position is 1-based over all crumbs.
+const breadcrumbLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: items.map((c, i) => ({
+    '@type': 'ListItem',
+    position: i + 1,
+    name: c.name,
+    ...(c.href ? { item: new URL(c.href, Astro.site).toString() } : {}),
+  })),
+};
+---
+
+<nav aria-label="Breadcrumb" class:list={['text-xs text-tk-ink-3', className]}>
+  <ol class="flex flex-wrap items-center gap-1.5">
+    {
+      items.map((c, i) => (
+        <li class="flex items-center gap-1.5">
+          {c.href ? (
+            <a href={c.href} class="transition-colors hover:text-tk-accent-text">
+              {c.name}
+            </a>
+          ) : (
+            <span aria-current="page" class="text-tk-ink-2">
+              {c.name}
+            </span>
+          )}
+          {i < items.length - 1 ? <span aria-hidden="true">/</span> : null}
+        </li>
+      ))
+    }
+  </ol>
+</nav>
+<script type="application/ld+json" set:html={JSON.stringify(breadcrumbLd)} />

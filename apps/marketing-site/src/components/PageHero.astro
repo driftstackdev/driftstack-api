@@ -14,6 +14,8 @@ const { label, title, lead } = Astro.props;
   <div class="hero-glow" aria-hidden="true"></div>
   <div class="absolute inset-0 grid-bg opacity-60" aria-hidden="true"></div>
   <div class="relative mx-auto max-w-6xl px-6 py-20 md:py-24">
+    {/* Optional breadcrumb trail above the eyebrow (deep hierarchy pages). */}
+    <slot name="crumbs" />
     <p class="section-label">{label}</p>
     <h1
       class="mt-4 max-w-3xl text-3xl font-bold tracking-tight text-tk-ink sm:text-4xl md:text-5xl"

@@ -10,6 +10,7 @@
 // starts on the API ladder — stated honestly, not buried).
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHero from '../../components/PageHero.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import Section from '../../components/Section.astro';
 import Stat from '../../components/Stat.astro';
 import CodeWindow from '../../components/CodeWindow.astro';
@@ -25,7 +26,13 @@ import CtaBand from '../../components/CtaBand.astro';
     label="Use cases · QA + engineering teams"
     title="Test on the real thing."
     lead="Your users are on iPhones. Your test grid probably isn't. Driftstack gives your suite the exact engine iOS users run — as a cloud session your CI starts with one API call."
-  />
+  >
+    <Breadcrumbs
+      slot="crumbs"
+      class="mb-5"
+      items={[{ name: 'Home', href: '/' }, { name: 'Use cases', href: '/use-cases' }, { name: 'QA + testing' }]}
+    />
+  </PageHero>
 
   <Section
     label="The problem"

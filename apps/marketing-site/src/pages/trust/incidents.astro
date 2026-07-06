@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHero from '../../components/PageHero.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import Section from '../../components/Section.astro';
 import CtaBand from '../../components/CtaBand.astro';
 import StatusBadge from '../../components/StatusBadge.astro';
@@ -57,6 +58,11 @@ function severityClass(s: Incident['severity']): string {
 >
   <!-- Hero -->
   <PageHero label="Trust · Incidents" title="Incident history.">
+    <Breadcrumbs
+      slot="crumbs"
+      class="mb-5"
+      items={[{ name: 'Home', href: '/' }, { name: 'Trust center', href: '/trust' }, { name: 'Incidents' }]}
+    />
     <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">
       Every customer-impacting outage or security event gets a public
       entry below — including ones short enough that customers might

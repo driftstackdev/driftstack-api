@@ -10,6 +10,7 @@
 // boundary (/legal/aup) instead of encouraging anyone to cross it.
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHero from '../../components/PageHero.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import Section from '../../components/Section.astro';
 import Stat from '../../components/Stat.astro';
 import FaqList from '../../components/FaqList.astro';
@@ -32,7 +33,13 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
     label="Use cases · Operators + account teams"
     title="Run many accounts, safely apart."
     lead="You run more than one account because the work demands it — client accounts at an agency, regional storefronts, seller profiles. The hard part isn't running them. It's keeping them apart."
-  />
+  >
+    <Breadcrumbs
+      slot="crumbs"
+      class="mb-5"
+      items={[{ name: 'Home', href: '/' }, { name: 'Use cases', href: '/use-cases' }, { name: 'Multi-account operations' }]}
+    />
+  </PageHero>
 
   <Section
     label="The problem"

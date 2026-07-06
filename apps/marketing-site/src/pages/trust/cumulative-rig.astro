@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHero from '../../components/PageHero.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import { CUMULATIVE_RIG, DEVICE_SUPPORT } from '../../data/capabilities.ts';
 
 // V-668 — Cumulative rig methodology page. The homepage repeatedly
@@ -49,6 +50,11 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
 >
   <!-- Hero -->
   <PageHero label="Trust center · Cumulative rig" title="Cumulative rig methodology.">
+    <Breadcrumbs
+      slot="crumbs"
+      class="mb-5"
+      items={[{ name: 'Home', href: '/' }, { name: 'Trust center', href: '/trust' }, { name: 'Cumulative rig' }]}
+    />
     <p class="mt-6 max-w-prose text-lg text-tk-ink-2 leading-relaxed">
       The cumulative rig is the full set of measurable signals a
       detection system can read from a browser session. Driftstack's

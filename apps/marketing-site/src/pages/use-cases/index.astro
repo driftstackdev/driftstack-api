@@ -5,6 +5,7 @@
 // register (the homepage §4 persona cards are the source phrases).
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHero from '../../components/PageHero.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import Section from '../../components/Section.astro';
 import IconTile from '../../components/IconTile.astro';
 import CtaBand from '../../components/CtaBand.astro';
@@ -42,7 +43,13 @@ const personas = [
     label="Use cases"
     title="Built for the work you actually do."
     lead="Three kinds of teams keep real iPhones in the cloud. Find yours — each page walks through the problem, how Driftstack answers it, and which plan fits."
-  />
+  >
+    <Breadcrumbs
+      slot="crumbs"
+      class="mb-5"
+      items={[{ name: 'Home', href: '/' }, { name: 'Use cases' }]}
+    />
+  </PageHero>
 
   <Section
     label="Pick your work"

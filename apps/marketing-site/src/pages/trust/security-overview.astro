@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHero from '../../components/PageHero.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
 
 // V-670 (V-550 follow-up) — public security overview as an evaluator
 // checklist. /security is the architecture deep-dive; this page is
@@ -15,6 +16,11 @@ import PageHero from '../../components/PageHero.astro';
   description="Driftstack security claims, mapped one-to-one to their verifiable evidence. Code paths, tests, and public docs — so your security review can self-serve."
 >
   <PageHero label="Trust center · Security overview" title="Every claim, mapped to evidence.">
+    <Breadcrumbs
+      slot="crumbs"
+      class="mb-5"
+      items={[{ name: 'Home', href: '/' }, { name: 'Trust center', href: '/trust' }, { name: 'Security overview' }]}
+    />
     <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">
       Architecture deep-dive lives at
       <a href="/security" class="text-tk-accent-text underline">/security</a>;
