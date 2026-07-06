@@ -559,7 +559,7 @@ import CtaBand from '../components/CtaBand.astro';
           test suite (a green test gate) before it lands.
         </p>
       </div>
-      <!-- S26 2026-07-06 (#132) — accuracy fix (audit M3): this card
+      {/* S26 2026-07-06 (#132) — accuracy fix (audit M3): this card
            previously claimed Renovate alongside Dependabot plus a 24h
            on-call alert; no Renovate config exists anywhere in the
            repo (only .github/dependabot.yml) and there is no on-call
@@ -567,7 +567,7 @@ import CtaBand from '../components/CtaBand.astro';
            weekly grouped Dependabot proposals across five ecosystems
            (.github/dependabot.yml, V-105) + patch-only auto-merge
            that waits for CI (.github/workflows/dependabot-auto-merge.yml,
-           V-148). -->
+           V-148). */}
       <div>
         <h3 class="text-base font-medium text-tk-ink">Dependabot</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
@@ -580,7 +580,7 @@ import CtaBand from '../components/CtaBand.astro';
           waits for human review.
         </p>
       </div>
-      <!-- S26 2026-07-06 (#132) — accuracy fix (audit H1): this card
+      {/* S26 2026-07-06 (#132) — accuracy fix (audit H1): this card
            previously claimed CycloneDX SBOMs + cryptographically
            signed images + a signature-verifying deploy pipeline.
            None of that tooling exists (no cosign/syft anywhere; the
@@ -592,7 +592,7 @@ import CtaBand from '../components/CtaBand.astro';
            post-deploy health-check with automatic rollback
            (.github/workflows/server-deploy.yml V-549.A/V-549.B), and
            the public /version endpoint reporting the deployed git SHA
-           (apps/server/src/lib/app.ts V-195). -->
+           (apps/server/src/lib/app.ts V-195). */}
       <div>
         <h3 class="text-base font-medium text-tk-ink">Locked installs, gated deploys</h3>
         <p class="mt-3 text-sm text-tk-ink-2">

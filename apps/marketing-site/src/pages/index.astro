@@ -896,14 +896,14 @@ try {
         <ul class="mt-5 space-y-2.5 text-sm text-tk-ink-2">
           <li class="flex gap-2.5"><span class="arrow-bullet">→</span><span>{apiLineup}</span></li>
           <li class="flex gap-2.5"><span class="arrow-bullet">→</span><span>{apiCaps} concurrent sessions per tier; Enterprise custom</span></li>
-          <!-- S26 2026-07-06 (#132) — accuracy fix (audit L1): the
+          {/* S26 2026-07-06 (#132) — accuracy fix (audit L1): the
                trailing "(API Builder and up)" read as if
                bring-your-own-key were gated to API Builder, but per
                packages/api-types/src/common.ts TIER_FEATURES every
                API tier has the AI agent (api_starter: aiAgent true,
                llmBilling 'byok_only'); only the BUNDLED option starts
                at api_builder ('byok_or_bundled'). Qualifier moved to
-               the clause it actually governs. -->
+               the clause it actually governs. */}
           <li class="flex gap-2.5"><span class="arrow-bullet">→</span><span>AI assistant on every API tier — connect your own Anthropic key and pay Anthropic directly, no Driftstack markup; an optional bundled assistant (no key needed) comes with API Builder and up</span></li>
         </ul>
         <a href="/pricing#api" class="btn-secondary mt-7 inline-flex">See API pricing →</a>
