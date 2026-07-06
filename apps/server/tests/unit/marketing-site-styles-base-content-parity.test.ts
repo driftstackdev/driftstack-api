@@ -211,7 +211,9 @@ describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => 
     expect(body).toMatch(/background: var\(--code-bg\);/);
     expect(body).toMatch(/\.code-preview \.code-window-chrome \{/);
     expect(body).toMatch(/\.code-preview \.code-window-chrome span\.pip \{/);
-    expect(body).toMatch(/h-2\.5 w-2\.5 rounded-full bg-white\/15/);
+    // S20 2026-07-06: pips /15 → /25 (measured 1.49:1 on the code-bg —
+    // sub-visible on the dark terminal chrome).
+    expect(body).toMatch(/h-2\.5 w-2\.5 rounded-full bg-white\/25/);
   });
 
   it('accent-rule framing pinned (Fleet): vertical tk-accent border-left + accent glow shadow', () => {

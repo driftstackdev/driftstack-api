@@ -250,7 +250,10 @@ const CATEGORY_COLOR: Record<ChangelogEntry['category'], string> = {
   sdk: 'bg-tk-raised text-tk-ink',
   docs: 'bg-tk-raised text-tk-ink',
   security: 'bg-red-100 text-red-900',
-  pricing: 'bg-amber-100 text-tk-accent-soft',
+  // (was text-tk-accent-soft — the 13%-alpha WASH token misused as a text
+  // color; rendered 1.21:1, effectively invisible. amber-900 matches the
+  // light-chip + dark-900-text pattern of the security/self-hosted rows.)
+  pricing: 'bg-amber-100 text-amber-900',
   'self-hosted': 'bg-emerald-100 text-emerald-900',
 };
 ---

@@ -77,10 +77,11 @@ describe('W525.B apps/marketing-site/tailwind.config.mjs content parity', () => 
     expect(body).toMatch(/'accent-strong': 'rgb\(var\(--accent-strong-rgb\) \/ <alpha-value>\)',/);
     expect(body).toMatch(/'accent-text': 'var\(--accent-text\)',/);
     expect(body).toMatch(/'glow-accent': '0 0 0 1px var\(--accent\), 0 0 26px var\(--glow\)',/);
-    expect(body).toMatch(
-      /ambient: '0 1px 2px rgb\(15 16 20 \/ 0\.04\), 0 10px 28px -18px rgb\(15 16 20 \/ 0\.12\)',/,
-    );
-    expect(body).toMatch(/'ambient-lg':/);
+    // S20 2026-07-06 — ambient shadows became mode-aware vars: the original
+    // gray shadows composite to a measured 1.0000:1 on the near-black dark
+    // bg (zero elevation cue); the per-mode values live in base.css.
+    expect(body).toMatch(/ambient: 'var\(--shadow-ambient\)',/);
+    expect(body).toMatch(/'ambient-lg': 'var\(--shadow-ambient-lg\)',/);
     expect(body).toMatch(/card: '14px',/);
   });
 

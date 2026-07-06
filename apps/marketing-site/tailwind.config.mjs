@@ -64,8 +64,12 @@ export default {
         'glow-accent': '0 0 0 1px var(--accent), 0 0 26px var(--glow)',
         'inset-divider': 'inset 0 1px 0 rgba(255, 255, 255, 0.06)',
         // Fleet v2 — calm ambient card shadows (replace glow-on-everything).
-        ambient: '0 1px 2px rgb(15 16 20 / 0.04), 0 10px 28px -18px rgb(15 16 20 / 0.12)',
-        'ambient-lg': '0 2px 4px rgb(15 16 20 / 0.05), 0 24px 56px -24px rgb(15 16 20 / 0.2)',
+        // S20 2026-07-06: mode-aware vars — the original gray shadows are a
+        // measured no-op on the near-black dark bg (composite to 1.0000:1),
+        // so dark mode supplies a lit top rim + true-black drop instead
+        // (values live in styles/base.css per data-mode block).
+        ambient: 'var(--shadow-ambient)',
+        'ambient-lg': 'var(--shadow-ambient-lg)',
       },
       backgroundImage: {
         // Fleet v2 — calmer accent-aware ambient radials (follow the

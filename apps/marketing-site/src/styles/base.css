@@ -177,9 +177,16 @@
     background-image:
       linear-gradient(to right, rgb(var(--ink-rgb) / 0.04) 1px, transparent 1px),
       linear-gradient(to bottom, rgb(var(--ink-rgb) / 0.04) 1px, transparent 1px);
+    /* S20: 0.04 gridlines measured 1.065:1 on the dark bg — decorative
+       loss; dark mode gets a perceptible (still faint) 0.06. */
     background-size: 40px 40px;
     mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 30%, transparent 75%);
     -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 30%, transparent 75%);
+  }
+  [data-mode='dark'] .grid-bg {
+    background-image:
+      linear-gradient(to right, rgb(var(--ink-rgb) / 0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--ink-rgb) / 0.06) 1px, transparent 1px);
   }
 
   /* 2026-05-22 — hero atmosphere (marketing's editorial signature; the
@@ -245,10 +252,10 @@
     color: #cfd2dc;
   }
   .code-preview .code-window-chrome {
-    @apply flex items-center gap-2 border-b border-white/10 px-4 py-3; /* dark-terminal chrome in both modes */
+    @apply flex items-center gap-2 border-b border-white/15 px-4 py-3; /* dark-terminal chrome in both modes */
   }
   .code-preview .code-window-chrome span.pip {
-    @apply h-2.5 w-2.5 rounded-full bg-white/15;
+    @apply h-2.5 w-2.5 rounded-full bg-white/25;
   }
 
   /* Accent rule — vertical glow line used to draw the eye to a
@@ -434,35 +441,54 @@
   --err: #d8453c;
   --sync: #2563eb;
   --code-bg: #16171c;
+  /* S20 — mode-aware elevation: the light values are the original v2
+     ambient shadows (they work on light surfaces). */
+  --shadow-ambient: 0 1px 2px rgb(15 16 20 / 0.04), 0 10px 28px -18px rgb(15 16 20 / 0.12);
+  --shadow-ambient-lg: 0 2px 4px rgb(15 16 20 / 0.05), 0 24px 56px -24px rgb(15 16 20 / 0.2);
 }
 [data-mode='dark'] {
   --bg-rgb: 6 6 8;
-  --surface-rgb: 14 14 18;
-  --raised-rgb: 21 21 27;
-  --hover-rgb: 34 35 44;
+  --surface-rgb: 20 20 26;
+  --raised-rgb: 28 28 36;
+  --hover-rgb: 36 37 47;
   --ink-rgb: 245 245 247;
   --ink-2-rgb: 176 176 187;
   --ink-3-rgb: 140 140 150;
-  --border-rgb: 30 30 38;
+  --border-rgb: 44 44 56;
   --ready-rgb: 47 227 154;
   --busy-rgb: 255 194 77;
   --err-rgb: 255 107 97;
   --bg: #060608;
-  --surface: #0e0e12;
-  --raised: #15151b;
-  --hover: #22232c;
+  /* S20 2026-07-06 (founder: "boxes might not even be visible") — the dark
+     surface ladder was compressed ~4x below the GUI's (surface vs bg was
+     1.05:1, below perceptibility; every layer boundary hung on a 1.16:1
+     hairline border). Bumped for SEPARATION while the near-black brand bg
+     stays locked: surface 1.10:1 / raised 1.20:1 vs bg / border 1.47:1.
+     DELIBERATE divergence from the dashboard's byte-identical dark
+     surfaces (same latent issue there; port is a separate decision) —
+     precedent: the --ink-3 divergence below. */
+  --surface: #14141a;
+  --raised: #1c1c24;
+  --hover: #24252f;
   --ink: #f5f5f7;
   --ink-2: #b0b0bb;
   /* --ink-3 deliberately diverges from the dashboard's #73737f: marketing
      uses ink-3 for small muted print at reading distance, and #8c8c96
      clears WCAG AA on #060608 where #73737f (≈4.2:1) does not. */
   --ink-3: #8c8c96;
-  --border: #1e1e26;
+  --border: #2c2c38;
   --ready: #2fe39a;
   --busy: #ffc24d;
   --err: #ff6b61;
   --sync: #60a5fa;
   --code-bg: #0c0c11;
+  /* S20 — dark elevation: the light-mode gray shadows composite to
+     EXACTLY the bg on near-black (a mathematical no-op, measured
+     1.0000:1), so dark cards had zero elevation cue. Dark uses the
+     standard dark-UI cue instead: a lit top rim (inset white ~5%)
+     + a true-black drop for overlap depth. */
+  --shadow-ambient: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 10px 28px -18px rgb(0 0 0 / 0.7);
+  --shadow-ambient-lg: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 24px 56px -24px rgb(0 0 0 / 0.85);
 }
 
 /* ── AA-safe accent-toned TEXT (Fleet v2 2026-07-03). The raw --accent fails

@@ -16,7 +16,9 @@ const LABELS: Record<ChipState, string> = {
 const TONES: Record<ChipState, string> = {
   live: 'text-tk-ready border-tk-ready/30',
   'rolling-out': 'text-tk-busy border-tk-busy/30',
-  roadmap: 'text-tk-ink-3 border-tk-border',
+  // S20: roadmap chips floated as bare words on dark (no fill, 1.16:1
+  // border) — a raised fill makes the chip read as a chip.
+  roadmap: 'bg-tk-raised text-tk-ink-3 border-tk-border',
 };
 ---
 
