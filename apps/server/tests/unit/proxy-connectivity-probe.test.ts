@@ -62,6 +62,49 @@ describe('parseExitIdentityFromResponseTail (#128 new-tab panel capture)', () =>
     expect(parseExitIdentityFromResponseTail(resp(body))?.city).toBe('São Paulo');
   });
 
+  it('bounds untrusted field lengths from a malicious/MITM proxy body — ip>45 rejects the block; over-long region/city/timezone degrade to null (#128 hardening)', () => {
+    // An "ip" longer than an IPv6 literal (45 chars) is bogus → whole block rejected.
+    expect(
+      parseExitIdentityFromResponseTail(
+        resp(JSON.stringify({ ip: 'x'.repeat(46), country: 'US' })),
+      ),
+    ).toBeUndefined();
+    // A 45-char value is still accepted (the IPv6-max boundary).
+    const ip45 = '2'.repeat(45);
+    expect(
+      parseExitIdentityFromResponseTail(resp(JSON.stringify({ ip: ip45, country: 'US' })))?.ip,
+    ).toBe(ip45);
+    // region/city over 128 + timezone over 64 → null (no assign-wire / panel bloat).
+    expect(
+      parseExitIdentityFromResponseTail(
+        resp(
+          JSON.stringify({
+            ip: '1.2.3.4',
+            country: 'US',
+            region: 'r'.repeat(129),
+            city: 'c'.repeat(200),
+            timezone: 't'.repeat(65),
+          }),
+        ),
+      ),
+    ).toEqual({ ip: '1.2.3.4', country: 'US', region: null, city: null, timezone: null });
+    // At-cap values (128/128/64) are kept verbatim.
+    const kept = parseExitIdentityFromResponseTail(
+      resp(
+        JSON.stringify({
+          ip: '1.2.3.4',
+          country: 'US',
+          region: 'r'.repeat(128),
+          city: 'c'.repeat(128),
+          timezone: 't'.repeat(64),
+        }),
+      ),
+    );
+    expect(kept?.region?.length).toBe(128);
+    expect(kept?.city?.length).toBe(128);
+    expect(kept?.timezone?.length).toBe(64);
+  });
+
   it('returns undefined (never throws) on partial body, no content-length, oversize, non-JSON, or missing ip', () => {
     const full = JSON.stringify({ ip: '1.2.3.4', country: 'US' });
     // body not fully buffered (Content-Length says more than present)

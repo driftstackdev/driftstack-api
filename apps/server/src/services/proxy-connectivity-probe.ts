@@ -98,16 +98,22 @@ export function parseExitIdentityFromResponseTail(tail: Buffer): ProbeExitIdenti
     const parsed: unknown = JSON.parse(tail.subarray(bodyStart, bodyStart + len).toString('utf8'));
     if (typeof parsed !== 'object' || parsed === null) return undefined;
     const o = parsed as Record<string, unknown>;
-    if (typeof o.ip !== 'string' || o.ip.length === 0) return undefined;
-    const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
+    // Length caps — the body is our OWN echo endpoint's, but it rides back THROUGH
+    // the customer's (attacker-influenceable / MITM-able) proxy, so treat every
+    // field as untrusted. An IPv6 literal maxes at 45 chars; a bogus over-long "ip"
+    // invalidates the whole block. region/city/timezone over their sane ceilings
+    // degrade to null rather than bloating the assign wire frame + the box panel.
+    if (typeof o.ip !== 'string' || o.ip.length === 0 || o.ip.length > 45) return undefined;
+    const str = (v: unknown, max: number): string | null =>
+      typeof v === 'string' && v.length > 0 && v.length <= max ? v : null;
     const country =
       typeof o.country === 'string' && /^[A-Z]{2}$/.test(o.country) ? o.country : 'XX';
     return {
       ip: o.ip,
       country,
-      region: str(o.region),
-      city: str(o.city),
-      timezone: str(o.timezone),
+      region: str(o.region, 128),
+      city: str(o.city, 128),
+      timezone: str(o.timezone, 64),
     };
   } catch {
     return undefined;
@@ -519,6 +525,16 @@ export class ProxyConnectivityProbe {
  * probe failure by the caller).
  */
 class SocketReader {
+  /** Hard cap on the in-memory read buffer. The probe only ever needs a SOCKS5
+   *  handshake (tens of bytes) + one tiny HTTP response (status line + headers +
+   *  a ≤4096-byte echo body) — a few KB total. 256 KiB is a very generous ceiling.
+   *  A proxy the customer wired to the CP is attacker-influenceable (or MITM-able),
+   *  and without a cap a malicious/abusive proxy can stream unbounded bytes into CP
+   *  memory for the whole ~6s deadline window (and concurrent creates amplify it).
+   *  On overflow we fail the read CLOSED (the probe returns a failure → the launch
+   *  is BLOCKED), which is the correct verdict: a proxy that floods isn't usable. */
+  private static readonly MAX_BUFFER_BYTES = 256 * 1024;
+
   private buf: Buffer = Buffer.alloc(0);
   private waiter: (() => void) | null = null;
   private closed = false;
@@ -526,6 +542,17 @@ class SocketReader {
 
   constructor(socket: Socket) {
     socket.on('data', (chunk: Buffer) => {
+      if (this.buf.length + chunk.length > SocketReader.MAX_BUFFER_BYTES) {
+        // Abusive volume with no valid framing → stop buffering, tear down, and mark
+        // errored so pending + future reads reject cleanly (mapped to a probe failure
+        // by the caller). Idempotent: keep the first error if one already latched.
+        this.errored ??= new Error(
+          `proxy response exceeded probe buffer cap (${SocketReader.MAX_BUFFER_BYTES} bytes)`,
+        );
+        socket.destroy();
+        this.wake();
+        return;
+      }
       this.buf = Buffer.concat([this.buf, chunk]);
       this.wake();
     });
