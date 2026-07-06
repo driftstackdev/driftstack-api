@@ -3488,6 +3488,12 @@ export function SimulatorWindow(): JSX.Element {
             // (a sensible state — never leave it half-switched) and show a brief,
             // NON-BLOCKING notice. No alert(); the toast auto-dismisses.
             setActiveTabId(pending.prevTabId);
+            // audit wb1w3015f #6 — reset the (window-global) page chrome on the revert
+            // exactly like the forward-switch paths do, so the REJECTED tab's overlay /
+            // spinner / stalled badge / load-gate can't bleed onto the reverted-to tab
+            // (whose own re-activated page_state below re-asserts the truth). Without
+            // this a stale 'Try again' overlay could force-refresh the working prev tab.
+            resetPageChromeForSwitch();
             // The box switched (or tried to) to the REJECTED tab and is now publishing
             // it — reverting only the GUI's activeTabId leaves the video on the failed
             // page while the strip + address bar show the previous tab. Re-activate the
