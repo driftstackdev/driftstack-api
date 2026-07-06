@@ -234,12 +234,15 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
 
     // Sample entries (post 2026-05-XX V-131 license-tier-gate parity
     // simplification: software-updates + archetype-updates all-tiers
-    // Continuous; source-access still tiered Solo/Pro=artifacts /
-    // Enterprise=artifacts + read-only audit).
+    // Continuous; source-access still tiered Solo/Pro=compiled software /
+    // Enterprise adds read-only source review — S20b 2026-07-06 plain-
+    // language labels, same 2-level differentiation).
     expect(p).toMatch(/self_hosted_solo: 'Continuous'/);
     expect(p).toMatch(/self_hosted_pro: 'Continuous'/);
     expect(p).toMatch(/self_hosted_enterprise: 'Continuous'/);
-    expect(p).toMatch(/self_hosted_enterprise: 'Build artifacts \+ read-only repo audit'/);
+    expect(p).toMatch(
+      /self_hosted_enterprise: 'Compiled software \+ read-only source-code review access'/,
+    );
   });
 
   it('CRITICAL paid manual + API tiers use the "Get started" → /signup CTA (trial-funnel CTA retired with the trial pack 2026-05-27). The 6 non-enterprise paid tiers send signups straight to /signup; the free tier uses "Get started — free".', () => {

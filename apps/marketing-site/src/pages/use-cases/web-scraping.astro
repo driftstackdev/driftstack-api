@@ -47,12 +47,12 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
     <div class="mt-8 max-w-prose space-y-5 text-base leading-7 text-tk-ink-2">
       <p>
         Point a desktop collector at a mobile-first site and you get the
-        desktop version — or worse, a "please use our app" interstitial
-        instead of the page. Fake the phone's user-agent string and you get
-        the next problem: detection. Websites have gotten very good at
-        spotting a desktop browser wearing a phone costume, because the
-        disguise only covers the surfaces a stealth plugin remembered to
-        paint.
+        desktop version — or worse, a full-screen "please use our app"
+        roadblock instead of the page. Fake the phone's user-agent string and
+        you get the next problem: detection. Websites have gotten very good
+        at spotting a desktop browser wearing a phone costume, because the
+        disguise only covers the details the stealth tool remembered to
+        fake.
       </p>
       <p>
         Driftstack doesn't wear a costume. Every session runs the browser
@@ -71,15 +71,15 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
     <div class="mt-10 grid gap-4 sm:grid-cols-3">
       <Stat
         plain="Looks human to every website"
-        technical="Canvas + WebGL hashes match the real-iPhone population — not unique-per-session like every other API"
+        technical="The hidden 'device photos' sites take to spot fakes (canvas + WebGL hashes) match millions of real iPhones — not a new unique value per session like every other API"
       />
       <Stat
         plain="Stable across sessions"
-        technical="Hash uniqueness: population-stable, where stealth Chromium reads 100% unique"
+        technical="Fingerprint values match what millions of real iPhones share, session after session (population-stable); stealth Chromium mints a new one every session — 100% unique, itself a giveaway"
       />
       <Stat
         plain="Any country you need"
-        technical="Bring your own proxy or VPN, attached per profile — locale and timezone follow the exit"
+        technical="Bring your own proxy or VPN, attached per profile — language and clock settings follow the exit's location"
       />
     </div>
     <p class="mt-8 max-w-prose text-sm leading-6 text-tk-ink-3">
@@ -92,7 +92,7 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
   <Section
     label="Which plan"
     title="Collectors are code — take the API ladder."
-    lead="Drive sessions from the TypeScript, Python, or Go SDK — or any HTTP client — with structured actions: navigate, interact, capture, extract. One concurrent cap, unmetered hours inside it."
+    lead="Drive sessions from the TypeScript, Python, or Go SDK — or any HTTP client — with structured actions: navigate, interact, capture, extract. One cap on how many sessions run at the same time (think browser tabs open at once) — hours inside it aren't metered."
   >
     <div class="mt-8 flex flex-wrap items-center gap-4">
       <a href="/pricing#api" class="btn-secondary">See API pricing →</a>
@@ -104,8 +104,9 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
       Collect responsibly: the
       <a href="/legal/aup" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">Acceptable Use Policy</a>
       draws the line in plain words — market research and price monitoring
-      are what this page is about; scraping that bypasses authentication or
-      reasonable rate limits is not allowed.
+      are what this page is about; scraping that gets around logins
+      (authentication) or past a site's reasonable rate limits is not
+      allowed.
     </p>
   </Section>
 

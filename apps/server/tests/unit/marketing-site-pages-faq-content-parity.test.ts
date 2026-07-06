@@ -71,12 +71,12 @@ describe('W500.A apps/marketing-site /faq (src/data/faq.ts + faq.astro) content 
 
   it("Free-tier mechanic pinned: 'One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from the desktop GUI client — $0 forever, no card required. The free tier is manual-only (no programmatic API/SDK access)' + perpetual (no expiry) + manual-only + no metering — pinned so the founder-locked free-tier shape survives. (Free tier is MANUAL-GUI-ONLY; programmatic API/SDK access starts on the API ladder, API Starter from $149/mo. The prior 2026-05-28 'API-within-free-limits' framing is superseded — common.ts:76 'free $0 — manual-only (no API)'.)", () => {
     expect(body).toMatch(
-      /One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from the desktop GUI client — \$0 forever, no card required\./,
+      /One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from our desktop app — \$0 forever, no card required\./,
     );
-    expect(body).toMatch(/The free tier is manual-only \(no programmatic API\/SDK access\)/);
+    expect(body).toMatch(/The free tier is manual-only \(no API\/SDK access from code\)/);
     expect(body).toMatch(/The free tier is perpetual/);
     expect(body).toMatch(
-      /Programmatic API\/SDK access starts on the API ladder \(API Starter from \$149\/mo\)/,
+      /Access from code — the API and SDKs — starts on the API ladder \(API Starter from \$149\/mo\)/,
     );
     expect(body).not.toMatch(/within the free limits/);
     expect(body).not.toMatch(/driven from the API or the desktop GUI client/);
@@ -111,7 +111,7 @@ describe('W500.A apps/marketing-site /faq (src/data/faq.ts + faq.astro) content 
 
   it('Stripe payment framing pinned: \'Stripe is our payment processor. Card statements show "STRIPE *DRIFTSTACK". Receipts come from Stripe. Subscription management goes through the Stripe Customer Portal. Stripe handles PCI compliance, fraud protection, dispute mechanisms, and EU VAT/BTW reverse-charge — all of which we inherit rather than reimplement.\' — pinned so the Stripe-handled scope (PCI + fraud + dispute + EU VAT/BTW reverse-charge) stays explicit (drift to dropping would let customers wonder which compliance pieces Driftstack does vs. Stripe)', () => {
     expect(body).toMatch(
-      /Stripe handles PCI compliance, fraud protection, dispute mechanisms, and EU VAT\/BTW reverse-charge — all of which we inherit rather than reimplement\./,
+      /Stripe handles PCI compliance \(the card-security rules\), fraud protection, payment disputes, and EU VAT\/BTW reverse-charge \(the EU tax rules for business buyers\) — we rely on Stripe for all of that rather than rebuilding it ourselves\./,
     );
   });
 
@@ -122,20 +122,31 @@ describe('W500.A apps/marketing-site /faq (src/data/faq.ts + faq.astro) content 
 
   it("BYOK security framing: 'Your Anthropic API key is encrypted at rest with envelope encryption, decrypted in-memory only at session execution time, and never logged. The DPA covers the handling shape. Self-hosted customers can use their own KMS for the envelope key.' — pinned so the envelope-encryption + in-memory-only + never-logged + DPA-coverage + KMS-bring-your-own posture survive (drift to dropping any would weaken the BYOK security narrative for compliance buyers)", () => {
     expect(body).toMatch(
-      /Your Anthropic API key is encrypted at rest with envelope encryption, decrypted in-memory only at session execution time, and never logged\. The DPA covers the handling shape\. Self-hosted customers can use their own KMS for the envelope key\./,
+      /Your Anthropic API key is encrypted at rest with envelope encryption, decrypted in-memory only at session execution time, and never logged\./,
+    );
+    // S20b 2026-07-06: the security terms stay, each now carries a plain
+    // gloss (envelope encryption / DPA / KMS spelled out). The data-file
+    // literal escapes the apostrophe (`it\'s`) — accept both forms.
+    expect(body).toMatch(
+      /Our data-processing agreement \(DPA\) covers exactly how it\\?'s handled\./,
+    );
+    expect(body).toMatch(
+      /Self-hosted customers can hold the outer \(envelope\) key in their own key-management system \(KMS\)\./,
     );
   });
 
   it("Cap-reached HTTP 429 + RFC 9457 framing: 'Session-creation requests fail with HTTP 429 + a structured RFC 9457 problem-detail pointing at the cap-reached state and (where applicable) the next-tier upgrade path. Existing in-flight sessions are not interrupted.' — pinned so the 429 status + RFC 9457 + non-interruption contract stay explicit (drift to dropping non-interruption would let customers think hitting cap mid-fleet would kill in-flight sessions)", () => {
-    expect(body).toMatch(
-      /Session-creation requests fail with HTTP 429 \+ a structured RFC 9457 problem-detail/,
-    );
+    // S20b 2026-07-06: the answer now leads plain ("starting one session
+    // too many simply fails with a clear error") and keeps the developer
+    // contract in a parenthetical — 429 + RFC 9457 + non-interruption all
+    // still pinned.
+    expect(body).toMatch(/the request fails with HTTP 429 \+ a structured RFC 9457 problem-detail/);
     expect(body).toMatch(/Existing in-flight sessions are not interrupted\./);
   });
 
   it("Source-escrow framing: 'Data portability: profiles + audit logs + session metadata can be exported as CSV/JSON from the dashboard or via the API at any time' + 'Self-hosted SKU: Enterprise + Self-hosted licensees receive source escrow — if the cloud service is sunsetted, the source escrow agreement releases the WebKit fork + control-plane code so customers can continue running the stack on their own hardware indefinitely.' — pinned so the 2-protection 'what if Driftstack goes away?' framing survives (drift to dropping would lose the dealbreaker answer for compliance-conscious enterprise buyers)", () => {
     expect(body).toMatch(/<strong>Data portability:<\/strong>/);
-    expect(body).toMatch(/<strong>Self-hosted SKU:<\/strong>/);
+    expect(body).toMatch(/<strong>Self-hosted option:<\/strong>/);
     expect(body).toMatch(/Enterprise \+ Self-hosted licensees receive source escrow/);
   });
 

@@ -93,8 +93,14 @@ describe('W376.C marketing-site /pricing/crypto page content parity', () => {
     expect(body).toMatch(
       /equivalent\s+crypto amount is fixed when the order is created and doesn't\s+change/,
     );
+    // S20b 2026-07-06 reconciliation: the page previously contradicted
+    // itself ("no fixed 1-hour cutoff" vs the Late-payment bullet's 1-hour
+    // pay-window). Both facts are true and now stated together: the quote
+    // carries a 1-hour pay-window (server PAY_WINDOW_MS = 1h, gated by
+    // W340.A), but NOTHING auto-cancels — a missed order just goes stale
+    // and support closes it manually.
     expect(body).toMatch(
-      /There's no fixed 1-hour cutoff — a pending order isn't\s+automatically cancelled on a timer/,
+      /You then have a 1-hour window to pay at that quote\. An\s+order that misses the window isn't cancelled by a timer — it just\s+goes stale/,
     );
     expect(body).not.toMatch(/order auto-cancels/);
   });
@@ -111,30 +117,30 @@ describe('W376.C marketing-site /pricing/crypto page content parity', () => {
     );
   });
 
-  it('4-step checkout flow pinned (dashboard → mint order → broadcast → settle)', () => {
+  it('4-step checkout flow pinned (dashboard → create order → send transfer → settle on confirmations; S20b plain words, same flow)', () => {
     expect(body).toMatch(/From your account dashboard, pick the tier and click/);
     expect(body).toMatch(
-      /The Driftstack backend mints an order via NowPayments and\s+returns a unique deposit address \+ the exact amount to send\./,
+      /Driftstack creates an order through NowPayments and shows\s+you a one-time deposit address \+ the exact amount to send\./,
     );
-    expect(body).toMatch(/You broadcast the on-chain transfer/);
+    expect(body).toMatch(/You send the transfer\. The exchange or wallet\s+you use is up to you/);
     expect(body).toMatch(
-      /NowPayments watches the chain; once your transfer hits the\s+required confirmation count, Driftstack flips your account\s+to the new tier\./,
+      /NowPayments watches the blockchain; once your transfer reaches\s+the required number of confirmations, Driftstack switches your\s+account to the new tier\./,
     );
   });
 
-  it('3 failure modes pinned: underpayment / late payment / wrong currency', () => {
+  it('3 failure modes pinned: underpayment / late payment / wrong currency (S20b plain words, all 3 escalation paths intact)', () => {
     expect(body).toMatch(/<strong>Underpayment<\/strong>/);
-    expect(body).toMatch(/the order moves to <code>partial<\/code>/);
+    expect(body).toMatch(/the order is marked <code>partial<\/code>/);
     expect(body).toMatch(/<strong>Late payment<\/strong>/);
     expect(body).toMatch(/<strong>Wrong currency<\/strong>/);
     expect(body).toMatch(
-      /sending an unsupported\s+asset to the deposit address means the funds are not recovered\s+automatically/,
+      /if you send a currency we\s+don't accept, the money will not come back on its own/,
     );
   });
 
-  it('tax + accounting: USD-denominated invoices (matches card-billing posture)', () => {
+  it('tax + accounting: invoices in US dollars at the quoted (not realised) price — matches card-billing posture (S20b plain words, same facts)', () => {
     expect(body).toMatch(
-      /Driftstack issues USD-denominated invoices for crypto payments\s+based on the quoted USD price at order time, not the realised\s+crypto amount/,
+      /Invoices for crypto payments are issued in US dollars, at the USD\s+price quoted when you ordered — not at what the crypto happened to\s+be worth when it arrived/,
     );
   });
 

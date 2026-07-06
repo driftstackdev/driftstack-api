@@ -181,7 +181,7 @@ export const API_TIERS: ApiTier[] = [
     concurrent: 24,
     archetypeAccess: 'All currently-available archetypes',
     support: 'Slack Connect · 4h SLA',
-    audience: 'High-throughput automation fleets',
+    audience: 'High-volume automation running many sessions at once',
     aiAgent: true,
     llmBilling: 'byok_or_bundled',
     cta: { label: 'Get started', href: 'https://app.driftstack.dev/signup' },
@@ -206,7 +206,7 @@ export const API_TIERS: ApiTier[] = [
     concurrent: 'Custom',
     archetypeAccess: 'All available + custom archetypes',
     support: 'Dedicated CSM · 1h SLA',
-    audience: 'Negotiated commitment',
+    audience: 'Custom negotiated contracts',
     aiAgent: true,
     llmBilling: 'byok_or_bundled_custom',
     cta: { label: 'Contact sales', href: 'mailto:sales@driftstack.dev' },
@@ -263,9 +263,9 @@ export const SELF_HOSTED_ARCHETYPE_UPDATES: Record<string, string> = {
 };
 
 export const SELF_HOSTED_SOURCE_ACCESS: Record<string, string> = {
-  self_hosted_solo: 'Build artifacts',
-  self_hosted_pro: 'Build artifacts',
-  self_hosted_enterprise: 'Build artifacts + read-only repo audit',
+  self_hosted_solo: 'Compiled software (build artifacts)',
+  self_hosted_pro: 'Compiled software (build artifacts)',
+  self_hosted_enterprise: 'Compiled software + read-only source-code review access',
 };
 
 export const SELF_HOSTED_SKUS: SelfHostedSku[] = [

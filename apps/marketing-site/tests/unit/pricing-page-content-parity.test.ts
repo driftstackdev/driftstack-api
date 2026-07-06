@@ -71,7 +71,7 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     expect(body).toMatch(/A person → Manual\./);
     expect(body).toMatch(/You drive iPhones by hand in the desktop app\./);
     expect(body).toMatch(/Code → API\./);
-    expect(body).toMatch(/Your scripts and pipelines run the sessions\./);
+    expect(body).toMatch(/Your scripts and automated jobs run the sessions\./);
     // The quieter third card: both ladders share the engine + free tier.
     expect(body).toMatch(/Both\? Neither yet\? Start free\./);
     expect(body).toMatch(/Both ladders run the same engine and share the same free tier\./);
@@ -81,8 +81,10 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     expect(body).toMatch(
       /concurrent<\/strong> means\s*\n?\s*sessions running at the same time — think browser tabs/,
     );
+    // S20b 2026-07-06: the glossary line grew a third term (BYOK) — the
+    // profile definition now continues with ", and" instead of a period.
     expect(body).toMatch(
-      /profile<\/strong> is a saved iPhone identity\s*\n?\s*that keeps its logins and history\./,
+      /profile<\/strong> is a saved iPhone identity\s*\n?\s*that keeps its logins and history/,
     );
   });
 
@@ -142,18 +144,18 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     expect(body).toMatch(/BYOK or bundled — your call\./);
     expect(body).toContain('console.anthropic.com');
     expect(body).toMatch(/Bundled LLM \(API Builder, API Scale, Enterprise\)/);
-    expect(body).toMatch(/Self-hosted SKUs are BYOK-only/);
-    expect(body).toMatch(/Bundled per-token rate announced at launch/);
+    expect(body).toMatch(/Self-hosted\s*\n?\s*plans are BYOK-only/);
+    expect(body).toMatch(/bundled per-token rate is announced at launch/);
   });
 
-  it('free-tier perpetual claim pinned: never expires + upgrade to a paid tier (matches /faq)', () => {
+  it('free-tier perpetual claim pinned: never expires + upgrade to a paid tier (matches /faq; S20b: whitespace-tolerant — the sentence rewrapped)', () => {
     expect(body).toMatch(/The free tier is perpetual/);
-    expect(body).toMatch(/subscribe to\s+a paid tier from your dashboard/);
+    expect(body).toMatch(/subscribe\s+to a paid tier from your dashboard/);
   });
 
-  it('Stripe-proration mid-month claim pinned ("Yes. Stripe prorates the change automatically")', () => {
+  it('Stripe-proration mid-month claim pinned ("Yes. Stripe prorates the change automatically"; S20b: "session-creation gate" reworded plain, same when-it-applies fact)', () => {
     expect(body).toMatch(/Stripe prorates the change automatically\./);
-    expect(body).toMatch(/New limits apply\s+immediately on the next session-creation gate/);
+    expect(body).toMatch(/New limits apply\s+the next time you start a session/);
   });
 
   it('mini-FAQ teaser with 4 questions + /faq cross-link', () => {
@@ -195,8 +197,11 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     ).toBe(true);
   });
 
-  it("'Concurrent capacity bounded by your hardware, not by license' self-hosted teaser pinned", () => {
-    expect(body).toMatch(/Concurrent capacity is bounded by your hardware, not by license\./);
+  it("'sessions-at-once limited by your hardware, not the license' self-hosted teaser pinned (S20b plain words, same fact) + the source-escrow gloss", () => {
+    expect(body).toMatch(
+      /How many sessions run at once is limited by your hardware, not\s*\n?\s*by the license\./,
+    );
+    expect(body).toMatch(/Source escrow means a neutral third party/);
     expect(body).toMatch(/Hardware procurement detail at\{' '\}/);
     // v2: accent-colored TEXT uses the AA-safe text-tk-accent-text token.
     expect(body).toMatch(

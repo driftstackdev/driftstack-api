@@ -67,18 +67,16 @@ describe('W627 R7-R17 marketing additions content parity', () => {
       expect(body).toMatch(/plain="Any country you need"/);
     });
 
-    it('differentiator sub-claims preserved verbatim in the Stat technical props (canvas+WebGL real-iPhone-population hash + Apple WebKit source + same-engine 3 access paths); the no-runtime-JS-patching descriptor moved to the proof section Engine-deep card', () => {
+    it("differentiator sub-claims preserved in the Stat technical props (S20b 2026-07-06 plain-language pass: same facts — canvas+WebGL population-matched hashes glossed as the hidden 'device photos' sites take, Apple WebKit source code glossed as the engine inside every iPhone's Safari, code-or-dashboard access paths); the injects-nothing descriptor lives in the proof section Engine-deep card", () => {
       expect(body).toMatch(
-        /Canvas \+ WebGL hashes match the real-iPhone population — not unique-per-session like every other API/,
+        /The hidden 'device photos' sites take to spot fakes \(canvas \+ WebGL hashes\) match millions of real iPhones — not a new unique value per session like every other API/,
+      );
+      expect(body).toMatch(/Driftstack injects nothing, so there's nothing to find\./);
+      expect(body).toMatch(
+        /Built from Apple's WebKit source code — the engine inside every iPhone's Safari, the same one your iOS users run/,
       );
       expect(body).toMatch(
-        /No runtime JS patching, no stealth bundle for\s*\n?\s*fingerprinters to spot/,
-      );
-      expect(body).toMatch(
-        /Built from Apple's WebKit source — same engine your iOS users actually run/,
-      );
-      expect(body).toMatch(
-        /TypeScript, Python, Go, or the dashboard — same engine, three access paths/,
+        /From code — TypeScript, Python, or Go — or point-and-click from the dashboard\. Same engine either way/,
       );
     });
 
@@ -97,7 +95,9 @@ describe('W627 R7-R17 marketing additions content parity', () => {
       expect(body).toMatch(
         /Driftstack is built by the people who write the WebKit\s*\n?\s*patches/,
       );
-      expect(body).toMatch(/no\s*\n?\s*SDR machine, no upsell ladder, no roadmap chosen/);
+      expect(body).toMatch(
+        /no\s*\n?\s*cold-outreach sales team \(SDRs\), no upsell ladder, no roadmap chosen/,
+      );
     });
 
     it('3-card posture grid pinned (Design partner direct-engineer-access + Honest pricing one-concurrent-metric + Sovereignty your-data-stays-in-EU) — each card has its eyebrow label + headline + sub-processors cross-link in the Sovereignty card', () => {
@@ -150,25 +150,27 @@ describe('W627 R7-R17 marketing additions content parity', () => {
       expect(body).toMatch(/href="\/trust\/security-overview"/);
     });
 
-    it('7-signal table rows pinned (User-agent / Canvas hash / WebGL renderer / AudioContext / Core Text metrics / JS engine timing / Hash uniqueness across sessions — the 7th row added 2026-05-16 to make the population-stable claim concrete) + Driftstack-column values', () => {
+    it('7-signal table rows pinned (User-agent / Canvas hash / WebGL renderer / Audio fingerprint (AudioContext) / Core Text metrics / JavaScript engine timing / Fingerprint across sessions — the 7th row added 2026-05-16 to make the population-stable claim concrete; S20b 2026-07-06 plain-language labels) + Driftstack-column values + population-stable footnote', () => {
       // Left-column signal names.
       expect(body).toMatch(/<span class="text-tk-ink">User-agent<\/span>/);
       expect(body).toMatch(/<span class="text-tk-ink">Canvas hash<\/span>/);
       expect(body).toMatch(/<span class="text-tk-ink">WebGL renderer<\/span>/);
-      expect(body).toMatch(/<span class="text-tk-ink">AudioContext<\/span>/);
+      expect(body).toMatch(/<span class="text-tk-ink">Audio fingerprint \(AudioContext\)<\/span>/);
       expect(body).toMatch(/<span class="text-tk-ink">Core Text metrics<\/span>/);
-      expect(body).toMatch(/<span class="text-tk-ink">JS engine timing<\/span>/);
-      expect(body).toMatch(/<span class="text-tk-ink">Hash uniqueness across sessions<\/span>/);
+      expect(body).toMatch(/<span class="text-tk-ink">JavaScript engine timing<\/span>/);
+      expect(body).toMatch(/<span class="text-tk-ink">Fingerprint across sessions<\/span>/);
       // Right-column Driftstack values — concrete brand/engine references.
       expect(body).toMatch(/Apple GPU/);
       expect(body).toMatch(/JSCore/);
       expect(body).toMatch(/population-stable/);
+      // S20b: the plain-language footnote decoding the load-bearing row.
+      expect(body).toMatch(/population-stable = the same value millions of real iPhones/);
     });
 
-    it('Stealth-Chromium comparison column pinned (spoofed user-agent / 3x leaks Chromium / leaks system / V8 fingerprint / 100% unique hashes per session — the explicit fingerprint-uniqueness contrast added 2026-05-16)', () => {
+    it("Stealth-Chromium comparison column pinned (spoofed user-agent / 3x leaks Chromium / leaks system / Chrome's V8 / 100% unique hashes per session — the explicit fingerprint-uniqueness contrast added 2026-05-16)", () => {
       expect(body).toMatch(/Stealth Chromium/);
       expect(body).toMatch(/leaks Chromium/);
-      expect(body).toMatch(/V8 fingerprint/);
+      expect(body).toMatch(/Chrome's V8/);
       expect(body).toMatch(/100% unique/);
     });
   });

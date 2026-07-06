@@ -110,7 +110,12 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).toMatch(/EU-only by default\./);
     expect(body).toMatch(/Your data stays in the EU\./);
     expect(body).toMatch(/only the operational metadata we need to bill/);
-    expect(body).toMatch(/session duration,\s*\n?\s*archetype, cap usage/);
+    // S20b 2026-07-06: the billing-metadata triple reads in plain words
+    // (duration / archetype glossed via the glossary link / cap usage).
+    expect(body).toMatch(
+      /how long a\s*\n?\s*session ran, which iPhone model \+ iOS \+ Safari combination it used/,
+    );
+    expect(body).toMatch(/how much of your concurrent cap it used/);
     expect(body).toMatch(/href="\/trust\/sub-processors"/);
     // Prior framings must NOT return at this slot.
     expect(body).not.toMatch(/Customer data stays in the EU\./);
@@ -121,9 +126,14 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
   });
 
   it('egress state reflected accurately in the v2 trust band (per-profile SOCKS5 / OpenVPN / WireGuard egress IS live; only the per-session "change a running session\'s proxy mid-flight" path is roadmap) + the /trust/security-overview cross-link. The page must NOT flatly claim egress itself is "(not shipped)".', () => {
-    expect(body).toMatch(/Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\) is live/);
-    // Only the mid-flight per-session proxy swap is honestly roadmap.
-    expect(body).toMatch(/changing a running session's proxy mid-flight is on the roadmap/);
+    expect(body).toMatch(
+      /Customer-configurable egress — attaching your own internet exit \(a\s*\n?\s*SOCKS5 proxy, OpenVPN, or WireGuard\) to each profile — is live/,
+    );
+    // Only the mid-flight per-session proxy swap is honestly roadmap
+    // (S20b 2026-07-06: stated in plain words, same fact).
+    expect(body).toMatch(
+      /swapping the proxy on a session that's already running is on the\s*\n?\s*roadmap/,
+    );
     expect(body).toMatch(/href="\/trust\/security-overview"/);
     // The stale "egress itself is not shipped" outlier must NOT return —
     // it self-contradicted every other egress surface on the site.
@@ -158,14 +168,19 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
 
   it('stack-statement pinned inside the v2 proof section: "Apple\'s engine. Not a Chromium copy." + the "WebKit, Core Text, and the iOS rendering pipeline" capability sentence (the Chromium-fork/Playwright-patch competitor contrast now lives on /comparison)', () => {
     expect(body).toMatch(/Apple's engine\. Not a Chromium copy\./);
+    // S20b 2026-07-06 plain-language pass: Core Text + the pipeline are now
+    // glossed inline; the same capability sentence survives with glosses.
     expect(body).toMatch(
-      /WebKit, Core Text, and the\s*\n?\s*iOS rendering pipeline produce your fingerprint the way Apple\s*\n?\s*wrote them, in the order Apple intended\./,
+      /WebKit \(the browser engine\),\s*\n?\s*Core Text \(Apple's text-drawing system\)/,
+    );
+    expect(body).toMatch(
+      /rendering pipeline produce your fingerprint the way Apple wrote\s*\n?\s*them, in the order Apple intended\./,
     );
   });
 
-  it('bundled-or-BYOK AI claim pinned (Builder+ tier gate)', () => {
+  it('bundled-or-BYOK AI claim pinned (Builder+ tier gate; S20b plain words, same gate)', () => {
     expect(body).toMatch(
-      /Optional bundled AI assistant — or bring your own Anthropic API key\s+\(Builder\+\)/,
+      /Optional bundled AI assistant — or connect your own Anthropic key and pay Anthropic directly, no Driftstack markup \(API Builder and up\)/,
     );
   });
 

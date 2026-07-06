@@ -110,16 +110,18 @@ describe('W368.A marketing-site /faq page content parity', () => {
 
   it('free-tier mechanics pinned: $0-forever / one profile / one concurrent / manual-only (no API) / perpetual / no metering', () => {
     expect(body).toMatch(
-      /One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from the desktop GUI client/,
+      /One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from our desktop app/,
     );
     expect(body).toMatch(/\$0 forever, no card required/);
-    expect(body).toMatch(/The free tier is manual-only \(no programmatic API\/SDK access\)/);
+    expect(body).toMatch(/The free tier is manual-only \(no API\/SDK access from code\)/);
     expect(body).toMatch(/The free tier is perpetual/);
-    // Free tier is manual-only: programmatic API/SDK access starts on the
+    // Free tier is manual-only: access from code (API/SDK) starts on the
     // API ladder (API Starter from $149/mo). Old "API-within-free-limits"
-    // framing (2026-05-28) is superseded.
+    // framing (2026-05-28) is superseded. S20b 2026-07-06: same facts,
+    // plain words ("GUI client" → "desktop app", "programmatic" → "from
+    // code").
     expect(body).toMatch(
-      /Programmatic API\/SDK access starts on the API ladder \(API Starter from \$149\/mo\)/,
+      /Access from code — the API and SDKs — starts on the API ladder \(API Starter from \$149\/mo\)/,
     );
     expect(body).not.toMatch(/within the free limits/);
     expect(body).not.toMatch(/driven from the API or the desktop GUI client/);
@@ -149,7 +151,7 @@ describe('W368.A marketing-site /faq page content parity', () => {
       /account stays in a "suspended" state with a 30-day grace-period for recovery/,
     );
     expect(body).toMatch(
-      /your account data \(profiles, sessions, captures\) is deleted per the DPA retention schedule/,
+      /your account data \(profiles, sessions, captures\) is deleted on the schedule set in our data-processing agreement \(DPA\)/,
     );
   });
 
@@ -161,8 +163,10 @@ describe('W368.A marketing-site /faq page content parity', () => {
 
   it('"What if Driftstack goes away" two-protection answer pinned (portability + escrow)', () => {
     expect(body).toMatch(/Data portability:/);
-    expect(body).toMatch(/Self-hosted SKU:/);
-    expect(body).toMatch(/source escrow agreement releases the WebKit fork \+ control-plane code/);
+    expect(body).toMatch(/Self-hosted option:/);
+    expect(body).toMatch(
+      /escrow agreement releases the browser engine \(the WebKit fork\) and the management software \(the control-plane code\)/,
+    );
   });
 
   it('AUP link to /legal/aup + explicit prohibition list pinned (CSAM / fraud / sneaker bots)', () => {
@@ -171,7 +175,7 @@ describe('W368.A marketing-site /faq page content parity', () => {
     // (`don\'t`) depending on the string's quote style — accept both.
     expect(body).toMatch(/We don\\?'t allow attacks on third-party systems/);
     expect(body).toMatch(/fraud \(ad fraud, fake-account creation, payment fraud\)/);
-    expect(body).toMatch(/CSAM or other illegal content/);
+    expect(body).toMatch(/CSAM \(child sexual abuse material\) or other illegal content/);
     expect(body).toMatch(/sneaker bots \/ ticket bots/);
   });
 
@@ -185,8 +189,8 @@ describe('W368.A marketing-site /faq page content parity', () => {
     expect(body).toMatch(/There is no formal SLA with credits/);
   });
 
-  it('hardware framing pinned: macOS Apple Silicon (M-series Macs); not Linux + x86 — founder 2026-05-19 correction', () => {
-    expect(body).toMatch(/macOS Apple Silicon fleet hardware \(M-series Macs\)/);
+  it('hardware framing pinned: M-series Macs (macOS, Apple Silicon); not Linux + x86 — founder 2026-05-19 correction (S20b plain words, same hardware fact)', () => {
+    expect(body).toMatch(/M-series Macs \(macOS, Apple Silicon\)/);
     expect(body).not.toMatch(/Linux fleet hardware/);
     expect(body).not.toMatch(/data-center x86/);
   });

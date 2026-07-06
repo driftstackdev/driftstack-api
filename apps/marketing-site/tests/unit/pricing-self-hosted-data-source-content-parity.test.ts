@@ -121,11 +121,13 @@ describe('W386.A marketing-site src/data/pricing.ts self-hosted data-source cont
     expect(body).toMatch(/self_hosted_enterprise: 'All releases',/);
   });
 
-  it('SELF_HOSTED_SOURCE_ACCESS: 3-tier record (Solo+Pro=Build artifacts / Enterprise=Build artifacts + read-only repo audit)', () => {
+  it('SELF_HOSTED_SOURCE_ACCESS: 3-tier record (Solo+Pro=compiled software / Enterprise adds read-only source review — S20b 2026-07-06 plain-language labels, same 2-level differentiation)', () => {
     expect(body).toMatch(/export const SELF_HOSTED_SOURCE_ACCESS: Record<string, string> = \{/);
-    expect(body).toMatch(/self_hosted_solo: 'Build artifacts',/);
-    expect(body).toMatch(/self_hosted_pro: 'Build artifacts',/);
-    expect(body).toMatch(/self_hosted_enterprise: 'Build artifacts \+ read-only repo audit',/);
+    expect(body).toMatch(/self_hosted_solo: 'Compiled software \(build artifacts\)',/);
+    expect(body).toMatch(/self_hosted_pro: 'Compiled software \(build artifacts\)',/);
+    expect(body).toMatch(
+      /self_hosted_enterprise: 'Compiled software \+ read-only source-code review access',/,
+    );
   });
 
   it('ANNUAL_DISCOUNT_LABEL = "20% off annual"', () => {

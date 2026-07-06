@@ -63,14 +63,16 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
     expect(body).toMatch(/feature: 'Session metering surprises',/);
     expect(body).toMatch(/feature: 'Customer-controlled proxies',/);
     expect(body).toMatch(/feature: 'Data residency',/);
-    expect(body).toMatch(/feature: 'GUI for human operators',/);
+    expect(body).toMatch(/feature: 'Point-and-click app for human operators',/);
     expect(body).toMatch(/feature: 'SDK languages',/);
     expect(body).toMatch(/feature: 'Self-hosted option',/);
     expect(body).toMatch(/feature: 'Trial path',/);
   });
 
-  it("Driftstack engine row: 'Apple WebKit (C++ source-level fork)' — pinned so the canonical engine description (Apple WebKit + C++ + source-level fork) stays consistent across pages (drift would create marketing↔homepage↔about divergence)", () => {
-    expect(body).toMatch(/driftstack: 'Apple WebKit \(C\+\+ source-level fork\)',/);
+  it("Driftstack engine row: Apple WebKit, our own build of Apple's source code (source-level fork) — S20b plain words; pinned so the canonical engine description (Apple WebKit + source-level fork) stays consistent across pages (drift would create marketing↔homepage↔about divergence)", () => {
+    expect(body).toMatch(
+      /driftstack: "Apple WebKit — our own build of Apple's source code \(source-level fork\)",/,
+    );
   });
 
   it("Driftstack pricing-model row: 'Per concurrent session, hours unmetered' + Driftstack session-metering-surprises row: 'None — flat within concurrent cap' — pinned so the no-hourly-meter + no-surprise framing survives in the table (drift to adding per-call or per-hour would create cross-page divergence with the FAQ + pricing pages)", () => {
@@ -80,8 +82,10 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
 
   it("Driftstack data-residency row: 'EU-only compute + storage' + customer-controlled-proxies row: SOCKS5/OpenVPN/WireGuard per profile (shipped). 2026-05-22 — egress impl ships per planning 133 Phase 1; cell flipped from the prior 'Roadmap' framing now that the differentiator is real.", () => {
     expect(body).toMatch(/driftstack: 'EU-only compute \+ storage',/);
+    // S20b 2026-07-06 plain words: same three protocols, same per-profile
+    // scope, same every-traffic-type coverage.
     expect(body).toMatch(
-      /driftstack: 'SOCKS5 \(UDP\/QUIC\/WebRTC\) \+ OpenVPN \+ WireGuard, per profile',/,
+      /driftstack: 'Bring your own: SOCKS5 proxy, OpenVPN, or WireGuard VPN — per profile, covering every traffic type \(incl\. UDP\/QUIC\/WebRTC\)',/,
     );
   });
 
@@ -96,14 +100,22 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
 
   it("vs Bright Data BYO-proxy framing pinned: 'Bring your own proxy network or use SOCKS5 / OpenVPN / WireGuard to whatever IP pool you've already paid for. We don't sell proxies; we don't mark up egress.' — pinned so the 'BYO egress, no markup' positioning survives (drift to dropping would weaken the cost-comparison case against Bright Data who sells proxies). Priority order SOCKS5 / OpenVPN / WireGuard matches the API server's user-facing 503 messages + the founder verdict 2026-05-16 (Phase 1 / Phase 2 / Phase 3 deferred).", () => {
     expect(body).toMatch(
-      /Bring your own\s*\n?\s*proxy network or use SOCKS5 \/ OpenVPN \/ WireGuard to whatever IP\s*\n?\s*pool you've already paid for\. We don't sell proxies; we don't\s*\n?\s*mark up egress\./,
+      /Bring your own\s*\n?\s*proxy network or use SOCKS5 \/ OpenVPN \/ WireGuard to whatever IP\s*\n?\s*pool you've already paid for\. We don't sell proxies; we don't\s*\n?\s*mark up egress/,
+    );
+    // S20b 2026-07-06: the load-bearing sentence continues with a plain
+    // gloss of what egress means.
+    expect(body).toMatch(
+      /the traffic leaving for the open internet runs\s*\n?\s*over your own exit, so it's not ours to meter\./,
     );
   });
 
   it("When NOT Driftstack 3-card: Desktop-only targets + Pure HTML scraping + IP-pool-as-product — pinned so the honest-anti-recommendation 3-card list survives (drift to dropping would hide the where-Driftstack-isn't-the-fit guidance the V-472 doc-comment commits to)", () => {
     expect(body).toMatch(/<h3 class="text-lg font-medium text-tk-ink">Desktop-only targets<\/h3>/);
     expect(body).toMatch(/<h3 class="text-lg font-medium text-tk-ink">Pure HTML scraping<\/h3>/);
-    expect(body).toMatch(/<h3 class="text-lg font-medium text-tk-ink">IP-pool-as-product<\/h3>/);
+    // S20b 2026-07-06: "IP-pool-as-product" heading reads plain.
+    expect(body).toMatch(
+      /<h3 class="text-lg font-medium text-tk-ink">When the proxy pool is the product<\/h3>/,
+    );
   });
 
   it("Freshness stamp: 'Last reviewed 2026-05-10' + drift-correction mailto:support@driftstack.dev — pinned so the page-staleness signal + the customer-driven correction channel survive (drift to dropping the timestamp would let competitor rows go stale without a reviewer signal)", () => {

@@ -25,7 +25,7 @@ import CtaBand from '../../components/CtaBand.astro';
   <PageHero
     label="Use cases · QA + engineering teams"
     title="Test on the real thing."
-    lead="Your users are on iPhones. Your test grid probably isn't. Driftstack gives your suite the exact engine iOS users run — as a cloud session your CI starts with one API call."
+    lead="Your users are on iPhones. Your test grid probably isn't. Driftstack gives your suite the exact engine iOS users run — as a cloud session your CI (your automated build-and-test pipeline) starts with one API call."
   >
     <Breadcrumbs
       slot="crumbs"
@@ -56,7 +56,7 @@ import CtaBand from '../../components/CtaBand.astro';
     <div class="mt-10 grid gap-4 sm:grid-cols-3">
       <Stat
         plain="The engine, not an approximation"
-        technical="Built from Apple's WebKit source — same engine your iOS users actually run"
+        technical="Built from Apple's WebKit source code — the engine inside every iPhone's Safari, the same one your iOS users run"
       />
       <Stat
         plain="The iPhones your users hold"
@@ -125,8 +125,9 @@ try {
     <div class="mt-8 flex flex-wrap items-center gap-4">
       <a href="/pricing#api" class="btn-secondary">See API pricing →</a>
       <p class="text-sm text-tk-ink-3">
-        The free tier is manual-only — use it to verify rendering and
-        fingerprint fidelity by hand before you wire up the SDK.
+        The free tier is manual-only — use it to check by hand that pages
+        render right and the fingerprint holds up, before you connect the
+        SDK.
       </p>
     </div>
   </Section>

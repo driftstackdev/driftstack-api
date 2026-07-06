@@ -64,49 +64,56 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
     expect(body).toMatch(/heading: 'Features',/);
   });
 
-  it("Pricing-group 4 rows: Monthly + Annual (monthly equivalent) + Annual total + Overage / hour — pinned so the 4 pricing-dimensions stay complete (drift to dropping 'Annual (monthly equivalent)' would force buyers to do their own math; drift to dropping 'Overage / hour' would hide overage exposure on hour-metered tiers)", () => {
+  it("Pricing-group 4 rows: Monthly + Annual (monthly equivalent) + Annual total + Extra hourly charges (overage) — S20b 2026-07-06 plain-language label + the overage row now renders 'None' instead of a bare dash; pinned so the 4 pricing-dimensions stay complete (drift to dropping 'Annual (monthly equivalent)' would force buyers to do their own math; drift to dropping the overage row would hide overage exposure on hour-metered tiers)", () => {
     expect(body).toMatch(/label: 'Monthly',/);
     expect(body).toMatch(/label: 'Annual \(monthly equivalent\)',/);
     expect(body).toMatch(/label: 'Annual total',/);
-    expect(body).toMatch(/label: 'Overage \/ hour',/);
+    expect(body).toMatch(/label: 'Extra hourly charges \(overage\)',/);
+    expect(body).toMatch(
+      /t\.overagePerHourUsd === null \? 'None' : fmtUsd\(t\.overagePerHourUsd\)/,
+    );
   });
 
-  it("Quotas-group 4 rows: Persistent profiles + Concurrent sessions + Session hours + Archetype access — pinned so the 4 quota-dimensions stay complete (drift to dropping 'Archetype access' would lose the per-tier device-mix differentiation; drift to dropping 'Session hours' would obscure the hour-metering boundary for the trial-pack column)", () => {
-    expect(body).toMatch(/label: 'Persistent profiles',/);
+  it("Quotas-group 4 rows: Saved profiles + Concurrent sessions + Session hours + Device types (archetypes) — S20b plain-language labels; pinned so the 4 quota-dimensions stay complete (drift to dropping the archetypes row would lose the per-tier device-mix differentiation; drift to dropping 'Session hours' would obscure the hour-metering boundary for the free column)", () => {
+    expect(body).toMatch(/label: 'Saved profiles',/);
     expect(body).toMatch(/label: 'Concurrent sessions',/);
     expect(body).toMatch(/label: 'Session hours',/);
-    expect(body).toMatch(/label: 'Archetype access',/);
+    expect(body).toMatch(/label: 'Device types \(archetypes\)',/);
   });
 
-  it("Features-group 3 rows: AI agent (bundled LLM) + Audience + Support — pinned so the 3 feature-dimensions stay complete (drift to dropping 'Audience' would lose the use-case anchoring; drift to dropping 'Support' would hide the per-tier SLA escalation)", () => {
-    expect(body).toMatch(/label: 'AI agent \(bundled LLM\)',/);
+  it("Features-group 3 rows: AI agent + Audience + Support — S20b: the '(bundled LLM)' label suffix moved into the footnote that now defines BYOK/bundled in plain words; pinned so the 3 feature-dimensions stay complete (drift to dropping 'Audience' would lose the use-case anchoring; drift to dropping 'Support' would hide the per-tier SLA escalation)", () => {
+    expect(body).toMatch(/label: 'AI agent',/);
     expect(body).toMatch(/label: 'Audience',/);
     expect(body).toMatch(/label: 'Support',/);
+    expect(body).toMatch(/BYOK = bring your own key/);
   });
 
-  it("Free-tier standalone card pinned: 'Free ({fmtUsd(freeTier.monthlyUsd)}, forever)' + 'evaluation tier, no card required, before committing to a paid tier' — pinned so the free-tier-as-separate-evaluation-tier framing survives (drift to merging it into the paid-tier table would lose the 'evaluate before committing' positioning)", () => {
+  it("Free-tier standalone card pinned: 'Free ({fmtUsd(freeTier.monthlyUsd)}, forever)' + 'a try-before-you-buy tier, no card required' (S20b plain words, same evaluate-before-committing positioning)", () => {
     expect(body).toMatch(/Free \(\{fmtUsd\(freeTier\.monthlyUsd\)\}, forever\)/);
-    expect(body).toMatch(/evaluation tier, no card required/);
+    expect(body).toMatch(/a try-before-you-buy tier, no card\s*\n?\s*required/);
   });
 
-  it("★ popular-tier framing pinned: '★ = team's most popular tier in active evaluations. Not a sales push — just the current cohort signal.' — pinned so the honest 'cohort signal, not sales pressure' framing survives (drift to dropping 'Not a sales push' would let the highlight read as upsell rather than data signal)", () => {
+  it("★ popular-tier framing pinned: '★ = team's most popular tier in active evaluations. Not a sales push — just what prospective customers are picking right now.' (S20b: 'cohort signal' reworded plain) — pinned so the honest 'data signal, not sales pressure' framing survives (drift to dropping 'Not a sales push' would let the highlight read as upsell rather than data signal)", () => {
     expect(body).toMatch(
-      /★ = team's most popular tier in active evaluations\. Not a sales\s*\n?\s*push — just the current cohort signal\./,
+      /★ = team's most popular tier in active evaluations\. Not a sales\s*\n?\s*push — just what prospective customers are picking right now\./,
     );
   });
 
   it("4-card tier-switching mechanics: 'Upgrade mid-month' (immediate + prorate) + 'Downgrade at renewal' (end-of-period + readable-but-uncreatable) + 'Cancel any time' (end-of-period + 30-day-data-retention) + 'Annual vs monthly' (~20% off + monthly→annual instant / annual→monthly at term end) — pinned so the 4 tier-switching policies stay consistent (drift to dropping 'readable but uncreatable' on downgrade would surprise customers when profile-creation hits a 402; drift to changing the 30-day-data-retention would create marketing↔DPA divergence)", () => {
+    // S20b 2026-07-06 plain words — all 4 policies still asserted with the
+    // same facts (proration, keep-but-can't-create on downgrade, 30-day
+    // retention then DPA-schedule deletion, ~20% annual).
     expect(body).toMatch(/Upgrade mid-month/);
     expect(body).toMatch(
-      /Switching to a higher tier is immediate\. We prorate the\s*\n?\s*remaining billing-period at the new tier's rate/,
+      /Switching to a higher tier is immediate\. You pay only the\s*\n?\s*difference for the rest of the billing period \(prorated\)/,
     );
     expect(body).toMatch(/Downgrade at renewal/);
     expect(body).toMatch(
-      /Profile counts above the new\s*\n?\s*tier's cap stay readable but become uncreatable\./,
+      /If you have more profiles than\s*\n?\s*the lower tier allows, you keep and can view them all — you\s*\n?\s*just can't create new ones until you're back under the limit\./,
     );
     expect(body).toMatch(/Cancel any time/);
     expect(body).toMatch(
-      /we keep your data for\s*\n?\s*30 days post-cancel for grace-period recovery, then delete\s*\n?\s*per our DPA terms\./,
+      /we keep your data for\s*\n?\s*30 days after cancellation in case you come back, then delete\s*\n?\s*it on the schedule promised in our data-processing agreement\s*\n?\s*\(DPA\)\./,
     );
     expect(body).toMatch(/Annual vs monthly/);
     expect(body).toMatch(/Annual billing is ~20% off the monthly rate, paid up-front\./);
@@ -114,7 +121,7 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
 
   it("Custom-quote CTA pinned: 'Need a custom quote?' + 'we'll quote in one business day.' + mailto:sales@driftstack.dev — pinned so the enterprise-quote escalation + the one-business-day commitment + the sales-team routing survive (drift to dropping the 'one business day' SLA would let prospects expect indefinite waits; drift to dropping the sales@ address would orphan the inbound)", () => {
     expect(body).toMatch(/Need a custom quote\?/);
-    expect(body).toMatch(/we'll quote in one business day\./);
+    expect(body).toMatch(/we'll quote in one business\s*\n?\s*day\./);
     expect(body).toMatch(
       /<a href="mailto:sales@driftstack\.dev" class="btn-primary">Email sales<\/a>/,
     );

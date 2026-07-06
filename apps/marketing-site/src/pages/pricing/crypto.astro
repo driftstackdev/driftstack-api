@@ -62,9 +62,9 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
     <p class="lead text-lg text-tk-ink-2"><strong class="text-tk-ink">Bitcoin, Ether, USDC, USDT</strong> — every self-serve paid tier accepts crypto via NowPayments.</p>
 
     <p>
-      Settlement is on-chain; once your transfer receives the required
-      confirmations, your account unlocks automatically — no support
-      ticket needed for the steady state.
+      Payment settles on the blockchain itself: once your transfer has the
+      required number of confirmations, your account unlocks automatically —
+      in the normal case, no support ticket needed.
     </p>
 
     <h2>Supported tiers</h2>
@@ -83,9 +83,10 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
     <p class="text-sm text-tk-ink-3">
       The price you see at checkout is quoted in USD; the equivalent
       crypto amount is fixed when the order is created and doesn't
-      change. There's no fixed 1-hour cutoff — a pending order isn't
-      automatically cancelled on a timer. If you want a fresh quote
-      (you missed your window, or market conditions moved), email
+      change. You then have a 1-hour window to pay at that quote. An
+      order that misses the window isn't cancelled by a timer — it just
+      goes stale. If you want a fresh quote (you missed your window, or
+      market conditions moved), email
       <a href="mailto:support@driftstack.dev">support@driftstack.dev</a>
       and we'll close the stale order so you can check out again at
       the current price.
@@ -94,7 +95,7 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
     <h2>Confirmation timing</h2>
     <table>
       <thead>
-        <tr><th>Asset</th><th>Required confirmations</th><th>Typical settle</th></tr>
+        <tr><th>Asset</th><th>Required confirmations</th><th>Typical time to settle</th></tr>
       </thead>
       <tbody>
         <tr><td>BTC</td><td>2</td><td>~20 minutes</td></tr>
@@ -108,18 +109,18 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
     <ol>
       <li>From your account dashboard, pick the tier and click
         <strong>Pay with crypto</strong>.</li>
-      <li>The Driftstack backend mints an order via NowPayments and
-        returns a unique deposit address + the exact amount to send.</li>
-      <li>You broadcast the on-chain transfer. The exchange or wallet
+      <li>Driftstack creates an order through NowPayments and shows
+        you a one-time deposit address + the exact amount to send.</li>
+      <li>You send the transfer. The exchange or wallet
         you use is up to you — we only need to see the transfer land
         at the address NowPayments issued.</li>
-      <li>NowPayments watches the chain; once your transfer hits the
-        required confirmation count, Driftstack flips your account
-        to the new tier.</li>
+      <li>NowPayments watches the blockchain; once your transfer reaches
+        the required number of confirmations, Driftstack switches your
+        account to the new tier.</li>
     </ol>
 
-    <p class="rounded-md border border-status-warning/40 bg-status-warning/15 p-3 text-sm">
-      <strong>Crypto payments are non-refundable.</strong> You may
+    <p class="rounded-md border border-status-warning bg-status-warning/15 p-3 text-sm">
+      <strong>⚠︎ Crypto payments are non-refundable.</strong> You may
       cancel anytime — cancellation stops future billing periods —
       but the current billing period is not refunded. See
       <a href="/legal/refunds">refund policy</a> for the full rules.
@@ -128,18 +129,20 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
     <h2>If something goes wrong</h2>
     <ul>
       <li><strong>Underpayment</strong> — if the transfer is short of
-        the quoted amount, the order moves to <code>partial</code>;
-        support follows up within one business day to confirm a
-        top-up. Crypto payments are non-refundable, so partial
-        underpayments are resolved by topping up rather than by
-        sending the customer's existing crypto back.</li>
+        the quoted amount, the order is marked <code>partial</code> and
+        support follows up within one business day to confirm a top-up.
+        Because crypto payments are non-refundable, a short payment is
+        fixed by topping up the difference — we can't send your crypto
+        back.</li>
       <li><strong>Late payment</strong> — transfers received after the
-        1-hour pay-window land on an expired order. Support manually
-        reconciles these; expect a one-business-day delay.</li>
-      <li><strong>Wrong currency</strong> — sending an unsupported
-        asset to the deposit address means the funds are not recovered
-        automatically. Email <a href="mailto:support@driftstack.dev">support@driftstack.dev</a> with the
-        transaction hash; we'll do what we can on a best-effort basis.</li>
+        1-hour pay-window land on an order we treat as expired. Nothing
+        is lost: support manually reconciles these, so expect a
+        one-business-day delay.</li>
+      <li><strong>Wrong currency</strong> — if you send a currency we
+        don't accept, the money will not come back on its own. Email
+        <a href="mailto:support@driftstack.dev">support@driftstack.dev</a> with the
+        transaction hash (the payment's ID on the blockchain); we'll do
+        what we can on a best-effort basis.</li>
     </ul>
 
     <h2>Refunds + cancellation</h2>
@@ -149,8 +152,8 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
       billing period it covers. You can cancel your subscription at
       any time — cancellation stops the next billing period's
       payment request — but the current period is not pro-rated or
-      refunded. This is the standard B2B SaaS posture; the rationale
-      is in <a href="/legal/refunds">/legal/refunds</a>.
+      refunded. This is standard practice for business software
+      subscriptions; the reasoning is in <a href="/legal/refunds">/legal/refunds</a>.
     </p>
     <p>
       If you need a refund mechanism, our card-billing path (Stripe)
@@ -160,11 +163,12 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
 
     <h2>Tax + accounting</h2>
     <p>
-      Driftstack issues USD-denominated invoices for crypto payments
-      based on the quoted USD price at order time, not the realised
-      crypto amount. This keeps your accounting in line with cards;
-      if you need a crypto-denominated receipt for self-custody
-      accounting, request one from support.
+      Invoices for crypto payments are issued in US dollars, at the USD
+      price quoted when you ordered — not at what the crypto happened to
+      be worth when it arrived. That keeps your books the same as card
+      payments. If you instead need a receipt showing the crypto amount
+      (for bookkeeping of crypto you hold yourself — "self-custody"),
+      request one from support.
     </p>
   </main>
 </BaseLayout>

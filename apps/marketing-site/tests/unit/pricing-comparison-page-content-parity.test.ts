@@ -59,18 +59,23 @@ describe('W375.B marketing-site /pricing/comparison page content parity', () => 
       "heading: 'Quotas'",
       "heading: 'Features'",
     ]);
-    // Pricing rows.
+    // Pricing rows (S20b 2026-07-06 plain-language labels; the overage row
+    // now renders 'None' instead of a bare dash so the no-overage fact
+    // reads as a fact, not missing data).
     expect(body).toMatch(/label: 'Monthly'/);
     expect(body).toMatch(/label: 'Annual \(monthly equivalent\)'/);
     expect(body).toMatch(/label: 'Annual total'/);
-    expect(body).toMatch(/label: 'Overage \/ hour'/);
+    expect(body).toMatch(/label: 'Extra hourly charges \(overage\)'/);
+    expect(body).toMatch(
+      /t\.overagePerHourUsd === null \? 'None' : fmtUsd\(t\.overagePerHourUsd\)/,
+    );
     // Quotas rows.
-    expect(body).toMatch(/label: 'Persistent profiles'/);
+    expect(body).toMatch(/label: 'Saved profiles'/);
     expect(body).toMatch(/label: 'Concurrent sessions'/);
     expect(body).toMatch(/label: 'Session hours'/);
-    expect(body).toMatch(/label: 'Archetype access'/);
+    expect(body).toMatch(/label: 'Device types \(archetypes\)'/);
     // Features rows.
-    expect(body).toMatch(/label: 'AI agent \(bundled LLM\)'/);
+    expect(body).toMatch(/label: 'AI agent'/);
     expect(body).toMatch(/label: 'Audience'/);
     expect(body).toMatch(/label: 'Support'/);
   });
@@ -103,28 +108,30 @@ describe('W375.B marketing-site /pricing/comparison page content parity', () => 
     expect(body).toMatch(/Annual billing is ~20% off the monthly rate, paid up-front\./);
   });
 
-  it('"profile counts above new tier\'s cap stay readable but become uncreatable" downgrade framing pinned', () => {
+  it('"more profiles than the lower tier allows: keep and view all, can\'t create new ones" downgrade framing pinned (S20b plain words, same mechanic)', () => {
     expect(body).toMatch(
-      /Profile counts above the new\s+tier's cap stay readable but become uncreatable\./,
+      /If you have more profiles than\s+the lower tier allows, you keep and can view them all — you\s+just can't create new ones until you're back under the limit\./,
     );
   });
 
-  it('"30 days post-cancel for grace-period recovery, then delete per DPA" pinned', () => {
+  it('"30 days after cancellation in case you come back, then delete on the DPA schedule" pinned (S20b plain words, same retention facts)', () => {
     expect(body).toMatch(
-      /we keep your data for\s+30 days post-cancel for grace-period recovery, then delete\s+per our DPA terms/,
+      /we keep your data for\s+30 days after cancellation in case you come back, then delete\s+it on the schedule promised in our data-processing agreement\s+\(DPA\)/,
     );
   });
 
-  it('★-highlight cohort-signal disclaimer pinned ("Not a sales push")', () => {
+  it('★-highlight disclaimer pinned ("Not a sales push") + the S20b BYOK/archetype/SLA footnote gloss', () => {
     expect(body).toMatch(
-      /★ = team's most popular tier in active evaluations\. Not a sales\s+push — just the current cohort signal\./,
+      /★ = team's most popular tier in active evaluations\. Not a sales\s+push — just what prospective customers are picking right now\./,
     );
+    expect(body).toMatch(/BYOK = bring your own key/);
+    expect(body).toMatch(/SLA = the\s+reply time we commit to for support\./);
   });
 
-  it('mailto:sales@driftstack.dev custom-quote escape hatch pinned (1-business-day SLA)', () => {
+  it('mailto:sales@driftstack.dev custom-quote escape hatch pinned (1-business-day quote)', () => {
     expect(body).toMatch(/mailto:sales@driftstack\.dev/);
     expect(body).toMatch(
-      /Volume above the published tiers, longer-than-30-day data\s+retention, or contractual SLA terms — email us with the\s+shape of your usage and we'll quote in one business day\./,
+      /Volume above the published tiers, keeping data longer than 30\s+days, or a contractual reply-time commitment \(SLA\) — email us\s+a rough picture of your usage and we'll quote in one business\s+day\./,
     );
   });
 
@@ -139,10 +146,10 @@ describe('W375.B marketing-site /pricing/comparison page content parity', () => 
     );
   });
 
-  it('free-tier card uses data import for figures (not hardcoded)', () => {
+  it('free-tier card uses data import for figures (not hardcoded; S20b: "evaluation tier" → "try-before-you-buy tier")', () => {
     expect(body).toMatch(/const freeTier = API_TIERS\.find\(\(t\) => t\.id === 'free'\);/);
     expect(body).toMatch(/Free \(\{fmtUsd\(freeTier\.monthlyUsd\)\}, forever\)/);
-    expect(body).toMatch(/\{freeTier\.hoursLabel\} — evaluation tier/);
+    expect(body).toMatch(/\{freeTier\.hoursLabel\} — a try-before-you-buy tier/);
   });
 
   it('sticky-left "Dimension" column header pinned (table-shape decision)', () => {

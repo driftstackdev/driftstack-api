@@ -59,7 +59,7 @@ describe('W366.A marketing-site /comparison page content parity', () => {
       "'Session metering surprises'",
       "'Customer-controlled proxies'",
       "'Data residency'",
-      "'GUI for human operators'",
+      "'Point-and-click app for human operators'",
       "'SDK languages'",
       "'Self-hosted option'",
       "'Trial path'",
@@ -83,11 +83,13 @@ describe('W366.A marketing-site /comparison page content parity', () => {
     expect(pricingShape!.length).toBe(4);
   });
 
-  it('honesty section "Where Driftstack isn\'t the fit" with 3 non-fit categories pinned', () => {
+  it('honesty section "Where Driftstack isn\'t the fit" with 3 non-fit categories pinned (S20b: "IP-pool-as-product" heading reads plain)', () => {
     expect(body).toContain("Where Driftstack isn't the fit");
     expect(body).toMatch(/<h3 class="text-lg font-medium text-tk-ink">Desktop-only targets<\/h3>/);
     expect(body).toMatch(/<h3 class="text-lg font-medium text-tk-ink">Pure HTML scraping<\/h3>/);
-    expect(body).toMatch(/<h3 class="text-lg font-medium text-tk-ink">IP-pool-as-product<\/h3>/);
+    expect(body).toMatch(
+      /<h3 class="text-lg font-medium text-tk-ink">When the proxy pool is the product<\/h3>/,
+    );
   });
 
   it('free-tier CTA cross-link points at /pricing#free + framing pinned (one profile / manual / perpetual)', () => {
@@ -112,11 +114,13 @@ describe('W366.A marketing-site /comparison page content parity', () => {
     );
   });
 
-  it('per-row engine claim pinned: Driftstack = "Apple WebKit (C++ source-level fork)"', () => {
+  it("per-row engine claim pinned: Driftstack = Apple WebKit, our own build of Apple's source code (source-level fork) — S20b plain words, same engine promise", () => {
     // Load-bearing differentiator — the page promises WebKit, not
     // Chromium-with-iOS-skin. A future copy softening to "iOS-
     // optimized Chromium" would break the entire positioning.
-    expect(body).toMatch(/driftstack: 'Apple WebKit \(C\+\+ source-level fork\)'/);
+    expect(body).toMatch(
+      /driftstack: "Apple WebKit — our own build of Apple's source code \(source-level fork\)"/,
+    );
     // M.6 Path A: multi-archetype + Safari 26.5 launch scope per founder
     // verdict 2026-05-17. Single-archetype framing must NOT return.
     expect(body).toMatch(
@@ -131,9 +135,9 @@ describe('W366.A marketing-site /comparison page content parity', () => {
     expect(body).toMatch(/We don't sell proxies; we don't\s+mark up egress/);
   });
 
-  it('"bring-your-own Anthropic key" anti-Browserbase claim pinned', () => {
+  it('"bring-your-own Anthropic key" anti-Browserbase claim pinned (S20b: "LLM proxy markup" → "markup on AI usage", same no-markup commitment)', () => {
     expect(body).toMatch(
-      /Bring-your-own\s+Anthropic key is supported — no LLM proxy markup unless you\s+explicitly opt into bundled/,
+      /Bring-your-own\s+Anthropic key is supported — no markup on AI usage unless you\s+explicitly opt into bundled billing/,
     );
   });
 

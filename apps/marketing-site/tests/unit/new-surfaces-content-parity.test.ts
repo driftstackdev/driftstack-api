@@ -179,9 +179,11 @@ describe('W599.A /use-cases/web-scraping (data teams)', () => {
     expect(body).toMatch(/no\s*\n?\s*app-steering redirects/);
   });
 
-  it('population-matched framing reuses homepage §6 verbatim phrases: iPhone bucket with millions + population-stable vs 100% unique', () => {
+  it('population-matched framing reuses homepage §6 phrases: iPhone bucket with millions + population-stable vs 100% unique (S20b 2026-07-06 plain words, same facts)', () => {
     expect(body).toMatch(/lands in the iPhone bucket\s*\n?\s*with millions of others/);
-    expect(body).toMatch(/population-stable, where stealth Chromium reads 100% unique/);
+    expect(body).toMatch(
+      /session after session \(population-stable\); stealth Chromium mints a new one every session — 100% unique, itself a giveaway/,
+    );
   });
 
   it('plan pointer: API ladder → /pricing#api + comparison cross-link for the signal detail', () => {
@@ -189,10 +191,10 @@ describe('W599.A /use-cases/web-scraping (data teams)', () => {
     expect(body).toMatch(/href="\/comparison"/);
   });
 
-  it('AUP boundary named for scraping specifically: auth-bypassing / rate-limit-abusing collection is out (capability description, never encouragement)', () => {
+  it('AUP boundary named for scraping specifically: auth-bypassing / rate-limit-abusing collection is out (capability description, never encouragement; S20b plain words, prohibition at full strength)', () => {
     expect(body).toMatch(/href="\/legal\/aup"/);
     expect(body).toMatch(
-      /bypasses authentication or\s*\n?\s*reasonable rate limits is not allowed/,
+      /gets around logins\s*\n?\s*\(authentication\) or past a site's reasonable rate limits is not\s*\n?\s*allowed/,
     );
   });
 

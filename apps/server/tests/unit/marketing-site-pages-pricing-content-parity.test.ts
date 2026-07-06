@@ -58,8 +58,8 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     expect(imp![1]!).not.toContain('TRIAL_PACK');
   });
 
-  it("fmtAiAgent 3-state LLM-billing map: byok_only → 'BYOK (Anthropic key required)' / byok_or_bundled → 'BYOK or bundled (your choice)' / byok_or_bundled_custom → 'BYOK or bundled (custom rate)' — pinned so the 3-state AI-agent column display strings stay consistent (drift to dropping 'Anthropic key required' would obscure which model provider; drift to dropping 'custom rate' would lose the Enterprise-tier signal)", () => {
-    expect(body).toMatch(/case 'byok_only':\s*\n?\s*return 'BYOK \(Anthropic key required\)';/);
+  it("fmtAiAgent 3-state LLM-billing map: byok_only → 'BYOK — bring your own Anthropic key' (S20b self-glossing cell) / byok_or_bundled → 'BYOK or bundled (your choice)' / byok_or_bundled_custom → 'BYOK or bundled (custom rate)' — pinned so the 3-state AI-agent column display strings stay consistent (drift to dropping the Anthropic naming would obscure which model provider; drift to dropping 'custom rate' would lose the Enterprise-tier signal)", () => {
+    expect(body).toMatch(/case 'byok_only':\s*\n?\s*return 'BYOK — bring your own Anthropic key';/);
     expect(body).toMatch(
       /case 'byok_or_bundled':\s*\n?\s*return 'BYOK or bundled \(your choice\)';/,
     );
@@ -72,7 +72,10 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     expect(body).toMatch(/A perpetual free tier to evaluate the platform/);
     expect(body).toMatch(/\{freeTier\.profiles\} profile/);
     expect(body).toMatch(/\{freeTier\.concurrent\}/);
-    expect(body).toMatch(/concurrent session of up to 20 minutes/);
+    // S20b 2026-07-06: "concurrent session ... manual-only via the desktop
+    // GUI client" → "session at a time ... driven by hand in our desktop
+    // app" — same 20-minute cap, plain words.
+    expect(body).toMatch(/session at a time \(up to 20 minutes each\)/);
     expect(body).toMatch(/it never expires/);
   });
 
@@ -111,7 +114,7 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     expect(body).toMatch(/A person → Manual\./);
     expect(body).toMatch(/You drive iPhones by hand in the desktop app\./);
     expect(body).toMatch(/Code → API\./);
-    expect(body).toMatch(/Your scripts and pipelines run the sessions\./);
+    expect(body).toMatch(/Your scripts and automated jobs run the sessions\./);
     expect(body).toMatch(/Both ladders run the same engine and share the same free tier\./);
   });
 
@@ -119,8 +122,10 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     expect(body).toMatch(
       /concurrent<\/strong> means\s*\n?\s*sessions running at the same time — think browser tabs/,
     );
+    // S20b 2026-07-06: the glossary line grew a third term (BYOK) — the
+    // profile definition now continues with ", and" instead of a period.
     expect(body).toMatch(
-      /profile<\/strong> is a saved iPhone identity\s*\n?\s*that keeps its logins and history\./,
+      /profile<\/strong> is a saved iPhone identity\s*\n?\s*that keeps its logins and history/,
     );
   });
 
@@ -144,32 +149,34 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     expect(body).toMatch(/−20%/);
   });
 
-  it("Manual ladder header pinned: 'Manual — for humans' + 'Persistent profiles. Drive sessions yourself in the GUI client. No code required.' — pinned so the Manual-ladder positioning (humans + GUI + no-code) stays consistent (drift to dropping 'No code required' would obscure why Manual is a separate ladder from API)", () => {
+  it("Manual ladder header pinned: 'Manual — for humans' + 'Saved profiles that keep their logins. Drive sessions yourself in the desktop app. No code required.' (S20b plain words, same positioning) — pinned so the Manual-ladder positioning (humans + desktop app + no-code) stays consistent (drift to dropping 'No code required' would obscure why Manual is a separate ladder from API)", () => {
     expect(body).toMatch(/Manual — for humans/);
     expect(body).toMatch(
-      /Persistent profiles\. Drive sessions yourself in the GUI client\. No code\s*\n?\s*required\./,
+      /Saved profiles that keep their logins\. Drive sessions yourself in\s*\n?\s*the desktop app\. No code required\./,
     );
   });
 
   it("API ladder BYOK explainer pinned: 'bring your own API key from Anthropic for the optional AI agent feature. Your model spend goes to your provider account; Driftstack doesn't markup or proxy.' — pinned so the BYOK-anthropic + no-markup framing survives (drift to claiming markup would invite billing-transparency pushback; drift to dropping anthropic specificity would obscure which provider the BYOK uses)", () => {
     expect(body).toMatch(/<em>bring your own API key<\/em> from Anthropic for the optional AI/);
+    // S20b 2026-07-06: no-markup claim in plain words, same commitment.
     expect(body).toMatch(
-      /Your model spend goes\s*\n?\s*to your provider account; Driftstack doesn't markup or proxy\./,
+      /You pay Anthropic directly for the AI usage —\s*\n?\s*Driftstack adds no markup and never sits in the middle\./,
     );
   });
 
-  it("Self-hosted ladder header pinned: 'Self-hosted — for sovereignty' + 'Run the entire stack on your own hardware. No concurrent-session caps from us — your hardware is the cap. Driftstack licenses the software, you scale the fleet.' — pinned so the no-license-cap + hardware-is-the-cap unit-economics flip survives (drift to dropping 'No concurrent-session caps from us' would lose THE core self-hosted economic narrative)", () => {
-    expect(body).toMatch(/Self-hosted — for sovereignty/);
+  it("Self-hosted ladder header pinned: 'Self-hosted — for full control' + 'Run the entire stack on your own hardware. No concurrent-session caps from us — your hardware is the cap. Driftstack licenses the software; you add machines whenever you need more capacity.' (S20b plain words) — pinned so the no-license-cap + hardware-is-the-cap unit-economics flip survives (drift to dropping 'No concurrent-session caps from us' would lose THE core self-hosted economic narrative)", () => {
+    expect(body).toMatch(/Self-hosted — for full control/);
     expect(body).toMatch(
-      /Run the entire stack on your own hardware\. No concurrent-session caps from\s*\n?\s*us — your hardware is the cap\. Driftstack licenses the software, you\s*\n?\s*scale the fleet\./,
+      /Run the entire stack on your own hardware\. No concurrent-session caps from\s*\n?\s*us — your hardware is the cap\. Driftstack licenses the software; you\s*\n?\s*add machines whenever you need more capacity\./,
     );
   });
 
   it("BYOK / Bundled LLM section pinned: 'BYOK or bundled — your call.' + 'API Builder, API Scale, Enterprise' bundled-tier list + 'Self-hosted SKUs are BYOK-only because we don't proxy LLM calls into customer hardware.' — pinned so the bundled-tier scope + the self-hosted-BYOK-only architectural reason survive (drift to claiming self-hosted bundled would create marketing↔engineering divergence)", () => {
     expect(body).toMatch(/BYOK or bundled — your call\./);
     expect(body).toMatch(/Bundled LLM \(API Builder, API Scale, Enterprise\)/);
+    // S20b 2026-07-06: same architectural reason, plain words.
     expect(body).toMatch(
-      /Self-hosted SKUs are BYOK-only because we don't proxy LLM calls into\s*\n?\s*customer hardware\./,
+      /Self-hosted\s*\n?\s*plans are BYOK-only because we don't route AI calls into hardware you\s*\n?\s*own\./,
     );
   });
 
@@ -181,9 +188,9 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     expect(body).toMatch(/<a href="\/faq" class="btn-secondary">See full FAQ<\/a>/);
   });
 
-  it("VAT framing pinned: 'All prices in USD. VAT/BTW added per region per applicable EU rules. No setup fees on any tier. Annual contracts billed up front.' — pinned so the USD-base + VAT/BTW + no-setup-fee + annual-prepay 4-state commitment survives (drift to dropping VAT/BTW would surprise EU customers at checkout; drift to dropping 'no setup fees' would let prospects assume hidden onboarding charges)", () => {
+  it("VAT framing pinned: 'All prices in USD. Sales tax (VAT — called BTW in the Netherlands) is added where EU rules require it. No setup fees on any tier. Annual contracts billed up front.' (S20b plain words) — pinned so the USD-base + VAT/BTW + no-setup-fee + annual-prepay 4-state commitment survives (drift to dropping VAT/BTW would surprise EU customers at checkout; drift to dropping 'no setup fees' would let prospects assume hidden onboarding charges)", () => {
     expect(body).toMatch(
-      /All prices in USD\. VAT\/BTW added per region per applicable EU rules\. No\s*\n?\s*setup fees on any tier\. Annual contracts billed up front\./,
+      /All prices in USD\. Sales tax \(VAT — called BTW in the Netherlands\) is\s*\n?\s*added where EU rules require it\. No setup fees on any tier\. Annual\s*\n?\s*contracts billed up front\./,
     );
   });
 

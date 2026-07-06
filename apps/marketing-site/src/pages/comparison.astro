@@ -28,7 +28,7 @@ interface ComparisonRow {
 const COMPARISON_ROWS: ComparisonRow[] = [
   {
     feature: 'Browser engine',
-    driftstack: 'Apple WebKit (C++ source-level fork)',
+    driftstack: "Apple WebKit — our own build of Apple's source code (source-level fork)",
     browserless: 'Chromium / Chrome',
     brightData: 'Chromium-based scraping browser',
     scrapingBee: 'Chromium (Puppeteer)',
@@ -44,7 +44,7 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   },
   {
     feature: 'Stealth approach',
-    driftstack: 'Source-level — no JS-runtime patches',
+    driftstack: 'Built into the source itself — nothing patched over while the page runs',
     browserless: 'Stealth plugins (puppeteer-extra)',
     brightData: 'Proprietary anti-detection layer',
     scrapingBee: 'Stealth headers + rotating proxies',
@@ -70,13 +70,13 @@ const COMPARISON_ROWS: ComparisonRow[] = [
     feature: 'Session metering surprises',
     driftstack: 'None — flat within concurrent cap',
     browserless: 'Idle browser hours billable',
-    brightData: 'GB egress can spike',
-    scrapingBee: 'Hard JS pages cost more credits',
+    brightData: 'Data-transfer (GB) charges can spike',
+    scrapingBee: 'JavaScript-heavy pages cost more credits',
     browserbase: 'Idle browser hours billable',
   },
   {
     feature: 'Customer-controlled proxies',
-    driftstack: 'SOCKS5 (UDP/QUIC/WebRTC) + OpenVPN + WireGuard, per profile',
+    driftstack: 'Bring your own: SOCKS5 proxy, OpenVPN, or WireGuard VPN — per profile, covering every traffic type (incl. UDP/QUIC/WebRTC)',
     browserless: 'Per-session HTTP/HTTPS proxy config',
     brightData: 'Their proxy network is the product',
     scrapingBee: 'Bundled (their pool)',
@@ -91,8 +91,8 @@ const COMPARISON_ROWS: ComparisonRow[] = [
     browserbase: 'US / EU regions',
   },
   {
-    feature: 'GUI for human operators',
-    driftstack: 'Yes — Tauri client, Manual ladder',
+    feature: 'Point-and-click app for human operators',
+    driftstack: 'Yes — desktop app (Manual tiers)',
     browserless: 'API-first (no GUI)',
     brightData: 'Browser product + dashboard',
     scrapingBee: 'API-first (no GUI)',
@@ -108,7 +108,7 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   },
   {
     feature: 'Self-hosted option',
-    driftstack: 'Yes — three SKUs (source escrow on Enterprise)',
+    driftstack: 'Yes — three plans (source escrow on Enterprise)',
     browserless: 'Yes — open-source core',
     brightData: 'No',
     scrapingBee: 'No',
@@ -187,13 +187,17 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <p class="max-w-prose text-base text-tk-ink-2">
-        The <strong>Fingerprint posture</strong> row is the one that
-        flips most detection-decisions. Driftstack returns canvas + WebGL
-        hashes that match the real-iPhone population; every other vendor
-        below returns unique-per-session hashes that flag the visitor as
-        synthetic. Signal-by-signal methodology at
+        The <strong>Fingerprint posture</strong> row decides most
+        detections. When a website checks how a browser draws graphics (its
+        <a href="/glossary#canvas-hash" class="text-tk-accent-text underline">canvas</a>
+        and WebGL fingerprints), Driftstack produces the same results real
+        iPhones produce — so a session blends into the crowd of genuine
+        iPhone visitors. Every other vendor below produces results that
+        change on every session, which is itself a giveaway that the
+        visitor isn't a normal device. The signal-by-signal methodology is
+        in
         <a href="/trust/cumulative-rig" class="text-tk-accent-text underline"
-          >/trust/cumulative-rig</a>.
+          >the full signal table</a>.
       </p>
       <!-- M.5 (Part F2) mobile scroll-cue: the 6-column competitor
            table forces a min-width of 900px (below that it would
@@ -297,18 +301,20 @@ const COMPARISON_ROWS: ComparisonRow[] = [
         <h3 class="text-xl font-semibold text-tk-ink">Driftstack vs Browserless</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
           Browserless is the canonical "Chrome-as-a-service" platform —
-          Puppeteer / Playwright over a hosted browser pool, REST and
-          WebSocket APIs, open-source self-hosted core. Pick Browserless
-          when the target site renders fine on desktop Chrome and you
-          don't need iOS-specific signals.
+          you rent Chrome browsers in their cloud and drive them with the
+          standard developer tools (Puppeteer / Playwright); the core is
+          open source and can be self-hosted. Pick Browserless when the
+          target site renders fine on desktop Chrome and you don't need
+          iOS-specific signals.
         </p>
         <p class="mt-3 text-sm text-tk-ink-2">
-          Pick Driftstack when the target reads
-          <code class="font-mono text-xs">navigator.userAgent</code>,
+          Pick Driftstack when the target site checks iPhone-specific
+          signals — the browser's identity string, touch-screen events, how
+          Apple renders fonts
+          (<code class="font-mono text-xs">navigator.userAgent</code>,
           <code class="font-mono text-xs">User-Agent-Client-Hints</code>,
-          Touch events, Core Text font metrics, or any other iOS-specific
-          primitive — and a Chromium-flavored answer would mismatch a real
-          iPhone visitor.
+          Touch events, Core Text metrics) — and a Chrome-shaped answer
+          would give the game away.
         </p>
         <p class="mt-3 flex items-center gap-1.5 text-xs font-mono uppercase tracking-widest text-tk-ink-3">
           <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-tk-accent-text" aria-hidden="true">
@@ -345,7 +351,8 @@ const COMPARISON_ROWS: ComparisonRow[] = [
           iPhone WebKit returning iOS-shaped fingerprints. Bring your own
           proxy network or use SOCKS5 / OpenVPN / WireGuard to whatever IP
           pool you've already paid for. We don't sell proxies; we don't
-          mark up egress.
+          mark up egress — the traffic leaving for the open internet runs
+          over your own exit, so it's not ours to meter.
         </p>
         <p class="mt-3 flex items-center gap-1.5 text-xs font-mono uppercase tracking-widest text-tk-ink-3">
           <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-tk-accent-text" aria-hidden="true">
@@ -356,8 +363,9 @@ const COMPARISON_ROWS: ComparisonRow[] = [
         </p>
         <p class="mt-1 text-sm text-tk-ink-2">
           Bright Data bills per GB transferred + per request on most
-          products. Driftstack bills concurrent caps; bandwidth is
-          customer-egress, so it doesn't appear on our invoice at all.
+          products. Driftstack bills concurrent caps; your traffic runs
+          over your own proxy or VPN (your egress), so bandwidth never
+          shows up on our invoice at all.
         </p>
       </div>
 
@@ -374,14 +382,14 @@ const COMPARISON_ROWS: ComparisonRow[] = [
           list — POST a URL, get HTML or extracted data back. Stealth
           headers and proxy rotation are bundled. Pick ScrapingBee when the
           workload is
-          <strong>fetch-this-page-give-me-the-DOM</strong> and you don't
-          need to interact with the page after rendering.
+          <strong>fetch-this-page-and-hand-me-the-contents</strong> and you
+          don't need to interact with the page after rendering.
         </p>
         <p class="mt-3 text-sm text-tk-ink-2">
           Pick Driftstack when the workload is interactive — multi-step
-          checkouts, form fills, modal navigation, login state across many
-          requests, profile-bound cookie persistence — and the engine
-          needs to be iPhone Safari, not generic Chromium.
+          checkouts, form fills, pop-up dialogs, staying logged in across
+          many requests, cookies that stay saved with each profile — and
+          the engine needs to be iPhone Safari, not generic Chromium.
         </p>
         <p class="mt-3 flex items-center gap-1.5 text-xs font-mono uppercase tracking-widest text-tk-ink-3">
           <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-tk-accent-text" aria-hidden="true">
@@ -408,10 +416,10 @@ const COMPARISON_ROWS: ComparisonRow[] = [
         <h3 class="text-xl font-semibold text-tk-ink">Driftstack vs Browserbase</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
           Browserbase is a managed Chromium platform optimized for AI
-          agent workloads — Stagehand integration, replay viewer for
-          debugging agent runs, observability tuned to LLM-driven
-          sessions. Pick Browserbase when your agent stack is built around
-          Chromium primitives and your target sites accept desktop Chrome.
+          agent workloads — Stagehand integration, a replay viewer for
+          debugging agent runs, monitoring tuned to AI-driven sessions.
+          Pick Browserbase when your agent stack is built around Chromium
+          and your target sites accept desktop Chrome.
         </p>
         <p class="mt-3 text-sm text-tk-ink-2">
           Pick Driftstack when the agent needs to look like a real iPhone
@@ -430,8 +438,8 @@ const COMPARISON_ROWS: ComparisonRow[] = [
         <p class="mt-1 text-sm text-tk-ink-2">
           Browserbase bills browser-hours; idle counts. Driftstack bills
           concurrent caps; idle within the cap is free. Bring-your-own
-          Anthropic key is supported — no LLM proxy markup unless you
-          explicitly opt into bundled.
+          Anthropic key is supported — no markup on AI usage unless you
+          explicitly opt into bundled billing.
         </p>
       </div>
     </div>
@@ -454,7 +462,7 @@ const COMPARISON_ROWS: ComparisonRow[] = [
         <h3 class="text-lg font-medium text-tk-ink">Desktop-only targets</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
           If your target site is a B2B dashboard or an internal tool that
-          only desktop users hit, an iPhone fingerprint adds zero unlock
+          only desktop users hit, an iPhone fingerprint buys you nothing
           and may attract attention. Browserless or Browserbase are the
           cleaner picks.
         </p>
@@ -469,9 +477,9 @@ const COMPARISON_ROWS: ComparisonRow[] = [
         <h3 class="text-lg font-medium text-tk-ink">Pure HTML scraping</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
           "Fetch URL, extract data, never interact" is exactly the workload
-          ScrapingBee and similar API-first scrapers price for. Driftstack
-          costs more per fetch in that shape because you're paying for
-          engine fidelity you don't need.
+          ScrapingBee and similar API-first scrapers price for. For that
+          kind of job Driftstack costs more per page — you'd be paying for
+          browser realism you don't need.
         </p>
       </div>
       <div>
@@ -481,12 +489,13 @@ const COMPARISON_ROWS: ComparisonRow[] = [
             <circle cx="12" cy="12" r="3" />
           </svg>
         </div>
-        <h3 class="text-lg font-medium text-tk-ink">IP-pool-as-product</h3>
+        <h3 class="text-lg font-medium text-tk-ink">When the proxy pool is the product</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          If the unlock is residential / mobile / ISP IPs at scale and the
-          engine is interchangeable, Bright Data or a dedicated proxy
-          vendor will outprice us. Driftstack expects you to bring your
-          own egress.
+          If what you're buying is residential / mobile / ISP addresses at
+          scale and the engine is interchangeable, Bright Data or a
+          dedicated proxy vendor will outprice us. Driftstack expects you
+          to bring your own proxy or VPN for traffic to the open internet
+          (your egress).
         </p>
       </div>
     </div>

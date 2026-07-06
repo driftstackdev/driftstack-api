@@ -83,7 +83,15 @@ describe('W502.B apps/marketing-site/src/pages/pricing/crypto.astro content pari
 
   it("No-automatic-expiry quote framing pinned: 'the equivalent crypto amount is fixed when the order is created and doesn't change. There's no fixed 1-hour cutoff — a pending order isn't automatically cancelled on a timer.' + support@driftstack.dev stale-order-closure path — pinned so the honest no-auto-cancel statement survives (a fictional '1 hour price-lock + auto-cancel' claim was corrected 2026-06-30: expireOrder()/sweepExpiredOrders() in apps/server/src/services/crypto-orders.ts are never invoked by any route or scheduled job — sweep-expired is admin-manual-only via POST /v1/admin/crypto-orders/sweep-expired with a default 24h window, not 1h, and no cron is registered in apps/server/src/lib/bootstrap.ts. Drift back to claiming an automatic timer would re-create the doc/code mismatch; drift to dropping the support-contact fallback would orphan customers wanting a fresh quote)", () => {
     expect(body).toMatch(
-      /the equivalent\s*\n?\s*crypto amount is fixed when the order is created and doesn't\s*\n?\s*change\. There's no fixed 1-hour cutoff — a pending order isn't\s*\n?\s*automatically cancelled on a timer\./,
+      /the equivalent\s*\n?\s*crypto amount is fixed when the order is created and doesn't\s*\n?\s*change\./,
+    );
+    // S20b 2026-07-06 reconciliation: the quote carries a 1-hour pay-window
+    // (server PAY_WINDOW_MS = 1h, gated by W340.A) but NOTHING auto-cancels
+    // — a missed order just goes stale and support closes it manually. This
+    // resolves the page's prior self-contradiction with the Late-payment
+    // bullet while keeping the no-auto-cancel truth this pin protects.
+    expect(body).toMatch(
+      /You then have a 1-hour window to pay at that quote\. An\s*\n?\s*order that misses the window isn't cancelled by a timer — it just\s*\n?\s*goes stale\./,
     );
     expect(body).toMatch(
       /email\s*\n?\s*<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>\s*\n?\s*and we'll close the stale order so you can check out again at\s*\n?\s*the current price\./,
@@ -104,32 +112,35 @@ describe('W502.B apps/marketing-site/src/pages/pricing/crypto.astro content pari
 
   it("4-step checkout flow: 'Pay with crypto' click → 'NowPayments and returns a unique deposit address' → 'broadcast the on-chain transfer' → 'flips your account to the new tier' — pinned so the 4-step crypto-checkout customer-mental-model stays consistent (drift to dropping the 'unique deposit address' framing would let customers expect a static address; drift to dropping 'flips your account' would obscure the auto-unlock behaviour)", () => {
     expect(body).toMatch(/<strong>Pay with crypto<\/strong>/);
+    // S20b 2026-07-06 plain words, same flow (one-time deposit address +
+    // auto tier-switch on confirmations both still pinned).
     expect(body).toMatch(
-      /The Driftstack backend mints an order via NowPayments and\s*\n?\s*returns a unique deposit address \+ the exact amount to send\./,
+      /Driftstack creates an order through NowPayments and shows\s*\n?\s*you a one-time deposit address \+ the exact amount to send\./,
     );
     expect(body).toMatch(
-      /You broadcast the on-chain transfer\. The exchange or wallet\s*\n?\s*you use is up to you/,
+      /You send the transfer\. The exchange or wallet\s*\n?\s*you use is up to you/,
     );
     expect(body).toMatch(
-      /once your transfer hits the\s*\n?\s*required confirmation count, Driftstack flips your account\s*\n?\s*to the new tier\./,
+      /once your transfer reaches\s*\n?\s*the required number of confirmations, Driftstack switches your\s*\n?\s*account to the new tier\./,
     );
   });
 
   it('3-state error handling: Underpayment (partial → support 1-business-day topup) + Late payment (expired-order reconcile) + Wrong currency (best-effort recovery via tx hash) — pinned so the 3 failure-mode escalation paths stay documented (drift to dropping any would orphan customers in that error state)', () => {
+    // S20b 2026-07-06 plain words — all 3 escalation paths intact.
     expect(body).toMatch(
-      /<strong>Underpayment<\/strong> — if the transfer is short of\s*\n?\s*the quoted amount, the order moves to <code>partial<\/code>/,
+      /<strong>Underpayment<\/strong> — if the transfer is short of\s*\n?\s*the quoted amount, the order is marked <code>partial<\/code>/,
     );
     expect(body).toMatch(
-      /<strong>Late payment<\/strong> — transfers received after the\s*\n?\s*1-hour pay-window land on an expired order/,
+      /<strong>Late payment<\/strong> — transfers received after the\s*\n?\s*1-hour pay-window land on an order we treat as expired/,
     );
     expect(body).toMatch(
-      /<strong>Wrong currency<\/strong> — sending an unsupported\s*\n?\s*asset to the deposit address means the funds are not recovered\s*\n?\s*automatically/,
+      /<strong>Wrong currency<\/strong> — if you send a currency we\s*\n?\s*don't accept, the money will not come back on its own/,
     );
   });
 
-  it("USD-denominated invoice framing pinned: 'Driftstack issues USD-denominated invoices for crypto payments based on the quoted USD price at order time, not the realised crypto amount.' — pinned so the USD-invoice + quoted-not-realised commitment survives (drift to switching to crypto-denominated invoices would break customer-side accounting that's built on USD line items)", () => {
+  it("USD invoice framing pinned: 'Invoices for crypto payments are issued in US dollars, at the USD price quoted when you ordered — not at what the crypto happened to be worth when it arrived.' (S20b plain words) — pinned so the USD-invoice + quoted-not-realised commitment survives (drift to switching to crypto-denominated invoices would break customer-side accounting that's built on USD line items)", () => {
     expect(body).toMatch(
-      /Driftstack issues USD-denominated invoices for crypto payments\s*\n?\s*based on the quoted USD price at order time, not the realised\s*\n?\s*crypto amount\./,
+      /Invoices for crypto payments are issued in US dollars, at the USD\s*\n?\s*price quoted when you ordered — not at what the crypto happened to\s*\n?\s*be worth when it arrived/,
     );
   });
 

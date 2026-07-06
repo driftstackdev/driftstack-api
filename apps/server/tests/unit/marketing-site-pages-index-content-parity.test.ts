@@ -72,8 +72,13 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
 
   it('Stack framing inside the v2 proof section: "Apple\'s engine. Not a Chromium copy." + the "WebKit, Core Text, and the iOS rendering pipeline" capability sentence. The Chromium-fork/Playwright-patch competitor contrast now lives on /comparison (linked from this section).', () => {
     expect(body).toMatch(/Apple's engine\. Not a Chromium copy\./);
+    // S20b 2026-07-06 plain-language pass: Core Text + the pipeline are now
+    // glossed inline; the same capability sentence survives with glosses.
     expect(body).toMatch(
-      /WebKit, Core Text, and the\s*\n?\s*iOS rendering pipeline produce your fingerprint the way Apple\s*\n?\s*wrote them, in the order Apple intended\./,
+      /WebKit \(the browser engine\),\s*\n?\s*Core Text \(Apple's text-drawing system\)/,
+    );
+    expect(body).toMatch(
+      /rendering pipeline produce your fingerprint the way Apple wrote\s*\n?\s*them, in the order Apple intended\./,
     );
     expect(body).toMatch(/href="\/comparison"/);
   });
@@ -115,8 +120,15 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/EU-only by default\./);
     expect(body).toMatch(/Your data stays in the EU\./);
     expect(body).toMatch(/only the operational metadata we need to bill/);
-    expect(body).toMatch(/session duration,\s*\n?\s*archetype, cap usage/);
-    expect(body).toMatch(/Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\) is live/);
+    // S20b 2026-07-06: the billing-metadata triple reads in plain words
+    // (duration / archetype glossed via the glossary link / cap usage).
+    expect(body).toMatch(
+      /how long a\s*\n?\s*session ran, which iPhone model \+ iOS \+ Safari combination it used/,
+    );
+    expect(body).toMatch(/how much of your concurrent cap it used/);
+    expect(body).toMatch(
+      /Customer-configurable egress — attaching your own internet exit \(a\s*\n?\s*SOCKS5 proxy, OpenVPN, or WireGuard\) to each profile — is live/,
+    );
     expect(body).toMatch(/href="\/trust\/security-overview"/);
     // Prior framings must NOT return at this slot.
     expect(body).not.toMatch(/Customer data stays in the EU\./);
@@ -141,7 +153,7 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/\{apiLineup\}/);
     expect(body).toMatch(/\{apiCaps\} concurrent sessions per tier; Enterprise custom/);
     expect(body).toMatch(
-      /Optional bundled AI assistant — or bring your own Anthropic API key\s+\(Builder\+\)/,
+      /Optional bundled AI assistant — or connect your own Anthropic key and pay Anthropic directly, no Driftstack markup \(API Builder and up\)/,
     );
     expect(body).not.toMatch(/API Starter \$149\/mo · Builder \$499\/mo · Scale \$1,499\/mo/);
   });
@@ -193,7 +205,9 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
   it("Human-by-design behavioural section pinned (v2 headline 'It even moves like a person.'): the bots-move-in-straight-lines lead + touch/scroll + typing-cadence + per-profile-persona cards — all backed by packages/behavioural-simulation (prod-wired)", () => {
     expect(body).toMatch(/It even moves like a person\./);
     expect(body).toMatch(/Bots move in straight lines and constant time\./);
-    expect(body).toMatch(/Curved touch paths, momentum flicks, variable dwell/);
+    expect(body).toMatch(
+      /Curved touch paths, momentum flicks, natural variation in how long\s*\n?\s*each touch rests/,
+    );
     expect(body).toMatch(/Per-character rhythm with natural pauses/);
     expect(body).toMatch(/consistent motion signature across\s*\n?\s*sessions/);
   });

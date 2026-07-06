@@ -50,10 +50,10 @@ describe('W261.C /faq ↔ TIER_CONCURRENT_SESSION_LIMITS parity', () => {
   it('free-tier framing pinned: $0-forever / one concurrent / manual-only (no API) / no metering', () => {
     expect(page).toMatch(/The free tier is \$0 forever/);
     expect(page).toMatch(/The free tier has no metering at all/);
-    // Free tier is manual-only (GUI client); programmatic API/SDK access
+    // Free tier is manual-only (desktop app); access from code (API/SDK)
     // starts on the API ladder. Old "API-within-free-limits" framing is
-    // superseded.
-    expect(page).toMatch(/The free tier is manual-only \(no programmatic API\/SDK access\)/);
+    // superseded. S20b 2026-07-06: same fact, plain words.
+    expect(page).toMatch(/The free tier is manual-only \(no API\/SDK access from code\)/);
     expect(page).not.toMatch(/within the free limits/);
   });
 

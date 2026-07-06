@@ -41,7 +41,7 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'proxy',
     term: 'Proxy',
-    def: "A relay your session's traffic travels through, so a website sees the relay's address instead of ours. In Driftstack you attach your own proxy per profile — each phone browses from its own corner of the world.",
+    def: "A relay your session's traffic travels through, so a website sees the relay's address instead of the session's own — which would otherwise be our data center's. In Driftstack you attach your own proxy per profile — each phone browses from its own corner of the world.",
   },
   {
     id: 'vpn',
@@ -51,7 +51,7 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'egress',
     term: 'Egress',
-    def: 'Your session\'s own internet exit — where its traffic actually leaves for the open web. Driftstack routes a session\'s traffic through the exit you attach (proxy or VPN), and locale and timezone follow the exit so nothing contradicts the address a website sees. What\'s live versus rolling out is documented at <a href="/trust/security-overview" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">/trust/security-overview</a>.',
+    def: 'Your session\'s own internet exit — where its traffic actually leaves for the open web. Driftstack routes a session\'s traffic through the exit you attach (proxy or VPN), and the phone\'s language and clock (locale and timezone) follow the exit\'s location so nothing contradicts the address a website sees. What\'s live versus rolling out is documented at <a href="/trust/security-overview" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">/trust/security-overview</a>.',
   },
   {
     id: 'fingerprint',
@@ -101,7 +101,7 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'byok',
     term: 'BYOK',
-    def: "Bring Your Own Key. Driftstack's optional AI agent can run against your own model-provider API key — your model spend goes to your provider account, with no Driftstack markup — instead of the bundled rate on one Driftstack invoice.",
+    def: "Bring Your Own Key. Driftstack's optional AI agent can use the key from your own AI-provider account (for example Anthropic) — the AI usage is then billed to you by your provider, with no Driftstack markup — instead of paying the bundled rate on one Driftstack invoice.",
   },
   {
     id: 'self-hosted',
