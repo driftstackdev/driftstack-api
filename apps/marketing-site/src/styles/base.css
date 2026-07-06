@@ -305,14 +305,27 @@
     content: '';
     @apply h-[7px] w-[7px] shrink-0 rounded-full bg-current;
   }
+  /* S25 2026-07-06 — label text moved to the AA-safe --*-text tones
+     (raw status tokens fail 4.5:1 as small light-mode text); the dot
+     itself keeps the raw status fill via an explicit ::before
+     override of the bg-current default above. */
   .status-dot--ready {
-    @apply text-tk-ready;
+    @apply text-tk-ready-text;
+  }
+  .status-dot--ready::before {
+    @apply bg-tk-ready;
   }
   .status-dot--busy {
-    @apply text-tk-busy;
+    @apply text-tk-busy-text;
+  }
+  .status-dot--busy::before {
+    @apply bg-tk-busy;
   }
   .status-dot--err {
-    @apply text-tk-err;
+    @apply text-tk-err-text;
+  }
+  .status-dot--err::before {
+    @apply bg-tk-err;
   }
   .status-dot--idle {
     @apply text-tk-ink-3;

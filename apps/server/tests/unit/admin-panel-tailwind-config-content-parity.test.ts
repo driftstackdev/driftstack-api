@@ -1,9 +1,16 @@
 // W527.B — drift guard for apps/admin-panel/tailwind.config.mjs.
-// Design tokens shared with marketing site — same posture as customer-
-// dashboard. Drift here would create cross-app (admin↔marketing↔
-// dashboard) brand-color divergence. Admin-panel matches dashboard's
-// 'plugins:[]' posture (no @tailwindcss/typography — admin pages are
-// forms/tables, no prose).
+// S25 2026-07-06 framing update: the old "verbatim palette parity
+// across marketing-site + customer-dashboard + admin-panel" claim is
+// SUPERSEDED — marketing-site (2026-07-03) and customer-dashboard
+// (S24 2026-07-06, commit 6a988b359) both RETIRED their legacy
+// oxblood/slate utility ladders in favor of the two-axis tk-* token
+// system (#722F37 lives on as --accent-strong on the oxblood axis).
+// Admin-panel deliberately still carries the legacy ladders (it was
+// not part of the Fleet v2 redesign); these pins now guard ADMIN'S
+// OWN palette staying anchored at the locked #722F37 accent, not a
+// cross-app byte-parity that no longer exists. Admin-panel matches
+// dashboard's 'plugins:[]' posture (no @tailwindcss/typography —
+// admin pages are forms/tables, no prose).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +28,7 @@ function read(p: string): string {
 describe('W527.B apps/admin-panel/tailwind.config.mjs content parity', () => {
   const body = read(LIB);
 
-  it("Shared-with-marketing framing pinned: 'Design tokens shared with the marketing site (apps/marketing-site/tailwind.config.mjs). Keep these synchronised — the customer experience reads as one product, not two.' + @type JSDoc + 8-extension content glob — pinned so the cross-app shared-token + one-product-not-two posture survives (admin-panel's parallel pin alongside marketing-site + customer-dashboard ensures all 3 apps stay aligned)", () => {
+  it("Shared-with-marketing framing pinned: 'Design tokens shared with the marketing site (apps/marketing-site/tailwind.config.mjs). Keep these synchronised — the customer experience reads as one product, not two.' + @type JSDoc + 8-extension content glob. S25 2026-07-06: the source comment is a historical artifact — marketing-site (2026-07-03) + customer-dashboard (S24) retired their verbatim ladders for the tk-* token system, so this no longer describes a live 3-app sync; pinned as-is until admin-panel's own Fleet v2 port updates the comment", () => {
     expect(body).toMatch(/\/\*\* @type \{import\('tailwindcss'\)\.Config\} \*\//);
     expect(body).toMatch(
       /\/\/ Design tokens shared with the marketing site \(apps\/marketing-site\/\s*\n?\s*\/\/ tailwind\.config\.mjs\)\. Keep these synchronised — the customer\s*\n?\s*\/\/ experience reads as one product, not two\./,
@@ -29,7 +36,7 @@ describe('W527.B apps/admin-panel/tailwind.config.mjs content parity', () => {
     expect(body).toMatch(/content: \['\.\/src\/\*\*\/\*\.\{astro,html,js,jsx,md,mdx,ts,tsx\}'\],/);
   });
 
-  it('Oxblood palette parity-with-marketing-and-dashboard framing pinned: 11-step (50→950) palette anchored at #722F37 700 base — pinned so the cross-app oxblood-palette parity (verbatim across marketing-site + customer-dashboard + admin-panel) commitment survives', () => {
+  it("Oxblood palette pinned: 11-step (50→950) palette anchored at #722F37 700 base. S25 2026-07-06: formerly framed as verbatim cross-app parity with marketing-site + customer-dashboard — SUPERSEDED (both retired their oxblood ladders for the tk-* token axes; #722F37 lives on there as --accent-strong). Admin-panel is now the sole carrier of the legacy ladder; pinned so ADMIN's own palette stays anchored at the locked founder accent", () => {
     expect(body).toMatch(/\/\/ Oxblood — locked accent per founder direction \(#722F37\)\./);
     expect(body).toMatch(/oxblood: \{/);
     expect(body).toMatch(/50: '#fbf3f4',/);
@@ -45,7 +52,7 @@ describe('W527.B apps/admin-panel/tailwind.config.mjs content parity', () => {
     expect(body).toMatch(/950: '#2b0f15',/);
   });
 
-  it('Slate palette parity-with-marketing-and-dashboard framing pinned: 11-step (50→950) palette — pinned so the cross-app slate-palette parity (verbatim across marketing-site + customer-dashboard + admin-panel) commitment survives', () => {
+  it("Slate palette pinned: 11-step (50→950) palette. S25 2026-07-06: formerly framed as verbatim cross-app parity with marketing-site + customer-dashboard — SUPERSEDED (marketing retired its slate ladder 2026-07-03; the dashboard's S24 config keeps only a trimmed slate subset for 2 legacy consumers). Pinned so ADMIN's own neutral scale doesn't drift", () => {
     expect(body).toMatch(/slate: \{/);
     expect(body).toMatch(/50: '#f8fafc',/);
     expect(body).toMatch(/100: '#f1f5f9',/);

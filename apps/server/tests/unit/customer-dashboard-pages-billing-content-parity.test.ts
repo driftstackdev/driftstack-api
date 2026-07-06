@@ -45,8 +45,9 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
 
   it('STATUS_BADGE_CLASS 9-state catalog: active / trialing / past_due / canceled / unpaid / incomplete / incomplete_expired / paused / no_subscription on the two-axis status tokens (Fleet v2 2026-07-02: tk-ready positive, tk-err recovery, tk-accent transient, tk-hover muted — flips with data-mode, unlike the old emerald/red literals) — pinned so the Stripe lifecycle vocabulary stays complete (drift to dropping incomplete_expired would render Stripe-state-incomplete-then-expired with no styling)', () => {
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
+    // S25 2026-07-06 — status-toned TEXT re-pinned raw tk-ready/tk-err → AA-safe tk-ready-text/tk-err-text (washes stay raw).
     expect(body).toMatch(
-      /const STATUS_BADGE_CLASS: Record<string, string> = \{\s*\n?\s*active: 'bg-tk-ready\/10 text-tk-ready',\s*\n?\s*trialing: 'bg-tk-accent\/10 text-tk-accent-text',\s*\n?\s*past_due: 'bg-tk-err\/10 text-tk-err',\s*\n?\s*canceled: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*unpaid: 'bg-tk-err\/10 text-tk-err',\s*\n?\s*incomplete: 'bg-tk-accent\/10 text-tk-accent-text',\s*\n?\s*incomplete_expired: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*paused: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*no_subscription: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*\};/,
+      /const STATUS_BADGE_CLASS: Record<string, string> = \{\s*\n?\s*active: 'bg-tk-ready\/10 text-tk-ready-text',\s*\n?\s*trialing: 'bg-tk-accent\/10 text-tk-accent-text',\s*\n?\s*past_due: 'bg-tk-err\/10 text-tk-err-text',\s*\n?\s*canceled: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*unpaid: 'bg-tk-err\/10 text-tk-err-text',\s*\n?\s*incomplete: 'bg-tk-accent\/10 text-tk-accent-text',\s*\n?\s*incomplete_expired: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*paused: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*no_subscription: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*\};/,
     );
   });
 

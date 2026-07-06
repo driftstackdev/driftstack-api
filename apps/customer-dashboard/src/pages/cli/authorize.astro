@@ -99,9 +99,9 @@ const apiBaseUrl = resolveApiBaseUrl();
     </div>
 
     <div data-state="success" class="mt-8 hidden">
-      <div class="rounded-lg border border-tk-ready/30 bg-tk-ready/10 px-4 py-4 text-center text-sm text-tk-ready">
+      <div class="rounded-lg border border-tk-ready/30 bg-tk-ready/10 px-4 py-4 text-center text-sm text-tk-ready-text">
         <p class="font-medium">Desktop client authorized.</p>
-        <p class="mt-1 text-tk-ready" data-deep-link-status>
+        <p class="mt-1 text-tk-ready-text" data-deep-link-status>
           Returning you to the Driftstack desktop app…
         </p>
       </div>
@@ -117,7 +117,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     <div data-state="error" class="mt-8 hidden">
       <div
         data-error-message
-        class="rounded-lg border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-200"
+        class="rounded-lg border border-tk-err/30 bg-tk-err/10 px-4 py-3 text-sm text-tk-err-text"
       ></div>
       <button
         type="button"
@@ -134,7 +134,7 @@ const apiBaseUrl = resolveApiBaseUrl();
          accept-all button so the customer can clear the gate inline
          instead of bouncing through a separate page. -->
     <div data-state="legal-accept" class="mt-8 hidden">
-      <div class="rounded-lg border border-rose-400/30 bg-rose-400/10 px-4 py-4 text-sm text-rose-200">
+      <div class="rounded-lg border border-tk-err/30 bg-tk-err/10 px-4 py-4 text-sm text-tk-err-text">
         <p class="font-medium">Please review and accept the following before authorizing:</p>
         <ul data-legal-pending-list class="mt-3 space-y-2"></ul>
       </div>
@@ -273,15 +273,15 @@ const apiBaseUrl = resolveApiBaseUrl();
           const li = document.createElement('li');
           li.className = 'flex items-center gap-2';
           const dot = document.createElement('span');
-          dot.className = 'inline-block size-1.5 rounded-full bg-rose-300';
+          dot.className = 'inline-block size-1.5 rounded-full bg-tk-err';
           const a = document.createElement('a');
           a.href = 'https://driftstack.dev/legal/' + urlSlug(doc.document_key) + '/';
           a.target = '_blank';
           a.rel = 'noopener noreferrer';
-          a.className = 'text-rose-100 underline underline-offset-4 hover:text-white';
+          a.className = 'text-tk-err-text underline underline-offset-4 hover:text-tk-ink';
           a.textContent = docLabel(doc);
           const ver = document.createElement('span');
-          ver.className = 'text-xs text-rose-300';
+          ver.className = 'text-xs text-tk-err-text';
           ver.textContent = '(v' + doc.current_version + ')';
           li.append(dot, a, ver);
           list.append(li);

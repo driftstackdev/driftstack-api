@@ -88,7 +88,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         </div>
         <p
           data-invite-error
-          class="hidden rounded border border-tk-err/30 bg-tk-err/10 px-3 py-2 text-sm text-tk-err"
+          class="hidden rounded border border-tk-err/30 bg-tk-err/10 px-3 py-2 text-sm text-tk-err-text"
         >
         </p>
         <div class="flex justify-end gap-3 border-t border-tk-border pt-4">
@@ -241,7 +241,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           escapeHtml(m.id) +
           '" data-remove-email="' +
           escapeHtml(m.member_email) +
-          '" class="text-sm text-tk-err hover:underline">Remove</button>';
+          '" class="text-sm text-tk-err-text hover:underline">Remove</button>';
         const roleClass =
           m.role === 'admin' ? 'bg-tk-accent/10 text-tk-accent-text' : 'bg-tk-surface text-tk-ink-2';
         return (

@@ -146,7 +146,7 @@ describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => 
     expect(body).not.toMatch(/\.card:hover::before \{/);
   });
 
-  it('Fleet v2 recipe port pinned (2026-07-03, signatures match apps/customer-dashboard/src/styles/base.css): panel/panel-title + stat-card/label/value/sub + status-dot family (ready/busy/err/idle/live) + pill + themer/themer-btn', () => {
+  it('Fleet v2 recipe port pinned (2026-07-03, signatures match apps/customer-dashboard/src/styles/base.css; S25 2026-07-06 — status-dot label text re-toned onto the AA-safe --*-text tokens with an explicit ::before override keeping the dot on the raw status fill): panel/panel-title + stat-card/label/value/sub + status-dot family (ready/busy/err/idle/live) + pill + themer/themer-btn', () => {
     expect(body).toMatch(
       /\.panel \{\s*\n\s*@apply rounded-card border border-tk-border bg-tk-surface p-\[18px\] shadow-ambient;/,
     );
@@ -160,9 +160,12 @@ describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => 
     );
     expect(body).toMatch(/\.stat-sub \{/);
     expect(body).toMatch(/\.status-dot \{/);
-    expect(body).toMatch(/\.status-dot--ready \{\s*\n\s*@apply text-tk-ready;/);
-    expect(body).toMatch(/\.status-dot--busy \{\s*\n\s*@apply text-tk-busy;/);
-    expect(body).toMatch(/\.status-dot--err \{\s*\n\s*@apply text-tk-err;/);
+    expect(body).toMatch(/\.status-dot--ready \{\s*\n\s*@apply text-tk-ready-text;/);
+    expect(body).toMatch(/\.status-dot--ready::before \{\s*\n\s*@apply bg-tk-ready;/);
+    expect(body).toMatch(/\.status-dot--busy \{\s*\n\s*@apply text-tk-busy-text;/);
+    expect(body).toMatch(/\.status-dot--busy::before \{\s*\n\s*@apply bg-tk-busy;/);
+    expect(body).toMatch(/\.status-dot--err \{\s*\n\s*@apply text-tk-err-text;/);
+    expect(body).toMatch(/\.status-dot--err::before \{\s*\n\s*@apply bg-tk-err;/);
     expect(body).toMatch(/\.status-dot--idle \{/);
     expect(body).toMatch(/\.status-dot--live::before \{\s*\n\s*animation: livepulse/);
     expect(body).toMatch(/\.pill \{/);

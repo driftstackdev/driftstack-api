@@ -124,10 +124,13 @@
            focus-visible:outline-offset-2 focus-visible:outline-tk-accent;
   }
 
-  /* Danger button — destructive actions (revoke / delete / remove). */
+  /* Danger button — destructive actions (revoke / delete / remove).
+     S25 2026-07-06: label text on the AA-safe --err-text tone (raw
+     --err fails 4.5:1 as small text on the light err/10 wash); the
+     wash + focus outline stay on the raw status token. */
   .btn-danger {
     @apply inline-flex items-center justify-center rounded-lg
-           bg-tk-err/10 px-4 py-2 text-sm font-medium text-tk-err
+           bg-tk-err/10 px-4 py-2 text-sm font-medium text-tk-err-text
            transition-colors duration-150 hover:bg-tk-err/20
            focus-visible:outline focus-visible:outline-2
            focus-visible:outline-offset-2 focus-visible:outline-tk-err
@@ -288,8 +291,9 @@
   .stat-sub {
     @apply mt-1 text-xs text-tk-ink-3;
   }
+  /* S25 2026-07-06 — trend text on the AA-safe --ready-text tone. */
   .stat-sub--up {
-    @apply text-tk-ready;
+    @apply text-tk-ready-text;
   }
 
   /* Meter — thin usage/cap progress track (blueprint .bar). */
@@ -309,14 +313,27 @@
     content: '';
     @apply h-[7px] w-[7px] shrink-0 rounded-full bg-current;
   }
+  /* S25 2026-07-06 — label text moved to the AA-safe --*-text tones
+     (raw status tokens fail 4.5:1 as small light-mode text); the dot
+     itself keeps the raw status fill via an explicit ::before
+     override of the bg-current default above. */
   .status-dot--ready {
-    @apply text-tk-ready;
+    @apply text-tk-ready-text;
+  }
+  .status-dot--ready::before {
+    @apply bg-tk-ready;
   }
   .status-dot--busy {
-    @apply text-tk-busy;
+    @apply text-tk-busy-text;
+  }
+  .status-dot--busy::before {
+    @apply bg-tk-busy;
   }
   .status-dot--err {
-    @apply text-tk-err;
+    @apply text-tk-err-text;
+  }
+  .status-dot--err::before {
+    @apply bg-tk-err;
   }
   .status-dot--idle {
     @apply text-tk-ink-3;

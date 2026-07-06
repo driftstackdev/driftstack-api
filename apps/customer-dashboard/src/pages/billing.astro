@@ -19,11 +19,11 @@ const status = MOCK_SUBSCRIPTION?.status ?? 'no_subscription';
 // the two-axis status tokens so badges flip with data-mode instead of
 // the old hard-coded emerald/red literals that broke in light mode.
 const STATUS_BADGE_CLASS: Record<string, string> = {
-  active: 'bg-tk-ready/10 text-tk-ready',
+  active: 'bg-tk-ready/10 text-tk-ready-text',
   trialing: 'bg-tk-accent/10 text-tk-accent-text',
-  past_due: 'bg-tk-err/10 text-tk-err',
+  past_due: 'bg-tk-err/10 text-tk-err-text',
   canceled: 'bg-tk-hover text-tk-ink-2',
-  unpaid: 'bg-tk-err/10 text-tk-err',
+  unpaid: 'bg-tk-err/10 text-tk-err-text',
   incomplete: 'bg-tk-accent/10 text-tk-accent-text',
   incomplete_expired: 'bg-tk-hover text-tk-ink-2',
   paused: 'bg-tk-hover text-tk-ink-2',
@@ -225,11 +225,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       // BADGE_TONE_CLASSES lists every class any status ever applies, so we
       // can strip them all before adding the new one.
       const STATUS_BADGE_CLASS = {
-        active: 'bg-tk-ready/10 text-tk-ready',
+        active: 'bg-tk-ready/10 text-tk-ready-text',
         trialing: 'bg-tk-accent/10 text-tk-accent-text',
-        past_due: 'bg-tk-err/10 text-tk-err',
+        past_due: 'bg-tk-err/10 text-tk-err-text',
         canceled: 'bg-tk-hover text-tk-ink-2',
-        unpaid: 'bg-tk-err/10 text-tk-err',
+        unpaid: 'bg-tk-err/10 text-tk-err-text',
         incomplete: 'bg-tk-accent/10 text-tk-accent-text',
         incomplete_expired: 'bg-tk-hover text-tk-ink-2',
         paused: 'bg-tk-hover text-tk-ink-2',
@@ -449,11 +449,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       // 6-state CryptoOrderStatus catalog (api-types) — an uncatalogued
       // status renders with the muted fallback, never unstyled.
       const CRYPTO_BADGE = {
-        pending: 'bg-tk-busy/10 text-tk-busy',
-        confirming: 'bg-tk-busy/10 text-tk-busy',
-        paid: 'bg-tk-ready/10 text-tk-ready',
-        failed: 'bg-tk-err/10 text-tk-err',
-        partial: 'bg-tk-busy/10 text-tk-busy',
+        pending: 'bg-tk-busy/10 text-tk-busy-text',
+        confirming: 'bg-tk-busy/10 text-tk-busy-text',
+        paid: 'bg-tk-ready/10 text-tk-ready-text',
+        failed: 'bg-tk-err/10 text-tk-err-text',
+        partial: 'bg-tk-busy/10 text-tk-busy-text',
         cancelled: 'bg-tk-hover text-tk-ink-2',
       };
       function fmtPrice(cents, currency) {

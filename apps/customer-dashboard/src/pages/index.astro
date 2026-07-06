@@ -436,10 +436,10 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       // complete: an uncatalogued status would render unstyled.
       const STATUS_BADGE_CLASS = {
         creating: 'bg-tk-accent/10 text-tk-accent-text',
-        ready: 'bg-tk-ready/10 text-tk-ready',
-        busy: 'bg-tk-busy/10 text-tk-busy',
+        ready: 'bg-tk-ready/10 text-tk-ready-text',
+        busy: 'bg-tk-busy/10 text-tk-busy-text',
         destroyed: 'bg-tk-hover text-tk-ink-2',
-        errored: 'bg-tk-err/10 text-tk-err',
+        errored: 'bg-tk-err/10 text-tk-err-text',
       };
 
       function escapeHtml(s) {
@@ -536,7 +536,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           const marker = li.querySelector('[data-step-marker]');
           if (marker && done[step]) {
             marker.textContent = '✓';
-            marker.classList.add('bg-tk-ready/15', 'text-tk-ready');
+            marker.classList.add('bg-tk-ready/15', 'text-tk-ready-text');
             li.setAttribute('data-step-done', 'true');
           }
         }

@@ -201,7 +201,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         </div>
         <p
           data-create-error
-          class="hidden rounded border border-tk-err/30 bg-tk-err/10 px-3 py-2 text-sm text-tk-err"
+          class="hidden rounded border border-tk-err/30 bg-tk-err/10 px-3 py-2 text-sm text-tk-err-text"
         ></p>
         <div class="flex justify-end gap-3 border-t border-tk-border pt-4">
           <button
@@ -230,7 +230,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       data-create-reveal
       class="mb-8 hidden rounded-lg border border-tk-ready/30 bg-tk-ready/10 p-6"
     >
-      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ready">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ready-text">
         <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-ready/15 ring-1 ring-tk-ready/40">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M9 12l2 2 4-4" />
@@ -239,7 +239,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         </span>
         Endpoint created
       </h2>
-      <p class="mt-1 text-sm text-tk-ready">
+      <p class="mt-1 text-sm text-tk-ready-text">
         Copy this signing secret now — it won't be shown again. Use it with the SDK's
         <code class="font-mono">verifyWebhookSignature</code> helper to authenticate
         incoming deliveries.
@@ -281,18 +281,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         valid for the grace window below; roll your verifier forward before
         then or the next delivery will fail signature check.
       </p>
-      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-tk-busy">
+      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-tk-busy-text">
         Endpoint
       </p>
       <p data-rotate-endpoint-id class="mt-1 font-mono text-xs text-tk-ink"></p>
-      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-tk-busy">
+      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-tk-busy-text">
         New secret
       </p>
       <pre
         data-rotate-secret
         class="mt-1 overflow-x-auto rounded border border-tk-accent/30 bg-tk-surface px-3 py-2 font-mono text-xs text-tk-ink"
       ></pre>
-      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-tk-busy">
+      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-tk-busy-text">
         Old secret valid until
       </p>
       <p data-rotate-grace-expires class="mt-1 text-sm text-tk-ink"></p>
@@ -426,7 +426,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         </div>
         <p
           data-edit-error
-          class="hidden rounded border border-tk-err/30 bg-tk-err/10 px-3 py-2 text-sm text-tk-err"
+          class="hidden rounded border border-tk-err/30 bg-tk-err/10 px-3 py-2 text-sm text-tk-err-text"
         ></p>
         <div class="flex justify-end gap-3 border-t border-blue-100 pt-4">
           <button
@@ -667,16 +667,16 @@ const apiBaseUrl = resolveApiBaseUrl();
           : '';
         const activeBadge =
           'inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
-          (e.active ? 'bg-tk-ready/10 text-tk-ready' : 'bg-tk-surface text-tk-ink-2');
+          (e.active ? 'bg-tk-ready/10 text-tk-ready-text' : 'bg-tk-surface text-tk-ink-2');
         // V-185 — aggregate delivery counts now in /v1/webhooks
         // response. Falls back to zeros if missing.
         const counts = e.delivery_counts || { delivered: 0, failed: 0, dlq: 0 };
-        const dlqClass = counts.dlq > 0 ? 'text-tk-err' : 'text-tk-ink-3';
+        const dlqClass = counts.dlq > 0 ? 'text-tk-err-text' : 'text-tk-ink-3';
         const requeueLink =
           counts.dlq > 0
             ? '<a href="#requeue-' +
               escapeHtml(e.id) +
-              '" class="text-sm font-medium text-tk-err hover:underline">Requeue DLQ (' +
+              '" class="text-sm font-medium text-tk-err-text hover:underline">Requeue DLQ (' +
               counts.dlq +
               ')</a>'
             : '';
@@ -698,7 +698,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           // know how long they have to roll the new secret across
           // their verifier infra.
           (e.rotation_grace_expires_at
-            ? '<span class="rounded-full bg-tk-accent/10 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-busy" title="Old secret stays valid until this time. Roll your verifier forward before then.">rotating · ends ' +
+            ? '<span class="rounded-full bg-tk-accent/10 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-busy-text" title="Old secret stays valid until this time. Roll your verifier forward before then.">rotating · ends ' +
               escapeHtml(fmtIsoDay(e.rotation_grace_expires_at)) +
               '</span>'
             : '') +
@@ -734,14 +734,14 @@ const apiBaseUrl = resolveApiBaseUrl();
           '" class="text-sm text-tk-accent-text hover:underline">Rotate secret</button>' +
           '<button type="button" data-delete="' +
           escapeHtml(e.id) +
-          '" class="text-sm text-tk-err hover:underline">Delete</button>' +
+          '" class="text-sm text-tk-err-text hover:underline">Delete</button>' +
           '</div></div>' +
           '<div class="mt-4 flex flex-wrap gap-1.5">' +
           events +
           '</div>' +
           '<dl class="mt-4 grid grid-cols-3 gap-2 border-t border-tk-border pt-4 text-center">' +
           '<div><dt class="text-xs text-tk-ink-3">Delivered</dt>' +
-          '<dd class="mt-1 font-mono text-lg font-medium text-tk-ready">' +
+          '<dd class="mt-1 font-mono text-lg font-medium text-tk-ready-text">' +
           counts.delivered.toLocaleString('en-US') +
           '</dd></div>' +
           '<div><dt class="text-xs text-tk-ink-3">Failed</dt>' +
@@ -780,12 +780,12 @@ const apiBaseUrl = resolveApiBaseUrl();
           'inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ';
         const statusClass =
           d.status === 'delivered'
-            ? statusBadge + 'bg-tk-ready/10 text-tk-ready'
+            ? statusBadge + 'bg-tk-ready/10 text-tk-ready-text'
             : d.status === 'pending' || d.status === 'in_flight'
               ? statusBadge + 'bg-tk-accent/10 text-tk-accent-text'
               : d.status === 'failed'
-                ? statusBadge + 'bg-orange-50 text-orange-700'
-                : statusBadge + 'bg-tk-err/10 text-tk-err';
+                ? statusBadge + 'bg-tk-busy/10 text-tk-busy-text'
+                : statusBadge + 'bg-tk-err/10 text-tk-err-text';
         const replayBtn =
           d.status === 'failed' || d.status === 'dlq' || d.status === 'delivered'
             ? '<button type="button" data-replay="' +
@@ -809,7 +809,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           '</span>' +
           '</div>' +
           (d.last_error
-            ? '<p class="mt-1 text-xs text-tk-err">' + escapeHtml(d.last_error) + '</p>'
+            ? '<p class="mt-1 text-xs text-tk-err-text">' + escapeHtml(d.last_error) + '</p>'
             : '') +
           '</div>' +
           replayBtn +
@@ -927,7 +927,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           })
           .catch((err) => {
             container.innerHTML =
-              '<p class="text-sm text-tk-err">Failed to load deliveries: ' +
+              '<p class="text-sm text-tk-err-text">Failed to load deliveries: ' +
               escapeHtml(err && err.message ? err.message : 'network error') +
               '</p>';
           });
@@ -1007,7 +1007,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               .then((r) => {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 btn.textContent = 'Replayed ✓';
-                btn.classList.add('text-tk-ready');
+                btn.classList.add('text-tk-ready-text');
               })
               .catch((err) => {
                 btn.disabled = false;

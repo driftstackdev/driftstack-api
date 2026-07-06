@@ -199,7 +199,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             </div>
             <p
               data-field="mfa-error"
-              class="mt-2 hidden rounded border border-tk-err/30 bg-tk-err/10 px-2 py-1 text-xs text-tk-err"
+              class="mt-2 hidden rounded border border-tk-err/30 bg-tk-err/10 px-2 py-1 text-xs text-tk-err-text"
             ></p>
           </div>
         </div>
@@ -300,7 +300,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         </div>
         <p
           data-field="mfa-step-up-error"
-          class="mt-2 hidden rounded border border-tk-err/30 bg-tk-err/10 px-2 py-1 text-xs text-tk-err"
+          class="mt-2 hidden rounded border border-tk-err/30 bg-tk-err/10 px-2 py-1 text-xs text-tk-err-text"
         ></p>
       </div>
     </section>
@@ -586,7 +586,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               ? 'last sign-in ' + escapeHtml(fmtRelative(link.last_login_at))
               : 'never used';
             const revokedFrag = link.last_revoked_at
-              ? ' · <span class="text-tk-busy">revoked upstream — sign in to re-link</span>'
+              ? ' · <span class="text-tk-busy-text">revoked upstream — sign in to re-link</span>'
               : '';
             const manageUrl = providerManageUrl(link.provider);
             const manageFrag = manageUrl
@@ -721,7 +721,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               ' · expires ' +
               escapeHtml(fmtIso(s.expires_at));
             const action = s.current
-              ? '<span class="rounded-full bg-tk-ready/10 px-2 py-1 text-xs font-medium text-tk-ready">current</span>'
+              ? '<span class="rounded-full bg-tk-ready/10 px-2 py-1 text-xs font-medium text-tk-ready-text">current</span>'
               : '<button type="button" class="btn-secondary text-sm text-tk-err-text" data-revoke-id="' +
                 escapeHtml(s.id) +
                 '">Revoke</button>';
@@ -1281,11 +1281,11 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (status.enrolled) {
             mfaStatusBadge.textContent = 'enrolled';
             mfaStatusBadge.classList.remove('bg-tk-surface', 'text-tk-ink-2');
-            mfaStatusBadge.classList.add('bg-tk-ready/10', 'text-tk-ready');
+            mfaStatusBadge.classList.add('bg-tk-ready/10', 'text-tk-ready-text');
           } else {
             mfaStatusBadge.textContent = 'not enrolled';
             mfaStatusBadge.classList.add('bg-tk-surface', 'text-tk-ink-2');
-            mfaStatusBadge.classList.remove('bg-tk-ready/10', 'text-tk-ready');
+            mfaStatusBadge.classList.remove('bg-tk-ready/10', 'text-tk-ready-text');
           }
         }
         showHidden(mfaEnrollSection, status.enrolled);
