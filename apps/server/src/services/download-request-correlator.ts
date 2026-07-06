@@ -28,9 +28,17 @@ export interface DownloadTransport {
   sendFetch(request: FetchDownloadRequest): void;
 }
 
-/** A jailed-file read can carry up to 64 MiB over the WSS — a generous bound, but
- *  still capped so a silent/wedged node can't hang the GET indefinitely. */
+/** A jailed-file read (FETCH) can carry up to 64 MiB over the WSS — a generous
+ *  bound, but still capped so a silent/wedged node can't hang the GET indefinitely. */
 export const DOWNLOAD_REQUEST_TIMEOUT_MS = 30_000;
+
+/** The LIST op returns only file METADATA (name/size/mime), never the 64 MiB body,
+ *  so it has no reason to wait the full fetch budget. audit wb1w3015f #5: the list
+ *  is what the GUI POLLS every ~2s, so a 30s hold on a merely-slow device stretched
+ *  the "waiting for the device…" window to a full 30s per timed-out tick. A 10s cap
+ *  (matching the cookies poll) tightens that to a third while still tolerating a
+ *  slow-but-live node — a metadata reply that takes >10s means the node is wedged. */
+export const DOWNLOAD_LIST_REQUEST_TIMEOUT_MS = 10_000;
 
 /** Uniform outcome — never rejects, so the route maps each case to a status. */
 export type DownloadOutcome =

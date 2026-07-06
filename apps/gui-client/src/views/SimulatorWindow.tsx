@@ -3704,12 +3704,24 @@ export function SimulatorWindow(): JSX.Element {
         }
         const loading = isHarnessState ? msg.state === 'loading' : msg.loading;
         if (typeof loading === 'boolean') {
-          setPageLoading(loading);
-          // Finding #1 — a box-reported loading=true arms the watchdog too (not just
-          // operator navigates), so it self-terminates if the box never pushes a
-          // terminal frame (session ends mid-load, renderer wedges, dropped frame).
-          if (loading) armLoadWatchdog();
-          else clearLoadWatchdog();
+          // audit wb1w3015f #7 — mirror the poll-path grace guard (line ~3849) on this
+          // authoritative data-channel path: a stale loading=false from the page the
+          // operator just LEFT (or a late frame before the box sees our just-submitted
+          // navigate) must NOT clear the NEW navigation's optimistic spinner — that reads
+          // as "nothing is happening" right after a click. Drop a within-grace
+          // loading=false UNLESS it's for the CURRENT nav target (navTargetOk ⇒ a genuine
+          // fast new-page load, which SHOULD clear the spinner immediately). loading=true
+          // always applies (escalate), and past the grace window we always apply.
+          const staleClear =
+            !loading && !navTargetOk && Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS;
+          if (!staleClear) {
+            setPageLoading(loading);
+            // Finding #1 — a box-reported loading=true arms the watchdog too (not just
+            // operator navigates), so it self-terminates if the box never pushes a
+            // terminal frame (session ends mid-load, renderer wedges, dropped frame).
+            if (loading) armLoadWatchdog();
+            else clearLoadWatchdog();
+          }
         }
         setLoadProgress(typeof msg.progress === 'number' ? msg.progress : null);
       } catch {

@@ -56,6 +56,7 @@ import {
 } from './upload-request-correlator.js';
 import {
   DownloadRequestCorrelator,
+  DOWNLOAD_LIST_REQUEST_TIMEOUT_MS,
   type DownloadTransport,
   type DownloadOutcome,
 } from './download-request-correlator.js';
@@ -226,7 +227,10 @@ export class FleetControlConnection {
   requestDownloadList(
     requestId: string,
     sessionId: string,
-    timeoutMs?: number,
+    // audit wb1w3015f #5 — the LIST op is metadata-only (never the 64 MiB body) and
+    // is what the GUI POLLS every ~2s, so it defaults to the SHORTER list budget
+    // rather than the fetch op's 30s. A caller may still override.
+    timeoutMs: number = DOWNLOAD_LIST_REQUEST_TIMEOUT_MS,
   ): Promise<DownloadOutcome> {
     const req = serializeListDownloads({ requestId, sessionId });
     return this.downloadCorrelator.requestList(req, timeoutMs);
