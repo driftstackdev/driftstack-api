@@ -319,7 +319,7 @@
   --hover-rgb: 241 242 245;
   --ink-rgb: 15 16 20;
   --ink-2-rgb: 71 74 85;
-  --ink-3-rgb: 138 141 153;
+  --ink-3-rgb: 106 109 122;
   --border-rgb: 228 230 236;
   --ready-rgb: 12 154 93;
   --busy-rgb: 201 138 18;
@@ -330,7 +330,13 @@
   --hover: #f1f2f5;
   --ink: #0f1014;
   --ink-2: #474a55;
-  --ink-3: #8a8d99;
+  /* S23 2026-07-06 — light ink-3 darkened for AA: #8a8d99 measured only
+     2.98:1 on --bg #f2f3f6 / 3.31:1 on #fff / 2.95:1 on --hover #f1f2f5,
+     failing WCAG AA for the small muted print it carries (tree section
+     labels, Copy buttons, footer meta, status lines). #6a6d7a is
+     4.64 / 5.15 / 4.60 on those surfaces (all ≥4.5:1) while staying
+     clearly lighter than ink-2 #474a55 (7.96:1) so hierarchy holds. */
+  --ink-3: #6a6d7a;
   --border: #e4e6ec;
   --ready: #0c9a5d;
   --busy: #c98a12;

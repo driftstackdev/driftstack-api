@@ -77,15 +77,15 @@ const apiBaseUrl = resolveApiBaseUrl();
           <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Secret access</p>
           <p class="mt-1.5 text-sm font-semibold text-tk-ink">Always audited</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
-            Every credential read lands in your <a href="/audit-log" class="text-tk-accent underline">audit log</a>.
+            Every credential read lands in your <a href="/audit-log" class="text-tk-accent-text underline">audit log</a>.
           </p>
         </div>
       </div>
       <p class="mt-4 text-xs text-tk-ink-3">
         Full model at
-        <a href="https://driftstack.dev/trust/security-overview" class="text-tk-accent underline">driftstack.dev/trust</a>
+        <a href="https://driftstack.dev/trust/security-overview" class="text-tk-accent-text underline">driftstack.dev/trust</a>
         · your data, your call — export or delete anytime from
-        <a href="#danger-zone" class="text-tk-accent underline">the danger zone</a>.
+        <a href="#danger-zone" class="text-tk-accent-text underline">the danger zone</a>.
       </p>
     </section>
 
@@ -518,7 +518,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               escapeHtml(fmtIso(entry.timestamp)) +
               '</p>' +
               '<p class="mt-1 text-sm text-tk-ink">' +
-              '<code class="font-mono text-xs text-tk-accent">' +
+              '<code class="font-mono text-xs text-tk-accent-text">' +
               escapeHtml(entry.action) +
               '</code>' +
               '</p>' +
@@ -587,7 +587,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             const manageFrag = manageUrl
               ? '<a href="' +
                 escapeHtml(manageUrl) +
-                '" target="_blank" rel="noopener noreferrer" class="shrink-0 text-xs text-tk-accent underline underline-offset-4 hover:text-tk-accent-text">Manage on ' +
+                '" target="_blank" rel="noopener noreferrer" class="shrink-0 text-xs text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">Manage on ' +
                 escapeHtml(providerLabel(link.provider)) +
                 ' ↗</a>'
               : '';

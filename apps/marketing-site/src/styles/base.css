@@ -423,7 +423,7 @@
   --hover-rgb: 241 242 245;
   --ink-rgb: 15 16 20;
   --ink-2-rgb: 71 74 85;
-  --ink-3-rgb: 138 141 153;
+  --ink-3-rgb: 106 109 122;
   --border-rgb: 228 230 236;
   --ready-rgb: 12 154 93;
   --busy-rgb: 201 138 18;
@@ -434,7 +434,13 @@
   --hover: #f1f2f5;
   --ink: #0f1014;
   --ink-2: #474a55;
-  --ink-3: #8a8d99;
+  /* S23 2026-07-06 — light ink-3 darkened for AA: #8a8d99 measured only
+     2.98:1 on --bg #f2f3f6 / 3.31:1 on #fff / 2.95:1 on --hover #f1f2f5,
+     failing WCAG AA for the small muted print it carries (tree section
+     labels, Copy buttons, footer meta, status lines). #6a6d7a is
+     4.64 / 5.15 / 4.60 on those surfaces (all ≥4.5:1) while staying
+     clearly lighter than ink-2 #474a55 (7.96:1) so hierarchy holds. */
+  --ink-3: #6a6d7a;
   --border: #e4e6ec;
   --ready: #0c9a5d;
   --busy: #c98a12;
@@ -464,17 +470,17 @@
      1.05:1, below perceptibility; every layer boundary hung on a 1.16:1
      hairline border). Bumped for SEPARATION while the near-black brand bg
      stays locked: surface 1.10:1 / raised 1.20:1 vs bg / border 1.47:1.
-     DELIBERATE divergence from the dashboard's byte-identical dark
-     surfaces (same latent issue there; port is a separate decision) —
-     precedent: the --ink-3 divergence below. */
+     S21 2026-07-06: the dashboard ported this ladder byte-identically, so
+     the shared-token pledge holds again (the temporary S20 divergence is
+     resolved). */
   --surface: #14141a;
   --raised: #1c1c24;
   --hover: #24252f;
   --ink: #f5f5f7;
   --ink-2: #b0b0bb;
-  /* --ink-3 deliberately diverges from the dashboard's #73737f: marketing
-     uses ink-3 for small muted print at reading distance, and #8c8c96
-     clears WCAG AA on #060608 where #73737f (≈4.2:1) does not. */
+  /* ink-3 carries small muted print at reading distance; #8c8c96 clears
+     WCAG AA on #060608 where the old dashboard #73737f (≈4.2:1) did not.
+     Unified across marketing + dashboard + docs as of S21/S22.1. */
   --ink-3: #8c8c96;
   --border: #2c2c38;
   --ready: #2fe39a;

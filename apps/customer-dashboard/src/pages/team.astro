@@ -164,7 +164,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       same email address. Once accepted, members can act on this account's resources by toggling
       the "Acting as" picker in the sidebar — reads work for both <code>member</code> and
       <code>admin</code> roles; writes require <code>admin</code>. See
-      <a href="https://docs.driftstack.dev/api/team" class="text-tk-accent underline" target="_blank" rel="noopener noreferrer">docs.driftstack.dev/api/team</a> for the role gating reference.
+      <a href="https://docs.driftstack.dev/api/team" class="text-tk-accent-text underline" target="_blank" rel="noopener noreferrer">docs.driftstack.dev/api/team</a> for the role gating reference.
     </p>
     </div>
   </div>
@@ -243,7 +243,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           escapeHtml(m.member_email) +
           '" class="text-sm text-tk-err hover:underline">Remove</button>';
         const roleClass =
-          m.role === 'admin' ? 'bg-tk-accent/10 text-tk-accent' : 'bg-tk-surface text-tk-ink-2';
+          m.role === 'admin' ? 'bg-tk-accent/10 text-tk-accent-text' : 'bg-tk-surface text-tk-ink-2';
         return (
           '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
           '<div class="min-w-0">' +
@@ -279,7 +279,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           ' · expires ' +
           escapeHtml(fmtIsoDay(inv.expires_at)) +
           '</p></div>' +
-          '<span class="inline-flex shrink-0 rounded-full bg-tk-accent/10 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-accent">pending</span>' +
+          '<span class="inline-flex shrink-0 rounded-full bg-tk-accent/10 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-accent-text">pending</span>' +
           '</li>'
         );
       }
@@ -300,7 +300,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             kind +
             '. <button type="button" data-action="retry-team-' +
             kind +
-            '" class="text-tk-accent underline">Retry</button></li>';
+            '" class="text-tk-accent-text underline">Retry</button></li>';
           const retryBtn = ul.querySelector('[data-action="retry-team-' + kind + '"]');
           if (retryBtn)
             retryBtn.addEventListener('click', function () {

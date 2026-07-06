@@ -89,7 +89,8 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     // Load-bearing routing decision — onboarding redirects logged-in
     // customers via the dashboard home, not a session-specific page.
     expect(body).toMatch(/Skip to dashboard\s*<\/a>/);
-    expect(body).toMatch(/<a\s*\n?\s*href="\/"\s*\n?\s*class="text-tk-accent[^"]*"\s*\n?\s*>/);
+    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
+    expect(body).toMatch(/<a\s*\n?\s*href="\/"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>/);
   });
 
   it('localStorage key ds_web_session_token (customer-dashboard convention)', () => {

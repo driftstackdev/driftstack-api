@@ -88,8 +88,9 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
 
   it("Skip-to-dashboard escape: 'Already know what you want? Skip to dashboard' link to '/'", () => {
     expect(body).toMatch(/Already know what you want\?/);
+    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<a\s*\n?\s*href="\/"\s*\n?\s*class="text-tk-accent[^"]*"\s*\n?\s*>\s*Skip to dashboard\s*<\/a>/,
+      /<a\s*\n?\s*href="\/"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>\s*Skip to dashboard\s*<\/a>/,
     );
   });
 

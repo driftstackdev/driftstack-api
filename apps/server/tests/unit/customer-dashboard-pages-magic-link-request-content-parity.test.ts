@@ -44,8 +44,9 @@ describe('customer-dashboard/pages/auth/magic-link-request content parity', () =
     expect(body).toMatch(
       /\/\/\s+4\. Dev convenience: when AUTH_EXPOSE_DEBUG_TOKEN=true on the server,\s*\n?\s*\/\/\s+a `debug_token` field is surfaced as a paste-into link\./,
     );
+    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<span class="font-mono uppercase tracking-wide text-tk-accent">Dev mode:<\/span>/,
+      /<span class="font-mono uppercase tracking-wide text-tk-accent-text">Dev mode:<\/span>/,
     );
     expect(body).toMatch(
       /debugLink\.setAttribute\(\s*\n?\s*'href',\s*\n?\s*'\/auth\/magic-link\?token=' \+ encodeURIComponent\(body\.debug_token\),\s*\n?\s*\);/,

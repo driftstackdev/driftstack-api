@@ -295,7 +295,7 @@ const navSections: NavSection[] = [
                   height="32"
                   class="inline-block h-8 w-8 transition-transform duration-300 group-hover:scale-110"
                 />
-                <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK</span></span>
+                <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent-text">STACK</span></span>
               </a>
               <span class="flex-1" />
               {/* Fleet v2 — theme switcher on auth/onboarding pages (the
@@ -355,7 +355,7 @@ const navSections: NavSection[] = [
               height="28"
               class="inline-block h-7 w-7"
             />
-            <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK</span></span>
+            <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent-text">STACK</span></span>
           </a>
           <button
             type="button"
@@ -410,7 +410,7 @@ const navSections: NavSection[] = [
                     height="32"
                     class="inline-block h-8 w-8 transition-transform duration-300 group-hover:scale-110"
                   />
-                  <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK</span></span>
+                  <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent-text">STACK</span></span>
                 </a>
               </div>
               {/*
@@ -508,7 +508,7 @@ const navSections: NavSection[] = [
                                 // by bg + text color + inset divider only.
                                 'group flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150',
                                 active
-                                  ? 'bg-tk-accent/10 text-tk-accent shadow-inset-divider'
+                                  ? 'bg-tk-accent/10 text-tk-accent-text shadow-inset-divider'
                                   : 'text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink',
                               ]}
                             >
@@ -540,7 +540,7 @@ const navSections: NavSection[] = [
                                     // → no width jump when the badge appears.
                                     'shrink-0 rounded px-1.5 py-px font-mono text-[10px] opacity-0 transition-opacity',
                                     active
-                                      ? 'bg-tk-accent/20 text-tk-accent'
+                                      ? 'bg-tk-accent/20 text-tk-accent-text'
                                       : 'bg-tk-hover text-tk-ink-3 group-hover:text-tk-ink-2',
                                   ]}
                                   >&nbsp;</span>
@@ -570,7 +570,7 @@ const navSections: NavSection[] = [
                 <a
                   href="#"
                   data-admin-shortcut-link
-                  class="flex items-center gap-2 rounded-md bg-tk-accent/5 px-3 py-1.5 text-sm font-medium text-tk-accent hover:bg-tk-accent/10"
+                  class="flex items-center gap-2 rounded-md bg-tk-accent/5 px-3 py-1.5 text-sm font-medium text-tk-accent-text hover:bg-tk-accent/10"
                 >
                   <svg
                     viewBox="0 0 16 16"
@@ -1131,7 +1131,7 @@ const navSections: NavSection[] = [
                       : (parts[0] || '?').slice(0, 2).toUpperCase();
                   saAvatar.textContent = initials;
                   saAvatar.className =
-                    'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-tk-border bg-tk-accent/10 text-xs font-medium text-tk-accent';
+                    'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-tk-border bg-tk-accent/10 text-xs font-medium text-tk-accent-text';
                 }
                 // 2026-05-21 — block is rendered `invisible` (CSS
                 // visibility:hidden) in SSR so the sidebar nav below it
@@ -1492,7 +1492,7 @@ const navSections: NavSection[] = [
                 a.href = 'https://driftstack.dev/legal/' + slug + '/';
                 a.target = '_blank';
                 a.rel = 'noopener noreferrer';
-                a.className = 'text-tk-accent underline underline-offset-4 hover:text-tk-accent-text';
+                a.className = 'text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2';
                 a.textContent = DOC_LABEL[doc.document_key] || doc.title || doc.document_key;
                 const ver = document.createElement('span');
                 ver.className = 'text-xs text-tk-ink-3';
@@ -1555,11 +1555,11 @@ const navSections: NavSection[] = [
               relative paths would 404 against the Cloudflare Pages
               project that serves the dashboard. */}
           <nav class="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <a href="https://driftstack.dev/legal/privacy" class="hover:text-tk-accent">Privacy</a>
-            <a href="https://driftstack.dev/legal/terms" class="hover:text-tk-accent">Terms</a>
-            <a href="https://driftstack.dev/legal/dpa" class="hover:text-tk-accent">DPA</a>
-            <a href="https://driftstack.dev/legal/aup" class="hover:text-tk-accent">AUP</a>
-            <a href="https://driftstack.dev/trust/sub-processors" class="hover:text-tk-accent"
+            <a href="https://driftstack.dev/legal/privacy" class="hover:text-tk-accent-text">Privacy</a>
+            <a href="https://driftstack.dev/legal/terms" class="hover:text-tk-accent-text">Terms</a>
+            <a href="https://driftstack.dev/legal/dpa" class="hover:text-tk-accent-text">DPA</a>
+            <a href="https://driftstack.dev/legal/aup" class="hover:text-tk-accent-text">AUP</a>
+            <a href="https://driftstack.dev/trust/sub-processors" class="hover:text-tk-accent-text"
               >Sub-processors</a
             >
           </nav>
@@ -1698,7 +1698,7 @@ const navSections: NavSection[] = [
             li.setAttribute('role', 'option');
             li.className =
               'cursor-pointer px-4 py-2 text-sm ' +
-              (i === active ? 'bg-tk-accent/10 text-tk-accent' : 'text-tk-ink-2');
+              (i === active ? 'bg-tk-accent/10 text-tk-accent-text' : 'text-tk-ink-2');
             li.addEventListener('click', function () {
               close();
               a.run();

@@ -104,7 +104,10 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
   });
 
   it('cross-links pinned: /api-keys (revoke surface) + cancel → /', () => {
-    expect(body).toMatch(/<a href="\/api-keys" class="text-tk-accent underline">API keys<\/a>/);
+    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
+    expect(body).toMatch(
+      /<a href="\/api-keys" class="text-tk-accent-text underline">API keys<\/a>/,
+    );
     expect(body).toMatch(/<a href="\/api-keys"[\s\S]*?>\s*View your API keys\s*<\/a>/);
     expect(body).toMatch(
       /cancelBtn\.addEventListener\('click', \(\) => \{\s*\n?\s*window\.location\.href = '\/';/,

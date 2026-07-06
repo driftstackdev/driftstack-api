@@ -106,8 +106,9 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
       /A wrong account cannot decrypt your data — enforced by math, not policy\./,
     );
     expect(body).toMatch(/Every credential read lands in your <a href="\/audit-log"/);
+    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /export or delete anytime from\s*\n?\s*<a href="#danger-zone" class="text-tk-accent underline">the danger zone<\/a>\./,
+      /export or delete anytime from\s*\n?\s*<a href="#danger-zone" class="text-tk-accent-text underline">the danger zone<\/a>\./,
     );
   });
 

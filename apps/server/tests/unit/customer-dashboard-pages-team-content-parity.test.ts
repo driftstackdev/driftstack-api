@@ -71,15 +71,15 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
     );
   });
 
-  it('Role badge styling: admin → bg-tk-accent/10 text-tk-accent / member → bg-tk-surface text-tk-ink-2 — pinned so admin visually pops over member (admins have write power, customers should be able to tell at a glance who can take destructive actions); drift to identical styling would hide the role distinction. Fleet v2 (2026-07-03) moved admin off the hard-coded blue-50/blue-700 onto the two-axis accent token so the badge renders correctly in light mode.', () => {
+  it('Role badge styling: admin → bg-tk-accent/10 text-tk-accent-text (S23 2026-07-06 AA text tone) / member → bg-tk-surface text-tk-ink-2 — pinned so admin visually pops over member (admins have write power, customers should be able to tell at a glance who can take destructive actions); drift to identical styling would hide the role distinction. Fleet v2 (2026-07-03) moved admin off the hard-coded blue-50/blue-700 onto the two-axis accent token so the badge renders correctly in light mode.', () => {
     expect(body).toMatch(
-      /m\.role === 'admin' \? 'bg-tk-accent\/10 text-tk-accent' : 'bg-tk-surface text-tk-ink-2';/,
+      /m\.role === 'admin' \? 'bg-tk-accent\/10 text-tk-accent-text' : 'bg-tk-surface text-tk-ink-2';/,
     );
   });
 
-  it("Pending invite badge: bg-tk-accent/10 text-tk-accent + uppercase 'pending' — pinned so pending invites have visual urgency (glow-red = needs action, distinct from member emerald/slate) so admins can see at a glance who hasn't accepted yet", () => {
+  it("Pending invite badge: bg-tk-accent/10 text-tk-accent-text (S23 2026-07-06 AA text tone) + uppercase 'pending' — pinned so pending invites have visual urgency (glow-red = needs action, distinct from member emerald/slate) so admins can see at a glance who hasn't accepted yet", () => {
     expect(body).toMatch(
-      /<span class="inline-flex shrink-0 rounded-full bg-tk-accent\/10 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-accent">pending<\/span>/,
+      /<span class="inline-flex shrink-0 rounded-full bg-tk-accent\/10 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-accent-text">pending<\/span>/,
     );
   });
 

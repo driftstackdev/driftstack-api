@@ -725,13 +725,13 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<div class="flex shrink-0 flex-col items-end gap-2">' +
           '<button type="button" data-edit="' +
           escapeHtml(e.id) +
-          '" class="text-sm text-tk-accent hover:underline">Edit</button>' +
+          '" class="text-sm text-tk-accent-text hover:underline">Edit</button>' +
           '<button type="button" data-test="' +
           escapeHtml(e.id) +
-          '" class="text-sm text-tk-accent hover:underline">Send test</button>' +
+          '" class="text-sm text-tk-accent-text hover:underline">Send test</button>' +
           '<button type="button" data-rotate="' +
           escapeHtml(e.id) +
-          '" class="text-sm text-tk-accent hover:underline">Rotate secret</button>' +
+          '" class="text-sm text-tk-accent-text hover:underline">Rotate secret</button>' +
           '<button type="button" data-delete="' +
           escapeHtml(e.id) +
           '" class="text-sm text-tk-err hover:underline">Delete</button>' +
@@ -745,7 +745,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           counts.delivered.toLocaleString('en-US') +
           '</dd></div>' +
           '<div><dt class="text-xs text-tk-ink-3">Failed</dt>' +
-          '<dd class="mt-1 font-mono text-lg font-medium text-tk-accent">' +
+          '<dd class="mt-1 font-mono text-lg font-medium text-tk-accent-text">' +
           counts.failed.toLocaleString('en-US') +
           '</dd></div>' +
           '<div><dt class="text-xs text-tk-ink-3">DLQ</dt>' +
@@ -758,7 +758,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<div class="mt-4 flex items-center justify-between">' +
           '<button type="button" data-toggle-deliveries="' +
           escapeHtml(e.id) +
-          '" class="text-sm text-tk-accent hover:underline">View delivery log →</button>' +
+          '" class="text-sm text-tk-accent-text hover:underline">View delivery log →</button>' +
           requeueLink +
           '</div>' +
           '<div data-deliveries="' +
@@ -782,7 +782,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           d.status === 'delivered'
             ? statusBadge + 'bg-tk-ready/10 text-tk-ready'
             : d.status === 'pending' || d.status === 'in_flight'
-              ? statusBadge + 'bg-tk-accent/10 text-tk-accent'
+              ? statusBadge + 'bg-tk-accent/10 text-tk-accent-text'
               : d.status === 'failed'
                 ? statusBadge + 'bg-orange-50 text-orange-700'
                 : statusBadge + 'bg-tk-err/10 text-tk-err';
@@ -790,7 +790,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           d.status === 'failed' || d.status === 'dlq' || d.status === 'delivered'
             ? '<button type="button" data-replay="' +
               escapeHtml(d.id) +
-              '" class="text-xs text-tk-accent hover:underline">Replay</button>'
+              '" class="text-xs text-tk-accent-text hover:underline">Replay</button>'
             : '';
         return (
           '<li class="flex items-start justify-between gap-3 py-2 text-sm">' +
@@ -864,7 +864,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           const moreBtn = state.cursor
             ? '<button type="button" data-load-more-deliveries="' +
               escapeHtml(endpointId) +
-              '" class="mt-3 text-sm text-tk-accent hover:underline">Load more</button>'
+              '" class="mt-3 text-sm text-tk-accent-text hover:underline">Load more</button>'
             : '';
           body = list + moreBtn;
         }

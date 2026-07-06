@@ -70,7 +70,12 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     expect(body).toMatch(/\.btn-ghost \{/);
     expect(body).toMatch(/\.btn-danger \{/);
     expect(body).toMatch(/\.nav-link \{/);
-    expect(body).toMatch(/@apply text-sm text-tk-ink-2 transition-colors hover:text-tk-accent;/);
+    // S23 2026-07-06 — dashboard nav-link hover re-pinned to the AA-safe
+    // tk-accent-text tone (raw --accent is ~3.0:1 on the dark bg), matching
+    // the marketing recipe below.
+    expect(body).toMatch(
+      /@apply text-sm text-tk-ink-2 transition-colors hover:text-tk-accent-text;/,
+    );
     expect(body).toMatch(/\.dashboard-card \{/);
     expect(body).toMatch(/rounded-card border border-tk-border bg-tk-surface p-6 shadow-ambient/);
     expect(body).toMatch(/\.form-input \{/);

@@ -152,8 +152,9 @@ describe('W738 dashboard /cli/authorize page V-266/V-267/V-328e parity', () => {
 
   it('CRITICAL /api-keys revoke-anytime framing pinned. The wording — "remains active until you revoke it from API keys" — tells customers how to undo a mistaken authorization.', () => {
     const p = read(PAGE);
+    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(p).toMatch(
-      /and remains active until you revoke it from <a href="\/api-keys" class="text-tk-accent underline">API keys<\/a>/,
+      /and remains active until you revoke it from <a href="\/api-keys" class="text-tk-accent-text underline">API keys<\/a>/,
     );
   });
 

@@ -97,11 +97,13 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
   });
 
   it("Forgot-password + Create-one fallback links: 'Forgot your password?' → /forgot-password + 'No account yet? Create one' → /signup (with data-signup-link for the V-269 next= rewrite hook) — pinned so the dual escape hatches (recover password / sign up instead) stay visible on every sign-in attempt", () => {
+    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<a\s*\n?\s*href="\/forgot-password"\s*\n?\s*class="text-tk-accent[^"]*"\s*\n?\s*>\s*Forgot your password\?\s*<\/a\s*\n?\s*>/,
+      /<a\s*\n?\s*href="\/forgot-password"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>\s*Forgot your password\?\s*<\/a\s*\n?\s*>/,
     );
+    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /No account yet\? <a\s*\n?\s*data-signup-link\s*\n?\s*href="\/signup"\s*\n?\s*class="text-tk-accent[^"]*"\s*\n?\s*>\s*Create one\s*<\/a/,
+      /No account yet\? <a\s*\n?\s*data-signup-link\s*\n?\s*href="\/signup"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>\s*Create one\s*<\/a/,
     );
   });
 

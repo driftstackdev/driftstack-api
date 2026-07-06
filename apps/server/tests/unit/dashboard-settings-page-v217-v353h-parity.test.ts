@@ -88,8 +88,9 @@ describe('W759 dashboard /settings page V-217 + V-204 + V-352 parity', () => {
     expect(p).toMatch(
       /Account profile, email notifications, and your Anthropic API key\.\s*\n?\s*Changes here affect/,
     );
+    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(p).toMatch(
-      /Security, sign-ins &amp; danger zone moved to\s*\n?\s*<a href="\/security" class="text-tk-accent underline">Privacy &amp; security<\/a>\./,
+      /Security, sign-ins &amp; danger zone moved to\s*\n?\s*<a href="\/security" class="text-tk-accent-text underline">Privacy &amp; security<\/a>\./,
     );
   });
 

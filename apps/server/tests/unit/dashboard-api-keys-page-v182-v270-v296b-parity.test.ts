@@ -228,11 +228,11 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     );
   });
 
-  it("CRITICAL key-row 'grace ends' inline annotation pinned. When a key has expires_at set (post-rotation), the row shows ' · <span class=\"text-tk-accent\">grace ends <iso>' as inline metadata. Drift would hide the grace-deadline from the customer.", () => {
+  it("CRITICAL key-row 'grace ends' inline annotation pinned. When a key has expires_at set (post-rotation), the row shows ' · <span class=\"text-tk-accent-text\">grace ends <iso>' as inline metadata (S23 2026-07-06 AA text tone). Drift would hide the grace-deadline from the customer.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /\(k\.expires_at\s*\n\s+\? ' · <span class="text-tk-accent">grace ends ' \+\s*\n\s+escapeHtml\(fmtIso\(k\.expires_at\)\) \+\s*\n\s+'<\/span>'\s*\n\s+: ''\)/,
+      /\(k\.expires_at\s*\n\s+\? ' · <span class="text-tk-accent-text">grace ends ' \+\s*\n\s+escapeHtml\(fmtIso\(k\.expires_at\)\) \+\s*\n\s+'<\/span>'\s*\n\s+: ''\)/,
     );
   });
 

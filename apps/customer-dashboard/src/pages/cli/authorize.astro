@@ -27,7 +27,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 <DashboardLayout title="Authorize desktop client" withSidebar={false}>
   <div class="mx-auto max-w-md px-6 py-16" data-page="cli-authorize">
     <header class="text-center">
-      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Desktop client</p>
+      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">Desktop client</p>
       <h1 class="mt-2 text-2xl font-semibold tracking-tight text-tk-ink">
         Authorize this device?
       </h1>
@@ -45,7 +45,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         This page expects an authorization code in the URL. Open it from the Driftstack
         desktop app's "Sign in with browser" button.
       </div>
-      <a href="/" class="mt-6 block text-center text-sm text-tk-accent underline">
+      <a href="/" class="mt-6 block text-center text-sm text-tk-accent-text underline">
         Return to dashboard
       </a>
     </div>
@@ -72,7 +72,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       <p class="text-sm text-tk-ink-2">
         The Driftstack desktop client on this device is requesting an API key bound to
         your account. The key gives the desktop app the same access as your web session
-        and remains active until you revoke it from <a href="/api-keys" class="text-tk-accent underline">API keys</a>.
+        and remains active until you revoke it from <a href="/api-keys" class="text-tk-accent-text underline">API keys</a>.
       </p>
       <div class="mt-6 rounded-md border border-tk-border bg-tk-bg px-4 py-3">
         <div class="flex items-center justify-between gap-4 text-xs text-tk-ink-3">
@@ -109,7 +109,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         The desktop app should reopen automatically. If it doesn't, switch back to it
         manually — it will pick up the credentials on the next poll.
       </p>
-      <a href="/api-keys" class="mt-6 block text-center text-sm text-tk-accent underline">
+      <a href="/api-keys" class="mt-6 block text-center text-sm text-tk-accent-text underline">
         View your API keys
       </a>
     </div>

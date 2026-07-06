@@ -81,11 +81,13 @@ describe('docs styles/base content parity', () => {
     expect(body).toMatch(/#8c8c96 clears WCAG AA on #060608/);
   });
 
-  it('light-mode block pinned BYTE-IDENTICAL to marketing (bg #f2f3f6 / surface #fff / ink #0f1014 / border #e4e6ec) — the light toggle target', () => {
+  it('light-mode block pinned BYTE-IDENTICAL to marketing (bg #f2f3f6 / surface #fff / ink #0f1014 / border #e4e6ec) — the light toggle target. S23 2026-07-06: light ink-3 darkened #8a8d99→#6a6d7a for AA (old value was 2.98:1 on #f2f3f6, below the 4.5:1 small-text floor; #6a6d7a = 4.64/5.15/4.60 on bg/surface/hover)', () => {
     expect(body).toMatch(/--bg: #f2f3f6;/);
     expect(body).toMatch(/--ink: #0f1014;/);
     expect(body).toMatch(/--ink-2: #474a55;/);
-    expect(body).toMatch(/--ink-3: #8a8d99;/);
+    expect(body).toMatch(/--ink-3: #6a6d7a;/);
+    expect(body).toMatch(/--ink-3-rgb: 106 109 122;/);
+    expect(body).not.toMatch(/--ink-3: #8a8d99/);
     expect(body).toMatch(/--border: #e4e6ec;/);
     expect(body).toMatch(/--bg-rgb: 242 243 246;/);
   });
@@ -271,6 +273,9 @@ describe('docs styles/base content parity', () => {
       '--ink: #f5f5f7;',
       '--ink-2: #b0b0bb;',
       '--ink-3: #8c8c96;',
+      // S23 2026-07-06 — AA light ink-3, unified same-commit in all three apps.
+      '--ink-3: #6a6d7a;',
+      '--ink-3-rgb: 106 109 122;',
       '--bg: #f2f3f6;',
       '--accent: #9b3b46;',
       '--accent-text: #d4626e;',

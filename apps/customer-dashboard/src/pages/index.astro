@@ -69,7 +69,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           </a>
           <span
             data-account-tier
-            class="rounded-full border border-tk-accent/30 bg-tk-accent/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-tk-accent"
+            class="rounded-full border border-tk-accent/30 bg-tk-accent/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-tk-accent-text"
           >
             —
           </span>
@@ -87,7 +87,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
 
     <div
       data-banner
-      class="mb-6 hidden rounded-lg border border-tk-accent/30 bg-tk-accent/10 px-4 py-3 text-sm text-amber-800"
+      class="mb-6 hidden rounded-lg border border-tk-busy/30 bg-tk-busy/10 px-4 py-3 text-sm text-tk-ink-2"
       role="status"
     >
     </div>
@@ -120,7 +120,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
               target="_blank"
               rel="noopener noreferrer"
               data-onboarding-app-link
-              class="font-medium text-tk-ink hover:text-tk-accent">Get the desktop app</a
+              class="font-medium text-tk-ink hover:text-tk-accent-text">Get the desktop app</a
             >
             <span class="mt-0.5 block text-xs text-tk-ink-3">Sessions are driven there.</span>
           </span>
@@ -128,7 +128,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         <li data-onboarding-step="key" class="flex items-start gap-2.5 text-sm">
           <span data-step-marker class="badge-count mt-0.5">2</span>
           <span>
-            <a href="/api-keys" class="font-medium text-tk-ink hover:text-tk-accent"
+            <a href="/api-keys" class="font-medium text-tk-ink hover:text-tk-accent-text"
               >Connect the app</a
             >
             <span class="mt-0.5 block text-xs text-tk-ink-3"
@@ -146,7 +146,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         <li data-onboarding-step="team" class="hidden items-start gap-2.5 text-sm">
           <span data-step-marker class="badge-count mt-0.5">4</span>
           <span>
-            <a href="/team" class="font-medium text-tk-ink hover:text-tk-accent"
+            <a href="/team" class="font-medium text-tk-ink hover:text-tk-accent-text"
               >Invite your team</a
             >
             <span class="mt-0.5 block text-xs text-tk-ink-3">Roles + seats.</span>
@@ -259,15 +259,15 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Secret access</p>
           <p class="mt-1.5 text-sm font-semibold text-tk-ink">Always audited</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
-            Every credential read lands in your <a href="/audit-log" class="text-tk-accent underline">audit log</a>.
+            Every credential read lands in your <a href="/audit-log" class="text-tk-accent-text underline">audit log</a>.
           </p>
         </div>
       </div>
       <p class="mt-4 text-xs text-tk-ink-3">
         Full model at
-        <a href="https://driftstack.dev/trust/security-overview" class="text-tk-accent underline">driftstack.dev/trust</a>
+        <a href="https://driftstack.dev/trust/security-overview" class="text-tk-accent-text underline">driftstack.dev/trust</a>
         · your data, your call — export or delete anytime from
-        <a href="/settings" class="text-tk-accent underline">Settings</a>.
+        <a href="/settings" class="text-tk-accent-text underline">Settings</a>.
       </p>
     </section>
 
@@ -385,7 +385,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         <div class="panel">
           <h2 class="panel-title">Plan</h2>
           <div data-subscription-empty class="hidden text-sm text-tk-ink-3">
-            No active subscription. <a href="/select-tier" class="text-tk-accent hover:underline">Pick a tier →</a>
+            No active subscription. <a href="/select-tier" class="text-tk-accent-text hover:underline">Pick a tier →</a>
           </div>
           <div data-subscription-card class="hidden">
             <p
@@ -435,7 +435,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       // creating / ready / busy / destroyed / errored — and must stay
       // complete: an uncatalogued status would render unstyled.
       const STATUS_BADGE_CLASS = {
-        creating: 'bg-tk-accent/10 text-tk-accent',
+        creating: 'bg-tk-accent/10 text-tk-accent-text',
         ready: 'bg-tk-ready/10 text-tk-ready',
         busy: 'bg-tk-busy/10 text-tk-busy',
         destroyed: 'bg-tk-hover text-tk-ink-2',

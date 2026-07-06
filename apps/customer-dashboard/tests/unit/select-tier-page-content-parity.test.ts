@@ -79,8 +79,9 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
   });
 
   it('Enterprise mailto:sales@driftstack.dev fallback pinned (~$4,000/mo floor matches /faq + /pricing)', () => {
+    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /Enterprise tier \(~\$4,000\/mo, custom\) — <a href="mailto:sales@driftstack\.dev" class="text-tk-accent underline">contact sales<\/a>\./,
+      /Enterprise tier \(~\$4,000\/mo, custom\) — <a href="mailto:sales@driftstack\.dev" class="text-tk-accent-text underline">contact sales<\/a>\./,
     );
   });
 

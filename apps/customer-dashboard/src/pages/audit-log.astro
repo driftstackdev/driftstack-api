@@ -224,7 +224,7 @@ const FILTER_OPTIONS = [
       <button
         type="button"
         data-show-more-filters
-        class="text-sm text-tk-accent hover:underline"
+        class="text-sm text-tk-accent-text hover:underline"
       >
         More filters ▾
       </button>
@@ -343,7 +343,7 @@ const FILTER_OPTIONS = [
         <button
           type="button"
           data-load-more
-          class="text-sm font-medium text-tk-accent hover:text-oxblood-800 disabled:text-tk-ink-3"
+          class="text-sm font-medium text-tk-accent-text hover:text-tk-accent-2 disabled:text-tk-ink-3"
         >
           Load more
         </button>
@@ -508,7 +508,7 @@ const FILTER_OPTIONS = [
         list.innerHTML =
           '<li class="px-6 py-12 text-center text-sm text-tk-ink-3">' +
           "Couldn't load the audit log. " +
-          '<button type="button" data-action="retry-audit-log" class="text-tk-accent underline">Retry</button>' +
+          '<button type="button" data-action="retry-audit-log" class="text-tk-accent-text underline">Retry</button>' +
           '</li>';
         const retryBtn = list.querySelector('[data-action="retry-audit-log"]');
         if (retryBtn)

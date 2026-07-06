@@ -95,8 +95,9 @@ describe('W492.B apps/customer-dashboard/src/pages/signup.astro content parity',
 
   it("Page chrome: withSidebar={false} + 'Already have an account? Sign in' fallback link — pinned so the no-sidebar auth-page convention stays consistent + the sign-in escape hatch survives for customers who realize they already have an account mid-flow", () => {
     expect(body).toMatch(/<DashboardLayout title="Sign up" withSidebar=\{false\}>/);
+    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /Already have an account\? <a\s*\n?\s*data-login-link\s*\n?\s*href="\/login"\s*\n?\s*class="text-tk-accent[^"]*"\s*\n?\s*>\s*Sign in\s*<\/a\s*\n?\s*>/,
+      /Already have an account\? <a\s*\n?\s*data-login-link\s*\n?\s*href="\/login"\s*\n?\s*class="text-tk-accent-text[^"]*"\s*\n?\s*>\s*Sign in\s*<\/a\s*\n?\s*>/,
     );
   });
 

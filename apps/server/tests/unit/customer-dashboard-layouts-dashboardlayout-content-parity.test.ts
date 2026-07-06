@@ -167,11 +167,12 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     );
   });
 
-  it("active-link styling pinned: pathname matching → highlighted (bg-tk-accent/10 + text-tk-accent + shadow-inset-divider). 2026-05-21 — exact match for '/' (so Overview doesn't highlight on every nested route) + prefix match for the rest. font-medium applied on BOTH active + inactive (constant width prevents click-induced layout shift).", () => {
+  it("active-link styling pinned: pathname matching → highlighted (bg-tk-accent/10 + text-tk-accent-text + shadow-inset-divider; S23 2026-07-06 — active label is TEXT, so it reads the AA-safe accent-text tone). 2026-05-21 — exact match for '/' (so Overview doesn't highlight on every nested route) + prefix match for the rest. font-medium applied on BOTH active + inactive (constant width prevents click-induced layout shift).", () => {
     expect(body).toMatch(
       /item\.href === '\/'\s*\n?\s*\?\s*pathname === '\/'\s*\n?\s*:\s*pathname === item\.href \|\|\s*\n?\s*pathname\.startsWith\(item\.href \+ '\/'\)/,
     );
-    expect(body).toMatch(/'bg-tk-accent\/10 text-tk-accent shadow-inset-divider'/);
+    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
+    expect(body).toMatch(/'bg-tk-accent\/10 text-tk-accent-text shadow-inset-divider'/);
     expect(body).toMatch(/text-sm font-medium transition-colors/);
   });
 });

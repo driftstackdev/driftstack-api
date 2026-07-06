@@ -133,11 +133,12 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     );
   });
 
-  it('CRITICAL member-row admin-role badge color contrast pinned. admin → bg-tk-accent/10 text-tk-accent; member → bg-tk-surface/text-tk-ink-2. Drift to identical styling would lose the visual role distinction. Fleet v2 (2026-07-03) moved admin onto the two-axis accent token (was hard-coded blue-50/blue-700) so the badge renders in light mode.', () => {
+  it('CRITICAL member-row admin-role badge color contrast pinned. admin → bg-tk-accent/10 text-tk-accent-text (S23 2026-07-06 AA text tone); member → bg-tk-surface/text-tk-ink-2. Drift to identical styling would lose the visual role distinction. Fleet v2 (2026-07-03) moved admin onto the two-axis accent token (was hard-coded blue-50/blue-700) so the badge renders in light mode.', () => {
     const p = read(PAGE);
 
+    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(p).toMatch(
-      /m\.role === 'admin' \? 'bg-tk-accent\/10 text-tk-accent' : 'bg-tk-surface text-tk-ink-2'/,
+      /m\.role === 'admin' \? 'bg-tk-accent\/10 text-tk-accent-text' : 'bg-tk-surface text-tk-ink-2'/,
     );
   });
 
@@ -149,11 +150,12 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     );
   });
 
-  it('CRITICAL pending badge uses bg-tk-accent/text-tk-accent color contrast. The brand-color pending state is visually distinct from the gray empty state.', () => {
+  it('CRITICAL pending badge uses bg-tk-accent-wash/text-tk-accent-text color contrast (S23 2026-07-06 AA text tone). The brand-color pending state is visually distinct from the gray empty state.', () => {
     const p = read(PAGE);
 
+    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(p).toMatch(
-      /'<span class="inline-flex shrink-0 rounded-full bg-tk-accent\/10 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-accent">pending<\/span>'/,
+      /'<span class="inline-flex shrink-0 rounded-full bg-tk-accent\/10 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-accent-text">pending<\/span>'/,
     );
   });
 
@@ -195,7 +197,7 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /<a href="https:\/\/docs\.driftstack\.dev\/api\/team" class="text-tk-accent underline" target="_blank" rel="noopener noreferrer">docs\.driftstack\.dev\/api\/team<\/a>/,
+      /<a href="https:\/\/docs\.driftstack\.dev\/api\/team" class="text-tk-accent-text underline" target="_blank" rel="noopener noreferrer">docs\.driftstack\.dev\/api\/team<\/a>/,
     );
   });
 

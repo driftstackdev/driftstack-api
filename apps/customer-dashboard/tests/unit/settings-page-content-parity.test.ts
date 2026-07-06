@@ -82,8 +82,9 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     // The change-password / MFA / sign-ins / danger-zone surfaces left
     // this page — customers hunting for them in the old place need the
     // pointer, or the move reads as a feature removal.
+    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /Security, sign-ins &amp; danger zone moved to\s*\n?\s*<a href="\/security" class="text-tk-accent underline">Privacy &amp; security<\/a>\./,
+      /Security, sign-ins &amp; danger zone moved to\s*\n?\s*<a href="\/security" class="text-tk-accent-text underline">Privacy &amp; security<\/a>\./,
     );
   });
 
