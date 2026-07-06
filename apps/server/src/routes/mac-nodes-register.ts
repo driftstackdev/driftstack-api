@@ -175,6 +175,28 @@ export function registerMacNodesRoutes(
       }
       bumpOutcome('ok');
 
+      // #128 regression guard — a node pointed at a HOSTED LiveKit Cloud SFU
+      // (*.livekit.cloud) relays media box → remote DC → client (2 WAN hops), the
+      // exact "middleman" latency the founder hit for 18 days before it was caught.
+      // A co-located box-local SFU is the fast path. Cloud stays a VALID fallback
+      // (kept as rollback), so this WARNs loudly rather than rejects — turning a
+      // silent regression into an immediately-visible signal at the registration site.
+      try {
+        if (/\.livekit\.cloud$/i.test(new URL(body.livekit.ws_url).hostname)) {
+          req.log.warn(
+            {
+              component: 'mac-node-livekit-register',
+              macNodeId: body.mac_node_id,
+              wsHost: new URL(body.livekit.ws_url).hostname,
+            },
+            'fleet node registered a REMOTE LiveKit Cloud SFU (middleman) — streaming takes 2 WAN hops; prefer a co-located box-local SFU (#128 Option A)',
+          );
+        }
+      } catch {
+        // ws_url was already .url()-validated; a parse failure here is impossible,
+        // but a bad-URL edge must never break a successful registration.
+      }
+
       // LK.2 audit emission — operators provisioning Macs is exactly
       // the kind of event the admin audit log exists to capture.
       // Best-effort: a failure here cannot revert the persisted
