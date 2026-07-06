@@ -3868,6 +3868,14 @@ export function SimulatorWindow(): JSX.Element {
   // — a transient/gated failure just keeps the pending note, never throws.
   const [cookies, setCookies] = useState<SessionCookie[] | null>(null);
   const [cookiesNote, setCookiesNote] = useState<string | null>(null);
+  // Founder 2026-07-06 "cookies sometimes showing, sometimes not — should show all
+  // this profile's cookies at all times". The poll used to setCookies(null) on EVERY
+  // non-'ok' tick (timeout=device merely slow, transient 5xx, gated), blanking a
+  // populated panel each hiccup then repainting on the next success = the flicker.
+  // Fix: RETAIN the last-known jar through transient states; only the terminal
+  // session-ended path clears it. This ref lets the calm "waiting…" note show ONLY
+  // when there's genuinely nothing fetched yet (else we keep the jar on screen, no note).
+  const hasCookiesRef = useRef(false);
   useEffect(() => {
     // Approach B perf — poll ONLY while the Cookies pane is the active section
     // (was gated on the whole drawer being open). Switching away tears the
@@ -3880,6 +3888,7 @@ export function SimulatorWindow(): JSX.Element {
     // an ended session. Show an honest terminal note instead.
     if (sessionEnded !== null) {
       setCookies(null);
+      hasCookiesRef.current = false; // terminal clear — a new session starts fresh
       setCookiesNote('Session ended — cookies are no longer available.');
       return;
     }
@@ -3899,7 +3908,9 @@ export function SimulatorWindow(): JSX.Element {
         .then((res) => {
           if (cancelled) return;
           if (res.status === 'ok') {
-            setCookies(res.cookies ?? []);
+            const jar = res.cookies ?? [];
+            setCookies(jar);
+            hasCookiesRef.current = jar.length > 0;
             setCookiesNote(null);
             backoff = 3000; // reset cadence on a real success
           } else if (res.status === 'timeout') {
@@ -3912,11 +3923,12 @@ export function SimulatorWindow(): JSX.Element {
             // already a natural throttle; stay at the steady cadence so a
             // device that's merely slow gets polled again promptly instead of
             // being treated like a persistently degraded/gated path.
-            setCookies(null);
-            setCookiesNote('waiting for the device…');
+            // RETAIN the jar — a 'timeout' means the device is merely SLOW, not gone;
+            // blanking it here was the founder's flicker. Note only when nothing yet.
+            setCookiesNote(hasCookiesRef.current ? null : 'waiting for the device…');
           } else {
-            setCookies(null);
-            setCookiesNote(friendlyUnavailableNote(res.reason));
+            // RETAIN the jar through a degraded/gated tick; note only when nothing yet.
+            setCookiesNote(hasCookiesRef.current ? null : friendlyUnavailableNote(res.reason));
             backoff = Math.min(backoff * 2, 30000); // genuinely degraded → back off
           }
         })
@@ -3931,17 +3943,21 @@ export function SimulatorWindow(): JSX.Element {
           //   404 → no cookie jar yet (no page has loaded in the session)
           //   503 → the cookies route is gated off on this deployment
           //   else (network / 5xx) → a transient hiccup we'll retry on the next tick
-          setCookies(null);
           const status = err instanceof AgentSessionControlError ? err.status : 0;
-          setCookiesNote(
+          // RETAIN the last-known jar through a transient/gated failure (never blank a
+          // populated panel — the founder's "sometimes showing, sometimes not"). Show a
+          // note only when there's nothing fetched yet; EXCEPT 401/403 (creds expired →
+          // the jar can't refresh) which keeps its actionable note even over a stale jar.
+          const note =
             status === 401 || status === 403
               ? 'Session control credential expired — reopen the session to refresh.'
               : status === 404
                 ? 'cookies will appear once a page loads in the session'
                 : status === 503
                   ? "cookies aren't enabled on this deployment"
-                  : "couldn't load cookies — retrying",
-          );
+                  : "couldn't load cookies — retrying";
+          const credsExpired = status === 401 || status === 403;
+          setCookiesNote(hasCookiesRef.current && !credsExpired ? null : note);
           backoff = Math.min(backoff * 2, 30000); // failure → back off
         })
         .finally(() => {
