@@ -2026,6 +2026,12 @@ export async function createProductionDeps(
     // for client observability (GUI Connectivity test, ops tooling).
     driverName: config.driver,
     playwrightBrowser: config.playwrightBrowser,
+    // #139 — whether AI Browser Automation EXECUTES for real. This is the fleet
+    // control-plane gate (the SAME condition that wires ControlPlaneAgentExecutor
+    // over the fleet dispatch above), NOT the local `driver` (which stays 'mock'
+    // in prod because the real path is the fleet correlator, not the in-process
+    // driver). The GUI reads it to drop the stale "actions are simulated" note.
+    agentExecutionLive: config.fleetControlPlaneEnabled,
   };
 
   // V-232 — background poller startup. Both processTick methods own

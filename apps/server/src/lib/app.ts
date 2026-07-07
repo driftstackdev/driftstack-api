@@ -721,6 +721,11 @@ export interface AppDeps {
   driverName?: 'mock' | 'webkit' | 'playwright';
   /** V-337 — playwright browser channel, surfaced when driverName === 'playwright'. */
   playwrightBrowser?: 'webkit' | 'chromium' | 'firefox';
+  /** #139 — true when AI Browser Automation executes for real over the fleet
+   *  control plane (ControlPlaneAgentExecutor wired). Surfaced on /version as
+   *  `agent_execution` so the GUI can drop the "actions are simulated" note.
+   *  Independent of `driverName` (which is the local driver, not the fleet path). */
+  agentExecutionLive?: boolean;
   /**
    * V-531.B — LiveKit access-token mint surface. When all three fields
    * are present (apiKey + apiSecret + wsUrl), POST /v1/sessions/:id/
@@ -1682,6 +1687,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     ...(deps.driverName === 'playwright' && deps.playwrightBrowser !== undefined
       ? { playwright_browser: deps.playwrightBrowser }
       : {}),
+    // #139 — AI Browser Automation execution mode. 'live' = decomposed steps run
+    // for real on a fleet device (ControlPlaneAgentExecutor); 'simulated' = the
+    // StubAgentExecutor (dev/demo). The GUI uses this to drop the stale
+    // "actions are simulated" disclaimer — the `driver` field alone is misleading
+    // (it's 'mock' in prod even though automation is live via the fleet path).
+    agent_execution: deps.agentExecutionLive ? 'live' : 'simulated',
   }));
 
   // Readiness endpoint — public, no auth, no rate limit. Returns 200

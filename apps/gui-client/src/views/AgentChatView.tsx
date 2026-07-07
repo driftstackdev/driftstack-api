@@ -7,9 +7,10 @@
 // a per-turn cost/usage badge. Data layer: useAgentChat (S6) over the SDK
 // agentSessions resource (S5).
 //
-// Honest scope: the Claude PLAN is real; the browser ACTIONS are simulated in
-// this deployment until the live webkit driver is enabled (driver:mock). The
-// banner says so — no pretending.
+// Honest scope: #139 go-live — the Claude PLAN is real AND the browser ACTIONS
+// now execute for real on a fleet device (ControlPlaneAgentExecutor over the
+// fleet control plane). The banner reflects /version `agent_execution`: 'live'
+// when the fleet path is wired (prod), 'simulated' only on a stub deployment.
 
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type {
@@ -154,11 +155,14 @@ export function AgentChatView({
 } = {}): JSX.Element {
   const { client, settings } = useSettings();
   // #139 — the "browser actions are simulated" note is only true while the server
-  // runs driver:mock. Drive it off the live /version driver so it AUTO-HIDES the
-  // moment the real webkit driver goes live (founder: "it's a mock, not true
-  // anymore"). null/unknown or mock/playwright → still simulated; webkit → real.
-  const serverDriver = useConnectionStatus(settings.baseUrl).driver;
-  const actionsAreLive = serverDriver === 'webkit';
+  // runs the StubAgentExecutor. Drive it off /version `agent_execution` (the fleet
+  // control-plane gate), NOT `driver` — in prod `driver` stays 'mock' even though
+  // automation executes for real over the fleet correlator (the go-live path), so
+  // keying on driver:webkit wrongly showed "preview mode". `agent_execution:'live'`
+  // → real; 'simulated' → stub; null (older server / not yet probed) → treat as
+  // live so a transient probe gap doesn't flash the stale mock disclaimer.
+  const agentExecution = useConnectionStatus(settings.baseUrl).agentExecution;
+  const actionsAreLive = agentExecution !== 'simulated';
   const toasts = useToasts();
   // AI-ready status surfaced before you send: the agent needs a connected API
   // key. (The server-side LLM config can't be probed from here; an API key is
@@ -551,9 +555,10 @@ export function AgentChatView({
           </div>
         </header>
 
-        {/* Honest execution-mode banner — auto-updates with the live server
-            driver (#139): only claims "simulated" while driver:mock is actually
-            in effect; flips to the live indicator when the webkit driver is on. */}
+        {/* Honest execution-mode banner — auto-updates with /version
+            agent_execution (#139): shows the live indicator when AI-automation
+            executes for real over the fleet control plane (prod), and only says
+            "preview mode" on a genuine stub (agent_execution:'simulated'). */}
         <div className="border-b border-surface-divider bg-surface-inset px-4 py-1.5">
           {actionsAreLive ? (
             <span className="text-2xs text-ink-muted">

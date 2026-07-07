@@ -30,6 +30,12 @@ export type ConnectionState = 'connecting' | 'connected' | 'offline';
  *  up front instead of letting the customer discover it post-launch. */
 export type ServerDriver = 'mock' | 'webkit' | 'playwright';
 
+/** #139 — whether AI Browser Automation EXECUTES for real (fleet control plane
+ *  wired) vs runs the simulated stub. This is the correct "is it a mock" signal —
+ *  distinct from `driver`, which is the LOCAL driver ('mock' in prod even though
+ *  automation is live via the fleet path). */
+export type AgentExecution = 'live' | 'simulated';
+
 export interface ConnectionStatus {
   state: ConnectionState;
   lastOkAt: number | null;
@@ -37,6 +43,9 @@ export interface ConnectionStatus {
   /** W625 — null until a /version probe succeeds (or if the field is absent
    *  on an older server). */
   driver: ServerDriver | null;
+  /** #139 — null until a /version probe succeeds (or if the field is absent on an
+   *  older server — treat null as "unknown", NOT as simulated). */
+  agentExecution: AgentExecution | null;
 }
 
 export function useConnectionStatus(baseUrl: string): ConnectionStatus {
@@ -45,13 +54,20 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
     lastOkAt: null,
     lastError: null,
     driver: null,
+    agentExecution: null,
   });
   const probeRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setStatus({ state: 'connecting', lastOkAt: null, lastError: null, driver: null });
+    setStatus({
+      state: 'connecting',
+      lastOkAt: null,
+      lastError: null,
+      driver: null,
+      agentExecution: null,
+    });
 
     async function probe(): Promise<void> {
       const trimmed = baseUrl.trim().replace(/\/+$/, '');
@@ -69,9 +85,11 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
         if (cancelled) return;
         if (res.ok) {
           // W625 — parse the driver from /version so the UI can warn on mock.
+          // #139 — also parse agent_execution (the real "is automation live" signal).
           let driver: ServerDriver | null = null;
+          let agentExecution: AgentExecution | null = null;
           try {
-            const body = (await res.json()) as { driver?: unknown };
+            const body = (await res.json()) as { driver?: unknown; agent_execution?: unknown };
             if (
               body.driver === 'mock' ||
               body.driver === 'webkit' ||
@@ -79,11 +97,20 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
             ) {
               driver = body.driver;
             }
+            if (body.agent_execution === 'live' || body.agent_execution === 'simulated') {
+              agentExecution = body.agent_execution;
+            }
           } catch {
-            // /version body unreadable — leave driver null (banner just won't show).
+            // /version body unreadable — leave fields null (banners just won't show).
           }
           if (cancelled) return;
-          setStatus({ state: 'connected', lastOkAt: Date.now(), lastError: null, driver });
+          setStatus({
+            state: 'connected',
+            lastOkAt: Date.now(),
+            lastError: null,
+            driver,
+            agentExecution,
+          });
           return;
         }
         setStatus((prev) => ({
@@ -91,6 +118,7 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
           lastOkAt: prev.lastOkAt,
           lastError: `HTTP ${res.status}`,
           driver: prev.driver,
+          agentExecution: prev.agentExecution,
         }));
       } catch (err) {
         window.clearTimeout(timer);
@@ -106,6 +134,7 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
           lastOkAt: prev.lastOkAt,
           lastError: message,
           driver: prev.driver,
+          agentExecution: prev.agentExecution,
         }));
       }
     }

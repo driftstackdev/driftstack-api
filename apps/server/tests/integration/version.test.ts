@@ -18,6 +18,7 @@ interface VersionResponse {
   node_version: string;
   driver: 'mock' | 'webkit' | 'playwright';
   playwright_browser?: 'webkit' | 'chromium' | 'firefox';
+  agent_execution: 'live' | 'simulated';
 }
 
 describe('GET /version', () => {
@@ -69,5 +70,14 @@ describe('GET /version', () => {
     expect(body.driver).toBe('mock');
     // playwright_browser only included when driver === 'playwright'.
     expect(body.playwright_browser).toBeUndefined();
+  });
+
+  it("#139 — surfaces agent_execution; 'simulated' when the fleet control plane is off (test default)", async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({ method: 'GET', url: '/version' });
+    const body = res.json<VersionResponse>();
+    // Test fixture doesn't enable the fleet control plane → agentExecutionLive
+    // undefined → 'simulated'. Prod (FLEET_CONTROL_PLANE_ENABLED=true) → 'live'.
+    expect(body.agent_execution).toBe('simulated');
   });
 });
