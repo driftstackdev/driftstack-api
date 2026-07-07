@@ -103,6 +103,25 @@ function makeRouter(mfa: MfaState): (c: MockFetchCall) => Response {
       mfa.enrolled = true;
       return json({ recovery_codes: ['aaaa-1111', 'bbbb-2222'] });
     }
+    if (/\/v1\/account\/mfa\/recovery-codes\/regenerate$/.test(u) && method === 'POST') {
+      if (mfa.requireStepUp && !mfa.steppedUp) {
+        return json({ requires_mfa_step_up: true }, 403);
+      }
+      return json({
+        recovery_codes: [
+          'ra-0001',
+          'rb-0002',
+          'rc-0003',
+          'rd-0004',
+          're-0005',
+          'rf-0006',
+          'rg-0007',
+          'rh-0008',
+          'ri-0009',
+          'rj-0010',
+        ],
+      });
+    }
     if (/\/v1\/account\/mfa$/.test(u)) {
       if (method === 'DELETE') {
         if (mfa.requireStepUp && !mfa.steppedUp) {
@@ -225,6 +244,65 @@ describe('security page — MFA (2FA) disable', () => {
   });
 });
 
+// S35 2026-07-07 (fable-frontend-audit) — regenerate-recovery-codes
+// visibility. The reveal panel used to live INSIDE
+// data-section="mfa-enroll", which setMfaState() hides for enrolled
+// users — so the 10 fresh codes rendered into an invisible subtree
+// while the server had ALREADY invalidated every old code (lockout
+// risk). These tests execute the built page and assert the codes are
+// actually visible to an enrolled customer.
+describe('security page — MFA recovery-codes regenerate (enrolled)', () => {
+  let win: JSDOM['window'] | null = null;
+  afterEach(() => {
+    win?.close?.();
+    win = null;
+  });
+  const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
+
+  it('regenerate: the 10 fresh codes are VISIBLE — the reveal panel and every ancestor stay un-hidden for an enrolled user', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      confirmReturns: true,
+      route: makeRouter(newMfa({ enrolled: true })),
+    });
+    win = window;
+    await flush();
+    // Enrolled ⇒ the enroll section (the panel's OLD parent) is hidden.
+    expect(isHidden(window, '[data-section="mfa-enroll"]')).toBe(true);
+    (window.document.querySelector('[data-button="mfa-regenerate"]') as HTMLButtonElement).click();
+    await flush();
+    expect(
+      fetchCalls.some(
+        (c) =>
+          c.init?.method === 'POST' &&
+          /\/v1\/account\/mfa\/recovery-codes\/regenerate$/.test(c.url),
+      ),
+    ).toBe(true);
+    const codes = window.document.querySelectorAll('[data-list="mfa-recovery-codes"] li');
+    expect(codes.length).toBe(10);
+    // The regression: the panel itself was revealed but an ANCESTOR
+    // (mfa-enroll) stayed hidden. Walk the full ancestor chain.
+    const panel = window.document.querySelector('[data-section="mfa-recovery"]') as HTMLElement;
+    for (let el: HTMLElement | null = panel; el; el = el.parentElement) {
+      expect(el.classList.contains('hidden'), `ancestor <${el.tagName}> must not be hidden`).toBe(
+        false,
+      );
+    }
+  });
+
+  it('regenerate cancelled at confirm: no POST fired, the panel stays hidden', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      confirmReturns: false,
+      route: makeRouter(newMfa({ enrolled: true })),
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-button="mfa-regenerate"]') as HTMLButtonElement).click();
+    await flush();
+    expect(fetchCalls.some((c) => /recovery-codes\/regenerate$/.test(c.url))).toBe(false);
+    expect(isHidden(window, '[data-section="mfa-recovery"]')).toBe(true);
+  });
+});
+
 describe('security page — MFA (2FA) enrollment verify', () => {
   let win: JSDOM['window'] | null = null;
   afterEach(() => {
@@ -258,5 +336,76 @@ describe('security page — MFA (2FA) enrollment verify', () => {
     expect(verifyPosts.length).toBe(1);
     // Re-enabled once the (successful) request settles.
     expect(verifyBtn.disabled).toBe(false);
+  });
+});
+
+// S35 2026-07-07 (fable-frontend-audit) — enroll-start guard. Every
+// unguarded click fired a fresh POST /enroll and each call mints a NEW
+// pending secret server-side (last write wins), so a double-click with
+// out-of-order responses could leave the customer scanning a stale QR.
+describe('security page — MFA (2FA) enroll start guard', () => {
+  let win: JSDOM['window'] | null = null;
+  afterEach(() => {
+    win?.close?.();
+    win = null;
+  });
+  const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
+
+  it('double-click fires ONE POST /v1/account/mfa/enroll; after the QR renders the button is inert (no re-enroll on a later click)', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: makeRouter(newMfa({ enrolled: false })),
+    });
+    win = window;
+    await flush();
+    const startBtn = window.document.querySelector(
+      '[data-button="mfa-start"]',
+    ) as HTMLButtonElement;
+    startBtn.click();
+    // Second click lands while the first request is still in flight.
+    startBtn.click();
+    expect(startBtn.disabled).toBe(true);
+    await flush();
+    const enrollPosts = fetchCalls.filter(
+      (c) => c.init?.method === 'POST' && /\/v1\/account\/mfa\/enroll$/.test(c.url),
+    );
+    expect(enrollPosts.length).toBe(1);
+    // QR step revealed; the button stays inert so a re-click can't mint
+    // a fresh secret that would invalidate the QR on screen.
+    expect(isHidden(window, '[data-section="mfa-enroll-step"]')).toBe(false);
+    expect(startBtn.disabled).toBe(true);
+    startBtn.click();
+    await flush();
+    expect(
+      fetchCalls.filter(
+        (c) => c.init?.method === 'POST' && /\/v1\/account\/mfa\/enroll$/.test(c.url),
+      ).length,
+    ).toBe(1);
+  });
+
+  it('enroll failure re-enables the button with its original label so the customer can retry', async () => {
+    const base = makeRouter(newMfa({ enrolled: false }));
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        const u = call.url.replace(/^https?:\/\/[^/]+/, '');
+        if (/\/v1\/account\/mfa\/enroll$/.test(u) && method === 'POST') {
+          return json({ detail: 'enroll blew up' }, 500);
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    const startBtn = window.document.querySelector(
+      '[data-button="mfa-start"]',
+    ) as HTMLButtonElement;
+    startBtn.click();
+    await flush();
+    expect(fetchCalls.some((c) => /\/v1\/account\/mfa\/enroll$/.test(c.url))).toBe(true);
+    expect(startBtn.disabled).toBe(false);
+    expect(startBtn.textContent).toBe('Set up two-factor authentication');
+    expect(window.document.querySelector('[data-field="mfa-error"]')?.textContent).toMatch(
+      /enroll blew up/,
+    );
   });
 });

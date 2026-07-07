@@ -178,4 +178,27 @@ describe('docs layouts/DocLayout content parity', () => {
   it('S22.3 (2026-07-06) — data-pagefind-body on the ARTICLE pinned: scopes the Pagefind search index to article content only (once any page carries the attribute, everything without it — header, tree, TOC rail, footer, breadcrumbs, prev/next, the 404 page — stays out of the index, so chrome text never pollutes search results). Drift to dropping it would silently flip Pagefind to whole-page indexing of every route', () => {
     expect(body).toMatch(/<article\s*\n?\s*data-pagefind-body\s*\n?\s*class="prose max-w-3xl/);
   });
+
+  it("S35 2026-07-07 (fable-frontend-audit) — TOC labels read the heading's FULL text pinned: clone the heading, remove the appended [data-anchor] '#' link, then read textContent. The old h.firstChild.textContent read truncated any heading that STARTS with inline code to just that first element (18 of 30 rail entries on /webhooks/events lost everything after the code span, including [LIVE]/[PLANNED] tags)", () => {
+    expect(body).toMatch(/var labelSource = h\.cloneNode\(true\);/);
+    expect(body).toMatch(/labelSource\.querySelector\('\[data-anchor\]'\)/);
+    expect(body).toMatch(
+      /var label = \(labelSource\.textContent \|\| ''\)\.replace\(\/#\$\/, ''\)\.trim\(\);/,
+    );
+    // The first-text-node truncation must never come back.
+    expect(body).not.toMatch(/h\.firstChild \? h\.firstChild\.textContent/);
+  });
+
+  it("S35 2026-07-07 (fable-frontend-audit) — scroll-spy re-sync pinned: the spy resolution is a callable resolveSpy() (IO callback + hashchange both use it), rail clicks setActive(h.id) directly after pushState (pushState fires no hashchange and an instant jump may cross no observed heading), and real hash navigations highlight the named heading when it's a rail entry, else re-run the positional spy", () => {
+    expect(body).toMatch(/function resolveSpy\(\) \{/);
+    expect(body).toMatch(
+      /history\.pushState\(null, '', '#' \+ h\.id\);[\s\S]{0,400}?setActive\(h\.id\);/,
+    );
+    expect(body).toMatch(/window\.addEventListener\('hashchange', function \(\) \{/);
+    expect(body).toMatch(
+      /if \(id && linkById\[id\]\) setActive\(id\);\s*\n\s*else if \(id\) resolveSpy\(\);/,
+    );
+    // The below-96px positional fallback survives inside resolveSpy.
+    expect(body).toMatch(/getBoundingClientRect\(\)\.top < 96/);
+  });
 });

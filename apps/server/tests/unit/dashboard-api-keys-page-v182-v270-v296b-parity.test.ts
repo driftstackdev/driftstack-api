@@ -201,6 +201,24 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     }
   });
 
+  it("CRITICAL S35 2026-07-07 (fable-frontend-audit) — fmtIso() FUTURE-timestamp branch pinned in BOTH copies. A rotated key's grace expiry (expires_at = now+24h) used to hit the floor()d day math and render 'grace ends -1 days ago' for the whole grace window; future values now render 'in <1h' / 'in Nh' / 'in N days'. Drift back to past-only math resurrects the negative-days display.", () => {
+    const p = read(PAGE);
+
+    for (const phrase of [
+      'if (diffMs < 0)',
+      "return 'in <1h'",
+      'aheadHours',
+      'aheadDays',
+    ] as const) {
+      const occurrences = (p.match(new RegExp(phrase.replace(/[.()<]/g, '\\$&'), 'g')) ?? [])
+        .length;
+      expect(occurrences, `phrase ${phrase}`).toBeGreaterThanOrEqual(2);
+    }
+    // The 48h hour→day cutover in both copies (hours read better than
+    // '0 days'/'1 days' inside a 24h grace window).
+    expect((p.match(/aheadHours < 48/g) ?? []).length).toBe(2);
+  });
+
   it("CRITICAL Bullet-mask 24-char visual key-truncation pinned — `'•'.repeat(24)`. Drift to a different fill-char or count would change the visible key-shape on the dashboard. 2026-05-21 — SSR no longer renders keys (skeleton-only pre-hydration; 12566e61); only the JS-side render keeps the bullet mask.", () => {
     const p = read(PAGE);
 

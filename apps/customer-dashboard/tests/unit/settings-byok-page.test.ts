@@ -205,6 +205,55 @@ describe('settings page — BYOK Anthropic key', () => {
     expect(isHidden(window, '[data-byok-state="empty"]')).toBe(false);
   });
 
+  // S35 2026-07-07 (fable-frontend-audit) — a transient non-2xx on the
+  // status GET used to fall back to byokShowState('empty'), telling a
+  // customer WITH a stored key "No key on file"; and the chain called
+  // r.json() on the (HTML) error body without .catch, surfacing a
+  // JSON-parse error instead of the HTTP status.
+  it('load failure (502 with an HTML body): shows the ERROR state — never "No key on file" — with the parse-safe HTTP status, and Try again recovers', async () => {
+    let gatewayDown = true;
+    const base = makeRouter(newByok({ set: true, key_prefix: 'sk-ant-api03-XYZ' }));
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        const method = (call.init?.method || 'GET').toUpperCase();
+        const u = call.url.replace(/^https?:\/\/[^/]+/, '');
+        if (/\/v1\/account\/me\/byok-anthropic-key$/.test(u) && method === 'GET' && gatewayDown) {
+          return new Response('<html><body>502 Bad Gateway</body></html>', {
+            status: 502,
+            headers: { 'content-type': 'text/html' },
+          });
+        }
+        return base(call);
+      },
+    });
+    win = window;
+    await flush();
+    // The regression: this used to show 'empty' ("No key on file").
+    expect(isHidden(window, '[data-byok-state="error"]')).toBe(false);
+    expect(isHidden(window, '[data-byok-state="empty"]')).toBe(true);
+    expect(isHidden(window, '[data-byok-state="set"]')).toBe(true);
+    // Parse-safe: the surfaced detail is the HTTP status, not a
+    // JSON-parse exception message from the HTML body.
+    expect(window.document.querySelector('[data-byok-error]')?.textContent).toBe('HTTP 502');
+    // Try again re-fires the GET; with the gateway back, the stored key
+    // shows as set.
+    gatewayDown = false;
+    const getsBefore = fetchCalls.filter(
+      (c) => (c.init?.method || 'GET').toUpperCase() === 'GET' && /byok-anthropic-key$/.test(c.url),
+    ).length;
+    (window.document.querySelector('[data-byok-retry]') as HTMLButtonElement).click();
+    await flush();
+    const getsAfter = fetchCalls.filter(
+      (c) => (c.init?.method || 'GET').toUpperCase() === 'GET' && /byok-anthropic-key$/.test(c.url),
+    ).length;
+    expect(getsAfter).toBe(getsBefore + 1);
+    expect(isHidden(window, '[data-byok-state="set"]')).toBe(false);
+    expect(isHidden(window, '[data-byok-state="error"]')).toBe(true);
+    expect(window.document.querySelector('[data-byok-prefix]')?.textContent).toBe(
+      'sk-ant-api03-XYZ',
+    );
+  });
+
   it('clear cancelled: no DELETE fired, the key stays set', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       confirmReturns: false,

@@ -436,11 +436,18 @@ const nextItem =
         box that was inserted before the first h2). Populates the ≥xl
         right rail from the article's h2 + h3 ids, scroll-spies the
         current section with IntersectionObserver, and smooth-scrolls
-        anchor jumps unless the visitor prefers reduced motion. Reads
-        each heading's first text node so the appended "#" anchor link
-        isn't included in the label. Plain raw code — never a template
-        literal inside an expression container (the dead-inline-script
-        trap: Astro would emit the wrapper literally as a no-op string). */}
+        anchor jumps unless the visitor prefers reduced motion. Labels
+        come from the heading's FULL textContent with the appended "#"
+        anchor element stripped (clone + remove [data-anchor]) — S35
+        2026-07-07 (fable-frontend-audit): the old first-text-node read
+        truncated any heading that STARTS with inline code to just that
+        code span (18 of 30 rail entries on /webhooks/events lost their
+        [LIVE]/[PLANNED] tags). The spy also re-syncs on hashchange and
+        on rail clicks, so an instant anchor jump that crosses no
+        observed heading still highlights the right entry. Plain raw
+        code — never a template literal inside an expression container
+        (the dead-inline-script trap: Astro would emit the wrapper
+        literally as a no-op string). */}
     (function () {
       var article = document.querySelector('article');
       var toc = document.querySelector('[data-toc]');
@@ -459,9 +466,15 @@ const nextItem =
         'text-tk-accent-text no-underline transition-colors';
       var linkById = {};
       headings.forEach(function (h) {
-        var label = ((h.firstChild ? h.firstChild.textContent : h.textContent) || '')
-          .replace(/#$/, '')
-          .trim();
+        /* Full heading text minus the appended "#" anchor link: clone the
+           node, remove the [data-anchor] element (added by the earlier
+           section-anchor script), then read textContent. The trailing-#
+           strip stays as a belt-and-braces guard for a heading whose
+           anchor was not yet (or never) appended. */
+        var labelSource = h.cloneNode(true);
+        var anchorEl = labelSource.querySelector('[data-anchor]');
+        if (anchorEl && anchorEl.parentNode) anchorEl.parentNode.removeChild(anchorEl);
+        var label = (labelSource.textContent || '').replace(/#$/, '').trim();
         var li = document.createElement('li');
         var a = document.createElement('a');
         a.href = '#' + h.id;
@@ -473,6 +486,11 @@ const nextItem =
           var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
           h.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
           history.pushState(null, '', '#' + h.id);
+          /* S35 2026-07-07 (fable-frontend-audit) — pushState fires no
+             hashchange and an instant (reduced-motion) jump may cross no
+             observed heading, leaving the rail unhighlighted; the click
+             names the target, so mark it directly. */
+          setActive(h.id);
         });
         li.appendChild(a);
         list.appendChild(li);
@@ -495,34 +513,57 @@ const nextItem =
       }
       if (!('IntersectionObserver' in window)) return;
       var inView = {};
+      /* Shared spy resolution — first intersecting heading wins; when
+         nothing intersects the band (mid-section scroll, or an instant
+         anchor jump that crossed no heading) fall back to the last
+         heading that has scrolled above it. Callable outside the IO
+         callback (S35 2026-07-07 fable-frontend-audit: hashchange
+         re-sync) because a jump that fires zero IO entries used to
+         leave no rail entry highlighted. */
+      function resolveSpy() {
+        var current = null;
+        for (var i = 0; i < headings.length; i++) {
+          if (inView[headings[i].id]) {
+            current = headings[i].id;
+            break;
+          }
+        }
+        if (!current) {
+          for (var j = headings.length - 1; j >= 0; j--) {
+            if (headings[j].getBoundingClientRect().top < 96) {
+              current = headings[j].id;
+              break;
+            }
+          }
+        }
+        if (current) setActive(current);
+      }
       var observer = new IntersectionObserver(
         function (entries) {
           entries.forEach(function (entry) {
             inView[entry.target.id] = entry.isIntersecting;
           });
-          var current = null;
-          for (var i = 0; i < headings.length; i++) {
-            if (inView[headings[i].id]) {
-              current = headings[i].id;
-              break;
-            }
-          }
-          if (!current) {
-            /* Nothing intersecting the band (mid-section scroll) — spy the
-               last heading that has scrolled above it. */
-            for (var j = headings.length - 1; j >= 0; j--) {
-              if (headings[j].getBoundingClientRect().top < 96) {
-                current = headings[j].id;
-                break;
-              }
-            }
-          }
-          if (current) setActive(current);
+          resolveSpy();
         },
         { rootMargin: '-64px 0px -70% 0px' },
       );
       headings.forEach(function (h) {
         observer.observe(h);
+      });
+      /* S35 2026-07-07 (fable-frontend-audit) — in-article deep links
+         and manual #edits navigate via real hash changes: highlight the
+         named heading directly when it's a rail entry, else re-run the
+         positional spy. */
+      window.addEventListener('hashchange', function () {
+        var raw = window.location.hash ? window.location.hash.slice(1) : '';
+        var id = raw;
+        try {
+          id = decodeURIComponent(raw);
+        } catch (_e) {
+          /* malformed escape — use the raw hash */
+        }
+        if (id && linkById[id]) setActive(id);
+        else if (id) resolveSpy();
       });
     })();
   </script>

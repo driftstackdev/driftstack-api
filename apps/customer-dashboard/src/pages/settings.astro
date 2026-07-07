@@ -280,6 +280,20 @@ const EMAIL_EVENTS = [
         </div>
       </div>
 
+      {/* S35 2026-07-07 (fable-frontend-audit) — dedicated load-failure
+          state. A transient non-2xx on the status GET used to fall back
+          to the 'empty' panel, telling a customer WITH a stored key
+          "No key on file" — a false claim about their credential. */}
+      <div data-byok-state="error" class="mt-6 hidden">
+        <p class="text-sm text-tk-ink-2">
+          Couldn't check your key status just now — this is a loading problem,
+          not a missing key. Your stored key (if any) is untouched.
+          <button type="button" data-byok-retry class="text-tk-accent-text hover:underline">
+            Try again
+          </button>
+        </p>
+      </div>
+
       <div data-byok-error class="mt-6 hidden rounded-md bg-tk-accent/10 px-3 py-2 text-sm text-tk-accent-text"></div>
 
       <form data-byok-form class="mt-6 flex flex-wrap items-center gap-3" autocomplete="off">
@@ -732,11 +746,14 @@ const EMAIL_EVENTS = [
       const byokStateLoading = document.querySelector('[data-byok-state="loading"]');
       const byokStateEmpty = document.querySelector('[data-byok-state="empty"]');
       const byokStateSet = document.querySelector('[data-byok-state="set"]');
+      // S35 2026-07-07 (fable-frontend-audit) — 4th state: load failure.
+      const byokStateError = document.querySelector('[data-byok-state="error"]');
+      const byokRetryBtn = document.querySelector('[data-byok-retry]');
       const byokSetAt = document.querySelector('[data-byok-set-at]');
       const byokPrefix = document.querySelector('[data-byok-prefix]');
 
       function byokShowState(name) {
-        [byokStateLoading, byokStateEmpty, byokStateSet].forEach((el) => {
+        [byokStateLoading, byokStateEmpty, byokStateSet, byokStateError].forEach((el) => {
           if (el) el.classList.add('hidden');
         });
         const el = document.querySelector('[data-byok-state="' + name + '"]');
@@ -759,8 +776,15 @@ const EMAIL_EVENTS = [
         })
           .then((r) => {
             if (r.status === 404) return null; // empty (no key set)
+            // S35 2026-07-07 (fable-frontend-audit) — parse-safe: a 5xx
+            // from a gateway carries an HTML body, so r.json() itself
+            // rejects; .catch(() => ({})) keeps the HTTP status as the
+            // surfaced error instead of a JSON-parse one.
             if (!r.ok)
-              return r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+              return r
+                .json()
+                .catch(() => ({}))
+                .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
             return r.json();
           })
           .then((body) => {
@@ -778,10 +802,15 @@ const EMAIL_EVENTS = [
             byokShowState('set');
           })
           .catch((err) => {
+            // S35 2026-07-07 (fable-frontend-audit) — a load FAILURE is
+            // not an empty keyring: showing 'empty' here told a customer
+            // with a stored key "No key on file" on any transient non-2xx.
             byokShowError(err && err.message ? err.message : 'network error');
-            byokShowState('empty');
+            byokShowState('error');
           });
       }
+
+      if (byokRetryBtn) byokRetryBtn.addEventListener('click', loadByokAnthropic);
 
       if (byokForm) {
         byokForm.addEventListener('submit', (ev) => {
@@ -802,9 +831,12 @@ const EMAIL_EVENTS = [
             body: JSON.stringify({ api_key: key }),
           })
             .then((r) => {
+              // S35 2026-07-07 (fable-frontend-audit) — parse-safe non-2xx
+              // handling (HTML error bodies reject r.json()).
               if (!r.ok)
                 return r
                   .json()
+                  .catch(() => ({}))
                   .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
               return r.json();
             })
@@ -835,7 +867,13 @@ const EMAIL_EVENTS = [
             body: JSON.stringify(payload),
           })
             .then((r) =>
-              r.ok ? r.json() : r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+              // S35 2026-07-07 (fable-frontend-audit) — parse-safe non-2xx.
+              r.ok
+                ? r.json()
+                : r
+                    .json()
+                    .catch(() => ({}))
+                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
             )
             .then((body) => {
               byokTestBtn.textContent = body.ok === true ? 'Test ✓' : 'Test ⚠';
@@ -871,9 +909,11 @@ const EMAIL_EVENTS = [
             headers: { authorization: 'Bearer ' + token },
           })
             .then((r) => {
+              // S35 2026-07-07 (fable-frontend-audit) — parse-safe non-2xx.
               if (!r.ok && r.status !== 404)
                 return r
                   .json()
+                  .catch(() => ({}))
                   .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
               loadByokAnthropic();
             })

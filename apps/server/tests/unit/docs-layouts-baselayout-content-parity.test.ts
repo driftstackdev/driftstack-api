@@ -161,4 +161,15 @@ describe('docs layouts/BaseLayout content parity', () => {
     // The [data-search-kbd] hint swaps to Ctrl K off-Apple platforms.
     expect(body).toMatch(/k\.textContent = 'Ctrl K';/);
   });
+
+  it("S35 2026-07-07 (fable-frontend-audit) — search rejection handling pinned: the runSearch chain (pf.search + fragment r.data() Promise.all) carries a .catch that surfaces 'Search hit a snag — press Enter to try again.' instead of leaving the status stuck on 'Searching…' when a redeploy rotates the hashed /pagefind/ chunk URLs or the connection blips; Enter with no active result re-runs the query (keyboard retry path); the astro-dev missing-index DEV_MSG state stays distinct (loadFailed short-circuits the retry)", () => {
+    expect(body).toMatch(/pf\.search\(query\)\s*\n?\s*\.then\(/);
+    expect(body).toMatch(/\.catch\(function \(\) \{/);
+    expect(body).toMatch(/clearResults\('Search hit a snag — press Enter to try again\.'\);/);
+    // Enter retry path: no active result + non-empty query + index loaded.
+    expect(body).toMatch(/var retryQ = input\.value\.trim\(\);/);
+    expect(body).toMatch(
+      /if \(retryQ && !loadFailed\) \{\s*\n\s*e\.preventDefault\(\);\s*\n\s*status\.textContent = 'Searching…';\s*\n\s*runSearch\(retryQ\);/,
+    );
+  });
 });

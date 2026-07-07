@@ -376,18 +376,31 @@ const canonical = new URL(pathname, Astro.site).toString();
           var mySeq = ++seq;
           loadPagefind().then(function (pf) {
             if (!pf || mySeq !== seq) return;
-            pf.search(query).then(function (search) {
-              if (mySeq !== seq) return;
-              var top = search.results.slice(0, 10);
-              Promise.all(
-                top.map(function (r) {
-                  return r.data();
-                }),
-              ).then(function (datas) {
+            pf.search(query)
+              .then(function (search) {
+                if (mySeq !== seq) return null;
+                var top = search.results.slice(0, 10);
+                return Promise.all(
+                  top.map(function (r) {
+                    return r.data();
+                  }),
+                ).then(function (datas) {
+                  if (mySeq !== seq) return;
+                  renderResults(datas, query);
+                });
+              })
+              .catch(function () {
+                /* S35 2026-07-07 (fable-frontend-audit) — a rejected
+                   search or fragment fetch (a redeploy rotates the hashed
+                   /pagefind/ chunk URLs, so an open page's fragment
+                   requests 404; or the connection blips) used to leave the
+                   status stuck on 'Searching…' forever. Surface a
+                   retryable error instead — Enter or the next keystroke
+                   runs a fresh search. Distinct from the astro-dev
+                   missing-index empty state (loadFailed → DEV_MSG). */
                 if (mySeq !== seq) return;
-                renderResults(datas, query);
+                clearResults('Search hit a snag — press Enter to try again.');
               });
-            });
           });
         }
 
@@ -479,6 +492,17 @@ const canonical = new URL(pathname, Astro.site).toString();
               var url = items[activeIndex].url;
               close();
               window.location.href = url;
+              return;
+            }
+            /* S35 2026-07-07 (fable-frontend-audit) — no active result
+               (e.g. the previous search hit a snag): Enter re-runs the
+               query instead of doing nothing, giving the error state a
+               keyboard retry path. */
+            var retryQ = input.value.trim();
+            if (retryQ && !loadFailed) {
+              e.preventDefault();
+              status.textContent = 'Searching…';
+              runSearch(retryQ);
             }
           }
         });

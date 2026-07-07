@@ -83,6 +83,31 @@ describe('W759-security dashboard /security page V-079 + V-353h + V-355 + V-216 
     );
   });
 
+  it('CRITICAL S35 2026-07-07 (fable-frontend-audit) — the mfa-recovery reveal panel is a DIRECT child of the mfa region, NOT nested inside data-section="mfa-enroll". setMfaState() hides mfa-enroll for enrolled users, so a nested panel made regenerated codes INVISIBLE while the server had already invalidated every old code (lockout risk). The 6-space indent pins region-level placement; the 8-space nested form must never come back.', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(/MUST stay a direct child of the mfa region/);
+    expect(p).toMatch(
+      /\n {6}<div class="mt-6 hidden rounded-lg border border-tk-accent\/30 bg-tk-accent\/10 p-4" data-section="mfa-recovery">/,
+    );
+    expect(p).not.toMatch(/\n {8}<div class="[^"]*" data-section="mfa-recovery">/);
+    // performRegenerate reveals the panel + nudges it into view.
+    expect(p).toMatch(
+      /showHidden\(mfaRecoverySection, false\);\s*\n\s+if \(mfaRecoverySection && mfaRecoverySection\.scrollIntoView\) \{/,
+    );
+  });
+
+  it("CRITICAL S35 2026-07-07 (fable-frontend-audit) — enroll start has an in-flight + shown-QR guard. Every unguarded click minted a NEW pending TOTP secret server-side (last write wins), so a double-click could leave the customer scanning a stale QR. Disabled on click ('Generating secret…'), inert after the QR renders ('Secret generated — scan the QR below'), re-enabled only on error.", () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(/if \(mfaStart && mfaStart\.disabled\) return;/);
+    expect(p).toMatch(/mfaStart\.textContent = 'Generating secret…';/);
+    expect(p).toMatch(/mfaStart\.textContent = 'Secret generated — scan the QR below';/);
+    expect(p).toMatch(
+      /showMfaError\(err\.message \|\| 'Enroll failed\.'\);\s*\n\s+if \(mfaStart\) \{\s*\n\s+mfaStart\.disabled = false;\s*\n\s+mfaStart\.textContent = 'Set up two-factor authentication';/,
+    );
+  });
+
   it('CRITICAL V-079 change-password trigger uses password-reset flow pinned. The "V-079 — change password trigger via password-reset request" comment + POST /v1/auth/password-reset/request is what avoids exposing a separate password-change endpoint.', () => {
     const p = read(PAGE);
 

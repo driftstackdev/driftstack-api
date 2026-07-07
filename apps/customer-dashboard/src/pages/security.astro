@@ -204,43 +204,50 @@ const apiBaseUrl = resolveApiBaseUrl();
           </div>
         </div>
 
-        <!-- Hidden until /verify returns 10 recovery codes. -->
-        <div class="hidden rounded-lg border border-tk-accent/30 bg-tk-accent/10 p-4" data-section="mfa-recovery">
-          <p class="text-sm font-medium text-tk-accent-text">
-            Save your recovery codes — these are shown ONCE
-          </p>
-          <p class="mt-1 text-xs text-tk-accent-text">
-            Each code works once. Store them somewhere safe (password manager,
-            printed copy, secure note). Without your authenticator AND these
-            codes, account access requires support intervention.
-          </p>
-          <ul
-            class="mt-3 grid grid-cols-2 gap-2 font-mono text-sm text-tk-accent-text"
-            data-list="mfa-recovery-codes"
-          ></ul>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              data-button="mfa-recovery-copy"
-              class="btn-secondary text-xs"
-            >
-              Copy all
-            </button>
-            <button
-              type="button"
-              data-button="mfa-recovery-download"
-              class="btn-secondary text-xs"
-            >
-              Download .txt
-            </button>
-            <button
-              type="button"
-              data-button="mfa-recovery-acknowledge"
-              class="btn-primary text-xs"
-            >
-              I've saved them
-            </button>
-          </div>
+      </div>
+
+      <!-- One-shot recovery-codes reveal. Hidden until /verify (enroll
+           flow) or /recovery-codes/regenerate (enrolled flow) returns 10
+           fresh codes. S35 2026-07-07 (fable-frontend-audit): this panel
+           MUST stay a direct child of the mfa region — it used to live
+           inside data-section="mfa-enroll", which setMfaState() hides for
+           enrolled users, so regenerated codes (old ones already
+           invalidated server-side) rendered into an invisible subtree. -->
+      <div class="mt-6 hidden rounded-lg border border-tk-accent/30 bg-tk-accent/10 p-4" data-section="mfa-recovery">
+        <p class="text-sm font-medium text-tk-accent-text">
+          Save your recovery codes — these are shown ONCE
+        </p>
+        <p class="mt-1 text-xs text-tk-accent-text">
+          Each code works once. Store them somewhere safe (password manager,
+          printed copy, secure note). Without your authenticator AND these
+          codes, account access requires support intervention.
+        </p>
+        <ul
+          class="mt-3 grid grid-cols-2 gap-2 font-mono text-sm text-tk-accent-text"
+          data-list="mfa-recovery-codes"
+        ></ul>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            data-button="mfa-recovery-copy"
+            class="btn-secondary text-xs"
+          >
+            Copy all
+          </button>
+          <button
+            type="button"
+            data-button="mfa-recovery-download"
+            class="btn-secondary text-xs"
+          >
+            Download .txt
+          </button>
+          <button
+            type="button"
+            data-button="mfa-recovery-acknowledge"
+            class="btn-primary text-xs"
+          >
+            I've saved them
+          </button>
         </div>
       </div>
 
@@ -1316,7 +1323,20 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function startEnrollment() {
+        // S35 2026-07-07 (fable-frontend-audit) — in-flight + shown-QR
+        // guard. Every unguarded click fired a fresh POST /enroll, and
+        // each call mints a NEW pending secret server-side (last write
+        // wins), so a double-click with out-of-order responses could
+        // leave the customer scanning a QR for a secret the server no
+        // longer holds. Disable on click; once the QR renders, keep the
+        // button inert (a re-fire would silently invalidate the shown
+        // QR); re-enable only on error so the customer can retry.
+        if (mfaStart && mfaStart.disabled) return;
         clearMfaError();
+        if (mfaStart) {
+          mfaStart.disabled = true;
+          mfaStart.textContent = 'Generating secret…';
+        }
         authedFetch('/v1/account/mfa/enroll', { method: 'POST' })
           .then((r) =>
             r.ok
@@ -1331,8 +1351,17 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (mfaSecretEl) mfaSecretEl.textContent = body.secret_base32;
             showHidden(mfaEnrollStep, false);
             if (mfaVerifyInput) mfaVerifyInput.value = '';
+            // Stays disabled — the enroll step below is now the live
+            // flow; the secret shown there must remain the pending one.
+            if (mfaStart) mfaStart.textContent = 'Secret generated — scan the QR below';
           })
-          .catch((err) => showMfaError(err.message || 'Enroll failed.'));
+          .catch((err) => {
+            showMfaError(err.message || 'Enroll failed.');
+            if (mfaStart) {
+              mfaStart.disabled = false;
+              mfaStart.textContent = 'Set up two-factor authentication';
+            }
+          });
       }
 
       function verifyEnrollment() {
@@ -1525,7 +1554,16 @@ const apiBaseUrl = resolveApiBaseUrl();
                 )
                 .join('');
             }
+            // S35 2026-07-07 (fable-frontend-audit) — the panel is a
+            // direct child of the mfa region (NOT the enrolled-hidden
+            // mfa-enroll subtree), so this reveal is actually visible to
+            // an enrolled customer. The old codes are already invalidated
+            // server-side by this point; nudge the one-shot panel into
+            // view (same discipline as the api-keys rotate reveal).
             showHidden(mfaRecoverySection, false);
+            if (mfaRecoverySection && mfaRecoverySection.scrollIntoView) {
+              mfaRecoverySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
             loadMfa();
           })
           .catch((err) => {

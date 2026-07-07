@@ -159,6 +159,45 @@ describe('api-keys page — local integration', () => {
     expect(text.toLowerCase()).toContain('revoked');
   });
 
+  // S35 2026-07-07 (fable-frontend-audit) — fmtIso used to floor
+  // (now - date)/day, so any FUTURE timestamp rendered "-1 days ago":
+  // every rotated key displayed "grace ends -1 days ago" for its entire
+  // 24h grace window.
+  it('rotated key with a future grace expiry renders "grace ends in Nh" — never "-1 days ago"', async () => {
+    const graceKey = {
+      ...ACTIVE_KEY,
+      id: 'key_grace',
+      name: 'Rotated key',
+      expires_at: new Date(Date.now() + 23.5 * 60 * 60 * 1000).toISOString(),
+    };
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [() => json({ data: [graceKey] })],
+    });
+    win = window;
+    await flush();
+    const text = window.document.querySelector('[data-list]')?.textContent ?? '';
+    expect(text).toContain('grace ends in 23h');
+    expect(text).not.toContain('days ago');
+  });
+
+  it('a future grace expiry under an hour renders "grace ends in <1h"', async () => {
+    const graceKey = {
+      ...ACTIVE_KEY,
+      id: 'key_grace_soon',
+      name: 'Nearly-expired grace',
+      expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    };
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [() => json({ data: [graceKey] })],
+    });
+    win = window;
+    await flush();
+    const text = window.document.querySelector('[data-list]')?.textContent ?? '';
+    expect(text).toContain('grace ends in <1h');
+  });
+
   it('create: POSTs {name, scopes}, reveals the one-shot plaintext', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
