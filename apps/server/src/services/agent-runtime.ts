@@ -213,6 +213,73 @@ function delay(ms: number): Promise<void> {
 export class AgentRuntime {
   constructor(private readonly deps: AgentRuntimeDeps) {}
 
+  /**
+   * Persist ONE bundled-LLM cost row with the billing-integrity discipline the
+   * monthly soft-cap depends on: a bounded retry (SPEND_RECORD_MAX_ATTEMPTS,
+   * linear backoff) and, on final failure, a LOUD logger.error + a
+   * bundledLlmErrorTotal metric so a stuck/undercounting cap is visible in
+   * alerting rather than failing silently. Never throws — a meter blip must not
+   * break the turn (the deliberate product intent). Shared by BOTH the decompose
+   * row and the #140 read-back row so neither is a silent single-shot that would
+   * undercount the cap without an alert (audit #9). A read-intent turn therefore
+   * posts up to TWO rows (decompose + read-back) — both are real, within-slot
+   * LLM calls, so the monthly sum stays accurate and the concurrency limiter's
+   * overshoot stays bounded (its per-turn constant just includes the read-back).
+   */
+  private async recordUsageRowWithRetry(
+    recorder: AgentDecomposerUsageRecorder,
+    recordArgs: Parameters<AgentDecomposerUsageRecorder['record']>[0],
+    ctx: { accountId: string; agentSessionId: string; label: string },
+  ): Promise<void> {
+    let lastErr: unknown;
+    let recorded = false;
+    for (let attempt = 1; attempt <= SPEND_RECORD_MAX_ATTEMPTS; attempt++) {
+      try {
+        await recorder.record(recordArgs);
+        recorded = true;
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < SPEND_RECORD_MAX_ATTEMPTS) {
+          // Linear backoff between attempts (50ms, 100ms). Bounded so a meter
+          // blip recovers without adding noticeable turn latency.
+          await delay(SPEND_RECORD_RETRY_BASE_MS * attempt);
+        }
+      }
+    }
+    if (!recorded) {
+      // LOUD: the cost row never landed after all retries. For bundled turns
+      // this means the soft-cap silently stopped advancing for this account —
+      // surface it so alerting catches a stuck cap. Best-effort: a throwing
+      // logger/metric must not break the turn either.
+      try {
+        this.deps.logger?.error?.(
+          {
+            component: 'agent-runtime',
+            event: 'usage_record_persist_failed',
+            account_id: ctx.accountId,
+            agent_session_id: ctx.agentSessionId,
+            key_source: recordArgs.keySource ?? 'none',
+            cost_usd_cents: recordArgs.usage.costUsdCents ?? null,
+            record_label: ctx.label,
+            attempts: SPEND_RECORD_MAX_ATTEMPTS,
+            err: lastErr,
+          },
+          'bundled-LLM cost row failed to persist after retries — monthly soft-cap will undercount this turn',
+        );
+      } catch {
+        // Swallow; logging is best-effort and must not break the turn.
+      }
+      try {
+        this.deps.metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, {
+          kind: 'usage_record_persist_failed',
+        });
+      } catch {
+        // Swallow; metrics are best-effort.
+      }
+    }
+  }
+
   async runTurn(args: RunTurnArgs): Promise<RunTurnResult> {
     const at = (args.now ?? new Date()).toISOString();
     const session = await this.deps.sessions.get(args.agentSessionId);
@@ -351,67 +418,22 @@ export class AgentRuntime {
     // with accountId + turn cost) so a stuck cap is visible in alerting
     // rather than failing silently.
     if (this.deps.usageRecorder !== undefined && decomposed.usage !== undefined) {
-      const recorder = this.deps.usageRecorder;
-      const recordArgs = {
-        accountId: session.accountId,
-        driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
-        agentSessionId: session.id,
-        decomposeResultKind: decomposed.kind,
-        usage: decomposed.usage,
-        tokensConsumed: decomposed.tokensConsumed,
-        now: args.now ?? new Date(),
-        // Arc 1 sub-slice 6.4 (v2-#6) — forward the route-resolved
-        // key source so the recorder writes the right record_type.
-        ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
-      };
-      let lastErr: unknown;
-      let recorded = false;
-      for (let attempt = 1; attempt <= SPEND_RECORD_MAX_ATTEMPTS; attempt++) {
-        try {
-          await recorder.record(recordArgs);
-          recorded = true;
-          break;
-        } catch (err) {
-          lastErr = err;
-          if (attempt < SPEND_RECORD_MAX_ATTEMPTS) {
-            // Linear backoff between attempts (50ms, 100ms). Bounded so a
-            // meter blip recovers without adding noticeable turn latency.
-            await delay(SPEND_RECORD_RETRY_BASE_MS * attempt);
-          }
-        }
-      }
-      if (!recorded) {
-        // LOUD: the cost row never landed after all retries. For bundled
-        // turns this means the soft-cap silently stopped advancing for
-        // this account — surface it so alerting catches a stuck cap.
-        // Best-effort: a throwing logger must not break the turn either.
-        try {
-          this.deps.logger?.error?.(
-            {
-              component: 'agent-runtime',
-              event: 'usage_record_persist_failed',
-              account_id: session.accountId,
-              agent_session_id: session.id,
-              key_source: args.keySource ?? 'none',
-              cost_usd_cents: decomposed.usage.costUsdCents ?? null,
-              attempts: SPEND_RECORD_MAX_ATTEMPTS,
-              err: lastErr,
-            },
-            'bundled-LLM cost row failed to persist after retries — monthly soft-cap will undercount this turn',
-          );
-        } catch {
-          // Swallow; logging is best-effort and must not break the turn.
-        }
-        // Observability counter so a stuck cap is visible on the metrics
-        // dashboard even where structured logs aren't alerted on.
-        try {
-          this.deps.metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, {
-            kind: 'usage_record_persist_failed',
-          });
-        } catch {
-          // Swallow; metrics are best-effort.
-        }
-      }
+      await this.recordUsageRowWithRetry(
+        this.deps.usageRecorder,
+        {
+          accountId: session.accountId,
+          driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
+          agentSessionId: session.id,
+          decomposeResultKind: decomposed.kind,
+          usage: decomposed.usage,
+          tokensConsumed: decomposed.tokensConsumed,
+          now: args.now ?? new Date(),
+          // Arc 1 sub-slice 6.4 (v2-#6) — forward the route-resolved
+          // key source so the recorder writes the right record_type.
+          ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
+        },
+        { accountId: session.accountId, agentSessionId: session.id, label: 'decompose' },
+      );
     }
 
     // Arc 7 obs.3 — bump the driftstack_agent_decompose_total counter
@@ -565,8 +587,13 @@ export class AgentRuntime {
               entry: answerEntry,
             });
             if (this.deps.usageRecorder !== undefined && answer.usage !== undefined) {
-              try {
-                await this.deps.usageRecorder.record({
+              // Same retry + loud-log discipline as the decompose row (audit #9):
+              // this read-back row is ALSO a real bundled-LLM cost that feeds the
+              // monthly soft-cap, so a silent single-shot drop would undercount the
+              // cap with no alert. recordUsageRowWithRetry never throws.
+              await this.recordUsageRowWithRetry(
+                this.deps.usageRecorder,
+                {
                   accountId: session.accountId,
                   driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
                   agentSessionId: session.id,
@@ -575,10 +602,9 @@ export class AgentRuntime {
                   tokensConsumed: answer.tokensConsumed,
                   now: args.now ?? new Date(),
                   ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
-                });
-              } catch {
-                /* best-effort read-back cost row — a rare drop only undercounts the cap */
-              }
+                },
+                { accountId: session.accountId, agentSessionId: session.id, label: 'readback' },
+              );
             }
             if (answer.tokensConsumed > 0) {
               try {
