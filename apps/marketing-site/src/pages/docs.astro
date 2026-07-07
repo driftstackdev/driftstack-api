@@ -4,6 +4,11 @@
 // byte-identical to the pre-redesign page (the docs-landing pair + the
 // 63 doc-parity chains pin them); no card added or removed (see the
 // W210 note below on the deliberately missing Recipe library card).
+// S47 2026-07-07 (founder-approved: mirror deprecation) — the
+// Quickstart card now points at the verified docs successor
+// (docs.driftstack.dev/quickstart-curl/); the legacy
+// /docs/api-quickstart mirror page is deleted + 301-redirected via
+// public/_redirects.
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHero from '../components/PageHero.astro';
 import IconTile from '../components/IconTile.astro';
@@ -27,7 +32,7 @@ import IconTile from '../components/IconTile.astro';
   <section class="bg-tk-surface">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <div class="grid gap-6 md:grid-cols-3">
-        <a href="/docs/api-quickstart" class="group card p-6">
+        <a href="https://docs.driftstack.dev/quickstart-curl/" class="group card p-6">
           <IconTile class="mb-3">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M5 12l5 5L20 7" />
@@ -130,9 +135,11 @@ import IconTile from '../components/IconTile.astro';
             apps/docs/src/pages/api/recipes.md page is live at
             docs.driftstack.dev/api/recipes/). The card is omitted until
             a /docs/recipes mirror page lands on the marketing-site, so
-            this stays a card-less anchor rather than a card linking to
-            an external host (which would break the all-internal-anchors
-            pattern the other cards on this hub follow). */}
+            this stays a card-less anchor. (S47 2026-07-07: the hub is
+            no longer all-internal-anchors — the Quickstart card now
+            points at its docs.driftstack.dev successor after the
+            mirror deprecation — so a docs-hosted Recipe card is a
+            legitimate future option; founder call.) */}
       </div>
     </div>
   </section>
