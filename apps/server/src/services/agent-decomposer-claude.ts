@@ -377,6 +377,41 @@ function makeClaudeUsage(
   };
 }
 
+const KNOWN_INTENT_VERBS: ReadonlySet<string> = new Set([
+  'navigate',
+  'interact',
+  'wait',
+  'capture',
+  'scroll',
+  'behavioral_pause',
+]);
+
+/**
+ * Normalize a raw model intent object to the canonical `{ kind, ...params }`
+ * shape the switch below expects. Opus 4.x reliably emits intents VERB-KEYED —
+ * `{ "navigate": { "url": … } }`, `{ "capture": { "capture": "screenshot" } }` —
+ * rather than the documented `{ "kind": "navigate", "url": … }`. Left unhandled,
+ * every intent's `.kind` is undefined, the switch matches nothing, and the whole
+ * plan silently collapses to zero intents (→ the AI "responds without completing
+ * any steps"). Accept BOTH shapes so a model-format drift can never again empty a
+ * plan: an object with exactly one key that is a known verb, whose value is a
+ * params object, is unwrapped to `{ kind: verb, ...params }`. A bare
+ * `{ "screenshot": true }`-style value (non-object) becomes `{ kind: verb }`.
+ * Already-canonical `{ kind, … }` objects pass through unchanged.
+ */
+function normalizeIntentShape(i: Record<string, unknown>): Record<string, unknown> {
+  if (typeof i.kind === 'string') return i;
+  const keys = Object.keys(i);
+  if (keys.length === 1 && KNOWN_INTENT_VERBS.has(keys[0]!)) {
+    const verb = keys[0]!;
+    const params = i[verb];
+    return typeof params === 'object' && params !== null
+      ? { kind: verb, ...(params as Record<string, unknown>) }
+      : { kind: verb };
+  }
+  return i;
+}
+
 function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
   if (!Array.isArray(raw)) {
     throw new Error('Anthropic plan.intents was not an array');
@@ -384,7 +419,7 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
   const out: AgentIntent[] = [];
   for (const item of raw) {
     if (typeof item !== 'object' || item === null) continue;
-    const i = item as Record<string, unknown>;
+    const i = normalizeIntentShape(item as Record<string, unknown>);
     switch (i.kind) {
       case 'navigate':
         if (typeof i.url === 'string') out.push({ kind: 'navigate', url: i.url });

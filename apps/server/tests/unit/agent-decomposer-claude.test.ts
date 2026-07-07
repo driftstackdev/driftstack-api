@@ -145,6 +145,70 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       expect(res.tokensConsumed).toBe(450);
     });
 
+    it('#139 parses VERB-KEYED intents (the shape Opus 4.x actually emits) — must NOT collapse to empty', async () => {
+      // Opus 4.x reliably returns `{ "navigate": { "url": … } }` rather than the
+      // documented `{ "kind": "navigate", "url": … }`. Reproduced live on prod
+      // 2026-07-07: every AI-automation plan silently parsed to ZERO intents (the
+      // founder's "AI responds without completing any steps"). normalizeIntentShape
+      // must unwrap the verb key so the plan survives.
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'plan',
+          intents: [
+            { navigate: { url: 'https://example.com' } },
+            { wait: { condition: 'idle', timeoutMs: 5000 } },
+            { capture: { capture: 'screenshot' } },
+          ],
+        }),
+      ]);
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      expect(res.kind).toBe('plan');
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toEqual([
+        { kind: 'navigate', url: 'https://example.com' },
+        { kind: 'wait', condition: 'idle', timeoutMs: 5000 },
+        { kind: 'capture', capture: 'screenshot' },
+      ]);
+    });
+
+    it('#139 verb-keyed interact + scroll + a bare-verb capture all normalize', async () => {
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'plan',
+          intents: [
+            { interact: { action: 'tap', selector: '#go' } },
+            { scroll: { direction: 'down', amount_px: 400 } },
+            { navigate: { url: 'https://x.test' } },
+          ],
+        }),
+      ]);
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toEqual([
+        { kind: 'interact', action: 'tap', selector: '#go' },
+        { kind: 'scroll', direction: 'down', amount_px: 400 },
+        { kind: 'navigate', url: 'https://x.test' },
+      ]);
+    });
+
+    it('#139 canonical kind-keyed AND verb-keyed intents coexist in one plan', async () => {
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'plan',
+          intents: [
+            { kind: 'navigate', url: 'https://a.test' }, // canonical
+            { capture: { capture: 'screenshot' } }, // verb-keyed
+          ],
+        }),
+      ]);
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toEqual([
+        { kind: 'navigate', url: 'https://a.test' },
+        { kind: 'capture', capture: 'screenshot' },
+      ]);
+    });
+
     it('W140 parses scroll + behavioral_pause intents (direction required; pause fields optional)', async () => {
       const { fetch } = sequenceFetch([
         jsonResponse({
