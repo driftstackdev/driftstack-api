@@ -49,25 +49,42 @@
         window.addEventListener('unhandledrejection', function (e) {
           window.__dsFatal('UNHANDLED_REJECTION', e.reason);
         });
-        // Poll for the React mount instead of one hard 8s deadline: a CPU-starved
-        // machine (a heavy build/CI on the same box) can take well over 8s to
-        // parse + mount a ~1.4MB bundle in WKWebView, and a hard fail there is a
-        // FALSE negative that blocks a perfectly good app. Succeed the instant
-        // #root has children; only surface MOUNT_TIMEOUT if it TRULY never mounts
-        // within a generous window.
+        // Poll for the React mount instead of one hard deadline: a CPU-starved
+        // machine (a heavy build/CI on the same box, or the GUI running over
+        // Screen Sharing on a box that's also compiling) can take well over 30s
+        // to parse + mount a ~1.4MB bundle in WKWebView, and a hard fail there is
+        // a FALSE negative that blocks a perfectly good app (founder-hit
+        // 2026-07-07 at machine load 56). Succeed the instant #root has children.
+        //
+        // STARVATION-ADAPTIVE (A3 co-diagnosis): this poll runs on the SAME JS
+        // thread as the bundle, so under starvation its own ticks fire LATE. A
+        // tick that arrives far later than its 500ms interval proves the thread
+        // was BLOCKED (parsing/mounting, not hung) — that stalled time is not
+        // "React failed to mount", so credit it back instead of counting it toward
+        // the budget. Net: the 30s measures RESPONSIVE time, so a slow-but-fine
+        // mount under load extends the budget rather than false-failing; only a
+        // genuine hang (thread responsive, 30s of it elapsed, still no #root
+        // children) surfaces the panel.
         var __dsMountStart = Date.now();
+        var __dsLastTick = Date.now();
         var __dsMountPoll = setInterval(function () {
+          var now = Date.now();
+          var gap = now - __dsLastTick;
+          __dsLastTick = now;
+          // Tick fired >4x late ⇒ the thread was blocked; don't count that stall.
+          if (gap > 2000) __dsMountStart += gap - 500;
           var root = document.getElementById('root');
           if (root && root.childElementCount > 0) {
             clearInterval(__dsMountPoll); // mounted — all good
             return;
           }
-          if (Date.now() - __dsMountStart >= 30000 && !window.__dsFatalShown) {
+          if (now - __dsMountStart >= 30000 && !window.__dsFatalShown) {
             clearInterval(__dsMountPoll);
             window.__dsFatal(
               'MOUNT_TIMEOUT',
               new Error(
-                'UI did not render within 30s — the bundle loaded but React did not mount.',
+                'The app took too long to start — your Mac may be under heavy load ' +
+                  '(a build, or many apps open). Close some, then press Reload.',
               ),
             );
           }
