@@ -5,9 +5,10 @@
 // W655 splits the original 5 it() blocks into 12 focused per-concept
 // blocks + pins previously-implicit invariants:
 //
-//   • Critical-emails-not-opt-outable invariant — the 5 event types
+//   • Critical-emails-not-opt-outable invariant — the 3 event types
 //     that cannot be opted out of (verification + password-reset +
-//     billing-failure + subscription-cancellation + support-ack)
+//     billing-failure; S44 2026-07-07 trimmed the never-wired
+//     subscription-cancellation + support-ack templates)
 //     pinned per-line. Drift to letting any of these into the
 //     OptOutableEmailEvent enum would let customers silently opt
 //     out of receiving "your password was reset" or "your card
@@ -52,10 +53,13 @@ describe('W580.C packages/sdk-python/src/driftstack/resources/email_preferences.
     expect(body).toMatch(/Per-event opt-in\/opt-out toggles for non-critical customer emails\./);
   });
 
-  it('CRITICAL: critical-emails-not-opt-outable invariant pinned per-line. The 5 critical event types (verification / password-reset / billing-failure / subscription-cancellation / support-ack) MUST NOT be opt-outable. Drift to letting any of these into OptOutableEmailEvent would silently let customers opt out of "your password was reset" or "your card failed" — catastrophic safety-net break. The enum-naming invariant ("not in the OptOutableEmailEvent enum on purpose") is what enforces this at compile-time on the server side.', () => {
+  it('CRITICAL: critical-emails-not-opt-outable invariant pinned per-line. The 3 critical event types (verification / password-reset / billing-failure) MUST NOT be opt-outable. Drift to letting any of these into OptOutableEmailEvent would silently let customers opt out of "your password was reset" or "your card failed" — catastrophic safety-net break. The enum-naming invariant ("not in the OptOutableEmailEvent enum on purpose") is what enforces this at compile-time on the server side. (S44 2026-07-07 founder-approved trim deleted the never-wired subscription-cancellation + support-ack templates — roster 5→3.)', () => {
     expect(body).toMatch(
-      /Critical emails \(verification \/ password-reset \/ billing-failure \/\s*\nsubscription-cancellation \/ support-ack\) are not opt-outable; they\s*\naren't in the OptOutableEmailEvent enum on purpose\./,
+      /Critical emails \(verification \/ password-reset \/ billing-failure\)\s*\nare not opt-outable; they aren't in the OptOutableEmailEvent enum on purpose\./,
     );
+    // S44 negative pins — the deleted templates must not resurface.
+    expect(body).not.toMatch(/subscription-cancellation/);
+    expect(body).not.toMatch(/support-ack/);
   });
 
   it('Imports — __future__ annotations + typing Any + 2-class HTTP client + coerce_body helper. coerce_body is load-bearing because the set() body has a typed shape (event_type + opted_in bool) and customers may pass it as either a dict or a future EmailPreferenceUpdateRequest pydantic model.', () => {

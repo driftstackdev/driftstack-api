@@ -9,9 +9,10 @@
 //     billing-receipt. (trial-pack-purchased/expired removed with
 //     the dead trial_pack lifecycle.)
 //
-//   5-event security/financial bypass (always-send, never opt-outable):
-//     signup-verification / password-reset / billing-failure /
-//     subscription-cancellation / support-ack.
+//   3-event security/financial bypass (always-send, never opt-outable):
+//     signup-verification / password-reset / billing-failure.
+//     (S44 2026-07-07 founder-approved trim deleted the never-wired
+//     subscription-cancellation + support-ack templates: bypass 5→3.)
 //
 //   Storage convention — 'absence of a row means opted-in (default).
 //   Explicit opt-out writes a row with opted_in=false. Steady-state
@@ -77,12 +78,14 @@ describe('W929 V-204 email-preferences cross-source invariant', () => {
 
   // ─── Security/financial bypass framing ───────────────────────
 
-  it("CRITICAL header pins 5-event security/financial bypass — 'Security + financial emails (signup-verification, password-reset, billing-failure, subscription-cancellation, support-ack) bypass this gate entirely — they always send'. The 5-event bypass is the always-send contract.", () => {
+  it("CRITICAL header pins 3-event security/financial bypass — 'Security + financial emails (signup-verification, password-reset, billing-failure) bypass this gate entirely — they always send'. The bypass is the always-send contract. (S44 2026-07-07 trim: bypass list 5→3; deleted names must not creep back in.)", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/email-preferences.ts'));
     expect(p).toMatch(/Security \+ financial emails \(signup-/);
-    expect(p).toMatch(/verification, password-reset, billing-failure, subscription-/);
-    expect(p).toMatch(/cancellation, support-ack\) bypass this gate entirely — they/);
-    expect(p).toMatch(/always send/);
+    expect(p).toMatch(/verification, password-reset, billing-failure\) bypass this gate/);
+    expect(p).toMatch(/entirely — they always send/);
+    expect(p).toMatch(
+      /S44 2026-07-07 trimmed the never-\s*\n?\s*\/\/\s*wired subscription-cancellation \+ support-ack templates/,
+    );
   });
 
   // ─── Absence-is-opted-in storage convention ──────────────────

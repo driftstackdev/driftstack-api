@@ -2,9 +2,10 @@
 //
 // Customers opt out of "lifecycle" emails (signup-welcome, session-
 // failed-first, tier-changed, billing-receipt). Security + financial emails (signup-
-// verification, password-reset, billing-failure, subscription-
-// cancellation, support-ack) bypass this gate entirely — they
-// always send.
+// verification, password-reset, billing-failure) bypass this gate
+// entirely — they always send. (S44 2026-07-07 trimmed the never-
+// wired subscription-cancellation + support-ack templates; the
+// bypass list shrank with them.)
 //
 // Storage convention: absence of a row means opted-in (default).
 // Explicit opt-out writes a row with opted_in=false. Steady-state

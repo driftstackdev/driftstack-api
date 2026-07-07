@@ -71,14 +71,14 @@ describe('W771 docs /api/email-preferences content parity', () => {
     expect(p).not.toMatch(/"event_type": "trial-pack-expired"/);
   });
 
-  it('CRITICAL critical-emails-not-opt-outable 7-event catalog pinned — signup-verification + password-reset + billing-failure + subscription-cancellation + support-ack + status-incident-* + GDPR Art 34 security notices. Drift to letting any of these be opt-outable would erode customer-comms safety.', () => {
+  it('CRITICAL critical-emails-not-opt-outable 5-event catalog pinned — signup-verification + password-reset + billing-failure (S44-live trigger wording) + status-incident-* + GDPR Art 34 security notices. Drift to letting any of these be opt-outable would erode customer-comms safety. (S44 2026-07-07 founder-approved trim deleted the never-wired subscription-cancellation + support-ack templates — their bullets are gone and must stay gone.)', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/`signup-verification` — required to activate the account\./);
     expect(p).toMatch(/`password-reset` — security-critical\./);
-    expect(p).toMatch(/`billing-failure` — payment retry \/ customer-action-needed\./);
-    expect(p).toMatch(/`subscription-cancellation` — confirmation of an irreversible/);
-    expect(p).toMatch(/`support-ack` — reply to a support thread the customer/);
+    expect(p).toMatch(/`billing-failure` — fires on a failed subscription charge/);
+    expect(p).not.toMatch(/subscription-cancellation/);
+    expect(p).not.toMatch(/support-ack/);
     expect(p).toMatch(
       /`status-incident-created` \/ `status-incident-resolved` — only\s*\n?\s+to customers explicitly subscribed via `\/status` \(separate\s*\n?\s+opt-in surface, not part of email preferences\)\./,
     );

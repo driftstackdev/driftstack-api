@@ -145,8 +145,8 @@ const prefs = await client.emailPreferences.list();
 await client.emailPreferences.optOut('billing-renewal-reminder');
 ```
 
-Critical emails (verification, password-reset, billing-failure,
-subscription-cancellation, support-ack) are not opt-outable —
+Critical emails (verification, password-reset, billing-failure)
+are not opt-outable —
 they're absent from the `OptOutableEmailEvent` enum on purpose.
 
 ## Audit log

@@ -141,12 +141,30 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
     expect(body).toMatch(/checkout subscription completed \(informational\)/);
   });
 
-  it('Invoice events V-202b decision: receipt emails fire from Stripe (Driftstack-branded receipts deferred — TD-001)', () => {
+  it('S44 2026-07-07 invoice wire-in (TD-001 revival, supersedes the V-202b log-only decision): invoice.payment_succeeded → handleInvoicePaymentSucceeded → billing.payment_succeeded lifecycle event (billing-receipt email, V-204 opt-out-aware, zero-amount skipped); invoice.payment_failed → handleInvoicePaymentFailed → billing.payment_failed (billing-failure email, never opt-outable, nullable next_payment_attempt); invoice.finalized stays informational/log-only', () => {
     expect(body).toMatch(
-      /\/\/ V-202b decision \(founder verdict 2026-05-05\): receipt emails\s*\n?\s*\/\/ fire from Stripe's own infrastructure\. Driftstack-branded\s*\n?\s*\/\/ billing receipts deferred post-launch — see TD-001 in\s*\n?\s*\/\/ docs\/tech-debt\.md\./,
+      /\/\/ S44 2026-07-07 \(founder-approved\) — Driftstack-branded\s*\n?\s*\/\/ billing receipt, the TD-001 revival\./,
     );
     expect(body).toMatch(
-      /case 'invoice\.payment_succeeded':\s*\n?\s*case 'invoice\.payment_failed':\s*\n?\s*case 'invoice\.finalized':/,
+      /case 'invoice\.payment_succeeded':[\s\S]+?await this\.handleInvoicePaymentSucceeded\(event\);\s*\n?\s*return 'handled';/,
+    );
+    expect(body).toMatch(
+      /case 'invoice\.payment_failed':[\s\S]+?await this\.handleInvoicePaymentFailed\(event\);\s*\n?\s*return 'handled';/,
+    );
+    expect(body).toMatch(
+      /case 'invoice\.finalized':[\s\S]+?this\.logEvent\(event, 'invoice'\);\s*\n?\s*return 'handled';/,
+    );
+    // Receipt dispatch shape — the lifecycle event carries the decoded
+    // invoice fields; opt-out lives in AccountLifecycleService.
+    expect(body).toMatch(
+      /kind: 'billing\.payment_succeeded',\s*\n?\s*amountCents: amountPaid,\s*\n?\s*currency,\s*\n?\s*periodStart,\s*\n?\s*periodEnd,\s*\n?\s*hostedInvoiceUrl,\s*\n?\s*stripeEventId: event\.id,\s*\n?\s*stripeInvoiceId,/,
+    );
+    expect(body).toMatch(
+      /kind: 'billing\.payment_failed',\s*\n?\s*amountCents: amountDue,\s*\n?\s*currency,\s*\n?\s*retryAt,\s*\n?\s*stripeEventId: event\.id,\s*\n?\s*stripeInvoiceId,/,
+    );
+    // Zero-amount receipts are noise — pinned skip.
+    expect(body).toMatch(
+      /if \(amountPaid === 0\) \{\s*\n?\s*this\.logEvent\(event, 'invoice\.payment_succeeded \(zero-amount — no receipt\)'\);\s*\n?\s*return;/,
     );
   });
 

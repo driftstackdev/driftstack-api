@@ -4,7 +4,7 @@
 // V-353b MFA + V-484/V-297 audit filters/export + V-219 customer
 // rate-limit view. Drift here either (a) accidentally adds a
 // security/financial email (signup-verify, password-reset, billing-
-// failure, subscription-cancel, support-ack) to the opt-outable
+// failure) to the opt-outable
 // enum — customer disables critical comms; or (b) bumps avatar cap
 // past Fastify default JSON body limit silently.
 //
@@ -55,10 +55,13 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
     );
   });
 
-  it('V-204 OptOutableEmailEvent framing pinned: security + financial emails (signup-verification / password-reset / billing-failure / subscription-cancellation / support-ack) NEVER opt-outable — absent on purpose so API surface matches policy', () => {
+  it('V-204 OptOutableEmailEvent framing pinned: security + financial emails (signup-verification / password-reset / billing-failure) NEVER opt-outable — absent on purpose so API surface matches policy. (S44 2026-07-07 founder-approved trim deleted the never-wired subscription-cancellation + support-ack templates from the roster.)', () => {
     expect(body).toMatch(/\/\/ V-204 — email notification preferences/);
     expect(body).toMatch(
-      /\*\s*Event types the customer can opt out of\. Security \+ financial emails\s*\n?\s*\*\s*\(signup-verification, password-reset, billing-failure, subscription-\s*\n?\s*\*\s*cancellation, support-ack\) are never opt-outable; they're absent\s*\n?\s*\*\s*from this enum on purpose so the API surface matches the policy\./,
+      /\*\s*Event types the customer can opt out of\. Security \+ financial emails\s*\n?\s*\*\s*\(signup-verification, password-reset, billing-failure\)\s*\n?\s*\*\s*are never opt-outable; they're absent from this enum on purpose so\s*\n?\s*\*\s*the API surface matches the policy\./,
+    );
+    expect(body).toMatch(
+      /S44 2026-07-07 deleted the\s*\n?\s*\*\s*never-wired subscription-cancellation \+ support-ack templates\s*\n?\s*\*\s*outright\./,
     );
   });
 

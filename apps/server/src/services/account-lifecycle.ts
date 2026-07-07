@@ -6,6 +6,9 @@
 // so call sites stay consistent as the set of lifecycle events grows.
 // V-202c landed `session.failed.first`. V-202b adds:
 //   - `subscription.tier_changed` (paired audit emit + tier-changed email)
+// S44 2026-07-07 (founder-approved; TD-001 revival) adds:
+//   - `billing.payment_succeeded` (billing-receipt email, V-204 opt-out)
+//   - `billing.payment_failed`    (billing-failure email, never opt-outable)
 //
 // Contract notes:
 //   - Best-effort by design. Errors during dispatch are caught + logged
@@ -90,6 +93,42 @@ export type LifecycleEvent =
       renewalDate: Date;
       stripeEventId: string;
       stripeInvoiceId: string;
+    }
+  | {
+      // S44 2026-07-07 (founder-approved; TD-001 revival) — fires on
+      // Stripe `invoice.payment_succeeded`. Email-only; no audit row
+      // (the charge is not an account-state change — tier changes emit
+      // their own event). Honors the V-204 `billing-receipt` opt-out.
+      // Dedup rides the processed_stripe_events ledger (a duplicate
+      // event.id short-circuits in StripeWebhooksService.handle before
+      // dispatch), same discipline as subscription.renewal_reminder.
+      kind: 'billing.payment_succeeded';
+      amountCents: number;
+      currency: string;
+      /** Invoice period bounds (Stripe period_start/period_end). Null
+       *  when the payload omitted them — handler falls back to the
+       *  charge date. */
+      periodStart: Date | null;
+      periodEnd: Date | null;
+      /** Stripe hosted-invoice URL; null falls back to the portal. */
+      hostedInvoiceUrl: string | null;
+      stripeEventId: string;
+      stripeInvoiceId: string;
+    }
+  | {
+      // S44 2026-07-07 (founder-approved) — fires on Stripe
+      // `invoice.payment_failed`. Email-only and NEVER opt-outable:
+      // billing-failure is deliberately absent from
+      // OptOutableEmailEventSchema, so no shouldSend gate runs here.
+      // Same ledger-backed dedup as billing.payment_succeeded.
+      kind: 'billing.payment_failed';
+      amountCents: number;
+      currency: string;
+      /** Stripe next_payment_attempt; null = no further automatic
+       *  retry is scheduled (final dunning attempt). */
+      retryAt: Date | null;
+      stripeEventId: string;
+      stripeInvoiceId: string;
     };
 
 export interface AccountLifecycleServiceConfig {
@@ -150,6 +189,12 @@ export class AccountLifecycleService {
           return;
         case 'subscription.renewal_reminder':
           await this.handleRenewalReminder(accountId, event);
+          return;
+        case 'billing.payment_succeeded':
+          await this.handlePaymentSucceeded(accountId, event);
+          return;
+        case 'billing.payment_failed':
+          await this.handlePaymentFailed(accountId, event);
           return;
       }
     } catch (err) {
@@ -342,6 +387,84 @@ export class AccountLifecycleService {
       portalUrl: this.billingPortalUrl,
     });
   }
+
+  /**
+   * S44 2026-07-07 (founder-approved; TD-001 revival) — Driftstack-
+   * branded receipt on Stripe `invoice.payment_succeeded`. Honors the
+   * V-204 `billing-receipt` opt-out. No per-event dedup table: the
+   * Stripe event ledger already short-circuits duplicate event ids
+   * before the handler dispatches this event (same reasoning as
+   * handleRenewalReminder above).
+   */
+  private async handlePaymentSucceeded(
+    accountId: string,
+    event: {
+      amountCents: number;
+      currency: string;
+      periodStart: Date | null;
+      periodEnd: Date | null;
+      hostedInvoiceUrl: string | null;
+      stripeEventId: string;
+      stripeInvoiceId: string;
+    },
+  ): Promise<void> {
+    const allowed = await this.emailPreferences.shouldSend(accountId, 'billing-receipt');
+    if (!allowed) return;
+
+    const account = await this.repo.findForLifecycle(accountId);
+    if (account === null) return;
+
+    // Billing-period string for the template ("for the <period>
+    // period"). Falls back to the charge date when the invoice payload
+    // omitted period bounds (shouldn't happen for a real invoice, but
+    // the fields are optional in our minimal Stripe shape).
+    const period =
+      event.periodStart !== null && event.periodEnd !== null
+        ? `${isoDate(event.periodStart)} – ${isoDate(event.periodEnd)}`
+        : isoDate(new Date());
+
+    await this.email.sendBillingReceipt({
+      to: account.email,
+      amountFormatted: formatCents(event.amountCents, event.currency),
+      period,
+      invoiceUrl: event.hostedInvoiceUrl ?? this.billingPortalUrl,
+    });
+  }
+
+  /**
+   * S44 2026-07-07 (founder-approved) — payment-failure notice on
+   * Stripe `invoice.payment_failed`. DELIBERATELY no shouldSend gate:
+   * billing-failure is a critical-path email (absent from
+   * OptOutableEmailEventSchema by design) — a customer must always
+   * hear that their card failed, or they wake up to surprise
+   * service loss.
+   */
+  private async handlePaymentFailed(
+    accountId: string,
+    event: {
+      amountCents: number;
+      currency: string;
+      retryAt: Date | null;
+      stripeEventId: string;
+      stripeInvoiceId: string;
+    },
+  ): Promise<void> {
+    const account = await this.repo.findForLifecycle(accountId);
+    if (account === null) return;
+
+    await this.email.sendBillingFailure({
+      to: account.email,
+      amountFormatted: formatCents(event.amountCents, event.currency),
+      retryAt: event.retryAt,
+      portalUrl: this.billingPortalUrl,
+    });
+  }
+}
+
+/** S44 — date-only ISO rendering (YYYY-MM-DD, UTC) for receipt period
+ *  bounds; mirrors the renewalDate rendering in email.ts. */
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
 
 /**

@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Account notifications (SSE)
-description: Real-time per-account event stream — cost-threshold alerts, high-severity audit events, and session errors.
+description: Real-time per-account event stream — cost-threshold alerts, incident broadcasts, high-severity audit events, and session errors.
 ---
 
 # Account notifications
@@ -71,20 +71,24 @@ in either direction).
 
 ### `incident.broadcast`
 
-**Declared, not yet firing.** This kind exists in the stream's type
-union for incident fan-out, but no publisher emits it today —
-subscribers will not receive `incident.broadcast` frames until one
-ships. For incident visibility now, use the
-[status endpoints](/api/status/). The declared shape:
+Fires when a public incident is posted, updated, or resolved.
+(Live since 2026-07-07 — this kind was previously declared in the
+type union with no publisher; the status-page incident lifecycle
+now publishes it.) Incident frames are a platform-wide broadcast:
+every account with an open stream receives the same incident,
+stamped with its own `accountId`. The frame carries the incident's
+current severity and title — for full detail (affected components,
+update history, resolution state), query the
+[status endpoints](/api/status/).
 
-| field        | type                             | notes          |
-| ------------ | -------------------------------- | -------------- |
-| `kind`       | `"incident.broadcast"`           |                |
-| `accountId`  | `string`                         |                |
-| `incidentId` | `string`                         |                |
-| `severity`   | `"minor" \| "major" \| "outage"` |                |
-| `title`      | `string`                         | short headline |
-| `at`         | `string`                         | ISO8601        |
+| field        | type                             | notes                       |
+| ------------ | -------------------------------- | --------------------------- |
+| `kind`       | `"incident.broadcast"`           |                             |
+| `accountId`  | `string`                         | calling account             |
+| `incidentId` | `string`                         | `inc_…`                     |
+| `severity`   | `"minor" \| "major" \| "outage"` |                             |
+| `title`      | `string`                         | short headline              |
+| `at`         | `string`                         | ISO8601 server publish time |
 
 ### `audit.high_severity`
 

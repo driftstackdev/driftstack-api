@@ -116,7 +116,7 @@ import { AccountsAdminService } from '../services/admin-accounts.js';
 import { AdminBillingService } from '../services/admin-billing.js';
 import { PricingService } from '../services/pricing.js';
 import { PlatformSecretsService } from '../services/platform-secrets.js';
-import { IncidentsService } from '../services/incidents.js';
+import { IncidentsService, type IncidentRow } from '../services/incidents.js';
 import { DrizzleIncidentsRepo } from '../db/incidents-repo.js';
 import { DrizzleIncidentUpdateNotificationsRepo } from '../db/incident-update-notifications-repo.js';
 import { FetchProber, HealthProbeService } from '../services/health-probe.js';
@@ -693,11 +693,31 @@ export async function createProductionDeps(
   // V-295a — public-status incidents service. Lifecycle dispatches both
   // email fan-out AND outbound broadcasts in parallel; one failing
   // doesn't stall the other.
+  // S45 2026-07-07 (founder-approved) — each public-incident lifecycle
+  // hook ALSO publishes an `incident.broadcast` NotificationEvent to
+  // the customer SSE bus (GET /v1/account/me/notifications), retiring
+  // the kind's zero-publisher state. publishBroadcast fans the frame
+  // out to every account with a live stream, stamped per-subscriber
+  // with its own accountId; the emit is sync + best-effort (the bus
+  // swallows handler throws) so it can never stall the email/webhook
+  // fan-out.
+  const publishIncidentNotification = (incident: IncidentRow): void => {
+    notificationEventBus.publishBroadcast({
+      kind: 'incident.broadcast',
+      // Customer-facing incident id shape (`inc_<uuid>`) — same
+      // prefixing the status routes + generic webhook envelope use.
+      incidentId: `inc_${incident.id}`,
+      severity: incident.severity,
+      title: incident.title,
+      at: new Date().toISOString(),
+    });
+  };
   const incidentsRepo = new DrizzleIncidentsRepo(dbHandle);
   const incidentsService = new IncidentsService(incidentsRepo, {
     onPublicCreated: async (incident, update) => {
       // V-295e — bus emit is sync + in-process; doesn't need awaiting.
       incidentEventBus.publishCreated(incident, update);
+      publishIncidentNotification(incident);
       await Promise.all([
         incidentNotifications.notifyCreated(incident, update),
         incidentBroadcast.notifyCreated(incident, update),
@@ -705,6 +725,7 @@ export async function createProductionDeps(
     },
     onPublicResolved: async (incident, update) => {
       incidentEventBus.publishResolved(incident, update);
+      publishIncidentNotification(incident);
       await Promise.all([
         incidentNotifications.notifyResolved(incident, update),
         incidentBroadcast.notifyResolved(incident, update),
@@ -714,7 +735,10 @@ export async function createProductionDeps(
     // the throttle internally so a long-running incident can't spam
     // subscribers. Broadcast surface unchanged (Slack/generic webhooks
     // don't have the per-recipient throttle semantics email does).
+    // S45 — the SSE frame is NOT throttled: it's a live in-memory
+    // stream (no inbox to spam), and the dashboard wants every update.
     onPublicUpdated: async (incident, update) => {
+      publishIncidentNotification(incident);
       await incidentNotifications.notifyUpdated(incident, update);
     },
   });

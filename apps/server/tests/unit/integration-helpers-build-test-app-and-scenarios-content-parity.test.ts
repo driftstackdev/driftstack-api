@@ -84,7 +84,9 @@ describe('W795 integration _helpers/build-test-app + scenarios parity', () => {
       /import \{ WebhooksService, WebhooksAdminService \} from '\.\.\/\.\.\/\.\.\/src\/services\/webhooks\.js';/,
     );
     expect(p).toMatch(
-      /import \{ IncidentsService \} from '\.\.\/\.\.\/\.\.\/src\/services\/incidents\.js';/,
+      // S45 2026-07-07 — the fixture also imports IncidentRow (typed
+      // helper for the incident.broadcast publish mirror).
+      /import \{ IncidentsService, type IncidentRow \} from '\.\.\/\.\.\/\.\.\/src\/services\/incidents\.js';/,
     );
 
     // In-memory repo imports from the _helpers/ sibling directory.

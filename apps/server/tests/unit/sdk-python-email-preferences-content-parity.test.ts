@@ -30,8 +30,12 @@ describe('sdk-python resources/email_preferences content parity', () => {
     expect(body).toMatch(
       /Email preferences resource — \/v1\/account\/email-preferences \(V-204 \/ V-449\)/,
     );
-    expect(body).toMatch(/Critical emails \(verification \/ password-reset \/ billing-failure \//);
+    // S44 2026-07-07 (founder-approved trim) — the critical roster is
+    // 3 (the never-wired subscription-cancellation + support-ack
+    // templates were deleted outright).
+    expect(body).toMatch(/Critical emails \(verification \/ password-reset \/ billing-failure\)/);
     expect(body).toMatch(/aren't in the OptOutableEmailEvent enum on purpose\./);
+    expect(body).not.toMatch(/subscription-cancellation|support-ack/);
   });
 
   it('Sync resource class pinned: EmailPreferencesResource with 4-method surface (list / set / opt_out / opt_in). Drift to dropping the convenience methods (opt_out / opt_in) would make customers write more boilerplate; drift to renaming would break SDK consumers', () => {

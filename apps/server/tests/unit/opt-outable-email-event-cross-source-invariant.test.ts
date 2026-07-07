@@ -20,11 +20,13 @@
 //     toggle entries — one per opt-outable event).
 //
 // CRITICAL POLICY NOTE: Security + financial emails (signup-
-// verification, password-reset, billing-failure, subscription-
-// cancellation, support-ack) are NEVER opt-outable and MUST NOT
-// appear in this enum. Drift to including any of those would
-// break the policy that "customers can't disable critical-path
-// emails".
+// verification, password-reset, billing-failure) are NEVER
+// opt-outable and MUST NOT appear in this enum. Drift to including
+// any of those would break the policy that "customers can't disable
+// critical-path emails". (S44 2026-07-07 deleted the never-wired
+// subscription-cancellation + support-ack templates; their names
+// stay in the forbidden list below so a resurrection can't slip
+// into the enum unnoticed.)
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

@@ -210,12 +210,13 @@ describe('W770 docs /api/account content parity', () => {
     );
   });
 
-  it('CRITICAL email-preferences critical-emails-not-opt-outable framing pinned. The 5-event critical set (verification, password-reset, billing-failure, subscription-cancellation, support-ack) is the load-bearing contract that protects customers from misconfiguring themselves out of critical comms.', () => {
+  it('CRITICAL email-preferences critical-emails-not-opt-outable framing pinned. The 3-event critical set (verification, password-reset, billing-failure) is the load-bearing contract that protects customers from misconfiguring themselves out of critical comms. (S44 2026-07-07 founder-approved trim deleted the never-wired subscription-cancellation + support-ack templates from the set.)', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Critical emails \(verification, password-reset, billing-failure,\s*\n?subscription-cancellation, support-ack\) are not opt-outable —\s*\n?they're absent from the `OptOutableEmailEvent` enum on purpose\./,
+      /Critical emails \(verification, password-reset, billing-failure\)\s*\n?are not opt-outable —\s*\n?they're absent from the `OptOutableEmailEvent` enum on purpose\./,
     );
+    expect(p).not.toMatch(/subscription-cancellation|support-ack/);
   });
 
   it("CRITICAL why-/me-ignores-team-RBAC framing pinned. The 'editing a team owner\\'s display name, slug, region, or avatar via a member\\'s bearer token would be surprising' wording is the canonical isolation rationale + the future-route-name signal '/v1/team/owners/:id/...'.", () => {

@@ -155,7 +155,7 @@ describe('createEmailService — configured', () => {
     expect(c.TextBody).toContain('https://billing.driftstack.dev/invoice/abc');
   });
 
-  it('billing failure template', async () => {
+  it('billing failure template — retry scheduled (S44: retryLine carries the timestamp)', async () => {
     const logger = makeLogger();
     const client = makeStubClient();
     const svc = createEmailService({ config, logger, client });
@@ -167,31 +167,43 @@ describe('createEmailService — configured', () => {
     });
     const c = client.calls[0] as Record<string, string>;
     expect(c.Subject).toContain('payment failed');
+    expect(c.TextBody).toContain("We'll retry automatically at 2026-05-04T00:00:00.000Z (UTC).");
     expect(c.TextBody).toContain('https://billing.driftstack.dev/portal');
   });
 
-  it('subscription cancellation template', async () => {
+  it('billing failure template — final attempt (S44: null retryAt renders the no-further-retries sentence)', async () => {
     const logger = makeLogger();
     const client = makeStubClient();
     const svc = createEmailService({ config, logger, client });
-    await svc.sendSubscriptionCancellation({
+    await svc.sendBillingFailure({
       to: 'user@example.com',
-      effectiveAt: new Date('2026-06-01T00:00:00Z'),
+      amountFormatted: '€199.00',
+      retryAt: null,
       portalUrl: 'https://billing.driftstack.dev/portal',
     });
     const c = client.calls[0] as Record<string, string>;
-    expect(c.Subject).toContain('cancelled');
-    expect(c.TextBody).toContain('2026-06-01');
+    expect(c.Subject).toContain('payment failed');
+    expect(c.TextBody).toContain(
+      'This was the final automatic attempt — no further retries are scheduled.',
+    );
+    expect(c.TextBody).not.toContain('retry automatically at');
+    // HTML body renders the same sentence (entity-escaped apostrophes ok).
+    expect(c.HtmlBody).toContain('no further retries are scheduled.');
   });
 
-  it('support ack template', async () => {
+  // S44 2026-07-07 (founder-approved trim) — subscription-cancellation
+  // and support-ack were deleted (zero callers). The compile-time
+  // interface no longer declares them; assert the runtime object
+  // doesn't secretly keep them either.
+  it('S44 trim: sendSubscriptionCancellation + sendSupportAck are gone from the service object', () => {
     const logger = makeLogger();
     const client = makeStubClient();
-    const svc = createEmailService({ config, logger, client });
-    await svc.sendSupportAck({ to: 'user@example.com', ticketId: 'TKT-123' });
-    const c = client.calls[0] as Record<string, string>;
-    expect(c.Subject).toContain('support');
-    expect(c.TextBody).toContain('TKT-123');
+    const svc = createEmailService({ config, logger, client }) as unknown as Record<
+      string,
+      unknown
+    >;
+    expect(svc.sendSubscriptionCancellation).toBeUndefined();
+    expect(svc.sendSupportAck).toBeUndefined();
   });
 
   it('swallows send errors (fire-and-forget)', async () => {
@@ -217,11 +229,16 @@ describe('createEmailService — configured', () => {
     const logger = makeLogger();
     const client = makeStubClient();
     const svc = createEmailService({ config, logger, client });
-    await svc.sendSupportAck({ to: 'user@example.com', ticketId: 'TKT-123' });
+    await svc.sendBillingReceipt({
+      to: 'user@example.com',
+      amountFormatted: '€1.00',
+      period: '2026-05',
+      invoiceUrl: 'https://billing.driftstack.dev/invoice/abc',
+    });
     expect(logger.info).toHaveBeenCalledWith(
       expect.objectContaining({
         component: 'email',
-        template: 'support-ack',
+        template: 'billing-receipt',
         // maskEmail() — the raw address must not sit in plaintext in logs.
         to: 'u***@example.com',
       }),
@@ -233,7 +250,12 @@ describe('createEmailService — configured', () => {
     const logger = makeLogger();
     const client = makeStubClient();
     const svc = createEmailService({ config, logger, client, messageStream: 'broadcast' });
-    await svc.sendSupportAck({ to: 'a@b.com', ticketId: 'X' });
+    await svc.sendBillingReceipt({
+      to: 'a@b.com',
+      amountFormatted: '€1.00',
+      period: '2026-05',
+      invoiceUrl: 'https://x',
+    });
     const c = client.calls[0] as Record<string, string>;
     expect(c.MessageStream).toBe('broadcast');
   });

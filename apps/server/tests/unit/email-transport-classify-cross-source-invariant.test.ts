@@ -211,9 +211,9 @@ describe('W914 Email transport + V-057 + V-665 cross-source invariant', () => {
     expect(p).toMatch(/Deliberately swallow — email is never on a request critical path/);
   });
 
-  // ─── EmailService methods (sample 5 of the 16) ───────────────
+  // ─── EmailService methods (sample 4 of the 18) ───────────────
 
-  it('CRITICAL EmailService interface declares the 5-core methods — sendSignupVerification + sendPasswordReset + sendBillingReceipt + sendBillingFailure + sendSubscriptionCancellation. The 5 core methods are present on both the no-op stub AND the real impl, so call sites can rely on the same shape regardless of config.', () => {
+  it('CRITICAL EmailService interface declares the 4-core methods — sendSignupVerification + sendPasswordReset + sendBillingReceipt + sendBillingFailure. The core methods are present on both the no-op stub AND the real impl, so call sites can rely on the same shape regardless of config. (S44 2026-07-07 founder-approved trim deleted sendSubscriptionCancellation + sendSupportAck — zero callers; asserted GONE.)', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/email.ts'));
     expect(p).toMatch(
       /sendSignupVerification\(args: \{ to: string; link: string; expiresAt: Date \}\): Promise<void>/,
@@ -223,7 +223,8 @@ describe('W914 Email transport + V-057 + V-665 cross-source invariant', () => {
     );
     expect(p).toMatch(/sendBillingReceipt\(args: \{/);
     expect(p).toMatch(/sendBillingFailure\(args: \{/);
-    expect(p).toMatch(/sendSubscriptionCancellation\(args: \{/);
+    expect(p).not.toMatch(/sendSubscriptionCancellation\(/);
+    expect(p).not.toMatch(/sendSupportAck\(/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

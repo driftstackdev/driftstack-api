@@ -61,6 +61,13 @@ export type NotificationEvent =
 
 export type NotificationEventHandler = (event: NotificationEvent) => void;
 
+/** S45 — distributive Omit: plain `Omit` over a union collapses to the
+ *  union's COMMON keys (losing the per-kind payload fields); the naked
+ *  conditional distributes so each union member drops `accountId`
+ *  while keeping its own shape. */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+export type BroadcastNotificationEvent = DistributiveOmit<NotificationEvent, 'accountId'>;
+
 export class NotificationEventBus {
   private readonly subscribers = new Map<string, Set<NotificationEventHandler>>();
 
@@ -89,6 +96,27 @@ export class NotificationEventBus {
       } catch {
         /* swallow */
       }
+    }
+  }
+
+  /**
+   * S45 2026-07-07 (founder-approved) — platform-wide broadcast for
+   * account-agnostic events (today: `incident.broadcast`). The bus is
+   * strictly per-account and carries no persistence — events with no
+   * live subscribers are dropped on the floor — so "broadcast to every
+   * account" reduces to "publish to every account with a live
+   * subscriber": iterating the whole accounts table would fan out
+   * events that immediately drop. Each subscribed account receives its
+   * own copy stamped with its own `accountId`, preserving the
+   * per-account frame shape SSE clients already parse (cross-account
+   * leakage stays impossible: an incident is public platform data, and
+   * the only per-account field is the recipient's own id).
+   */
+  publishBroadcast(event: BroadcastNotificationEvent): void {
+    // Snapshot the key set first: a handler may unsubscribe (or the
+    // SSE backpressure guard may close a stream) while we iterate.
+    for (const accountId of Array.from(this.subscribers.keys())) {
+      this.publish({ ...event, accountId });
     }
   }
 

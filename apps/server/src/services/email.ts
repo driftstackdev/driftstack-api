@@ -16,13 +16,20 @@
 //   - signup-verification (magic-link, 30min single-use)
 //   - signup-welcome              (V-202; fires after email verify)
 //   - password-reset
-//   - billing-receipt
-//   - billing-failure
-//   - subscription-cancellation
-//   - support-ack (auto-reply when support@ receives a message)
+//   - billing-receipt             (S44 2026-07-07; Stripe
+//     invoice.payment_succeeded via the lifecycle dispatcher)
+//   - billing-failure             (S44 2026-07-07; Stripe
+//     invoice.payment_failed — never opt-outable)
 //   - session-failed-first        (V-202; first-failure-only, V-090)
 //   - tier-changed                (V-202)
 //   - oauth-pending-verification  (V-667.C; verdict-1 merge confirm)
+//
+// S44 2026-07-07 (founder-approved trim) — the subscription-
+// cancellation + support-ack templates and send methods (zero
+// callers since V-057 landed) and the quota-warning +
+// session-event-digest draft templates (never had send methods) were
+// DELETED. Resurrecting any of them requires a real caller plus a
+// docs catalog entry (apps/docs/src/pages/reference/emails.md).
 //
 // 2026-07-01 security fix — the fire-and-forget posture above is a
 // deliberate, correct tradeoff for MOST templates, but three of them
@@ -65,16 +72,28 @@ export interface EmailService {
    */
   sendSignupVerification(args: { to: string; link: string; expiresAt: Date }): Promise<void>;
   sendPasswordReset(args: { to: string; link: string; expiresAt: Date }): Promise<void>;
+  /** S44 2026-07-07 (founder-approved) — Driftstack-branded payment
+   *  receipt (TD-001 revival). Fires on Stripe
+   *  `invoice.payment_succeeded` via the lifecycle dispatcher
+   *  (`billing.payment_succeeded`); honors the V-204
+   *  `billing-receipt` opt-out. Dedup rides the Stripe event ledger
+   *  (`processed_stripe_events` — duplicate event.id short-circuits
+   *  before dispatch). */
   sendBillingReceipt(args: {
     to: string;
     amountFormatted: string;
     period: string;
     invoiceUrl: string;
   }): Promise<void>;
+  /** S44 2026-07-07 (founder-approved) — payment-failure notice.
+   *  Fires on Stripe `invoice.payment_failed`; NEVER opt-outable
+   *  (deliberately absent from OptOutableEmailEventSchema). `retryAt`
+   *  is Stripe's `next_payment_attempt` — null when Stripe has no
+   *  further automatic retry scheduled (final dunning attempt). */
   sendBillingFailure(args: {
     to: string;
     amountFormatted: string;
-    retryAt: Date;
+    retryAt: Date | null;
     portalUrl: string;
   }): Promise<void>;
   /** V-304b — fires ~7 days before subscription renewal (driven by
@@ -86,12 +105,6 @@ export interface EmailService {
     renewalDate: Date;
     portalUrl: string;
   }): Promise<void>;
-  sendSubscriptionCancellation(args: {
-    to: string;
-    effectiveAt: Date;
-    portalUrl: string;
-  }): Promise<void>;
-  sendSupportAck(args: { to: string; ticketId: string }): Promise<void>;
   /** V-202 — onboarding follow-up after email verification succeeds. */
   sendSignupWelcome(args: { to: string; dashboardUrl: string }): Promise<void>;
   /** V-202 — first-failure notice (V-090). Caller is responsible for deduplication. */
@@ -401,12 +414,17 @@ const TEMPLATES = {
     html: (v) =>
       `<p>Your payment of <strong>${v.amountFormatted}</strong> for the ${v.period} period was successful.</p><p><a href="${v.invoiceUrl}">View invoice</a></p><p>— Driftstack</p>`,
   },
+  // S44 2026-07-07 — `retryLine` is a full pre-rendered sentence
+  // (computed in sendBillingFailure below) because Stripe's
+  // next_payment_attempt is nullable: with a retry scheduled the line
+  // carries the timestamp; on the final dunning attempt it says no
+  // further retry is coming. One template, both truths.
   'billing-failure': {
     subject: 'Driftstack — payment failed',
     text: (v) =>
-      `We were unable to charge ${v.amountFormatted} on your Driftstack account.\n\nWe'll retry automatically at ${v.retryAt} (UTC). To update payment details before then, visit the billing portal:\n\n${v.portalUrl}\n\n— Driftstack`,
+      `We were unable to charge ${v.amountFormatted} on your Driftstack account.\n\n${v.retryLine} To update payment details, visit the billing portal:\n\n${v.portalUrl}\n\n— Driftstack`,
     html: (v) =>
-      `<p>We were unable to charge <strong>${v.amountFormatted}</strong> on your Driftstack account.</p><p>We'll retry automatically at <strong>${v.retryAt}</strong> (UTC). To update payment details before then, visit the <a href="${v.portalUrl}">billing portal</a>.</p><p>— Driftstack</p>`,
+      `<p>We were unable to charge <strong>${v.amountFormatted}</strong> on your Driftstack account.</p><p>${v.retryLine} To update payment details, visit the <a href="${v.portalUrl}">billing portal</a>.</p><p>— Driftstack</p>`,
   },
   // V-304b — DRAFT copy. Renewal reminder fires ~7 days before the
   // upcoming invoice. Tier-3 review-gated tone.
@@ -416,20 +434,6 @@ const TEMPLATES = {
       `Heads up — your Driftstack subscription renews on ${v.renewalDate} (UTC) for ${v.amountFormatted}.\n\nNothing to do if your payment method is up to date. To update payment details, change tier, or cancel before renewal, visit the billing portal:\n\n${v.portalUrl}\n\n— Driftstack`,
     html: (v) =>
       `<p>Heads up — your Driftstack subscription renews on <strong>${v.renewalDate}</strong> (UTC) for <strong>${v.amountFormatted}</strong>.</p><p>Nothing to do if your payment method is up to date. To update payment details, change tier, or cancel before renewal, visit the <a href="${v.portalUrl}">billing portal</a>.</p><p>— Driftstack</p>`,
-  },
-  'subscription-cancellation': {
-    subject: 'Driftstack — subscription cancelled',
-    text: (v) =>
-      `Your Driftstack subscription has been cancelled. Service continues through ${v.effectiveAt} (UTC), after which API access stops.\n\nIf this was unintended, you can resubscribe via the billing portal:\n\n${v.portalUrl}\n\n— Driftstack`,
-    html: (v) =>
-      `<p>Your Driftstack subscription has been cancelled. Service continues through <strong>${v.effectiveAt}</strong> (UTC), after which API access stops.</p><p>If this was unintended, you can resubscribe via the <a href="${v.portalUrl}">billing portal</a>.</p><p>— Driftstack</p>`,
-  },
-  'support-ack': {
-    subject: 'Driftstack support — we got your message',
-    text: (v) =>
-      `Thanks — we've received your message and opened ticket ${v.ticketId}. A human will reply within one business day.\n\n— Driftstack support`,
-    html: (v) =>
-      `<p>Thanks — we've received your message and opened ticket <strong>${v.ticketId}</strong>. A human will reply within one business day.</p><p>— Driftstack support</p>`,
   },
   'signup-welcome': {
     subject: 'Welcome to Driftstack',
@@ -569,30 +573,6 @@ const TEMPLATES = {
       `Driftstack posted an update on an open service-status incident.\n\nIncident: ${v.title}\nSeverity: ${v.severity}\nCurrent status: ${v.status}\nUpdate posted: ${v.incidentTime} (UTC)\n\nUpdate:\n${v.message}\n\nLive status: ${v.statusPageUrl}\nUnsubscribe: ${v.unsubscribeLink}\n\n— Driftstack`,
     html: (v) =>
       `<p>Driftstack posted an update on an open service-status incident.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Incident:</strong></td><td>${v.title}</td></tr><tr><td><strong>Severity:</strong></td><td>${v.severity}</td></tr><tr><td><strong>Current status:</strong></td><td>${v.status}</td></tr><tr><td><strong>Update posted:</strong></td><td>${v.incidentTime} (UTC)</td></tr></table><p><strong>Update:</strong><br />${v.message}</p><p>Live status: <a href="${v.statusPageUrl}">${v.statusPageUrl}</a><br />Unsubscribe: <a href="${v.unsubscribeLink}">${v.unsubscribeLink}</a></p><p>— Driftstack</p>`,
-  },
-  // V-486 — DRAFT copy. Quota-warning fires once per account per
-  // billing period when concurrent-cap utilisation crosses 80%.
-  // Caller dedupes via `quotaWarnEmailSentAt`. Tells the customer
-  // "you're approaching the ceiling, here's the upgrade path."
-  'quota-warning': {
-    subject: 'Driftstack — approaching your tier limit',
-    text: (v) =>
-      `You're at ${v.utilizationPct}% of your Driftstack ${v.quotaName} on the ${v.tier} tier.\n\nNothing's blocked yet — this is a heads-up. ${v.contextSentence}\n\nUpgrade path: ${v.upgradeUrl}\nUsage detail: ${v.usageUrl}\n\nThis is the only email you'll get for this period. The dashboard reflects live state.\n\n— Driftstack`,
-    html: (v) =>
-      `<p>You're at <strong>${v.utilizationPct}%</strong> of your Driftstack <strong>${v.quotaName}</strong> on the <strong>${v.tier}</strong> tier.</p><p>Nothing's blocked yet — this is a heads-up. ${v.contextSentence}</p><p><strong>Upgrade path:</strong> <a href="${v.upgradeUrl}">${v.upgradeUrl}</a><br /><strong>Usage detail:</strong> <a href="${v.usageUrl}">${v.usageUrl}</a></p><p>This is the only email you'll get for this period. The dashboard reflects live state.</p><p>— Driftstack</p>`,
-  },
-  // V-486 — DRAFT copy. Weekly session-event digest, opt-in. Lists
-  // {sessions_run, success_rate, top_failure_reason} for the past
-  // 7 days. Sent on Mondays at 09:00 in the account's timezone (or
-  // UTC if region preference is unset). Customers who don't want
-  // it unsubscribe via the link in the footer; preference stored
-  // on `email_preferences.session_event_digest`.
-  'session-event-digest': {
-    subject: 'Driftstack — your weekly session summary',
-    text: (v) =>
-      `Last week on Driftstack:\n\n  Sessions run: ${v.sessionsRun}\n  Success rate: ${v.successRatePct}%\n  Top failure reason: ${v.topFailureReason}\n\nFull dashboard: ${v.dashboardUrl}\n\nNo failures in the past week? You'll still get this email — that's by design. To turn the digest off, manage email preferences:\n${v.preferencesUrl}\n\nUnsubscribe (one click): ${v.unsubscribeLink}\n\n— Driftstack`,
-    html: (v) =>
-      `<p>Last week on Driftstack:</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Sessions run:</strong></td><td>${v.sessionsRun}</td></tr><tr><td><strong>Success rate:</strong></td><td>${v.successRatePct}%</td></tr><tr><td><strong>Top failure reason:</strong></td><td>${v.topFailureReason}</td></tr></table><p>Full dashboard: <a href="${v.dashboardUrl}">${v.dashboardUrl}</a></p><p>No failures in the past week? You'll still get this email — that's by design. To turn the digest off, <a href="${v.preferencesUrl}">manage email preferences</a>.</p><p>Unsubscribe (one click): <a href="${v.unsubscribeLink}">${v.unsubscribeLink}</a></p><p>— Driftstack</p>`,
   },
 } satisfies Record<string, Template>;
 
@@ -778,8 +758,6 @@ export function createEmailService({
       sendBillingReceipt: async () => {},
       sendBillingFailure: async () => {},
       sendBillingRenewalReminder: async () => {},
-      sendSubscriptionCancellation: async () => {},
-      sendSupportAck: async () => {},
       sendSignupWelcome: async () => {},
       sendSessionFailedFirst: async () => {},
       sendSessionSuccessFirst: async () => {},
@@ -976,7 +954,11 @@ export function createEmailService({
     sendBillingFailure: ({ to, amountFormatted, retryAt, portalUrl }) =>
       send('billing-failure', to, {
         amountFormatted,
-        retryAt: retryAt.toISOString(),
+        // S44 — pre-rendered retry sentence; see the template comment.
+        retryLine:
+          retryAt !== null
+            ? `We'll retry automatically at ${retryAt.toISOString()} (UTC).`
+            : `This was the final automatic attempt — no further retries are scheduled.`,
         portalUrl,
       }),
     sendBillingRenewalReminder: ({ to, amountFormatted, renewalDate, portalUrl }) =>
@@ -985,12 +967,6 @@ export function createEmailService({
         renewalDate: renewalDate.toISOString().slice(0, 10),
         portalUrl,
       }),
-    sendSubscriptionCancellation: ({ to, effectiveAt, portalUrl }) =>
-      send('subscription-cancellation', to, {
-        effectiveAt: effectiveAt.toISOString(),
-        portalUrl,
-      }),
-    sendSupportAck: ({ to, ticketId }) => send('support-ack', to, { ticketId }),
     sendSignupWelcome: ({ to, dashboardUrl }) => send('signup-welcome', to, { dashboardUrl }),
     sendSessionFailedFirst: ({ to, sessionId, errorMessage, docsUrl }) =>
       send('session-failed-first', to, { sessionId, errorMessage, docsUrl }),

@@ -7,8 +7,9 @@
 // sdk-python email-preferences split:
 //
 //   • Critical-emails-never-opt-outable invariant pinned per-line.
-//     The 5 critical emails (signup-verification + password-reset +
-//     billing-failure + subscription-cancellation + support-ack)
+//     The 3 critical emails (signup-verification + password-reset +
+//     billing-failure; S44 2026-07-07 trimmed the never-wired
+//     subscription-cancellation + support-ack templates)
 //     MUST be absent from the OptOutableEmailEvent enum so the TS
 //     type system REJECTS `optOut('password-reset')` at compile
 //     time (the function parameter is typed
@@ -56,10 +57,13 @@ describe('W429.A packages/sdk-typescript/src/resources/email-preferences.ts cont
     );
   });
 
-  it('CRITICAL: critical-emails-never-opt-outable invariant pinned per-line. The 5 critical emails (signup-verification + password-reset + billing-failure + subscription-cancellation + support-ack) MUST be absent from OptOutableEmailEvent enum. This is the policy-enforcement claim: "absent from the OptOutableEmailEvent enum on purpose so the API surface matches the policy." Drift to letting a critical email into the enum would let customers opt out of "your password was reset" or "your card failed" — catastrophic safety-net break.', () => {
+  it('CRITICAL: critical-emails-never-opt-outable invariant pinned per-line. The 3 critical emails (signup-verification + password-reset + billing-failure) MUST be absent from OptOutableEmailEvent enum. This is the policy-enforcement claim: "absent from the OptOutableEmailEvent enum on purpose so the API surface matches the policy." Drift to letting a critical email into the enum would let customers opt out of "your password was reset" or "your card failed" — catastrophic safety-net break. (S44 2026-07-07 founder-approved trim deleted the never-wired subscription-cancellation + support-ack templates, so the roster shrank 5→3; the deleted names must NOT reappear here as if they were live emails.)', () => {
     expect(body).toMatch(
-      /\/\/ Critical emails — signup-verification, password-reset,\s*\n?\s*\/\/ billing-failure, subscription-cancellation, support-ack — are\s*\n?\s*\/\/ never opt-outable; they're absent from the OptOutableEmailEvent\s*\n?\s*\/\/ enum on purpose so the API surface matches the policy\./,
+      /\/\/ Critical emails — signup-verification, password-reset,\s*\n?\s*\/\/ billing-failure — are never opt-outable; they're absent from the\s*\n?\s*\/\/ OptOutableEmailEvent enum on purpose so the API surface matches\s*\n?\s*\/\/ the policy\./,
     );
+    // S44 negative pins — the deleted templates must not resurface.
+    expect(body).not.toMatch(/subscription-cancellation/);
+    expect(body).not.toMatch(/support-ack/);
   });
 
   it('Imports — 3 api-types shapes (multi-line braced; sorted alphabetical): ListEmailPreferencesResponse + OptOutableEmailEvent + SetEmailPreferenceRequest. The OptOutableEmailEvent import is load-bearing — without it the optIn/optOut params would fall back to `string` and the type-narrowing safety net would be lost. EmailPreference type was dropped from the imports because the PUT route returns 204 No Content (no body); the SDK return type is now `Promise<void>` matching the wire shape.', () => {

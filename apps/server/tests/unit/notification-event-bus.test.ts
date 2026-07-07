@@ -140,4 +140,79 @@ describe('NotificationEventBus', () => {
       'session.errored',
     ]);
   });
+
+  // ── S45 2026-07-07 — publishBroadcast (platform-wide fan-out) ──────
+
+  describe('publishBroadcast (S45)', () => {
+    const broadcastFrame = {
+      kind: 'incident.broadcast' as const,
+      incidentId: 'inc_abc',
+      severity: 'major' as const,
+      title: 'API degraded',
+      at: '2026-07-07T12:00:00.000Z',
+    };
+
+    it('fans out to every subscribed account, stamping each copy with the subscriber own accountId', () => {
+      const bus = new NotificationEventBus();
+      const receivedA: NotificationEvent[] = [];
+      const receivedB: NotificationEvent[] = [];
+      bus.subscribe('acc_a', (e) => receivedA.push(e));
+      bus.subscribe('acc_b', (e) => receivedB.push(e));
+
+      bus.publishBroadcast(broadcastFrame);
+
+      expect(receivedA).toHaveLength(1);
+      expect(receivedB).toHaveLength(1);
+      expect(receivedA[0]).toEqual({ ...broadcastFrame, accountId: 'acc_a' });
+      expect(receivedB[0]).toEqual({ ...broadcastFrame, accountId: 'acc_b' });
+    });
+
+    it('is a no-op with zero subscribers (events with no live subscribers drop on the floor)', () => {
+      const bus = new NotificationEventBus();
+      expect(() => bus.publishBroadcast(broadcastFrame)).not.toThrow();
+    });
+
+    it('a throwing handler on one account does not block delivery to other accounts', () => {
+      const bus = new NotificationEventBus();
+      const receivedB: NotificationEvent[] = [];
+      bus.subscribe('acc_a', () => {
+        throw new Error('boom');
+      });
+      bus.subscribe('acc_b', (e) => receivedB.push(e));
+
+      bus.publishBroadcast(broadcastFrame);
+
+      expect(receivedB).toHaveLength(1);
+    });
+
+    it('an unsubscribed account receives nothing on later broadcasts', () => {
+      const bus = new NotificationEventBus();
+      const receivedA: NotificationEvent[] = [];
+      const unsubscribe = bus.subscribe('acc_a', (e) => receivedA.push(e));
+      bus.publishBroadcast(broadcastFrame);
+      unsubscribe();
+      bus.publishBroadcast(broadcastFrame);
+      expect(receivedA).toHaveLength(1);
+    });
+
+    it('a handler that unsubscribes ANOTHER account mid-broadcast does not break the fan-out (key-set snapshot)', () => {
+      const bus = new NotificationEventBus();
+      const receivedC: NotificationEvent[] = [];
+      let unsubC: (() => void) | null = null;
+      // acc_a's handler tears down acc_c's subscription while the
+      // broadcast is iterating — the snapshot means acc_c either got
+      // its copy already or is skipped harmlessly by publish()'s own
+      // per-account lookup; nothing throws.
+      bus.subscribe('acc_a', () => {
+        unsubC?.();
+      });
+      unsubC = bus.subscribe('acc_c', (e) => receivedC.push(e));
+
+      expect(() => bus.publishBroadcast(broadcastFrame)).not.toThrow();
+      // Map iteration order = insertion order: acc_a runs first and
+      // removes acc_c, so acc_c's copy is dropped — same semantics as
+      // an SSE client disconnecting mid-publish.
+      expect(receivedC).toHaveLength(0);
+    });
+  });
 });

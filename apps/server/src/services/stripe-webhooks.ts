@@ -273,16 +273,27 @@ export class StripeWebhooksService {
         case 'checkout.session.completed':
           return await this.handleCheckoutCompleted(event);
         case 'invoice.payment_succeeded':
+          // S44 2026-07-07 (founder-approved) — Driftstack-branded
+          // billing receipt, the TD-001 revival. The original V-202b
+          // decision (founder verdict 2026-05-05) deferred this wire-in
+          // in favour of Stripe's own receipts; S44 lands it via the
+          // lifecycle dispatcher (augment posture — Stripe's processor
+          // receipt settings are untouched). The receipt honors the
+          // V-204 `billing-receipt` opt-out; dedup rides the
+          // processed_stripe_events ledger (duplicate event.id
+          // short-circuits in handle() before dispatch).
+          await this.handleInvoicePaymentSucceeded(event);
+          return 'handled';
         case 'invoice.payment_failed':
+          // S44 2026-07-07 (founder-approved) — payment-failure notice.
+          // NEVER opt-outable (billing-failure is deliberately absent
+          // from OptOutableEmailEventSchema); same ledger-backed dedup.
+          await this.handleInvoicePaymentFailed(event);
+          return 'handled';
         case 'invoice.finalized':
-          // V-202b decision (founder verdict 2026-05-05): receipt emails
-          // fire from Stripe's own infrastructure. Driftstack-branded
-          // billing receipts deferred post-launch — see TD-001 in
-          // docs/tech-debt.md. Augmenting (Stripe + Driftstack both fire)
-          // would create two-emails-per-charge → spam; replacing would
-          // create a Driftstack-side delivery dependency on every charge.
-          // Skip is reversible: post-launch we can flip on the wire-in
-          // and either augment or replace based on customer feedback.
+          // Informational only — the S44 receipt fires on
+          // payment_succeeded, not at finalization (a finalized-but-
+          // unpaid invoice is not a charge).
           this.logEvent(event, 'invoice');
           return 'handled';
         case 'invoice.upcoming':
@@ -584,6 +595,132 @@ export class StripeWebhooksService {
     }
 
     this.logEvent(event, 'invoice.upcoming → renewal_reminder dispatched');
+  }
+
+  /**
+   * S44 2026-07-07 (founder-approved) — `invoice.payment_succeeded`
+   * handler. Decodes the paid invoice, resolves the customer to a
+   * local account, and dispatches the `billing.payment_succeeded`
+   * lifecycle event (→ billing-receipt email, V-204 opt-out-aware).
+   * Bails silently on missing fields / unknown customer, mirroring
+   * handleInvoiceUpcoming. Zero-amount invoices (trial starts, 100%
+   * discounts) are skipped — a "$0.00 payment was successful" receipt
+   * is noise, not a record of a charge.
+   */
+  private async handleInvoicePaymentSucceeded(event: StripeEvent): Promise<void> {
+    const invoice = event.data.object;
+    const stripeCustomerId = readString(invoice, 'customer');
+    const amountPaid = readNumber(invoice, 'amount_paid');
+    const currency = readString(invoice, 'currency');
+    const stripeInvoiceId = readString(invoice, 'id');
+    // Optional fields — the lifecycle handler has fallbacks for each.
+    const periodStart = readUnixTimestamp(invoice, 'period_start');
+    const periodEnd = readUnixTimestamp(invoice, 'period_end');
+    const hostedInvoiceUrl = readString(invoice, 'hosted_invoice_url');
+
+    if (
+      stripeCustomerId === null ||
+      amountPaid === null ||
+      currency === null ||
+      stripeInvoiceId === null
+    ) {
+      this.config.logger.warn(
+        { component: 'stripe-webhooks', eventId: event.id },
+        'invoice.payment_succeeded missing required fields; skipping billing receipt',
+      );
+      this.logEvent(event, 'invoice.payment_succeeded (missing-fields)');
+      return;
+    }
+
+    if (amountPaid === 0) {
+      this.logEvent(event, 'invoice.payment_succeeded (zero-amount — no receipt)');
+      return;
+    }
+
+    const accountId = await this.repo.findAccountIdFromCustomerOrRef({
+      stripeCustomerId,
+      clientReferenceId: null,
+    });
+    if (accountId === null) {
+      this.config.logger.warn(
+        { component: 'stripe-webhooks', eventId: event.id, stripeCustomerId },
+        'invoice.payment_succeeded references unknown customer; ignoring',
+      );
+      this.logEvent(event, 'invoice.payment_succeeded (unknown-customer)');
+      return;
+    }
+
+    if (this.accountLifecycle !== null) {
+      await this.accountLifecycle.emit(accountId, {
+        kind: 'billing.payment_succeeded',
+        amountCents: amountPaid,
+        currency,
+        periodStart,
+        periodEnd,
+        hostedInvoiceUrl,
+        stripeEventId: event.id,
+        stripeInvoiceId,
+      });
+    }
+
+    this.logEvent(event, 'invoice.payment_succeeded → billing receipt dispatched');
+  }
+
+  /**
+   * S44 2026-07-07 (founder-approved) — `invoice.payment_failed`
+   * handler. Dispatches the `billing.payment_failed` lifecycle event
+   * (→ billing-failure email, sent unconditionally to the account
+   * email — the template is critical-path and not opt-outable).
+   * `next_payment_attempt` is legitimately null on the final dunning
+   * attempt; the email copy adapts (see email.ts retryLine).
+   */
+  private async handleInvoicePaymentFailed(event: StripeEvent): Promise<void> {
+    const invoice = event.data.object;
+    const stripeCustomerId = readString(invoice, 'customer');
+    const amountDue = readNumber(invoice, 'amount_due');
+    const currency = readString(invoice, 'currency');
+    const stripeInvoiceId = readString(invoice, 'id');
+    const retryAt = readUnixTimestamp(invoice, 'next_payment_attempt');
+
+    if (
+      stripeCustomerId === null ||
+      amountDue === null ||
+      currency === null ||
+      stripeInvoiceId === null
+    ) {
+      this.config.logger.warn(
+        { component: 'stripe-webhooks', eventId: event.id },
+        'invoice.payment_failed missing required fields; skipping billing-failure notice',
+      );
+      this.logEvent(event, 'invoice.payment_failed (missing-fields)');
+      return;
+    }
+
+    const accountId = await this.repo.findAccountIdFromCustomerOrRef({
+      stripeCustomerId,
+      clientReferenceId: null,
+    });
+    if (accountId === null) {
+      this.config.logger.warn(
+        { component: 'stripe-webhooks', eventId: event.id, stripeCustomerId },
+        'invoice.payment_failed references unknown customer; ignoring',
+      );
+      this.logEvent(event, 'invoice.payment_failed (unknown-customer)');
+      return;
+    }
+
+    if (this.accountLifecycle !== null) {
+      await this.accountLifecycle.emit(accountId, {
+        kind: 'billing.payment_failed',
+        amountCents: amountDue,
+        currency,
+        retryAt,
+        stripeEventId: event.id,
+        stripeInvoiceId,
+      });
+    }
+
+    this.logEvent(event, 'invoice.payment_failed → billing-failure notice dispatched');
   }
 
   private handleCheckoutCompleted(event: StripeEvent): Promise<DispatchOutcome> {

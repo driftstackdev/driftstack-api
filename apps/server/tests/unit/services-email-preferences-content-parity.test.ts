@@ -7,10 +7,12 @@
 //
 //   • V-204 framing pinned + opt-outable cluster (4 lifecycle:
 //     signup-welcome, session-failed-first, tier-changed,
-//     billing-receipt) vs bypass cluster (5 security/financial:
-//     signup-verification, password-reset, billing-failure,
-//     subscription-cancellation, support-ack). (trial-pack-purchased/
-//     expired removed with the dead trial_pack lifecycle.)
+//     billing-receipt) vs bypass cluster (3 security/financial:
+//     signup-verification, password-reset, billing-failure).
+//     (trial-pack-purchased/expired removed with the dead trial_pack
+//     lifecycle; S44 2026-07-07 founder-approved trim deleted the
+//     never-wired subscription-cancellation + support-ack templates,
+//     bypass 5→3.)
 //   • Storage convention: absence-of-row = opted-in default; steady-
 //     state zero rows per account.
 //   • EmailPreferenceRecord: 4 fields (accountId / eventType /
@@ -49,8 +51,11 @@ describe('W400.A apps/server/src/services/email-preferences.ts content parity', 
     expect(body).not.toMatch(/trial-pack-purchased/);
     expect(body).not.toMatch(/trial-pack-expired/);
     expect(body).toMatch(
-      /Security \+ financial emails \(signup-\s*\n?\s*\/\/\s*verification, password-reset, billing-failure, subscription-\s*\n?\s*\/\/\s*cancellation, support-ack\) bypass this gate entirely — they\s*\n?\s*\/\/\s*always send\./,
+      /Security \+ financial emails \(signup-\s*\n?\s*\/\/\s*verification, password-reset, billing-failure\) bypass this gate\s*\n?\s*\/\/\s*entirely — they always send\./,
     );
+    // S44 2026-07-07 — deleted-template names must not creep back into
+    // the bypass framing as if those emails still existed.
+    expect(body).toMatch(/S44 2026-07-07 trimmed the never-/);
   });
 
   it('Storage-convention framing: absence-of-row = opted-in default, steady-state zero rows', () => {

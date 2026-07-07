@@ -64,7 +64,7 @@ describe('services/notification-event-bus.ts content parity', () => {
     expect(body).toMatch(/errorClass: string;/);
   });
 
-  it('bus shape pinned: subscribe(accountId, handler) → unsubscribe fn + publish + subscriberCount; best-effort handler isolation via try/catch swallow', () => {
+  it('bus shape pinned: subscribe(accountId, handler) → unsubscribe fn + publish + publishBroadcast (S45) + subscriberCount; best-effort handler isolation via try/catch swallow', () => {
     expect(body).toMatch(/export class NotificationEventBus \{/);
     expect(body).toMatch(
       /subscribe\(accountId: string, handler: NotificationEventHandler\): \(\) => void/,
@@ -74,6 +74,16 @@ describe('services/notification-event-bus.ts content parity', () => {
     // The handler-throw isolation contract — pin the try/catch block.
     expect(body).toMatch(
       /try \{\s*\n?\s*handler\(event\);\s*\n?\s*\} catch \{\s*\n?\s*\/\* swallow \*\/\s*\n?\s*\}/,
+    );
+  });
+
+  it('S45 publishBroadcast pinned: distributive-omit param type, per-subscriber accountId stamping via the existing publish path, and key-set snapshot before iteration (handlers may unsubscribe mid-fan-out)', () => {
+    expect(body).toMatch(/publishBroadcast\(event: BroadcastNotificationEvent\): void \{/);
+    expect(body).toMatch(
+      /for \(const accountId of Array\.from\(this\.subscribers\.keys\(\)\)\) \{\s*\n?\s*this\.publish\(\{ \.\.\.event, accountId \} as NotificationEvent\);/,
+    );
+    expect(body).toMatch(
+      /export type BroadcastNotificationEvent = DistributiveOmit<NotificationEvent, 'accountId'>;/,
     );
   });
 

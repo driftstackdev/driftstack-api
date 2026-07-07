@@ -23,10 +23,12 @@ describe('W592.C packages/sdk-go/email_preferences.go content parity', () => {
     expect(body).toMatch(
       /\/\/ Per-event opt-in\/opt-out for non-critical emails\. Critical emails/,
     );
-    expect(body).toMatch(
-      /\/\/ \(verification \/ password-reset \/ billing-failure \/ subscription-/,
-    );
-    expect(body).toMatch(/\/\/ cancellation \/ support-ack\) are not opt-outable by design\./);
+    // S44 2026-07-07 (founder-approved trim) — critical-email roster
+    // shrank 5→3: the never-wired subscription-cancellation +
+    // support-ack templates were deleted outright.
+    expect(body).toMatch(/\/\/ \(verification \/ password-reset \/ billing-failure\) are/);
+    expect(body).toMatch(/\/\/ not opt-outable by design\./);
+    expect(body).not.toMatch(/subscription-cancellation|support-ack/);
     expect(body).toMatch(
       /^type EmailPreference struct \{\s*\n\s*EventType string `json:"event_type"`\s*\n\s*OptedIn\s+bool\s+`json:"opted_in"`\s*\n\}/m,
     );

@@ -69,17 +69,18 @@ describe('W260.C docs/api/email-preferences ↔ live OptOutableEmailEventSchema 
 
   it('operational (non-opt-outable) categories are absent from OptOutableEmailEventSchema', () => {
     // These appear in the "What's NOT opt-outable" section. Verify the
-    // doc's claim that they're NOT in the live enum.
-    const operational = [
-      'signup-verification',
-      'password-reset',
-      'billing-failure',
-      'subscription-cancellation',
-      'support-ack',
-    ];
+    // doc's claim that they're NOT in the live enum. (S44 2026-07-07
+    // founder-approved trim deleted the never-wired subscription-
+    // cancellation + support-ack templates — the doc must no longer
+    // list them at all, and they must stay out of the enum.)
+    const operational = ['signup-verification', 'password-reset', 'billing-failure'];
     for (const op of operational) {
       expect(liveEvents.has(op as never)).toBe(false);
       expect(doc).toMatch(new RegExp(`\`${op}\``));
+    }
+    for (const deleted of ['subscription-cancellation', 'support-ack']) {
+      expect(liveEvents.has(deleted as never)).toBe(false);
+      expect(doc).not.toMatch(new RegExp(`\`${deleted}\``));
     }
   });
 });

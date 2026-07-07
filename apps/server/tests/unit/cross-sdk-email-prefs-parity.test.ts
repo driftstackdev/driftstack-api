@@ -4,7 +4,7 @@
 // W685 + W686 + W687 + W688 + W689 + W690 + W691 + W692 + W693 +
 // W694).
 //
-// CRITICAL: asserts the 5 critical email event types are NOT opt-
+// CRITICAL: asserts the 3 critical email event types are NOT opt-
 // outable across all 3 SDKs:
 //
 //   1. signup-verification / verification — "you signed up, click
@@ -15,14 +15,14 @@
 //      was them or an attacker)
 //   3. billing-failure — "your card failed" — drift would lose
 //      the revenue-protecting nag that prevents involuntary churn
-//   4. subscription-cancellation — "your subscription was
-//      cancelled" — drift would let customers wake up to surprise
-//      service-loss (legal-compliance issue too)
-//   5. support-ack — "we got your support email" — drift would
-//      lose the customer-trust signal that prevents duplicate
-//      support tickets
 //
-// The 5 critical events MUST stay out of the OptOutableEmailEvent
+// (S44 2026-07-07, founder-approved trim — the roster was 5: the
+// never-wired subscription-cancellation + support-ack templates
+// were deleted outright, so the SDKs no longer describe them. The
+// deleted names must NOT reappear in any SDK docstring as if those
+// emails existed.)
+//
+// The 3 critical events MUST stay out of the OptOutableEmailEvent
 // enum on purpose. Drift to letting ANY of these into the enum
 // would silently let customers opt out of safety-net emails.
 
@@ -65,24 +65,25 @@ describe('W694 cross-SDK V-204 email-preferences critical-emails parity', () => 
     expect(py).toMatch(/V-204/);
   });
 
-  it('CRITICAL 5 critical email event types pinned in all 3 SDKs as NOT opt-outable. Drift to letting ANY of these (verification / password-reset / billing-failure / subscription-cancellation / support-ack) into the OptOutableEmailEvent enum would silently let customers opt out of safety-net emails.', () => {
+  it('CRITICAL 3 critical email event types pinned in all 3 SDKs as NOT opt-outable. Drift to letting ANY of these (verification / password-reset / billing-failure) into the OptOutableEmailEvent enum would silently let customers opt out of safety-net emails. S44 negative pins: the deleted subscription-cancellation + support-ack templates must not resurface in SDK docstrings.', () => {
     const ts = read(TS_EMAIL_PREFS);
     const go = read(GO_EMAIL_PREFS);
     const py = read(PY_EMAIL_PREFS);
 
-    // All 3 SDKs reference the 5 critical event types in a "not opt-outable" context.
+    // All 3 SDKs reference the 3 critical event types in a "not opt-outable" context.
     const criticalEvents = [
       /signup-verification|\bverification\b/,
       /password-reset/,
       /billing-failure/,
-      /subscription-(?:\s*\n\s*(?:\/\/|#)\s*)?cancellation/,
-      /support-ack/,
     ];
 
     for (const sdk of [ts, go, py]) {
       for (const evt of criticalEvents) {
         expect(sdk, `event ${evt.source}`).toMatch(evt);
       }
+      // S44 2026-07-07 — deleted-template names must stay gone.
+      expect(sdk).not.toMatch(/subscription-(?:\s*\n\s*(?:\/\/|#)\s*)?cancellation/);
+      expect(sdk).not.toMatch(/support-ack/);
     }
   });
 
@@ -105,8 +106,8 @@ describe('W694 cross-SDK V-204 email-preferences critical-emails parity', () => 
     const ts = read(TS_EMAIL_PREFS);
     const py = read(PY_EMAIL_PREFS);
 
-    // sdk-typescript: "absent from the OptOutableEmailEvent\n// enum on purpose"
-    expect(ts).toMatch(/absent from the OptOutableEmailEvent\s*\n?\s*\/\/\s*enum on purpose/);
+    // sdk-typescript: "absent from the\n// OptOutableEmailEvent enum on purpose"
+    expect(ts).toMatch(/absent from the\s*\n?\s*\/\/\s*OptOutableEmailEvent enum on purpose/);
 
     // sdk-python: "aren't in the OptOutableEmailEvent enum on purpose"
     expect(py).toMatch(/aren't in the OptOutableEmailEvent enum on purpose/);
@@ -171,7 +172,7 @@ describe('W694 cross-SDK V-204 email-preferences critical-emails parity', () => 
     expect(py).toMatch(/"PUT"/);
   });
 
-  it('Cross-SDK V-204 5-invariant cluster — V-204 anchor + 5 critical events not opt-outable + "non-critical" scope + default-opt-in + 4-verb surface. Drift on any would fragment the cross-language email-policy contract.', () => {
+  it('Cross-SDK V-204 5-invariant cluster — V-204 anchor + 3 critical events not opt-outable + "non-critical" scope + default-opt-in + 4-verb surface. Drift on any would fragment the cross-language email-policy contract.', () => {
     const sdks = {
       'sdk-typescript': read(TS_EMAIL_PREFS),
       'sdk-go': read(GO_EMAIL_PREFS),
@@ -181,14 +182,10 @@ describe('W694 cross-SDK V-204 email-preferences critical-emails parity', () => 
     for (const [name, body] of Object.entries(sdks)) {
       expect(body, `${name} V-204`).toMatch(/V-204/);
       expect(body, `${name} non-critical`).toMatch(/non-critical/);
-      // 5 critical events appear in the file.
+      // 3 critical events appear in the file (S44 trimmed the roster 5→3).
       expect(body, `${name} verification`).toMatch(/verification/);
       expect(body, `${name} password-reset`).toMatch(/password-reset/);
       expect(body, `${name} billing-failure`).toMatch(/billing-failure/);
-      expect(body, `${name} subscription-cancellation`).toMatch(
-        /subscription-(?:\s*\n\s*(?:\/\/|#)\s*)?cancellation/,
-      );
-      expect(body, `${name} support-ack`).toMatch(/support-ack/);
     }
   });
 

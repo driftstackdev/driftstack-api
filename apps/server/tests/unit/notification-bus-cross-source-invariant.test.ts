@@ -104,4 +104,27 @@ describe('Notification v0 schema cross-source-invariant', () => {
     expect(body).toMatch(/^### `audit\.high_severity`$/m);
     expect(body).toMatch(/^### `session\.errored`$/m);
   });
+
+  // S45 2026-07-07 — retires the S36 "Declared, not yet firing" state:
+  // incident.broadcast now HAS a publisher (bootstrap wires all three
+  // public-incident lifecycle hooks through publishBroadcast). These
+  // pins keep the publisher wired and the docs page honest about it —
+  // if the publisher is ever removed, the docs marker must flip back.
+  it('S45: bootstrap publishes incident.broadcast from every public-incident lifecycle hook (created/updated/resolved) via publishBroadcast — the kind is LIVE, not declared-only', () => {
+    const bootstrap = read(resolve(REPO_ROOT, 'apps/server/src/lib/bootstrap.ts'));
+    expect(bootstrap).toMatch(
+      /notificationEventBus\.publishBroadcast\(\{\s*\n?\s*kind: 'incident\.broadcast',[\s\S]{0,300}?incidentId: `inc_\$\{incident\.id\}`,\s*\n?\s*severity: incident\.severity,\s*\n?\s*title: incident\.title,\s*\n?\s*at: new Date\(\)\.toISOString\(\),/,
+    );
+    // All three hooks route through the shared helper.
+    const publishCalls = bootstrap.match(/publishIncidentNotification\(incident\);/g) ?? [];
+    expect(publishCalls.length).toBe(3);
+  });
+
+  it('S45: docs page describes incident.broadcast as firing (posted/updated/resolved broadcast), and the S36 declared-not-yet-firing marker stays retired', () => {
+    const body = read(API_DOC);
+    expect(body).toMatch(/Fires when a public incident is posted, updated, or resolved\./);
+    expect(body).toMatch(/every account with an open stream receives the same incident/);
+    expect(body).not.toMatch(/Declared, not yet firing/);
+    expect(body).not.toMatch(/no publisher emits it today/);
+  });
 });

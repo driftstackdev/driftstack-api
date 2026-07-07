@@ -24,14 +24,17 @@ describe('docs/api/email-preferences content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("2-category operational-vs-transactional split framing pinned: 'Operational — non-optional. Required for the service to work (signup verification, password reset, billing-failure notice, subscription-cancellation confirmation, security notices). You cannot opt out of these.' + 'Transactional / informational — opt-outable. Welcome email, first-session activation milestone, tier-change confirmation, trial-pack lifecycle, billing receipts, renewal reminders. Customers control these via the endpoints below.' — pinned so the 2-category-split + you-cannot-opt-out-of-operational + customers-control-transactional contract all stay documented", () => {
+  it("2-category operational-vs-transactional split framing pinned: 'Operational — non-optional. Required for the service to work (signup verification, password reset, billing-failure notice, security notices). You cannot opt out of these.' + 'Transactional / informational — opt-outable. Welcome email, first-session activation milestone, tier-change confirmation, billing receipts, renewal reminders. Customers control these via the endpoints below.' — pinned so the 2-category-split + you-cannot-opt-out-of-operational + customers-control-transactional contract all stay documented. (S44 2026-07-07 founder-approved trim deleted the never-wired subscription-cancellation + support-ack templates, so the operational list no longer names them.)", () => {
     expect(body).toMatch(
-      /1\. \*\*Operational\*\* — non-optional\. Required for the service to\s*\n?\s*work \(signup verification, password reset, billing-failure\s*\n?\s*notice, subscription-cancellation confirmation, security\s*\n?\s*notices\)\. You cannot opt out of these\./,
+      /1\. \*\*Operational\*\* — non-optional\. Required for the service to\s*\n?\s*work \(signup verification, password reset, billing-failure\s*\n?\s*notice, security notices\)\. You cannot opt out of these\./,
     );
     expect(body).toMatch(
       /2\. \*\*Transactional \/ informational\*\* — opt-outable\. Welcome\s*\n?\s*email, first-session activation milestone, tier-change\s*\n?\s*confirmation, billing receipts, renewal reminders\./,
     );
     expect(body).not.toMatch(/trial-pack lifecycle/);
+    // S44 negative pins — deleted templates must not be re-documented.
+    expect(body).not.toMatch(/subscription-cancellation/);
+    expect(body).not.toMatch(/support-ack/);
   });
 
   it("DPA-affirmative-choice legal posture framing pinned: 'The endpoint surface is intentionally narrow: list current preferences, set one preference. Per-event opt-in is the unit; there's no \"opt out of everything optional\" shorthand because the legal posture (per the DPA) requires that we deliver each opt-out as an affirmative customer choice.' — pinned so the per-event-unit + no-bulk-opt-out + DPA-affirmative-choice-rationale contract all stay documented (drift to a bulk opt-out would weaken the GDPR-compliant affirmative-choice posture)", () => {
@@ -57,15 +60,11 @@ describe('docs/api/email-preferences content parity', () => {
     expect(body).not.toMatch(/`trial-pack-expired`/);
   });
 
-  it('7-always-send-NOT-opt-outable roster pinned: signup-verification (required to activate) + password-reset (security-critical) + billing-failure (payment retry) + subscription-cancellation (confirmation of irreversible action) + support-ack (customer-initiated thread reply) + status-incident-created/resolved (only to customers subscribed via /status, separate opt-in) + GDPR Art. 34 security notices. Drift to allowing opt-out of any operational class would break customer-protection invariant + likely violate GDPR for security notices', () => {
+  it('5-always-send-NOT-opt-outable roster pinned: signup-verification (required to activate) + password-reset (security-critical) + billing-failure (fires on Stripe invoice.payment_failed, S44-live) + status-incident-created/resolved (only to customers subscribed via /status, separate opt-in) + GDPR Art. 34 security notices. Drift to allowing opt-out of any operational class would break customer-protection invariant + likely violate GDPR for security notices. (S44 2026-07-07 trim removed the subscription-cancellation + support-ack bullets — those templates are deleted.)', () => {
     expect(body).toMatch(/- `signup-verification` — required to activate the account\./);
     expect(body).toMatch(/- `password-reset` — security-critical\./);
-    expect(body).toMatch(/- `billing-failure` — payment retry \/ customer-action-needed\./);
     expect(body).toMatch(
-      /- `subscription-cancellation` — confirmation of an irreversible\s*\n?\s*action\./,
-    );
-    expect(body).toMatch(
-      /- `support-ack` — reply to a support thread the customer\s*\n?\s*initiated\./,
+      /- `billing-failure` — fires on a failed subscription charge\s*\n?\s*\(Stripe `invoice\.payment_failed`\); tells you when the automatic\s*\n?\s*retry happens, or that none is scheduled\./,
     );
     expect(body).toMatch(
       /- `status-incident-created` \/ `status-incident-resolved` — only\s*\n?\s*to customers explicitly subscribed via `\/status`/,

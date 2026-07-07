@@ -53,7 +53,7 @@ import { PricingService } from '../../../src/services/pricing.js';
 import { PlatformSecretsService } from '../../../src/services/platform-secrets.js';
 import { InMemoryPricingRepo } from './in-memory-pricing-repo.js';
 import { InMemoryPlatformSecretsRepo } from './in-memory-platform-secrets-repo.js';
-import { IncidentsService } from '../../../src/services/incidents.js';
+import { IncidentsService, type IncidentRow } from '../../../src/services/incidents.js';
 import { InMemoryIncidentsRepo } from './in-memory-incidents-repo.js';
 import { InMemoryIncidentUpdateNotificationsRepo } from './in-memory-incident-update-notifications-repo.js';
 import { InMemoryStatusSubscribersRepo } from './in-memory-status-subscribers-repo.js';
@@ -61,6 +61,7 @@ import { StatusSubscribersService } from '../../../src/services/status-subscribe
 import { IncidentNotificationsService } from '../../../src/services/incident-notifications.js';
 import { IncidentBroadcastService } from '../../../src/services/incident-broadcast.js';
 import { IncidentEventBus } from '../../../src/services/incident-event-bus.js';
+import { NotificationEventBus } from '../../../src/services/notification-event-bus.js';
 import { SlaReportingService } from '../../../src/services/sla-reporting.js';
 import { InMemoryProbesRepo } from './in-memory-probes-repo.js';
 import { TeamMembersService } from '../../../src/services/team-members.js';
@@ -160,14 +161,6 @@ function createRecordingEmailService(realService: EmailService): {
     sendBillingRenewalReminder: async (args) => {
       record('billing-renewal-reminder', args);
       await realService.sendBillingRenewalReminder(args);
-    },
-    sendSubscriptionCancellation: async (args) => {
-      record('subscription-cancellation', args);
-      await realService.sendSubscriptionCancellation(args);
-    },
-    sendSupportAck: async (args) => {
-      record('support-ack', args);
-      await realService.sendSupportAck(args);
     },
     sendSignupWelcome: async (args) => {
       record('signup-welcome', args);
@@ -506,6 +499,9 @@ export interface TestAppFixture {
   byokAnthropicRepo: InMemoryBYOKAnthropicRepo;
   /** V-295e — exposed for direct event-bus subscription in tests. */
   incidentEventBus: IncidentEventBus;
+  /** S45 — customer SSE notification bus; tests subscribe directly to
+   *  assert incident.broadcast fan-out on public-incident lifecycle. */
+  notificationEventBus: NotificationEventBus;
   /** V-295e — exposed so tests can seed probe history before calling SLA. */
   probesRepo: InMemoryProbesRepo;
   /** V-298c — exposed so tests can seed account-email mappings (for accept flow). */
@@ -1004,10 +1000,25 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // V-295a — incidents service with in-memory repo + V-295c3-followup
   // lifecycle hooks for incident-notification fan-out + V-295d
   // outbound broadcasts.
+  // S45 2026-07-07 — mirror prod bootstrap: every public-incident hook
+  // also publishes an `incident.broadcast` frame to the customer SSE
+  // notification bus (per-subscriber accountId stamping via
+  // publishBroadcast).
+  const notificationEventBus = new NotificationEventBus();
+  const publishIncidentNotification = (incident: IncidentRow): void => {
+    notificationEventBus.publishBroadcast({
+      kind: 'incident.broadcast',
+      incidentId: `inc_${incident.id}`,
+      severity: incident.severity,
+      title: incident.title,
+      at: new Date().toISOString(),
+    });
+  };
   const incidentsRepo = new InMemoryIncidentsRepo();
   const incidentsService = new IncidentsService(incidentsRepo, {
     onPublicCreated: async (incident, update) => {
       incidentEventBus.publishCreated(incident, update);
+      publishIncidentNotification(incident);
       await Promise.all([
         incidentNotifications.notifyCreated(incident, update),
         incidentBroadcast.notifyCreated(incident, update),
@@ -1015,6 +1026,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     },
     onPublicResolved: async (incident, update) => {
       incidentEventBus.publishResolved(incident, update);
+      publishIncidentNotification(incident);
       await Promise.all([
         incidentNotifications.notifyResolved(incident, update),
         incidentBroadcast.notifyResolved(incident, update),
@@ -1022,7 +1034,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     },
     // V-545.B Phase 2 — mirror prod bootstrap so integration tests
     // exercising addUpdate fire the throttled notifyUpdated path.
+    // S45 — SSE frames are not throttled (live stream, no inbox).
     onPublicUpdated: async (incident, update) => {
+      publishIncidentNotification(incident);
       await incidentNotifications.notifyUpdated(incident, update);
     },
   });
@@ -1412,6 +1426,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     incidentsService,
     statusSubscribersService,
     incidentEventBus,
+    // S45 — activates GET /v1/account/me/notifications in tests, same
+    // opt-in wire the prod bootstrap uses.
+    notificationEventBus,
     slaReportingService,
     teamMembersService,
     rateLimitOverridesService,
@@ -1615,6 +1632,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     fleetNodesRepo,
     fleetControlRegistry,
     incidentEventBus,
+    notificationEventBus,
     probesRepo,
     teamMembersRepo,
     teamMembersService,

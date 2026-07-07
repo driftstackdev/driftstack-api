@@ -10,8 +10,8 @@
 //     deferred.
 //   • Format: TD-NNN + deferral source (V-NNN) + trigger conditions
 //     + implementation notes.
-//   • TD-001 — Driftstack-branded billing receipts (V-202b deferral;
-//     Stripe auto-receipts cover the floor).
+//   • TD-001 — Driftstack-branded billing receipts (V-202b deferral
+//     → RESOLVED 2026-07-07 by the S44 founder-approved wire-in).
 //   • TD-002 — Drizzle-kit reinstatement (V-228 → RESOLVED in V-231).
 //   • TD-003 — V-184b onboarding visual polish (V-235 deferred
 //     post-launch).
@@ -51,8 +51,22 @@ describe('W546.B /docs/tech-debt.md content parity', () => {
     expect(body).toMatch(/revisiting, and implementation notes for whoever picks it up\./);
   });
 
-  it("TD-001 Driftstack-branded billing receipts framing pinned: '## TD-001 — Driftstack-branded billing receipts' + '**Source:** V-202b (founder verdict 2026-05-05).' + 'Stripe's own infrastructure fires billing receipts (payment*succeeded / payment_failed) directly to the customer's email on file.' + 'Stripe receipts are a solved problem — legally compliant (tax-included, receipt-trail-acceptable for accounting), infrastructure-free (Stripe SLA covers delivery), and customer-trusted (customers recognize Stripe-branded receipts).' + 'Augmenting (both Stripe AND Driftstack fire on each charge) creates two-emails-per-charge spam.' + 'Replacing entirely creates a delivery dependency: a Driftstack-side outage during a Stripe charge means no receipt at all, with no easy fallback. Skip is the conservative choice; reversal is straightforward when the customer-feedback signal arrives.' + 'Use `AccountLifecycleService` (V-202c abstraction). Add a `billing.receipt_succeeded` and `billing.payment_failed` `LifecycleEvent` kind.' + '\"augment-then-eventually-replace\" rollout' + 'V-204 `billing-receipt` opt-out preference key is already in the catalog and would naturally apply to Phase 1 + Phase 2.' — pinned so the V-202b-deferral + Stripe-solved-tax-trail-customer-trust + 2-emails-spam-risk + V-202c AccountLifecycleService + V-204 billing-receipt-opt-out-key + augment-then-replace-rollout commitment survives", () => {
-    expect(body).toMatch(/## TD-001 — Driftstack-branded billing receipts/);
+  it("TD-001 Driftstack-branded billing receipts — RESOLVED 2026-07-07 (S44 founder-approved wire-in; receipt = V-204 opt-OUT superseding the Phase-1 opt-IN sketch, failure notice never opt-outable, original entry retained as history) — framing pinned: '## TD-001 — Driftstack-branded billing receipts — RESOLVED 2026-07-07' + '**Source:** V-202b (founder verdict 2026-05-05).' + 'Stripe's own infrastructure fires billing receipts (payment*succeeded / payment_failed) directly to the customer's email on file.' + 'Stripe receipts are a solved problem — legally compliant (tax-included, receipt-trail-acceptable for accounting), infrastructure-free (Stripe SLA covers delivery), and customer-trusted (customers recognize Stripe-branded receipts).' + 'Augmenting (both Stripe AND Driftstack fire on each charge) creates two-emails-per-charge spam.' + 'Replacing entirely creates a delivery dependency: a Driftstack-side outage during a Stripe charge means no receipt at all, with no easy fallback. Skip is the conservative choice; reversal is straightforward when the customer-feedback signal arrives.' + 'Use `AccountLifecycleService` (V-202c abstraction). Add a `billing.receipt_succeeded` and `billing.payment_failed` `LifecycleEvent` kind.' + '\"augment-then-eventually-replace\" rollout' + 'V-204 `billing-receipt` opt-out preference key is already in the catalog and would naturally apply to Phase 1 + Phase 2.' — pinned so the V-202b-deferral + Stripe-solved-tax-trail-customer-trust + 2-emails-spam-risk + V-202c AccountLifecycleService + V-204 billing-receipt-opt-out-key + augment-then-replace-rollout commitment survives", () => {
+    // S44 2026-07-07 — TD-001 is RESOLVED (founder-approved wire-in);
+    // heading carries the RESOLVED marker like TD-002, the resolution
+    // block records what landed, and the original entry is retained
+    // as the historical record (all original pinned phrases below
+    // still hold against that retained body).
+    expect(body).toMatch(/## TD-001 — Driftstack-branded billing receipts — RESOLVED 2026-07-07/);
+    expect(body).toMatch(
+      /\*\*Resolution:\*\* Landed as S44 2026-07-07 \(founder-approved wire-in\)\./,
+    );
+    expect(body).toMatch(/`invoice\.payment_succeeded` \/ `invoice\.payment_failed` now dispatch/);
+    expect(body).toMatch(
+      /uses\s*\n?the standard V-204 `billing-receipt` opt-OUT preference \(superseding the\s*\n?Phase-1 opt-IN toggle sketched below\)/,
+    );
+    expect(body).toMatch(/the failure notice is never\s*\n?opt-outable\./);
+    expect(body).toMatch(/\*\*Current state \(historical\):\*\*/);
     expect(body).toMatch(/\*\*Source:\*\* V-202b \(founder verdict 2026-05-05\)\./);
     expect(body).toMatch(/Stripe's own infrastructure fires billing receipts/);
     expect(body).toMatch(

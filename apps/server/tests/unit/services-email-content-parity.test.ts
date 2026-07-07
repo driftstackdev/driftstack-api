@@ -19,8 +19,15 @@
 //     EHOSTUNREACH/EAI_AGAIN/FetchError.
 //   • Pending-approval message-pattern fallback (wrapper libs set
 //     `code` as string).
-//   • Null config → 17-method no-op stub (isConfigured: false).
+//   • Null config → 18-method no-op stub (isConfigured: false).
 //   • Default messageStream = 'outbound'.
+//   • S44 2026-07-07 (founder-approved trim) — subscription-
+//     cancellation + support-ack templates/send methods and the
+//     quota-warning + session-event-digest draft templates are
+//     DELETED; negative pins below keep them gone. billing-receipt +
+//     billing-failure now really fire (Stripe invoice.payment_* via
+//     the lifecycle dispatcher); billing-failure retryAt is nullable
+//     (Stripe next_payment_attempt is null on the final attempt).
 //   • sendStatusIncidentNotification: kind discriminates 'created' →
 //     status-incident-created template vs 'resolved' → status-
 //     incident-resolved template.
@@ -93,7 +100,7 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
     );
   });
 
-  it('EmailService: 16 sendX methods + isConfigured readonly boolean', () => {
+  it('EmailService: 18 sendX methods + isConfigured readonly boolean (S44 trim removed sendSubscriptionCancellation + sendSupportAck; billing-receipt/failure carry S44 trigger docs + nullable retryAt)', () => {
     expect(body).toMatch(/export interface EmailService \{/);
     expect(body).toMatch(
       /sendSignupVerification\(args: \{ to: string; link: string; expiresAt: Date \}\): Promise<void>;/,
@@ -101,15 +108,18 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
     expect(body).toMatch(
       /sendPasswordReset\(args: \{ to: string; link: string; expiresAt: Date \}\): Promise<void>;/,
     );
-    expect(body).toMatch(/sendBillingReceipt\(args: \{/);
-    expect(body).toMatch(/sendBillingFailure\(args: \{/);
+    expect(body).toMatch(
+      /S44 2026-07-07 \(founder-approved\) — Driftstack-branded payment[\s\S]+?sendBillingReceipt\(args: \{/,
+    );
+    expect(body).toMatch(
+      /S44 2026-07-07 \(founder-approved\) — payment-failure notice\.[\s\S]+?sendBillingFailure\(args: \{\s*\n?\s*to: string;\s*\n?\s*amountFormatted: string;\s*\n?\s*retryAt: Date \| null;\s*\n?\s*portalUrl: string;\s*\n?\s*\}\): Promise<void>;/,
+    );
     expect(body).toMatch(
       /V-304b — fires ~7 days before subscription renewal[\s\S]+?sendBillingRenewalReminder\(args: \{/,
     );
-    expect(body).toMatch(/sendSubscriptionCancellation\(args: \{/);
-    expect(body).toMatch(
-      /sendSupportAck\(args: \{ to: string; ticketId: string \}\): Promise<void>;/,
-    );
+    // S44 2026-07-07 (founder-approved trim) — zero-caller methods deleted.
+    expect(body).not.toMatch(/sendSubscriptionCancellation\(/);
+    expect(body).not.toMatch(/sendSupportAck\(/);
     expect(body).toMatch(
       /V-202 — onboarding follow-up after email verification succeeds[\s\S]+?sendSignupWelcome\(args: \{ to: string; dashboardUrl: string \}\): Promise<void>;/,
     );
@@ -134,32 +144,40 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
     expect(body).toMatch(/readonly isConfigured: boolean;/);
   });
 
-  it('Templates: inline TEMPLATES object satisfies Record<string, Template> with signup-verification + password-reset + billing-receipt/failure/renewal-reminder + subscription-cancellation + support-ack + signup-welcome + session-failed-first/success-first + tier-changed + status-subscription-confirmation/welcome + team-invite + status-incident-created/resolved + quota-warning + session-event-digest (trial-pack-purchased/expired removed with the dead trial_pack lifecycle)', () => {
+  it('Templates: inline TEMPLATES object satisfies Record<string, Template> with signup-verification + password-reset + billing-receipt/failure/renewal-reminder + signup-welcome + session-failed-first/success-first + tier-changed + status-subscription-confirmation/welcome + team-invite + status-incident-created/resolved (trial-pack pair removed with the dead trial_pack lifecycle; S44 2026-07-07 founder-approved trim removed subscription-cancellation + support-ack + the quota-warning/session-event-digest drafts)', () => {
     expect(body).toMatch(/const TEMPLATES = \{/);
     expect(body).toMatch(/'signup-verification': \{/);
     expect(body).toMatch(/'password-reset': \{/);
     expect(body).toMatch(/'billing-receipt': \{/);
     expect(body).toMatch(/'billing-failure': \{/);
     expect(body).toMatch(/'billing-renewal-reminder': \{/);
-    expect(body).toMatch(/'subscription-cancellation': \{/);
-    expect(body).toMatch(/'support-ack': \{/);
     expect(body).toMatch(/'signup-welcome': \{/);
     expect(body).toMatch(/'session-failed-first': \{/);
     expect(body).toMatch(/'session-success-first': \{/);
     expect(body).toMatch(/'tier-changed': \{/);
     expect(body).not.toMatch(/'trial-pack-purchased': \{/);
     expect(body).not.toMatch(/'trial-pack-expired': \{/);
+    // S44 2026-07-07 — founder-approved trim; these four stay deleted.
+    expect(body).not.toMatch(/'subscription-cancellation': \{/);
+    expect(body).not.toMatch(/'support-ack': \{/);
+    expect(body).not.toMatch(/'quota-warning': \{/);
+    expect(body).not.toMatch(/'session-event-digest': \{/);
     expect(body).toMatch(/'status-subscription-confirmation': \{/);
     expect(body).toMatch(/'status-subscription-welcome': \{/);
     expect(body).toMatch(/'team-invite': \{/);
     expect(body).toMatch(/'status-incident-created': \{/);
     expect(body).toMatch(/'status-incident-resolved': \{/);
-    expect(body).toMatch(/'quota-warning': \{/);
-    expect(body).toMatch(/'session-event-digest': \{/);
     expect(body).toMatch(/\} satisfies Record<string, Template>;/);
   });
 
-  it('Null config → 17-method no-op stub with isConfigured:false; warn log mentions POSTMARK_API_TOKEN/FROM/REPLY_TO', () => {
+  it('S44 billing-failure template renders the pre-computed retryLine (nullable Stripe next_payment_attempt: timestamped retry sentence OR final-attempt sentence)', () => {
+    expect(body).toMatch(/\$\{v\.retryLine\} To update payment details, visit the billing portal/);
+    expect(body).toMatch(
+      /retryAt !== null\s*\n?\s*\? `We'll retry automatically at \$\{retryAt\.toISOString\(\)\} \(UTC\)\.`\s*\n?\s*: `This was the final automatic attempt — no further retries are scheduled\.`,/,
+    );
+  });
+
+  it('Null config → 18-method no-op stub with isConfigured:false; warn log mentions POSTMARK_API_TOKEN/FROM/REPLY_TO', () => {
     expect(body).toMatch(
       /'Postmark not configured — email sends will be no-ops\. Set POSTMARK_API_TOKEN\/FROM\/REPLY_TO to enable\.',/,
     );

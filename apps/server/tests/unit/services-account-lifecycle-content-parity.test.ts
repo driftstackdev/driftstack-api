@@ -17,9 +17,11 @@
 //     non-tier mutation noise).
 //   • Email-preference opt-outs honored via
 //     EmailPreferencesService.shouldSend.
-//   • LifecycleEvent: 4-kind union (session.failed.first /
+//   • LifecycleEvent: 6-kind union (session.failed.first /
 //     session.success.first / subscription.tier_changed /
-//     subscription.renewal_reminder). (trial_pack_purchased/expired
+//     subscription.renewal_reminder / billing.payment_succeeded /
+//     billing.payment_failed — the billing pair is S44 2026-07-07,
+//     founder-approved TD-001 revival). (trial_pack_purchased/expired
 //     removed with the dead trial_pack lifecycle.)
 //   • V-304a session.success.first: atomic-check-and-set first-success
 //     dedup (mirror pattern of failed.first).
@@ -69,7 +71,7 @@ describe('W406.C apps/server/src/services/account-lifecycle.ts content parity', 
     );
   });
 
-  it('LifecycleEvent: 4-kind union (session.failed.first / session.success.first / subscription.tier_changed / renewal_reminder)', () => {
+  it('LifecycleEvent: 6-kind union (session.failed.first / session.success.first / subscription.tier_changed / renewal_reminder / S44 billing.payment_succeeded / S44 billing.payment_failed)', () => {
     expect(body).toMatch(/export type LifecycleEvent =/);
     expect(body).toMatch(/\| \{\s*\n?\s*kind: 'session\.failed\.first';/);
     expect(body).toMatch(/\| \{\s*\n?\s*kind: 'session\.success\.first';/);
@@ -79,6 +81,15 @@ describe('W406.C apps/server/src/services/account-lifecycle.ts content parity', 
     expect(body).toMatch(
       /\/\/ V-327 — fires when Stripe's `invoice\.upcoming` webhook arrives\s*\n?\s*\/\/ \(~7 days before renewal\)\. Email-only; no audit row[\s\S]+?kind: 'subscription\.renewal_reminder';/,
     );
+    // S44 2026-07-07 — the billing pair: receipt honors the V-204
+    // opt-out; failure is never opt-outable (no shouldSend gate).
+    expect(body).toMatch(
+      /S44 2026-07-07 \(founder-approved; TD-001 revival\) — fires on\s*\n?\s*\/\/ Stripe `invoice\.payment_succeeded`[\s\S]+?kind: 'billing\.payment_succeeded';/,
+    );
+    expect(body).toMatch(
+      /S44 2026-07-07 \(founder-approved\) — fires on Stripe\s*\n?\s*\/\/ `invoice\.payment_failed`\. Email-only and NEVER opt-outable[\s\S]+?kind: 'billing\.payment_failed';/,
+    );
+    expect(body).toMatch(/retryAt: Date \| null;/);
   });
 
   it('AccountLifecycleRow: 4 fields (id/email + firstFailureEmailSentAt + firstSuccessEmailSentAt nullable dedup flags)', () => {

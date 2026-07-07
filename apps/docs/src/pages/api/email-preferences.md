@@ -10,8 +10,7 @@ Driftstack sends two categories of email:
 
 1. **Operational** — non-optional. Required for the service to
    work (signup verification, password reset, billing-failure
-   notice, subscription-cancellation confirmation, security
-   notices). You cannot opt out of these.
+   notice, security notices). You cannot opt out of these.
 2. **Transactional / informational** — opt-outable. Welcome
    email, first-session activation milestone, tier-change
    confirmation, billing receipts, renewal reminders. Customers
@@ -94,7 +93,7 @@ Required scope: `account_owner` (the service gates this write on
 | `session-success-first`    | One-time activation milestone               | opt-in  |
 | `session-failed-first`     | One-time first-failure notice               | opt-in  |
 | `tier-changed`             | Confirmation when subscription tier changes | opt-in  |
-| `billing-receipt`          | Successful payment receipt                  | opt-in  |
+| `billing-receipt`          | Receipt for each successful charge          | opt-in  |
 | `billing-renewal-reminder` | 7-days-before-renewal heads-up              | opt-in  |
 
 ## What's NOT opt-outable
@@ -103,11 +102,10 @@ These ALWAYS send regardless of preferences:
 
 - `signup-verification` — required to activate the account.
 - `password-reset` — security-critical.
-- `billing-failure` — payment retry / customer-action-needed.
-- `subscription-cancellation` — confirmation of an irreversible
-  action.
-- `support-ack` — reply to a support thread the customer
-  initiated.
+- `billing-failure` — fires on a failed subscription charge
+  (Stripe `invoice.payment_failed`); tells you when the automatic
+  retry happens, or that none is scheduled. Payment problems are
+  customer-action-needed, so this one always sends.
 - `status-incident-created` / `status-incident-resolved` — only
   to customers explicitly subscribed via `/status` (separate
   opt-in surface, not part of email preferences).

@@ -6,11 +6,15 @@
 //   lifecycle events that pair an audit-log emit and/or a
 //   transactional email send' (founder verdict 2026-05-05).
 //
-//   LifecycleEvent discriminated union (4 kinds):
+//   LifecycleEvent discriminated union (6 kinds):
 //     - 'session.failed.first'         (V-202c)
 //     - 'session.success.first'        (V-304a)
 //     - 'subscription.tier_changed'    (V-202b)
 //     - 'subscription.renewal_reminder'     (V-327)
+//     - 'billing.payment_succeeded'    (S44 2026-07-07; billing-receipt
+//       email, V-204 opt-out-aware, TD-001 revival)
+//     - 'billing.payment_failed'       (S44 2026-07-07; billing-failure
+//       email, never opt-outable — no shouldSend gate by design)
 //
 //   Contract: best-effort by design. Errors caught + logged warn,
 //     never propagate to caller. Caller's primary responsibility
@@ -73,16 +77,33 @@ describe('W916 V-202b/c AccountLifecycle emit dispatcher cross-source invariant'
 
   // ─── 6-kind LifecycleEvent discriminated union ───────────────
 
-  it("CRITICAL LifecycleEvent discriminated union has EXACTLY 4 kinds — 'session.failed.first' (V-202c) + 'session.success.first' (V-304a) + 'subscription.tier_changed' (V-202b) + 'subscription.renewal_reminder' (V-327). The 4-kind union covers every customer-facing lifecycle moment. (The trial_pack_purchased/expired pair was removed with the dead trial_pack lifecycle.)", () => {
+  it("CRITICAL LifecycleEvent discriminated union has EXACTLY 6 kinds — 'session.failed.first' (V-202c) + 'session.success.first' (V-304a) + 'subscription.tier_changed' (V-202b) + 'subscription.renewal_reminder' (V-327) + 'billing.payment_succeeded' + 'billing.payment_failed' (both S44 2026-07-07, founder-approved TD-001 revival). The 6-kind union covers every customer-facing lifecycle moment. (The trial_pack_purchased/expired pair was removed with the dead trial_pack lifecycle.)", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/account-lifecycle.ts'));
     expect(p).toMatch(/export type LifecycleEvent =/);
     expect(p).toMatch(/kind: 'session\.failed\.first';/);
     expect(p).toMatch(/kind: 'session\.success\.first';/);
     expect(p).toMatch(/kind: 'subscription\.tier_changed';/);
     expect(p).toMatch(/kind: 'subscription\.renewal_reminder';/);
+    expect(p).toMatch(/kind: 'billing\.payment_succeeded';/);
+    expect(p).toMatch(/kind: 'billing\.payment_failed';/);
     // Trial-pack kinds removed — assert they are GONE so the union can't regress.
     expect(p).not.toMatch(/kind: 'subscription\.trial_pack_purchased';/);
     expect(p).not.toMatch(/kind: 'subscription\.trial_pack_expired';/);
+  });
+
+  // ─── S44 billing wire — opt-out asymmetry pinned ─────────────
+
+  it('CRITICAL S44 billing.payment_succeeded honors the billing-receipt opt-out; billing.payment_failed DELIBERATELY has no shouldSend gate (billing-failure is critical-path, absent from OptOutableEmailEventSchema). Drift to gating the failure email would let a customer silently miss "your card failed".', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/account-lifecycle.ts'));
+    expect(p).toMatch(
+      /const allowed = await this\.emailPreferences\.shouldSend\(accountId, 'billing-receipt'\);\s*\n?\s*if \(!allowed\) return;/,
+    );
+    expect(p).toMatch(/DELIBERATELY no shouldSend gate/);
+    // The failure handler must call sendBillingFailure without any
+    // emailPreferences consult between findForLifecycle and the send.
+    expect(p).toMatch(
+      /private async handlePaymentFailed\([\s\S]+?const account = await this\.repo\.findForLifecycle\(accountId\);\s*\n?\s*if \(account === null\) return;\s*\n?\s*await this\.email\.sendBillingFailure\(\{/,
+    );
   });
 
   // ─── Best-effort + never-propagate framing ───────────────────

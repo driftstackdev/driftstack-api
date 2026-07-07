@@ -3,8 +3,10 @@
 // registry roster + critical-path vs opt-outable split:
 //
 //   Critical-path (NEVER opt-outable, ALWAYS sent):
-//     - signup-verification, password-reset, billing-failure,
-//       subscription-cancellation, support-ack.
+//     - signup-verification, password-reset, billing-failure.
+//       (S44 2026-07-07 founder-approved trim: subscription-
+//        cancellation + support-ack were zero-caller templates and
+//        are DELETED — asserted GONE below.)
 //
 //   Opt-outable (6, matches OptOutableEmailEventSchema):
 //     - signup-welcome, session-failed-first, session-success-first,
@@ -15,19 +17,22 @@
 //   Operational (other):
 //     - status-subscription-confirmation, status-subscription-welcome,
 //       team-invite, status-incident-created, status-incident-updated,
-//       status-incident-resolved, quota-warning, session-event-digest,
-//       oauth-pending-verification.
+//       status-incident-resolved, oauth-pending-verification.
+//       (S44: the quota-warning + session-event-digest drafts never
+//        had send methods and are DELETED — asserted GONE below.)
 //
 // stays in lockstep across:
 //   - apps/server/src/services/email.ts (TEMPLATES const).
 //   - packages/api-types/src/accounts.ts OptOutableEmailEventSchema
-//     (8 opt-outable subset).
+//     (6 opt-outable subset).
 //
 // Drift would silently break:
 //   * Opt-outable schema declares a template the registry lacks
 //     (server crashes trying to render).
 //   * Critical-path template appears in OptOutableEmailEvent
 //     (W864 forbids; W883 backstops at registry level).
+//   * A deleted S44 template resurrects without a caller + docs
+//     catalog entry.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -45,8 +50,15 @@ const CRITICAL_PATH_TEMPLATES = [
   'signup-verification',
   'password-reset',
   'billing-failure',
+] as const;
+
+// S44 2026-07-07 (founder-approved trim) — deleted outright; must not
+// resurrect in TEMPLATES (and must never appear in the opt-out enum).
+const S44_DELETED_TEMPLATES = [
   'subscription-cancellation',
   'support-ack',
+  'quota-warning',
+  'session-event-digest',
 ] as const;
 
 const OPT_OUTABLE_TEMPLATES = [
@@ -65,18 +77,21 @@ const OPERATIONAL_TEMPLATES = [
   'status-incident-created',
   'status-incident-updated',
   'status-incident-resolved',
-  'quota-warning',
-  'session-event-digest',
   'oauth-pending-verification',
 ] as const;
 
 describe('W883 Email-template registry cross-source invariant', () => {
   // ─── 5 critical-path templates present ──────────────────────
 
-  it('CRITICAL apps/server/src/services/email.ts TEMPLATES has all 5 critical-path templates — signup-verification + password-reset + billing-failure + subscription-cancellation + support-ack. These NEVER fall through opt-out gates.', () => {
+  it('CRITICAL apps/server/src/services/email.ts TEMPLATES has all 3 critical-path templates — signup-verification + password-reset + billing-failure. These NEVER fall through opt-out gates. The 4 S44-deleted templates stay GONE.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/email.ts'));
     for (const t of CRITICAL_PATH_TEMPLATES) {
       expect(p, `TEMPLATES must include '${t}'`).toMatch(new RegExp(`'${t}': \\{`));
+    }
+    for (const t of S44_DELETED_TEMPLATES) {
+      expect(p, `S44-deleted template '${t}' must NOT resurrect`).not.toMatch(
+        new RegExp(`'${t}': \\{`),
+      );
     }
   });
 
@@ -106,7 +121,7 @@ describe('W883 Email-template registry cross-source invariant', () => {
 
   // ─── 7 operational templates present ─────────────────────────
 
-  it('CRITICAL apps/server/src/services/email.ts TEMPLATES has 9 operational templates — status-subscription-* + team-invite + status-incident-{created,updated,resolved} + quota-warning + session-event-digest + oauth-pending-verification. status-incident-updated added 2026-05-16 for V-545.B (Phase 2 wire-up pending).', () => {
+  it('CRITICAL apps/server/src/services/email.ts TEMPLATES has 7 operational templates — status-subscription-* + team-invite + status-incident-{created,updated,resolved} + oauth-pending-verification. status-incident-updated added 2026-05-16 for V-545.B. (S44 2026-07-07 deleted the quota-warning + session-event-digest drafts: 9→7.)', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/email.ts'));
     for (const t of OPERATIONAL_TEMPLATES) {
       expect(p, `TEMPLATES must include '${t}'`).toMatch(new RegExp(`'${t}': \\{`));
@@ -115,13 +130,13 @@ describe('W883 Email-template registry cross-source invariant', () => {
 
   // ─── Critical-path templates NOT in OptOutableEmailEventSchema ─
 
-  it('CRITICAL no critical-path template (signup-verification / password-reset / billing-failure / subscription-cancellation / support-ack) appears in OptOutableEmailEventSchema. This is the security backstop — drift would let customers disable account-recovery / billing-failure / support emails.', () => {
+  it('CRITICAL no critical-path template (signup-verification / password-reset / billing-failure) — and no S44-deleted template name — appears in OptOutableEmailEventSchema. This is the security backstop — drift would let customers disable account-recovery / billing-failure emails, or resurrect a deleted template id into the customer-facing enum.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
     const m = p.match(/OptOutableEmailEventSchema = z\.enum\(\[([\s\S]+?)\]\)/);
     expect(m).not.toBeNull();
     const body = m![1];
-    for (const t of CRITICAL_PATH_TEMPLATES) {
-      expect(body, `OptOutableEmailEventSchema MUST NOT include critical-path '${t}'`).not.toMatch(
+    for (const t of [...CRITICAL_PATH_TEMPLATES, ...S44_DELETED_TEMPLATES]) {
+      expect(body, `OptOutableEmailEventSchema MUST NOT include '${t}'`).not.toMatch(
         new RegExp(`'${t.replace(/-/g, '\\-')}'`),
       );
     }
@@ -142,15 +157,16 @@ describe('W883 Email-template registry cross-source invariant', () => {
     }
   });
 
-  // ─── Cardinality: 5 + 6 + 9 = 20 → registry has ≥ 20 ─────────
+  // ─── Cardinality: 3 + 6 + 7 = 16 → registry has ≥ 16 ─────────
 
-  it('CRITICAL email template registry has at least 20 templates (5 critical + 6 opt-outable + 9 operational). Future templates may add to the operational bucket without breaking this; if total drops below 20, drift dropped a known-required template. (The trial-pack pair was removed with the dead trial_pack lifecycle: opt-outable 8→6.)', () => {
-    expect(CRITICAL_PATH_TEMPLATES.length).toBe(5);
+  it('CRITICAL email template registry has at least 16 templates (3 critical + 6 opt-outable + 7 operational). Future templates may add to the operational bucket without breaking this; if total drops below 16, drift dropped a known-required template. (Trial-pack pair removed with the dead trial_pack lifecycle: opt-outable 8→6; S44 2026-07-07 founder-approved trim: critical 5→3, operational 9→7, total 20→16.)', () => {
+    expect(CRITICAL_PATH_TEMPLATES.length).toBe(3);
     expect(OPT_OUTABLE_TEMPLATES.length).toBe(6);
-    expect(OPERATIONAL_TEMPLATES.length).toBe(9);
+    expect(OPERATIONAL_TEMPLATES.length).toBe(7);
+    expect(S44_DELETED_TEMPLATES.length).toBe(4);
     const totalKnown =
       CRITICAL_PATH_TEMPLATES.length + OPT_OUTABLE_TEMPLATES.length + OPERATIONAL_TEMPLATES.length;
-    expect(totalKnown).toBe(20);
+    expect(totalKnown).toBe(16);
   });
 
   // ─── EmailService interface header pinned ─────────────────────
