@@ -108,8 +108,16 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
     expect(body).toMatch(
       /\/\/ V-202b — lifecycle dispatcher fans this out into audit emit \+\s*\n?\s*\/\/ tier-changed email at one call site\./,
     );
+    // Fable last-hours audit 2026-07-07 (C4) — the active/trialing branch sets
+    // the account to its BEST active/trialing tier (rank-aware reconcile), not
+    // blindly the event's own tier, so a multi-active account isn't downgraded
+    // by a routine update on a lower sub. The emit therefore carries the
+    // reconciled appliedTier, gated on a real change with a non-null result.
     expect(body).toMatch(
-      /await this\.accountLifecycle\.emit\(accountId, \{\s*\n?\s*kind: 'subscription\.tier_changed',\s*\n?\s*fromTier: previousTier,\s*\n?\s*toTier: tier,/,
+      /const \{ previousTier, appliedTier \} = await this\.repo\.setAccountTierToBestActive\(\{/,
+    );
+    expect(body).toMatch(
+      /if \(this\.accountLifecycle !== null && appliedTier !== null && previousTier !== appliedTier\) \{\s*\n?\s*await this\.accountLifecycle\.emit\(accountId, \{\s*\n?\s*kind: 'subscription\.tier_changed',\s*\n?\s*fromTier: previousTier,\s*\n?\s*toTier: appliedTier,/,
     );
   });
 

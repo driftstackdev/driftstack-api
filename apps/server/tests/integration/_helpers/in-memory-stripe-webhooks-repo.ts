@@ -3,7 +3,10 @@
 import { randomUUID } from 'node:crypto';
 import type { AccountTier } from '@driftstack/api-types';
 import type { StripeWebhooksRepo } from '../../../src/services/stripe-webhooks.js';
-import { isCryptoTierUpgrade } from '../../../src/services/crypto-tier-activation.js';
+import {
+  isCryptoTierUpgrade,
+  tierActivationRank,
+} from '../../../src/services/crypto-tier-activation.js';
 
 interface LedgerRow {
   eventId: string;
@@ -202,6 +205,31 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
       )
       .sort((x, y) => y.updatedAt.getTime() - x.updatedAt.getTime());
     const appliedTier = remaining[0]?.tier ?? args.fallbackTier;
+    this.accounts.set(args.accountId, { ...a, tier: appliedTier });
+    return Promise.resolve({ previousTier, appliedTier });
+  }
+
+  setAccountTierToBestActive(args: {
+    accountId: string;
+    at: Date;
+  }): Promise<{ previousTier: AccountTier | null; appliedTier: AccountTier | null }> {
+    // Fable last-hours audit 2026-07-07 (C4) — mirrors the Drizzle
+    // setAccountTierToBestActive: set to the HIGHEST-RANKED active/trialing
+    // subscription (rank-aware, not most-recently-updated), never downgrading
+    // to a fallback. Empty active set / missing account leaves the tier as-is.
+    const a = this.accounts.get(args.accountId);
+    if (!a) return Promise.resolve({ previousTier: null, appliedTier: null });
+    const previousTier = a.tier;
+    const active = Array.from(this.subs.values()).filter(
+      (s) => s.accountId === args.accountId && (s.status === 'active' || s.status === 'trialing'),
+    );
+    let appliedTier: AccountTier | null = null;
+    for (const row of active) {
+      if (appliedTier === null || tierActivationRank(row.tier) > tierActivationRank(appliedTier)) {
+        appliedTier = row.tier;
+      }
+    }
+    if (appliedTier === null) return Promise.resolve({ previousTier, appliedTier: previousTier });
     this.accounts.set(args.accountId, { ...a, tier: appliedTier });
     return Promise.resolve({ previousTier, appliedTier });
   }

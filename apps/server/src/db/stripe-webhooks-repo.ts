@@ -5,7 +5,7 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { AccountTier } from '@driftstack/api-types';
 import type { StripeWebhooksRepo } from '../services/stripe-webhooks.js';
-import { isCryptoTierUpgrade } from '../services/crypto-tier-activation.js';
+import { isCryptoTierUpgrade, tierActivationRank } from '../services/crypto-tier-activation.js';
 import type { Database } from './client.js';
 import { accounts, processedStripeEvents, subscriptions } from './schema.js';
 
@@ -229,6 +229,58 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
         .orderBy(desc(subscriptions.updatedAt))
         .limit(1);
       const appliedTier = remaining[0]?.tier ?? args.fallbackTier;
+      await tx
+        .update(accounts)
+        .set({ tier: appliedTier, updatedAt: args.at })
+        .where(eq(accounts.id, args.accountId));
+      return { previousTier, appliedTier };
+    });
+  }
+
+  async setAccountTierToBestActive(args: {
+    accountId: string;
+    at: Date;
+  }): Promise<{ previousTier: AccountTier | null; appliedTier: AccountTier | null }> {
+    // Fable last-hours audit 2026-07-07 (C4) — same FOR UPDATE serialization as
+    // the sibling account-tier writers. Set the account to its HIGHEST-RANKED
+    // active/trialing subscription so a routine update on a superseded LOWER
+    // subscription can't downgrade an account that still holds a HIGHER active
+    // one. Rank-aware (not most-recently-updated like the downgrade helper): an
+    // upgrade must win over a lower sub regardless of which row was touched last.
+    // The caller upserts the current sub active first, so the active set is
+    // non-empty in practice; when it is (or the account row is gone) we leave
+    // the tier untouched — this method never downgrades to a fallback.
+    return this.database.db.transaction(async (tx) => {
+      const before = await tx
+        .select({ tier: accounts.tier })
+        .from(accounts)
+        .where(eq(accounts.id, args.accountId))
+        .for('update')
+        .limit(1);
+      const previousTier = before[0]?.tier ?? null;
+      if (previousTier === null) return { previousTier: null, appliedTier: null };
+      const active = await tx
+        .select({ tier: subscriptions.tier })
+        .from(subscriptions)
+        .where(
+          and(
+            eq(subscriptions.accountId, args.accountId),
+            inArray(subscriptions.status, ['active', 'trialing']),
+          ),
+        );
+      // Highest-RANKED active/trialing tier — seeded from the active set only
+      // (never previousTier), so a genuine single-subscription downgrade still
+      // lowers the account. null only when the set is empty, handled above.
+      let appliedTier: AccountTier | null = null;
+      for (const row of active) {
+        if (
+          appliedTier === null ||
+          tierActivationRank(row.tier) > tierActivationRank(appliedTier)
+        ) {
+          appliedTier = row.tier;
+        }
+      }
+      if (appliedTier === null) return { previousTier, appliedTier: previousTier };
       await tx
         .update(accounts)
         .set({ tier: appliedTier, updatedAt: args.at })

@@ -126,9 +126,17 @@ export function registerProfileSnapshotsRoutes(
   );
 
   // ── GET /v1/profiles/:id/snapshots — list per profile ──────────────────
+  // V-553.B-21 / Fable last-hours audit 2026-07-07 (C9) — read:profiles gate.
+  // Snapshots ARE profile data (the reference already documents `read` or
+  // `read:profiles` as required here, and write:profiles is scoped to cover
+  // "profiles and their snapshots"); the sibling GET /v1/profiles routes gate
+  // on read:profiles but these snapshot reads were missed, so a narrow granular
+  // key lacking read:profiles could read snapshot metadata. Ownership is already
+  // account-scoped in the handler; this adds the missing least-privilege floor.
+  // A broad `read` / account_owner key satisfies it via the V-481 hierarchy.
   app.get<{ Params: { id: string } }>(
     '/v1/profiles/:id/snapshots',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read:profiles'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       const profileId = uuidFromPrefixedId(req.params.id, 'prof');
@@ -150,9 +158,10 @@ export function registerProfileSnapshotsRoutes(
   );
 
   // ── GET /v1/profile-snapshots — list per account ───────────────────────
+  // read:profiles gate — see the C9 rationale on GET /v1/profiles/:id/snapshots.
   app.get(
     '/v1/profile-snapshots',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read:profiles'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       const eff = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));
@@ -172,9 +181,10 @@ export function registerProfileSnapshotsRoutes(
   );
 
   // ── GET /v1/profile-snapshots/:id ──────────────────────────────────────
+  // read:profiles gate — see the C9 rationale on GET /v1/profiles/:id/snapshots.
   app.get<{ Params: { id: string } }>(
     '/v1/profile-snapshots/:id',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read:profiles'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       const id = uuidFromPrefixedId(req.params.id, 'psnap');

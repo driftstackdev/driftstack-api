@@ -107,9 +107,9 @@ describe('W438.C apps/server/src/routes/profile-snapshots.ts content parity', ()
     );
   });
 
-  it('GET /v1/profile-snapshots: account-wide list (no parentProfileId); reads accept both team roles', () => {
+  it('GET /v1/profile-snapshots: account-wide list (no parentProfileId); reads accept both team roles; read:profiles scope floor (C9 2026-07-07)', () => {
     expect(body).toMatch(
-      /app\.get\(\s*\n?\s*'\/v1\/profile-snapshots',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
+      /app\.get\(\s*\n?\s*'\/v1\/profile-snapshots',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read:profiles'\), app\.rateLimit\('global'\)\] \},/,
     );
   });
 

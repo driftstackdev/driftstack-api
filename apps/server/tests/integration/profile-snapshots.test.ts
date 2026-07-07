@@ -507,6 +507,52 @@ describe('profile-snapshot write ops require write:profiles scope', () => {
     expect(res.json<{ data: unknown[] }>().data).toEqual([]);
   });
 
+  // Fable last-hours audit 2026-07-07 (C9) — snapshot READS now require
+  // read:profiles (the reference already documented it; enforcement was
+  // missing). A key that can WRITE profiles/snapshots but has no read scope
+  // must not read snapshot metadata — write:profiles "Does not include read".
+  const WRITE_ONLY = { scopes: ['write:profiles'] as const };
+
+  it('403 LIST (GET /v1/profile-snapshots) with a write:profiles-only key — C9', async () => {
+    fx = await buildTestApp({ scopes: [...WRITE_ONLY.scopes] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/profile-snapshots',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('403 per-profile LIST (GET /v1/profiles/:id/snapshots) with a write:profiles-only key — C9', async () => {
+    fx = await buildTestApp({ scopes: [...WRITE_ONLY.scopes] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/profiles/${SOME_PROF}/snapshots`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('403 GET one (GET /v1/profile-snapshots/:id) with a write:profiles-only key — C9', async () => {
+    fx = await buildTestApp({ scopes: [...WRITE_ONLY.scopes] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/profile-snapshots/${SOME_SNAP}`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('a read:profiles-scoped key CAN read snapshots (the granular read scope satisfies the C9 gate)', async () => {
+    fx = await buildTestApp({ scopes: ['read:profiles'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/profile-snapshots',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
   it('a write-scoped key still captures a snapshot (no regression for the happy path)', async () => {
     fx = await buildTestApp();
     const profile = await mintProfile(fx, 'scope-happy');

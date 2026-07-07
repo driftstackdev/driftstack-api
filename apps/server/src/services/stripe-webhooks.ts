@@ -150,6 +150,27 @@ export interface StripeWebhooksRepo {
     fallbackTier: AccountTier;
     at: Date;
   }): Promise<{ previousTier: AccountTier | null; appliedTier: AccountTier }>;
+  /**
+   * Fable last-hours audit 2026-07-07 (C4) — the active/trialing counterpart
+   * of downgradeAccountTierToBestRemaining. After an active/trialing upsert,
+   * set the account tier to the HIGHEST-RANKED active/trialing subscription
+   * (by tierActivationRank), NOT blindly the event's own tier. An account can
+   * hold multiple active subscriptions (re-checkout is permitted while
+   * past_due), so a routine `customer.subscription.updated` on a LOWER sub
+   * must not downgrade an account that still holds a HIGHER active sub. Unlike
+   * the downgrade helper's most-recently-updated tie-break, this is rank-aware:
+   * an upgrade must never lose to a lower sub merely because it was touched
+   * more recently. Same FOR UPDATE serialization as the sibling writers. The
+   * caller upserts the current sub active BEFORE calling, so the active set is
+   * non-empty here; `appliedTier` is null only when the account row is gone
+   * (unchanged → no emit). Single-active-subscription accounts are unaffected:
+   * the best-active tier is exactly the event's tier, identical to the prior
+   * unconditional setAccountTier.
+   */
+  setAccountTierToBestActive(args: {
+    accountId: string;
+    at: Date;
+  }): Promise<{ previousTier: AccountTier | null; appliedTier: AccountTier | null }>;
 }
 
 export type DispatchOutcome = 'handled' | 'ignored' | `error:${string}`;
@@ -416,20 +437,32 @@ export class StripeWebhooksService {
     // state. Trialing counts as active for our purposes (the customer
     // gets the tier; Stripe handles the dunning).
     if (tier !== undefined && (status === 'active' || status === 'trialing')) {
-      const { previousTier } = await this.repo.setAccountTier({ accountId, tier, at });
+      // Fable last-hours audit 2026-07-07 (C4) — set the account to its BEST
+      // active/trialing entitlement, not blindly this event's tier. The sub
+      // was already mirrored active by the upsert above, so the reconcile sees
+      // it; for a single-active-subscription account best-active === this
+      // event's tier (behaviour identical to the prior setAccountTier), and for
+      // a multi-active account a routine update on a lower sub no longer
+      // downgrades a paying higher-tier customer.
+      const { previousTier, appliedTier } = await this.repo.setAccountTierToBestActive({
+        accountId,
+        at,
+      });
       // Invalidate the cached AccountContext only on a real tier change
       // (same condition as the audit emit below) so a no-op subscription
       // update — e.g. a payment-method swap that re-sets the same tier —
       // doesn't needlessly evict the cache.
-      if (previousTier !== tier) await this.invalidateAuthCache(accountId);
+      if (appliedTier !== null && previousTier !== appliedTier) {
+        await this.invalidateAuthCache(accountId);
+      }
       // V-202b — lifecycle dispatcher fans this out into audit emit +
       // tier-changed email at one call site. Short-circuits internally
       // when previousTier === newTier (no-op transition).
-      if (this.accountLifecycle !== null) {
+      if (this.accountLifecycle !== null && appliedTier !== null && previousTier !== appliedTier) {
         await this.accountLifecycle.emit(accountId, {
           kind: 'subscription.tier_changed',
           fromTier: previousTier,
-          toTier: tier,
+          toTier: appliedTier,
           effectiveAt: at,
           stripeEventType: event.type,
           stripeEventId: event.id,

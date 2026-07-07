@@ -286,6 +286,89 @@ describe('customer.subscription.deleted — cancel + downgrade', () => {
     // sub_A is canceled but the account stays on api_scale (from sub_B), NOT free.
     expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_scale');
   });
+
+  it('does NOT downgrade when a routine UPDATE fires on a SUPERSEDED lower subscription while a higher one is still active (Fable last-hours audit 2026-07-07, C4)', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    // sub_A active on api_builder, then sub_B active on api_scale → api_scale.
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_c4_subA_create',
+        type: 'customer.subscription.created',
+        stripeSubscriptionId: 'sub_A',
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+        createdSec: 2000,
+      }),
+    );
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_c4_subB_create',
+        type: 'customer.subscription.created',
+        stripeSubscriptionId: 'sub_B',
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_scale_monthly',
+        status: 'active',
+        createdSec: 2001,
+      }),
+    );
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_scale');
+
+    // A routine customer.subscription.updated on the LOWER sub_A — e.g. a
+    // payment-method swap or metadata touch, still active on api_builder. Before
+    // C4 the active branch blindly wrote api_builder, silently downgrading a
+    // customer who is still paying for api_scale via sub_B. Now the branch
+    // reconciles to the account's BEST active tier, so sub_A's own event can't
+    // drop the account below its highest live entitlement.
+    const result = (await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_c4_subA_update',
+        type: 'customer.subscription.updated',
+        stripeSubscriptionId: 'sub_A',
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+        createdSec: 2002,
+      }),
+    )) as { statusCode: number; body: { outcome: string } };
+    expect(result.body.outcome).toBe('handled');
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_scale');
+  });
+
+  it('a genuine single-subscription plan downgrade (api_scale → api_builder on the SAME sub) still applies (C4 does not over-block)', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_c4_solo_create',
+        type: 'customer.subscription.created',
+        stripeSubscriptionId: 'sub_solo',
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_scale_monthly',
+        status: 'active',
+        createdSec: 3000,
+      }),
+    );
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_scale');
+    // The customer downgrades their ONE subscription to api_builder. Best-active
+    // now equals the sub's new tier, so the account correctly drops to api_builder.
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_c4_solo_downgrade',
+        type: 'customer.subscription.updated',
+        stripeSubscriptionId: 'sub_solo',
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+        createdSec: 3001,
+      }),
+    );
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+  });
 });
 
 // V-226 — subscription.tier_changed customer-facing audit emit.
