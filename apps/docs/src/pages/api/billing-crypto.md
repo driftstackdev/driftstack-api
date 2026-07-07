@@ -40,8 +40,9 @@ endpoints: `PATCH /v1/billing/crypto-orders/:id` and
 `POST /v1/billing/crypto-orders/:id/cancel`. Read endpoints — listing
 orders, fetching a single order, and receipts — only require
 authentication.) Idempotent — pass an `Idempotency-Key` header to
-make retries safe; the same key within 24h returns the original
-order verbatim with an `Idempotent-Replayed: 1` response header.
+make retries safe; a repeated key returns the original order
+verbatim (with an `Idempotent-Replayed: 1` response header) for as
+long as the order row exists — there is no 24-hour expiry.
 
 Returns:
 
@@ -168,8 +169,9 @@ your endpoint returns non-2xx, each carrying the same top-level `id` —
 dedup on that `id` (also surfaced as `X-Driftstack-Event-Id`).
 
 The companion `crypto.order.failed` event fires on the
-`pending|confirming|partial → failed` transition (whether driven
-by an IPN status, customer cancellation, or admin sweep).
+`pending|confirming|partial → failed` transition (driven by an IPN
+status or an admin sweep — a customer cancellation moves the order
+to `cancelled` and fires no event).
 
 ## Idempotency
 
@@ -182,8 +184,9 @@ POST /v1/billing/crypto-checkout
 Idempotency-Key: a1b2c3d4-5e6f-7890-1234-567890abcdef
 ```
 
-Duplicate keys within the 24h cache window return the original
-order verbatim with an `Idempotent-Replayed: 1` response header.
+A duplicate key returns the original order verbatim with an
+`Idempotent-Replayed: 1` response header, for as long as the order
+row exists.
 A duplicate key with a different request body fires a structured
 `crypto_checkout_idempotency_body_mismatch` warn log; the
 contract still replays the original order, but operators can grep

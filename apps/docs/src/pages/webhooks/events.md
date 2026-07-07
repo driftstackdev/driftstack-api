@@ -280,8 +280,8 @@ transitions to a terminal state. Wired end-to-end 2026-05-22
 
 `reason` is one of: `ipn` (a NowPayments IPN reported a terminal
 non-paid status — a failed, refunded, or timed-out payment all surface
-here), `expired` (the 20-minute payment window elapsed before payment
-landed), or `swept` (admin / cron cleanup of a stuck pending order past
+here), `expired` (the payment window — 60 minutes at checkout — elapsed
+before payment landed and an operator expired the order), or `swept` (admin / cron cleanup of a stuck pending order past
 the staleness threshold). These are the three values
 `CryptoOrdersService` emits; the underlying NowPayments sub-status
 (timeout / refunded / cancelled) is collapsed into `ipn`.
