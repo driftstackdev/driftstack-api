@@ -104,7 +104,7 @@ describe('W520.A apps/marketing-site/src/pages/docs/billing-crypto-overview.astr
 
   it("Paid + crypto.order.paid IS-subscribable framing pinned: 'Your tier upgrade is applied the moment the order transitions to paid. A receipt email is sent to the account address. A crypto.order.paid event is emitted and is subscribable — register an endpoint via POST /v1/webhooks (see /docs/webhooks-crypto-events), or poll GET /v1/billing/crypto-orders/<order_id> if you prefer.' — pinned so the tier-upgrade-on-paid + receipt-email + crypto.order.paid-IS-subscribable (register via POST /v1/webhooks) + poll-fallback commitment survives. The event was promoted to subscribable: the previous 'emitted but not yet on the subscribable webhook event list' framing is superseded.", () => {
     expect(body).toMatch(
-      /Your tier upgrade is applied the moment the order transitions\s*\n?\s*to <code>paid<\/code>\. A receipt email is sent to the account\s*\n?\s*address\. A <code>crypto\.order\.paid<\/code> event is emitted and\s*\n?\s*is subscribable — register an endpoint via\s*\n?\s*<code>POST \/v1\/webhooks<\/code> \(see\s*\n?\s*<a href="\/docs\/webhooks-crypto-events">\/docs\/webhooks-crypto-events<\/a>\),\s*\n?\s*or poll\s*\n?\s*<code>GET \/v1\/billing\/crypto-orders\/&lt;order_id&gt;<\/code> if\s*\n?\s*you prefer\./,
+      /Your tier upgrade is applied the moment the order transitions\s*\n?\s*to <code>paid<\/code>\. A receipt email is sent to the account\s*\n?\s*address\. A <code>crypto\.order\.paid<\/code> event is emitted and\s*\n?\s*is subscribable — register an endpoint via\s*\n?\s*<code>POST \/v1\/webhooks<\/code> \(see\s*\n?\s*<a href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/">\/docs\/webhooks-crypto-events<\/a>\),\s*\n?\s*or poll\s*\n?\s*<code>GET \/v1\/billing\/crypto-orders\/&lt;order_id&gt;<\/code> if\s*\n?\s*you prefer\./,
     );
     // Anti-drift: the event is now subscribable; the old NOT-yet-subscribable
     // framing must NOT return (would create marketing↔webhook-event-list divergence).
@@ -152,18 +152,21 @@ describe('W520.A apps/marketing-site/src/pages/docs/billing-crypto-overview.astr
 
   it('6-related-doc cluster: /docs/billing-crypto-integration-guide + /pricing + /docs/billing-faq + /docs/webhooks-crypto-events + /docs/crypto-orders-polling-vs-webhooks + /docs/idempotency-keys + /docs/api-quickstart — pinned so the 6-related-doc + 1-pricing navigation surface stays complete (drift to dropping any cross-ref would orphan from the per-topic detail page)', () => {
     expect(body).toMatch(
-      /<a href="\/docs\/billing-crypto-integration-guide">Crypto\s*\n?\s*payments — integration guide<\/a>/,
+      /<a href="https:\/\/docs\.driftstack\.dev\/guides\/paying-with-crypto\/">Crypto\s*\n?\s*payments — integration guide<\/a>/,
     );
     expect(body).toMatch(/<a href="\/pricing">Pricing<\/a>/);
     expect(body).toMatch(/<a href="\/docs\/billing-faq">Billing FAQ<\/a>/);
     expect(body).toMatch(
-      /<a href="\/docs\/webhooks-crypto-events">Crypto webhook\s*\n?\s*events<\/a>/,
+      /<a href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/">Crypto webhook\s*\n?\s*events<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="\/docs\/crypto-orders-polling-vs-webhooks">Polling\s*\n?\s*vs webhooks<\/a>/,
+      /<a href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/">Polling\s*\n?\s*vs webhooks<\/a>/,
     );
     expect(body).toMatch(/<a href="\/docs\/idempotency-keys">Idempotency keys<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/api-quickstart">API quickstart<\/a>/);
+    // S47 2026-07-07 (founder-approved: mirror deprecation): deleted-mirror hrefs re-pinned to the docs successors.
+    expect(body).toMatch(
+      /<a href="https:\/\/docs\.driftstack\.dev\/quickstart-curl\/">API quickstart<\/a>/,
+    );
   });
 
   it('file exists at canonical path', () => {

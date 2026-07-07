@@ -116,7 +116,10 @@ describe('W364.A /docs/sdk-go parity', () => {
 
   it('all cross-links resolve (api-quickstart / sdk-go-crypto-orders / sdk-typescript / sdk-python / webhooks / cost-monitoring / error-codes)', () => {
     for (const [href, path] of [
-      ['/docs/api-quickstart', 'apps/marketing-site/src/pages/docs/api-quickstart.astro'],
+      // S47 2026-07-07 (founder-approved: mirror deprecation): the
+      // api-quickstart mirror is deleted; the page cross-links the
+      // docs curl quickstart successor.
+      ['https://docs.driftstack.dev/quickstart-curl/', 'apps/docs/src/pages/quickstart-curl.md'],
       [
         '/docs/sdk-go-crypto-orders',
         'apps/marketing-site/src/pages/docs/sdk-go-crypto-orders.astro',

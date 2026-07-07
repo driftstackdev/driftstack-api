@@ -2,27 +2,24 @@
 // V-705 migration reference for teams coming off Browserless.
 // W228.A already pins the negative claims (no script-passthrough,
 // no waitUntilTerminal, etc.) from the server side; this guard
-// pins the positive surface claims a porting engineer relies on.
 //
-// Pinned:
-//   • Action endpoint set cited in the surface-comparison table is
-//     a subset of what apps/server actually registers
-//     (navigate / interact / wait / capture under /v1/sessions/:id/*).
-//   • capture kinds (screenshot / dom_snapshot / pdf) inline-base64
-//     framing — not presigned URLs.
-//   • Over-cap 429 + concurrency-limit RFC 7807 type pinned.
-//   • Recordings cross-link cites the roadmap state (V-540).
-//   • Tier-pick list (api_starter / api_builder / api_scale) — the
-//     three tier slugs must continue to resolve in the tier
-//     taxonomy.
-//   • "WebKit only" + "Cloud only" negative claims pinned.
-//   • Cross-links to /docs/profiles + /docs/sdk-typescript +
-//     /docs/sdk-python + /docs/webhooks + /docs/cost-monitoring +
-//     /docs/recordings + /pricing all resolve.
+// S47 2026-07-07 (founder-approved: mirror deprecation) — SUPERSEDED.
+// The legacy marketing mirror page /docs/migration-from-browserless is DELETED and
+// 301-redirects (apps/marketing-site/public/_redirects) to its
+// verified docs successor:
+//   https://docs.driftstack.dev/guides/migrate-from-browserless/
+//   (source: apps/docs/src/pages/guides/migrate-from-browserless.md; S29/S37 content batches — every claim
+//   re-verified against server source before carry-over. Ongoing
+//   content-parity guarding for this topic lives with the docs
+//   page's own pin lattice.)
+// This file stays as a redirect tombstone so the original guard
+// history above remains greppable and the deprecation cannot
+// silently regress (page resurrection would shadow the 301 —
+// CF Pages serves static assets before _redirects).
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -31,115 +28,42 @@ const PAGE = resolve(
   REPO_ROOT,
   'apps/marketing-site/src/pages/docs/migration-from-browserless.astro',
 );
-const ROUTES_DIR = resolve(REPO_ROOT, 'apps/server/src/routes');
+const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
+const DOCS_SUCCESSOR_SRC = resolve(
+  REPO_ROOT,
+  'apps/docs/src/pages/guides/migrate-from-browserless.md',
+);
 
-function read(p: string): string {
-  return readFileSync(p, 'utf8');
-}
-
-function allRoutes(): string {
-  const out: string[] = [];
-  for (const e of readdirSync(ROUTES_DIR)) {
-    if (e.endsWith('.ts')) out.push(readFileSync(join(ROUTES_DIR, e), 'utf8'));
-  }
-  return out.join('\n');
-}
-
-describe('W357.A /docs/migration-from-browserless parity', () => {
-  const body = read(PAGE);
-  const routes = allRoutes();
-
-  it('action endpoint set cited in the comparison table is registered server-side', () => {
-    // POST /v1/sessions itself + the four action endpoints.
-    for (const r of [
-      "'/v1/sessions'",
-      "'/v1/sessions/:id/navigate'",
-      "'/v1/sessions/:id/interact'",
-      "'/v1/sessions/:id/wait'",
-      "'/v1/sessions/:id/capture'",
-    ]) {
-      expect(routes, `route missing: ${r}`).toContain(r);
-    }
-    expect(body).toContain('/v1/sessions');
-    expect(body).toMatch(/<code>navigate<\/code>/);
-    expect(body).toMatch(/<code>interact<\/code>/);
-    expect(body).toMatch(/<code>wait<\/code>/);
-    expect(body).toMatch(/<code>capture<\/code>/);
-  });
-
-  it('capture kind set (screenshot / dom_snapshot / pdf) framed as inline base64 — no presigned URL', () => {
-    expect(body).toMatch(/<code>kind=screenshot<\/code>/);
-    expect(body).toMatch(/<code>dom_snapshot<\/code>/);
-    expect(body).toMatch(/<code>pdf<\/code>/);
-    expect(body).toMatch(/inline base64 bytes — no\s+presigned URL/);
-  });
-
-  it('over-cap 429 + concurrency-limit RFC 7807 type pinned', () => {
-    expect(body).toMatch(/Tier-driven concurrency cap/);
-    expect(body).toMatch(/<code>429<\/code>/);
-    expect(body).toMatch(/<code>concurrency-limit<\/code> RFC 7807 type/);
-  });
-
-  it.skip('recordings cited as roadmap (V-540) — not shipped today', () => {
-    expect(body).toMatch(/<a href="\/docs\/recordings">roadmap<\/a>\s*\(V-540\)\s*but not shipped/);
+describe('S47 redirect tombstone — /docs/migration-from-browserless → https://docs.driftstack.dev/guides/migrate-from-browserless/', () => {
+  it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
     expect(
-      existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/recordings.astro')),
-    ).toBe(true);
+      existsSync(PAGE),
+      'migration-from-browserless.astro must stay deleted — a restored page file would shadow the 301',
+    ).toBe(false);
+
+    const rules = readFileSync(REDIRECTS, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/\s+/));
+    const rule = (from: string) => rules.find((t) => t[0] === from);
+
+    expect(rule('/docs/migration-from-browserless'), 'bare-path rule missing').toEqual([
+      '/docs/migration-from-browserless',
+      'https://docs.driftstack.dev/guides/migrate-from-browserless/',
+      '301',
+    ]);
+    expect(
+      rule('/docs/migration-from-browserless/'),
+      'trailing-slash rule missing (matching is exact-path)',
+    ).toEqual([
+      '/docs/migration-from-browserless/',
+      'https://docs.driftstack.dev/guides/migrate-from-browserless/',
+      '301',
+    ]);
   });
 
-  it('tier-pick list cites api_starter / api_builder / api_scale (three real tier slugs)', () => {
-    expect(body).toMatch(/api_starter/);
-    expect(body).toMatch(/api_builder/);
-    expect(body).toMatch(/api_scale/);
-  });
-
-  it('F-5 (Issue 5) negative-scope claims reframed: Cloud-only + Enterprise self-hosted-on-request callout; WebKit-only + Chrome/Firefox-not-a-planned-capability (was "on the roadmap" — reframed per Issue 5 so Chromium shops self-select out fast)', () => {
-    expect(body).toMatch(/Self-hosted on-prem \(cloud-only today; Self-hosted SKU/);
-    expect(body).toMatch(/Driftstack is WebKit\/iOS Safari\s+only by product scope/);
-    expect(body).toMatch(
-      /Chrome \/ Firefox automation is not\s+a planned capability of this product/,
-    );
-    expect(body).not.toMatch(/Chrome \+ Firefox are\s+on the roadmap/);
-  });
-
-  it('"no /function-style endpoint" claim pinned (negative server-side guard)', () => {
-    expect(body).toMatch(
-      /Server-side JS execution\. There is no\s+<code>\/function<\/code>-style endpoint/,
-    );
-    // Negative server-side guard: there must NOT be a /v1/sessions/:id/function
-    // (or similar) route registered.
-    expect(routes).not.toMatch(/['"]\/v1\/sessions\/:id\/function['"]/);
-    expect(routes).not.toMatch(/['"]\/v1\/sessions\/:id\/eval['"]/);
-  });
-
-  it('cross-links resolve (profiles / sdk-typescript / sdk-python / webhooks / cost-monitoring / recordings)', () => {
-    for (const [href, path] of [
-      ['/docs/profiles', 'apps/marketing-site/src/pages/docs/profiles.astro'],
-      ['/docs/sdk-typescript', 'apps/marketing-site/src/pages/docs/sdk-typescript.astro'],
-      ['/docs/sdk-python', 'apps/marketing-site/src/pages/docs/sdk-python.astro'],
-      ['/docs/webhooks', 'apps/marketing-site/src/pages/docs/webhooks.astro'],
-      ['/docs/cost-monitoring', 'apps/marketing-site/src/pages/docs/cost-monitoring.astro'],
-      ['/docs/recordings', 'apps/marketing-site/src/pages/docs/recordings.astro'],
-    ] as const) {
-      expect(body).toContain(href);
-      expect(existsSync(resolve(REPO_ROOT, path)), `missing: ${path}`).toBe(true);
-    }
-  });
-
-  it('developer-contact mailto + /pricing cross-link pinned', () => {
-    expect(body).toContain('mailto:developers@driftstack.dev');
-    expect(body).toContain('/pricing');
-  });
-
-  it('migration-checklist still cites the real onboarding flow (webhooks + cost alerts)', () => {
-    // The customer-facing migration checklist must keep pointing at
-    // the live cost-monitoring + webhooks endpoints — these are the
-    // gates that catch a bad cutover.
-    expect(body).toMatch(
-      /Set up <a href="\/docs\/webhooks">webhooks<\/a> for\s+session-completed events/,
-    );
-    expect(body).toMatch(
-      /Wire <a href="\/docs\/cost-monitoring">cost monitoring<\/a>\s+alerts before flipping production traffic/,
-    );
+  it('the docs successor source page still exists (a docs-side rename/move must update the redirect target)', () => {
+    expect(existsSync(DOCS_SUCCESSOR_SRC)).toBe(true);
   });
 });

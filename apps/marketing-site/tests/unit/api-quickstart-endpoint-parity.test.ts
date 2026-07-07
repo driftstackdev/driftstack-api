@@ -2,8 +2,22 @@
 // Every /v1/... endpoint cited in a curl example must correspond
 // to a live route registration on the server. Catches drift where
 // the quickstart demonstrates a renamed or unimplemented endpoint.
+//
+// S47 2026-07-07 (founder-approved: mirror deprecation) — SUPERSEDED.
+// The legacy marketing mirror page /docs/api-quickstart is DELETED and
+// 301-redirects (apps/marketing-site/public/_redirects) to its
+// verified docs successor:
+//   https://docs.driftstack.dev/quickstart-curl/
+//   (source: apps/docs/src/pages/quickstart-curl.md; S29/S37 content batches — every claim
+//   re-verified against server source before carry-over. Ongoing
+//   content-parity guarding for this topic lives with the docs
+//   page's own pin lattice.)
+// This file stays as a redirect tombstone so the original guard
+// history above remains greppable and the deprecation cannot
+// silently regress (page resurrection would shadow the 301 —
+// CF Pages serves static assets before _redirects).
 
-import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -11,71 +25,35 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/api-quickstart.astro');
-const ROUTES = resolve(REPO_ROOT, 'apps/server/src/routes');
+const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
+const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/quickstart-curl.md');
 
-function walk(dir: string, out: string[] = []): string[] {
-  if (!existsSync(dir)) return out;
-  for (const entry of readdirSync(dir)) {
-    const full = resolve(dir, entry);
-    const st = statSync(full);
-    if (st.isDirectory()) walk(full, out);
-    else out.push(full);
-  }
-  return out;
-}
+describe('S47 redirect tombstone — /docs/api-quickstart → https://docs.driftstack.dev/quickstart-curl/', () => {
+  it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
+    expect(
+      existsSync(PAGE),
+      'api-quickstart.astro must stay deleted — a restored page file would shadow the 301',
+    ).toBe(false);
 
-function read(p: string): string {
-  return readFileSync(p, 'utf8');
-}
+    const rules = readFileSync(REDIRECTS, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/\s+/));
+    const rule = (from: string) => rules.find((t) => t[0] === from);
 
-// Collect every literal `/v1/<path>` registered in any routes file.
-const routeFiles = walk(ROUTES).filter((f) => /\.ts$/.test(f));
-const liveRoutes = new Set<string>();
-for (const f of routeFiles) {
-  const body = read(f);
-  for (const m of body.matchAll(/['"`](\/v1\/[a-z0-9/_:-]+)['"`]/g)) {
-    liveRoutes.add(m[1]!);
-  }
-  // Capture inline app.<verb>('/v1/...') calls too.
-  for (const m of body.matchAll(/app\.\w+\(['"`](\/v1\/[a-z0-9/_:-]+)['"`]/g)) {
-    liveRoutes.add(m[1]!);
-  }
-}
-
-function normaliseCitedPath(raw: string): string {
-  // Map cited literal IDs in URLs to the route's `:param` shape.
-  // e.g. `/v1/sessions/ses_.../navigate` → `/v1/sessions/:id/navigate`
-  return (
-    raw
-      .replace(/\/(ses|prof|psnap|whk|wdl|ord|acc|key|inv|mem)_[^/]+/g, '/:id')
-      // Also handle bare `<id>` placeholders.
-      .replace(/\/<[^/>]+>/g, '/:id')
-      .replace(/\/:id\/:id/g, '/:id')
-  ); // dedupe duplicate :id from cascading replaces
-}
-
-describe('W301.B /docs/api-quickstart ↔ live route parity', () => {
-  const body = read(PAGE);
-
-  it('every /v1/... endpoint in a curl example resolves to a live route registration', () => {
-    const cited = [...body.matchAll(/api\.driftstack\.dev(\/v1\/[a-z0-9/_…-]+)/g)].map((m) =>
-      m[1]!.replace(/…/g, '_uuid'),
-    );
-
-    const offenders: { cited: string; normalised: string }[] = [];
-    for (const c of cited) {
-      const norm = normaliseCitedPath(c);
-      // Strip a leading slash + handle both the normalised and the
-      // raw forms — accept either.
-      const candidates = [norm, c, c.replace(/\/_uuid/g, '/:id')];
-      if (!candidates.some((p) => liveRoutes.has(p))) {
-        offenders.push({ cited: c, normalised: norm });
-      }
-    }
-    expect(offenders).toEqual([]);
+    expect(rule('/docs/api-quickstart'), 'bare-path rule missing').toEqual([
+      '/docs/api-quickstart',
+      'https://docs.driftstack.dev/quickstart-curl/',
+      '301',
+    ]);
+    expect(
+      rule('/docs/api-quickstart/'),
+      'trailing-slash rule missing (matching is exact-path)',
+    ).toEqual(['/docs/api-quickstart/', 'https://docs.driftstack.dev/quickstart-curl/', '301']);
   });
 
-  it('quickstart shows the `ses_` id prefix (canonical session id format)', () => {
-    expect(body).toMatch(/ses_[^/<\s]+/);
+  it('the docs successor source page still exists (a docs-side rename/move must update the redirect target)', () => {
+    expect(existsSync(DOCS_SUCCESSOR_SRC)).toBe(true);
   });
 });

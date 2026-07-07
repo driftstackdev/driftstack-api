@@ -8,8 +8,10 @@
 //   • BaseLayout import + page title + SEO description.
 //   • 5-card category grid: Quickstart / API reference / SDKs /
 //     Webhooks / Self-hosted.
-//   • Card hrefs: /docs/api-quickstart + /api-reference +
-//     /docs/sdk-typescript + /docs/webhooks + /self-hosted.
+//   • Card hrefs: https://docs.driftstack.dev/quickstart-curl/
+//     (S47 2026-07-07 mirror deprecation — was /docs/api-quickstart,
+//     now deleted + 301) + /api-reference + /docs/sdk-typescript +
+//     /docs/webhooks + /self-hosted.
 //   • W210 Recipe-library-removed inline comment (anti-404 guard).
 //   • OpenAPI 3.1 + try-in-browser + SDK codegen framing.
 //   • All-5-event-types + HMAC-SHA256 verification framing.
@@ -47,8 +49,9 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
     );
   });
 
-  it('5-card category grid: Quickstart (/docs/api-quickstart) + API reference (/api-reference) + SDKs (/docs/sdk-typescript) + Webhooks (/docs/webhooks) + Self-hosted (/self-hosted) — pinned so the 5 main doc entry points + their canonical hrefs stay correct (drift to dropping any card would orphan customers from that documentation category; drift to a different href would break the click-through)', () => {
-    expect(body).toMatch(/href="\/docs\/api-quickstart"/);
+  it('5-card category grid: Quickstart (https://docs.driftstack.dev/quickstart-curl/ — S47 2026-07-07 mirror deprecation successor of the deleted /docs/api-quickstart) + API reference (/api-reference) + SDKs (/docs/sdk-typescript) + Webhooks (/docs/webhooks) + Self-hosted (/self-hosted) — pinned so the 5 main doc entry points + their canonical hrefs stay correct (drift to dropping any card would orphan customers from that documentation category; drift to a different href would break the click-through; drift BACK to /docs/api-quickstart would re-point customers at a 301 stub)', () => {
+    expect(body).toMatch(/href="https:\/\/docs\.driftstack\.dev\/quickstart-curl\/"/);
+    expect(body).not.toMatch(/href="\/docs\/api-quickstart"/);
     expect(body).toMatch(/href="\/api-reference"/);
     expect(body).toMatch(/href="\/docs\/sdk-typescript"/);
     expect(body).toMatch(/href="\/docs\/webhooks"/);
@@ -88,7 +91,7 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
     );
   });
 
-  it("W210 recipe-library-removed inline comment pinned (slice 144 update — the recipe library IS now shipped at v1.0 per slice 121, so the prior 'Phase 3 deliverable' framing was stale; the marketing-site /docs/recipes MIRROR page still doesn't exist, just the apps/docs/src/pages/api/recipes.md page at docs.driftstack.dev/api/recipes/). The card stays card-less so the all-internal-anchors pattern survives, but the comment is now accurate.", () => {
+  it("W210 recipe-library-removed inline comment pinned (slice 144 update — the recipe library IS now shipped at v1.0 per slice 121, so the prior 'Phase 3 deliverable' framing was stale; the marketing-site /docs/recipes MIRROR page still doesn't exist, just the apps/docs/src/pages/api/recipes.md page at docs.driftstack.dev/api/recipes/). S47 2026-07-07: the hub is no longer all-internal-anchors (the Quickstart card points at its docs successor after the mirror deprecation), so the comment now flags a docs-hosted Recipe card as a founder-call option; the card itself stays absent until that call.", () => {
     expect(body).toMatch(
       /\{\/\* W210 — the Recipe library card pointed at \/docs\/recipes,\s*\n?\s*which doesn't exist yet on the marketing-site \/docs\/\* mirror\./,
     );

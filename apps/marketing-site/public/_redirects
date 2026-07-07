@@ -1,0 +1,46 @@
+# S47 2026-07-07 (founder-approved: mirror deprecation) — Cloudflare
+# Pages redirects for the marketing site.
+#
+# The legacy /docs/* mirror pages below are superseded by verified
+# equivalents on docs.driftstack.dev (S29/S37 content batches, every
+# claim re-verified against source before carry-over). The .astro
+# pages are DELETED in the same change — CF Pages serves static
+# assets BEFORE evaluating _redirects, so a surviving page file would
+# shadow its rule.
+#
+# ⚠️ Matching is EXACT-PATH: a rule for /docs/foo does NOT match
+# /docs/foo/ and vice-versa (verified empirically 2026-07-07 via
+# `wrangler pages dev` 4.59.2 — the bare rule 301'd, the slash
+# variant fell through, and the inverse held too). Every route
+# therefore carries BOTH spellings.
+#
+# NOT redirected (content-gap flags, S47 audit): /docs/billing-crypto-overview
+# (VAT-invoice-on-request policy absent from docs) and
+# /docs/billing-crypto-troubleshooting (support-response SLA absent
+# from docs) — those pages stay until the docs carry the content.
+#
+# Format reference:
+#   https://developers.cloudflare.com/pages/configuration/redirects/
+
+/docs/concurrency                        https://docs.driftstack.dev/guides/concurrency/            301
+/docs/concurrency/                       https://docs.driftstack.dev/guides/concurrency/            301
+/docs/migration-from-puppeteer           https://docs.driftstack.dev/guides/migrate-from-puppeteer/ 301
+/docs/migration-from-puppeteer/          https://docs.driftstack.dev/guides/migrate-from-puppeteer/ 301
+/docs/migration-from-browserless         https://docs.driftstack.dev/guides/migrate-from-browserless/ 301
+/docs/migration-from-browserless/        https://docs.driftstack.dev/guides/migrate-from-browserless/ 301
+/docs/sentry-integration                 https://docs.driftstack.dev/guides/sentry/                 301
+/docs/sentry-integration/                https://docs.driftstack.dev/guides/sentry/                 301
+/docs/api-quickstart                     https://docs.driftstack.dev/quickstart-curl/               301
+/docs/api-quickstart/                    https://docs.driftstack.dev/quickstart-curl/               301
+/docs/billing-crypto-integration-guide   https://docs.driftstack.dev/guides/paying-with-crypto/     301
+/docs/billing-crypto-integration-guide/  https://docs.driftstack.dev/guides/paying-with-crypto/     301
+/docs/webhooks-crypto-events             https://docs.driftstack.dev/webhooks/crypto-events/        301
+/docs/webhooks-crypto-events/            https://docs.driftstack.dev/webhooks/crypto-events/        301
+/docs/crypto-orders-polling-vs-webhooks  https://docs.driftstack.dev/webhooks/crypto-events/        301
+/docs/crypto-orders-polling-vs-webhooks/ https://docs.driftstack.dev/webhooks/crypto-events/        301
+/docs/emails-reference                   https://docs.driftstack.dev/reference/emails/              301
+/docs/emails-reference/                  https://docs.driftstack.dev/reference/emails/              301
+/docs/email-troubleshooting              https://docs.driftstack.dev/reference/emails/              301
+/docs/email-troubleshooting/             https://docs.driftstack.dev/reference/emails/              301
+/docs/data-residency                     https://docs.driftstack.dev/reference/data-residency/      301
+/docs/data-residency/                    https://docs.driftstack.dev/reference/data-residency/      301

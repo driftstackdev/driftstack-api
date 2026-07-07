@@ -2,123 +2,58 @@
 // rewritten under W226.A specifically because the previous revision
 // described a customer-configurable Sentry forwarder that did not
 // exist in the codebase: no /v1/account/integrations/sentry endpoint,
-// no DSN setting on the account row, no source_map_url field on
-// CreateSessionRequest, no `script.error` webhook event type. This
-// parity test pins the honesty posture so the fictional surface
-// doesn't get re-introduced into the doc copy.
 //
-// Pinned:
-//   • "no customer-configurable Sentry forwarder" disclaimer is
-//     still on the page (not silently scrubbed)
-//   • Server-side Sentry usage is real: apps/server/src/lib/sentry.ts
-//     exists + ships the V-494 sensitive-key denylist
-//   • NEGATIVE guards on the four fictional surfaces:
-//       - no /v1/account/integrations/sentry route registered
-//       - no sentry_dsn column on the account schema
-//       - no source_map_url / release_tag field on
-//         CreateSessionRequestSchema
-//       - no `script.error` value in SubscribableWebhookEventTypeSchema
-//   • Cross-links to /docs/webhooks + /docs/data-residency +
-//     /docs/error-codes resolve
-//   • integrations@driftstack.dev support contact pinned
+// S47 2026-07-07 (founder-approved: mirror deprecation) — SUPERSEDED.
+// The legacy marketing mirror page /docs/sentry-integration is DELETED and
+// 301-redirects (apps/marketing-site/public/_redirects) to its
+// verified docs successor:
+//   https://docs.driftstack.dev/guides/sentry/
+//   (source: apps/docs/src/pages/guides/sentry.md; S29/S37 content batches — every claim
+//   re-verified against server source before carry-over. Ongoing
+//   content-parity guarding for this topic lives with the docs
+//   page's own pin lattice.)
+// This file stays as a redirect tombstone so the original guard
+// history above remains greppable and the deprecation cannot
+// silently regress (page resurrection would shadow the 301 —
+// CF Pages serves static assets before _redirects).
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import {
-  CreateSessionRequestSchema,
-  SubscribableWebhookEventTypeSchema,
-} from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/sentry-integration.astro');
-const SENTRY_LIB = resolve(REPO_ROOT, 'apps/server/src/lib/sentry.ts');
-const ROUTES_DIR = resolve(REPO_ROOT, 'apps/server/src/routes');
-const DB_SCHEMA = resolve(REPO_ROOT, 'apps/server/src/db/schema.ts');
+const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
+const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/guides/sentry.md');
 
-function read(p: string): string {
-  return readFileSync(p, 'utf8');
-}
+describe('S47 redirect tombstone — /docs/sentry-integration → https://docs.driftstack.dev/guides/sentry/', () => {
+  it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
+    expect(
+      existsSync(PAGE),
+      'sentry-integration.astro must stay deleted — a restored page file would shadow the 301',
+    ).toBe(false);
 
-function readAllRoutes(): string {
-  const out: string[] = [];
-  for (const entry of readdirSync(ROUTES_DIR)) {
-    if (entry.endsWith('.ts')) out.push(readFileSync(join(ROUTES_DIR, entry), 'utf8'));
-  }
-  return out.join('\n');
-}
+    const rules = readFileSync(REDIRECTS, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/\s+/));
+    const rule = (from: string) => rules.find((t) => t[0] === from);
 
-describe('W352.A /docs/sentry-integration parity', () => {
-  const body = read(PAGE);
-
-  it('honesty disclaimer ("no customer-configurable Sentry forwarder today") still on the page', () => {
-    expect(body).toMatch(/no customer-configurable\s*Sentry forwarder/);
-    expect(body).toMatch(/<strong>Status:<\/strong>/);
+    expect(rule('/docs/sentry-integration'), 'bare-path rule missing').toEqual([
+      '/docs/sentry-integration',
+      'https://docs.driftstack.dev/guides/sentry/',
+      '301',
+    ]);
+    expect(
+      rule('/docs/sentry-integration/'),
+      'trailing-slash rule missing (matching is exact-path)',
+    ).toEqual(['/docs/sentry-integration/', 'https://docs.driftstack.dev/guides/sentry/', '301']);
   });
 
-  it('server-side Sentry lib + V-494 scrub denylist exist (the page cites them)', () => {
-    const sentry = read(SENTRY_LIB);
-    expect(body).toContain('apps/server/src/lib/sentry.ts');
-    expect(sentry).toMatch(/V-494[\s\S]{0,150}denylist/);
-    // The page also claims the scrub strips raw API keys, session
-    // secrets, customer URLs, webhook secrets. Pin the denylist
-    // mentions on the lib side.
-    expect(sentry).toMatch(/api[_-]?key|secret|token/i);
-  });
-
-  it('NEGATIVE: no /v1/account/integrations/sentry route registered server-side', () => {
-    const allRoutes = readAllRoutes();
-    expect(allRoutes).not.toContain('/v1/account/integrations/sentry');
-    expect(allRoutes).not.toContain('integrations/sentry');
-  });
-
-  it('NEGATIVE: no sentry_dsn / sentryDsn column anywhere on the db schema', () => {
-    const schema = read(DB_SCHEMA);
-    expect(schema).not.toMatch(/sentry_dsn|sentryDsn/i);
-  });
-
-  it('NEGATIVE: CreateSessionRequestSchema has no source_map_url / release / sentryRelease field', () => {
-    const fields = Object.keys(CreateSessionRequestSchema._def.shape() as Record<string, unknown>);
-    for (const banned of ['source_map_url', 'sourceMapUrl', 'release', 'sentry_release']) {
-      expect(fields).not.toContain(banned);
-    }
-  });
-
-  it("NEGATIVE: 'script.error' is not in SubscribableWebhookEventTypeSchema", () => {
-    const events = new Set<string>(
-      (SubscribableWebhookEventTypeSchema._def as { values: readonly string[] }).values,
-    );
-    expect(events.has('script.error')).toBe(false);
-  });
-
-  it('page cites session.failed as the in-place mechanism for stack traces', () => {
-    expect(body).toContain('session.failed');
-    // session.failed IS subscribable — pin the bidirectional claim.
-    const events = new Set<string>(
-      (SubscribableWebhookEventTypeSchema._def as { values: readonly string[] }).values,
-    );
-    expect(events.has('session.failed')).toBe(true);
-  });
-
-  it('roadmap section cites the eventual /v1/account/integrations/sentry endpoint (not yet shipped)', () => {
-    // The page documents what WILL exist. The negative guards above
-    // confirm none of it exists today. When it ships, this test
-    // should flip — and the negative guards above will start failing
-    // first, surfacing the doc update need.
-    expect(body).toMatch(/Roadmap:\s*control-plane forwarding/i);
-    expect(body).toMatch(/<code>POST \/v1\/account\/integrations\/sentry<\/code>/);
-    expect(body).toContain('integration.sentry.degraded');
-  });
-
-  it('Related cross-links to /docs/webhooks + /docs/data-residency + /docs/error-codes', () => {
-    expect(body).toContain('/docs/webhooks');
-    expect(body).toContain('/docs/data-residency');
-    expect(body).toContain('/docs/error-codes');
-  });
-
-  it('contact for integration questions is integrations@driftstack.dev', () => {
-    expect(body).toContain('integrations@driftstack.dev');
+  it('the docs successor source page still exists (a docs-side rename/move must update the redirect target)', () => {
+    expect(existsSync(DOCS_SUCCESSOR_SRC)).toBe(true);
   });
 });

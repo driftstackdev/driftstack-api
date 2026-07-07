@@ -40,27 +40,32 @@ describe('W512.A apps/marketing-site/src/pages/docs/sla-policy.astro content par
     );
   });
 
-  it("5-tier availability table: trial_pack/api_starter (no SLA) + solo_manual 99.5% / ~3h 40m + team_manual/api_builder 99.9% / ~43m + agency_manual/api_scale 99.95% / ~21m + enterprise 99.99% (per addendum) / ~4m — pinned so the 5-tier availability ladder + max-downtime/month commitments survive (drift to a different uptime target would put Driftstack on the hook for credits beyond contract; drift to dropping the 'per addendum' caveat on enterprise would lock in 99.99% as default)", () => {
+  it('Availability table aligned to ToS §9 (S43 2026-07-07, founder-approved): §9.1 tiers (free / solo_manual / team_manual / agency_manual / api_starter / api_builder) carry NO contractual SLA (best effort); §9.2 tiers api_scale + enterprise carry 99.9% / ~43m + the Severity-1 first-response column (4h / 1h). The old 99.5/99.9/99.95/99.99 5-row ladder contradicted the binding ToS and must not reappear.', () => {
     expect(body).toMatch(
-      /<tr><td><code>free<\/code> \/ <code>api_starter<\/code><\/td><td>—<\/td><td>\(no SLA — best effort\)<\/td><\/tr>/,
+      /<tr><td><code>free<\/code> \/ <code>solo_manual<\/code> \/ <code>team_manual<\/code> \/ <code>agency_manual<\/code> \/ <code>api_starter<\/code> \/ <code>api_builder<\/code><\/td><td>—<\/td><td>\(no contractual SLA — best effort, ToS §9\.1\)<\/td><td>—<\/td><\/tr>/,
     );
     expect(body).toMatch(
-      /<tr><td><code>solo_manual<\/code><\/td><td>99\.5%<\/td><td>~3h 40m<\/td><\/tr>/,
+      /<tr><td><code>api_scale<\/code><\/td><td>99\.9%<\/td><td>~43m<\/td><td>4 hours<\/td><\/tr>/,
     );
     expect(body).toMatch(
-      /<tr><td><code>team_manual<\/code> \/ <code>api_builder<\/code><\/td><td>99\.9%<\/td><td>~43m<\/td><\/tr>/,
+      /<tr><td><code>enterprise<\/code><\/td><td>99\.9%<\/td><td>~43m<\/td><td>1 hour<\/td><\/tr>/,
+    );
+    // The ToS-contradicting ladder rows must not reappear.
+    expect(body).not.toMatch(/99\.95%/);
+    expect(body).not.toMatch(/99\.99%/);
+    expect(body).not.toMatch(/<code>solo_manual<\/code><\/td><td>99\.5%/);
+    // §9.1/§9.2 tier split quoted from the ToS.
+    expect(body).toMatch(
+      /the Free, Manual-ladder\s*\n?\s*\(Personal, Team, Agency\), API Starter, and API Builder tiers are\s*\n?\s*provided <strong>without<\/strong> a contractually-binding\s*\n?\s*service level agreement/,
     );
     expect(body).toMatch(
-      /<tr><td><code>agency_manual<\/code> \/ <code>api_scale<\/code><\/td><td>99\.95%<\/td><td>~21m<\/td><\/tr>/,
-    );
-    expect(body).toMatch(
-      /<tr><td><code>enterprise<\/code><\/td><td>99\.99% \(per addendum\)<\/td><td>~4m<\/td><\/tr>/,
+      /first-response SLA on Severity-1 incidents of four\s*\n?\s*\(4\) hours on API Scale and one \(1\) hour on Enterprise/,
     );
   });
 
-  it("Mid-month-upgrade SLA boundary framing pinned: 'Tier upgrades take effect immediately on payment confirmation; SLA credit accruals reset at the boundary so a mid-month upgrade does not retroactively apply the higher target.' — pinned so the immediate-effect + no-retroactive-higher-target commitment survives (drift to retroactive application would invite credits for downtime before the upgrade-paid moment)", () => {
+  it("Mid-month-upgrade SLA boundary framing pinned (S43 wording: 'a mid-month upgrade into an SLA-carrying tier does not retroactively apply the commitment') — pinned so the immediate-effect + no-retroactive-commitment posture survives (drift to retroactive application would invite credits for downtime before the upgrade-paid moment)", () => {
     expect(body).toMatch(
-      /Tier upgrades take effect immediately on payment confirmation;\s*\n?\s*SLA credit accruals reset at the boundary so a mid-month upgrade\s*\n?\s*does not retroactively apply the higher target\./,
+      /Tier upgrades take effect immediately on payment confirmation;\s*\n?\s*SLA credit accruals reset at the boundary so a mid-month upgrade\s*\n?\s*into an SLA-carrying tier does not retroactively apply the\s*\n?\s*commitment\./,
     );
   });
 
@@ -108,9 +113,13 @@ describe('W512.A apps/marketing-site/src/pages/docs/sla-policy.astro content par
   });
 
   it("Credit-table 3-tier: <target ≥ 99.0% → 5% + <99.0% ≥ 95.0% → 10% + <95.0% → 25% + 'Credits are capped at the customer's monthly subscription fee for that month — they cannot exceed what was paid.' + 'Credits do not apply to per-minute or per-session usage charges, only the tier subscription line.' — pinned so the 3-tier credit ladder + cap-at-monthly-fee + subscription-only commitment survive (drift to higher percentages would put Driftstack on the hook for credits beyond contract; drift to dropping the usage-charge exclusion would expand the credit base beyond what's intended)", () => {
-    expect(body).toMatch(/<tr><td>Below target, ≥ 99\.0%<\/td><td>5%<\/td><\/tr>/);
+    // S43 2026-07-07 — first band names the §9.2 99.9% commitment
+    // explicitly (was "Below target"); credits scoped to the
+    // SLA-carrying tiers (API Scale + Enterprise).
+    expect(body).toMatch(/<tr><td>Below 99\.9%, ≥ 99\.0%<\/td><td>5%<\/td><\/tr>/);
     expect(body).toMatch(/<tr><td>Below 99\.0%, ≥ 95\.0%<\/td><td>10%<\/td><\/tr>/);
     expect(body).toMatch(/<tr><td>Below 95\.0%<\/td><td>25%<\/td><\/tr>/);
+    expect(body).toMatch(/<h2>Credit mechanics \(API Scale \+ Enterprise\)<\/h2>/);
     expect(body).toMatch(
       /Credits are capped at the customer's monthly subscription fee\s*\n?\s*for that month — they cannot exceed what was paid\./,
     );
@@ -135,8 +144,10 @@ describe('W512.A apps/marketing-site/src/pages/docs/sla-policy.astro content par
     );
     expect(body).toMatch(/<li>Dedicated 24\/7 oncall pager with named first responders\.<\/li>/);
     expect(body).toMatch(/<li>Maintenance-window pre-approval rights\.<\/li>/);
+    // S43 2026-07-07 — floor framing plus the ToS §9.2
+    // negotiated-SLA-governs clause quoted.
     expect(body).toMatch(
-      /The default-tier SLA above is the\s*\n?\s*floor — addenda only ever strengthen it\./,
+      /The SLA above is the floor — addenda\s*\n?\s*only ever strengthen it, and per ToS §9\.2 a negotiated SLA\s*\n?\s*governs in case of conflict with this page\./,
     );
   });
 

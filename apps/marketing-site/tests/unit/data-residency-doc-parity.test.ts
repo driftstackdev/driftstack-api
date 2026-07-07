@@ -2,55 +2,62 @@
 // 1. Region preference enum matches AccountRegionSchema (us / eu / apac).
 // 2. PATCH /v1/account/me is the documented mutation endpoint.
 // 3. MFA secret encryption + API key hashing claims match the live setup.
+//
+// S47 2026-07-07 (founder-approved: mirror deprecation) — SUPERSEDED.
+// The legacy marketing mirror page /docs/data-residency is DELETED and
+// 301-redirects (apps/marketing-site/public/_redirects) to its
+// verified docs successor:
+//   https://docs.driftstack.dev/reference/data-residency/
+//   (source: apps/docs/src/pages/reference/data-residency.md; S29/S37 content batches — every claim
+//   re-verified against server source before carry-over. Ongoing
+//   content-parity guarding for this topic lives with the docs
+//   page's own pin lattice.)
+// This file stays as a redirect tombstone so the original guard
+// history above remains greppable and the deprecation cannot
+// silently regress (page resurrection would shadow the 301 —
+// CF Pages serves static assets before _redirects).
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AccountRegionSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/data-residency.astro');
+const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
+const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/reference/data-residency.md');
 
-function read(p: string): string {
-  return readFileSync(p, 'utf8');
-}
+describe('S47 redirect tombstone — /docs/data-residency → https://docs.driftstack.dev/reference/data-residency/', () => {
+  it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
+    expect(
+      existsSync(PAGE),
+      'data-residency.astro must stay deleted — a restored page file would shadow the 301',
+    ).toBe(false);
 
-describe('W263.C /docs/data-residency ↔ live AccountRegionSchema parity', () => {
-  const page = read(PAGE);
+    const rules = readFileSync(REDIRECTS, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/\s+/));
+    const rule = (from: string) => rules.find((t) => t[0] === from);
 
-  it('region values match AccountRegionSchema enum exactly', () => {
-    const live = AccountRegionSchema.options.slice().sort();
-    expect(live).toEqual(['apac', 'eu', 'us']);
-    for (const r of live) {
-      expect(page).toMatch(new RegExp(`<code>${r}</code>`));
-    }
+    expect(rule('/docs/data-residency'), 'bare-path rule missing').toEqual([
+      '/docs/data-residency',
+      'https://docs.driftstack.dev/reference/data-residency/',
+      '301',
+    ]);
+    expect(
+      rule('/docs/data-residency/'),
+      'trailing-slash rule missing (matching is exact-path)',
+    ).toEqual([
+      '/docs/data-residency/',
+      'https://docs.driftstack.dev/reference/data-residency/',
+      '301',
+    ]);
   });
 
-  it('PATCH /v1/account/me is the documented mutation endpoint', () => {
-    expect(page).toMatch(/PATCH \/v1\/account\/me/);
-    const route = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-me.ts'));
-    expect(route).toContain(`'/v1/account/me'`);
-  });
-
-  it('MFA secret encryption claim matches the live AES-256 setup', () => {
-    expect(page).toMatch(/AES-256/);
-    expect(page).toMatch(/MFA_ENCRYPTION_KEY/);
-    const mfa = read(resolve(REPO_ROOT, 'apps/server/src/lib/mfa-totp.ts'));
-    expect(mfa).toMatch(/MFA_ENCRYPTION_KEY/);
-  });
-
-  it('API key hashing claim matches the live scrypt N=2^15 setup', () => {
-    expect(page).toMatch(/scrypt/);
-    expect(page).toMatch(/logN=15|N=2\^15/);
-    const apiKeys = read(resolve(REPO_ROOT, 'apps/server/src/lib/api-keys.ts'));
-    // The live cost parameter is N=2^15.
-    expect(apiKeys).toMatch(/scrypt/i);
-  });
-
-  it('Postgres + R2 sub-processor regions match the SUB_PROCESSORS list', () => {
-    expect(page).toMatch(/Postgres \(Neon, EU\)/);
-    expect(page).toMatch(/R2/);
+  it('the docs successor source page still exists (a docs-side rename/move must update the redirect target)', () => {
+    expect(existsSync(DOCS_SUCCESSOR_SRC)).toBe(true);
   });
 });

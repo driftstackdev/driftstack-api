@@ -55,10 +55,12 @@ describe('W264.D /docs/cli-quickstart ↔ live cli-authorize parity', () => {
     expect(page).toMatch(/app\.driftstack\.dev\/cli\/authorize/);
   });
 
-  it('cross-link /docs/api-quickstart resolves to a real page', () => {
-    expect(page).toContain('/docs/api-quickstart');
+  it('cross-link points at the docs curl-quickstart successor; the deleted mirror stays gone (S47 2026-07-07 mirror deprecation)', () => {
+    expect(page).toContain('https://docs.driftstack.dev/quickstart-curl/');
+    expect(existsSync(resolve(REPO_ROOT, 'apps/docs/src/pages/quickstart-curl.md'))).toBe(true);
+    // A restored mirror page would shadow its 301 in public/_redirects.
     expect(
       existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/api-quickstart.astro')),
-    ).toBe(true);
+    ).toBe(false);
   });
 });

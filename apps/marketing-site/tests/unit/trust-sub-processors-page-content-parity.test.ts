@@ -62,11 +62,21 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
     );
   });
 
-  it('"region preference vs region routing" honesty framing pinned', () => {
+  it('"region preference vs region routing" honesty framing pinned (S43 2026-07-07: scoped to database-resident data; R2 file objects replicate EU + US)', () => {
     expect(body).toMatch(/Region preference vs\. region routing\./);
     expect(body).toMatch(/It does not move\s+your data/);
+    // S43 2026-07-07 (founder-approved) — the old blanket "every
+    // customer's data resides on the EU-jurisdiction infrastructure"
+    // claim was false for R2-held file objects (default jurisdiction,
+    // EU + US replication). Now scoped honestly.
     expect(body).toMatch(
-      /every customer's data resides on the\s+EU-jurisdiction infrastructure listed in the table above —\s+regardless of region preference/,
+      /every customer's database-resident data —\s+account, profiles, sessions, audit logs — resides on the\s+EU-resident infrastructure listed in the table above/,
+    );
+    expect(body).toMatch(
+      /use R2's default jurisdiction, which replicates\s+between the EU and the US under the transfer mechanism\s+listed in the table/,
+    );
+    expect(body).not.toMatch(
+      /every customer's data resides on the\s+EU-jurisdiction infrastructure/,
     );
   });
 

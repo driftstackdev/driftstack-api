@@ -143,12 +143,17 @@ describe('W358.A /docs/crypto-orders-ops-runbook parity', () => {
       ['/docs/admin-csv-export', 'apps/marketing-site/src/pages/docs/admin-csv-export.astro'],
       ['/docs/idempotency-keys', 'apps/marketing-site/src/pages/docs/idempotency-keys.astro'],
       [
-        '/docs/billing-crypto-integration-guide',
-        'apps/marketing-site/src/pages/docs/billing-crypto-integration-guide.astro',
+        // S47 2026-07-07: integration-guide mirror deleted; docs
+        // successor is the paying-with-crypto guide.
+        'https://docs.driftstack.dev/guides/paying-with-crypto/',
+        'apps/docs/src/pages/guides/paying-with-crypto.md',
       ],
       [
-        '/docs/webhooks-crypto-events',
-        'apps/marketing-site/src/pages/docs/webhooks-crypto-events.astro',
+        // S47 2026-07-07 (founder-approved: mirror deprecation): the
+        // webhooks-crypto-events mirror is deleted; the page
+        // cross-links its docs successor.
+        'https://docs.driftstack.dev/webhooks/crypto-events/',
+        'apps/docs/src/pages/webhooks/crypto-events.md',
       ],
       ['/legal/refunds', 'apps/marketing-site/src/pages/legal/refunds.md'],
     ] as const) {

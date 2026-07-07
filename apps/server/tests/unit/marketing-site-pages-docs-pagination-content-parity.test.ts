@@ -31,7 +31,7 @@ describe('W509.C apps/marketing-site/src/pages/docs/pagination.astro content par
 
   it("V-695 framing pinned: 'pagination developer docs. Covers the cursor-based pagination pattern used across all list endpoints. Companion to /docs/api-quickstart.' — pinned so the V-695 anchor + /docs/api-quickstart companion + 'all list endpoints' scope all survive (drift to softening 'all' would let customers question which endpoints paginate)", () => {
     expect(body).toMatch(
-      /\/\/ V-695 — pagination developer docs\. Covers the cursor-based pagination\s*\n?\s*\/\/ pattern used across all list endpoints\. Companion to \/docs\/api-quickstart\./,
+      /\/\/ V-695 — pagination developer docs\. Covers the cursor-based pagination\s*\n?\s*\/\/ pattern used across all list endpoints\. Companion to https:\/\/docs\.driftstack\.dev\/quickstart-curl\/\./,
     );
   });
 

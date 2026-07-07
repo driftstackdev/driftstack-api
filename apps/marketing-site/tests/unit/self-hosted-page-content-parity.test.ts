@@ -18,7 +18,8 @@
 //     (Privacy / Volume / Sovereignty).
 //   • 4-step process pinned (Contact sales / Procure hardware
 //     / Onboard / Run) with sales@driftstack.dev contact.
-//   • "GA within 6 months of API public launch" timeline pinned.
+//   • Softened GA framing pinned (S43 2026-07-07: "GA follows the
+//     API public launch" — no dated commitment).
 //   • Cross-link to /faq for procurement/compliance questions.
 //   • ASCII architecture diagram present with secure-channel
 //     callout.
@@ -104,9 +105,14 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
     }
   });
 
-  it('sales@driftstack.dev contact + "self-hosted GA within 6 months" timeline pinned', () => {
+  it('sales@driftstack.dev contact + softened GA framing pinned (S43 2026-07-07: intent-without-deadline, no dated GA promise)', () => {
     expect(body).toMatch(/mailto:sales@driftstack\.dev\?subject=Self-Hosted%20inquiry/);
-    expect(body).toMatch(/Self-hosted GA within 6 months\s+of API public launch/);
+    // S43 2026-07-07 (founder-approved) — the dated "GA within 6
+    // months of API public launch" commitment was softened to
+    // intent-without-deadline; the dated form must not reappear.
+    expect(body).toMatch(/Self-hosted GA follows the\s+API public launch/);
+    expect(body).not.toMatch(/GA within 6 months/);
+    expect(body).not.toMatch(/ships within 6 months/);
   });
 
   it('cross-link to /faq resolves (common-questions teaser section)', () => {

@@ -2,46 +2,58 @@
 // row in the tier-cap table must match TIER_CONCURRENT_SESSION_LIMITS
 // from the live schema. Catches drift where a tier cap changes in
 // the schema but the doc isn't updated.
+//
+// S47 2026-07-07 (founder-approved: mirror deprecation) — SUPERSEDED.
+// The legacy marketing mirror page /docs/concurrency is DELETED and
+// 301-redirects (apps/marketing-site/public/_redirects) to its
+// verified docs successor:
+//   https://docs.driftstack.dev/guides/concurrency/
+//   (source: apps/docs/src/pages/guides/concurrency.md; S29/S37 content batches — every claim
+//   re-verified against server source before carry-over. Ongoing
+//   content-parity guarding for this topic lives with the docs
+//   page's own pin lattice.)
+// This file stays as a redirect tombstone so the original guard
+// history above remains greppable and the deprecation cannot
+// silently regress (page resurrection would shadow the 301 —
+// CF Pages serves static assets before _redirects).
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { TIER_CONCURRENT_SESSION_LIMITS, AccountTierSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/concurrency.astro');
+const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
+const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/guides/concurrency.md');
 
-function read(p: string): string {
-  return readFileSync(p, 'utf8');
-}
+describe('S47 redirect tombstone — /docs/concurrency → https://docs.driftstack.dev/guides/concurrency/', () => {
+  it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
+    expect(
+      existsSync(PAGE),
+      'concurrency.astro must stay deleted — a restored page file would shadow the 301',
+    ).toBe(false);
 
-describe('W302.A /docs/concurrency ↔ TIER_CONCURRENT_SESSION_LIMITS parity', () => {
-  const body = read(PAGE);
+    const rules = readFileSync(REDIRECTS, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/\s+/));
+    const rule = (from: string) => rules.find((t) => t[0] === from);
 
-  it('page cites every AccountTier in the concurrency table', () => {
-    const missing: string[] = [];
-    for (const tier of AccountTierSchema.options) {
-      if (!new RegExp(`<code>${tier}</code>`).test(body)) {
-        missing.push(tier);
-      }
-    }
-    expect(missing).toEqual([]);
+    expect(rule('/docs/concurrency'), 'bare-path rule missing').toEqual([
+      '/docs/concurrency',
+      'https://docs.driftstack.dev/guides/concurrency/',
+      '301',
+    ]);
+    expect(
+      rule('/docs/concurrency/'),
+      'trailing-slash rule missing (matching is exact-path)',
+    ).toEqual(['/docs/concurrency/', 'https://docs.driftstack.dev/guides/concurrency/', '301']);
   });
 
-  it('each tier row carries the canonical concurrent limit', () => {
-    const offenders: { tier: string; cap: number; cited: string | null }[] = [];
-    for (const [tier, cap] of Object.entries(TIER_CONCURRENT_SESSION_LIMITS)) {
-      // Look for a table row containing `<code>tier</code>` then a
-      // numeric td. Be tolerant of whitespace.
-      const re = new RegExp(`<code>${tier}</code>\\s*</td>\\s*<td>\\s*(\\d+)\\s*</td>`);
-      const m = body.match(re);
-      const cited = m ? Number(m[1]) : null;
-      if (cited !== cap) {
-        offenders.push({ tier, cap, cited: m?.[1] ?? null });
-      }
-    }
-    expect(offenders).toEqual([]);
+  it('the docs successor source page still exists (a docs-side rename/move must update the redirect target)', () => {
+    expect(existsSync(DOCS_SUCCESSOR_SRC)).toBe(true);
   });
 });

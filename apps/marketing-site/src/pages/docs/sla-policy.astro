@@ -5,6 +5,17 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // /docs/incident-policy (operational response) and /docs/api-versioning
 // (deprecation timelines). Pitched at procurement / customer security
 // review.
+//
+// S43 2026-07-07 (founder-approved) — aligned to the binding ToS §9.
+// The previous table published a 99.5/99.9/99.95/99.99 ladder across
+// every paid tier, contradicting ToS §9.1 (Free, Personal, Team,
+// Agency, API Starter, API Builder are provided WITHOUT a
+// contractually-binding SLA) and §9.2 (API Scale + Enterprise carry
+// the contractual SLA: "currently: 99.9% monthly availability;
+// first-response SLA on Severity-1 incidents of four (4) hours on API
+// Scale and one (1) hour on Enterprise"). This page is the
+// "published separately" SLA §9.2 references; its numbers now quote
+// the ToS grant exactly.
 ---
 
 <BaseLayout title="SLA policy — Driftstack" description="Service availability commitments, measurement methodology, and remedy mechanics for each tier.">
@@ -12,35 +23,49 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h1>SLA policy</h1>
 
     <p class="lead">
-      This page documents Driftstack's availability commitments by
-      tier, how we measure uptime, what counts as an "incident," and
-      the credit mechanics when we fail to meet the target. It
-      describes the standard offering; enterprise contracts can
-      negotiate a tier-specific SLA addendum that supersedes this
-      page.
+      This page is the contractual SLA the
+      <a href="/legal/terms">Terms of Service</a> Section 9.2 refers
+      to as "published separately". It documents which tiers carry a
+      contractual SLA, how we measure uptime, what counts as an
+      "incident," and the credit mechanics when we fail to meet the
+      commitment. Enterprise contracts can negotiate a tier-specific
+      SLA addendum that supersedes this page.
     </p>
 
-    <h2>Tier-by-tier availability targets</h2>
+    <h2>Which tiers carry a contractual SLA</h2>
     <p>
-      Tier ids below match the <code>AccountTier</code> enum the API
-      uses; see <code>GET /v1/account/me</code>.
+      Per the Terms of Service Section 9.1, the Free, Manual-ladder
+      (Personal, Team, Agency), API Starter, and API Builder tiers are
+      provided <strong>without</strong> a contractually-binding
+      service level agreement: Driftstack uses commercially reasonable
+      efforts to maintain availability, but does not commit to a
+      specific uptime percentage at these tiers. Per Section 9.2, the
+      API Scale and Enterprise tiers carry the contractual SLA on
+      this page. Tier ids below match the <code>AccountTier</code>
+      enum the API uses; see <code>GET /v1/account/me</code>.
     </p>
     <table>
       <thead>
-        <tr><th>Tier</th><th>Monthly target</th><th>Max allowed downtime / month</th></tr>
+        <tr><th>Tier</th><th>Monthly availability</th><th>Max allowed downtime / month</th><th>Severity-1 first response</th></tr>
       </thead>
       <tbody>
-        <tr><td><code>free</code> / <code>api_starter</code></td><td>—</td><td>(no SLA — best effort)</td></tr>
-        <tr><td><code>solo_manual</code></td><td>99.5%</td><td>~3h 40m</td></tr>
-        <tr><td><code>team_manual</code> / <code>api_builder</code></td><td>99.9%</td><td>~43m</td></tr>
-        <tr><td><code>agency_manual</code> / <code>api_scale</code></td><td>99.95%</td><td>~21m</td></tr>
-        <tr><td><code>enterprise</code></td><td>99.99% (per addendum)</td><td>~4m</td></tr>
+        <tr><td><code>free</code> / <code>solo_manual</code> / <code>team_manual</code> / <code>agency_manual</code> / <code>api_starter</code> / <code>api_builder</code></td><td>—</td><td>(no contractual SLA — best effort, ToS §9.1)</td><td>—</td></tr>
+        <tr><td><code>api_scale</code></td><td>99.9%</td><td>~43m</td><td>4 hours</td></tr>
+        <tr><td><code>enterprise</code></td><td>99.9%</td><td>~43m</td><td>1 hour</td></tr>
       </tbody>
     </table>
     <p>
+      The Severity-1 first-response column is the ToS §9.2 grant
+      verbatim: a "first-response SLA on Severity-1 incidents of four
+      (4) hours on API Scale and one (1) hour on Enterprise". The
+      severity ladder itself is defined in the
+      <a href="/docs/incident-policy">incident communication policy</a>.
+    </p>
+    <p>
       Tier upgrades take effect immediately on payment confirmation;
       SLA credit accruals reset at the boundary so a mid-month upgrade
-      does not retroactively apply the higher target.
+      into an SLA-carrying tier does not retroactively apply the
+      commitment.
     </p>
 
     <h2>What's covered</h2>
@@ -90,17 +115,18 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       issue isn't counted against us).
     </p>
 
-    <h2>Credit mechanics</h2>
+    <h2>Credit mechanics (API Scale + Enterprise)</h2>
     <p>
-      Missing the monthly target accrues a credit on the customer's
-      next invoice, computed against the monthly subscription fee:
+      On the SLA-carrying tiers, missing the monthly availability
+      commitment accrues a credit on the customer's next invoice,
+      computed against the monthly subscription fee:
     </p>
     <table>
       <thead>
         <tr><th>Uptime in month</th><th>Credit</th></tr>
       </thead>
       <tbody>
-        <tr><td>Below target, ≥ 99.0%</td><td>5%</td></tr>
+        <tr><td>Below 99.9%, ≥ 99.0%</td><td>5%</td></tr>
         <tr><td>Below 99.0%, ≥ 95.0%</td><td>10%</td></tr>
         <tr><td>Below 95.0%</td><td>25%</td></tr>
       </tbody>
@@ -143,8 +169,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     </ul>
     <p>
       Contact <a href="mailto:sales@driftstack.dev">sales@driftstack.dev</a>
-      to start the conversation. The default-tier SLA above is the
-      floor — addenda only ever strengthen it.
+      to start the conversation. The SLA above is the floor — addenda
+      only ever strengthen it, and per ToS §9.2 a negotiated SLA
+      governs in case of conflict with this page.
     </p>
 
     <h2>Related</h2>

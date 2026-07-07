@@ -3,20 +3,19 @@
 // pattern (would create marketing↔runtime divergence) or breaks the
 // 60-second-spin-up positioning.
 //
-//   • V-680 doc-comment framing.
-//   • Flat-object-no-envelope commitment.
-//   • Sample 5-step flow: get key → /v1/account/me health check →
-//     POST /v1/sessions create → poll → POST capture.
-//   • ds_live_ prefix + only-store-hash + can't-show-again posture.
-//   • 3-scope ladder: read / write / account_owner.
-//   • Session id ses_ prefix + creating → ready → busy → destroyed /
-//     errored states.
-//   • Captures inline base64 + encoding field + byte_size + duration_ms.
-//   • Live session viewed in the Driftstack desktop app (2026-07-02:
-//     the web /sessions/<id> live-view URL was retired — sessions are
-//     driven + viewed in the desktop GUI, not the web dashboard).
-//   • Poll every 5 seconds fine for small workloads; webhooks for prod.
-//   • developers@driftstack.dev + 1-business-day SLA.
+// S47 2026-07-07 (founder-approved: mirror deprecation) — SUPERSEDED.
+// The legacy marketing mirror page /docs/api-quickstart is DELETED and
+// 301-redirects (apps/marketing-site/public/_redirects) to its
+// verified docs successor:
+//   https://docs.driftstack.dev/quickstart-curl/
+//   (source: apps/docs/src/pages/quickstart-curl.md; S29/S37 content batches — every claim
+//   re-verified against server source before carry-over. Ongoing
+//   content-parity guarding for this topic lives with the docs
+//   page's own pin lattice.)
+// This file stays as a redirect tombstone so the original guard
+// history above remains greppable and the deprecation cannot
+// silently regress (page resurrection would shadow the 301 —
+// CF Pages serves static assets before _redirects).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -25,96 +24,36 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const LIB = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/api-quickstart.astro');
+const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/api-quickstart.astro');
+const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
+const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/quickstart-curl.md');
 
-function read(p: string): string {
-  return readFileSync(p, 'utf8');
-}
+describe('S47 redirect tombstone — /docs/api-quickstart → https://docs.driftstack.dev/quickstart-curl/', () => {
+  it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
+    expect(
+      existsSync(PAGE),
+      'api-quickstart.astro must stay deleted — a restored page file would shadow the 301',
+    ).toBe(false);
 
-describe('W512.C apps/marketing-site/src/pages/docs/api-quickstart.astro content parity', () => {
-  const body = read(LIB);
+    const rules = readFileSync(REDIRECTS, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/\s+/));
+    const rule = (from: string) => rules.find((t) => t[0] === from);
 
-  it("V-680 framing pinned: 'API quickstart for developers landing on docs.driftstack.dev for the first time. Companion to /api-reference (full surface) + /docs/oauth-apps (third-party app authors); this page is for the \"I want to spin up a session in 60 seconds\" path.' + 'Posture: focuses on api_starter tier (the cheapest entry into the programmatic surface). Examples are runnable verbatim once the reader has an API key in hand.' — pinned so the V-680 anchor + 2-companion cross-references + 60-second positioning + api_starter-tier-floor + runnable-verbatim commitments survive (drift to dropping V-680 would orphan the page from the engineering posture; drift to softening 'runnable verbatim' would let samples drift from being copy-paste-ready)", () => {
-    expect(body).toMatch(
-      /\/\/ V-680 — API quickstart for developers landing on docs\.driftstack\.dev\s*\n?\s*\/\/ for the first time\. Companion to \/api-reference \(full surface\) \+\s*\n?\s*\/\/ \/docs\/oauth-apps \(third-party app authors\); this page is for the\s*\n?\s*\/\/ "I want to spin up a session in 60 seconds" path\./,
-    );
-    expect(body).toMatch(
-      /\/\/ Posture: focuses on api_starter tier \(the cheapest entry into the\s*\n?\s*\/\/ programmatic surface\)\. Examples are runnable verbatim once the\s*\n?\s*\/\/ reader has an API key in hand\./,
-    );
+    expect(rule('/docs/api-quickstart'), 'bare-path rule missing').toEqual([
+      '/docs/api-quickstart',
+      'https://docs.driftstack.dev/quickstart-curl/',
+      '301',
+    ]);
+    expect(
+      rule('/docs/api-quickstart/'),
+      'trailing-slash rule missing (matching is exact-path)',
+    ).toEqual(['/docs/api-quickstart/', 'https://docs.driftstack.dev/quickstart-curl/', '301']);
   });
 
-  it("API-key minting framing pinned: 'You'll see a single full-string key starting with ds_live_. Copy it now — we only store the hash, so we can't show it again. If you lose it, revoke and mint a new one.' — pinned so the ds_live_-prefix + hash-only-storage + can't-show-again + revoke-and-rotate-on-loss 4-state key-minting framing survives (drift to a different prefix would create marketing↔server divergence; drift to softening 'can't show it again' would mislead customers about the hash-only commitment)", () => {
-    expect(body).toMatch(
-      /You'll see a single full-string\s*\n?\s*key starting with <code>ds_live_<\/code>\. Copy it now — we only\s*\n?\s*store the hash, so we can't show it again\. If you lose it,\s*\n?\s*revoke and mint a new one\./,
-    );
-  });
-
-  it('3-scope ladder pinned: read (read sessions and profiles, covers read:sessions + read:profiles) + write (start sessions + modify profiles) + account_owner (full account control) — pinned so the 3-scope ladder stays consistent (drift to dropping any scope would create marketing↔scope-enum divergence; drift to changing the read/write boundary would shift the least-privilege guidance)', () => {
-    expect(body).toMatch(
-      /<li><code>read<\/code> — read sessions and profiles \(covers\s*\n?\s*<code>read:sessions<\/code> \+ <code>read:profiles<\/code>\)\.<\/li>/,
-    );
-    expect(body).toMatch(/<li><code>write<\/code> — start sessions, modify profiles\.<\/li>/);
-    expect(body).toMatch(/<li><code>account_owner<\/code> — full account control\.<\/li>/);
-  });
-
-  it("/v1/account/me sample response 5-field framing pinned: id (acc_) + email + tier api_starter + concurrent_session_cap 2 + profile_cap 25 + 'A 401 here means the key is wrong, malformed, or revoked.' + flat-object-no-envelope framing — pinned so the canonical /account/me response shape + the 401-diagnosis hint + flat-no-envelope commitment all survive (drift to envelope-wrapping the response would create marketing↔server divergence; drift to dropping the 401 hint would orphan first-time-key-typo debugging)", () => {
-    expect(body).toMatch(/"tier": "api_starter"/);
-    expect(body).toMatch(/"concurrent_session_cap": 2/);
-    expect(body).toMatch(/"profile_cap": 25/);
-    expect(body).toMatch(
-      /A <code>401<\/code> here means the key is wrong, malformed, or\s*\n?\s*revoked\. Check the dashboard\. The response is a flat object —\s*\n?\s*no <code>\{`\{"account": …\}`\}<\/code> envelope\./,
-    );
-  });
-
-  it("Session-create sample 3-field body pinned: archetype: 'default' + purpose: 'production_customer' + label: 'first-session' + 201 Created + ses_ id prefix + 'creating → ready → busy → destroyed (or errored on failure)' lifecycle — pinned so the 3-field body + 201-status + ses_-prefix + 5-state-lifecycle commitment survives (consistent with /docs/sdk-typescript + /docs/sdk-python lifecycle framing)", () => {
-    expect(body).toMatch(/"archetype": "default"/);
-    expect(body).toMatch(/"purpose": "production_customer"/);
-    expect(body).toMatch(/"label": "first-session"/);
-    expect(body).toMatch(/→ 201 Created/);
-    expect(body).toMatch(
-      /The session id prefix is <code>ses_<\/code>\. Status moves\s*\n?\s*through <code>creating<\/code> → <code>ready<\/code> →\s*\n?\s*<code>busy<\/code> → <code>destroyed<\/code> \(or\s*\n?\s*<code>errored<\/code> on failure\)\./,
-    );
-  });
-
-  it('Live-view framing pinned: sessions are watched in the Driftstack desktop app (2026-07-02 account-portal IA — the web /sessions/<id> live-view route was retired; drift back to a web live-view URL would resurrect a 404 path)', () => {
-    expect(body).toMatch(/Watch the live session in the\s*\n?\s*Driftstack desktop app\./);
-    // The retired web live-view URL must NOT come back.
-    expect(body).not.toMatch(/app\.driftstack\.dev\/sessions\//);
-  });
-
-  it('Separate-navigate-call framing pinned: \'To drive the session to a URL after it\'s running, use POST /v1/sessions/<id>/navigate with {"url": "https://example.com"} — the session-create call itself doesn\'t take a target URL.\' — pinned so the separate-navigate + sessions.create-no-URL commitment stays consistent with /docs/sdk-typescript + /docs/sdk-python (drift to claiming session-create takes a URL would create marketing↔SDK divergence)', () => {
-    expect(body).toMatch(
-      /To drive the session to a URL after it's running, use\s*\n?\s*<code>POST \/v1\/sessions\/&lt;id&gt;\/navigate<\/code> with/,
-    );
-    expect(body).toMatch(/the\s*\n?\s*session-create call itself doesn't take a target URL\./);
-  });
-
-  it("Polling guidance pinned: 'Poll every 5 seconds is fine for small workloads. For production traffic, subscribe to webhooks (see POST /v1/webhooks).' — pinned so the 5s-polling-fine + webhooks-for-prod recommendation survives (drift to dropping the small-workload caveat would mislead developers about scale-acceptable polling)", () => {
-    expect(body).toMatch(
-      /Poll every 5 seconds is fine for small workloads\. For\s*\n?\s*production traffic, subscribe to webhooks \(see <code>POST \/v1\/webhooks<\/code>\)\./,
-    );
-  });
-
-  it("Capture endpoint sample 5-field pinned: kind: 'screenshot' + data (base64) + encoding (base64) + byte_size + duration_ms + 'Captures return inline base64 bytes — there is no presigned URL.' — pinned so the 5-field capture-response shape + the explicit-no-presigned-URL commitment survives (drift to claiming presigned URLs would mislead customers about the bytes-inline contract; consistent with /docs/recordings's 'no /v1/sessions/:id/recording endpoint today' framing)", () => {
-    expect(body).toMatch(/-d '\{"kind": "screenshot"\}'/);
-    expect(body).toMatch(/"kind": "screenshot"/);
-    expect(body).toMatch(/"data": "<base64-encoded bytes>"/);
-    expect(body).toMatch(/"encoding": "base64"/);
-    expect(body).toMatch(/"byte_size": 184320/);
-    expect(body).toMatch(/"duration_ms": 412/);
-    expect(body).toMatch(
-      /Captures return inline base64 bytes — there is no presigned\s*\n?\s*URL\./,
-    );
-  });
-
-  it('4-where-to-go-next cluster: /api-reference + /docs/cost-monitoring + /docs/oauth-apps + /pricing — pinned so the 4-doc next-step navigation stays complete (drift to dropping /pricing would orphan tier-upgrade discovery; drift to dropping /docs/oauth-apps would orphan third-party-app developers from their canonical doc)', () => {
-    expect(body).toMatch(/<a href="\/api-reference">Full API reference<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/cost-monitoring">Cost monitoring<\/a>/);
-    expect(body).toMatch(/<a href="\/docs\/oauth-apps">OAuth apps<\/a>/);
-    expect(body).toMatch(/<a href="\/pricing">Pricing<\/a>/);
-  });
-
-  it('file exists at canonical path', () => {
-    expect(existsSync(LIB)).toBe(true);
+  it('the docs successor source page still exists (a docs-side rename/move must update the redirect target)', () => {
+    expect(existsSync(DOCS_SUCCESSOR_SRC)).toBe(true);
   });
 });

@@ -135,19 +135,25 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
     );
   });
 
-  it('F-5 (Issue 5) self-serve-tier SLA honesty pinned: "Self-serve tiers operate without a contractual uptime SLA" (was "Pre-launch we don\'t publish a contractual SLA" — reframed per Issue 5 to drop the launch-window label; same scope-limit on the SLA promise)', () => {
-    // Load-bearing honesty claim — contractual SLAs only on Self-
-    // hosted SKUs + Enterprise. A future "we have an SLA"
-    // softening must update this copy first.
-    // S20c 2026-07-06 plain-language pass: SLA glossed ("uptime
-    // guarantee"), SKU glossed ("packages"); same scope-limit.
+  it('F-5 SLA honesty pinned to ToS §9 (S43 2026-07-07): most plans no contractual SLA; API Scale + Enterprise carry the contractual SLA', () => {
+    // Load-bearing honesty claim, aligned to the binding ToS §9
+    // (S43 2026-07-07, founder-approved). The prior copy said
+    // "Self-serve plans come without a contractual uptime guarantee"
+    // and attributed contractual SLA terms to "Self-hosted SKUs and
+    // Enterprise" — both wrong against ToS §9.2, which grants the
+    // contractual SLA to API Scale (a self-serve tier) and
+    // Enterprise; the self-hosted-SLA claim had no contractual basis.
+    // S20c plain-language glosses retained.
     expect(body).toMatch(
-      /Self-serve plans come without a contractual uptime guarantee\s+\(an SLA\) —\s+we publish incidents at/,
+      /Most plans come without a contractual uptime guarantee\s+\(an SLA\) —\s+we publish incidents at/,
     );
     expect(body).toMatch(
-      /Self-hosted packages \(SKUs\) and\s+Enterprise\s+tiers carry contractual SLA terms/,
+      /The API Scale and Enterprise\s+tiers carry a contractual SLA \(99\.9% monthly availability \+\s+a Severity-1 first-response commitment/,
     );
     expect(body).not.toMatch(/Pre-launch we don't publish a contractual SLA/);
+    expect(body).not.toMatch(
+      /Self-hosted packages \(SKUs\) and\s+Enterprise\s+tiers carry contractual SLA terms/,
+    );
   });
 
   it('CAIQ / VSAQ / vendor-portal questionnaire-welcome claim pinned', () => {

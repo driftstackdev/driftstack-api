@@ -42,8 +42,17 @@ function read(p: string): string {
 describe('W379.A marketing-site /legal/sub-processors.md content parity', () => {
   const body = read(PAGE);
 
-  it('version 1.0 + effective 2026-05-10 doc header pinned (matches register)', () => {
-    expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-10/);
+  it('version 1.1 + effective 2026-07-07 doc header pinned (matches register; S43 R2 correction bump)', () => {
+    // S43 2026-07-07 (founder-approved) — v1.0 → v1.1: Cloudflare R2
+    // row corrected (default jurisdiction w/ EU+US replication under
+    // SCCs+DPF; real object classes). Header bumps per this page's own
+    // change-notice convention.
+    expect(body).toMatch(/\*\*Version:\*\* 1\.1 · \*\*Effective:\*\* 2026-07-07/);
+  });
+
+  it('changelog carries the v1.1 R2-correction entry alongside the v1.0 baseline (S43 2026-07-07)', () => {
+    expect(body).toMatch(/\*\*2026-07-07 — v1\.1\.\*\* Cloudflare R2 row corrected/);
+    expect(body).toMatch(/\*\*2026-05-10 — v1\.0\.\*\* Initial standalone publication/);
   });
 
   it('intentionally-short vendor surface posture framing pinned (load-bearing trust signal)', () => {
@@ -84,8 +93,14 @@ describe('W379.A marketing-site /legal/sub-processors.md content parity', () => 
       /The production control plane runs on \*\*Hetzner Cloud\*\* \(compute\) with\s+\*\*Neon\*\* \(managed Postgres\)/,
     );
     expect(body).toMatch(/\*\*Upstash\*\* \(managed Redis\)/);
-    expect(body).toMatch(/\*\*Cloudflare R2\*\* for object storage/);
-    expect(body).toMatch(/execution fleet runs on\s+\*\*MacStadium\*\*/);
+    // S43 2026-07-07 — R2 object classes corrected: avatars, encrypted
+    // profile blobs, public status snapshots (recordings/screenshots
+    // were never stored there; recording is not a live feature).
+    expect(body).toMatch(
+      /\*\*Cloudflare R2\*\* for object storage \(avatars, encrypted profile\s+blobs, public status snapshots\)/,
+    );
+    expect(body).not.toMatch(/object storage \(recordings, screenshots,\s+avatars\)/);
+    expect(body).toMatch(/execution\s+fleet runs on\s+\*\*MacStadium\*\*/);
   });
 
   it('Hetzner is production compute, EU-resident (not narrowed to dev/staging)', () => {

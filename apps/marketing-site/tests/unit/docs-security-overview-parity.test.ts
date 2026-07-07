@@ -94,7 +94,13 @@ describe('W354.A /docs/security-overview parity', () => {
         'apps/marketing-site/src/pages/docs/api-security-headers.astro',
         '/docs/api-security-headers',
       ],
-      ['apps/marketing-site/src/pages/docs/data-residency.astro', '/docs/data-residency'],
+      // S47 2026-07-07 (founder-approved: mirror deprecation): the
+      // data-residency mirror is deleted; the page cross-links its
+      // docs successor.
+      [
+        'apps/docs/src/pages/reference/data-residency.md',
+        'https://docs.driftstack.dev/reference/data-residency/',
+      ],
       ['apps/marketing-site/src/pages/docs/audit-log.astro', '/docs/audit-log'],
       ['apps/marketing-site/src/pages/docs/admin-api.astro', '/docs/admin-api'],
       ['apps/marketing-site/src/pages/docs/incident-policy.astro', '/docs/incident-policy'],

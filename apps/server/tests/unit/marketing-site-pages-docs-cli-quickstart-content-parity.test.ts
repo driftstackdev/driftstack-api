@@ -32,7 +32,7 @@ describe('W513.A apps/marketing-site/src/pages/docs/cli-quickstart.astro content
 
   it("V-699 + V-266 framing pinned: 'CLI quickstart docs. Covers the install, the V-266 browser-OAuth-style activation flow, and the most common commands. Companion to /docs/api-quickstart (which targets direct-curl usage).' — pinned so the V-699 anchor + V-266-cross-ref + /docs/api-quickstart companion all survive (drift to dropping V-266 would orphan the auth-flow anchor from the source-of-truth endpoint)", () => {
     expect(body).toMatch(
-      /\/\/ V-699 — CLI quickstart docs\. Covers the install, the V-266\s*\n?\s*\/\/ browser-OAuth-style activation flow, and the most common\s*\n?\s*\/\/ commands\. Companion to \/docs\/api-quickstart \(which targets\s*\n?\s*\/\/ direct-curl usage\)\./,
+      /\/\/ V-699 — CLI quickstart docs\. Covers the install, the V-266\s*\n?\s*\/\/ browser-OAuth-style activation flow, and the most common\s*\n?\s*\/\/ commands\. Companion to https:\/\/docs\.driftstack\.dev\/quickstart-curl\/ \(which targets\s*\n?\s*\/\/ direct-curl usage\)\./,
     );
   });
 
@@ -117,7 +117,10 @@ describe('W513.A apps/marketing-site/src/pages/docs/cli-quickstart.astro content
   });
 
   it("3-where-to-go-next: /docs/api-quickstart + /docs/api-keys + /docs/sessions — pinned so the 3-doc downstream navigation stays complete (drift to dropping /docs/sessions would orphan session-lifecycle discovery from the CLI's primary use-case)", () => {
-    expect(body).toMatch(/<a href="\/docs\/api-quickstart">\/docs\/api-quickstart<\/a>/);
+    // S47 2026-07-07 (founder-approved: mirror deprecation): href re-pinned to the docs successor (display text keeps the historical path, which 301s to the same target).
+    expect(body).toMatch(
+      /<a href="https:\/\/docs\.driftstack\.dev\/quickstart-curl\/">\/docs\/api-quickstart<\/a>/,
+    );
     expect(body).toMatch(/<a href="\/docs\/api-keys">\/docs\/api-keys<\/a>/);
     expect(body).toMatch(/<a href="\/docs\/sessions">\/docs\/sessions<\/a>/);
   });

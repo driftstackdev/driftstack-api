@@ -8,8 +8,9 @@
 //     SubscribableWebhookEventTypeSchema
 //   • flat-response (no `{ session: {…} }` envelope) is the live
 //     shape; `concurrency-limit` is the canonical 429 problem-type
-//   • cross-links to /docs/api-quickstart + /docs/concurrency +
-//     /docs/rate-limits all resolve.
+//   • cross-links to the docs quickstart-curl + concurrency guide
+//     (S47 2026-07-07 mirror-deprecation successors) + /docs/rate-limits
+//     all resolve.
 
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -25,9 +26,11 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/sessions.astro');
-const QUICKSTART = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/api-quickstart.astro');
+// S47 2026-07-07 (founder-approved: mirror deprecation): api-quickstart
+// + concurrency mirrors deleted; cross-links point at the docs successors.
+const QUICKSTART = resolve(REPO_ROOT, 'apps/docs/src/pages/quickstart-curl.md');
 const RATE_LIMITS = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/rate-limits.astro');
-const CONCURRENCY = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/concurrency.astro');
+const CONCURRENCY = resolve(REPO_ROOT, 'apps/docs/src/pages/guides/concurrency.md');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -93,11 +96,11 @@ describe('W345.A /docs/sessions parity', () => {
     expect(body).toMatch(/lowercase slug \(3–60 chars,\s*<code>\[a-z0-9_\]<\/code>/);
   });
 
-  it('cross-links to /docs/api-quickstart, /docs/rate-limits, /docs/concurrency all resolve', () => {
+  it('cross-links to the curl quickstart (docs successor), /docs/rate-limits, and the concurrency guide (docs successor) all resolve (S47 2026-07-07)', () => {
     for (const [href, file] of [
-      ['/docs/api-quickstart', QUICKSTART],
+      ['https://docs.driftstack.dev/quickstart-curl/', QUICKSTART],
       ['/docs/rate-limits', RATE_LIMITS],
-      ['/docs/concurrency', CONCURRENCY],
+      ['https://docs.driftstack.dev/guides/concurrency/', CONCURRENCY],
     ] as const) {
       expect(body).toContain(href);
       expect(existsSync(file)).toBe(true);

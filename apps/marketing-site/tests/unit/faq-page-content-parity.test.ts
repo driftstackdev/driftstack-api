@@ -20,8 +20,9 @@
 //   • Sticky category side-nav anchors to the group headings.
 //   • Free-tier mechanics: $0 forever / one profile / one
 //     concurrent / manual-only (no API) / perpetual / no
-//     metering. (Free is GUI-only; programmatic API/SDK access
-//     starts on the API ladder.)
+//     metering. (Free is GUI-only; every PAID tier includes
+//     programmatic API/SDK access — S43 2026-07-07 claims fix;
+//     the API ladder is the path built/sized for code-first.)
 //   • Concurrent-cap ladder (Personal = 1 / Team = 3
 //     / Agency = 8 / API Starter = 2 / Builder = 8 /
 //     Scale = 24 / Enterprise = custom).
@@ -33,7 +34,9 @@
 //   • "What if Driftstack goes away" two-protection answer
 //     (data portability + source escrow).
 //   • AUP link to /legal/aup + bot/fraud prohibitions.
-//   • Support SLA: single 48h business-time target.
+//   • Support: single 48h business-time target (operational, not
+//     contractual) + the ToS §9.2 Severity-1 first-response SLA on
+//     API Scale / Enterprise (S43 2026-07-07).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -115,14 +118,21 @@ describe('W368.A marketing-site /faq page content parity', () => {
     expect(body).toMatch(/\$0 forever, no card required/);
     expect(body).toMatch(/The free tier is manual-only \(no API\/SDK access from code\)/);
     expect(body).toMatch(/The free tier is perpetual/);
-    // Free tier is manual-only: access from code (API/SDK) starts on the
-    // API ladder (API Starter from $149/mo). Old "API-within-free-limits"
-    // framing (2026-05-28) is superseded. S20b 2026-07-06: same facts,
-    // plain words ("GUI client" → "desktop app", "programmatic" → "from
-    // code").
+    // Free tier is manual-only. S43 2026-07-07 (founder-approved)
+    // claims fix: the old "access from code starts on the API ladder"
+    // sentence was FALSE — TIER_FEATURES gives every paid tier
+    // (including the Manual ladder) apiAccess: true with live keys.
+    // The answer now says every paid tier includes API access and the
+    // API ladder is the path built/sized for code-first workloads.
+    // Old "API-within-free-limits" framing (2026-05-28) stays
+    // superseded; S20b plain-words framing retained.
     expect(body).toMatch(
-      /Access from code — the API and SDKs — starts on the API ladder \(API Starter from \$149\/mo\)/,
+      /Every paid tier, including the Manual tiers, includes programmatic API\/SDK access with live keys/,
     );
+    expect(body).toMatch(
+      /The API ladder \(API Starter from \$149\/mo\) is the path built and sized for code-first workloads/,
+    );
+    expect(body).not.toMatch(/starts on the API ladder/);
     expect(body).not.toMatch(/within the free limits/);
     expect(body).not.toMatch(/driven from the API or the desktop GUI client/);
     expect(body).toMatch(/No per-hour metering, no credit decrement, no overage/);
@@ -184,14 +194,32 @@ describe('W368.A marketing-site /faq page content parity', () => {
     expect(body).toMatch(/sneaker bots \/ ticket bots/);
   });
 
-  it('support response framing pinned: single 48h business-time target, no tiered ladder (founder 2026-05-19 verdict)', () => {
+  it('support response framing pinned: single 48h business-time target (explicitly non-contractual) + ToS §9.2 Severity-1 grant on Scale/Enterprise (S43 2026-07-07)', () => {
     expect(body).toMatch(/Reply target is 48h business-time across every tier/);
+    // S43: the 48h figure is the honest operational target, framed as
+    // such — not a contractual SLA.
+    expect(body).toMatch(/an operational target we hold ourselves to, not a contractual SLA/);
     expect(body).toMatch(/Slack Connect is available on request/);
+    // ToS §9.2 grant, quoted no-more-no-less: contractual first-response
+    // SLA on Severity-1 incidents — 4h API Scale / 1h Enterprise.
+    expect(body).toMatch(
+      /contractual first-response SLA on Severity-1 incidents \(4 hours and 1 hour respectively\)/,
+    );
   });
 
-  it('uptime target framing pinned: best-effort 99.5% across all tiers, no tiered SLA (founder 2026-05-19 verdict)', () => {
-    expect(body).toMatch(/Best-effort 99\.5% across all tiers/);
-    expect(body).toMatch(/There is no formal SLA with credits/);
+  it('uptime framing pinned to ToS §9 (S43 2026-07-07, supersedes the 2026-05-19 no-SLA framing): §9.1 tiers best-effort, §9.2 tiers 99.9% contractual SLA', () => {
+    // §9.1 tiers: no contractual commitment (true before, still true).
+    expect(body).toMatch(/there is no contractually-binding SLA/);
+    expect(body).toMatch(/operationally we aim for 99\.5%\+/);
+    // §9.2 truth the old answer contradicted ("There is no formal SLA
+    // with credits" was false for API Scale + Enterprise):
+    expect(body).toMatch(
+      /API Scale and Enterprise carry a contractual SLA: 99\.9% monthly availability with service credits/,
+    );
+    expect(body).not.toMatch(/There is no formal SLA with credits/);
+    expect(body).not.toMatch(/Best-effort 99\.5% across all tiers/);
+    // Good-faith credit posture on non-SLA tiers stays.
+    expect(body).toMatch(/we will work out a credit in good faith/);
   });
 
   it('hardware framing pinned: M-series Macs (macOS, Apple Silicon); not Linux + x86 — founder 2026-05-19 correction (S20b plain words, same hardware fact)', () => {

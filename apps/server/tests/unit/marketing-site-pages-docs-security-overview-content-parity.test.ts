@@ -49,7 +49,7 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
 
   it('V-713 framing pinned. Re-enabled by slice 269 after verifying the V-713 anchor + 3-companion-doc framing still exists verbatim at security-overview.astro:4-8', () => {
     expect(body).toMatch(
-      /\/\/ V-713 — public security overview\. Pitched at customer security\s*\n?\s*\/\/ review \+ procurement teams\. Companion to \/docs\/data-residency,\s*\n?\s*\/\/ \/docs\/audit-log, \/docs\/incident-policy\./,
+      /\/\/ V-713 — public security overview\. Pitched at customer security\s*\n?\s*\/\/ review \+ procurement teams\. Companion to https:\/\/docs\.driftstack\.dev\/reference\/data-residency\/,\s*\n?\s*\/\/ \/docs\/audit-log, \/docs\/incident-policy\./,
     );
   });
 
@@ -155,7 +155,10 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
   });
 
   it('5-related-doc cluster: /docs/data-residency + /docs/admin-api + /docs/incident-policy + /docs/audit-log + /legal/sub-processors — pinned so the 5-related-doc navigation surface stays complete', () => {
-    expect(body).toMatch(/<a href="\/docs\/data-residency">Data residency<\/a>/);
+    // S47 2026-07-07 (founder-approved: mirror deprecation): the data-residency mirror is deleted; href re-pinned to the docs successor.
+    expect(body).toMatch(
+      /<a href="https:\/\/docs\.driftstack\.dev\/reference\/data-residency\/">Data residency<\/a>/,
+    );
     expect(body).toMatch(/<a href="\/docs\/admin-api">Admin API \+ scope<\/a>/);
     expect(body).toMatch(/<a href="\/docs\/incident-policy">Incident policy<\/a>/);
     expect(body).toMatch(/<a href="\/docs\/audit-log">Audit log<\/a>/);

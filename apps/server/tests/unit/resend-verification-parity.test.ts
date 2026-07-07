@@ -23,10 +23,12 @@ const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const AUTH_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/auth.ts');
 const RATE_LIMIT = resolve(REPO_ROOT, 'apps/server/src/middleware/ip-rate-limit.ts');
 const VERIFY_PAGE = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/verify-email.astro');
-const TROUBLESHOOTING = resolve(
-  REPO_ROOT,
-  'apps/marketing-site/src/pages/docs/email-troubleshooting.astro',
-);
+// S47 2026-07-07 (founder-approved: mirror deprecation): the legacy
+// /docs/email-troubleshooting mirror is deleted (301 →
+// docs.driftstack.dev/reference/emails/); the self-service-resend
+// claim now lives on the docs successor, so the guard reads that
+// source.
+const TROUBLESHOOTING = resolve(REPO_ROOT, 'apps/docs/src/pages/reference/emails.md');
 const ERROR_CODES = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/error-codes.astro');
 
 function read(p: string): string {
@@ -73,11 +75,15 @@ describe('#187 resend-verification parity', () => {
     expect(verifyPage).not.toMatch(/lands in a future iteration/);
   });
 
-  it('/docs/email-troubleshooting no longer claims there is no self-service resend', () => {
+  it('the emails doc (S47 successor of /docs/email-troubleshooting) documents self-service resend, never denies it', () => {
     const body = read(TROUBLESHOOTING);
     expect(body).not.toMatch(/no\s+self-service\s+resend\s+today/);
     expect(body).toMatch(/Resend verification email/);
-    expect(body).toContain('/verify-email');
+    // Successor framing: verification emails are safe to re-request
+    // (self-service), with the same 3/min per-IP cap this suite pins
+    // on the server limiter above.
+    expect(body).toMatch(/safe to re-request/);
+    expect(body).toMatch(/3\/minute per-IP cap/);
   });
 
   it('/docs/error-codes points email-not-verified at /verify-email, not /forgot-password', () => {

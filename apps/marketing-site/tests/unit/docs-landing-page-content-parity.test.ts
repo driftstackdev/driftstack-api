@@ -5,9 +5,10 @@
 //   • Hero: "Everything you need to drive a session." + 4-line
 //     orientation copy.
 //   • 5 doc-category cards in canonical order: Quickstart →
-//     /docs/api-quickstart / API reference → /api-reference / SDKs
-//     → /docs/sdk-typescript / Webhooks → /docs/webhooks /
-//     Self-hosted → /self-hosted.
+//     docs.driftstack.dev/quickstart-curl/ (S47 2026-07-07 mirror
+//     deprecation — was /docs/api-quickstart, now deleted + 301) /
+//     API reference → /api-reference / SDKs → /docs/sdk-typescript /
+//     Webhooks → /docs/webhooks / Self-hosted → /self-hosted.
 //   • 5 webhook event types pinned in the Webhooks card description
 //     (session.completed / session.failed / api_key.revoked /
 //     quota.warning_80pct / quota.exceeded) + HMAC-SHA256 framing.
@@ -48,7 +49,10 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
 
   it('5 doc-category cards in canonical order (Quickstart / API reference / SDKs / Webhooks / Self-hosted)', () => {
     const cards = [
-      { href: '/docs/api-quickstart', label: 'Quickstart' },
+      // S47 2026-07-07 (founder-approved: mirror deprecation): the
+      // Quickstart card points at the docs successor of the deleted
+      // /docs/api-quickstart mirror.
+      { href: 'https://docs.driftstack.dev/quickstart-curl/', label: 'Quickstart' },
       { href: '/api-reference', label: 'API reference' },
       { href: '/docs/sdk-typescript', label: 'SDKs' },
       { href: '/docs/webhooks', label: 'Webhooks' },
@@ -115,12 +119,15 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
 
   it('W210 Recipe-library-removal honesty comment pinned (no 404 link until ships)', () => {
     expect(body).toMatch(/W210 — the Recipe library card pointed at \/docs\/recipes/);
-    // The comment block explains why this is a card-less anchor
-    // rather than a card linking to docs.driftstack.dev (which
-    // would break the all-internal-anchors pattern). Pin the
-    // "card-less anchor" framing so future drift can't quietly
-    // revert to a 404-link card.
-    expect(body).toMatch(/card-less anchor rather than a card linking to\s+an external host/);
+    // The comment block explains why this is a card-less anchor.
+    // S47 2026-07-07 (founder-approved: mirror deprecation): the hub
+    // is no longer all-internal-anchors (the Quickstart card points
+    // at its docs successor), so the comment now flags a docs-hosted
+    // Recipe card as a founder-call option; pin the card-less-anchor
+    // framing + the founder-call handoff so drift can't quietly
+    // re-add a card without that call.
+    expect(body).toMatch(/this stays a card-less anchor\./);
+    expect(body).toMatch(/legitimate future option; founder call\./);
   });
 
   it('help banner: "Doc not landing?" + support@driftstack.dev mailto + same-business-day claim. 2026-05-23 — h2 wrapped with help-circle icon; pin loosened to label-presence.', () => {
@@ -148,7 +155,11 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
 
   it('all 5 destination pages exist (Quickstart / API ref / TS SDK / Webhooks / Self-hosted)', () => {
     const dir = resolve(REPO_ROOT, 'apps/marketing-site/src/pages');
-    expect(existsSync(resolve(dir, 'docs/api-quickstart.astro'))).toBe(true);
+    // S47 2026-07-07: the Quickstart card's destination is the docs
+    // app successor; the old mirror page must stay DELETED (a
+    // restored file would shadow its 301 in public/_redirects).
+    expect(existsSync(resolve(dir, 'docs/api-quickstart.astro'))).toBe(false);
+    expect(existsSync(resolve(REPO_ROOT, 'apps/docs/src/pages/quickstart-curl.md'))).toBe(true);
     expect(existsSync(resolve(dir, 'api-reference.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'docs/sdk-typescript.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'docs/webhooks.astro'))).toBe(true);

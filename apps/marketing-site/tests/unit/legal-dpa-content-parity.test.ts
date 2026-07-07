@@ -228,9 +228,18 @@ describe('W378.A marketing-site /legal/dpa.md content parity', () => {
 
   it('Annex 3 region-preference vs region-routing honesty framing + /trust/sub-processors cross-link', () => {
     expect(body).toMatch(/\*\*Region preference vs\. region routing\.\*\*/);
+    // S43 2026-07-07 (founder-approved) — the old "all Customer Data
+    // resides on the EU-jurisdiction infrastructure" blanket claim was
+    // false for R2-held file objects (default jurisdiction, EU + US
+    // replication). Now scoped: database data EU-resident; R2 file
+    // objects replicate EU + US under the listed transfer mechanism.
     expect(body).toMatch(
-      /The preference is informational for v1: all\s+Customer Data resides on the EU-jurisdiction infrastructure/,
+      /Customer Data held in Driftstack's databases \(account, profile,\s+session, and audit data\) resides on the EU-resident infrastructure/,
     );
+    expect(body).toMatch(
+      /use R2's default jurisdiction, which\s+replicates storage between the EU and the US under the transfer\s+mechanism listed above/,
+    );
+    expect(body).not.toMatch(/all\s+Customer Data resides on the EU-jurisdiction infrastructure/);
     expect(body).toMatch(/at least 30 days'\s+notice under Section 9 \(Sub-processor amendment\)/);
     expect(body).toMatch(/\[`\/trust\/sub-processors`\]\(\/trust\/sub-processors\)/);
   });

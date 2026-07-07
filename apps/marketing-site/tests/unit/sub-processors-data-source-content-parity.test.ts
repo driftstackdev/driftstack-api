@@ -11,11 +11,13 @@
 //   • Each entry: 4 fields (name / region / purpose / transfer
 //     mechanism).
 //   • Article 28(2) 30-day notice posture pinned in module comment.
-//   • SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-05-10'.
+//   • SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-07-07' (S43 R2
+//     correction bump).
 //   • SubProcessorChangeLogEntry: 4 kinds (added / removed /
 //     material_change / register_published).
-//   • SUB_PROCESSOR_CHANGELOG: 1 initial register_published entry
-//     pinned (2026-05-10 baseline).
+//   • SUB_PROCESSOR_CHANGELOG: register_published baseline
+//     (2026-05-10) + S43 Cloudflare R2 material_change correction
+//     (2026-07-07).
 //   • V-478 framing pinned.
 //   • Anthropic opt-in framing + NowPayments opt-in framing +
 //     LiveKit opt-in framing pinned.
@@ -145,9 +147,23 @@ describe('W385.A marketing-site src/data/sub-processors.ts content parity', () =
     expect(body).toMatch(/Stripe Payments Europe Ltd \(Ireland\)/);
   });
 
-  it('Cloudflare R2 row: 3 use cases (recordings/screenshots / status-page snapshots / profile avatars)', () => {
+  it('Cloudflare R2 row: corrected object classes + default jurisdiction + SCCs/DPF transfer basis (S43 2026-07-07)', () => {
+    // S43 2026-07-07 (founder-approved) register correction — the old
+    // row claimed "EU jurisdiction … no transfer required" and listed
+    // "session recordings and screenshots". Ground truth: default
+    // jurisdiction with EU + US replication (transfer mechanism
+    // required), and the real object classes are avatars, encrypted
+    // profile blobs, and public status snapshots.
     expect(body).toMatch(
-      /Object storage for session recordings and screenshots, public status-page snapshots, and customer-uploaded profile avatars/,
+      /Object storage for customer-uploaded profile avatars, encrypted profile blobs, and public status-page snapshots/,
+    );
+    expect(body).toMatch(/region: 'Default jurisdiction \(data replicated EU \+ US\)'/);
+    // Narrow negative pins: the S43 comment + the changelog correction
+    // entry legitimately QUOTE the old wording; only the live row
+    // must not carry it.
+    expect(body).not.toMatch(/Object storage for session recordings/);
+    expect(body).not.toMatch(
+      /transferMechanism: 'EU-jurisdiction storage — no transfer required\.'/,
     );
   });
 
@@ -156,8 +172,15 @@ describe('W385.A marketing-site src/data/sub-processors.ts content parity', () =
     expect(body).toMatch(/EU ingest region — no transfer required for error data\./);
   });
 
-  it('SUB_PROCESSOR_REGISTER_LAST_UPDATED = "2026-05-10"', () => {
-    expect(body).toMatch(/export const SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-05-10';/);
+  it('SUB_PROCESSOR_REGISTER_LAST_UPDATED = "2026-07-07" (S43 R2-correction bump)', () => {
+    expect(body).toMatch(/export const SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-07-07';/);
+  });
+
+  it('SUB_PROCESSOR_CHANGELOG carries the S43 Cloudflare R2 material_change correction entry', () => {
+    expect(body).toMatch(/kind: 'material_change',\s*\n?\s*subject: 'Cloudflare R2',/);
+    expect(body).toMatch(
+      /correction of the register to describe existing processing ' \+\s*\n?\s*'accurately/,
+    );
   });
 
   it('V-478 change-log surface framing pinned', () => {

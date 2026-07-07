@@ -38,7 +38,7 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
 
   it('V-684 + W213.A 5-source-file accuracy-pass framing pinned: companion to /docs/api-quickstart + /docs/oauth-apps + 5-source-of-truth (webhook-signing.ts / durable-webhook-delivery.ts / webhook-worker.ts / webhooks.ts route / db/schema.ts) — pinned so the V-684 anchor + 5-source-file accuracy-pass commitment survives (drift to dropping the source-file list would let the doc drift away from server reality)', () => {
     expect(body).toMatch(
-      /\/\/ V-684 — webhooks developer docs\. Companion to \/docs\/api-quickstart\s*\n?\s*\/\/ \+ \/docs\/oauth-apps; covers the subscribe→deliver→verify→retry\s*\n?\s*\/\/ loop developers integrate against\./,
+      /\/\/ V-684 — webhooks developer docs\. Companion to https:\/\/docs\.driftstack\.dev\/quickstart-curl\/\s*\n?\s*\/\/ \+ \/docs\/oauth-apps; covers the subscribe→deliver→verify→retry\s*\n?\s*\/\/ loop developers integrate against\./,
     );
     expect(body).toMatch(
       /\/\/ W213\.A — full accuracy pass against the source of truth:\s*\n?\s*\/\/\s+- apps\/server\/src\/lib\/webhook-signing\.ts \(signature format\)\s*\n?\s*\/\/\s+- apps\/server\/src\/services\/durable-webhook-delivery\.ts \(retry\s*\n?\s*\/\/\s+schedule \+ max attempts\)\s*\n?\s*\/\/\s+- apps\/server\/src\/services\/webhook-worker\.ts \(auto-disable\s*\n?\s*\/\/\s+threshold\)/,

@@ -57,10 +57,14 @@ describe('W342.B marketing /docs/* env-var-name sweep', () => {
     expect(referencing.length).toBeGreaterThan(0);
   });
 
-  it('the canonical /docs/api-quickstart cites DRIFTSTACK_API_KEY at least once', () => {
+  it('the canonical quickstart cites DRIFTSTACK_API_KEY at least once', () => {
     // Sanity that the env var is actually documented somewhere the
     // user lands first.
-    const quickstart = resolve(DOCS_DIR, 'api-quickstart.astro');
+    // S47 2026-07-07 (founder-approved: mirror deprecation): the
+    // legacy /docs/api-quickstart mirror is deleted (301 →
+    // docs.driftstack.dev/quickstart-curl/); the landing quickstart
+    // is now the docs successor, so the guard reads that source.
+    const quickstart = resolve(REPO_ROOT, 'apps/docs/src/pages/quickstart-curl.md');
     expect(read(quickstart)).toContain('DRIFTSTACK_API_KEY');
     expect(read(quickstart)).not.toMatch(/DRIFTSTACK_KEY(?![A-Z_])/);
   });

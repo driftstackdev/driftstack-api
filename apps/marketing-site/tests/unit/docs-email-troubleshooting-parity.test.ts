@@ -2,54 +2,62 @@
 // 1. noreply@driftstack.dev is the canonical sender (no fictional aliases).
 // 2. Postmark is named as the sending provider (matches sub-processor list).
 // 3. support@driftstack.dev is the contact for replays.
-// 4. status.driftstack.dev is cited for outage cases.
-// 5. /docs/emails-reference cross-link exists.
+//
+// S47 2026-07-07 (founder-approved: mirror deprecation) — SUPERSEDED.
+// The legacy marketing mirror page /docs/email-troubleshooting is DELETED and
+// 301-redirects (apps/marketing-site/public/_redirects) to its
+// verified docs successor:
+//   https://docs.driftstack.dev/reference/emails/
+//   (source: apps/docs/src/pages/reference/emails.md; S29/S37 content batches — every claim
+//   re-verified against server source before carry-over. Ongoing
+//   content-parity guarding for this topic lives with the docs
+//   page's own pin lattice.)
+// This file stays as a redirect tombstone so the original guard
+// history above remains greppable and the deprecation cannot
+// silently regress (page resurrection would shadow the 301 —
+// CF Pages serves static assets before _redirects).
 
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SUB_PROCESSORS } from '../../src/data/sub-processors';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/email-troubleshooting.astro');
+const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
+const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/reference/emails.md');
 
-function read(p: string): string {
-  return readFileSync(p, 'utf8');
-}
-
-describe('W266.B /docs/email-troubleshooting ↔ canonical sender + provider parity', () => {
-  const page = read(PAGE);
-
-  it('canonical sender noreply@driftstack.dev is named', () => {
-    expect(page).toMatch(/noreply@driftstack\.dev/);
-  });
-
-  it('does not name fictional alternate sender domains', () => {
-    expect(page).not.toMatch(/@driftstack\.io/);
-    expect(page).not.toMatch(/@mail\.driftstack\.dev/);
-    expect(page).not.toMatch(/@email\.driftstack\.dev/);
-  });
-
-  it('Postmark is named as the sending provider (matches sub-processor list)', () => {
-    expect(page).toMatch(/Postmark/);
-    const live = new Set(SUB_PROCESSORS.map((s) => s.name.split(' ')[0]!));
-    expect(live.has('Postmark')).toBe(true);
-  });
-
-  it('support@driftstack.dev is the contact for replays', () => {
-    expect(page).toMatch(/support@driftstack\.dev/);
-  });
-
-  it('status.driftstack.dev is cited for outage cases', () => {
-    expect(page).toMatch(/status\.driftstack\.dev/);
-  });
-
-  it('cross-link /docs/emails-reference exists', () => {
-    // The doc may not always link; verify the target page exists.
+describe('S47 redirect tombstone — /docs/email-troubleshooting → https://docs.driftstack.dev/reference/emails/', () => {
+  it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
     expect(
-      existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/emails-reference.astro')),
-    ).toBe(true);
+      existsSync(PAGE),
+      'email-troubleshooting.astro must stay deleted — a restored page file would shadow the 301',
+    ).toBe(false);
+
+    const rules = readFileSync(REDIRECTS, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/\s+/));
+    const rule = (from: string) => rules.find((t) => t[0] === from);
+
+    expect(rule('/docs/email-troubleshooting'), 'bare-path rule missing').toEqual([
+      '/docs/email-troubleshooting',
+      'https://docs.driftstack.dev/reference/emails/',
+      '301',
+    ]);
+    expect(
+      rule('/docs/email-troubleshooting/'),
+      'trailing-slash rule missing (matching is exact-path)',
+    ).toEqual([
+      '/docs/email-troubleshooting/',
+      'https://docs.driftstack.dev/reference/emails/',
+      '301',
+    ]);
+  });
+
+  it('the docs successor source page still exists (a docs-side rename/move must update the redirect target)', () => {
+    expect(existsSync(DOCS_SUCCESSOR_SRC)).toBe(true);
   });
 });

@@ -2,60 +2,58 @@
 // 1. api_starter example response uses the live cap values
 //    (concurrent_session_cap=2, profile_cap=25), not the legacy 5/10.
 // 2. /v1/account/me + /v1/sessions endpoint paths match the live routes.
-// 3. Required scopes (read, write, account_owner) are all real
-//    ApiKeyScopeSchema values.
+//
+// S47 2026-07-07 (founder-approved: mirror deprecation) — SUPERSEDED.
+// The legacy marketing mirror page /docs/api-quickstart is DELETED and
+// 301-redirects (apps/marketing-site/public/_redirects) to its
+// verified docs successor:
+//   https://docs.driftstack.dev/quickstart-curl/
+//   (source: apps/docs/src/pages/quickstart-curl.md; S29/S37 content batches — every claim
+//   re-verified against server source before carry-over. Ongoing
+//   content-parity guarding for this topic lives with the docs
+//   page's own pin lattice.)
+// This file stays as a redirect tombstone so the original guard
+// history above remains greppable and the deprecation cannot
+// silently regress (page resurrection would shadow the 301 —
+// CF Pages serves static assets before _redirects).
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import {
-  ApiKeyScopeSchema,
-  TIER_CONCURRENT_SESSION_LIMITS,
-  PROFILES_PER_TIER,
-} from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/api-quickstart.astro');
+const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
+const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/quickstart-curl.md');
 
-function read(p: string): string {
-  return readFileSync(p, 'utf8');
-}
+describe('S47 redirect tombstone — /docs/api-quickstart → https://docs.driftstack.dev/quickstart-curl/', () => {
+  it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
+    expect(
+      existsSync(PAGE),
+      'api-quickstart.astro must stay deleted — a restored page file would shadow the 301',
+    ).toBe(false);
 
-describe('W264.A /docs/api-quickstart ↔ live tier-cap parity', () => {
-  const page = read(PAGE);
+    const rules = readFileSync(REDIRECTS, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/\s+/));
+    const rule = (from: string) => rules.find((t) => t[0] === from);
 
-  it('api_starter concurrent + profile caps match the schema', () => {
-    expect(TIER_CONCURRENT_SESSION_LIMITS.api_starter).toBe(2);
-    expect(PROFILES_PER_TIER.api_starter).toBe(25);
-    expect(page).toMatch(/"concurrent_session_cap":\s*2\b/);
-    expect(page).toMatch(/"profile_cap":\s*25\b/);
+    expect(rule('/docs/api-quickstart'), 'bare-path rule missing').toEqual([
+      '/docs/api-quickstart',
+      'https://docs.driftstack.dev/quickstart-curl/',
+      '301',
+    ]);
+    expect(
+      rule('/docs/api-quickstart/'),
+      'trailing-slash rule missing (matching is exact-path)',
+    ).toEqual(['/docs/api-quickstart/', 'https://docs.driftstack.dev/quickstart-curl/', '301']);
   });
 
-  it('does not show the legacy 5 / 10 cap pair', () => {
-    expect(page).not.toMatch(/"concurrent_session_cap":\s*5\b/);
-    expect(page).not.toMatch(/"profile_cap":\s*10\b/);
-  });
-
-  it('GET /v1/account/me + POST /v1/sessions are documented + registered', () => {
-    expect(page).toMatch(/\/v1\/account\/me/);
-    expect(page).toMatch(/\/v1\/sessions/);
-    const acctMe = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-me.ts'));
-    expect(acctMe).toContain(`'/v1/account/me'`);
-    const sessions = read(resolve(REPO_ROOT, 'apps/server/src/routes/sessions.ts'));
-    expect(sessions).toContain(`'/v1/sessions'`);
-  });
-
-  it('scopes listed (read, write, account_owner) are real ApiKeyScopeSchema values', () => {
-    const live = new Set(ApiKeyScopeSchema.options);
-    for (const s of ['read', 'write', 'account_owner']) {
-      expect(live.has(s as never)).toBe(true);
-      expect(page).toMatch(new RegExp(`<code>${s}</code>`));
-    }
-  });
-
-  it('key prefix ds_live_ matches the live key format', () => {
-    expect(page).toMatch(/ds_live_/);
+  it('the docs successor source page still exists (a docs-side rename/move must update the redirect target)', () => {
+    expect(existsSync(DOCS_SUCCESSOR_SRC)).toBe(true);
   });
 });

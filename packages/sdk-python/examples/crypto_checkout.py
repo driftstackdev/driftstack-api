@@ -56,7 +56,7 @@ def main() -> int:
 
     # 3) For demo purposes, poll status. PRODUCTION CALLERS: subscribe
     #    to the `crypto.order.paid` webhook instead — see
-    #    /docs/crypto-orders-polling-vs-webhooks. The webhook delivers
+    #    https://docs.driftstack.dev/webhooks/crypto-events/. The webhook delivers
     #    the same envelope at settlement, no polling required.
     print("Polling status (demo only — use webhooks in production)...")
     for _ in range(3):

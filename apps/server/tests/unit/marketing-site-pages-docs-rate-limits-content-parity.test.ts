@@ -37,7 +37,7 @@ describe('W517.A apps/marketing-site/src/pages/docs/rate-limits.astro content pa
 
   it("V-685 + W198 TIER_RATE_LIMIT_DEFAULTS-source-of-truth framing pinned: 'rate-limits developer docs. Companion to /docs/webhooks + /docs/api-quickstart; describes the bucket model, the headers returned on every response, what to do when 429ed, and how to request an override.' + W198 'values mirror the live TIER_RATE_LIMIT_DEFAULTS table in packages/api-types/src/common.ts' + 'The bucket set is intentionally small today — only global and sessions:create are enforced server-side.' — pinned so the V-685 anchor + W198 TIER_RATE_LIMIT_DEFAULTS-anchor + only-2-buckets-enforced commitment survives", () => {
     expect(body).toMatch(
-      /\/\/ V-685 — rate-limits developer docs\. Companion to \/docs\/webhooks \+\s*\n?\s*\/\/ \/docs\/api-quickstart; describes the bucket model, the headers\s*\n?\s*\/\/ returned on every response, what to do when 429ed, and how to\s*\n?\s*\/\/ request an override\./,
+      /\/\/ V-685 — rate-limits developer docs\. Companion to \/docs\/webhooks \+\s*\n?\s*\/\/ https:\/\/docs\.driftstack\.dev\/quickstart-curl\/; describes the bucket model, the headers\s*\n?\s*\/\/ returned on every response, what to do when 429ed, and how to\s*\n?\s*\/\/ request an override\./,
     );
     expect(body).toMatch(
       /\/\/ W198 — values mirror the live `TIER_RATE_LIMIT_DEFAULTS` table in\s*\n?\s*\/\/ `packages\/api-types\/src\/common\.ts`\./,
@@ -120,7 +120,7 @@ describe('W517.A apps/marketing-site/src/pages/docs/rate-limits.astro content pa
 
   it("2-problem-type-URI dispatch framing pinned: 'concurrency-limit' problem-type for concurrency-cap-429 vs 'rate-limited' problem-type for bucket-429 + 'Dispatch on the type URI, not the status code.' + TIER_CONCURRENT_SESSION_LIMITS anchor + /docs/concurrency cross-ref — pinned so the 2-distinct-problem-type + dispatch-on-type-not-status + TIER_CONCURRENT_SESSION_LIMITS source-of-truth commitment survives", () => {
     expect(body).toMatch(
-      /The caps\s*\n?\s*mirror <code>TIER_CONCURRENT_SESSION_LIMITS<\/code> exactly;\s*\n?\s*see <a href="\/docs\/concurrency">\/docs\/concurrency<\/a> for the\s*\n?\s*authoritative table \+ backoff guidance\./,
+      /The caps\s*\n?\s*mirror <code>TIER_CONCURRENT_SESSION_LIMITS<\/code> exactly;\s*\n?\s*see <a href="https:\/\/docs\.driftstack\.dev\/guides\/concurrency\/">\/docs\/concurrency<\/a> for the\s*\n?\s*authoritative table \+ backoff guidance\./,
     );
     expect(body).toMatch(
       /<code>https:\/\/errors\.driftstack\.dev\/concurrency-limit<\/code>\s*\n?\s*problem-type — distinct from rate-limit 429s, which use the\s*\n?\s*<code>https:\/\/errors\.driftstack\.dev\/rate-limited<\/code> type\.\s*\n?\s*Dispatch on the <code>type<\/code> URI, not the status code\./,

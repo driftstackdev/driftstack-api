@@ -5,7 +5,7 @@
 // commitment (would mislead CJS users who land here).
 //
 //   • V-703 doc-comment framing + V-680 posture + companion to
-//     /docs/api-quickstart + /docs/cli-quickstart.
+//     docs.driftstack.dev/quickstart-curl/ (S47) + /docs/cli-quickstart.
 //   • Package: @driftstack/sdk (npm/bun/pnpm install matrix).
 //   • Node ≥ 20 + Bun ≥ 1.1 + Deno ≥ 1.40 + dual-published (ESM +
 //     CommonJS via conditional exports) commitment.
@@ -37,7 +37,7 @@ describe('W512.B apps/marketing-site/src/pages/docs/sdk-typescript.astro content
 
   it("V-703 + V-680 framing pinned: 'TypeScript SDK quickstart. Companion to /docs/api-quickstart (raw HTTP / curl) and /docs/cli-quickstart. Pitched at teams that already have a Node/Bun/Deno service and want a typed surface instead of hand-rolling fetch calls. Posture matches V-680: code samples runnable verbatim once a key is in hand.' — pinned so the V-703 + V-680 anchors + 2-companion cross-references + verbatim-runnable-posture all survive (drift to dropping V-680 would orphan the doc from the consistent-posture commitment)", () => {
     expect(body).toMatch(
-      /\/\/ V-703 — TypeScript SDK quickstart\. Companion to \/docs\/api-quickstart\s*\n?\s*\/\/ \(raw HTTP \/ curl\) and \/docs\/cli-quickstart\./,
+      /\/\/ V-703 — TypeScript SDK quickstart\. Companion to https:\/\/docs\.driftstack\.dev\/quickstart-curl\/\s*\n?\s*\/\/ \(raw HTTP \/ curl\) and \/docs\/cli-quickstart\./,
     );
     expect(body).toMatch(
       /\/\/ already have a Node\/Bun\/Deno service and want a typed surface\s*\n?\s*\/\/ instead of hand-rolling fetch calls\. Posture matches V-680: code\s*\n?\s*\/\/ samples runnable verbatim once a key is in hand\./,
