@@ -148,8 +148,13 @@ describe('W439.A apps/server/src/routes/webhooks.ts content parity', () => {
     expect(body).toMatch(
       /\/\/ V-307 — customer self-service replay\. Different from the admin\s*\n?\s*\/\/ \/v1\/admin\/webhook-deliveries\/:id\/replay \(which can replay any\s*\n?\s*\/\/ account's delivery\): this one is account-scoped and 404s if the\s*\n?\s*\/\/ delivery isn't owned by the calling account\./,
     );
+    // S32 2026-07-07 (fable-frontend-audit) — the route resolves the effective (act-as team)
+    // account and passes it through; the old direct call was the bug.
     expect(body).toMatch(
-      /const deliveryId = uuidFromPrefixedId\(request\.params\.deliveryId, 'wdl'\);\s*\n?\s*const updated = await service\.replayDeliveryAsCustomer\(ctx, deliveryId\);\s*\n?\s*return reply\.code\(200\)\.send\(publicDelivery\(updated\)\);/,
+      /const deliveryId = uuidFromPrefixedId\(request\.params\.deliveryId, 'wdl'\);/,
+    );
+    expect(body).toMatch(
+      /const updated = await service\.replayDeliveryAsCustomer\(ctx, deliveryId, \{\s*\n?\s*\.\.\.\(effective\.kind === 'team' \? \{ effectiveAccountId: effective\.accountId \} : \{\}\),\s*\n?\s*\}\);\s*\n?\s*return reply\.code\(200\)\.send\(publicDelivery\(updated\)\);/,
     );
   });
 

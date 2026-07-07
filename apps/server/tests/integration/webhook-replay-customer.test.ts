@@ -76,6 +76,65 @@ describe('POST /v1/webhook-deliveries/:deliveryId/replay', () => {
     expect(replayed[0]!.targetResourceId).toBe(deliveryPublicId);
   });
 
+  // S32 2026-07-07 (fable-frontend-audit) — replay was the only delivery
+  // surface ignoring team act-as: the ownership lookup used the member's
+  // own account, so replaying a team-visible delivery 404'd. Locks the
+  // fix (200 with the header) AND the scoping (404 without it).
+  it('honours x-driftstack-account: team admin can replay the owner account delivery', async () => {
+    fx = await buildTestApp();
+    const OWNER_ACCOUNT_ID = '00000000-0000-4000-8000-000000000a01';
+    const MEMBERSHIP_ID = '00000000-0000-4000-8000-00000000c001';
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      { membershipId: MEMBERSHIP_ID, ownerAccountId: OWNER_ACCOUNT_ID, role: 'admin' },
+    ]);
+    const actAs = { 'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}` };
+
+    // Member (acting as the owner) creates the OWNER's endpoint.
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: { ...headers, authorization: `Bearer ${fx.plaintext}`, ...actAs },
+      payload: {
+        url: 'https://example.test/owner-webhook',
+        events: ['session.completed'],
+        description: 'owner endpoint',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const endpointId = created.json<{ id: string }>().id;
+
+    // A delivery lands on the OWNER account.
+    const count = await fx.webhooksService.enqueueEvent(OWNER_ACCOUNT_ID, 'session.completed', {
+      id: 'ses_owner',
+      status: 'completed',
+    });
+    expect(count).toBeGreaterThan(0);
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/webhooks/${endpointId}/deliveries`,
+      headers: { authorization: `Bearer ${fx.plaintext}`, ...actAs },
+    });
+    expect(list.statusCode).toBe(200);
+    const deliveryId = list.json<{ data: { id: string }[] }>().data[0]!.id;
+
+    // WITHOUT the header the member does not own it: 404 (scoping intact).
+    const noHeader = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/webhook-deliveries/${deliveryId}/replay`,
+      headers: { ...headers, authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(noHeader.statusCode).toBe(404);
+
+    // WITH the header the replay succeeds.
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/webhook-deliveries/${deliveryId}/replay`,
+      headers: { ...headers, authorization: `Bearer ${fx.plaintext}`, ...actAs },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ status: string }>().status).toBe('pending');
+  });
+
   it('404 when delivery does not exist', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

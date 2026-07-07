@@ -157,13 +157,25 @@ describe('W753 dashboard /webhooks page V-181 + V-475 parity', () => {
     expect(matches?.length, 'actAs spreads').toBeGreaterThanOrEqual(3);
   });
 
-  it("CRITICAL V-185 delivery-counts framing pinned. The doc-block — 'Live /v1/webhooks response shape DOES include endpoint metadata ... but does NOT include aggregate delivery_counts ... Adding a delivery-aggregation endpoint is a separate V-NNN' — explains WHY mock shows counts and live shows dashes.", () => {
+  // S32 2026-07-07 (fable-frontend-audit) — the old doc-block claimed
+  // /v1/webhooks does NOT expose aggregate delivery_counts and that a
+  // mock renders them; both became false (V-185 added the real counts;
+  // the page never rendered the mock). The MOCK_WEBHOOKS block was
+  // removed and the cards render live counts. Pin the corrected framing
+  // + negative pins so the obsolete claims can't return.
+  it('CRITICAL V-185 live delivery-counts framing pinned (S32: mock/counts-not-exposed doc-block removed).', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Live \/v1\/webhooks response shape DOES include endpoint metadata/);
-    expect(p).toMatch(/but does NOT/);
-    expect(p).toMatch(/include aggregate delivery_counts \(delivered\/failed\/dlq\)/);
-    expect(p).toMatch(/Adding a delivery-aggregation endpoint is a separate V-NNN/);
+    expect(p).toMatch(/delivery_counts to \/v1\/webhooks/);
+    expect(p).toMatch(/the cards render live counts/);
+    expect(p).not.toMatch(/does NOT[\s\S]{0,80}include aggregate delivery_counts/);
+    expect(p).not.toMatch(/delivery-aggregation endpoint is a separate V-NNN/);
+    // The mock array itself is gone (its declaration was `const
+    // MOCK_WEBHOOKS: MockWebhookEndpoint[]`); the S32 removal-note
+    // comments still name it, so pin the declaration's absence, not the
+    // bare token.
+    expect(p).not.toMatch(/const MOCK_WEBHOOKS/);
+    expect(p).not.toMatch(/hooks\.example\.test/);
   });
 
   it('CRITICAL every subscribable webhook event has a create-form checkbox — driven by SubscribableWebhookEventTypeSchema so the dashboard can never silently fall behind the API subscribable set. Was a hardcoded 5, which left crypto.order.paid/failed + session.egress_capability_changed unguarded; a new subscribable event now fails this test until the dashboard offers it.', () => {

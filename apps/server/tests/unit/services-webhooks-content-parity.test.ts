@@ -173,13 +173,20 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     expect(body).toMatch(/triggered_by_account_id: `acc_\$\{ctx\.account\.id\}`,/);
   });
 
-  it('V-307 replayDeliveryAsCustomer: account_owner scope + account-scope check on owning endpoint + webhook_delivery.replayed audit', () => {
+  // S32 2026-07-07 (fable-frontend-audit) — replay now honours team act-as like every other
+  // delivery surface (it was the only one scoping ownership to the
+  // member's own account, so team replays 404'd). Scope check is
+  // skipped when the route resolved an effective team account
+  // (mirrors create()/listDeliveries()).
+  it('V-307+S32 replayDeliveryAsCustomer: effective-account ownership + conditional scope + webhook_delivery.replayed audit', () => {
     expect(body).toMatch(
-      /V-307 — customer self-service replay\. Looks up the delivery, then\s*\n?\s*\*\s*the owning endpoint \(must be the calling account's\),/,
+      /replay was the ONLY delivery surface that\s*\n?\s*\/\/ ignored team act-as/,
     );
-    expect(body).toMatch(/throwIfMissingScope\(ctx, 'account_owner'\);/);
     expect(body).toMatch(
-      /\/\/ Account-scope check: the owning endpoint must belong to the caller\.\s*\n?\s*const endpoint = await this\.repo\.findEndpoint\(delivery\.webhookId, ctx\.account\.id\);/,
+      /if \(opts\.effectiveAccountId === undefined\) \{\s*\n?\s*throwIfMissingScope\(ctx, 'account_owner'\);/,
+    );
+    expect(body).toMatch(
+      /const endpoint = await this\.repo\.findEndpoint\(delivery\.webhookId, accountId\);/,
     );
     expect(body).toMatch(
       /action: 'webhook_delivery\.replayed',\s*\n?\s*targetResourceId: `wdl_\$\{deliveryId\}`,/,

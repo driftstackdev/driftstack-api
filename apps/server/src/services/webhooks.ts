@@ -669,7 +669,8 @@ export class WebhooksService {
 
   /**
    * V-307 — customer self-service replay. Looks up the delivery, then
-   * the owning endpoint (must be the calling account's), then resets
+   * the owning endpoint (must belong to the effective account — the
+   * caller's own, or the team owner's when acting-as), then resets
    * the delivery to pending so the worker re-fires it. Audit emitted
    * via accountAudit.
    *
@@ -681,14 +682,27 @@ export class WebhooksService {
   async replayDeliveryAsCustomer(
     ctx: AccountContext,
     deliveryId: string,
+    opts: { effectiveAccountId?: string } = {},
   ): Promise<WebhookDeliveryRow> {
-    throwIfMissingScope(ctx, 'account_owner');
+    // S32 2026-07-07 (fable-frontend-audit) — replay was the ONLY delivery surface that
+    // ignored team act-as: the dashboard sends x-driftstack-account and
+    // listDeliveries honours it, but replay scoped the ownership lookup
+    // to the member's own account, so every replay of a team-visible
+    // delivery 404'd. Mirrors create()/listDeliveries(): when
+    // effectiveAccountId is set the route layer already enforced the
+    // team-admin role, which is the authorization for the owner's
+    // resource (the member's own key need not carry account_owner).
+    if (opts.effectiveAccountId === undefined) {
+      throwIfMissingScope(ctx, 'account_owner');
+    }
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const delivery = await this.repo.findDeliveryById(deliveryId);
     if (!delivery) {
       throw new NotFoundError(`Webhook delivery "${deliveryId}" not found.`);
     }
-    // Account-scope check: the owning endpoint must belong to the caller.
-    const endpoint = await this.repo.findEndpoint(delivery.webhookId, ctx.account.id);
+    // Account-scope check: the owning endpoint must belong to the
+    // effective account (the owner in act-as mode).
+    const endpoint = await this.repo.findEndpoint(delivery.webhookId, accountId);
     if (!endpoint) {
       throw new NotFoundError(`Webhook delivery "${deliveryId}" not found.`);
     }
@@ -699,7 +713,7 @@ export class WebhooksService {
     if (this.accountAudit) {
       try {
         await this.accountAudit.record({
-          accountId: ctx.account.id,
+          accountId,
           actorType: 'customer',
           actorAccountId: ctx.account.id,
           actorKeyId: ctx.apiKey.id,

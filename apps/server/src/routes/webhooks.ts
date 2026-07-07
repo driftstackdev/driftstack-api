@@ -252,7 +252,12 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       const deliveryId = uuidFromPrefixedId(request.params.deliveryId, 'wdl');
-      const updated = await service.replayDeliveryAsCustomer(ctx, deliveryId);
+      // S32 2026-07-07 (fable-frontend-audit) — honour team act-as like every other
+      // delivery surface on this page.
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      const updated = await service.replayDeliveryAsCustomer(ctx, deliveryId, {
+        ...(effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {}),
+      });
       return reply.code(200).send(publicDelivery(updated));
     },
   );

@@ -2,52 +2,17 @@
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 
 // V-181 — progressive-enhancement wiring against /v1/webhooks,
-// mirrors V-180 /sessions pattern. SSG renders mock for instant
-// paint; inline <script> replaces the endpoint list with live data
-// when ds_web_session_token is in localStorage.
+// mirrors V-180 /sessions pattern. SSR renders loading skeletons for
+// instant paint; the inline <script> below replaces them with live
+// data when ds_web_session_token is in localStorage.
 //
-// Live /v1/webhooks response shape DOES include endpoint metadata
-// (URL, events, active, description, consecutive_failures,
-// last_success_at, last_failure_at, created_at) but does NOT
-// include aggregate delivery_counts (delivered/failed/dlq). The
-// mock displays delivery_counts; in live mode we render dashes for
-// those cells and surface a note ("Delivery counts coming soon").
-// Adding a delivery-aggregation endpoint is a separate V-NNN.
-
-interface MockWebhookEndpoint {
-  id: string;
-  url: string;
-  events: ReadonlyArray<string>;
-  active: boolean;
-  description: string | null;
-  created_at: string;
-  delivery_counts: { delivered: number; failed: number; dlq: number };
-}
-
-const MOCK_WEBHOOKS: MockWebhookEndpoint[] = [
-  {
-    id: 'whk_00000000-0000-4000-8000-0000000000d1',
-    url: 'https://hooks.example.test/driftstack',
-    events: ['session.completed', 'session.failed', 'quota.warning_80pct'],
-    active: true,
-    description: 'production hook',
-    created_at: '2026-04-15T09:30:00Z',
-    delivery_counts: { delivered: 4321, failed: 12, dlq: 1 },
-  },
-  {
-    id: 'whk_00000000-0000-4000-8000-0000000000d2',
-    url: 'https://staging.example.test/driftstack',
-    events: ['session.completed'],
-    active: false,
-    description: 'staging — paused while testing',
-    created_at: '2026-04-22T15:00:00Z',
-    delivery_counts: { delivered: 213, failed: 0, dlq: 0 },
-  },
-];
-
-function fmtIsoDay(iso: string): string {
-  return new Date(iso).toISOString().slice(0, 10);
-}
+// S32 2026-07-07 (fable-frontend-audit) — removed the MOCK_WEBHOOKS /
+// MockWebhookEndpoint / frontmatter fmtIsoDay block: it was never
+// rendered (the template ships skeletons, not the mock), yet the
+// list-fetch error path told the customer "showing preview data
+// below" — pointing at data that did not exist. V-185 also added the
+// real delivery_counts to /v1/webhooks, so the "counts coming soon"
+// framing is obsolete; the cards render live counts.
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
@@ -468,7 +433,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         Subscribe to events when sessions complete, fail, crypto orders settle,
         or quota thresholds trip. POST + URL + event list = endpoint.
       </p>
-      <a href="#new" class="btn-primary mt-6 inline-flex">Create endpoint</a>
+      {/* S32 2026-07-07 (fable-frontend-audit) — was <a href="#new">, a
+          dead anchor (no #new target, no handler): the primary CTA for
+          every zero-endpoint customer did nothing. Now the same
+          data-show-create trigger the header button uses. */}
+      <button type="button" data-show-create class="btn-primary mt-6 inline-flex"
+        >Create endpoint</button
+      >
     </div>
     <ul data-list class="space-y-4">
       {[0, 1].map(() => (
@@ -514,7 +485,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       const token = localStorage.getItem('ds_web_session_token');
 
       // V-347 — wire the create form.
-      const showCreateBtn = root.querySelector('[data-show-create]');
+      // S32 2026-07-07 — querySelectorAll: both the header button and the
+      // empty-state CTA carry data-show-create (querySelector wired only
+      // the first).
+      const showCreateBtns = root.querySelectorAll('[data-show-create]');
       const createWrap = root.querySelector('[data-create-wrap]');
       const createForm = root.querySelector('[data-create-form]');
       const createCancel = root.querySelector('[data-create-cancel]');
@@ -552,7 +526,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         createError.classList.remove('hidden');
       }
 
-      if (showCreateBtn) showCreateBtn.addEventListener('click', showCreate);
+      showCreateBtns.forEach((b) => b.addEventListener('click', showCreate));
       if (createCancel) createCancel.addEventListener('click', hideCreate);
       if (revealDismiss) {
         revealDismiss.addEventListener('click', () => {
@@ -609,6 +583,14 @@ const apiBaseUrl = resolveApiBaseUrl();
             )
             .then((body) => {
               hideCreate();
+              // S32 2026-07-07 (fable-frontend-audit) — re-enable the submit
+              // button on SUCCESS too (only the .catch did before), or the
+              // form is stuck on 'Creating…' after the first create and a
+              // second endpoint can never be submitted without a reload.
+              if (createSubmit) {
+                createSubmit.disabled = false;
+                createSubmit.textContent = 'Create endpoint';
+              }
               if (createReveal && revealSecret) {
                 revealSecret.textContent = body.secret || '(no secret returned)';
                 createReveal.classList.remove('hidden');
@@ -672,13 +654,19 @@ const apiBaseUrl = resolveApiBaseUrl();
         // response. Falls back to zeros if missing.
         const counts = e.delivery_counts || { delivered: 0, failed: 0, dlq: 0 };
         const dlqClass = counts.dlq > 0 ? 'text-tk-err-text' : 'text-tk-ink-3';
+        // S32 2026-07-07 (fable-frontend-audit) — was a dead #requeue-<id>
+        // anchor (no handler, no such endpoint): there is no bulk-requeue
+        // API — replay is per-delivery. This now opens the delivery log
+        // filtered to the failed deliveries, where each row has a working
+        // Replay button (data-open-deliveries is wired by
+        // wireDeliveryToggles to expand + load the log).
         const requeueLink =
           counts.dlq > 0
-            ? '<a href="#requeue-' +
+            ? '<button type="button" data-open-deliveries="' +
               escapeHtml(e.id) +
-              '" class="text-sm font-medium text-tk-err-text hover:underline">Requeue DLQ (' +
+              '" data-open-deliveries-status="dlq" class="text-sm font-medium text-tk-err-text hover:underline">Review DLQ (' +
               counts.dlq +
-              ')</a>'
+              ')</button>'
             : '';
         return (
           '<li class="dashboard-card">' +
@@ -824,6 +812,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       // the whole list. Filter changes reset the cursor + clear append
       // state.
       const deliveriesPager = new Map();
+      // S32 — Map<endpointId, latest-request-seq> for the race guard.
+      const deliveriesSeq = new Map();
       // Map<endpointId, { items: [], cursor: string|null, status: string }>
 
       function buildFilterBar(endpointId, status) {
@@ -889,6 +879,13 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function loadDeliveries(endpointId, container, status) {
         if (!token) return;
+        // S32 2026-07-07 (fable-frontend-audit) — request-generation guard:
+        // changing the filter while a fetch is in flight left two live
+        // requests, and a stale (slower, unfiltered) response landing last
+        // would silently revert the customer's selection. Stamp each load
+        // and drop any response that isn't the latest for this endpoint.
+        const seq = (deliveriesSeq.get(endpointId) || 0) + 1;
+        deliveriesSeq.set(endpointId, seq);
         const queryParts = ['limit=20'];
         if (status) queryParts.push('status=' + encodeURIComponent(status));
         container.innerHTML =
@@ -917,6 +914,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         )
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((body) => {
+            // Drop a stale response (a newer filter/load fired after this).
+            if (deliveriesSeq.get(endpointId) !== seq) return;
             const state = {
               items: body.data || [],
               cursor: body.has_more ? body.next_cursor : null,
@@ -926,6 +925,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             renderDeliveries(container, endpointId, state);
           })
           .catch((err) => {
+            if (deliveriesSeq.get(endpointId) !== seq) return;
             container.innerHTML =
               '<p class="text-sm text-tk-err-text">Failed to load deliveries: ' +
               escapeHtml(err && err.message ? err.message : 'network error') +
@@ -1034,6 +1034,24 @@ const apiBaseUrl = resolveApiBaseUrl();
               container.classList.add('hidden');
               btn.textContent = 'View delivery log →';
             }
+          });
+        });
+        // S32 2026-07-07 (fable-frontend-audit) — the "Review DLQ" card
+        // link expands the delivery log pre-filtered to the dead-lettered
+        // deliveries, where each row's Replay button works (replacing the
+        // old dead #requeue anchor).
+        ul.querySelectorAll('[data-open-deliveries]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-open-deliveries');
+            const status = btn.getAttribute('data-open-deliveries-status') || '';
+            const container = ul.querySelector('[data-deliveries="' + id + '"]');
+            const toggle = ul.querySelector('[data-toggle-deliveries="' + id + '"]');
+            if (!container) return;
+            container.classList.remove('hidden');
+            if (toggle) toggle.textContent = 'Hide delivery log';
+            deliveriesPager.delete(id);
+            loadDeliveries(id, container, status);
+            container.scrollIntoView({ block: 'nearest' });
           });
         });
       }
@@ -1382,7 +1400,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       if (!token) {
-        showBanner('Sign in to see live webhook endpoints. Showing preview data below.');
+        // S32 2026-07-07 (fable-frontend-audit) — no preview data exists;
+        // show the empty state, not a promise of data below.
+        ul.classList.add('hidden');
+        empty.classList.remove('hidden');
+        showBanner('Sign in to see and manage your webhook endpoints.');
         return;
       }
 
@@ -1415,15 +1437,23 @@ const apiBaseUrl = resolveApiBaseUrl();
             wireTestButtons();
             wireRotateButtons();
           }
-          showBanner(
-            'Live data loaded. Aggregate delivery counts (delivered/failed/DLQ) are not exposed via /v1/webhooks; inspect /v1/webhooks/{id}/deliveries for per-event detail.',
-          );
+          // S32 2026-07-07 (fable-frontend-audit) — the old success banner
+          // claimed delivery counts are "not exposed via /v1/webhooks",
+          // but V-185 added delivery_counts and the cards render them; the
+          // banner contradicted the page. No banner on a clean load.
         })
         .catch((err) => {
+          // S32 2026-07-07 (fable-frontend-audit) — the old copy said
+          // "Showing preview data below", but no preview data is ever
+          // rendered (MOCK_WEBHOOKS was dead code) — the customer was left
+          // staring at loading skeletons forever. Show an honest error
+          // state instead.
+          ul.classList.add('hidden');
+          empty.classList.add('hidden');
           showBanner(
-            "Couldn't load live webhooks (" +
+            "Couldn't load your webhook endpoints (" +
               (err && err.message ? err.message : 'network error') +
-              '). Showing preview data below.',
+              '). Refresh to try again.',
           );
         })
         .finally(function () {

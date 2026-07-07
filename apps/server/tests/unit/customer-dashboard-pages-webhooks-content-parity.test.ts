@@ -36,16 +36,20 @@ function read(p: string): string {
 describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-181 framing pinned: 'progressive-enhancement wiring against /v1/webhooks, mirrors V-180 /sessions pattern. SSG renders mock for instant paint; inline <script> replaces the endpoint list with live data when ds_web_session_token is in localStorage.' — pinned so the SSG-mock + live-replace pattern + the cross-page V-180 sessions consistency reference survive. Re-enabled by slice 157 after verifying the V-181 comment still exists at webhooks.astro:4-7 with the matching shape", () => {
+  it("V-181 framing pinned: 'progressive-enhancement wiring against /v1/webhooks, mirrors V-180 /sessions pattern. SSR renders loading skeletons for instant paint (S32: the mock was never rendered and was removed); inline <script> replaces them with live data.' — pinned so the skeleton + live-replace pattern + the cross-page V-180 sessions consistency reference survive. Re-enabled by slice 157 after verifying the V-181 comment still exists at webhooks.astro:4-7 with the matching shape", () => {
+    // S32 2026-07-07 (fable-frontend-audit) — the page never rendered a mock (skeletons only);
+    // the doc-block now says so and the dead MOCK_WEBHOOKS was removed.
     expect(body).toMatch(
-      /\/\/ V-181 — progressive-enhancement wiring against \/v1\/webhooks,\s*\n?\s*\/\/ mirrors V-180 \/sessions pattern\. SSG renders mock for instant\s*\n?\s*\/\/ paint; inline <script> replaces the endpoint list with live data/,
+      /\/\/ V-181 — progressive-enhancement wiring against \/v1\/webhooks,\s*\n?\s*\/\/ mirrors V-180 \/sessions pattern\. SSR renders loading skeletons for\s*\n?\s*\/\/ instant paint; the inline <script> below replaces them with live/,
     );
   });
 
-  it('Delivery-counts coming-soon framing pinned: \'Live /v1/webhooks response shape DOES include endpoint metadata (URL, events, active, description, consecutive_failures, last_success_at, last_failure_at, created_at) but does NOT include aggregate delivery_counts (delivered/failed/dlq). The mock displays delivery_counts; in live mode we render dashes for those cells and surface a note ("Delivery counts coming soon"). Adding a delivery-aggregation endpoint is a separate V-NNN.\' — pinned so the mock-vs-live shape divergence stays documented (drift to claiming live counts work would mislead customers reading the page comments)', () => {
-    expect(body).toMatch(
-      /\/\/ Live \/v1\/webhooks response shape DOES include endpoint metadata\s*\n?\s*\/\/ \(URL, events, active, description, consecutive_failures,\s*\n?\s*\/\/ last_success_at, last_failure_at, created_at\) but does NOT\s*\n?\s*\/\/ include aggregate delivery_counts/,
-    );
+  it('Delivery-counts framing pinned (S32: live counts shipped via V-185; coming-soon block removed): \'Live /v1/webhooks response shape DOES include endpoint metadata (URL, events, active, description, consecutive_failures, last_success_at, last_failure_at, created_at) but does NOT include aggregate delivery_counts (delivered/failed/dlq). The mock displays delivery_counts; in live mode we render dashes for those cells and surface a note ("Delivery counts coming soon"). Adding a delivery-aggregation endpoint is a separate V-NNN.\' — pinned so the mock-vs-live shape divergence stays documented (drift to claiming live counts work would mislead customers reading the page comments)', () => {
+    // S32 2026-07-07 (fable-frontend-audit) — V-185 added the real delivery_counts, so the
+    // "coming soon"/"not exposed" framing became false and was removed.
+    expect(body).toMatch(/delivery_counts to \/v1\/webhooks/);
+    expect(body).toMatch(/the cards render live counts/);
+    expect(body).not.toMatch(/Delivery counts coming soon/);
   });
 
   it('V-475 in-page rotate-secret reveal framing pinned. Re-enabled by slice 276 after restoring the V-475 anchor on the HTML comment at webhooks.astro:211 (anchor stripped to bare-em-dash + bare-space-indentation)', () => {
