@@ -478,7 +478,13 @@ const pricingStructuredData = {
             aria-selected="false"
           >
             Annual
+            {/* S34 2026-07-07 (fable-frontend-audit) — the chip's idle colors (accent-text on
+                an accent wash) become unreadable (1.2–1.9:1) once the
+                Annual button is SELECTED and fills with solid accent;
+                setPeriod() flips the chip to white-ink-on-white-wash in
+                the selected state (computed 4.9:1 at 10px). */}
             <span
+              data-annual-chip
               class="ml-1 rounded-sm bg-tk-accent/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-tk-accent-text"
               >−20%</span
             >
@@ -921,12 +927,23 @@ const pricingStructuredData = {
             'aria-selected',
             btn.getAttribute('data-period') === period ? 'true' : 'false',
           );
+          var chip = btn.querySelector('[data-annual-chip]');
           if (btn.getAttribute('data-period') === period) {
             btn.classList.add('bg-tk-accent', 'text-tk-accent-ink');
             btn.classList.remove('text-tk-ink-2');
+            // S34 — accent-toned chip is unreadable on the solid accent
+            // fill; flip to white ink on a white wash while selected.
+            if (chip) {
+              chip.classList.remove('bg-tk-accent/15', 'text-tk-accent-text');
+              chip.classList.add('bg-white/15', 'text-tk-accent-ink');
+            }
           } else {
             btn.classList.remove('bg-tk-accent', 'text-tk-accent-ink');
             btn.classList.add('text-tk-ink-2');
+            if (chip) {
+              chip.classList.remove('bg-white/15', 'text-tk-accent-ink');
+              chip.classList.add('bg-tk-accent/15', 'text-tk-accent-text');
+            }
           }
         });
         monthlyEls.forEach((el) => el.classList.toggle('hidden', period !== 'monthly'));

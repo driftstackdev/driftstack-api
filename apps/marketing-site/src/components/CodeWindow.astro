@@ -44,13 +44,26 @@ const { title, copyTargetId } = Astro.props;
       if (!btn) return;
       var target = document.getElementById(btn.getAttribute('data-copy-target') || '');
       if (!target || !navigator.clipboard) return;
-      navigator.clipboard.writeText(target.textContent || '').then(function () {
-        var prev = btn.textContent;
-        btn.textContent = 'Copied';
-        window.setTimeout(function () {
-          btn.textContent = prev;
-        }, 1200);
-      });
+      // S34 2026-07-07 (fable-frontend-audit) — two execution-proven bugs fixed: (1) the
+      // restore timer captured the CURRENT label, so a second click
+      // within 1.2s captured 'Copied' and the button never returned to
+      // 'Copy'; restore to the constant instead. (2) a rejected
+      // clipboard write (permission denied / focus lost) was a silent
+      // unhandled rejection — surface it briefly.
+      navigator.clipboard
+        .writeText(target.textContent || '')
+        .then(function () {
+          btn.textContent = 'Copied';
+          window.setTimeout(function () {
+            btn.textContent = 'Copy';
+          }, 1200);
+        })
+        .catch(function () {
+          btn.textContent = 'Copy failed';
+          window.setTimeout(function () {
+            btn.textContent = 'Copy';
+          }, 1800);
+        });
     });
   }
 </script>

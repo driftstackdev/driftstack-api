@@ -133,7 +133,11 @@ describe('W529 marketing-site Fleet v2 component kit content parity', () => {
     expect(body).toMatch(/class="code-window-chrome"/);
     expect(body).toMatch(/data-copy-target=\{copyTargetId\}/);
     expect(body).toMatch(/window\.__dsCopyWired = true;/);
-    expect(body).toMatch(/navigator\.clipboard\.writeText/);
+    // S34 2026-07-07 — the chained form (multiline .writeText(...)
+    // .then/.catch) replaced the bare call: restore-to-constant fixes a
+    // stuck 'Copied' label, .catch surfaces denied clipboard writes.
+    expect(body).toMatch(/navigator\.clipboard\s*\n?\s*\.writeText/);
+    expect(body).toMatch(/btn\.textContent = 'Copy failed';/);
     // the dead-inline-script trap: an expression container opening right
     // after the script tag ships a literal string instead of running
     expect(body).not.toMatch(/<script is:inline>\s*\{/);

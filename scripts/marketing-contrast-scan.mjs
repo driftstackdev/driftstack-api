@@ -16,6 +16,11 @@
 // < 3:1 large). Run it after any token or component-tone change; the bar
 // is ZERO unique failures in BOTH modes.
 //
+// KNOWN BLIND SPOT (S34): the scan runs at a fixed 1440x900 desktop
+// viewport, so md:hidden mobile-only chrome (the hamburger nav popup)
+// is never rendered/scanned. If mobile-only text styles diverge from
+// desktop, verify manually or add a mobile-viewport pass.
+//
 // USAGE (from repo root):
 //   npm run build --workspace @driftstack/marketing-site
 //   (cd apps/marketing-site && npx astro preview --port 4321 &)
@@ -52,6 +57,10 @@ const PAGES = [
   '/trust/cumulative-rig',
   '/pricing/comparison',
   '/pricing/crypto',
+  // S34 — previously unscanned surfaces.
+  '/newtab',
+  '/404',
+  '/500',
 ];
 
 // Runs in the page. Composites alpha backgrounds up the ancestor chain onto
@@ -64,8 +73,28 @@ const SCAN = `(() => {
   const bgOf = (el) => {
     let cur = el, stack = [];
     while (cur && cur !== document.documentElement) {
-      const c = parse(getComputedStyle(cur).backgroundColor);
+      const st = getComputedStyle(cur);
+      const c = parse(st.backgroundColor);
       if (c && c.a > 0) { stack.push(c); if (c.a >= 1) break; }
+      // S34 — gradient awareness: a background-image gradient with a
+      // solid (a >= 0.5) first color stop is the element's real
+      // backdrop; the old walk ignored background-image entirely, so
+      // #eee text on linear-gradient(#fff,#fff) scanned as a
+      // near-black-bg PASS (execution-proven false negative). Take the
+      // first solid stop as an opaque layer; low-alpha wash gradients
+      // (the body's ambient radials) stay ignored — the solid base
+      // beneath dominates them.
+      if (st.backgroundImage && st.backgroundImage.includes('gradient')) {
+        const g = parse(st.backgroundImage);
+        if (g && g.a >= 0.5) { stack.push({ rgb: g.rgb, a: 1 }); break; }
+        const hex = st.backgroundImage.match(/#([0-9a-f]{6}|[0-9a-f]{3})\b/i);
+        if (hex) {
+          let h = hex[1];
+          if (h.length === 3) h = h.split('').map((x) => x + x).join('');
+          stack.push({ rgb: [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)), a: 1 });
+          break;
+        }
+      }
       cur = cur.parentElement;
     }
     // S24 — the base under all alpha layers follows the mode axis
@@ -115,6 +144,27 @@ async function main() {
   const agg = new Map();
   for (const path of PAGES) {
     await page.goto(BASE + path, { waitUntil: 'networkidle' });
+    // S34 — /pricing's annual price blocks are display:none until the
+    // billing-period toggle is clicked, so they were structurally
+    // unscanned. Flip to annual before scanning (the union of both
+    // states is covered: monthly is the SSR default on every other
+    // page load in the loop's other rows... the toggle click below
+    // scans annual for this row; monthly text is identical classes).
+    if (path === '/pricing') {
+      const toggled = await page.evaluate(() => {
+        const t = document.querySelector('button[data-period="annual"], [data-period="annual"]');
+        if (t instanceof HTMLElement) {
+          t.click();
+          return true;
+        }
+        return false;
+      });
+      if (toggled) await page.waitForTimeout(250);
+      else
+        process.stdout.write(
+          '  (warn: /pricing annual toggle not found — annual prices unscanned)\n',
+        );
+    }
     if (light) {
       // Flip the mode axis the way the themer does, then wait out
       // transition-colors (150–300ms) — computed colors read mid-animation
