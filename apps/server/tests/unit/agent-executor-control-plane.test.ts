@@ -78,6 +78,24 @@ describe('ControlPlaneAgentExecutor', () => {
     expect(decodeWireData(got[1]!.inputParams)).toEqual({ strategy: 'css selector', value: '#go' });
   });
 
+  it('#139 dispatches on the AGENT session id (agentSessionId), NOT the driftstack sessionId', async () => {
+    // The fleet routing dispatcher resolves agent_sessions.node_id by the AGENT
+    // session id. A pure /v1/agent-sessions run has driftstackSessionId=null →
+    // sessionId arrives as "unattached"; the executor MUST dispatch on
+    // agentSessionId so the node resolves. Regression guard for the live bug where
+    // every dispatch stranded as "no automation device is running this session".
+    const { got, dispatcher } = mockDispatcher((d) => okResult(d.intentId, d.sessionId));
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const res = await exec.execute({
+      sessionId: 'unattached',
+      agentSessionId: 'agt_real_id',
+      plan: { kind: 'plan', intents: [{ kind: 'navigate', url: 'https://x' }], tokensConsumed: 0 },
+    });
+    expect(res.ok).toBe(true);
+    expect(got).toHaveLength(1);
+    expect(got[0]!.sessionId).toBe('agt_real_id'); // NOT 'unattached'
+  });
+
   it('halts on the first dispatch failure (later intents not dispatched)', async () => {
     const { got, dispatcher } = mockDispatcher((d, i) =>
       i === 1 ? failResult(d.intentId, 'intent_webdriver_failed') : okResult(d.intentId),

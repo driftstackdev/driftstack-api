@@ -115,8 +115,20 @@ export function consequentialHalt(
 }
 
 export interface ExecuteArgs {
-  /** /v1/sessions session id the plan runs against. */
+  /** /v1/sessions (driftstack `ses_…`) session id the plan runs against. Used by
+   *  the legacy driver-path RealAgentExecutor. NULL/`unattached` for a pure
+   *  /v1/agent-sessions run (no attached driftstack session) — the fleet path
+   *  keys on `agentSessionId` instead. */
   sessionId: string;
+  /**
+   * #139 — the AGENT session id (`agt_…`). This is the id the fleet control plane
+   * dispatched the session to the box under (sessionAssign) AND the key on
+   * `agent_sessions.node_id`, so it is THE routing key for the control-plane
+   * executor. The runtime always sets it; ControlPlaneAgentExecutor dispatches on
+   * it. Optional on the interface so the legacy driver-path executors + existing
+   * callers keep compiling (they use `sessionId`).
+   */
+  agentSessionId?: string;
   /** The plan to execute. Refuse + clarify results are no-ops here —
    *  the caller (agent runtime) handles those before reaching the
    *  executor. The narrowing happens at the type level. */

@@ -79,6 +79,10 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   async execute(args: ExecuteArgs): Promise<ExecutorRunResult> {
     const results: IntentResult[] = [];
     const approved = args.approvedConsequentialActions ?? EMPTY_APPROVED;
+    // #139 — dispatch on the AGENT session id (the box + agent_sessions.node_id
+    // routing key). Fall back to `sessionId` only if the runtime didn't thread it
+    // (legacy callers) — never dispatch on the `unattached` sentinel.
+    const dispatchSessionId = args.agentSessionId ?? args.sessionId;
     for (const intent of args.plan.intents) {
       // 0. W443/W445 consequential-action gate — halt (WITHOUT dispatching) on a
       //    purchase / payment / account-deletion the customer hasn't approved this
@@ -100,7 +104,12 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       }
 
       // 2-4. Dispatch (with bounded auto-retry) + map the result back.
-      const result = await this.runIntent(args.sessionId, intent, mapped.intentName, mapped.params);
+      const result = await this.runIntent(
+        dispatchSessionId,
+        intent,
+        mapped.intentName,
+        mapped.params,
+      );
       results.push(result);
       if (result.kind === 'failure') break; // halt-on-first-failure
     }

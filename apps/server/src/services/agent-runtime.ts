@@ -465,6 +465,14 @@ export class AgentRuntime {
     const targetSessionId = sessionWithUser.driftstackSessionId ?? 'unattached';
     const executorResult = await this.deps.executor.execute({
       sessionId: targetSessionId,
+      // #139 — the fleet control-plane executor routes on the AGENT session id
+      // (the id the box was dispatched to via sessionAssign + the key on
+      // agent_sessions.node_id). driftstackSessionId is NULL for a pure
+      // /v1/agent-sessions run, so passing only that stranded every fleet dispatch
+      // as `unattached` → "no automation device is running this session". Always
+      // thread the agent session id so the control-plane executor can resolve the
+      // owning node; the legacy driver-path executor keeps using `sessionId`.
+      agentSessionId: session.id,
       plan: decomposed,
       ...(args.approvedConsequentialActions !== undefined
         ? { approvedConsequentialActions: args.approvedConsequentialActions }
