@@ -55,6 +55,20 @@
 // profiles Export / Import split into two sections, and the Webhooks
 // section now carries children too (endpoints + replay; events is a
 // catalog with none). Top-level slugs stay FROZEN at 50.
+//
+// S29 SUPERSESSION (2026-07-07, docs content-enrichment batch 1) —
+// top-level census 50 → 55: five NEW pages migrated from the legacy
+// marketing /docs mirror (every factual claim re-verified against
+// server/SDK/api-types source first). Get started gains
+// /quickstart-curl/ ("Quickstart (curl)", between the SDK quickstart
+// and license-activation); Guides gains /guides/concurrency/
+// ("Concurrency & backpressure", after session-lifecycle),
+// /guides/migrate-from-puppeteer/, /guides/migrate-from-browserless/
+// (after live-video), and /guides/sentry/ (last). Children census
+// UNCHANGED at 130 — the new pages are guides/get-started content,
+// and children extraction only covers the API reference + Webhooks
+// sections. The superseded "exactly 5 Guides entries / exactly 2 Get
+// started entries / 50 routes" pins below were re-pinned in lockstep.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -130,15 +144,15 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     ]);
   });
 
-  it("Overview + Get started blocks pinned: '/' Introduction first item; quickstart + license-activation", () => {
+  it("Overview + Get started blocks pinned: '/' Introduction first item; quickstart + quickstart-curl (S29) + license-activation", () => {
     expect(body).toMatch(
-      /\{\s*\n?\s*label: 'Overview',\s*\n?\s*items: \[\{ href: '\/', label: 'Introduction' \}\],\s*\n?\s*\},\s*\n?\s*\{\s*\n?\s*label: 'Get started',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/quickstart\/', label: 'Quickstart' \},\s*\n?\s*\{ href: '\/license-activation\/', label: 'License activation \(GUI client\)' \},\s*\n?\s*\],\s*\n?\s*\},/,
+      /\{\s*\n?\s*label: 'Overview',\s*\n?\s*items: \[\{ href: '\/', label: 'Introduction' \}\],\s*\n?\s*\},\s*\n?\s*\{\s*\n?\s*label: 'Get started',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/quickstart\/', label: 'Quickstart' \},\s*\n?\s*\{ href: '\/quickstart-curl\/', label: 'Quickstart \(curl\)' \},\s*\n?\s*\{ href: '\/license-activation\/', label: 'License activation \(GUI client\)' \},\s*\n?\s*\],\s*\n?\s*\},/,
     );
   });
 
-  it('Guides section: 5 entries (overview + profile-management + session-lifecycle + team-rbac + live-video); team-rbac label is the plain-words "Teams & access control" (page slug/title untouched)', () => {
+  it('Guides section: 9 entries (S29 — overview + profile-management + session-lifecycle + concurrency + team-rbac + live-video + migrate-from-puppeteer + migrate-from-browserless + sentry); team-rbac label is the plain-words "Teams & access control" (page slug/title untouched)', () => {
     expect(body).toMatch(
-      /\{\s*\n?\s*label: 'Guides',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/guides\/', label: 'Guides overview' \},\s*\n?\s*\{ href: '\/guides\/profile-management\/', label: 'Profile management' \},\s*\n?\s*\{ href: '\/guides\/session-lifecycle\/', label: 'Session lifecycle' \},\s*\n?\s*\{ href: '\/guides\/team-rbac\/', label: 'Teams & access control' \},\s*\n?\s*\{ href: '\/guides\/live-video\/', label: 'Live video' \},\s*\n?\s*\],\s*\n?\s*\},/,
+      /\{\s*\n?\s*label: 'Guides',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/guides\/', label: 'Guides overview' \},\s*\n?\s*\{ href: '\/guides\/profile-management\/', label: 'Profile management' \},\s*\n?\s*\{ href: '\/guides\/session-lifecycle\/', label: 'Session lifecycle' \},\s*\n?\s*\{ href: '\/guides\/concurrency\/', label: 'Concurrency & backpressure' \},\s*\n?\s*\{ href: '\/guides\/team-rbac\/', label: 'Teams & access control' \},\s*\n?\s*\{ href: '\/guides\/live-video\/', label: 'Live video' \},\s*\n?\s*\{ href: '\/guides\/migrate-from-puppeteer\/', label: 'Migrating from Puppeteer \/ Playwright' \},\s*\n?\s*\{ href: '\/guides\/migrate-from-browserless\/', label: 'Migrating from Browserless' \},\s*\n?\s*\{ href: '\/guides\/sentry\/', label: 'Sentry integration' \},\s*\n?\s*\],\s*\n?\s*\},/,
     );
   });
 
@@ -271,16 +285,16 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     );
   });
 
-  it('total tree size (S27 census): 50 top-level route hrefs (a drop below 50 means a page went orphaned again) + 130 children anchor hrefs (122 API + 8 webhooks — S27 flow-step promotions, Export/Import split, and the webhooks extraction sweep raised the S22.4 census of 108; md lockstep enforced by docs-nav-endpoint-children-integrity)', () => {
+  it('total tree size (S29 census): 55 top-level route hrefs (S22.2 pinned 50; S29 content-enrichment batch 1 added quickstart-curl + 4 guides — a drop below 55 means a page went orphaned again) + 130 children anchor hrefs (122 API + 8 webhooks — unchanged by S29; md lockstep enforced by docs-nav-endpoint-children-integrity)', () => {
     const hrefs = [...body.matchAll(/href: '([^']+)',/g)].map((m) => m[1]!);
     const topLevel = hrefs.filter((h) => !h.includes('#'));
     const anchors = hrefs.filter((h) => h.includes('#'));
-    expect(topLevel).toHaveLength(50);
+    expect(topLevel).toHaveLength(55);
     expect(anchors).toHaveLength(130);
     // No duplicate hrefs at either level (the apps/docs
     // doc-nav-section-label-baseline suite enforces the top-level rule at
     // runtime too; mirrored here so a server-only run still catches it).
-    expect(new Set(topLevel).size).toBe(50);
+    expect(new Set(topLevel).size).toBe(55);
     expect(new Set(anchors).size).toBe(130);
   });
 

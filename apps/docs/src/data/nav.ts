@@ -45,6 +45,16 @@
 // replay). Children extraction now ALSO covers the Webhooks section
 // (endpoints + replay carry children; events is a catalog with none).
 // Census: 122 API + 8 webhooks = 130 endpoint sub-nodes.
+//
+// S29 (2026-07-07, docs content-enrichment batch 1) — 5 NEW pages
+// migrated from the legacy marketing /docs mirror (facts re-verified
+// against server/SDK/api-types source before carry-over): Get started
+// gains the curl-first quickstart (/quickstart-curl/); Guides gains
+// concurrency & backpressure, the two migration guides (Puppeteer /
+// Playwright, Browserless), and Sentry. Top-level route census
+// 50 → 55. Endpoint children census unchanged (the new pages are
+// guides, not API-reference resources — the children-integrity suite
+// only extracts from the API reference + Webhooks sections).
 
 export interface DocNavItem {
   href: string;
@@ -80,6 +90,7 @@ export const DOC_NAV: DocNavSection[] = [
     label: 'Get started',
     items: [
       { href: '/quickstart/', label: 'Quickstart' },
+      { href: '/quickstart-curl/', label: 'Quickstart (curl)' },
       { href: '/license-activation/', label: 'License activation (GUI client)' },
     ],
   },
@@ -89,8 +100,12 @@ export const DOC_NAV: DocNavSection[] = [
       { href: '/guides/', label: 'Guides overview' },
       { href: '/guides/profile-management/', label: 'Profile management' },
       { href: '/guides/session-lifecycle/', label: 'Session lifecycle' },
+      { href: '/guides/concurrency/', label: 'Concurrency & backpressure' },
       { href: '/guides/team-rbac/', label: 'Teams & access control' },
       { href: '/guides/live-video/', label: 'Live video' },
+      { href: '/guides/migrate-from-puppeteer/', label: 'Migrating from Puppeteer / Playwright' },
+      { href: '/guides/migrate-from-browserless/', label: 'Migrating from Browserless' },
+      { href: '/guides/sentry/', label: 'Sentry integration' },
     ],
   },
   {
