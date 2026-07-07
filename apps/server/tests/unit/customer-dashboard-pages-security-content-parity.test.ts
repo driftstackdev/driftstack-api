@@ -86,9 +86,13 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
     );
   });
 
-  it("Danger-zone framing pinned: 'Account deletion is irreversible. All sessions, profiles, API keys, and webhook endpoints are immediately revoked. Recordings are hard-deleted from R2 within your configured retention window (default 30 days). Invoice history retained per Dutch tax law (7 years) — not deletable on request.' + the support@driftstack.dev deletion-request mailto + the #danger-zone anchor id (the trust-panel footer deep-links to it) — pinned so the irreversibility + accurate 30d-default R2 retention + accurate 7y Dutch-tax retention (corrected 2026-07-01 from a stale 14-day/10-year mismatch vs docs/legal/privacy-policy.md's actual retention table) + the current email-request path all survive", () => {
+  // S38 2026-07-07 (fable-truth-audit follow-on) — the old pin locked TWO fictions: session recordings
+  // (feature never shipped — recordingKey() has zero callers) and a
+  // customer-configurable retention window (no such setting). The
+  // danger zone now points at the privacy-policy purge schedule.
+  it('Danger-zone framing pinned: irreversible deletion + privacy-policy purge schedule + 7y Dutch-tax invoice retention + support@ mailto + #danger-zone anchor (S38: recordings/configurable-retention fictions retired)', () => {
     expect(body).toMatch(
-      /All sessions, profiles, API keys,\s*\n?\s*and webhook endpoints are immediately revoked\. Recordings are hard-\s*\n?\s*deleted from R2 within your configured retention window \(default 30\s*\n?\s*days\)\. Invoice history retained per Dutch tax law \(7 years\) — not\s*\n?\s*deletable on request\./,
+      /All sessions, profiles, API keys,\s*\n?\s*and webhook endpoints are immediately revoked, and stored account\s*\n?\s*data is purged on the schedule in the privacy policy\. Invoice\s*\n?\s*history retained per Dutch tax law \(7 years\) — not\s*\n?\s*deletable on\s*\n?\s*request\./,
     );
     expect(body).toMatch(
       /href="mailto:support@driftstack\.dev\?subject=Account%20deletion%20request"/,

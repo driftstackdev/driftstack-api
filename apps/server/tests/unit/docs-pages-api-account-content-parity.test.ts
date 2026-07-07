@@ -109,7 +109,7 @@ describe('W770 docs /api/account content parity', () => {
     );
   });
 
-  it("CRITICAL avatar_url short-lived (1h) presigned-R2-GET framing pinned. The 'short-lived (1h) presigned R2 GET URL' wording explains the EU-jurisdiction R2 bucket TTL.", () => {
+  it("CRITICAL avatar_url short-lived (1h) presigned-R2-GET framing pinned. The 'short-lived (1h) presigned R2 GET URL' wording explains the presigned-accessiction R2 bucket TTL.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/short-lived \(1h\) presigned R2 GET URL\./);
@@ -159,12 +159,17 @@ describe('W770 docs /api/account content parity', () => {
     );
   });
 
-  it("CRITICAL avatar EU-jurisdiction R2 bucket framing pinned. The 'The image lands in the EU-jurisdiction Cloudflare R2 bucket' wording matches DPA/data-residency framing.", () => {
+  // S38 2026-07-07 (fable-truth-audit follow-on) — the old pin locked an "EU-jurisdiction R2"
+  // claim; the buckets live in Cloudflare's default jurisdiction
+  // (EU + US replication; founder soften decision 2026-07-07), so the
+  // page now states the honest posture.
+  it('CRITICAL avatar R2 storage framing pinned: private, replication outside the EU possible (S38: EU-jurisdiction claim retired)', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The image lands in the EU-jurisdiction\s*\n?Cloudflare R2 bucket; the response includes a presigned read URL\./,
+      /The image is stored privately on Cloudflare R2\s*\n?\(its storage network can replicate outside the EU\); the response\s*\n?\s*includes a presigned read URL\./,
     );
+    expect(p).not.toMatch(/EU-jurisdiction/);
   });
 
   it("CRITICAL DELETE avatar leaves-R2-object-orphan-for-sweeper framing pinned. The 'clears the avatar pointer; the R2 object is left in place (a sweeper job collects orphaned keys off the hot path)' wording is the load-bearing async-GC contract.", () => {

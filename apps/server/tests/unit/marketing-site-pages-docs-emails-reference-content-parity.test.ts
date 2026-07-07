@@ -17,7 +17,7 @@
 //   • Status + ops 6-template: 4 status-* + session-event-digest + quota-warning.
 //   • Team + support 2-template: team-invite + support-ack (both not-opt-outable).
 //   • Email-preferences API: GET + PUT /v1/account/email-preferences.
-//   • Domain framing: noreply@ + reply-to support@ + DKIM/SPF/DMARC p=quarantine
+//   • Domain framing: noreply@ + reply-to info@ + SPF/DKIM (S38: DMARC claim retired — no record)
 //     + rua/ruf reporting + Postmark single-sender + security@ for impersonation.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -134,10 +134,16 @@ describe('W519.C apps/marketing-site/src/pages/docs/emails-reference.astro conte
     );
   });
 
-  it("Domain + sender-reputation framing pinned: 'Driftstack emails come from noreply@driftstack.dev with reply-to support@driftstack.dev. DKIM, SPF, and DMARC are configured on the driftstack.dev apex domain (DMARC policy p=quarantine with rua + ruf reporting). Postmark is the single sender — if you see an email claiming to come from Driftstack from any other infrastructure, it isn't us. Report it to security@driftstack.dev.' — pinned so the noreply@ from + support@ reply-to + DKIM/SPF/DMARC + p=quarantine + rua/ruf + Postmark-single-sender + security@-impersonation-report commitment survives", () => {
+  // S38 2026-07-07 (fable-truth-audit follow-on) — the old pin locked a FALSE claim: no _dmarc DNS
+  // record exists (dig-verified + the 2026-06-02 internal audit), and
+  // the live POSTMARK_REPLY_TO is info@, not support@. The page now
+  // states only the verifiable SPF + DKIM posture.
+  it('Domain + sender-reputation framing pinned: noreply@ from + info@ reply-to + SPF/DKIM + Postmark-single-sender + security@ impersonation report (S38: DMARC p=quarantine claim retired — no record exists)', () => {
     expect(body).toMatch(
-      /Driftstack emails come from <code>noreply@driftstack\.dev<\/code>\s*\n?\s*with reply-to <code>support@driftstack\.dev<\/code>\. DKIM, SPF,\s*\n?\s*and DMARC are configured on the <code>driftstack\.dev<\/code>\s*\n?\s*apex domain \(DMARC policy <code>p=quarantine<\/code> with\s*\n?\s*<code>rua<\/code> \+ <code>ruf<\/code> reporting\)\. Postmark is\s*\n?\s*the single sender — if you see an email claiming to come from\s*\n?\s*Driftstack from any other infrastructure, it isn't us\. Report\s*\n?\s*it to\s*\n?\s*<a href="mailto:security@driftstack\.dev">security@driftstack\.dev<\/a>\./,
+      /Driftstack emails come from <code>noreply@driftstack\.dev<\/code>[\s\S]{0,40}with reply-to <code>info@driftstack\.dev<\/code>\. SPF and DKIM[\s\S]{0,120}Postmark is the single sender/,
     );
+    expect(body).not.toMatch(/p=quarantine/);
+    expect(body).not.toMatch(/reply-to <code>support@driftstack\.dev/);
   });
 
   it('4-related-doc cluster: /docs/email-troubleshooting + /docs/status-subscriptions + /docs/api-security-headers + /legal/privacy — pinned so the 4-related-doc navigation surface stays complete (drift to dropping /legal/privacy would orphan the email handling from the privacy policy cross-ref)', () => {

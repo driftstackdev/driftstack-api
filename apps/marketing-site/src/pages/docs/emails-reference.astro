@@ -237,14 +237,18 @@ PUT /v1/account/email-preferences            # body: { event_type, opted_in }`}<
 
     <h2>Domain + sender reputation</h2>
     <p>
+      {/* S38 2026-07-07 (fable-truth-audit follow-on) — the old copy
+          claimed a DMARC quarantine policy with rua/ruf reporting; dig
+          shows NO _dmarc record exists (the 2026-06-02 internal audit
+          found the same), and the reply-to is info@ per
+          POSTMARK_REPLY_TO, not support@. State only what is
+          verifiably configured. */}
       Driftstack emails come from <code>noreply@driftstack.dev</code>
-      with reply-to <code>support@driftstack.dev</code>. DKIM, SPF,
-      and DMARC are configured on the <code>driftstack.dev</code>
-      apex domain (DMARC policy <code>p=quarantine</code> with
-      <code>rua</code> + <code>ruf</code> reporting). Postmark is
-      the single sender — if you see an email claiming to come from
-      Driftstack from any other infrastructure, it isn't us. Report
-      it to
+      with reply-to <code>info@driftstack.dev</code>. SPF and DKIM
+      are configured on the <code>driftstack.dev</code> domain, and
+      Postmark is the single sender — if you see an email claiming to
+      come from Driftstack from any other infrastructure, it isn't us.
+      Report it to
       <a href="mailto:security@driftstack.dev">security@driftstack.dev</a>.
     </p>
 

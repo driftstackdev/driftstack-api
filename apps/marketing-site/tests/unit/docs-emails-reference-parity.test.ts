@@ -113,11 +113,16 @@ describe('W350.A /docs/emails-reference parity', () => {
     expect(route).toContain("'/v1/account/email-preferences'");
   });
 
-  it('sender + DMARC + Postmark claims pinned', () => {
+  // S38 2026-07-07 (fable-truth-audit follow-on) — DMARC claim retired (no _dmarc record exists,
+  // dig-verified); reply-to corrected to the live POSTMARK_REPLY_TO
+  // (info@). support@ remains elsewhere on the page as the support
+  // contact, so pin the reply-to phrase specifically.
+  it('sender + SPF/DKIM + Postmark claims pinned (DMARC claim retired)', () => {
     expect(body).toContain('noreply@driftstack.dev');
-    expect(body).toContain('support@driftstack.dev');
-    expect(body).toMatch(/DKIM, SPF,\s*and DMARC/);
-    expect(body).toMatch(/Postmark is\s*the single sender/);
+    expect(body).toMatch(/reply-to <code>info@driftstack\.dev/);
+    expect(body).toMatch(/SPF and DKIM/);
+    expect(body).not.toMatch(/p=quarantine/);
+    expect(body).toMatch(/Postmark is the single sender/);
   });
 
   it('cross-links to /docs/email-troubleshooting + /docs/status-subscriptions resolve', () => {

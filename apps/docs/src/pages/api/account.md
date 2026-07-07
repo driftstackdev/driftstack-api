@@ -68,8 +68,9 @@ Returns the same shape as `GET /v1/account/me` with the new values applied.
 
 `POST /v1/account/me/avatar` —
 
-Inline base64 body. The image lands in the EU-jurisdiction
-Cloudflare R2 bucket; the response includes a presigned read URL.
+Inline base64 body. The image is stored privately on Cloudflare R2
+(its storage network can replicate outside the EU); the response
+includes a presigned read URL.
 Field shape:
 
 ```json
