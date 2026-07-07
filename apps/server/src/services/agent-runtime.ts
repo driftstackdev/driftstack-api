@@ -13,7 +13,7 @@
 
 import type { AgentDecomposer, DecomposeResult, DecomposeUsage } from './agent-decomposer.js';
 import type { AgentExecutor, ExecutorRunResult } from './agent-executor.js';
-import { runResultToTranscriptEntry } from './agent-executor.js';
+import { runResultToTranscriptEntry, sanitizeTranscriptText } from './agent-executor.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from './agent-sessions.js';
 import type { AgentSessionEventBus } from './agent-session-event-bus.js';
 import { METRIC_NAMES } from './metrics-registry.js';
@@ -194,6 +194,14 @@ const SPEND_RECORD_RETRY_BASE_MS = 50;
 // follow-up (a `wantsAnswer` flag on the plan, prompt-eval-gated).
 const READ_INTENT_RE =
   /\b(get|find|read|extract|scrape|fetch|show|tell|list|report|look\s?up|lookup|what|whats|which|when|where|who|how\s+(?:many|much|long|old|far|big))\b/i;
+
+// #140 — only fire the read-back when the session has enough budget to cover a
+// FULL answer call (~MAX_OBSERVATION_CHARS=20k input chars ≈ ~5k tokens +
+// ANSWER_MAX_OUTPUT_TOKENS=512). A coarse `> 0` gate let a near-empty balance run
+// a full ~5.5k-token call that debitTokens then floored to 0 — a silent
+// per-session budget-cap overspend (post-ship audit finding). Below this, skip
+// the read-back: the customer still gets the plan result, no overspend.
+const READBACK_MIN_BUDGET_TOKENS = 6_000;
 
 function delay(ms: number): Promise<void> {
   if (ms <= 0) return Promise.resolve();
@@ -523,7 +531,7 @@ export class AgentRuntime {
       observe !== undefined &&
       answerFromObservation !== undefined &&
       args.byokApiKey !== undefined &&
-      updated.tokenBudgetRemaining > 0 &&
+      updated.tokenBudgetRemaining >= READBACK_MIN_BUDGET_TOKENS &&
       decomposed.intents.some((i) => i.kind === 'capture') &&
       READ_INTENT_RE.test(args.userMessage)
     ) {
@@ -537,37 +545,52 @@ export class AgentRuntime {
             byokAnthropicApiKey: args.byokApiKey,
             model: sessionAfter.model,
           });
-          // Debit the read-back tokens (a real 2nd LLM call) so reads stay bounded.
-          if (answer.tokensConsumed > 0) {
-            sessionAfter = await this.deps.sessions.debitTokens(session.id, answer.tokensConsumed);
-          }
-          // Record the read-back cost row (soft-cap input; best-effort single
-          // attempt — the read-back never fails the turn).
-          if (this.deps.usageRecorder !== undefined && answer.usage !== undefined) {
-            try {
-              await this.deps.usageRecorder.record({
-                accountId: session.accountId,
-                driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
-                agentSessionId: session.id,
-                decomposeResultKind: 'plan',
-                usage: answer.usage,
-                tokensConsumed: answer.tokensConsumed,
-                now: args.now ?? new Date(),
-                ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
-              });
-            } catch {
-              /* best-effort read-back cost row — a rare drop only undercounts the cap */
+          // The observed page text is UNTRUSTED and the answer is a MODEL PARAPHRASE
+          // of it, so sanitize before it lands as history the next turn reads: strip
+          // C0/C1 control chars (no forged transcript lines — the answer becomes a
+          // role:'agent' entry that buildMessages replays) + cap length. Same guard
+          // the sibling executor-summary path uses (post-ship audit finding).
+          const answerBody = sanitizeTranscriptText(answer.answer);
+          if (answerBody.length > 0) {
+            // Ordering matters (post-ship audit): APPEND FIRST — the customer must
+            // SEE the answer before we bill it. If the append throws (rare DB error)
+            // the outer catch makes the read-back a no-op → no charge for an unseen
+            // answer. Only after it's durably stored do we RECORD the spend (soft-cap
+            // input) + DEBIT the budget, EACH best-effort so neither skips the other.
+            const answerEntry = { at, role: 'agent' as const, body: answerBody };
+            sessionAfter = await this.deps.sessions.appendTranscript(session.id, answerEntry);
+            this.deps.eventBus?.publish({
+              agentSessionId: session.id,
+              index: sessionAfter.transcript.length - 1,
+              entry: answerEntry,
+            });
+            if (this.deps.usageRecorder !== undefined && answer.usage !== undefined) {
+              try {
+                await this.deps.usageRecorder.record({
+                  accountId: session.accountId,
+                  driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
+                  agentSessionId: session.id,
+                  decomposeResultKind: 'plan',
+                  usage: answer.usage,
+                  tokensConsumed: answer.tokensConsumed,
+                  now: args.now ?? new Date(),
+                  ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
+                });
+              } catch {
+                /* best-effort read-back cost row — a rare drop only undercounts the cap */
+              }
+            }
+            if (answer.tokensConsumed > 0) {
+              try {
+                sessionAfter = await this.deps.sessions.debitTokens(
+                  session.id,
+                  answer.tokensConsumed,
+                );
+              } catch {
+                /* debit best-effort — the spend is already recorded above */
+              }
             }
           }
-          // Append the answer as a follow-up agent turn — flows to the GUI via the
-          // existing transcript + SSE (no new response field / SDK change).
-          const answerEntry = { at, role: 'agent' as const, body: answer.answer };
-          sessionAfter = await this.deps.sessions.appendTranscript(session.id, answerEntry);
-          this.deps.eventBus?.publish({
-            agentSessionId: session.id,
-            index: sessionAfter.transcript.length - 1,
-            entry: answerEntry,
-          });
         }
       } catch {
         // Read-back is additive — never fail the turn on it.
