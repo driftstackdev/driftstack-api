@@ -103,8 +103,21 @@ describe('services/agent-executor content parity', () => {
     expect(body).toMatch(
       /\* Helper for the dashboard chat-UI: render an ExecutorRunResult as a\s*\n?\s*\*\s+TranscriptEntry the agent's next turn can read\. Keeps the\s*\n?\s*\*\s+serialization rule in one place — every consumer that wants to\s*\n?\s*\*\s+append executor results to a transcript must use this so the\s*\n?\s*\*\s+decomposer sees consistent output formatting in `history`\./,
     );
-    expect(body).toMatch(/lines\.push\(`✓ \$\{r\.summary\}`\);/);
-    expect(body).toMatch(/lines\.push\(`✗ \$\{r\.intent\.kind\} — \$\{r\.reason\}`\);/);
+    // #139 — the free-text fields (summary carries the navigate result URL,
+    // reason the harness message, matchedText the matched phrase) are
+    // page-influenced now the real executor is live, so they are sanitized
+    // before joining the body the decomposer replays; the ✓/✗ glyph encoding +
+    // interpolation shape are still pinned.
+    expect(body).toMatch(/lines\.push\(`✓ \$\{sanitizeTranscriptText\(r\.summary\)\}`\);/);
+    expect(body).toMatch(
+      /lines\.push\(`✗ \$\{r\.intent\.kind\} — \$\{sanitizeTranscriptText\(r\.reason\)\}`\);/,
+    );
+    // The sanitizer: strips C0/C1 control chars (transcript line-forging defense)
+    // + caps length (bloat). Pinned so this prompt-injection interim can't
+    // silently regress to raw interpolation.
+    expect(body).toMatch(/export function sanitizeTranscriptText\(s: string\): string \{/);
+    expect(body).toMatch(/s\.replace\(\/\[\\u0000-\\u001f\\u007f-\\u009f\]\/g, ' '\)\.trim\(\)/);
+    expect(body).toMatch(/export const MAX_TRANSCRIPT_FIELD_LEN = 512;/);
     // #139 — the "(plan halted on failure)" suffix keys on a NON-wait failure
     // (an actual halt), NOT on !ok (which is true even when a best-effort wait
     // failed but later steps completed). Guard against a regression back to !ok.

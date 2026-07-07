@@ -449,6 +449,41 @@ function stubSummary(intent: AgentIntent): string {
 }
 
 /**
+ * Neutralize an executor-derived free-text field before it becomes a line in
+ * the transcript body that the decomposer replays to the model as history
+ * (buildMessages sends `entry.body` verbatim). Two defense-in-depth properties,
+ * both behaviour-preserving for legitimate content (summaries/reasons never
+ * legitimately contain control characters, and a real URL/selector is well
+ * under the cap):
+ *  - STRUCTURAL: strip C0/C1 control characters (chiefly CR/LF) so a
+ *    page-influenced string — most notably a `navigate` result URL
+ *    (agent-intent-result summarize(): `navigated to ${outputData.url}`) or a
+ *    harness/webdriver error message that reflects page text — cannot inject a
+ *    raw newline and FORGE an extra transcript line (e.g. a fake "(plan
+ *    approved)" the next turn would read as its own prior assistant output).
+ *    The #139 go-live wired the real ControlPlaneAgentExecutor, so these fields
+ *    now carry page-influenced text that was latent under the StubAgentExecutor
+ *    (project_agent_runloop_prompt_injection_frame_surfaced). The SYSTEM_PROMPT
+ *    already frames history observations as UNTRUSTED and the consequential-gate
+ *    still bounds blast radius; this closes the structural line-forging channel
+ *    the prose-level framing doesn't cover. The full fix — a distinct
+ *    `observation` transcript role so buildMessages delimits these as untrusted
+ *    DATA rather than assistant output — is a coordinated, prompt-eval-gated
+ *    change; this is the safe interim.
+ *  - BLOAT: cap length so a pathological multi-KB URL can't balloon the
+ *    transcript / token spend. Mirrors the 200-char cap already applied to the
+ *    failure reason in agent-intent-result.ts.
+ */
+export const MAX_TRANSCRIPT_FIELD_LEN = 512;
+export function sanitizeTranscriptText(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  const stripped = s.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim();
+  return stripped.length > MAX_TRANSCRIPT_FIELD_LEN
+    ? `${stripped.slice(0, MAX_TRANSCRIPT_FIELD_LEN)}…`
+    : stripped;
+}
+
+/**
  * Helper for the dashboard chat-UI: render an ExecutorRunResult as a
  * TranscriptEntry the agent's next turn can read. Keeps the
  * serialization rule in one place — every consumer that wants to
@@ -461,12 +496,19 @@ export function runResultToTranscriptEntry(
 ): TranscriptEntry {
   const lines: string[] = [];
   for (const r of runResult.results) {
+    // `r.intent.kind` / `r.category` are fixed enums (safe); the free-text
+    // fields (summary — carries the navigate result URL; reason — carries the
+    // harness/webdriver message; matchedText — the matched consequential phrase)
+    // are page-influenced now that the real executor is live, so neutralize them
+    // before they join the transcript body the model replays as history.
     if (r.kind === 'success') {
-      lines.push(`✓ ${r.summary}`);
+      lines.push(`✓ ${sanitizeTranscriptText(r.summary)}`);
     } else if (r.kind === 'confirmation_required') {
-      lines.push(`⏸ ${r.intent.kind} — confirmation required (${r.category}: "${r.matchedText}")`);
+      lines.push(
+        `⏸ ${r.intent.kind} — confirmation required (${r.category}: "${sanitizeTranscriptText(r.matchedText)}")`,
+      );
     } else {
-      lines.push(`✗ ${r.intent.kind} — ${r.reason}`);
+      lines.push(`✗ ${r.intent.kind} — ${sanitizeTranscriptText(r.reason)}`);
     }
   }
   if (runResult.awaitingConfirmation) {
