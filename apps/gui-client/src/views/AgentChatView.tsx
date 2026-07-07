@@ -557,7 +557,7 @@ export function AgentChatView({
         <div className="border-b border-surface-divider bg-surface-inset px-4 py-1.5">
           {actionsAreLive ? (
             <span className="text-2xs text-ink-muted">
-              <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 align-middle"></span>
+              <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent align-middle"></span>
               Live device — Claude plans each step and runs it on a real iPhone.
             </span>
           ) : (
