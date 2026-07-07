@@ -100,9 +100,14 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
         <p>
           The "region" you can pick from <span class="font-mono">/settings → Region</span>
           (us / eu / apac) is a <em>stated preference</em>. It does not move
-          your data. Today, every customer's data resides on the
-          EU-jurisdiction infrastructure listed in the table above —
-          regardless of region preference.
+          your data. Today, every customer's database-resident data —
+          account, profiles, sessions, audit logs — resides on the
+          EU-resident infrastructure listed in the table above,
+          regardless of region preference. File objects on Cloudflare
+          R2 (avatars, encrypted profile blobs, public status
+          snapshots) use R2's default jurisdiction, which replicates
+          between the EU and the US under the transfer mechanism
+          listed in the table.
         </p>
         <p>
           The preference exists so we can route accounts to the matching

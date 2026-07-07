@@ -484,21 +484,21 @@ Driftstack personnel are restricted and audited.
 
 The same list as in [Privacy Policy Section 7](privacy-policy.md#7-sub-processors) applies, summarised here for convenience:
 
-| Sub-processor                             | Role                                      | Location                          | Transfer mechanism                      |
-| ----------------------------------------- | ----------------------------------------- | --------------------------------- | --------------------------------------- |
-| MacStadium, Inc.                          | Mac mini fleet hosting                    | US, California                    | 2021 SCCs Module 2 + EU-US DPF (verify) |
-| Stripe Payments Europe Ltd                | Payment processing (EEA/UK/CH Customers)  | Ireland                           | EEA-internal                            |
-| Stripe, Inc.                              | Payment processing (non-EEA Customers)    | US, Delaware                      | 2021 SCCs Module 2 + EU-US DPF (verify) |
-| Anthropic, PBC (conditional, opt-in only) | Bundled-LLM AI agent                      | US, Delaware                      | 2021 SCCs Module 3 + EU-US DPF (verify) |
-| Moneybird B.V.                            | Accounting + invoicing                    | Netherlands                       | EEA-internal                            |
-| Hetzner Online GmbH                       | Control-plane hosting (VM)                | Germany                           | EEA-internal                            |
-| Neon, Inc.                                | Managed Postgres                          | US (corp); EU Frankfurt (data)    | 2021 SCCs Module 2 + EU-US DPF (verify) |
-| Upstash, Inc.                             | Managed Redis                             | US (corp); EU Frankfurt (data)    | 2021 SCCs Module 2 + EU-US DPF (verify) |
-| Cloudflare, Inc.                          | DNS / CDN / edge / R2 / Pages             | US (corp); EU jurisdiction (data) | 2021 SCCs Module 2 + EU-US DPF (verify) |
-| Postmark (ActiveCampaign LLC)             | Transactional email                       | US                                | 2021 SCCs Module 2 + EU-US DPF (verify) |
-| Sentry (Functional Software, Inc.)        | Error tracking                            | US (corp); EU region (data)       | 2021 SCCs Module 2 + EU-US DPF (verify) |
-| NowPayments OU (conditional, opt-in only) | Crypto payment processing                 | Estonia                           | EEA-internal                            |
-| LiveKit, Inc. (conditional, opt-in only)  | WebRTC live-session signaling + media SFU | US, Delaware                      | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| Sub-processor                             | Role                                      | Location                                                     | Transfer mechanism                      |
+| ----------------------------------------- | ----------------------------------------- | ------------------------------------------------------------ | --------------------------------------- |
+| MacStadium, Inc.                          | Mac mini fleet hosting                    | US, California                                               | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| Stripe Payments Europe Ltd                | Payment processing (EEA/UK/CH Customers)  | Ireland                                                      | EEA-internal                            |
+| Stripe, Inc.                              | Payment processing (non-EEA Customers)    | US, Delaware                                                 | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| Anthropic, PBC (conditional, opt-in only) | Bundled-LLM AI agent                      | US, Delaware                                                 | 2021 SCCs Module 3 + EU-US DPF (verify) |
+| Moneybird B.V.                            | Accounting + invoicing                    | Netherlands                                                  | EEA-internal                            |
+| Hetzner Online GmbH                       | Control-plane hosting (VM)                | Germany                                                      | EEA-internal                            |
+| Neon, Inc.                                | Managed Postgres                          | US (corp); EU Frankfurt (data)                               | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| Upstash, Inc.                             | Managed Redis                             | US (corp); EU Frankfurt (data)                               | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| Cloudflare, Inc.                          | DNS / CDN / edge / R2 / Pages             | US (corp); R2 default jurisdiction (data replicated EU + US) | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| Postmark (ActiveCampaign LLC)             | Transactional email                       | US                                                           | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| Sentry (Functional Software, Inc.)        | Error tracking                            | US (corp); EU region (data)                                  | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| NowPayments OU (conditional, opt-in only) | Crypto payment processing                 | Estonia                                                      | EEA-internal                            |
+| LiveKit, Inc. (conditional, opt-in only)  | WebRTC live-session signaling + media SFU | US, Delaware                                                 | 2021 SCCs Module 2 + EU-US DPF (verify) |
 
 The list as published in the Privacy Policy is the authoritative
 list for the avoidance of doubt; this Annex is a convenience copy.

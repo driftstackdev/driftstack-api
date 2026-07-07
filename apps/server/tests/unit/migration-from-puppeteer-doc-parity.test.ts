@@ -2,75 +2,68 @@
 // previous revision claimed body fields (`profile_id`, `record`) and
 // SDK methods (`client.sessions.state`, `navigate(id, urlString)`)
 // that don't exist. An integrator copying the curl examples would
-// hit 400s on every body.
+//
+// S47 2026-07-07 (founder-approved: mirror deprecation) — SUPERSEDED.
+// The legacy marketing mirror page /docs/migration-from-puppeteer is DELETED and
+// 301-redirects (apps/marketing-site/public/_redirects) to its
+// verified docs successor:
+//   https://docs.driftstack.dev/guides/migrate-from-puppeteer/
+//   (source: apps/docs/src/pages/guides/migrate-from-puppeteer.md; S29/S37 content batches — every claim
+//   re-verified against server source before carry-over. Ongoing
+//   content-parity guarding for this topic lives with the docs
+//   page's own pin lattice.)
+// This file stays as a redirect tombstone so the original guard
+// history above remains greppable and the deprecation cannot
+// silently regress (page resurrection would shadow the 301 —
+// CF Pages serves static assets before _redirects).
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CreateSessionRequestSchema } from '@driftstack/api-types';
 
-const REPO = join(__dirname, '..', '..', '..', '..');
-const DOC_PATH = join(
-  REPO,
-  'apps',
-  'marketing-site',
-  'src',
-  'pages',
-  'docs',
-  'migration-from-puppeteer.astro',
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(
+  REPO_ROOT,
+  'apps/marketing-site/src/pages/docs/migration-from-puppeteer.astro',
+);
+const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
+const DOCS_SUCCESSOR_SRC = resolve(
+  REPO_ROOT,
+  'apps/docs/src/pages/guides/migrate-from-puppeteer.md',
 );
 
-function read(path: string): string {
-  return readFileSync(path, 'utf8');
-}
+describe('S47 redirect tombstone — /docs/migration-from-puppeteer → https://docs.driftstack.dev/guides/migrate-from-puppeteer/', () => {
+  it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
+    expect(
+      existsSync(PAGE),
+      'migration-from-puppeteer.astro must stay deleted — a restored page file would shadow the 301',
+    ).toBe(false);
 
-describe('W227.A migration-from-puppeteer doc parity', () => {
-  const doc = read(DOC_PATH);
+    const rules = readFileSync(REDIRECTS, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/\s+/));
+    const rule = (from: string) => rules.find((t) => t[0] === from);
 
-  it('session-create example uses schema-accepted fields', () => {
-    const shape = CreateSessionRequestSchema.shape;
-    expect(shape).toHaveProperty('archetype');
-    // 2026-05-20 — profile_id IS now schema-accepted (fa8cb83a); the
-    // migration-from-puppeteer example stays archetype-only because
-    // the audience hasn't created Driftstack profiles yet, but the
-    // schema check no longer asserts profile_id is absent.
-    expect(shape).toHaveProperty('profile_id');
-    expect(shape).not.toHaveProperty('record');
-    // The curl create example uses the schema-accepted "label" field and
-    // omits archetype to inherit the locked launch default (both real
-    // schema fields). The stale generic "archetype": "default" literal is
-    // gone; "label" is schema-accepted.
-    expect(shape).toHaveProperty('label');
-    expect(doc).toMatch(/\{\s*"label":\s*"qa-login"\s*\}/);
-    expect(doc).not.toMatch(/"archetype":\s*"default"/);
-    // The stale "record" field stays banned (never existed):
-    expect(doc).not.toMatch(/"record":\s*true/);
+    expect(rule('/docs/migration-from-puppeteer'), 'bare-path rule missing').toEqual([
+      '/docs/migration-from-puppeteer',
+      'https://docs.driftstack.dev/guides/migrate-from-puppeteer/',
+      '301',
+    ]);
+    expect(
+      rule('/docs/migration-from-puppeteer/'),
+      'trailing-slash rule missing (matching is exact-path)',
+    ).toEqual([
+      '/docs/migration-from-puppeteer/',
+      'https://docs.driftstack.dev/guides/migrate-from-puppeteer/',
+      '301',
+    ]);
   });
 
-  it('state-fetch example uses GET /v1/sessions/:id/state', () => {
-    expect(doc).toMatch(/GET \/v1\/sessions\/ses_/);
-    // Old wording showed POST for the same path.
-    expect(doc).not.toMatch(/POST \/v1\/sessions\/ses_[^/]+\/state/);
-  });
-
-  it('SDK example uses real method names + signatures', () => {
-    // navigate takes a body object, not a URL string.
-    expect(doc).toMatch(/sessions\.navigate\(session\.id, \{ url:/);
-    expect(doc).not.toMatch(/sessions\.navigate\(session\.id, '/);
-    // getState is the real method, not state.
-    expect(doc).toMatch(/sessions\.getState\(/);
-    expect(doc).not.toMatch(/sessions\.state\(/);
-    // Create body uses archetype, not profileId. The example uses the
-    // LOCKED_ARCHETYPE_ID (iPhone 17 / iOS 18.7 / Safari 26.4
-    // family per M.6 multi-archetype framing) — not the generic
-    // 'default' label which was the pre-launch placeholder.
-    expect(doc).toMatch(/archetype:\s*'iphone17_ios18_7_safari26_4'/);
-    expect(doc).not.toMatch(/profileId:/);
-  });
-
-  it('does not document the fictional GET /v1/sessions/:id/recording', () => {
-    expect(doc).not.toMatch(/\/v1\/sessions\/ses_[^/]+\/recording/);
-    // Concept-table cell should now point to the roadmap doc.
-    expect(doc).toMatch(/\/docs\/recordings/);
+  it('the docs successor source page still exists (a docs-side rename/move must update the redirect target)', () => {
+    expect(existsSync(DOCS_SUCCESSOR_SRC)).toBe(true);
   });
 });

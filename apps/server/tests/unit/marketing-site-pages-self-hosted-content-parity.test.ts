@@ -20,7 +20,8 @@
 //     Sovereignty.
 //   • 4-step process: Contact sales → Procure hardware → Onboard →
 //     Run.
-//   • 'Available Contact Sales from day 0. Self-hosted GA within 6
+//   • 'Available Contact Sales from day 0. Self-hosted GA follows
+//     the API public launch.' (S43 2026-07-07 softening — was 'within 6
 //     months of API public launch.'
 //   • 'Concurrent capacity is bounded by your hardware, not by
 //     license.'
@@ -69,10 +70,12 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
     expect(body).toMatch(/case 'unlimited':\s*\n?\s*return 'Unlimited';/);
   });
 
-  it('GA window framing pinned: \'Available "Contact Sales" from day 0. Self-hosted GA within 6 months of API public launch.\' — pinned so the contact-sales-day-0 + 6-month-GA commitment stays explicit (drift to silently dropping would let customers expect self-serve self-hosted onboarding from launch; drift to a longer GA would lose the commitment)', () => {
+  it('GA framing pinned (S43 2026-07-07, founder-approved softening): \'Available "Contact Sales" from day 0. Self-hosted GA follows the API public launch.\' — intent-without-deadline replaces the dated "within 6 months" commitment; the contact-sales-day-0 promise stays explicit and the dated form must not reappear', () => {
     expect(body).toMatch(
-      /Available "Contact Sales" from day 0\. Self-hosted GA within 6 months\s*\n?\s*of API public launch\./,
+      /Available "Contact Sales" from day 0\. Self-hosted GA follows the\s*\n?\s*API public launch\./,
     );
+    expect(body).not.toMatch(/GA within 6 months/);
+    expect(body).not.toMatch(/ships within 6 months/);
   });
 
   it("Architecture framing pinned: 'Two boxes. One secure channel. Your hardware, our orchestration.' + 'Self-hosted is one piece of Driftstack software running on Mac hardware you own. The control plane orchestrates sessions, exposes the SDK + GUI, and never holds your session content.' — pinned so the two-box architecture metaphor + the 'we orchestrate, you hold session content' division of responsibility survive (drift to dropping 'never holds your session content' would weaken the privacy promise)", () => {

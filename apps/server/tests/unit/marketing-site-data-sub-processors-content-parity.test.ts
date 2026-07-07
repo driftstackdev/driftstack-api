@@ -21,7 +21,8 @@
 //   • SUB_PROCESSORS 12 entries: Hetzner Cloud + Neon + Upstash +
 //     Cloudflare R2 + Postmark + Sentry + Stripe + Anthropic +
 //     Moneybird + MacStadium + NowPayments + LiveKit.
-//   • SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-05-10'.
+//   • SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-07-07' (S43 R2
+//     correction bump).
 //   • V-478 SubProcessorChangeLogEntry framing pinned + 4-value
 //     kind union ('added'|'removed'|'material_change'|
 //     'register_published') + 'register_published' baseline marker
@@ -86,9 +87,12 @@ describe('W463.C apps/marketing-site/src/data/sub-processors.ts content parity',
     expect(body).toMatch(/name: 'LiveKit',/);
   });
 
-  it("Transfer mechanism categories pinned: 'EU-resident — no transfer required.' (Hetzner/Neon/Upstash/Moneybird) + 'EU-jurisdiction storage' (Cloudflare R2) + '2021 Standard Contractual Clauses + EU-US Data Privacy Framework.' (Postmark/Stripe/Anthropic/MacStadium/LiveKit) + 'EEA-internal — no transfer mechanism required.' (NowPayments) + 'EU ingest region' (Sentry)", () => {
+  it("Transfer mechanism categories pinned: 'EU-resident — no transfer required.' (Hetzner/Neon/Upstash/Moneybird) + '2021 Standard Contractual Clauses + EU-US Data Privacy Framework.' (Cloudflare R2/Postmark/Stripe/Anthropic/MacStadium/LiveKit) + 'EEA-internal — no transfer mechanism required.' (NowPayments) + 'EU ingest region' (Sentry). S43 2026-07-07: the R2 'EU-jurisdiction storage — no transfer required' claim was false (default jurisdiction, EU + US replication) — R2 now carries the SCCs+DPF mechanism and the old string must not reappear.", () => {
     expect(body).toMatch(/transferMechanism: 'EU-resident — no transfer required\.',/);
-    expect(body).toMatch(/transferMechanism: 'EU-jurisdiction storage — no transfer required\.',/);
+    expect(body).not.toMatch(
+      /transferMechanism: 'EU-jurisdiction storage — no transfer required\.',/,
+    );
+    expect(body).toMatch(/region: 'Default jurisdiction \(data replicated EU \+ US\)',/);
     expect(body).toMatch(
       /transferMechanism: '2021 Standard Contractual Clauses \+ EU-US Data Privacy Framework\.',/,
     );
@@ -101,8 +105,8 @@ describe('W463.C apps/marketing-site/src/data/sub-processors.ts content parity',
     );
   });
 
-  it("SUB_PROCESSOR_REGISTER_LAST_UPDATED pinned to '2026-05-10'", () => {
-    expect(body).toMatch(/export const SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-05-10';/);
+  it("SUB_PROCESSOR_REGISTER_LAST_UPDATED pinned to '2026-07-07' (S43 R2-correction bump)", () => {
+    expect(body).toMatch(/export const SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-07-07';/);
   });
 
   it("V-478 change-log framing pinned: 'V-478 — sub-processor change-log surface.' + 'Every material change to the SUB_PROCESSORS register lands here as an immutable entry.' + Art 28(2) 30-day notice email pairing", () => {
@@ -121,9 +125,14 @@ describe('W463.C apps/marketing-site/src/data/sub-processors.ts content parity',
     );
   });
 
-  it("SUB_PROCESSOR_CHANGELOG: register_published baseline entry pinned (date '2026-05-10', kind 'register_published', subject empty, effective_at '2026-05-10')", () => {
+  it("SUB_PROCESSOR_CHANGELOG: S43 Cloudflare R2 material_change correction entry (2026-07-07) + register_published baseline entry (date '2026-05-10', kind 'register_published', subject empty)", () => {
+    // S43 2026-07-07 — the correction entry leads the array (newest
+    // first is not enforced; the baseline entry must still exist).
     expect(body).toMatch(
-      /export const SUB_PROCESSOR_CHANGELOG: SubProcessorChangeLogEntry\[\] = \[\s*\n?\s*\{\s*\n?\s*date: '2026-05-10',\s*\n?\s*kind: 'register_published',\s*\n?\s*subject: '',/,
+      /date: '2026-07-07',\s*\n?\s*kind: 'material_change',\s*\n?\s*subject: 'Cloudflare R2',/,
+    );
+    expect(body).toMatch(
+      /date: '2026-05-10',\s*\n?\s*kind: 'register_published',\s*\n?\s*subject: '',/,
     );
   });
 

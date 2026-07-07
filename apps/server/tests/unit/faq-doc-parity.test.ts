@@ -39,9 +39,12 @@ describe('W247.B faq doc parity', () => {
   it('free tier framed as $0 forever, no metering, manual-only', () => {
     expect(doc).toMatch(/The free tier is \$0 forever/);
     expect(doc).toMatch(/The free tier has no metering at all/);
-    // Free tier is manual-only (GUI client); programmatic API/SDK access
-    // starts on the API ladder. Old "API-within-free-limits" framing is
-    // superseded (common.ts:76 "free $0 — manual-only (no API)").
+    // Free tier is manual-only (GUI client). S43 2026-07-07: every
+    // PAID tier includes programmatic API/SDK access (TIER_FEATURES
+    // apiAccess: true across the paid ladder) — the old "starts on
+    // the API ladder" framing was false and is retired. Old
+    // "API-within-free-limits" framing stays superseded
+    // (common.ts:76 "free $0 — manual-only (no API)").
     // S20c 2026-07-06 plain-language pass: the parenthetical reworded
     // "no programmatic API/SDK access" → "no API/SDK access from code"
     // (same server-matching fact — manual-only, no code access).

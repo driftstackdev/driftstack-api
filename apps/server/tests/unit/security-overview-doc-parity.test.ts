@@ -25,15 +25,11 @@ const DOC_PATH = join(
   'docs',
   'security-overview.astro',
 );
-const RESIDENCY_DOC = join(
-  REPO,
-  'apps',
-  'marketing-site',
-  'src',
-  'pages',
-  'docs',
-  'data-residency.astro',
-);
+// S47 2026-07-07 (founder-approved: mirror deprecation): the
+// /docs/data-residency mirror is deleted (301 →
+// docs.driftstack.dev/reference/data-residency/); the cross-check
+// reads the docs successor source.
+const RESIDENCY_DOC = join(REPO, 'apps', 'docs', 'src', 'pages', 'reference', 'data-residency.md');
 
 function read(path: string): string {
   return readFileSync(path, 'utf8');
@@ -54,7 +50,9 @@ describe('W229.A security-overview doc parity', () => {
 
   it('region claim matches data-residency (single EU today, multi-region roadmap)', () => {
     const residency = read(RESIDENCY_DOC);
-    expect(residency).toMatch(/primarily in the EU/);
+    // S47 re-pin: the docs successor states the same EU-control-plane
+    // posture in its own (deliberately softened) canonical wording.
+    expect(residency).toMatch(/customer data in our\s*\n?\s*databases is EU-resident/);
     expect(doc).toMatch(/primarily in the EU/);
     // Rule out the fictional 3-region claim:
     expect(doc).not.toMatch(/three regions \(EU, US-East/);

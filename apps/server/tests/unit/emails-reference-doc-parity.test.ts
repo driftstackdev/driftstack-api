@@ -2,57 +2,58 @@
 //   - the auth route paths used by the trigger column
 //   - the opt-outable event set (Lifecycle + Billing tables) against
 //     OptOutableEmailEventSchema
+//
+// S47 2026-07-07 (founder-approved: mirror deprecation) — SUPERSEDED.
+// The legacy marketing mirror page /docs/emails-reference is DELETED and
+// 301-redirects (apps/marketing-site/public/_redirects) to its
+// verified docs successor:
+//   https://docs.driftstack.dev/reference/emails/
+//   (source: apps/docs/src/pages/reference/emails.md; S29/S37 content batches — every claim
+//   re-verified against server source before carry-over. Ongoing
+//   content-parity guarding for this topic lives with the docs
+//   page's own pin lattice.)
+// This file stays as a redirect tombstone so the original guard
+// history above remains greppable and the deprecation cannot
+// silently regress (page resurrection would shadow the 301 —
+// CF Pages serves static assets before _redirects).
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { OptOutableEmailEventSchema } from '@driftstack/api-types';
 
-const REPO = join(__dirname, '..', '..', '..', '..');
-const DOC_PATH = join(
-  REPO,
-  'apps',
-  'marketing-site',
-  'src',
-  'pages',
-  'docs',
-  'emails-reference.astro',
-);
-const AUTH_ROUTE_PATH = join(REPO, 'apps', 'server', 'src', 'routes', 'auth.ts');
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/emails-reference.astro');
+const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
+const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/reference/emails.md');
 
-function read(path: string): string {
-  return readFileSync(path, 'utf8');
-}
-
-describe('W236.A emails-reference doc parity', () => {
-  const doc = read(DOC_PATH);
-  const auth = read(AUTH_ROUTE_PATH);
-
-  it('signup + password-reset trigger paths match the real auth routes', () => {
-    expect(auth).toMatch(/'\/v1\/auth\/signup'/);
-    expect(auth).toMatch(/'\/v1\/auth\/password-reset\/request'/);
-    expect(doc).toMatch(/POST \/v1\/auth\/signup/);
-    expect(doc).toMatch(/POST \/v1\/auth\/password-reset\/request/);
-    // Stale path the previous revision used:
-    expect(doc).not.toMatch(/POST \/v1\/auth\/password-reset<\/code>\)/);
-  });
-
-  it('email-preferences endpoint paths are correct', () => {
-    expect(doc).toMatch(/GET \/v1\/account\/email-preferences/);
-    expect(doc).toMatch(/PUT \/v1\/account\/email-preferences/);
-  });
-
-  it('every event mentioned as opt-outable appears in OptOutableEmailEventSchema', () => {
-    const allowed = new Set((OptOutableEmailEventSchema._def.values as readonly string[]).slice());
-    // Pull every `<strong>foo-bar</strong>` entry from the Lifecycle
-    // table — those are claimed opt-outable.
-    const lifecycle = doc.split('<h2>Lifecycle (opt-outable)</h2>')[1]?.split('<h2>')[0] ?? '';
-    const events = Array.from(lifecycle.matchAll(/<strong>([a-z-]+)<\/strong>/g)).map((m) => m[1]!);
-    expect(events.length).toBeGreaterThan(0);
-    const offenders = events.filter((e) => !allowed.has(e));
+describe('S47 redirect tombstone — /docs/emails-reference → https://docs.driftstack.dev/reference/emails/', () => {
+  it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
     expect(
-      offenders,
-      `events claimed opt-outable but not in enum: ${offenders.join(', ')}`,
-    ).toEqual([]);
+      existsSync(PAGE),
+      'emails-reference.astro must stay deleted — a restored page file would shadow the 301',
+    ).toBe(false);
+
+    const rules = readFileSync(REDIRECTS, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/\s+/));
+    const rule = (from: string) => rules.find((t) => t[0] === from);
+
+    expect(rule('/docs/emails-reference'), 'bare-path rule missing').toEqual([
+      '/docs/emails-reference',
+      'https://docs.driftstack.dev/reference/emails/',
+      '301',
+    ]);
+    expect(
+      rule('/docs/emails-reference/'),
+      'trailing-slash rule missing (matching is exact-path)',
+    ).toEqual(['/docs/emails-reference/', 'https://docs.driftstack.dev/reference/emails/', '301']);
+  });
+
+  it('the docs successor source page still exists (a docs-side rename/move must update the redirect target)', () => {
+    expect(existsSync(DOCS_SUCCESSOR_SRC)).toBe(true);
   });
 });

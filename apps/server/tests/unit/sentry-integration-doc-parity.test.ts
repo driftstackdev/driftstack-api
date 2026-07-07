@@ -2,64 +2,58 @@
 //
 // The page previously documented a customer-facing Sentry forwarder
 // that doesn't exist (no /integrations/sentry endpoint, no DSN
-// setting on the account row, no source_map_url / release field on
-// session-create). This guard:
-//   - confirms the doc currently calls out the not-shipped state
-//     when the integration endpoint isn't registered, OR
-//   - flips and forces the doc to drop the not-shipped framing once
-//     the integration ships.
+//
+// S47 2026-07-07 (founder-approved: mirror deprecation) — SUPERSEDED.
+// The legacy marketing mirror page /docs/sentry-integration is DELETED and
+// 301-redirects (apps/marketing-site/public/_redirects) to its
+// verified docs successor:
+//   https://docs.driftstack.dev/guides/sentry/
+//   (source: apps/docs/src/pages/guides/sentry.md; S29/S37 content batches — every claim
+//   re-verified against server source before carry-over. Ongoing
+//   content-parity guarding for this topic lives with the docs
+//   page's own pin lattice.)
+// This file stays as a redirect tombstone so the original guard
+// history above remains greppable and the deprecation cannot
+// silently regress (page resurrection would shadow the 301 —
+// CF Pages serves static assets before _redirects).
 
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const REPO = join(__dirname, '..', '..', '..', '..');
-const DOC_PATH = join(
-  REPO,
-  'apps',
-  'marketing-site',
-  'src',
-  'pages',
-  'docs',
-  'sentry-integration.astro',
-);
-const ROUTES_DIR = join(REPO, 'apps', 'server', 'src', 'routes');
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/sentry-integration.astro');
+const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
+const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/guides/sentry.md');
 
-function read(path: string): string {
-  return readFileSync(path, 'utf8');
-}
+describe('S47 redirect tombstone — /docs/sentry-integration → https://docs.driftstack.dev/guides/sentry/', () => {
+  it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
+    expect(
+      existsSync(PAGE),
+      'sentry-integration.astro must stay deleted — a restored page file would shadow the 301',
+    ).toBe(false);
 
-function anyRouteSourceIncludes(needle: RegExp | string): boolean {
-  for (const entry of readdirSync(ROUTES_DIR, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
-    const text = readFileSync(join(ROUTES_DIR, entry.name), 'utf8');
-    if (typeof needle === 'string' ? text.includes(needle) : needle.test(text)) return true;
-  }
-  return false;
-}
+    const rules = readFileSync(REDIRECTS, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/\s+/));
+    const rule = (from: string) => rules.find((t) => t[0] === from);
 
-describe('W226.A sentry-integration doc parity', () => {
-  const doc = read(DOC_PATH);
-
-  it('flags customer Sentry forwarding as not-shipped when no integration endpoint is registered', () => {
-    const integrationShipped =
-      anyRouteSourceIncludes(/\/v1\/account\/integrations\/sentry/) ||
-      anyRouteSourceIncludes(/sentry_dsn/);
-    if (integrationShipped) {
-      expect(doc).not.toMatch(/no customer-configurable\s+Sentry forwarder/i);
-    } else {
-      expect(doc).toMatch(/no customer-configurable\s+Sentry forwarder/i);
-      // The doc must direct readers to instrument the page-under-test.
-      expect(doc).toMatch(/instrument[\s\S]*?page/i);
-    }
+    expect(rule('/docs/sentry-integration'), 'bare-path rule missing').toEqual([
+      '/docs/sentry-integration',
+      'https://docs.driftstack.dev/guides/sentry/',
+      '301',
+    ]);
+    expect(
+      rule('/docs/sentry-integration/'),
+      'trailing-slash rule missing (matching is exact-path)',
+    ).toEqual(['/docs/sentry-integration/', 'https://docs.driftstack.dev/guides/sentry/', '301']);
   });
 
-  it('doc does not invent session-create body fields for Sentry', () => {
-    // Real session-create accepts only archetype / purpose / label /
-    // metadata. The previous revision claimed `source_map_url`,
-    // `release`, `script`, `target_url` — all fictional.
-    expect(doc).not.toMatch(/source_map_url:/);
-    expect(doc).not.toMatch(/sessions\.start\(/);
-    expect(doc).not.toMatch(/release:\s*'my-app/);
+  it('the docs successor source page still exists (a docs-side rename/move must update the redirect target)', () => {
+    expect(existsSync(DOCS_SUCCESSOR_SRC)).toBe(true);
   });
 });

@@ -97,7 +97,10 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-05-27',
     category: 'pricing',
     title: 'Perpetual free tier replaces the one-time trial pack',
-    body: 'The entry tier is now a perpetual free tier: $0 forever, one persistent profile, one concurrent session, manual sessions up to 20 minutes each, driven from the desktop GUI client, no card required. It is manual-only — programmatic API/SDK access starts on the API ladder. There is no expiry, no credit to run out, and no usage metering. This replaces the previous one-time $2.99 trial pack entirely.',
+    // S43 2026-07-07 (founder-approved) — claims fix: "starts on the
+    // API ladder" was false (every paid tier includes API access, per
+    // TIER_FEATURES); the free tier's manual-only claim is true.
+    body: 'The entry tier is now a perpetual free tier: $0 forever, one persistent profile, one concurrent session, manual sessions up to 20 minutes each, driven from the desktop GUI client, no card required. It is manual-only — programmatic API/SDK access comes with the paid tiers. There is no expiry, no credit to run out, and no usage metering. This replaces the previous one-time $2.99 trial pack entirely.',
   },
   {
     date: '2026-05-22',

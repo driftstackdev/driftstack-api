@@ -168,9 +168,12 @@ describe('W733 sub-processors + ADR-002 Stripe-only parity', () => {
     expect(l).toMatch(/Billing email, line-item description, amount, card token\./);
   });
 
-  it('CRITICAL legal/sub-processors.md Cloudflare R2 row mentions server-side encryption framing. The "encrypted server-side" framing is what tells customers R2 recording/screenshot bytes are encrypted at rest.', () => {
+  it('CRITICAL legal/sub-processors.md Cloudflare R2 row data categories pinned (S43 2026-07-07 correction): avatar bytes + encrypted profile blobs + operational status snapshots — the old "Recording artifacts + screenshots" claim was false (session recording is not a live feature; captures return inline and are not retained on R2).', () => {
     const l = read(LEGAL);
-    expect(l).toMatch(/Recording artifacts \+ screenshots \(encrypted server-side\), avatar bytes/);
+    expect(l).toMatch(
+      /Avatar bytes, encrypted profile blobs, status-page snapshots \(operational JSON\)/,
+    );
+    expect(l).not.toMatch(/Recording artifacts \+ screenshots/);
   });
 
   it('CRITICAL legal/sub-processors.md SCC + EU-US DPF framing pinned on every US-transfer vendor row (Postmark, Stripe, Anthropic, MacStadium, LiveKit). Drift to dropping would weaken the GDPR-Article-46 compliance posture.', () => {

@@ -141,9 +141,14 @@ describe('W575.C /docs/legal/dpa.md (part 3) content parity', () => {
     expect(body).toMatch(
       /\| Upstash, Inc\.\s+\| Managed Redis\s+\| US \(corp\); EU Frankfurt \(data\)\s+\| 2021 SCCs Module 2 \+ EU-US DPF \(verify\) \|/,
     );
+    // S43 2026-07-07 (founder-approved) — Cloudflare location cell
+    // corrected: R2 uses the default jurisdiction (data replicated
+    // EU + US), not "EU jurisdiction". The SCCs+DPF transfer-mechanism
+    // cell was already correct and now actually applies.
     expect(body).toMatch(
-      /\| Cloudflare, Inc\.\s+\| DNS \/ CDN \/ edge \/ R2 \/ Pages\s+\| US \(corp\); EU jurisdiction \(data\) \| 2021 SCCs Module 2 \+ EU-US DPF \(verify\) \|/,
+      /\| Cloudflare, Inc\.\s+\| DNS \/ CDN \/ edge \/ R2 \/ Pages\s+\| US \(corp\); R2 default jurisdiction \(data replicated EU \+ US\) \| 2021 SCCs Module 2 \+ EU-US DPF \(verify\) \|/,
     );
+    expect(body).not.toMatch(/\| US \(corp\); EU jurisdiction \(data\)/);
     expect(body).toMatch(
       /\| Postmark \(ActiveCampaign LLC\)\s+\| Transactional email\s+\| US\s+\| 2021 SCCs Module 2 \+ EU-US DPF \(verify\) \|/,
     );

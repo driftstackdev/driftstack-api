@@ -2,57 +2,65 @@
 // Same theme as W220.A / W230.A: the page used to frame
 // crypto.order.* events as a live, subscribable webhook integration,
 // when they're emitted server-side but not in
-// SubscribableWebhookEventTypeSchema yet. This guard fails if anyone
-// reverts the framing to "register a webhook + handle the event" so
-// long as the enum stays gated.
+//
+// S47 2026-07-07 (founder-approved: mirror deprecation) — SUPERSEDED.
+// The legacy marketing mirror page /docs/billing-crypto-integration-guide is DELETED and
+// 301-redirects (apps/marketing-site/public/_redirects) to its
+// verified docs successor:
+//   https://docs.driftstack.dev/guides/paying-with-crypto/
+//   (source: apps/docs/src/pages/guides/paying-with-crypto.md; S29/S37 content batches — every claim
+//   re-verified against server source before carry-over. Ongoing
+//   content-parity guarding for this topic lives with the docs
+//   page's own pin lattice.)
+// This file stays as a redirect tombstone so the original guard
+// history above remains greppable and the deprecation cannot
+// silently regress (page resurrection would shadow the 301 —
+// CF Pages serves static assets before _redirects).
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SubscribableWebhookEventTypeSchema } from '@driftstack/api-types';
 
-const REPO = join(__dirname, '..', '..', '..', '..');
-const DOC_PATH = join(
-  REPO,
-  'apps',
-  'marketing-site',
-  'src',
-  'pages',
-  'docs',
-  'billing-crypto-integration-guide.astro',
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(
+  REPO_ROOT,
+  'apps/marketing-site/src/pages/docs/billing-crypto-integration-guide.astro',
 );
+const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
+const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/guides/paying-with-crypto.md');
 
-function read(path: string): string {
-  return readFileSync(path, 'utf8');
-}
+describe('S47 redirect tombstone — /docs/billing-crypto-integration-guide → https://docs.driftstack.dev/guides/paying-with-crypto/', () => {
+  it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
+    expect(
+      existsSync(PAGE),
+      'billing-crypto-integration-guide.astro must stay deleted — a restored page file would shadow the 301',
+    ).toBe(false);
 
-describe('W232.A billing-crypto-integration-guide doc parity', () => {
-  const doc = read(DOC_PATH);
-  const subscribable = new Set(
-    (SubscribableWebhookEventTypeSchema._def.values as readonly string[]).map((v) => v),
-  );
+    const rules = readFileSync(REDIRECTS, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/\s+/));
+    const rule = (from: string) => rules.find((t) => t[0] === from);
 
-  it('switches to polling when crypto.order.* events are not subscribable', () => {
-    const live = subscribable.has('crypto.order.paid');
-    if (!live) {
-      // Doc must NOT show a "register a webhook + case 'crypto.order.paid'"
-      // pattern when the event isn't on the subscribable list.
-      expect(doc).not.toMatch(/case 'crypto\.order\.paid'/);
-      expect(doc).not.toMatch(/Register a webhook endpoint that subscribes to/i);
-      // And must direct readers to poll.
-      expect(doc).toMatch(/poll/i);
-      expect(doc).toMatch(/\/v1\/billing\/crypto-orders\//);
-    }
+    expect(rule('/docs/billing-crypto-integration-guide'), 'bare-path rule missing').toEqual([
+      '/docs/billing-crypto-integration-guide',
+      'https://docs.driftstack.dev/guides/paying-with-crypto/',
+      '301',
+    ]);
+    expect(
+      rule('/docs/billing-crypto-integration-guide/'),
+      'trailing-slash rule missing (matching is exact-path)',
+    ).toEqual([
+      '/docs/billing-crypto-integration-guide/',
+      'https://docs.driftstack.dev/guides/paying-with-crypto/',
+      '301',
+    ]);
   });
 
-  it('still references the idempotency-key header on checkout', () => {
-    expect(doc).toMatch(/idempotency-key/i);
-    expect(doc).toMatch(/\/docs\/idempotency-keys/);
-  });
-
-  it('receipt endpoints in the doc match the route convention', () => {
-    for (const suffix of ['/receipt', '/receipt.txt', '/receipt.pdf']) {
-      expect(doc).toContain(suffix);
-    }
+  it('the docs successor source page still exists (a docs-side rename/move must update the redirect target)', () => {
+    expect(existsSync(DOCS_SUCCESSOR_SRC)).toBe(true);
   });
 });

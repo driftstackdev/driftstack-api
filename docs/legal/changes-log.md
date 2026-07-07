@@ -23,6 +23,45 @@ references the corresponding rows in this log.
 
 ---
 
+## 2026-07-07 — S43 sub-processor register correction (founder-approved)
+
+- **DPA Annex 3 (sub-processors table)**: Cloudflare, Inc. location
+  cell corrected from "US (corp); EU jurisdiction (data)" to
+  "US (corp); R2 default jurisdiction (data replicated EU + US)".
+  Ground truth (DNS + production-box verified): the R2 buckets use
+  the default jurisdiction, which replicates data between the EU and
+  the US. The transfer-mechanism cell (2021 SCCs Module 2 + EU-US
+  DPF) was already correct and is unchanged — the row now discloses
+  that the mechanism actually applies rather than claiming no
+  transfer occurs. Applied to both copies (`docs/legal/dpa.md`
+  canonical + `apps/marketing-site/src/pages/legal/dpa.md`
+  customer-facing); the marketing copy's Annex 3 "Region preference
+  vs. region routing" paragraph is scoped the same way (database
+  data EU-resident; R2 file objects replicate EU + US under the
+  listed mechanism).
+- **Sub-processor register** (`apps/marketing-site/src/pages/legal/sub-processors.md`
+  v1.0 → v1.1 + `apps/marketing-site/src/data/sub-processors.ts`,
+  rendered at /trust/sub-processors): Cloudflare R2 row corrected in
+  lockstep — region "EU jurisdiction" → "Default jurisdiction (data
+  replicated EU + US)", transfer mechanism "no transfer required" →
+  2021 SCCs + EU-US DPF, and the purpose/data categories corrected
+  to the objects actually stored (customer-uploaded profile avatars,
+  encrypted profile blobs, public status-page snapshots — not
+  "session recordings and screenshots"; session recording is not a
+  live feature). `SUB_PROCESSOR_REGISTER_LAST_UPDATED` bumped to
+  2026-07-07; a `material_change` correction entry added to the
+  public change log. V-271 mirror linter unchanged (names did not
+  change) and re-run green.
+- **No new sub-processor / no 30-day notice window**: the processing
+  itself did not change — the register's description of it did. This
+  is a correction to disclose existing processing accurately, not
+  the engagement of a new sub-processor or a change in an existing
+  sub-processor's actual role.
+- **No ToS / AUP / Definitions / Privacy Policy update in this
+  slice**: the Privacy Policy §7 Cloudflare row carries the same
+  stale "EU jurisdiction selected" description and is flagged for a
+  follow-up under its own Section 15 update conventions.
+
 ## 2026-05-09 — V-353 + V-359 + V-298a + V-352b cycle disclosure refresh
 
 - **Privacy Policy §3.2 (Authentication data)**: extended the "What"

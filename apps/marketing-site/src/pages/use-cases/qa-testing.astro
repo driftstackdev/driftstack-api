@@ -6,8 +6,9 @@
 // enforced by the workspace archetype sweeps). Claim register:
 // homepage §4 card ("Test on the real thing" / the-bug-you-reproduce
 // line), §8 FOR DEVELOPERS (SDK trio + plain-HTTPS integrations),
-// faq.ts free-tier answer (free is manual-only; programmatic access
-// starts on the API ladder — stated honestly, not buried).
+// faq.ts free-tier answer (free is manual-only; every paid tier
+// includes API access — the API ladder is the one built/sized for
+// code-first workloads; S43 2026-07-07 claims fix).
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHero from '../../components/PageHero.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
@@ -117,10 +118,14 @@ try {
     </div>
   </Section>
 
+  {/* S43 2026-07-07 (founder-approved) — claims fix: programmatic
+      access is included on every paid tier, so the lead no longer says
+      it "starts on the API ladder"; the API ladder is the path sized
+      for code-first workloads. */}
   <Section
     label="Which plan"
     title="Code calling → the API ladder."
-    lead="Programmatic access starts on the API ladder — SDK keys, session creation from CI, concurrent caps sized for parallel suites."
+    lead="The API ladder is built for code-first workloads — SDK keys, session creation from CI, concurrent caps sized for parallel suites. (Every paid tier includes API access; the API ladder's caps are sized for it.)"
   >
     <div class="mt-8 flex flex-wrap items-center gap-4">
       <a href="/pricing#api" class="btn-secondary">See API pricing →</a>

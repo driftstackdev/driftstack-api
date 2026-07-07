@@ -100,7 +100,7 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     expect(p).toMatch(/id: 'team_manual',[\s\S]{0,1000}highlight: true,/);
   });
 
-  it('CRITICAL Agency pricing pinned — $699/mo + $559 annual-equiv + 200 profiles + 8 concurrent + 12h SLA Slack Connect.', () => {
+  it('CRITICAL Agency pricing pinned — $699/mo + $559 annual-equiv + 200 profiles + 8 concurrent + Email/Slack Connect channel with the 48h non-contractual target (S43 2026-07-07: ToS §9.1 disclaims a reply-time SLA on this tier, so the old "12h SLA" figure is retired).', () => {
     const p = read(PRICING);
 
     expect(p).toMatch(
@@ -109,7 +109,7 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     expect(p).toMatch(/id: 'agency_manual',[\s\S]{0,500}profiles: 200,/);
     expect(p).toMatch(/id: 'agency_manual',[\s\S]{0,600}concurrent: 8,/);
     expect(p).toMatch(
-      /id: 'agency_manual',[\s\S]{0,700}support: 'Email \+ Slack Connect · 12h SLA',/,
+      /id: 'agency_manual',[\s\S]{0,700}support: 'Email \+ Slack Connect · 48h target',/,
     );
   });
 
@@ -135,7 +135,7 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     expect(p).toMatch(/id: 'api_builder',[\s\S]{0,1000}highlight: true,/);
   });
 
-  it('CRITICAL API Scale pricing pinned — $1,499/mo + $1,199 annual-equiv + 500 profiles + 24 concurrent + 4h SLA Slack Connect.', () => {
+  it('CRITICAL API Scale pricing pinned — $1,499/mo + $1,199 annual-equiv + 500 profiles + 24 concurrent + Slack Connect with the ToS §9.2 4h Severity-1 first-response SLA (S43 2026-07-07: the bare "4h SLA" read as an all-ticket reply SLA; the ToS grant is Severity-1 first-response).', () => {
     const p = read(PRICING);
 
     expect(p).toMatch(
@@ -143,7 +143,9 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     );
     expect(p).toMatch(/id: 'api_scale',[\s\S]{0,500}profiles: 500,/);
     expect(p).toMatch(/id: 'api_scale',[\s\S]{0,600}concurrent: 24,/);
-    expect(p).toMatch(/id: 'api_scale',[\s\S]{0,700}support: 'Slack Connect · 4h SLA',/);
+    expect(p).toMatch(
+      /id: 'api_scale',[\s\S]{0,700}support: 'Slack Connect · 4h Severity-1 first-response SLA',/,
+    );
   });
 
   it('CRITICAL Enterprise tier — monthlyUsd null + annualMonthlyEquivalentUsd 4_000 (the $4,000/mo entry floor) + annualUsd 48_000 (= 4_000 × 12, a true YEARLY total like every other tier) + Custom profiles + Custom concurrent + dedicated CSM 1h + Contact sales CTA. The $4,000/mo floor is the entry for the negotiated commitment.', () => {
@@ -154,7 +156,11 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     expect(p).toMatch(/id: 'enterprise',[\s\S]{0,950}annualUsd: 48_000,/);
     expect(p).toMatch(/id: 'enterprise',[\s\S]{0,1100}profiles: 'Custom',/);
     expect(p).toMatch(/id: 'enterprise',[\s\S]{0,1200}concurrent: 'Custom',/);
-    expect(p).toMatch(/id: 'enterprise',[\s\S]{0,1300}support: 'Dedicated CSM · 1h SLA',/);
+    // S43 2026-07-07 — support string states the ToS §9.2 grant
+    // exactly (1h Severity-1 first-response), not a bare "1h SLA".
+    expect(p).toMatch(
+      /id: 'enterprise',[\s\S]{0,1300}support: 'Dedicated CSM · 1h Severity-1 first-response SLA',/,
+    );
     expect(p).toMatch(
       /id: 'enterprise',[\s\S]{0,1500}cta: \{ label: 'Contact sales', href: 'mailto:sales@driftstack\.dev' \}/,
     );

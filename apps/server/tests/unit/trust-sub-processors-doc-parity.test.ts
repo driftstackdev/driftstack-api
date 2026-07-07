@@ -7,9 +7,12 @@
 //      MacStadium, LiveKit, Moneybird).
 //   2. The register-last-updated marker is parseable as ISO YYYY-MM-DD.
 //   3. The change-log is non-empty and uses the documented `kind` enum.
-//   4. The data-residency table in /docs/data-residency uses
-//      consistent region wording (Sentry EU, Postmark EU sending) —
-//      previously these were mislabelled US.
+//   4. The data-residency reference uses consistent region wording
+//      (Sentry EU ingest, Postmark EU sending) — previously these
+//      were mislabelled US. S47 2026-07-07 (founder-approved: mirror
+//      deprecation): the /docs/data-residency mirror is deleted
+//      (301 → docs.driftstack.dev/reference/data-residency/), so
+//      this clause now reads the docs successor source.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -30,15 +33,8 @@ const TRUST_PAGE = join(
   'trust',
   'sub-processors.astro',
 );
-const RESIDENCY_PAGE = join(
-  REPO,
-  'apps',
-  'marketing-site',
-  'src',
-  'pages',
-  'docs',
-  'data-residency.astro',
-);
+// S47 2026-07-07: the docs successor of the deleted mirror page.
+const RESIDENCY_PAGE = join(REPO, 'apps', 'docs', 'src', 'pages', 'reference', 'data-residency.md');
 
 function read(path: string): string {
   return readFileSync(path, 'utf8');
@@ -89,12 +85,14 @@ describe('W244.C trust/sub-processors doc parity', () => {
     expect(page).toContain('SUB_PROCESSOR_CHANGELOG');
   });
 
-  it('data-residency page reflects the EU-region posture of Sentry + Postmark', () => {
+  it('data-residency reference (S47 docs successor) reflects the EU-region posture of Sentry + Postmark', () => {
     // Drift fix: previously these were listed as US.
     expect(residency).not.toMatch(/Sentry \(US, sentry\.io\)/);
     expect(residency).not.toMatch(/Postmark \(US\)/);
-    expect(residency).toMatch(/Sentry EU/);
-    expect(residency).toMatch(/Postmark \(EU sending region\)/);
+    // S47 re-pin to the docs successor's phrasing (same posture).
+    expect(residency).toMatch(/Sentry, EU ingest region/);
+    expect(residency).toMatch(/ingest\.de\.sentry\.io/);
+    expect(residency).toMatch(/Postmark, EU sending region/);
   });
 
   it('cross-links between residency + sub-processors are bidirectional', () => {

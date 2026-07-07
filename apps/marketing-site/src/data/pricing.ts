@@ -18,6 +18,19 @@
 // they still apply so the Tier 3 draft-surface review can focus on
 // new fields + render structure.
 
+// S43 2026-07-07 (founder-approved) — SLA alignment to ToS §9. The
+// cloud-tier `support` strings previously carried a 48h/24h/12h/4h/1h
+// per-tier reply-time "SLA" ladder. ToS §9.1 provides the Free,
+// Manual-ladder (Personal, Team, Agency), API Starter, and API
+// Builder tiers WITHOUT a contractually-binding SLA, so those tiers
+// now state the support channel + the honest operational 48h target
+// (same wording as the self-hosted SKUs' fmtSupportTier, per the
+// 2026-05-19 founder verdict + the faq.ts "48h business-time across
+// every tier" target). ToS §9.2 grants API Scale and Enterprise a
+// contractual "first-response SLA on Severity-1 incidents of four (4)
+// hours on API Scale and one (1) hour on Enterprise" — those two
+// tiers state exactly that grant, no more.
+
 export type TierType = 'free' | 'manual' | 'api';
 
 /**
@@ -86,7 +99,7 @@ export const API_TIERS: ApiTier[] = [
     overagePerHourUsd: null,
     concurrent: 1,
     archetypeAccess: 'All currently-available archetypes',
-    support: 'Email · 48h SLA',
+    support: 'Email · 48h target',
     audience: 'Solo power users, individual operators',
     aiAgent: false,
     llmBilling: null,
@@ -104,7 +117,7 @@ export const API_TIERS: ApiTier[] = [
     overagePerHourUsd: null,
     concurrent: 3,
     archetypeAccess: 'All currently-available archetypes',
-    support: 'Email · 24h SLA',
+    support: 'Email · 48h target',
     audience: 'Teams of account managers',
     aiAgent: true,
     llmBilling: 'byok_only',
@@ -123,7 +136,7 @@ export const API_TIERS: ApiTier[] = [
     overagePerHourUsd: null,
     concurrent: 8,
     archetypeAccess: 'All currently-available archetypes',
-    support: 'Email + Slack Connect · 12h SLA',
+    support: 'Email + Slack Connect · 48h target',
     audience: 'Agencies juggling many client profiles',
     aiAgent: true,
     llmBilling: 'byok_only',
@@ -143,7 +156,7 @@ export const API_TIERS: ApiTier[] = [
     overagePerHourUsd: null,
     concurrent: 2,
     archetypeAccess: 'All currently-available archetypes',
-    support: 'Email · 48h SLA',
+    support: 'Email · 48h target',
     audience: 'Solo developers, evaluation-stage automation',
     aiAgent: true,
     llmBilling: 'byok_only',
@@ -161,7 +174,7 @@ export const API_TIERS: ApiTier[] = [
     overagePerHourUsd: null,
     concurrent: 8,
     archetypeAccess: 'All currently-available archetypes',
-    support: 'Email + Slack Connect · 12h SLA',
+    support: 'Email + Slack Connect · 48h target',
     audience: 'Production automation at scale',
     aiAgent: true,
     llmBilling: 'byok_or_bundled',
@@ -180,7 +193,7 @@ export const API_TIERS: ApiTier[] = [
     overagePerHourUsd: null,
     concurrent: 24,
     archetypeAccess: 'All currently-available archetypes',
-    support: 'Slack Connect · 4h SLA',
+    support: 'Slack Connect · 4h Severity-1 first-response SLA',
     audience: 'High-volume automation running many sessions at once',
     aiAgent: true,
     llmBilling: 'byok_or_bundled',
@@ -205,7 +218,7 @@ export const API_TIERS: ApiTier[] = [
     overagePerHourUsd: null,
     concurrent: 'Custom',
     archetypeAccess: 'All available + custom archetypes',
-    support: 'Dedicated CSM · 1h SLA',
+    support: 'Dedicated CSM · 1h Severity-1 first-response SLA',
     audience: 'Custom negotiated contracts',
     aiAgent: true,
     llmBilling: 'byok_or_bundled_custom',

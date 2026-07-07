@@ -6,7 +6,7 @@ description: The third parties Driftstack uses to deliver the service, what each
 
 # Driftstack — Sub-processor List
 
-**Version:** 1.0 · **Effective:** 2026-05-10
+**Version:** 1.1 · **Effective:** 2026-07-07
 
 This page enumerates the sub-processors Driftstack engages to deliver
 the Service. It is referenced from the
@@ -34,29 +34,29 @@ list does **not** cover:
 
 ## Current sub-processors
 
-| Sub-processor      | Purpose                                                                                                                                                                                           | Data categories                                                          | Location                                          | Transfer mechanism                                                |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------- | ----------------------------------------------------------------- |
-| **Hetzner Cloud**  | Compute infrastructure for the Driftstack control plane (production).                                                                                                                             | Account data, session metadata (encrypted at rest).                      | Falkenstein, Germany (EU).                        | EU-resident — no transfer required.                               |
-| **Neon, Inc.**     | Managed Postgres for account, session, and audit data.                                                                                                                                            | Account data, session metadata, audit log.                               | Frankfurt (EU).                                   | EU-resident — no transfer required.                               |
-| **Upstash, Inc.**  | Managed Redis for auth-cache and rate-limit state.                                                                                                                                                | Auth-cache entries, rate-limit buckets, ephemeral session state.         | Frankfurt (EU).                                   | EU-resident — no transfer required.                               |
-| **Cloudflare R2**  | Object storage for session recordings and screenshots, public status-page snapshots, and customer-uploaded profile avatars.                                                                       | Recording artifacts + screenshots (encrypted server-side), avatar bytes. | EU jurisdiction.                                  | EU-jurisdiction storage — no transfer required.                   |
-| **Postmark**       | Transactional email (signup verification, password reset, billing notifications, support correspondence).                                                                                         | Recipient email, message body, deliverability metadata.                  | EU sending region.                                | 2021 Standard Contractual Clauses + EU-US Data Privacy Framework. |
-| **Sentry**         | Error monitoring and observability for the Driftstack control plane.                                                                                                                              | Stack traces, scrubbed request shape, account-id-only telemetry.         | EU region (ingest.de.sentry.io).                  | EU ingest region — no transfer required for error data.           |
-| **Stripe**         | Payment processing, subscription management, BYOK metered billing, BTW reverse-charge handling via Stripe Tax.                                                                                    | Billing email, line-item description, amount, card token.                | Stripe Payments Europe Ltd (Ireland).             | 2021 Standard Contractual Clauses + EU-US Data Privacy Framework. |
-| **Anthropic**      | Large language model for the optional AI agent feature, engaged in BYOK-proxy or opt-in bundled-LLM mode. Session data flows only when one of those modes is engaged on a turn.                   | Customer-supplied prompts + session context for the turn.                | United States.                                    | 2021 Standard Contractual Clauses + EU-US Data Privacy Framework. |
-| **Moneybird**      | Accounting and invoicing operations for Driftstack B.V.                                                                                                                                           | Invoice line items, billing identity.                                    | Netherlands (EU).                                 | EU-resident — no transfer required.                               |
-| **MacStadium**     | Mac hardware hosting for the iPhone Safari session execution fleet.                                                                                                                               | Session execution state (transient).                                     | United States.                                    | 2021 Standard Contractual Clauses + EU-US Data Privacy Framework. |
-| **NowPayments OÜ** | Cryptocurrency payment processing (BTC, LTC, USDT, USDC, ETH, XMR). Engaged only when a customer opts to pay with cryptocurrency at checkout; bypassed for Stripe-paying customers.               | Order ID, amount + currency, payment-pointer metadata.                   | Estonia (EU).                                     | EEA-internal — no transfer mechanism required.                    |
-| **LiveKit, Inc.**  | WebRTC live-session signaling + media SFU for the optional "live session" feature, where a customer or Driftstack support views an in-progress browser session in real time. Disabled by default. | Session ID, room name, ephemeral SDP signalling, live media.             | United States (regional endpoints; EU preferred). | 2021 Standard Contractual Clauses + EU-US Data Privacy Framework. |
+| Sub-processor      | Purpose                                                                                                                                                                                           | Data categories                                                                  | Location                                          | Transfer mechanism                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------- |
+| **Hetzner Cloud**  | Compute infrastructure for the Driftstack control plane (production).                                                                                                                             | Account data, session metadata (encrypted at rest).                              | Falkenstein, Germany (EU).                        | EU-resident — no transfer required.                               |
+| **Neon, Inc.**     | Managed Postgres for account, session, and audit data.                                                                                                                                            | Account data, session metadata, audit log.                                       | Frankfurt (EU).                                   | EU-resident — no transfer required.                               |
+| **Upstash, Inc.**  | Managed Redis for auth-cache and rate-limit state.                                                                                                                                                | Auth-cache entries, rate-limit buckets, ephemeral session state.                 | Frankfurt (EU).                                   | EU-resident — no transfer required.                               |
+| **Cloudflare R2**  | Object storage for customer-uploaded profile avatars, encrypted profile blobs, and public status-page snapshots.                                                                                  | Avatar bytes, encrypted profile blobs, status-page snapshots (operational JSON). | Default jurisdiction (data replicated EU + US).   | 2021 Standard Contractual Clauses + EU-US Data Privacy Framework. |
+| **Postmark**       | Transactional email (signup verification, password reset, billing notifications, support correspondence).                                                                                         | Recipient email, message body, deliverability metadata.                          | EU sending region.                                | 2021 Standard Contractual Clauses + EU-US Data Privacy Framework. |
+| **Sentry**         | Error monitoring and observability for the Driftstack control plane.                                                                                                                              | Stack traces, scrubbed request shape, account-id-only telemetry.                 | EU region (ingest.de.sentry.io).                  | EU ingest region — no transfer required for error data.           |
+| **Stripe**         | Payment processing, subscription management, BYOK metered billing, BTW reverse-charge handling via Stripe Tax.                                                                                    | Billing email, line-item description, amount, card token.                        | Stripe Payments Europe Ltd (Ireland).             | 2021 Standard Contractual Clauses + EU-US Data Privacy Framework. |
+| **Anthropic**      | Large language model for the optional AI agent feature, engaged in BYOK-proxy or opt-in bundled-LLM mode. Session data flows only when one of those modes is engaged on a turn.                   | Customer-supplied prompts + session context for the turn.                        | United States.                                    | 2021 Standard Contractual Clauses + EU-US Data Privacy Framework. |
+| **Moneybird**      | Accounting and invoicing operations for Driftstack B.V.                                                                                                                                           | Invoice line items, billing identity.                                            | Netherlands (EU).                                 | EU-resident — no transfer required.                               |
+| **MacStadium**     | Mac hardware hosting for the iPhone Safari session execution fleet.                                                                                                                               | Session execution state (transient).                                             | United States.                                    | 2021 Standard Contractual Clauses + EU-US Data Privacy Framework. |
+| **NowPayments OÜ** | Cryptocurrency payment processing (BTC, LTC, USDT, USDC, ETH, XMR). Engaged only when a customer opts to pay with cryptocurrency at checkout; bypassed for Stripe-paying customers.               | Order ID, amount + currency, payment-pointer metadata.                           | Estonia (EU).                                     | EEA-internal — no transfer mechanism required.                    |
+| **LiveKit, Inc.**  | WebRTC live-session signaling + media SFU for the optional "live session" feature, where a customer or Driftstack support views an in-progress browser session in real time. Disabled by default. | Session ID, room name, ephemeral SDP signalling, live media.                     | United States (regional endpoints; EU preferred). | 2021 Standard Contractual Clauses + EU-US Data Privacy Framework. |
 
 ## Production topology
 
 The production control plane runs on **Hetzner Cloud** (compute) with
 **Neon** (managed Postgres) for account / session / audit data,
 **Upstash** (managed Redis) for auth-cache and rate-limit state, and
-**Cloudflare R2** for object storage (recordings, screenshots,
-avatars). The iPhone Safari session execution fleet runs on
-**MacStadium** Mac hardware.
+**Cloudflare R2** for object storage (avatars, encrypted profile
+blobs, public status snapshots). The iPhone Safari session execution
+fleet runs on **MacStadium** Mac hardware.
 
 ## What changed since the previous version
 
@@ -95,6 +95,18 @@ account ID + the email you want subscribed.
 
 ## Changelog
 
+- **2026-07-07 — v1.1.** Cloudflare R2 row corrected. The previous
+  row described the storage as "EU jurisdiction — no transfer
+  required" and listed "session recordings and screenshots". In fact
+  the R2 buckets use the default jurisdiction, which replicates data
+  between the EU and the US, so a transfer mechanism applies (2021
+  Standard Contractual Clauses + EU-US Data Privacy Framework), and
+  the objects actually stored are customer-uploaded profile avatars,
+  encrypted profile blobs, and public status-page snapshots (session
+  recording is not a live feature). This is a correction of the
+  register to describe existing processing accurately — the
+  processing itself did not change, so no 30-day notice window
+  applies.
 - **2026-05-10 — v1.0.** Initial standalone publication. Inherits the
   vendor list from DPA v0.9 + adds NowPayments, LiveKit.
 

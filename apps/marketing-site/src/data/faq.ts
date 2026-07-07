@@ -68,7 +68,12 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'Can I use the API or SDK on the free tier?',
-        a: 'No — the free tier is manual-only and runs through our desktop app. Access from code — the API and SDKs — starts on the API ladder (API Starter from $149/mo), which is also where you get multiple concurrent sessions and no per-session time cap. The free tier lets you evaluate the real iPhone Safari fingerprint hands-on before committing to automation.',
+        // S43 2026-07-07 (founder-approved) — claims fix: the old
+        // answer claimed code access began only on the API ladder,
+        // but TIER_FEATURES gives every paid tier (including the
+        // Manual ladder) apiAccess: true with live keys. The free
+        // tier's manual-only claim is true and stays.
+        a: 'No — the free tier is manual-only and runs through our desktop app. Every paid tier, including the Manual tiers, includes programmatic API/SDK access with live keys; paid tiers also drop the per-session time cap. The API ladder (API Starter from $149/mo) is the path built and sized for code-first workloads, with concurrent caps that scale further (up to 24 sessions side by side on API Scale). The free tier lets you evaluate the real iPhone Safari fingerprint hands-on before committing to automation.',
       },
       {
         q: 'Is there any usage metering on the free tier?',
@@ -76,7 +81,11 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'How do I move from the free tier to a paid tier?',
-        a: 'Subscribe to any Manual or API tier through Stripe Checkout from your dashboard. Your existing profile and account carry over; the higher concurrent + profile limits and (on the API ladder) programmatic access apply immediately on activation.',
+        // S43 2026-07-07 (founder-approved) — claims fix: programmatic
+        // access is included on every paid tier (TIER_FEATURES
+        // apiAccess: true across the paid ladder), not only the API
+        // ladder; the old "(on the API ladder)" qualifier was false.
+        a: 'Subscribe to any Manual or API tier through Stripe Checkout from your dashboard. Your existing profile and account carry over; the higher concurrent + profile limits and programmatic API access (included on every paid tier) apply immediately on activation.',
       },
     ],
   },
@@ -261,7 +270,12 @@ export const FAQ_GROUPS: FaqGroup[] = [
     entries: [
       {
         q: 'How do I contact support?',
-        a: 'Email <a href="mailto:support@driftstack.dev" class="text-tk-accent-text underline">support@driftstack.dev</a>. Reply target is 48h business-time across every tier — replies are written, not template-blasted, so they take honest time. Slack Connect is available on request once a paid subscription is active.',
+        // S43 2026-07-07 (founder-approved) — the 48h figure stays as
+        // the honest operational target, now explicitly framed as a
+        // target rather than a contractual SLA, and reconciled with
+        // the ToS §9.2 Severity-1 first-response grant on API Scale +
+        // Enterprise.
+        a: 'Email <a href="mailto:support@driftstack.dev" class="text-tk-accent-text underline">support@driftstack.dev</a>. Reply target is 48h business-time across every tier — an operational target we hold ourselves to, not a contractual SLA. Replies are written, not template-blasted, so they take honest time. Slack Connect is available on request once a paid subscription is active. API Scale and Enterprise additionally carry a contractual first-response SLA on Severity-1 incidents (4 hours and 1 hour respectively) — see the <a href="/docs/sla-policy" class="text-tk-accent-text underline">SLA policy</a>.',
       },
       {
         q: 'What if a session fails?',
@@ -277,7 +291,13 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: "What's the uptime target?",
-        a: 'Best-effort 99.5% across all tiers. There is no formal SLA with credits — an SLA is a contractual uptime promise with automatic payouts when it\'s missed — because Driftstack is a small operation and a tiered uptime ladder would be theatre rather than a real obligation we can stand behind. The <a href="https://status.driftstack.dev" class="text-tk-accent-text underline">status page</a> publishes incidents with timestamps + a written root-cause analysis (RCA) for each. If an incident hurts your workload meaningfully, email <a href="mailto:support@driftstack.dev" class="text-tk-accent-text underline">support@driftstack.dev</a> with concrete impact and we will work out a credit in good faith.',
+        // S43 2026-07-07 (founder-approved) — aligned to the binding
+        // ToS §9: the old answer ("no formal SLA with credits" on any
+        // tier) contradicted §9.2, which grants API Scale + Enterprise
+        // a contractual SLA (99.9% monthly availability) published at
+        // /docs/sla-policy. The §9.1 tiers remain best-effort with no
+        // contractual commitment — that part was true and stays.
+        a: 'Two answers, per the <a href="/legal/terms" class="text-tk-accent-text underline">Terms</a> §9. On the Free, Manual (Personal / Team / Agency), API Starter, and API Builder tiers there is no contractually-binding SLA — we run best-effort (operationally we aim for 99.5%+) but do not commit to a specific uptime percentage, because a promise we could not stand behind would be theatre. API Scale and Enterprise carry a contractual SLA: 99.9% monthly availability with service credits, published in full at the <a href="/docs/sla-policy" class="text-tk-accent-text underline">SLA policy</a>. Either way, the <a href="https://status.driftstack.dev" class="text-tk-accent-text underline">status page</a> publishes incidents with timestamps + a written root-cause analysis (RCA) for each, and if an incident hurts your workload meaningfully on any tier, email <a href="mailto:support@driftstack.dev" class="text-tk-accent-text underline">support@driftstack.dev</a> with concrete impact and we will work out a credit in good faith.',
       },
     ],
   },

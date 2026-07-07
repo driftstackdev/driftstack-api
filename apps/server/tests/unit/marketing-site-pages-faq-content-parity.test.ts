@@ -19,11 +19,15 @@
 //     Starter/Builder/Scale 2/8/24.
 //   • Free-tier mechanic: $0 forever + one profile + one concurrent +
 //     manual-only (GUI-only, no API/SDK) + perpetual + no metering.
-//     Programmatic API/SDK access starts on the API ladder.
+//     Every PAID tier includes programmatic API/SDK access (S43
+//     2026-07-07 claims fix); the API ladder is the code-first path.
 //   • Enterprise from $4,000/mo.
 //   • Stripe payment processor + EU VAT/BTW reverse-charge.
-//   • Support: single 48h business-time target across all tiers.
-//   • Uptime: single best-effort 99.5% across all tiers.
+//   • Support: single 48h business-time target across all tiers
+//     (non-contractual) + ToS §9.2 Severity-1 first-response SLA on
+//     API Scale / Enterprise (S43 2026-07-07).
+//   • Uptime: §9.1 tiers best-effort; API Scale + Enterprise carry
+//     the contractual 99.9% SLA per ToS §9.2 (S43 2026-07-07).
 //   • 20% annual discount + 30-day cancellation notice.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -69,15 +73,19 @@ describe('W500.A apps/marketing-site /faq (src/data/faq.ts + faq.astro) content 
     );
   });
 
-  it("Free-tier mechanic pinned: 'One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from the desktop GUI client — $0 forever, no card required. The free tier is manual-only (no programmatic API/SDK access)' + perpetual (no expiry) + manual-only + no metering — pinned so the founder-locked free-tier shape survives. (Free tier is MANUAL-GUI-ONLY; programmatic API/SDK access starts on the API ladder, API Starter from $149/mo. The prior 2026-05-28 'API-within-free-limits' framing is superseded — common.ts:76 'free $0 — manual-only (no API)'.)", () => {
+  it("Free-tier mechanic pinned: 'One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from our desktop app — $0 forever, no card required. The free tier is manual-only (no API/SDK access from code)' + perpetual (no expiry) + manual-only + no metering — pinned so the founder-locked free-tier shape survives. (S43 2026-07-07 claims fix: EVERY PAID tier includes programmatic API/SDK access with live keys — TIER_FEATURES apiAccess: true across the paid ladder — so the old 'starts on the API ladder' sentence is retired; the API ladder is the path built/sized for code-first workloads. The free tier stays manual-only — common.ts 'free $0 — manual-only (no API)'.)", () => {
     expect(body).toMatch(
       /One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from our desktop app — \$0 forever, no card required\./,
     );
     expect(body).toMatch(/The free tier is manual-only \(no API\/SDK access from code\)/);
     expect(body).toMatch(/The free tier is perpetual/);
     expect(body).toMatch(
-      /Access from code — the API and SDKs — starts on the API ladder \(API Starter from \$149\/mo\)/,
+      /Every paid tier, including the Manual tiers, includes programmatic API\/SDK access with live keys/,
     );
+    expect(body).toMatch(
+      /The API ladder \(API Starter from \$149\/mo\) is the path built and sized for code-first workloads/,
+    );
+    expect(body).not.toMatch(/starts on the API ladder/);
     expect(body).not.toMatch(/within the free limits/);
     expect(body).not.toMatch(/driven from the API or the desktop GUI client/);
     expect(body).toMatch(/No per-hour metering, no credit decrement, no overage/);
@@ -87,16 +95,25 @@ describe('W500.A apps/marketing-site /faq (src/data/faq.ts + faq.astro) content 
     expect(body).toMatch(/Enterprise is custom — from \$4,000\/mo on annual contracts only\./);
   });
 
-  it("Support response framing pinned: single 48h business-time target across all tiers, no tiered SLA ladder, Slack Connect on request post-subscription — pinned per founder 2026-05-19 verdict that a tiered support ladder reads as theatre for a small operation; replaces the prior 5-tier '48h/24h/12h+Slack/4h+Slack/1h+CSM' ladder", () => {
+  it('Support response framing pinned: single 48h business-time target across all tiers, explicitly non-contractual, Slack Connect on request post-subscription + the ToS §9.2 Severity-1 first-response grant on API Scale/Enterprise (S43 2026-07-07, aligned to the binding ToS §9 — supersedes the 2026-05-19 flat-ladder framing where it contradicted §9.2)', () => {
     expect(body).toMatch(/Reply target is 48h business-time across every tier/);
+    expect(body).toMatch(/an operational target we hold ourselves to, not a contractual SLA/);
     expect(body).toMatch(
       /Slack Connect is available on request once a paid subscription is active/,
     );
+    expect(body).toMatch(
+      /contractual first-response SLA on Severity-1 incidents \(4 hours and 1 hour respectively\)/,
+    );
   });
 
-  it('Uptime target framing pinned: single best-effort 99.5% across all tiers, no tiered SLA ladder, no auto-credit theatre — pinned per founder 2026-05-19 verdict that tiered uptime + auto-credit is theatre rather than an obligation a small operation can stand behind; status page + good-faith credit on real impact replaces the prior 3-bucket SLA ladder', () => {
-    expect(body).toMatch(/Best-effort 99\.5% across all tiers/);
-    expect(body).toMatch(/There is no formal SLA with credits/);
+  it('Uptime framing pinned to ToS §9 (S43 2026-07-07, founder-approved): §9.1 tiers best-effort (no contractual commitment; ~99.5% operational aim), §9.2 tiers (API Scale + Enterprise) carry the contractual 99.9% SLA with credits published at /docs/sla-policy — the old "There is no formal SLA with credits" blanket was FALSE against §9.2 and must not reappear', () => {
+    expect(body).toMatch(/there is no contractually-binding SLA/);
+    expect(body).toMatch(/operationally we aim for 99\.5%\+/);
+    expect(body).toMatch(
+      /API Scale and Enterprise carry a contractual SLA: 99\.9% monthly availability with service credits/,
+    );
+    expect(body).not.toMatch(/There is no formal SLA with credits/);
+    expect(body).not.toMatch(/Best-effort 99\.5% across all tiers/);
     expect(body).toMatch(/status\.driftstack\.dev/);
   });
 

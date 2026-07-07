@@ -2,69 +2,62 @@
 // actual SubscribableWebhookEventTypeSchema.
 //
 // crypto.order.paid / crypto.order.failed are emitted server-side
-// (services/crypto-orders.ts calls webhooks.enqueueEvent with those
-// literals), but they are NOT in the SubscribableWebhookEventTypeSchema
-// today, so POST /v1/webhooks with `events: ["crypto.order.paid"]`
-// is rejected with a 400. The previous doc described the integration
-// as if it were live; this test fails if anyone re-introduces the
-// live-integration framing while the enum is still gated.
 //
-// The test also auto-relaxes once the enum is expanded — at that
-// point, the page must be rewritten to drop the "not yet" framing,
-// and the second assertion below will fail until it does.
+// S47 2026-07-07 (founder-approved: mirror deprecation) — SUPERSEDED.
+// The legacy marketing mirror page /docs/webhooks-crypto-events is DELETED and
+// 301-redirects (apps/marketing-site/public/_redirects) to its
+// verified docs successor:
+//   https://docs.driftstack.dev/webhooks/crypto-events/
+//   (source: apps/docs/src/pages/webhooks/crypto-events.md; S29/S37 content batches — every claim
+//   re-verified against server source before carry-over. Ongoing
+//   content-parity guarding for this topic lives with the docs
+//   page's own pin lattice.)
+// This file stays as a redirect tombstone so the original guard
+// history above remains greppable and the deprecation cannot
+// silently regress (page resurrection would shadow the 301 —
+// CF Pages serves static assets before _redirects).
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SubscribableWebhookEventTypeSchema } from '@driftstack/api-types';
 
-const REPO = join(__dirname, '..', '..', '..', '..');
-const DOC_PATH = join(
-  REPO,
-  'apps',
-  'marketing-site',
-  'src',
-  'pages',
-  'docs',
-  'webhooks-crypto-events.astro',
-);
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/webhooks-crypto-events.astro');
+const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
+const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/webhooks/crypto-events.md');
 
-function read(path: string): string {
-  return readFileSync(path, 'utf8');
-}
+describe('S47 redirect tombstone — /docs/webhooks-crypto-events → https://docs.driftstack.dev/webhooks/crypto-events/', () => {
+  it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
+    expect(
+      existsSync(PAGE),
+      'webhooks-crypto-events.astro must stay deleted — a restored page file would shadow the 301',
+    ).toBe(false);
 
-describe('W220.A webhooks-crypto-events doc parity', () => {
-  const doc = read(DOC_PATH);
-  // Build a set from the discriminator schema.
-  const subscribable = new Set(
-    (SubscribableWebhookEventTypeSchema._def.values as readonly string[]).map((v) => v),
-  );
+    const rules = readFileSync(REDIRECTS, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/\s+/));
+    const rule = (from: string) => rules.find((t) => t[0] === from);
 
-  it('flags crypto.order.* events as not-yet-subscribable when the enum excludes them', () => {
-    const cryptoEventsInEnum =
-      subscribable.has('crypto.order.paid') && subscribable.has('crypto.order.failed');
-    if (cryptoEventsInEnum) {
-      // Enum has been expanded — doc should NO LONGER flag these as
-      // roadmap. Force a rewrite at that point.
-      expect(doc).not.toMatch(/not yet on the public webhook subscription list/i);
-      expect(doc).not.toMatch(/Planned event shape/);
-    } else {
-      // Today: doc must clearly mark these as not-yet-live.
-      expect(doc).toMatch(/not yet/i);
-      expect(doc).toMatch(/400/);
-      // And direct readers to the polling alternative.
-      expect(doc).toMatch(/\/v1\/billing\/crypto-orders/);
-    }
+    expect(rule('/docs/webhooks-crypto-events'), 'bare-path rule missing').toEqual([
+      '/docs/webhooks-crypto-events',
+      'https://docs.driftstack.dev/webhooks/crypto-events/',
+      '301',
+    ]);
+    expect(
+      rule('/docs/webhooks-crypto-events/'),
+      'trailing-slash rule missing (matching is exact-path)',
+    ).toEqual([
+      '/docs/webhooks-crypto-events/',
+      'https://docs.driftstack.dev/webhooks/crypto-events/',
+      '301',
+    ]);
   });
 
-  it('doc does not show a working POST /v1/webhooks subscription example with crypto.order.* events', () => {
-    // Hard-block the previous shape: an integrator pasting this
-    // would hit 400. Tolerate the literal `"events": ["crypto.order.paid", "crypto.order.failed"]`
-    // only inside a curl block that's clearly marked as planned —
-    // we look for `events: ["crypto.order.paid"]` immediately after
-    // a curl POST line as the canonical fail pattern.
-    expect(doc).not.toMatch(
-      /curl[^\n]*\/v1\/webhooks[\s\S]{0,300}"events":\s*\[\s*"crypto\.order\.paid"/,
-    );
+  it('the docs successor source page still exists (a docs-side rename/move must update the redirect target)', () => {
+    expect(existsSync(DOCS_SUCCESSOR_SRC)).toBe(true);
   });
 });

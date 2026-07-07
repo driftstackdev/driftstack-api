@@ -2,64 +2,62 @@
 // claims about the `region` account preference enum + the PATCH
 // route that updates it. Prevents the doc from quietly drifting
 // (e.g. listing a region code that isn't in the Postgres enum).
+//
+// S47 2026-07-07 (founder-approved: mirror deprecation) — SUPERSEDED.
+// The legacy marketing mirror page /docs/data-residency is DELETED and
+// 301-redirects (apps/marketing-site/public/_redirects) to its
+// verified docs successor:
+//   https://docs.driftstack.dev/reference/data-residency/
+//   (source: apps/docs/src/pages/reference/data-residency.md; S29/S37 content batches — every claim
+//   re-verified against server source before carry-over. Ongoing
+//   content-parity guarding for this topic lives with the docs
+//   page's own pin lattice.)
+// This file stays as a redirect tombstone so the original guard
+// history above remains greppable and the deprecation cannot
+// silently regress (page resurrection would shadow the 301 —
+// CF Pages serves static assets before _redirects).
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const REPO = join(__dirname, '..', '..', '..', '..');
-const DOC_PATH = join(
-  REPO,
-  'apps',
-  'marketing-site',
-  'src',
-  'pages',
-  'docs',
-  'data-residency.astro',
-);
-const SCHEMA = join(REPO, 'apps', 'server', 'src', 'db', 'schema.ts');
-const ACCOUNT_ME = join(REPO, 'apps', 'server', 'src', 'routes', 'account-me.ts');
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/data-residency.astro');
+const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
+const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/reference/data-residency.md');
 
-function read(path: string): string {
-  return readFileSync(path, 'utf8');
-}
+describe('S47 redirect tombstone — /docs/data-residency → https://docs.driftstack.dev/reference/data-residency/', () => {
+  it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
+    expect(
+      existsSync(PAGE),
+      'data-residency.astro must stay deleted — a restored page file would shadow the 301',
+    ).toBe(false);
 
-describe('W244.A data-residency doc parity', () => {
-  const doc = read(DOC_PATH);
-  const schema = read(SCHEMA);
-  const accountMe = read(ACCOUNT_ME);
+    const rules = readFileSync(REDIRECTS, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/\s+/));
+    const rule = (from: string) => rules.find((t) => t[0] === from);
 
-  it('region enum in doc matches the account_region pgEnum', () => {
-    // Live values come from the pgEnum.
-    expect(schema).toMatch(
-      /pgEnum\(\s*['"]account_region['"],\s*\[['"]us['"],\s*['"]eu['"],\s*['"]apac['"]\s*\]\)/,
-    );
-    // Doc lists exactly those three plus null.
-    expect(doc).toMatch(/<code>us<\/code>/);
-    expect(doc).toMatch(/<code>eu<\/code>/);
-    expect(doc).toMatch(/<code>apac<\/code>/);
-    expect(doc).toMatch(/<code>null<\/code>/);
-    // No fictional region codes.
-    expect(doc).not.toMatch(/<code>(emea|amer|latam|africa)<\/code>/i);
+    expect(rule('/docs/data-residency'), 'bare-path rule missing').toEqual([
+      '/docs/data-residency',
+      'https://docs.driftstack.dev/reference/data-residency/',
+      '301',
+    ]);
+    expect(
+      rule('/docs/data-residency/'),
+      'trailing-slash rule missing (matching is exact-path)',
+    ).toEqual([
+      '/docs/data-residency/',
+      'https://docs.driftstack.dev/reference/data-residency/',
+      '301',
+    ]);
   });
 
-  it('points at the live PATCH endpoint for the region field', () => {
-    expect(accountMe).toMatch(/app\.patch\(\s*['"]\/v1\/account\/me['"]/);
-    expect(doc).toMatch(/PATCH \/v1\/account\/me/);
-  });
-
-  it('asserts EU-primary posture consistent with W229 security-overview', () => {
-    expect(doc).toMatch(/primarily in the EU/i);
-    expect(doc).toMatch(/never leaves the EU/i);
-  });
-
-  it('does not promise customer-configurable retention on captures', () => {
-    // W238/W217 — capture retention is operator-tuned, not a customer knob.
-    expect(doc).not.toMatch(/customer-configurable\s+(capture|retention)/i);
-    expect(doc).not.toMatch(/Default\s+30\s+days\s+for\s+screenshots/);
-  });
-
-  it('cross-links to /legal/sub-processors for the canonical list', () => {
-    expect(doc).toMatch(/\/legal\/sub-processors/);
+  it('the docs successor source page still exists (a docs-side rename/move must update the redirect target)', () => {
+    expect(existsSync(DOCS_SUCCESSOR_SRC)).toBe(true);
   });
 });

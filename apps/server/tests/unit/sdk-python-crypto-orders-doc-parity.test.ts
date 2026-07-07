@@ -178,10 +178,13 @@ describe('W719 sdk-python-crypto-orders marketing-doc parity', () => {
     const links = [
       '/docs/sdk-python',
       '/docs/sdk-typescript-crypto-orders',
-      '/docs/billing-crypto-integration-guide',
+      // S47 2026-07-07 (founder-approved: mirror deprecation): the
+      // integration-guide / webhooks-crypto-events /
+      // polling-vs-webhooks mirrors are deleted; hrefs re-pinned to
+      // the docs successors.
+      'https://docs.driftstack.dev/guides/paying-with-crypto/',
       '/docs/idempotency-keys',
-      '/docs/webhooks-crypto-events',
-      '/docs/crypto-orders-polling-vs-webhooks',
+      'https://docs.driftstack.dev/webhooks/crypto-events/',
     ];
     for (const link of links) {
       const re = new RegExp(`href="${link.replace(/\//g, '\\/')}"`);

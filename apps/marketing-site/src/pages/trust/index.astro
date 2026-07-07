@@ -261,17 +261,24 @@ import StatusBadge from '../../components/StatusBadge.astro';
           vendor list attached to the DPA).
         </dd>
       </div>
+      {/* S43 2026-07-07 (founder-approved) — aligned to ToS §9: API
+          Scale (self-serve) also carries the contractual SLA, and the
+          unverified "self-hosted SKUs carry contractual SLA terms"
+          claim is dropped in favour of what the ToS actually grants. */}
       <div>
         <dt class="text-sm font-medium text-tk-ink">What's the incident-response SLA?</dt>
         <dd class="mt-1 text-sm text-tk-ink-2">
-          Self-serve plans come without a contractual uptime guarantee
+          Most plans come without a contractual uptime guarantee
           (an SLA) —
           we publish incidents at
           <a href="/trust/incidents" class="text-tk-accent-text underline"
             >/trust/incidents</a
-          > and the live status above. Self-hosted packages (SKUs) and
-          Enterprise
-          tiers carry contractual SLA terms.
+          > and the live status above. The API Scale and Enterprise
+          tiers carry a contractual SLA (99.9% monthly availability +
+          a Severity-1 first-response commitment — see the
+          <a href="/docs/sla-policy" class="text-tk-accent-text underline"
+            >SLA policy</a
+          >).
         </dd>
       </div>
       <div>

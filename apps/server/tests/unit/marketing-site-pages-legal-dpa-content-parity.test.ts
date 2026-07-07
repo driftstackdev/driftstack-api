@@ -174,10 +174,16 @@ describe('W506.B apps/marketing-site/src/pages/legal/dpa.md content parity', () 
     expect(body).toMatch(/### G\. Logical separation/);
   });
 
-  it("Annex 3 13-vendor Sub-processor table + Region-preference-vs-routing framing pinned: 'Customer may state an infrastructure region preference (one of `us` / `eu` / `apac`) via the dashboard or API. The preference is informational for v1: all Customer Data resides on the EU-jurisdiction infrastructure listed above regardless of the preference selected.' — pinned so the honest 'preference doesn't move data yet' framing + the 30-day-pre-migration-notice future commitment survive (drift to claiming preference moves data now would over-promise; drift to dropping the future-notice commitment would orphan multi-region planning)", () => {
+  it("Annex 3 13-vendor Sub-processor table + Region-preference-vs-routing framing pinned (S43 2026-07-07, founder-approved): database Customer Data EU-resident; R2 file objects use the default jurisdiction and replicate EU + US under the listed transfer mechanism — pinned so the honest 'preference doesn't move data yet' framing + the 30-day-pre-migration-notice future commitment survive, and so the old blanket 'all Customer Data … EU-jurisdiction' over-claim (false for R2-held objects) cannot reappear", () => {
     expect(body).toMatch(/\*\*Region preference vs\. region routing\.\*\*/);
     expect(body).toMatch(
-      /Customer may state an\s*\n?\s*infrastructure region preference \(one of `us` \/ `eu` \/ `apac`\) via\s*\n?\s*the dashboard or API\. The preference is informational for v1: all\s*\n?\s*Customer Data resides on the EU-jurisdiction infrastructure listed\s*\n?\s*above regardless of the preference selected\./,
+      /Customer may state an\s*\n?\s*infrastructure region preference \(one of `us` \/ `eu` \/ `apac`\) via\s*\n?\s*the dashboard or API\. The preference is informational for v1:\s*\n?\s*Customer Data held in Driftstack's databases \(account, profile,\s*\n?\s*session, and audit data\) resides on the EU-resident infrastructure\s*\n?\s*listed above regardless of the preference selected/,
+    );
+    expect(body).toMatch(
+      /file objects\s*\n?\s*held in Cloudflare R2 \(customer-uploaded avatars, encrypted profile\s*\n?\s*blobs, public status snapshots\) use R2's default jurisdiction, which\s*\n?\s*replicates storage between the EU and the US under the transfer\s*\n?\s*mechanism listed above/,
+    );
+    expect(body).not.toMatch(
+      /all\s*\n?\s*Customer Data resides on the EU-jurisdiction infrastructure/,
     );
     expect(body).toMatch(
       /When the multi-region\s*\n?\s*rollout ships, Driftstack will give Customer at least 30 days'\s*\n?\s*notice/,

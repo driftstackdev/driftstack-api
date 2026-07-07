@@ -5,7 +5,8 @@
 // Article 28(2)) or changes the 30-day-notice-and-objection mechanics
 // (would breach the DPA commitment customers signed on).
 //
-//   • Version 1.0 + effective 2026-05-10 + DPA section 4 anchor.
+//   • Version 1.1 + effective 2026-07-07 (S43 R2 correction) + DPA
+//     section 4 anchor.
 //   • 12-vendor sub-processor table matching the live register: Hetzner /
 //     Neon / Upstash / Cloudflare R2 / Postmark / Sentry / Stripe /
 //     Anthropic / Moneybird / MacStadium / NowPayments / LiveKit —
@@ -32,8 +33,8 @@ function read(p: string): string {
 describe('W505.A apps/marketing-site/src/pages/legal/sub-processors.md content parity', () => {
   const body = read(LIB);
 
-  it('Version 1.0 + effective 2026-05-10 + DPA section 4 anchor — pinned so the version-tracked register + the DPA-section-4 cross-reference both survive (drift to dropping section 4 anchor would orphan the customer contractual register from the marketing version; drift to a different DPA section would create cross-doc divergence)', () => {
-    expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-10/);
+  it("Version 1.1 + effective 2026-07-07 + DPA section 4 anchor — pinned so the version-tracked register + the DPA-section-4 cross-reference both survive (S43 2026-07-07: v1.0 → v1.1 for the Cloudflare R2 correction, per the page's own bump-the-effective-date convention)", () => {
+    expect(body).toMatch(/\*\*Version:\*\* 1\.1 · \*\*Effective:\*\* 2026-07-07/);
     expect(body).toMatch(
       /referenced from the\s*\n?\s*\[Data Processing Addendum\]\(dpa\.md\) \(section 4 — "Sub-processors"\)/,
     );

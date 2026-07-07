@@ -42,11 +42,18 @@ export const SUB_PROCESSORS: SubProcessor[] = [
     transferMechanism: 'EU-resident — no transfer required.',
   },
   {
+    // S43 2026-07-07 (founder-approved) — register correction. The
+    // prior entry claimed "EU jurisdiction … no transfer required" and
+    // listed "session recordings and screenshots"; ground truth
+    // (dig + prod-box verified) is the R2 default jurisdiction with
+    // EU + US replication (a transfer mechanism IS required), and the
+    // objects actually stored are avatars, encrypted profile blobs,
+    // and public status-page snapshots. Recordings are roadmap-only.
     name: 'Cloudflare R2',
-    region: 'EU jurisdiction',
+    region: 'Default jurisdiction (data replicated EU + US)',
     purpose:
-      'Object storage for session recordings and screenshots, public status-page snapshots, and customer-uploaded profile avatars.',
-    transferMechanism: 'EU-jurisdiction storage — no transfer required.',
+      'Object storage for customer-uploaded profile avatars, encrypted profile blobs, and public status-page snapshots.',
+    transferMechanism: '2021 Standard Contractual Clauses + EU-US Data Privacy Framework.',
   },
   {
     name: 'Postmark',
@@ -104,7 +111,7 @@ export const SUB_PROCESSORS: SubProcessor[] = [
   },
 ];
 
-export const SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-05-10';
+export const SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-07-07';
 
 /**
  * V-478 — sub-processor change-log surface.
@@ -137,6 +144,29 @@ export interface SubProcessorChangeLogEntry {
 }
 
 export const SUB_PROCESSOR_CHANGELOG: SubProcessorChangeLogEntry[] = [
+  {
+    // S43 2026-07-07 (founder-approved) — correction entry, effective
+    // immediately: the processing itself did not change, only the
+    // register's description of it, so no 30-day Art 28(2) window
+    // applies (nothing new is being engaged; the entry now discloses
+    // the transfer that was already happening).
+    date: '2026-07-07',
+    kind: 'material_change',
+    subject: 'Cloudflare R2',
+    summary:
+      'Correction: the Cloudflare R2 row previously described the ' +
+      'storage as "EU jurisdiction — no transfer required" and listed ' +
+      '"session recordings and screenshots". In fact the R2 buckets ' +
+      'use the default jurisdiction, which replicates data between ' +
+      'the EU and the US, so a transfer mechanism applies (2021 ' +
+      'Standard Contractual Clauses + EU-US Data Privacy Framework), ' +
+      'and the objects actually stored are customer-uploaded profile ' +
+      'avatars, encrypted profile blobs, and public status-page ' +
+      'snapshots (session recording is not a live feature). This is a ' +
+      'correction of the register to describe existing processing ' +
+      'accurately — the processing itself did not change.',
+    effective_at: '2026-07-07',
+  },
   {
     date: '2026-05-10',
     kind: 'register_published',

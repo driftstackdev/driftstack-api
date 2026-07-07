@@ -2,59 +2,65 @@
 // The previous revision presented webhooks (push) as a shipped option
 // for crypto-order state changes; in reality `crypto.order.*` is not
 // in SubscribableWebhookEventTypeSchema, so webhooks aren't
-// deliverable. This guard fails if the doc reasserts the "subscribe"
-// framing while the enum stays gated.
+//
+// S47 2026-07-07 (founder-approved: mirror deprecation) — SUPERSEDED.
+// The legacy marketing mirror page /docs/crypto-orders-polling-vs-webhooks is DELETED and
+// 301-redirects (apps/marketing-site/public/_redirects) to its
+// verified docs successor:
+//   https://docs.driftstack.dev/webhooks/crypto-events/
+//   (source: apps/docs/src/pages/webhooks/crypto-events.md; S29/S37 content batches — every claim
+//   re-verified against server source before carry-over. Ongoing
+//   content-parity guarding for this topic lives with the docs
+//   page's own pin lattice.)
+// This file stays as a redirect tombstone so the original guard
+// history above remains greppable and the deprecation cannot
+// silently regress (page resurrection would shadow the 301 —
+// CF Pages serves static assets before _redirects).
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SubscribableWebhookEventTypeSchema } from '@driftstack/api-types';
 
-const REPO = join(__dirname, '..', '..', '..', '..');
-const DOC_PATH = join(
-  REPO,
-  'apps',
-  'marketing-site',
-  'src',
-  'pages',
-  'docs',
-  'crypto-orders-polling-vs-webhooks.astro',
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(
+  REPO_ROOT,
+  'apps/marketing-site/src/pages/docs/crypto-orders-polling-vs-webhooks.astro',
 );
+const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
+const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/webhooks/crypto-events.md');
 
-function read(): string {
-  return readFileSync(DOC_PATH, 'utf8');
-}
+describe('S47 redirect tombstone — /docs/crypto-orders-polling-vs-webhooks → https://docs.driftstack.dev/webhooks/crypto-events/', () => {
+  it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
+    expect(
+      existsSync(PAGE),
+      'crypto-orders-polling-vs-webhooks.astro must stay deleted — a restored page file would shadow the 301',
+    ).toBe(false);
 
-describe('W242.B crypto-orders-polling-vs-webhooks doc parity', () => {
-  const doc = read();
-  const live = new Set(
-    (SubscribableWebhookEventTypeSchema._def.values as readonly string[]).map((v) => v),
-  );
-  const cryptoPaidLive = live.has('crypto.order.paid');
+    const rules = readFileSync(REDIRECTS, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/\s+/));
+    const rule = (from: string) => rules.find((t) => t[0] === from);
 
-  it('reflects current subscribable status for crypto.order.paid', () => {
-    if (!cryptoPaidLive) {
-      // Doc must flag webhooks as roadmap.
-      expect(doc).toMatch(/not yet/i);
-      // And cross-link to the roadmap doc.
-      expect(doc).toMatch(/\/docs\/webhooks-crypto-events/);
-    } else {
-      // Once shipped, no "not yet" caveat.
-      expect(doc).not.toMatch(/not yet/i);
-    }
+    expect(rule('/docs/crypto-orders-polling-vs-webhooks'), 'bare-path rule missing').toEqual([
+      '/docs/crypto-orders-polling-vs-webhooks',
+      'https://docs.driftstack.dev/webhooks/crypto-events/',
+      '301',
+    ]);
+    expect(
+      rule('/docs/crypto-orders-polling-vs-webhooks/'),
+      'trailing-slash rule missing (matching is exact-path)',
+    ).toEqual([
+      '/docs/crypto-orders-polling-vs-webhooks/',
+      'https://docs.driftstack.dev/webhooks/crypto-events/',
+      '301',
+    ]);
   });
 
-  it('keeps polling as a first-class shipped path regardless of gating', () => {
-    expect(doc).toMatch(/<h2>Today: polling<\/h2>|Polling cadence/);
-    // Sample polling code stays in.
-    expect(doc).toMatch(/client\.cryptoOrders\.(get|listAll)/);
-  });
-
-  it('does not present webhook subscription as a current shipped option for crypto orders', () => {
-    if (!cryptoPaidLive) {
-      // Forbidden framings that paint webhooks as live for crypto:
-      expect(doc).not.toMatch(/When webhooks are the right call/i);
-      expect(doc).not.toMatch(/Sub-second once the IPN lands/i);
-    }
+  it('the docs successor source page still exists (a docs-side rename/move must update the redirect target)', () => {
+    expect(existsSync(DOCS_SUCCESSOR_SRC)).toBe(true);
   });
 });

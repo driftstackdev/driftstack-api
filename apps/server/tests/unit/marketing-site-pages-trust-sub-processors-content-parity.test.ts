@@ -79,13 +79,19 @@ describe('W502.C apps/marketing-site/src/pages/trust/sub-processors.astro conten
     );
   });
 
-  it("Region-preference-vs-routing framing pinned: 'The \"region\" you can pick from /settings → Region (us / eu / apac) is a stated preference. It does not move your data.' + 'every customer's data resides on the EU-jurisdiction infrastructure listed in the table above — regardless of region preference.' — pinned so the honest 'preference doesn't move data, EU-jurisdiction is the actual state' commitment survives (drift to dropping 'stated preference' would mislead customers into thinking the dropdown moves data today; drift to dropping 'EU-jurisdiction' would obscure the data-residency reality)", () => {
+  it("Region-preference-vs-routing framing pinned (S43 2026-07-07, founder-approved): stated preference doesn't move data + database-resident data EU-resident + R2 file objects replicate EU + US under the listed transfer mechanism — the old blanket 'every customer's data … EU-jurisdiction' claim was false for R2-held objects and must not reappear", () => {
     expect(body).toMatch(/Region preference vs\. region routing\./);
     expect(body).toMatch(
       /\(us \/ eu \/ apac\) is a <em>stated preference<\/em>\. It does not move\s*\n?\s*your data\./,
     );
     expect(body).toMatch(
-      /every customer's data resides on the\s*\n?\s*EU-jurisdiction infrastructure listed in the table above —\s*\n?\s*regardless of region preference\./,
+      /every customer's database-resident data —\s*\n?\s*account, profiles, sessions, audit logs — resides on the\s*\n?\s*EU-resident infrastructure listed in the table above/,
+    );
+    expect(body).toMatch(
+      /use R2's default jurisdiction, which replicates\s*\n?\s*between the EU and the US under the transfer mechanism\s*\n?\s*listed in the table\./,
+    );
+    expect(body).not.toMatch(
+      /every customer's data resides on the\s*\n?\s*EU-jurisdiction infrastructure/,
     );
   });
 
