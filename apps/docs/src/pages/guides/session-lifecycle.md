@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Session lifecycle
-description: The full lifecycle of a Driftstack session — create, drive, capture, destroy, and how concurrency and idle timeouts shape the boundaries.
+description: The full lifecycle of a Driftstack session — create, drive, capture, destroy, and how concurrency and duration caps shape the boundaries.
 ---
 
 # Session lifecycle
@@ -28,7 +28,7 @@ The wire-level `session.status` enum has five values: `creating` / `ready` / `bu
                                                               └──────┘
                                                                   │
                                                                   │ destroy
-                                                                  │ OR idle ≥ idle_timeout
+                                                                  │ OR free-tier 20-min cap
                                                                   ▼
                                                             ┌───────────┐
                                                             │ destroyed │
@@ -36,11 +36,11 @@ The wire-level `session.status` enum has five values: `creating` / `ready` / `bu
                                                             (or `errored` on driver failure)
 ```
 
-In practice you don't observe `creating` separately — the SDK's `sessions.create()` blocks until the server-side transition reaches `ready` (the driver is allocated and the harness is responding). Every method call flips the session into `busy` for the duration and back to `ready` on ack. `errored` is a terminal failure state mirroring `destroyed` but caused by a driver-side fault (not by an explicit destroy or idle timeout).
+In practice you don't observe `creating` separately — the SDK's `sessions.create()` blocks until the server-side transition reaches `ready` (the driver is allocated and the harness is responding). Every method call flips the session into `busy` for the duration and back to `ready` on ack. `errored` is a terminal failure state mirroring `destroyed` but caused by a driver-side fault (not by an explicit destroy or the free-tier duration cap).
 
 ## Concurrency
 
-Each tier has a hard cap on simultaneously-active sessions. Exceeding the cap returns `429 Too Many Requests` on `sessions.create()`, with a `Retry-After` header indicating when capacity will free up (worst case = soonest tracked session's idle-timeout boundary).
+Each tier has a hard cap on simultaneously-active sessions. Exceeding the cap returns `429 Too Many Requests` on `sessions.create()`, with `current_sessions` and `limit` in the problem body. Unlike rate-limit 429s there is no `Retry-After` header — capacity frees when one of your sessions ends, so destroy one (or wait for your own workflow to finish) and retry.
 
 | Tier        | Concurrent sessions |
 | ----------- | ------------------- |
@@ -97,14 +97,14 @@ console.log(result.final_url, result.status, result.duration_ms);
 
 ## Capture
 
-`POST /v1/sessions/:id/capture` returns a screenshot or full-page render.
+`POST /v1/sessions/:id/capture` returns a screenshot, DOM snapshot, or PDF.
 
 ```ts
 const shot = await client.sessions.capture(session.id, { kind: 'screenshot' });
-// shot.kind, shot.format, shot.bytes_url, shot.captured_at
+// shot.kind, shot.data, shot.encoding, shot.byte_size, shot.duration_ms
 ```
 
-Captures are stored on the EU-resident object-storage sub-processor (Cloudflare R2) and the response includes a signed URL that's valid for a bounded window (~15 minutes). Persist the bytes if you need them long-term.
+The response carries the capture inline — `data` is the content itself (base64-encoded for screenshots and PDFs) — and nothing is stored server-side. Persist the bytes yourself if you need them long-term.
 
 ## Destroy
 
@@ -114,7 +114,7 @@ await client.sessions.destroy(session.id);
 
 `destroy` is idempotent — calling it twice on the same `id` is a no-op the second time. It releases the concurrent slot immediately. If the session was bound to a profile, the profile's storage state is captured and saved on a clean destroy.
 
-**Always destroy.** Forgotten sessions burn concurrent slots until their idle timeout fires. A `try / finally` around your session work is the safe pattern:
+**Always destroy.** Forgotten sessions burn concurrent slots until you destroy them (only free-tier sessions stop on their own, at the 20-minute cap). A `try / finally` around your session work is the safe pattern:
 
 ```ts
 const session = await client.sessions.create();
@@ -128,13 +128,9 @@ try {
 
 Python and Go SDK examples follow the same pattern (`with` block in Python sync; `defer` in Go).
 
-## Idle timeout
+## Auto-destroy: the free-tier duration cap
 
-If a session sees no API call for the per-tier idle window, the runtime auto-destroys it and emits a `session.destroyed` webhook with `reason: "idle_timeout"`. This protects against stuck workflows burning your concurrent capacity indefinitely.
-
-Default idle window: 10 minutes. Higher tiers may extend (configured per-account by the control plane).
-
-To keep a session alive during a slow workflow, periodically call any method — `sessions.getState()` is the cheapest heartbeat.
+Paid-tier sessions are never auto-destroyed — a forgotten session holds its concurrent slot until you destroy it, which is why the `try / finally` pattern above matters. On the free tier, a session is capped at 20 minutes of wall-clock time; when the cap is reached the runtime destroys it for you. There is no idle timeout on any tier.
 
 ## Error shapes
 

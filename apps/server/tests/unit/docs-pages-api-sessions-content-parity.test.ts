@@ -59,9 +59,13 @@ describe('W761 docs /api/sessions content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Hitting the cap on `POST \/v1\/sessions` returns `429 Too Many\s*\n?Requests` with a `Retry-After` header\./,
+      // S31 2026-07-07 (fable-truth-audit) — ConcurrencyLimitError carries current_sessions/limit
+      // extensions and NO retry_after_seconds, so no Retry-After header is
+      // emitted (middleware/error-handler.ts only sets it for rate limits).
+      /Hitting the cap on `POST \/v1\/sessions` returns `429 Too Many\s*\n?Requests` with `current_sessions` and `limit` in the problem body/,
     );
-    expect(p).toMatch(/Sessions auto-destroy after\s*\n?their tier-default idle timeout/);
+    expect(p).toMatch(/free-tier sessions stop at the 20-minute duration\s*\n?cap/);
+    expect(p).not.toMatch(/tier-default idle timeout/);
   });
 
   it('CRITICAL 5-state STATUS enum pinned — creating/ready/busy/destroyed/errored. Matches W749 dashboard /sessions STATUS_BADGE_CLASS map.', () => {

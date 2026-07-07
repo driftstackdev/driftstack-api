@@ -32,7 +32,9 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
       /^---\nlayout: \.\.\/\.\.\/layouts\/DocLayout\.astro\ntitle: Session lifecycle\n/,
     );
     expect(p).toMatch(
-      /description: The full lifecycle of a Driftstack session — create, drive, capture, destroy, and how concurrency and idle timeouts shape the boundaries\./,
+      // S31 2026-07-07 (fable-truth-audit) — no idle timeout exists; the boundary is the
+      // free-tier duration cap.
+      /description: The full lifecycle of a Driftstack session — create, drive, capture, destroy, and how concurrency and duration caps shape the boundaries\./,
     );
   });
 
@@ -55,7 +57,9 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     expect(p).toMatch(/│ ready │/);
     expect(p).toMatch(/│ busy │/);
     expect(p).toMatch(/│ destroyed │/);
-    expect(p).toMatch(/│ OR idle ≥ idle_timeout/);
+    // S31 2026-07-07 (fable-truth-audit) — the diagram edge is the free-tier duration cap.
+    expect(p).toMatch(/│ OR free-tier 20-min cap/);
+    expect(p).not.toMatch(/idle ≥ idle_timeout/);
     expect(p).toMatch(/`errored` on driver failure/);
     // The fictional `active` state must NOT return in the diagram.
     expect(p).not.toMatch(/│ active │/);
@@ -75,7 +79,9 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Exceeding the cap returns `429 Too Many Requests` on `sessions\.create\(\)`, with a `Retry-After` header indicating when capacity will free up \(worst case = soonest tracked session's idle-timeout boundary\)\./,
+      // S31 2026-07-07 (fable-truth-audit) — no Retry-After on concurrency 429s (only
+      // rate-limit 429s carry it) and no idle timeout exists.
+      /Exceeding the cap returns `429 Too Many Requests` on `sessions\.create\(\)`, with `current_sessions` and `limit` in the problem body\./,
     );
   });
 
@@ -157,9 +163,13 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Captures are stored on the EU-resident object-storage sub-processor \(Cloudflare R2\) and the response includes a signed URL that's valid for a bounded window \(~15 minutes\)\./,
+      // S31 2026-07-07 (fable-truth-audit) — captures were NEVER stored server-side:
+      // CaptureResponseSchema is inline {kind, data, encoding,
+      // byte_size, duration_ms} (packages/api-types/src/sessions.ts).
+      // The old pin locked a fictional R2 + signed-URL flow.
+      /The response carries the capture inline — `data` is the content itself \(base64-encoded for screenshots and PDFs\) — and nothing is stored server-side\./,
     );
-    expect(p).toMatch(/Persist the bytes if you need them long-term\./);
+    expect(p).toMatch(/Persist the bytes yourself if you need them long-term\./);
   });
 
   it('CRITICAL destroy-is-idempotent + slot-released-immediately + profile-state-saved-on-clean-destroy framing pinned. The 3-claim contract matches W761 /api/sessions 4-claim destroy contract.', () => {
@@ -173,11 +183,13 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     );
   });
 
-  it("CRITICAL 'Always destroy.' try/finally framing pinned. The 'Forgotten sessions burn concurrent slots until their idle timeout fires. A try / finally around your session work is the safe pattern' wording explains the lifecycle-discipline.", () => {
+  // S31 2026-07-07 (fable-truth-audit) — no idle timeout; slots are held until an explicit
+  // destroy (free tier alone stops at its 20-min duration cap).
+  it("CRITICAL 'Always destroy.' try/finally framing pinned — forgotten sessions hold their slot until destroyed.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /\*\*Always destroy\.\*\* Forgotten sessions burn concurrent slots until their idle timeout fires\./,
+      /\*\*Always destroy\.\*\* Forgotten sessions burn concurrent slots until you destroy them \(only free-tier sessions stop on their own, at the 20-minute cap\)\./,
     );
     expect(p).toMatch(/A `try \/ finally` around your session work is the safe pattern:/);
   });
@@ -190,23 +202,30 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     );
   });
 
-  it("CRITICAL 10-minute default idle-timeout + session.destroyed reason:idle_timeout framing pinned. The 'Default idle window: 10 minutes. Higher tiers may extend (configured per-account by the control plane)' wording is the canonical idle-cleanup contract.", () => {
+  // S31 2026-07-07 (fable-truth-audit) — the old pin locked a FICTIONAL idle-cleanup
+  // contract: no idle timeout exists on any tier (the only auto-stop is
+  // the free-tier 20-minute duration sweep, session-duration-sweeper.ts),
+  // and the webhook enum has no session.destroyed event at all
+  // (packages/api-types/src/webhooks.ts).
+  it('CRITICAL auto-destroy framing pinned: paid sessions never auto-destroyed; free tier stops at the 20-minute duration cap; no idle timeout on any tier.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /If a session sees no API call for the per-tier idle window, the runtime auto-destroys it and emits a `session\.destroyed` webhook with `reason: "idle_timeout"`\./,
+      /Paid-tier sessions are never auto-destroyed — a forgotten session holds its concurrent slot until you destroy it/,
     );
-    expect(p).toMatch(
-      /Default idle window: 10 minutes\. Higher tiers may extend \(configured per-account by the control plane\)\./,
-    );
+    expect(p).toMatch(/On the free tier, a session is capped at 20 minutes of wall-clock time/);
+    expect(p).toMatch(/There is no idle timeout on any tier\./);
+    expect(p).not.toMatch(/session\.destroyed/);
+    expect(p).not.toMatch(/idle_timeout/);
   });
 
-  it("CRITICAL getState-as-cheapest-heartbeat framing pinned. The 'To keep a session alive during a slow workflow, periodically call any method — sessions.getState() is the cheapest heartbeat' wording is the canonical keep-alive idiom.", () => {
+  // S31 2026-07-07 (fable-truth-audit) — the keep-alive idiom was retired with the
+  // fictional idle timeout: there is nothing to keep alive against, so
+  // the page no longer teaches a heartbeat. Pin its absence.
+  it('heartbeat idiom removed with the fictional idle timeout', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /To keep a session alive during a slow workflow, periodically call any method — `sessions\.getState\(\)` is the cheapest heartbeat\./,
-    );
+    expect(p).not.toMatch(/cheapest heartbeat/);
   });
 
   it('CRITICAL 7-error-shape catalog pinned. 429-rate-limited + 429-concurrency-limit + 429-tier-limit + 404 + 409 + 410 session-destroyed + 502/503 driver. Matches W776 /sdk/error-handling problem-detail URL hierarchy.', () => {

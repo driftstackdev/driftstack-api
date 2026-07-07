@@ -145,13 +145,14 @@ describe('W368.A marketing-site /faq page content parity', () => {
     expect(body).toMatch(/auto-renew unless cancelled at least 30 days before renewal/);
   });
 
-  it('cancel posture: "suspended" + 30-day grace-period + DPA retention schedule (no immediate delete)', () => {
-    expect(body).toMatch(/No data is deleted at cancellation/);
+  // S31 2026-07-07 (fable-truth-audit) — the suspended-state/90-day-purge flow never existed:
+  // Stripe cancellation downgrades to the perpetual free tier
+  // (services/stripe-webhooks.ts) and deletes nothing.
+  it('cancel posture: downgrade to the perpetual free tier, nothing deleted', () => {
+    expect(body).toMatch(/nothing is deleted, your profiles and account data stay/);
+    expect(body).toMatch(/your account moves to the free tier automatically — nothing is deleted/);
     expect(body).toMatch(
-      /account stays in a "suspended" state with a 30-day grace-period for recovery/,
-    );
-    expect(body).toMatch(
-      /your account data \(profiles, sessions, captures\) is deleted on the schedule set in our data-processing agreement \(DPA\)/,
+      /Free-tier limits then apply \(1 profile, 1 concurrent session, manual-only\)/,
     );
   });
 

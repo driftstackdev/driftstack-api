@@ -100,7 +100,9 @@ describe('W599.B /use-cases/multi-account (operators + account teams)', () => {
 
   it('answer stays inside the approved claim register: own-physical-phone persistent profiles + 10-to-200 browser-tabs desktop app (pricing Manual card claims)', () => {
     expect(body).toMatch(/look like its own physical phone/);
-    expect(body).toMatch(/keep 10 to 200\s*\n?\s*logged-in profiles open at once/);
+    // S31 2026-07-07 (fable-truth-audit) — 'open at once' conflated stored profiles with
+    // concurrent sessions (manual caps 1/3/8).
+    expect(body).toMatch(/keep 10 to 200\s*\n?\s*logged-in profiles saved and ready/);
     expect(body).toMatch(/switch between them like browser\s*\n?\s*tabs/);
   });
 

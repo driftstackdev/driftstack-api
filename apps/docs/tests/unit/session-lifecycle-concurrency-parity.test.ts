@@ -33,10 +33,13 @@ describe('W307.A session-lifecycle ↔ PROBLEM_TYPES parity', () => {
     expect(body).toMatch(/concurrent slot/i);
   });
 
-  it('describes idle-timeout auto-destroy emitting session.destroyed with reason idle_timeout', () => {
-    expect(body).toMatch(/idle[_ -]timeout/i);
-    expect(body).toMatch(/session\.destroyed/);
-    expect(body).toMatch(/reason:\s*['"]idle_timeout['"]/);
+  // S31 2026-07-07 (fable-truth-audit) — the old assertion locked a FICTIONAL contract:
+  // no idle timeout exists (only the free-tier 20-min duration sweep)
+  // and the webhook enum has no session.destroyed event.
+  it('describes the real auto-destroy boundary: free-tier duration cap, no idle timeout, no session.destroyed event', () => {
+    expect(body).toMatch(/capped at 20 minutes/);
+    expect(body).toMatch(/There is no idle timeout on any tier\./);
+    expect(body).not.toMatch(/session\.destroyed/);
   });
 
   it('frames tier concurrent caps as the only customer-visible meter', () => {

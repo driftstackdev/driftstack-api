@@ -51,7 +51,7 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     expect(existsSync(P('versioning.md'))).toBe(true);
   });
 
-  it('sessions.md: iPhone Safari WebKit-fork session + concurrent-slot framing + 8-row TIER_CONCURRENT_SESSION_LIMITS table + 429 Retry-After on cap-exceeded + tier-default idle timeout auto-destroy pinned', () => {
+  it('sessions.md: iPhone Safari WebKit-fork session + concurrent-slot framing + 8-row TIER_CONCURRENT_SESSION_LIMITS table + 429-problem-body on cap-exceeded + free-tier duration cap (S31: idle timeout was fictional) pinned', () => {
     const body = read(P('sessions.md'));
     expect(body).toMatch(/^title: Sessions$/m);
     expect(body).toMatch(/^# Sessions$/m);
@@ -64,9 +64,13 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     expect(body).toMatch(/\| `api_scale`\s+\|\s+24 \|/);
     expect(body).toMatch(/\| `enterprise`\s+\|\s+32 \|/);
     expect(body).toMatch(/Hitting the cap on `POST \/v1\/sessions` returns `429 Too Many/);
-    expect(body).toMatch(/Requests` with a `Retry-After` header\./);
-    expect(body).toMatch(/Sessions auto-destroy after/);
-    expect(body).toMatch(/their tier-default idle timeout \(driver-managed\)\./);
+    // S31 2026-07-07 (fable-truth-audit) — concurrency 429 carries no Retry-After (only
+    // rate-limit 429s do).
+    expect(body).toMatch(/Requests` with `current_sessions` and `limit` in the problem body/);
+    // S31 2026-07-07 (fable-truth-audit) — no idle timeout; the real boundary is the
+    // free-tier duration cap.
+    expect(body).toMatch(/free-tier sessions stop at the 20-minute duration/);
+    expect(body).not.toMatch(/tier-default idle timeout/); // S31 2026-07-07 (fable-truth-audit)
     expect(existsSync(P('sessions.md'))).toBe(true);
   });
 

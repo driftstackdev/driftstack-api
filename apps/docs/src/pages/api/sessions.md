@@ -33,8 +33,11 @@ shared `TIER_CONCURRENT_SESSION_LIMITS` constant in
 | `enterprise`    |                  32 |
 
 Hitting the cap on `POST /v1/sessions` returns `429 Too Many
-Requests` with a `Retry-After` header. Sessions auto-destroy after
-their tier-default idle timeout (driver-managed).
+Requests` with `current_sessions` and `limit` in the problem body (no
+`Retry-After` header — that header is only sent on rate-limit 429s;
+retry once one of your sessions ends). Paid-tier sessions run until
+you destroy them; free-tier sessions stop at the 20-minute duration
+cap.
 
 ## Resource shape
 
@@ -409,6 +412,6 @@ write returns 403).
 | 403    | `forbidden`             | Scope missing (write on a read-only key)                        |
 | 404    | `not-found`             | Session not found / not owned                                   |
 | 410    | `session-destroyed`     | Session is `destroyed`; recreate                                |
-| 504    | `session-timeout`       | Idle timeout reached mid-call                                   |
+| 504    | `session-timeout`       | An operation exceeded its time budget mid-call                  |
 | 502    | `driver-error`          | Driver-level failure (network, crash)                           |
 | 503    | `driver-not-integrated` | Real WebKit driver unavailable; the server is configured for it |

@@ -20,7 +20,11 @@ import DocLayout from '../../layouts/DocLayout.astro';
     </li>
     <li>
       <a href="/guides/session-lifecycle/">Session lifecycle</a> — full state diagram,
-      concurrency caps, idle timeout, error shapes.
+      concurrency caps, duration caps, error shapes.
+    </li>
+    <li>
+      <a href="/guides/concurrency/">Concurrency &amp; backpressure</a> — how the
+      concurrent-session cap works and how to code around a full fleet.
     </li>
     <li>
       <a href="/guides/team-rbac/">Team RBAC — invite, accept, act-as</a> — end-to-end
@@ -32,6 +36,18 @@ import DocLayout from '../../layouts/DocLayout.astro';
       running agent session's video stream over LiveKit WebRTC; covers token mint,
       connect, render, input forwarding, and reconnect.
     </li>
+    <li>
+      <a href="/guides/migrate-from-puppeteer/">Migrating from Puppeteer / Playwright</a>
+      — concept mapping plus a side-by-side first script.
+    </li>
+    <li>
+      <a href="/guides/migrate-from-browserless/">Migrating from Browserless</a> —
+      action-based API instead of remote CDP; what changes and what maps over.
+    </li>
+    <li>
+      <a href="/guides/sentry/">Sentry integration</a> — how Driftstack relates to your
+      Sentry setup, and what our own error pipeline scrubs.
+    </li>
   </ul>
 
   <h2>Get started</h2>
@@ -39,6 +55,10 @@ import DocLayout from '../../layouts/DocLayout.astro';
   <ul>
     <li>
       <a href="/quickstart/">Quickstart</a> — signup to first session in five minutes.
+    </li>
+    <li>
+      <a href="/quickstart-curl/">Quickstart (curl)</a> — the same path with raw HTTP,
+      no SDK.
     </li>
     <li>
       <a href="/sdk/installation/">SDK installation</a> — install + configure each SDK.

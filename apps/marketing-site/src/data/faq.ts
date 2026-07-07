@@ -89,7 +89,12 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'What if I cancel?',
-        a: 'Service continues through the end of your current billing period. After that, your API keys stop working — requests are refused with an error saying the subscription needs renewing. No data is deleted at cancellation; your account stays in a "suspended" state with a 30-day grace-period for recovery, then your account data (profiles, sessions, captures) is deleted on the schedule set in our data-processing agreement (DPA). Basic session records are kept up to 90 days; invoice history is retained for the legally-required period.',
+        // S31 2026-07-07 (fable-truth-audit) — the old answer described a
+        // suspended-state + 90-day-purge flow that does not exist:
+        // Stripe cancellation downgrades the account to the perpetual
+        // free tier (services/stripe-webhooks.ts), nothing is deleted,
+        // and no 'subscription needs renewing' error exists.
+        a: 'Service continues through the end of your current billing period. After that your account moves to the free tier automatically — nothing is deleted, your profiles and account data stay, and you can resubscribe any time. Free-tier limits then apply (1 profile, 1 concurrent session, manual-only). Invoice history is retained for the legally-required period.',
       },
       {
         q: 'How does Enterprise pricing work?',
@@ -143,7 +148,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: "What's the BYOK markup?",
-        a: 'Per-token pricing for the bundled rate is announced at launch. BYOK incurs no Driftstack markup — your Anthropic API key, your bill, your control. Set a stored BYOK key via the dashboard <span class="font-mono">/settings</span> page, <span class="font-mono">PUT /v1/account/me/byok-anthropic-key</span>, or per-request via the <span class="font-mono">x-byok-anthropic-api-key</span> header. Which tiers may use which billing: Team, Agency, and API Starter are BYOK-only; API Builder, API Scale, and Enterprise support bundled-LLM with consent — an explicit opt-in (for developers: <span class="font-mono">PATCH /v1/account/me/bundled-llm-settings</span>). The dashboard switch for that opt-in arrives at v1.1 (until then, use the PATCH endpoint directly); a read-only bundled-LLM status panel is already on <span class="font-mono">/agent-sessions</span>.',
+        a: 'Per-token pricing for the bundled rate is announced at launch. BYOK incurs no Driftstack markup — your Anthropic API key, your bill, your control. Set a stored BYOK key via the dashboard <span class="font-mono">/settings</span> page, <span class="font-mono">PUT /v1/account/me/byok-anthropic-key</span>, or per-request via the <span class="font-mono">x-byok-anthropic-api-key</span> header. Which tiers may use which billing: Team, Agency, and API Starter are BYOK-only; API Builder, API Scale, and Enterprise support bundled-LLM with consent — an explicit opt-in (for developers: <span class="font-mono">PATCH /v1/account/me/bundled-llm-settings</span>). The dashboard switch for that opt-in arrives at v1.1 (until then, use the PATCH endpoint directly); a read-only bundled-LLM status panel is in the desktop app.',
       },
       {
         q: 'Is BYOK secret-handling secure?',
@@ -176,7 +181,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'Are you GDPR-compliant?',
-        a: 'Yes. Privacy Policy + DPA + Acceptable Use Policy are linked in the footer. Sub-processor list is documented in the DPA Annex 3. You control how long we keep your data: 30 days by default, adjustable anywhere from 1 to 365 days, or turned off entirely. Requests to have your data deleted (GDPR\'s "right to erasure") are honoured within 30 days. The legal documents are baseline drafts under counsel review; first paying customer onboards only after counsel review completes.',
+        a: 'Yes. Privacy Policy + DPA + Acceptable Use Policy are linked in the footer. Sub-processor list is documented in the DPA Annex 3. Requests to have your data deleted (GDPR\'s "right to erasure") are honoured within 30 days. The legal documents are baseline drafts under counsel review; first paying customer onboards only after counsel review completes.',
       },
       {
         q: 'Do you have a SOC 2 / ISO 27001 audit?',

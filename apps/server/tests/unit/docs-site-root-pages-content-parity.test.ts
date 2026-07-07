@@ -87,7 +87,10 @@ describe('W600 apps/docs root pages content parity', () => {
     expect(body).toMatch(/^## 4\. What happened$/m);
     expect(body).toMatch(/^## 5\. Next steps$/m);
     expect(body).toMatch(/export DRIFTSTACK_API_KEY="ds_live_…"/);
-    expect(body).toMatch(/The key prefix \(`ds_live_`\) tells you it's a production key\./);
+    // S31 2026-07-07 (fable-truth-audit) — corrected: free tier mints ds_test_ keys.
+    expect(body).toMatch(
+      /Paid-tier keys carry the `ds_live_` prefix; free-tier accounts get `ds_test_` keys/,
+    );
     expect(body).toMatch(/npm install @driftstack\/sdk/);
     expect(body).toMatch(/pip install driftstack-sdk/);
     expect(body).toMatch(/go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go/);

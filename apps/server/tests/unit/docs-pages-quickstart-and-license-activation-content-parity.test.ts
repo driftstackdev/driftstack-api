@@ -62,9 +62,12 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     const p = read(QS);
 
     expect(p).toMatch(
-      /API keys are scoped to the account that created them\. The key prefix \(`ds_live_`\) tells you it's a production key\./,
+      // S31 2026-07-07 (fable-truth-audit) — free tier mints ds_test_ keys (services/api-keys.ts
+      // env = tier === 'free' ? 'test' : 'live'), so the old 'same key
+      // shape for free accounts' framing was wrong.
+      /API keys are scoped to the account that created them\. Paid-tier keys carry the `ds_live_` prefix; free-tier accounts get `ds_test_` keys/,
     );
-    expect(p).toMatch(/Free and pre-billing accounts get the same key shape\./);
+    expect(p).toMatch(/free-tier accounts get `ds_test_` keys \(same shape, test environment\)/);
   });
 
   it('CRITICAL quickstart 3-language install commands pinned — npm/pip/go-get matching W778 SDK installation. Drift would let SDK adopters drift between install pages.', () => {
@@ -110,7 +113,9 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     expect(p).toMatch(/`data` is the PNG \*\*base64-encoded\*\*/);
     expect(p).toMatch(/Buffer\.from\(shot\.data, 'base64'\)/);
     expect(p).toMatch(
-      /`client\.sessions\.destroy\(\)` released the concurrent slot\. Sessions also auto-expire after the per-tier idle timeout if you forget to destroy them\./,
+      // S31 2026-07-07 (fable-truth-audit) — no idle timeout exists on any tier; only the
+      // free-tier 20-minute duration cap auto-stops sessions.
+      /`client\.sessions\.destroy\(\)` released the concurrent slot\. Only free-tier sessions stop on their own \(at the 20-minute cap\)/,
     );
   });
 

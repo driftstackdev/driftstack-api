@@ -245,8 +245,11 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
           <li>GET /v1/status/stream</li>
           <li>GET /v1/status/sla</li>
           <li>POST /v1/status/subscribe</li>
-          <li>POST /v1/status/subscribe/confirm</li>
-          <li>POST /v1/status/subscribe/unsubscribe</li>
+          {/* S31 2026-07-07 (fable-truth-audit) — confirm/unsubscribe are
+              GET (clicked-from-email links), not POST
+              (routes/status-subscribe.ts). */}
+          <li>GET /v1/status/subscribe/confirm</li>
+          <li>GET /v1/status/subscribe/unsubscribe</li>
         </ul>
       </div>
 
@@ -339,8 +342,12 @@ fmt.Println(session.ID)
     <div class="mt-12">
       <h3 class="text-xl font-semibold text-tk-ink">2. Drive the session</h3>
       <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
+        {/* S31 2026-07-07 (fable-truth-audit) — "swipes" was wrong: the
+            interact kinds are tap / type / scroll / press
+            (packages/api-types/src/sessions.ts InteractActionSchema). */}
         Navigate, tap, wait. <code class="font-mono">interact</code>
-        handles taps, swipes, and key presses; <code class="font-mono">wait</code>
+        handles taps, typing, scrolling, and key presses;
+        <code class="font-mono">wait</code>
         blocks until a DOM condition is met or a timeout fires.
       </p>
       <div class="mt-5 grid gap-4 md:grid-cols-2">
@@ -391,14 +398,20 @@ _, err = client.Sessions.Interact(ctx, session.ID, &driftstack.InteractRequest{
     <div class="mt-12">
       <h3 class="text-xl font-semibold text-tk-ink">3. Capture a screenshot</h3>
       <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
-        <code class="font-mono">capture</code> takes one of four kinds:
-        <code class="font-mono">screenshot</code>, <code class="font-mono">dom</code>,
-        <code class="font-mono">pdf</code>, or <code class="font-mono">recording</code>.
-        The response carries the file's contents directly as
-        base64-encoded text (the <code class="font-mono">data</code> field)
-        for the first three; recordings are saved to cloud storage
-        (Cloudflare R2) and the response returns a private,
-        time-limited download link (a signed-URL handle).
+        {/* S31 2026-07-07 (fable-truth-audit) — the old copy claimed a
+            fourth "recording" kind saved to R2 with a signed download
+            link; no such kind, storage, or URL exists (CaptureKindSchema
+            = screenshot | dom_snapshot | pdf; CaptureResponseSchema is
+            always inline base64 — packages/api-types/src/sessions.ts).
+            Recordings are roadmap-only. */}
+        <code class="font-mono">capture</code> takes one of three kinds:
+        <code class="font-mono">screenshot</code>,
+        <code class="font-mono">dom_snapshot</code>, or
+        <code class="font-mono">pdf</code>. The response carries the
+        file's contents directly as base64-encoded text (the
+        <code class="font-mono">data</code> field) — nothing is stored
+        server-side. Session video recording is on the
+        <a href="/roadmap" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">roadmap</a>, not live yet.
       </p>
       <div class="mt-5 grid gap-4 md:grid-cols-2">
         <pre

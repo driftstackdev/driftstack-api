@@ -155,13 +155,14 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
     }
   });
 
-  it('"Capture kind" 4-variant explainer pinned (screenshot / dom / pdf / recording)', () => {
+  // S31 2026-07-07 (fable-truth-audit) — the old pin locked a fictional 4th 'recording' kind
+  // with R2 storage + signed URLs; CaptureKindSchema is 3 kinds, always
+  // inline (packages/api-types/src/sessions.ts).
+  it('"Capture kind" 3-variant explainer pinned (screenshot / dom_snapshot / pdf, inline base64, recordings = roadmap)', () => {
     expect(body).toMatch(
-      /capture<\/code> takes one of four kinds:\s*\n?\s*<code class="font-mono">screenshot<\/code>,\s*<code class="font-mono">dom<\/code>,\s*\n?\s*<code class="font-mono">pdf<\/code>, or <code class="font-mono">recording<\/code>/,
+      /capture<\/code> takes one of three kinds:\s*\n?\s*<code class="font-mono">screenshot<\/code>,\s*\n?\s*<code class="font-mono">dom_snapshot<\/code>, or\s*\n?\s*<code class="font-mono">pdf<\/code>/,
     );
     // S20c 2026-07-06: same R2 + signed-URL facts, said plainly.
-    expect(body).toMatch(
-      /recordings are saved to cloud storage\s+\(Cloudflare R2\) and the response returns a private,\s+time-limited download link \(a signed-URL handle\)/,
-    );
+    expect(body).toMatch(/Session video recording is on the\s*\n?\s*<a href="\/roadmap"/);
   });
 });
