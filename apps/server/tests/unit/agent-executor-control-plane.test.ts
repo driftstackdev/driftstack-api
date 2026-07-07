@@ -326,4 +326,50 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
     expect(got.filter((g) => g.intentName === 'navigate')).toHaveLength(1); // not re-run
     expect(got.filter((g) => g.intentName === 'click')).toHaveLength(4); // 3 fails + 1 success
   });
+
+  // #139 go-live — the consequential-action confirmation gate must survive the
+  // StubAgentExecutor → ControlPlaneAgentExecutor swap. A real fleet box would
+  // EXECUTE a purchase/payment/deletion; dropping the halt would let it run
+  // unconfirmed. These pin that ControlPlaneAgentExecutor applies the SAME gate.
+  describe('consequential-action confirmation gate (#139/#130)', () => {
+    it('halts BEFORE dispatching an unapproved consequential tap (never reaches the box)', async () => {
+      const { got, dispatcher } = mockDispatcher((d) => okResult(d.intentId));
+      const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+      const res = await exec.execute(
+        planArgs([
+          { kind: 'navigate', url: 'https://shop.example.com' },
+          { kind: 'interact', action: 'tap', selector: 'Buy Now' }, // purchase
+          { kind: 'capture', capture: 'screenshot' }, // must NOT run
+        ]),
+      );
+      expect(res.ok).toBe(false);
+      expect(res.awaitingConfirmation).toBe(true);
+      // navigate dispatched; the purchase halted (confirmation_required); capture never reached.
+      expect(res.results).toHaveLength(2);
+      expect(res.results[0]!.kind).toBe('success');
+      expect(res.results[1]!.kind).toBe('confirmation_required');
+      if (res.results[1]!.kind !== 'confirmation_required') throw new Error('narrow');
+      expect(res.results[1]!.category).toBe('purchase');
+      // Only the navigate hit the dispatcher — the consequential tap was NOT dispatched.
+      expect(got.map((d) => d.intentName)).toEqual(['navigate']);
+    });
+
+    it('proceeds to dispatch when the consequential action is pre-approved', async () => {
+      const { got, dispatcher } = mockDispatcher((d) => okResult(d.intentId));
+      const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+      const res = await exec.execute({
+        sessionId: 'ses_x',
+        plan: {
+          kind: 'plan',
+          intents: [{ kind: 'interact', action: 'tap', selector: 'Buy Now' }],
+          tokensConsumed: 0,
+        },
+        // signature = `${category}:${matchedText.toLowerCase()}` (consequentialSignature).
+        approvedConsequentialActions: new Set(['purchase:buy now']),
+      });
+      expect(res.ok).toBe(true);
+      expect(res.awaitingConfirmation).toBeUndefined();
+      expect(got.map((d) => d.intentName)).toEqual(['click']); // the approved tap WAS dispatched
+    });
+  });
 });

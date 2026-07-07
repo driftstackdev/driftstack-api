@@ -99,7 +99,9 @@ import { DrizzleAgentSessionsRepo } from '../db/agent-sessions-repo.js';
 import { DrizzleAgentDecomposerUsageRecorder } from '../db/agent-decomposer-usage-recorder.js';
 import { AgentRuntime } from '../services/agent-runtime.js';
 import { loadRefusalPatterns, type RefusalPattern } from '../services/task-refusal.js';
-import { StubAgentExecutor } from '../services/agent-executor.js';
+import { StubAgentExecutor, type AgentExecutor } from '../services/agent-executor.js';
+import { ControlPlaneAgentExecutor } from '../services/agent-executor-control-plane.js';
+import { FleetSessionRoutingDispatcher } from '../services/fleet-session-routing-dispatcher.js';
 import { ClaudeAgentDecomposer } from '../services/agent-decomposer-claude.js';
 import { DeterministicAgentDecomposer } from '../services/agent-decomposer-deterministic.js';
 import type { AgentDecomposer } from '../services/agent-decomposer.js';
@@ -870,7 +872,32 @@ export async function createProductionDeps(
   // neither key path is available — agent-sessions routes still
   // return planned/clarified output rather than 503ing the customer.
   const agentSessionsRepo = new DrizzleAgentSessionsRepo(dbHandle);
-  const agentExecutor = new StubAgentExecutor();
+  // W2808 — forward holder for the fleet control registry, constructed later in
+  // the fleet-control-plane deps block. Declared HERE (moved up from that block)
+  // so the #139 go-live routing dispatcher can read it lazily. `current` is unset
+  // until the registry is built; the dispatcher tolerates that (fails honestly).
+  const fleetRegistryHolder: { current?: FleetControlRegistry } = {};
+  // #139 go-live — AI-Browser-Automation execution path. When the fleet control
+  // plane is enabled, run each decomposed plan over the REAL fleet dispatch:
+  // ControlPlaneAgentExecutor → FleetSessionRoutingDispatcher routes every intent
+  // to the box the session was dispatched to (agent_sessions.node_id → the node's
+  // IntentDispatchCorrelator) → the harness IntentExecutor runs it for real. When
+  // no box is connected it fails HONESTLY (session_error), never a fake success —
+  // replacing the StubAgentExecutor's synthetic per-intent successes (the founder-
+  // reported "returns a response without completing steps one by one" / "mock").
+  // Without the flag (local/test/pre-fleet), the stub stays — preserving the
+  // pre-launch demo path + every existing decompose→execute test. The consequential-
+  // action confirmation gate is preserved across the swap (ControlPlaneAgentExecutor
+  // applies the SAME consequentialHalt as the stub).
+  const agentExecutor: AgentExecutor = config.fleetControlPlaneEnabled
+    ? new ControlPlaneAgentExecutor(
+        new FleetSessionRoutingDispatcher(
+          () => fleetRegistryHolder.current,
+          agentSessionsRepo,
+          logger,
+        ),
+      )
+    : new StubAgentExecutor();
   const agentDecomposer = selectAgentDecomposer(config, logger);
   const agentDecomposerKind: 'claude' | 'deterministic' =
     agentDecomposer instanceof ClaudeAgentDecomposer ? 'claude' : 'deterministic';
@@ -1446,12 +1473,10 @@ export async function createProductionDeps(
   // nonce cache instance is shared between the verifier (replay defence)
   // and AppDeps.fleetNonceCache — app.ts's activation gate requires all
   // three (fleetNodeAuth + fleetNonceCache + fleetControlRegistry).
-  // W2808 — forward holder so the onHeartbeat CP↔daemon reconcile can resolve the
-  // reporting node's connection (to re-issue sessionEnd) WITHOUT extracting the
-  // registry construction out of the return object. Set inline at construction
-  // (`fleetRegistryHolder.current = new FleetControlRegistry(...)`) and read only at
-  // heartbeat fire-time (long after construction completes).
-  const fleetRegistryHolder: { current?: FleetControlRegistry } = {};
+  // W2808 — forward holder (fleetRegistryHolder) is declared EARLIER now (just
+  // above the agentExecutor wiring), because the #139 go-live routing dispatcher
+  // also reads it lazily. It's still assigned inline at registry construction
+  // below and read only at heartbeat/dispatch fire-time (long after boot).
   // W2813 — last-seen per-process bootId per node, for the CP bootId consumer (restart
   // detection). Process-lifetime map; reset on CP restart is intentional (the consumer
   // records-only on the first beat after a reset, so it never mass-closes — see

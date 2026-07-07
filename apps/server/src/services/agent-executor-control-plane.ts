@@ -13,12 +13,13 @@
 // (agent-session intents dispatch over the control-plane WSS by intentName, not
 // the server driver; see docs/internal/cross-agent-control-plane-contract.md).
 //
-// Depends only on an injected `IntentDispatcher` (IntentDispatchCorrelator
-// satisfies it) — so it's unit-testable with a mock dispatcher today, and the
-// live wiring is just `new ControlPlaneAgentExecutor(correlator)` once the
-// /v1/fleet/events WS transport lands (gated on the fleet_nodes migration +
-// per-node key provisioning). NOT yet wired into bootstrap (StubAgentExecutor
-// stays) — that swap is a founder/launch call.
+// Depends only on an injected `IntentDispatcher` — so it's unit-testable with a
+// mock dispatcher. #139 go-live: WIRED into bootstrap (gated on
+// FLEET_CONTROL_PLANE_ENABLED) via FleetSessionRoutingDispatcher, which routes
+// each intent to the correlator of the node the session was dispatched to
+// (agent_sessions.node_id → registry). Without the flag, bootstrap keeps the
+// StubAgentExecutor (demo/test path). The dispatcher fails honestly when no box
+// is connected — never a fake success.
 //
 // Never throws (AgentExecutor contract): a mapping miss, an encode error, and a
 // dispatch failure (the dispatcher itself never rejects) all surface as a
@@ -31,6 +32,7 @@ import type {
   ExecutorRunResult,
   IntentResult,
 } from './agent-executor.js';
+import { consequentialHalt } from './agent-executor.js';
 import { agentIntentToDispatch } from './agent-intent-to-dispatch.js';
 import { intentResultToCustomer } from './agent-intent-result.js';
 import { serializeIntentDispatch, type ParsedIntentResult } from './harness-control-codec.js';
@@ -56,6 +58,7 @@ export interface AutoRetryOptions {
 
 const DEFAULT_MAX_RETRIES = 2;
 const DEFAULT_RETRY_DELAY_MS = 400;
+const EMPTY_APPROVED: ReadonlySet<string> = new Set<string>();
 
 export class ControlPlaneAgentExecutor implements AgentExecutor {
   private readonly maxRetries: number;
@@ -75,7 +78,20 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
 
   async execute(args: ExecuteArgs): Promise<ExecutorRunResult> {
     const results: IntentResult[] = [];
+    const approved = args.approvedConsequentialActions ?? EMPTY_APPROVED;
     for (const intent of args.plan.intents) {
+      // 0. W443/W445 consequential-action gate — halt (WITHOUT dispatching) on a
+      //    purchase / payment / account-deletion the customer hasn't approved this
+      //    run. Identical gate to Stub/RealAgentExecutor: the go-live swap must NOT
+      //    silently drop it (a real box would otherwise execute the action for
+      //    real). The customer approves → the plan re-runs with the signature in
+      //    approvedConsequentialActions.
+      const halt = consequentialHalt(intent, approved);
+      if (halt) {
+        results.push(halt);
+        return { results, ok: false, awaitingConfirmation: true };
+      }
+
       // 1. Map the customer verb → harness intentName + params (or unsupported).
       const mapped = agentIntentToDispatch(intent);
       if (!mapped.ok) {

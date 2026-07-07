@@ -94,8 +94,10 @@ export function consequentialSignature(
 }
 
 /** If `intent` is a consequential action not yet approved, returns the
- *  confirmation_required result to halt on; else null. */
-function consequentialHalt(
+ *  confirmation_required result to halt on; else null. Exported so every
+ *  AgentExecutor implementation (Stub / Real / ControlPlane) applies the SAME
+ *  human-confirmation gate — swapping executors must never drop it (#139/#130). */
+export function consequentialHalt(
   intent: AgentIntent,
   approved: ReadonlySet<string>,
 ): Extract<IntentResult, { kind: 'confirmation_required' }> | null {
