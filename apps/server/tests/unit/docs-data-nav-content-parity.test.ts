@@ -76,6 +76,17 @@
 // 7 sub-nodes (page-state / cookie read+import / history step / file
 // upload / downloads list+fetch), profiles gains trim, and auth gains
 // resend-verification. Top-level census unchanged at 55.
+//
+// S37 SUPERSESSION 2026-07-07 (docs content-enrichment batch 2) —
+// top-level census 55 → 60: five NEW pages adapted from the legacy
+// marketing /docs mirror (claims re-verified against the crypto
+// routes/service, email-service send sites, and the post-S30
+// residency posture). Guides gains /guides/paying-with-crypto/ +
+// /guides/crypto-troubleshooting/ (after sentry); Webhooks gains
+// /webhooks/crypto-events/ ("Crypto order events", a catalog page
+// with NO children, between the event catalog and replay); Platform
+// reference gains /reference/emails/ + /reference/data-residency/
+// (last). Children census unchanged at 139.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -157,9 +168,9 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     );
   });
 
-  it('Guides section: 9 entries (S29 — overview + profile-management + session-lifecycle + concurrency + team-rbac + live-video + migrate-from-puppeteer + migrate-from-browserless + sentry); team-rbac label is the plain-words "Teams & access control" (page slug/title untouched)', () => {
+  it('Guides section: 11 entries (S29 added concurrency + the two migration guides + sentry; S37 added paying-with-crypto + crypto-troubleshooting); team-rbac label is the plain-words "Teams & access control" (page slug/title untouched)', () => {
     expect(body).toMatch(
-      /\{\s*\n?\s*label: 'Guides',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/guides\/', label: 'Guides overview' \},\s*\n?\s*\{ href: '\/guides\/profile-management\/', label: 'Profile management' \},\s*\n?\s*\{ href: '\/guides\/session-lifecycle\/', label: 'Session lifecycle' \},\s*\n?\s*\{ href: '\/guides\/concurrency\/', label: 'Concurrency & backpressure' \},\s*\n?\s*\{ href: '\/guides\/team-rbac\/', label: 'Teams & access control' \},\s*\n?\s*\{ href: '\/guides\/live-video\/', label: 'Live video' \},\s*\n?\s*\{ href: '\/guides\/migrate-from-puppeteer\/', label: 'Migrating from Puppeteer \/ Playwright' \},\s*\n?\s*\{ href: '\/guides\/migrate-from-browserless\/', label: 'Migrating from Browserless' \},\s*\n?\s*\{ href: '\/guides\/sentry\/', label: 'Sentry integration' \},\s*\n?\s*\],\s*\n?\s*\},/,
+      /\{\s*\n?\s*label: 'Guides',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/guides\/', label: 'Guides overview' \},\s*\n?\s*\{ href: '\/guides\/profile-management\/', label: 'Profile management' \},\s*\n?\s*\{ href: '\/guides\/session-lifecycle\/', label: 'Session lifecycle' \},\s*\n?\s*\{ href: '\/guides\/concurrency\/', label: 'Concurrency & backpressure' \},\s*\n?\s*\{ href: '\/guides\/team-rbac\/', label: 'Teams & access control' \},\s*\n?\s*\{ href: '\/guides\/live-video\/', label: 'Live video' \},\s*\n?\s*\{ href: '\/guides\/migrate-from-puppeteer\/', label: 'Migrating from Puppeteer \/ Playwright' \},\s*\n?\s*\{ href: '\/guides\/migrate-from-browserless\/', label: 'Migrating from Browserless' \},\s*\n?\s*\{ href: '\/guides\/sentry\/', label: 'Sentry integration' \},\s*\n?\s*\{ href: '\/guides\/paying-with-crypto\/', label: 'Paying with crypto' \},\s*\n?\s*\{ href: '\/guides\/crypto-troubleshooting\/', label: 'Crypto payment troubleshooting' \},\s*\n?\s*\],\s*\n?\s*\},/,
     );
   });
 
@@ -276,32 +287,34 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     );
   });
 
-  it('Webhooks section: 3 entries (endpoints + events + replay); S27 — endpoints + replay carry children (webhooks extraction sweep), events is a catalog with none', () => {
+  it('Webhooks section: 4 entries (endpoints + events + crypto-events + replay); S27 — endpoints + replay carry children (webhooks extraction sweep); events + the S37 crypto-events page are catalogs with none', () => {
     expect(body).toMatch(
       /\{\s*\n?\s*label: 'Webhooks',\s*\n?\s*items: \[\s*\n?\s*\{\s*\n?\s*href: '\/webhooks\/endpoints\/',\s*\n?\s*label: 'Endpoints \(CRUD \+ rotate \+ test\)',\s*\n?\s*children: \[/,
     );
-    expect(body).toMatch(/\{ href: '\/webhooks\/events\/', label: 'Event catalog' \},/);
+    expect(body).toMatch(
+      /\{ href: '\/webhooks\/events\/', label: 'Event catalog' \},\s*\n?\s*\{ href: '\/webhooks\/crypto-events\/', label: 'Crypto order events' \},/,
+    );
     expect(body).toMatch(
       /\{\s*\n?\s*href: '\/webhooks\/replay\/',\s*\n?\s*label: 'Replay deliveries',\s*\n?\s*children: \[\s*\n?\s*\{\s*\n?\s*href: '\/webhooks\/replay\/#replay-a-delivery',\s*\n?\s*label: 'Replay a delivery',\s*\n?\s*method: 'POST',/,
     );
   });
 
-  it('Platform reference section (NEW in S22.2 — all 6 /reference/* pages were orphaned before): errors → rate-limits → pagination → idempotency → scopes → metrics', () => {
+  it('Platform reference section (S22.2 un-orphaned the 6 /reference/* pages; S37 added emails + data-residency): errors → rate-limits → pagination → idempotency → scopes → metrics → emails → data-residency', () => {
     expect(body).toMatch(
-      /\{\s*\n?\s*label: 'Platform reference',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/reference\/errors\/', label: 'Errors' \},\s*\n?\s*\{ href: '\/reference\/rate-limits\/', label: 'Rate limits' \},\s*\n?\s*\{ href: '\/reference\/pagination\/', label: 'Pagination' \},\s*\n?\s*\{ href: '\/reference\/idempotency\/', label: 'Idempotency keys' \},\s*\n?\s*\{ href: '\/reference\/scopes\/', label: 'API key scopes' \},\s*\n?\s*\{ href: '\/reference\/metrics\/', label: 'Prometheus metrics' \},\s*\n?\s*\],\s*\n?\s*\},/,
+      /\{\s*\n?\s*label: 'Platform reference',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/reference\/errors\/', label: 'Errors' \},\s*\n?\s*\{ href: '\/reference\/rate-limits\/', label: 'Rate limits' \},\s*\n?\s*\{ href: '\/reference\/pagination\/', label: 'Pagination' \},\s*\n?\s*\{ href: '\/reference\/idempotency\/', label: 'Idempotency keys' \},\s*\n?\s*\{ href: '\/reference\/scopes\/', label: 'API key scopes' \},\s*\n?\s*\{ href: '\/reference\/metrics\/', label: 'Prometheus metrics' \},\s*\n?\s*\{ href: '\/reference\/emails\/', label: 'Emails Driftstack sends' \},\s*\n?\s*\{ href: '\/reference\/data-residency\/', label: 'Data residency' \},\s*\n?\s*\],\s*\n?\s*\},/,
     );
   });
 
-  it('total tree size (S33 census): 55 top-level route hrefs (S22.2 pinned 50; S29 content-enrichment batch 1 added quickstart-curl + 4 guides — a drop below 55 means a page went orphaned again) + 139 children anchor hrefs (131 API + 8 webhooks — S33 2026-07-07 fable-truth-audit added the 9 previously-undocumented live endpoints; md lockstep enforced by docs-nav-endpoint-children-integrity)', () => {
+  it('total tree size (S37 census): 60 top-level route hrefs (S22.2 pinned 50; S29 batch 1 → 55; S37 content-enrichment batch 2 added 2 crypto guides + webhooks/crypto-events + reference/emails + reference/data-residency — a drop below 60 means a page went orphaned again) + 139 children anchor hrefs (131 API + 8 webhooks — unchanged by S37: the new pages are guides/catalog/reference pages, not endpoint resources; md lockstep enforced by docs-nav-endpoint-children-integrity)', () => {
     const hrefs = [...body.matchAll(/href: '([^']+)',/g)].map((m) => m[1]!);
     const topLevel = hrefs.filter((h) => !h.includes('#'));
     const anchors = hrefs.filter((h) => h.includes('#'));
-    expect(topLevel).toHaveLength(55);
+    expect(topLevel).toHaveLength(60);
     expect(anchors).toHaveLength(139);
     // No duplicate hrefs at either level (the apps/docs
     // doc-nav-section-label-baseline suite enforces the top-level rule at
     // runtime too; mirrored here so a server-only run still catches it).
-    expect(new Set(topLevel).size).toBe(55);
+    expect(new Set(topLevel).size).toBe(60);
     expect(new Set(anchors).size).toBe(139);
   });
 

@@ -63,6 +63,17 @@
 // profiles gains trim, auth gains resend-verification. Children
 // census 130 → 139 (131 API + 8 webhooks); top-level routes
 // unchanged at 55.
+//
+// S37 2026-07-07 (docs content-enrichment batch 2) — 5 NEW pages
+// adapted from the legacy marketing /docs mirror (every claim
+// re-verified against the crypto routes/service, the email-service
+// send sites, and the post-S30 residency posture before carry-over):
+// Guides gains /guides/paying-with-crypto/ and
+// /guides/crypto-troubleshooting/; Webhooks gains
+// /webhooks/crypto-events/ (a catalog page — no endpoint children);
+// Platform reference gains /reference/emails/ and
+// /reference/data-residency/. Top-level route census 55 → 60;
+// children census unchanged at 139.
 
 export interface DocNavItem {
   href: string;
@@ -114,6 +125,8 @@ export const DOC_NAV: DocNavSection[] = [
       { href: '/guides/migrate-from-puppeteer/', label: 'Migrating from Puppeteer / Playwright' },
       { href: '/guides/migrate-from-browserless/', label: 'Migrating from Browserless' },
       { href: '/guides/sentry/', label: 'Sentry integration' },
+      { href: '/guides/paying-with-crypto/', label: 'Paying with crypto' },
+      { href: '/guides/crypto-troubleshooting/', label: 'Crypto payment troubleshooting' },
     ],
   },
   {
@@ -635,6 +648,7 @@ export const DOC_NAV: DocNavSection[] = [
         ],
       },
       { href: '/webhooks/events/', label: 'Event catalog' },
+      { href: '/webhooks/crypto-events/', label: 'Crypto order events' },
       {
         href: '/webhooks/replay/',
         label: 'Replay deliveries',
@@ -657,6 +671,8 @@ export const DOC_NAV: DocNavSection[] = [
       { href: '/reference/idempotency/', label: 'Idempotency keys' },
       { href: '/reference/scopes/', label: 'API key scopes' },
       { href: '/reference/metrics/', label: 'Prometheus metrics' },
+      { href: '/reference/emails/', label: 'Emails Driftstack sends' },
+      { href: '/reference/data-residency/', label: 'Data residency' },
     ],
   },
 ];
