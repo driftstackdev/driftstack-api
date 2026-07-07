@@ -43,14 +43,20 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     // S20c 2026-07-06 plain-language pass: same facts, plain words
     // lead; "patched at runtime" kept as the precise term in parens,
     // EU-residency stated plainly with the term in parens.
+    // S30 2026-07-07 (founder decision: soften): hero scoped to "your
+    // account data" + "(EU-resident control plane)" — blanket "your
+    // data" / "EU-resident infrastructure" over-reached since R2-held
+    // file objects replicate EU + US.
     expect(body).toMatch(/One engine\. One product\. Engineered for fidelity\./);
     expect(body).toMatch(
       /Driftstack ships iPhone Safari sessions on demand, built on\s+real <a href="\/glossary#webkit"[^>]*>WebKit<\/a>\s+— the same engine every physical iPhone runs — with nothing\s+quietly modified while the browser is running \("patched at\s+runtime"\), so there's nothing for detection systems to spot\./,
     );
     expect(body).toMatch(
-      /Our servers and your data live in the EU \(EU-resident\s+infrastructure\), and the scope stays deliberately narrow: one\s+product, two ways to use it, no land-grab\./,
+      /Our servers and your account data live in the EU \(EU-resident\s+control plane\), and the scope stays deliberately narrow: one\s+product, two ways to use it, no land-grab\./,
     );
     expect(body).not.toMatch(/Driftstack ships real iPhone Safari sessions/);
+    // S30 negative pin — the blanket form must not silently return.
+    expect(body).not.toMatch(/your data live in the EU \(EU-resident\s+infrastructure\)/);
   });
 
   it("WebKit source-code framing pinned (R6 plain-English rewrite + 2026-05-16 unique-per-session contrast): 'we run Apple's WebKit source code, the same engine that ships on every real iPhone' kept; the contrast paragraph now names the 100% unique canvas/WebGL hashes competitors leak as the literal opposite of a real iPhone returning the same hash as millions of others", () => {
@@ -63,8 +69,14 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     );
   });
 
-  it('EU-resident card states the accurate residency posture: control-plane infra (compute/database/object storage) is EU-resident, and session execution + a few processors transfer to the US under SCCs + EU-US DPF (matches the real /trust/sub-processors list — Anthropic/MacStadium/LiveKit are US). No vendor names on the about page (moved to /trust/sub-processors); a link to the dedicated page replaces the vendor enumeration.', () => {
-    expect(body).toMatch(/Compute, database, and object storage all run in the EU\./);
+  it('EU-resident card states the accurate residency posture: compute + database are EU-resident, uploaded files sit on Cloudflare R2 (default jurisdiction, can replicate outside the EU — S30 2026-07-07 founder decision: soften), and session execution + a few processors transfer to the US under SCCs + EU-US DPF (matches the real /trust/sub-processors list — Anthropic/MacStadium/LiveKit are US). No vendor names on the about page (moved to /trust/sub-processors); a link to the dedicated page replaces the vendor enumeration.', () => {
+    expect(body).toMatch(/Compute and database run in the EU\./);
+    expect(body).toMatch(
+      /Uploaded files \(avatars,\s+for example\) sit on Cloudflare's R2 storage, which can\s+replicate outside the EU\./,
+    );
+    // S30 negative pin — the blanket object-storage-in-EU claim must
+    // not silently return.
+    expect(body).not.toMatch(/Compute, database, and object storage all run in the EU/);
     expect(body).toMatch(
       /Session execution and a few processors[\s\S]{0,140}transfer to the US\s*\n?\s*under Standard Contractual Clauses \+ the EU-US Data Privacy\s*\n?\s*Framework — no undisclosed flows\./,
     );

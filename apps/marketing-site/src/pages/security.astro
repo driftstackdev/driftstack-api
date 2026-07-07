@@ -16,7 +16,7 @@ import CtaBand from '../components/CtaBand.astro';
 
 <BaseLayout
   title="Security"
-  description="How Driftstack protects customer keys and content. TLS 1.2+1.3 with HSTS preload, scrypt-hashed API keys, HMAC-SHA256 webhook signatures, no-customer-data-access posture, EU-resident infrastructure."
+  description="How Driftstack protects customer keys and content. TLS 1.2+1.3 with HSTS preload, scrypt-hashed API keys, HMAC-SHA256 webhook signatures, no-customer-data-access posture, EU-resident control plane."
   ogImage="/og/security.png"
 >
   <!-- Hero -->
@@ -269,9 +269,13 @@ import CtaBand from '../components/CtaBand.astro';
           </svg>
         </IconTile>
         <strong class="block text-tk-ink">Data residency is EU-default.</strong>
-        Compute, database, object storage all in the EU (Hetzner in
-        Falkenstein, Germany + Neon EU + Upstash EU + Cloudflare R2
-        EU). Session execution may run elsewhere under SCCs (the EU's
+        {/* S30 2026-07-07 (founder decision: soften) — R2 dropped from
+            the all-in-the-EU list: file objects live on Cloudflare R2
+            in the default jurisdiction (EU + US replication). */}
+        Compute and database in the EU (Hetzner in
+        Falkenstein, Germany + Neon EU + Upstash EU). Uploaded files
+        (avatars, for example) sit on Cloudflare R2, which can
+        replicate outside the EU. Session execution may run elsewhere under SCCs (the EU's
         Standard Contractual Clauses for lawful data transfer abroad)
         + the EU-US Data Privacy Framework. Detail in the same
         sub-processors list.

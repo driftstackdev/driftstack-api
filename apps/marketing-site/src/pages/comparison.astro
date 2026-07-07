@@ -84,7 +84,10 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   },
   {
     feature: 'Data residency',
-    driftstack: 'EU-only compute + storage',
+    // S30 2026-07-07 (founder decision: soften) — "EU-only ... storage"
+    // over-claimed: file objects live on Cloudflare R2 in the default
+    // jurisdiction (EU + US replication). Compute + database are EU-true.
+    driftstack: 'EU compute + database; file storage on Cloudflare R2 (EU + US replication)',
     browserless: 'US / EU regions',
     brightData: 'Global; configurable per plan',
     scrapingBee: 'US default',

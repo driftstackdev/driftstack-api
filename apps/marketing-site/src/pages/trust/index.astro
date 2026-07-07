@@ -53,8 +53,13 @@ import StatusBadge from '../../components/StatusBadge.astro';
                No-customer-data-access). The old five-item list also
                counted "EU-resident infrastructure", which is not one
                of the /security pillars — it now rides as its own
-               (still true) sentence, and the enumeration matches the
-               real six. */}
+               sentence, and the enumeration matches the
+               real six. S30 2026-07-07 (founder decision: soften):
+               that sentence now says "EU servers" — the six pillars
+               run on the EU control plane (true), but blanket
+               "EU-resident infrastructure" over-reached since file
+               objects live on Cloudflare R2 in the default
+               jurisdiction (EU + US replication). */}
           <p class="mt-3 text-sm text-tk-ink-2">
             Six pillars shipped today: everything between you and us
             travelling encrypted (TLS), each profile bringing its own internet
@@ -64,8 +69,8 @@ import StatusBadge from '../../components/StatusBadge.astro';
             cryptographically signed so you can prove each message
             came from us (HMAC), team roles where your whole team can
             look but only admins can change, and a design that keeps our staff from
-            ever seeing your session content. All of it runs on EU-resident
-            infrastructure. The live posture
+            ever seeing your session content. All of it runs on EU
+            servers. The live posture
             across each pillar is
             on the security overview (its own card below).
           </p>
@@ -213,9 +218,13 @@ import StatusBadge from '../../components/StatusBadge.astro';
     <dl class="mt-8 grid gap-x-8 gap-y-6 md:grid-cols-2">
       <div>
         <dt class="text-sm font-medium text-tk-ink">Where is data hosted?</dt>
+        {/* S30 2026-07-07 (founder decision: soften) — "EU only" +
+            "R2 EU jurisdiction" over-claimed: R2 uses the default
+            jurisdiction and replicates EU + US. Compute + database
+            are EU-true. */}
         <dd class="mt-1 text-sm text-tk-ink-2">
-          EU only. Compute (Hetzner Nuremberg), database (Neon Frankfurt),
-          object storage (Cloudflare R2 EU jurisdiction). Full list at
+          EU by default. Compute (Hetzner Nuremberg), database (Neon Frankfurt);
+          object storage (Cloudflare R2, EU + US replication). Full list at
           <a href="/trust/sub-processors" class="text-tk-accent-text underline"
             >/trust/sub-processors</a
           >.

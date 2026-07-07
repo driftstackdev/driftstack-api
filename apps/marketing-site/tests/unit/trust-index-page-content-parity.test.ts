@@ -96,10 +96,13 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
     }
   });
 
-  it('residency claim pinned: Hetzner Nuremberg / Neon Frankfurt / Cloudflare R2 EU', () => {
+  it('residency claim pinned: Hetzner Nuremberg / Neon Frankfurt / Cloudflare R2 EU + US replication — S30 2026-07-07 (founder decision: soften): "EU only" → "EU by default" and the false "R2 EU jurisdiction" → "EU + US replication" (R2 uses the default jurisdiction; only DB-resident data is EU-guaranteed)', () => {
     expect(body).toMatch(
-      /EU only\. Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\),\s+object storage \(Cloudflare R2 EU jurisdiction\)\./,
+      /EU by default\. Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\);\s+object storage \(Cloudflare R2, EU \+ US replication\)\./,
     );
+    // S30 negative pins — the absolutist claims must not silently return.
+    expect(body).not.toMatch(/EU only\./);
+    expect(body).not.toMatch(/Cloudflare R2 EU jurisdiction/);
   });
 
   it('scrypt-hashed-at-rest + 24-hour rotation grace claim pinned (aligned with /security)', () => {

@@ -106,9 +106,9 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).toMatch(/Visit 200 pages on one session for the cost of\s*\n?\s*visiting one\./);
   });
 
-  it('M.3 (Plan Item 8) EU compliance simplification: "EU-only by default." headline (replaces "Customer data stays in the EU." for inviting/scan-friendly tone) + plain-English body ("Your data stays in the EU. We don\'t log what your sessions visit or do — only the operational metadata we need to bill") + sub-processors cross-link. Infra-tier detail (Database / object storage / compute / single-region) was moved off the homepage to /trust/security-overview and /trust/sub-processors where infra-tier readers go.', () => {
-    expect(body).toMatch(/EU-only by default\./);
-    expect(body).toMatch(/Your data stays in the EU\./);
+  it('S30 2026-07-07 (founder decision: soften) EU residency softened: "EU-hosted by default." headline (supersedes M.3\'s "EU-only by default." — DB-resident data is EU-Hetzner-true, but file objects live on Cloudflare R2 default jurisdiction with EU + US replication, so the absolutist claim over-promised) + plain-English body ("Your account data lives on EU servers. We don\'t log what your sessions visit or do — only the operational metadata we need to bill") + sub-processors cross-link.', () => {
+    expect(body).toMatch(/EU-hosted by default\./);
+    expect(body).toMatch(/Your account data lives on EU servers\./);
     expect(body).toMatch(/only the operational metadata we need to bill/);
     // S20b 2026-07-06: the billing-metadata triple reads in plain words
     // (duration / archetype glossed via the glossary link / cap usage).
@@ -123,6 +123,10 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
       /Database, object storage, and compute all run in the EU,\s+single-region\./,
     );
     expect(body).not.toMatch(/Hetzner\s+Falkenstein, Neon EU, and Cloudflare R2/);
+    // S30 negative pins — the absolutist residency claims must not
+    // silently return (founder decision 2026-07-07: soften).
+    expect(body).not.toMatch(/EU-only by default/);
+    expect(body).not.toMatch(/Your data stays in the EU/);
   });
 
   it('egress state reflected accurately in the v2 trust band (per-profile SOCKS5 / OpenVPN / WireGuard egress IS live; only the per-session "change a running session\'s proxy mid-flight" path is roadmap) + the /trust/security-overview cross-link. The page must NOT flatly claim egress itself is "(not shipped)".', () => {

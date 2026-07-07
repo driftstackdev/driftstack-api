@@ -52,8 +52,9 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
   // while /security (the page this card links to) renders SIX
   // (01 Transport / 02 Egress / 03 API keys / 04 Webhooks /
   // 05 Team roles / 06 No-customer-data-access). The enumeration now
-  // matches the real six; EU-resident infrastructure (true, but not
-  // one of the /security pillars) rides as its own sentence.
+  // matches the real six; the EU-hosting sentence (not one of the
+  // /security pillars) rides as its own sentence — softened to "EU
+  // servers" by S30 2026-07-07 (founder decision: soften).
   it("Security card pinned: 'Architecture + posture →' + 6-pillar shipped commitment matching /security's rendered pillars (01–06). History: 2026-05-22 egress flipped roadmap→shipped (4→5); S26 2026-07-06 count corrected 5→6 to match /security.", () => {
     expect(body).toMatch(/Architecture \+ posture →/);
     expect(body).toMatch(/Six pillars shipped today/);
@@ -71,8 +72,13 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     );
     expect(body).toMatch(/team roles where your whole team can\s+look but only admins can change/);
     expect(body).toMatch(/a design that keeps our staff from\s+ever seeing your session content/);
-    // EU residency stays claimed (its own sentence, not a pillar).
-    expect(body).toMatch(/All of it runs on EU-resident\s+infrastructure\./);
+    // EU hosting stays claimed (its own sentence, not a pillar).
+    // S30 2026-07-07 (founder decision: soften): "EU servers" replaces
+    // "EU-resident infrastructure" — the six pillars run on the EU
+    // control plane (true), but the blanket infrastructure claim
+    // over-reached since R2-held file objects replicate EU + US.
+    expect(body).toMatch(/All of it runs on EU\s+servers\./);
+    expect(body).not.toMatch(/All of it runs on EU-resident\s+infrastructure\./);
   });
 
   it("Sub-processors card pinned: 'Live list + regions →' + 'Source of truth for Article 28(2) amendment notices; mirrored in DPA Annex 3.' — pinned so the Article 28(2) + DPA-Annex-3 cross-reference survives in the hub-card too (consistent with the canonical /trust/sub-processors framing)", () => {
@@ -119,10 +125,13 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     expect(body).toMatch(/How do we get a security questionnaire answered\?/);
   });
 
-  it("Data-hosted answer pinned: 'EU only. Compute (Hetzner Nuremberg), database (Neon Frankfurt), object storage (Cloudflare R2 EU jurisdiction).' — pinned so the EU-only + 3-sub-processor location specificity survives (drift to dropping the Hetzner Nuremberg / Neon Frankfurt / R2 EU specificity would lose the data-residency credibility signal; drift to dropping 'EU only' would soften the residency commitment)", () => {
+  it("Data-hosted answer pinned: 'EU by default. Compute (Hetzner Nuremberg), database (Neon Frankfurt); object storage (Cloudflare R2, EU + US replication).' — S30 2026-07-07 (founder decision: soften) supersedes the prior 'EU only ... R2 EU jurisdiction' pin: R2 uses the DEFAULT jurisdiction (verified on the prod box, task #24), so the absolutist 'EU only' + false 'EU jurisdiction' had to go; the 3-sub-processor location specificity survives", () => {
     expect(body).toMatch(
-      /EU only\. Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\),\s*\n?\s*object storage \(Cloudflare R2 EU jurisdiction\)\./,
+      /EU by default\. Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\);\s*\n?\s*object storage \(Cloudflare R2, EU \+ US replication\)\./,
     );
+    // S30 negative pins — the absolutist claims must not silently return.
+    expect(body).not.toMatch(/EU only\./);
+    expect(body).not.toMatch(/Cloudflare R2 EU jurisdiction/);
   });
 
   it("Destination-URL answer pinned: 'No. Session traffic exits through your egress (the SOCKS5 / OpenVPN / WireGuard proxies you configure). Driftstack orchestrates the session; the proxy carries the bytes.' — pinned so the no-we-don't-see-URLs + customer-egress posture survives (drift to softening 'No' would let buyers question what Driftstack actually sees; drift to dropping the SOCKS5/OpenVPN/WG list would lose the customer-controlled-egress specifics). Priority order SOCKS5 / OpenVPN / WireGuard per founder verdict 2026-05-16; matches the API server's user-facing 503 messages.", () => {

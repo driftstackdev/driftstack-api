@@ -19,8 +19,10 @@
 //     shared raw-body parser.
 //   • Customer-configurable egress is marked ROADMAP (○) not
 //     shipped (✓) — load-bearing honesty signal.
-//   • EU-only data plane: Hetzner Nuremberg / Neon Frankfurt /
-//     R2 EU jurisdiction (aligned with /trust/index + /about).
+//   • EU control plane: Hetzner Nuremberg / Neon Frankfurt /
+//     R2 EU + US replication (aligned with /trust/index + /about;
+//     S30 2026-07-07 founder decision: soften — R2 is default
+//     jurisdiction, not EU).
 //   • Account deletion: 30-day grace + hard delete per DPA.
 //   • Vulnerability disclosure: 2-day ack, 5-day triage, 90-day
 //     coordinated window (aligned with /trust/compliance).
@@ -105,15 +107,17 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
     expect(body).toMatch(/an OpenVPN\s+file \(\.ovpn\)/); // S20c 2026-07-06
   });
 
-  it('EU control plane: Hetzner Nuremberg / Neon Frankfurt / R2 EU jurisdiction, session-execution fleet on MacStadium US', () => {
+  it('EU control plane: Hetzner Nuremberg / Neon Frankfurt / R2 EU + US replication, session-execution fleet on MacStadium US — S30 2026-07-07 (founder decision: soften): the false "R2 EU jurisdiction" became "EU + US replication" (R2 uses the default jurisdiction), aligned with /docs/data-residency', () => {
     // Header is "EU control plane" (not "EU-only data plane"): the
     // EU sub-processors carry the control plane, while the iPhone
     // Safari session-execution fleet runs on MacStadium (US).
     expect(body).toMatch(/<p class="font-medium text-tk-ink">EU control plane<\/p>/);
     expect(body).not.toMatch(/EU-only data plane/);
     expect(body).toMatch(
-      /Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\),\s+object storage \(Cloudflare R2 EU jurisdiction\)/,
+      /Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\),\s+object storage \(Cloudflare R2, EU \+ US replication\)/,
     );
+    // S30 negative pin — the false jurisdiction claim must not return.
+    expect(body).not.toMatch(/Cloudflare R2 EU jurisdiction/);
     // S20c 2026-07-06 plain-language pass: SCCs glossed inline (the
     // EU's Standard Contractual Clauses), DPF spelled out.
     expect(body).toMatch(

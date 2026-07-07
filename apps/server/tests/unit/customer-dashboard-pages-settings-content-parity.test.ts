@@ -74,7 +74,11 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
   });
 
   it('V-352b avatar upload contract: 2MB max + PNG/JPEG/WebP only + R2 EU storage + POST /v1/account/me/avatar { content_type, data_base64 } + DELETE /v1/account/me/avatar — pinned so the upload constraints (size + types + region) + the base64 wire format + the DELETE-to-remove contract all survive (drift to dropping size limit would let bad actors flood R2 with multi-GB avatars; drift to dropping base64 would change the wire format)', () => {
-    expect(body).toMatch(/PNG, JPEG, or WebP\. Max 2 MB\. Stored on Cloudflare R2 \(EU\)\./);
+    // S30 2026-07-07 (founder decision: soften) — the "(EU)" tag
+    // over-claimed: avatars live on R2 in the default jurisdiction
+    // (EU + US replication). Size/type/wire-format guards unchanged.
+    expect(body).toMatch(/PNG, JPEG, or WebP\. Max 2 MB\. Stored privately on Cloudflare R2\./);
+    expect(body).not.toMatch(/Cloudflare R2 \(EU\)/);
     expect(body).toMatch(/if \(file\.size > 2 \* 1024 \* 1024\) \{/);
     expect(body).toMatch(/if \(!\/\^image\\\/\(png\|jpeg\|webp\)\$\/\.test\(file\.type\)\) \{/);
     expect(body).toMatch(

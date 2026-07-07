@@ -85,11 +85,19 @@ describe('W365.A marketing-site /security page parity', () => {
     expect(body).toMatch(
       /<strong class="block text-tk-ink">Data residency is EU-default\.<\/strong>/,
     );
-    // EU-only stack disclosed.
+    // EU-default stack disclosed.
     // S20c 2026-07-06: FSN datacenter code spelled out for non-engineers.
+    // S30 2026-07-07 (founder decision: soften): "Cloudflare R2 EU"
+    // dropped from the in-the-EU parenthetical — R2 file objects live
+    // in the default jurisdiction and can replicate outside the EU.
     expect(body).toMatch(
-      /Hetzner in\s+Falkenstein, Germany \+ Neon EU \+ Upstash EU \+ Cloudflare R2\s+EU/,
+      /Compute and database in the EU \(Hetzner in\s+Falkenstein, Germany \+ Neon EU \+ Upstash EU\)\./,
     );
+    expect(body).toMatch(
+      /Uploaded files\s+\(avatars, for example\) sit on Cloudflare R2, which can\s+replicate outside the EU\./,
+    );
+    // S30 negative pin — the blanket claim must not silently return.
+    expect(body).not.toMatch(/Compute, database, object storage all in the EU/);
   });
 
   it('sub-processor list cited + cross-link to /trust/sub-processors resolves', () => {

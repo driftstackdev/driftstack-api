@@ -769,9 +769,15 @@ try {
     </div>
   </Section>
 
-  <!-- ═══ 10 · TRUST BAND — "Simple to pay for. Hard to snoop on." Merges
+  {/* ═══ 10 · TRUST BAND — "Simple to pay for. Hard to snoop on." Merges
        metering + EU privacy + who-builds-it. The EU framing is W246.D-pinned
-       (EU-only by default / operational metadata / trust links). ═══ -->
+       (EU-hosted by default / operational metadata / trust links).
+       S30 2026-07-07 (founder decision: soften): the old absolutist
+       residency headline + blanket stays-in-the-EU body were softened —
+       DB-resident data (accounts, profiles, audit logs, session metadata)
+       is EU-Hetzner-true, but file objects (avatars, uploads) live on
+       Cloudflare R2 in the default jurisdiction (EU + US replication), so
+       the absolutist wording over-promised. ═══ */}
   <Section
     label="Metering"
     title="Simple to pay for. Hard to snoop on."
@@ -788,9 +794,9 @@ try {
         </p>
       </div>
       <div class="panel">
-        <h3 class="text-lg font-semibold text-tk-ink">EU-only by default.</h3>
+        <h3 class="text-lg font-semibold text-tk-ink">EU-hosted by default.</h3>
         <p class="mt-3 text-sm leading-7 text-tk-ink-2">
-          Your data stays in the EU. We don't log what your sessions visit or
+          Your account data lives on EU servers. We don't log what your sessions visit or
           do — only the operational metadata we need to bill: how long a
           session ran, which iPhone model + iOS + Safari combination it used
           (its <a href="/glossary#archetype" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">archetype</a>),
@@ -847,9 +853,11 @@ try {
           think about. Annual contracts save 20% — listed, not negotiated
           case-by-case.
         </Card>
-        <Card title="Your data stays in the EU">
+        <Card title="Your account data stays in the EU">
           <p slot="icon" class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Sovereignty</p>
-          Customer data lives in the EU, in one region only. We don't log
+          Account data — profiles, audit logs, session metadata — lives in
+          one EU region; uploaded files use Cloudflare's storage network,
+          which can replicate outside the EU. We don't log
           destination URLs, response bodies, or session content. Every
           outside company that handles data for us (our sub-processors) is
           listed on the

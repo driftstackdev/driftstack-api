@@ -100,14 +100,19 @@ describe('W627 R7-R17 marketing additions content parity', () => {
       );
     });
 
-    it('3-card posture grid pinned (Design partner direct-engineer-access + Honest pricing one-concurrent-metric + Sovereignty your-data-stays-in-EU) — each card has its eyebrow label + headline + sub-processors cross-link in the Sovereignty card', () => {
+    it('3-card posture grid pinned (Design partner direct-engineer-access + Honest pricing one-concurrent-metric + Sovereignty your-account-data-stays-in-EU) — each card has its eyebrow label + headline + sub-processors cross-link in the Sovereignty card. S30 2026-07-07 (founder decision: soften): the Sovereignty card title scoped to "Your account data" and the body discloses that R2-held uploaded files can replicate outside the EU.', () => {
       expect(body).toMatch(/Design partner/);
       expect(body).toMatch(/Direct engineer access/);
       expect(body).toMatch(/Honest pricing/);
       expect(body).toMatch(/One concurrent metric/);
       expect(body).toMatch(/Sovereignty/);
-      expect(body).toMatch(/Your data stays in the EU/);
+      expect(body).toMatch(/Your account data stays in the EU/);
+      expect(body).toMatch(
+        /uploaded files use Cloudflare's storage network,\s*\n?\s*which can replicate outside the EU/,
+      );
       expect(body).toMatch(/href="\/trust\/sub-processors"/);
+      // S30 negative pin — the blanket card title must not return.
+      expect(body).not.toMatch(/Card title="Your data stays in the EU"/);
     });
   });
 

@@ -80,8 +80,12 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
     expect(body).toMatch(/driftstack: 'None — flat within concurrent cap',/);
   });
 
-  it("Driftstack data-residency row: 'EU-only compute + storage' + customer-controlled-proxies row: SOCKS5/OpenVPN/WireGuard per profile (shipped). 2026-05-22 — egress impl ships per planning 133 Phase 1; cell flipped from the prior 'Roadmap' framing now that the differentiator is real.", () => {
-    expect(body).toMatch(/driftstack: 'EU-only compute \+ storage',/);
+  it("Driftstack data-residency row: 'EU compute + database; file storage on Cloudflare R2 (EU + US replication)' (S30 2026-07-07 founder decision: soften — supersedes 'EU-only compute + storage': R2-held file objects use the default jurisdiction, so only compute + database are EU-guaranteed) + customer-controlled-proxies row: SOCKS5/OpenVPN/WireGuard per profile (shipped). 2026-05-22 — egress impl ships per planning 133 Phase 1; cell flipped from the prior 'Roadmap' framing now that the differentiator is real.", () => {
+    expect(body).toMatch(
+      /driftstack: 'EU compute \+ database; file storage on Cloudflare R2 \(EU \+ US replication\)',/,
+    );
+    // S30 negative pin — the absolutist cell must not silently return.
+    expect(body).not.toMatch(/EU-only compute \+ storage/);
     // S20b 2026-07-06 plain words: same three protocols, same per-profile
     // scope, same every-traffic-type coverage.
     expect(body).toMatch(

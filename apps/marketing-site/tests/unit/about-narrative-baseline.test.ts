@@ -31,8 +31,9 @@ describe('W334.B /about narrative baseline', () => {
     expect(body).toMatch(/we run Apple's WebKit\s+source code/);
   });
 
-  it('EU control-plane posture: control-plane infra is EU-resident, session execution + a few processors transfer to the US under SCCs + EU-US DPF (matches the real sub-processor list); vendor names live on /trust/sub-processors, the about-page card links there instead of enumerating vendors inline', () => {
-    expect(body).toMatch(/Compute, database, and object storage all run in the EU/);
+  it('EU control-plane posture: compute + database are EU-resident (S30 2026-07-07 founder decision: soften — object storage dropped from the EU list since R2-held files replicate EU + US), session execution + a few processors transfer to the US under SCCs + EU-US DPF (matches the real sub-processor list); vendor names live on /trust/sub-processors, the about-page card links there instead of enumerating vendors inline', () => {
+    expect(body).toMatch(/Compute and database run in the EU/);
+    expect(body).not.toMatch(/Compute, database, and object storage all run in the EU/);
     expect(body).toMatch(
       /transfer to the US\s*\n?\s*under Standard Contractual Clauses \+ the EU-US Data Privacy/,
     );

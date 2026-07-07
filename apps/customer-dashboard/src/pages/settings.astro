@@ -132,8 +132,11 @@ const EMAIL_EVENTS = [
                 Remove
               </button>
             </div>
+            {/* S30 2026-07-07 (founder decision: soften) — avatars live
+                on Cloudflare R2 in the default jurisdiction (EU + US
+                replication), so the "(EU)" tag over-claimed. */}
             <p class="text-xs text-tk-ink-3">
-              PNG, JPEG, or WebP. Max 2 MB. Stored on Cloudflare R2 (EU).
+              PNG, JPEG, or WebP. Max 2 MB. Stored privately on Cloudflare R2.
             </p>
             <p
               data-field="avatar-error"

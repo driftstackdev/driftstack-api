@@ -46,9 +46,9 @@ describe('W246.D marketing-site /index doc parity', () => {
     }
   });
 
-  it('M.3 (Plan Item 8) EU compliance simplification: "EU-only by default." headline (replaces "Customer data stays in the EU." for inviting/scan-friendly tone) + plain-English body that drops the infra-tier "Database, object storage, and compute" enumeration in favour of "operational metadata we need to bill (session duration, archetype, cap usage)" framing. Infra-tier readers get the detail via the /trust/sub-processors cross-link.', () => {
-    expect(doc).toMatch(/EU-only by default/);
-    expect(doc).toMatch(/Your data stays in the EU/);
+  it('S30 2026-07-07 (founder decision: soften) EU residency softened: "EU-hosted by default." headline (supersedes M.3\'s "EU-only by default." — DB-resident data is EU-Hetzner-true, but file objects live on Cloudflare R2 default jurisdiction with EU + US replication) + "Your account data lives on EU servers." plain-English body + "operational metadata we need to bill" framing. Infra-tier readers get the detail via the /trust/sub-processors cross-link.', () => {
+    expect(doc).toMatch(/EU-hosted by default/);
+    expect(doc).toMatch(/Your account data lives on EU servers/);
     expect(doc).toMatch(/operational metadata we need to bill/);
     expect(doc).not.toMatch(/Hetzner\s*\n?\s*Falkenstein, Neon EU, and Cloudflare R2/);
     // Prior infra-tier wording must NOT return.
@@ -56,6 +56,10 @@ describe('W246.D marketing-site /index doc parity', () => {
     expect(doc).not.toMatch(
       /Database, object storage, and compute all run in the EU,\s*\n?\s*single-region/,
     );
+    // S30 negative pins — the absolutist residency claims must not
+    // silently return (founder decision 2026-07-07: soften).
+    expect(doc).not.toMatch(/EU-only by default/);
+    expect(doc).not.toMatch(/Your data stays in the EU/);
   });
 
   it('does not claim "never sees destination URL" as a control-plane property', () => {

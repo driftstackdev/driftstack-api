@@ -40,15 +40,20 @@ describe('W315.B /trust/security-overview baseline', () => {
     expect(body).toMatch(/HMAC[- ]SHA[- ]?256/);
   });
 
-  it('positions EU control plane (Hetzner / Neon / Cloudflare R2 EU) with the session-execution fleet on MacStadium US', () => {
+  it('positions EU control plane (Hetzner / Neon) + honestly-scoped R2 with the session-execution fleet on MacStadium US', () => {
     // The control plane is EU-only; the session-execution driver
     // fleet runs on MacStadium (US) under SCCs + EU-US DPF, so the
     // data plane is NOT "EU-only".
+    // S30 2026-07-07 (founder decision: soften) — R2 buckets live in
+    // Cloudflare's default jurisdiction (verified on the prod box),
+    // so the old "Cloudflare R2 EU" positioning over-claimed; the page
+    // now states the EU + US replication reality.
     expect(body).toMatch(/EU control plane/i);
     expect(body).not.toMatch(/EU[- ]only data plane/i);
     expect(body).toMatch(/Hetzner\s+Nuremberg/);
     expect(body).toMatch(/Neon\s+Frankfurt/);
-    expect(body).toMatch(/Cloudflare R2 EU/);
+    expect(body).toMatch(/Cloudflare R2, EU \+ US replication/);
+    expect(body).not.toMatch(/Cloudflare R2 EU\b/);
     expect(body).toMatch(/MacStadium\s+hardware\s+\(US\)/);
   });
 

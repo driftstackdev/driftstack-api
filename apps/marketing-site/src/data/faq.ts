@@ -156,11 +156,19 @@ export const FAQ_GROUPS: FaqGroup[] = [
     entries: [
       {
         q: 'Where is my data stored?',
-        a: 'Customer data is hosted in the EU. Compute, database, and object storage are all EU-resident. Session execution may run in supported regions outside the EU under standard contractual clauses (SCCs) and the EU-US Data Privacy Framework — the legal mechanisms EU law provides for data that leaves the EU. Our complete sub-processor list, with locations and contractual basis, is published at <a href="/trust/sub-processors" class="text-tk-accent-text underline">/trust/sub-processors</a> and in the <a href="/legal/dpa" class="text-tk-accent-text underline">Data Processing Agreement</a>.',
+        // S30 2026-07-07 (founder decision: soften) — "object storage
+        // ... EU-resident" over-claimed: file objects (avatars,
+        // uploads) live on Cloudflare R2 in the default jurisdiction
+        // (EU + US replication), not the .eu-jurisdiction endpoint.
+        // DB-resident data (accounts, profiles, audit logs, session
+        // metadata) genuinely lives on EU Hetzner/Neon servers.
+        a: 'Customer data in our databases — your account, profiles, audit logs, session metadata — is hosted in the EU: compute and database are EU-resident. Uploaded files (your avatar, for example) use Cloudflare\'s R2 storage network, which can replicate outside the EU. Session execution may run in supported regions outside the EU under standard contractual clauses (SCCs) and the EU-US Data Privacy Framework — the legal mechanisms EU law provides for data that leaves the EU. Our complete sub-processor list, with locations and contractual basis, is published at <a href="/trust/sub-processors" class="text-tk-accent-text underline">/trust/sub-processors</a> and in the <a href="/legal/dpa" class="text-tk-accent-text underline">Data Processing Agreement</a>.',
       },
       {
         q: 'Can I pick which region my data is stored in?',
-        a: 'You can state a region preference (US / EU / APAC) from <span class="font-mono">/settings → Region</span>; for v1 it\'s informational only. Every customer\'s data sits on EU-jurisdiction infrastructure today regardless of preference selected. The preference exists so we can route you to the matching region automatically once the multi-region rollout lands; we\'ll give you 30 days\' notice before any of your data is moved — following the DPA\'s Article 28 process for changing sub-processors (the outside vendors that handle your data) — with the right to keep your data in the EU or terminate the affected portion of the service. The trust page at <a href="/trust/sub-processors" class="text-tk-accent-text underline">/trust/sub-processors</a> covers this in the same plain language as the dashboard.',
+        // S30 2026-07-07 (founder decision: soften) — scoped "data" to
+        // "account data": R2-held files carry no EU-residency guarantee.
+        a: 'You can state a region preference (US / EU / APAC) from <span class="font-mono">/settings → Region</span>; for v1 it\'s informational only. Every customer\'s account data sits on EU-jurisdiction infrastructure today regardless of preference selected. The preference exists so we can route you to the matching region automatically once the multi-region rollout lands; we\'ll give you 30 days\' notice before any of your data is moved — following the DPA\'s Article 28 process for changing sub-processors (the outside vendors that handle your data) — with the right to keep your data in the EU or terminate the affected portion of the service. The trust page at <a href="/trust/sub-processors" class="text-tk-accent-text underline">/trust/sub-processors</a> covers this in the same plain language as the dashboard.',
       },
       {
         q: 'What does my team see when I add them to my account?',
@@ -202,7 +210,11 @@ export const FAQ_GROUPS: FaqGroup[] = [
         // live). "Session metadata" is what we actually store —
         // mirrors the truthful export list in the
         // business-continuity answer below.
-        a: 'Everything runs in one EU region. Customer data — accounts, profiles, audit logs, session metadata — stays in the EU. The <a href="/trust/sub-processors" class="text-tk-accent-text underline">sub-processor list</a> has the full breakdown with each provider\'s region. From EU locations, your commands typically reach our API in under 30 milliseconds, and a full round trip — your click going in, the live picture coming back — takes under 100. US and Asia-Pacific customers see proportionally longer round trips, since the sessions stay in the EU.',
+        // S30 2026-07-07 (founder decision: soften) — the listed
+        // classes ARE DB-resident (EU-true), but "Everything ... EU"
+        // was blanket; added the file-storage scope (R2 default
+        // jurisdiction replicates EU + US).
+        a: 'Sessions run in one EU region. Customer data in our databases — accounts, profiles, audit logs, session metadata — stays in the EU; uploaded files (avatars, for example) use Cloudflare\'s storage network, which can replicate outside the EU. The <a href="/trust/sub-processors" class="text-tk-accent-text underline">sub-processor list</a> has the full breakdown with each provider\'s region. From EU locations, your commands typically reach our API in under 30 milliseconds, and a full round trip — your click going in, the live picture coming back — takes under 100. US and Asia-Pacific customers see proportionally longer round trips, since the sessions stay in the EU.',
       },
     ],
   },

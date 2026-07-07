@@ -116,9 +116,9 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/Visit 200 pages on one session for the cost of\s*\n?\s*visiting one\./);
   });
 
-  it('EU compliance pinned (v2 trust band): "EU-only by default." + plain-English body ("Your data stays in the EU. We don\'t log what your sessions visit or do — only the operational metadata we need to bill (session duration, archetype, cap usage)") + the live/roadmap egress framing cross-links /trust/security-overview.', () => {
-    expect(body).toMatch(/EU-only by default\./);
-    expect(body).toMatch(/Your data stays in the EU\./);
+  it('EU compliance pinned (v2 trust band): "EU-hosted by default." + plain-English body ("Your account data lives on EU servers. We don\'t log what your sessions visit or do — only the operational metadata we need to bill (session duration, archetype, cap usage)") + the live/roadmap egress framing cross-links /trust/security-overview. S30 2026-07-07 (founder decision: soften): supersedes "EU-only by default." / "Your data stays in the EU." — file objects live on Cloudflare R2 default jurisdiction (EU + US replication), so only DB-resident account data is EU-guaranteed.', () => {
+    expect(body).toMatch(/EU-hosted by default\./);
+    expect(body).toMatch(/Your account data lives on EU servers\./);
     expect(body).toMatch(/only the operational metadata we need to bill/);
     // S20b 2026-07-06: the billing-metadata triple reads in plain words
     // (duration / archetype glossed via the glossary link / cap usage).
@@ -137,6 +137,10 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     );
     expect(body).not.toMatch(/We log session metadata only/);
     expect(body).not.toMatch(/Hetzner\s*\n?\s*Falkenstein, Neon EU, and Cloudflare R2/);
+    // S30 negative pins — the absolutist residency claims must not
+    // silently return (founder decision 2026-07-07: soften).
+    expect(body).not.toMatch(/EU-only by default/);
+    expect(body).not.toMatch(/Your data stays in the EU/);
   });
 
   it('Manual ladder framing BOUND from pricing.ts (W292.B — no hand-typed dollars): {manualLineup} + {manualCaps} concurrent + unlimited hours within cap. The $79/$249/$699 values are guarded by pricing-manual-tier-figures-baseline.', () => {

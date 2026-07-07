@@ -138,12 +138,14 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     expect(body).not.toMatch(/V-080|V-487/);
   });
 
-  it("EU control plane claim pinned: 'EU control plane' + 'Compute (Hetzner Nuremberg), database (Neon Frankfurt), object storage (Cloudflare R2 EU jurisdiction)' + session-execution fleet on MacStadium US — pinned so the 3-sub-processor location specificity stays consistent with /trust/sub-processors + /trust (drift to dropping the explicit city/jurisdiction would weaken the data-residency credibility; drift to changing a sub-processor would create marketing↔sub-processor-register divergence). The data plane is NOT EU-only: the iPhone Safari driver fleet runs on MacStadium (US).", () => {
+  it("EU control plane claim pinned: 'EU control plane' + 'Compute (Hetzner Nuremberg), database (Neon Frankfurt), object storage (Cloudflare R2, EU + US replication)' + session-execution fleet on MacStadium US — S30 2026-07-07 (founder decision: soften) supersedes the prior 'R2 EU jurisdiction' pin: R2 uses the DEFAULT jurisdiction (verified on the prod box, task #24); wording now matches /docs/data-residency's 'EU + US replication'. The 3-sub-processor location specificity survives. The data plane is NOT EU-only: the iPhone Safari driver fleet runs on MacStadium (US).", () => {
     expect(body).toMatch(/EU control plane/);
     expect(body).not.toMatch(/EU-only data plane/);
     expect(body).toMatch(
-      /Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\),\s*\n?\s*object storage \(Cloudflare R2 EU jurisdiction\)\./,
+      /Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\),\s*\n?\s*object storage \(Cloudflare R2, EU \+ US replication\)\./,
     );
+    // S30 negative pin — the false jurisdiction claim must not return.
+    expect(body).not.toMatch(/Cloudflare R2 EU jurisdiction/);
     // S20c 2026-07-06 plain-language pass: SCCs glossed inline.
     expect(body).toMatch(
       /iPhone Safari session-execution fleet runs on MacStadium\s+hardware \(US\) under SCCs \(the EU's Standard Contractual\s+Clauses for lawful data transfer abroad\) \+ the EU-US\s+Data Privacy Framework/,

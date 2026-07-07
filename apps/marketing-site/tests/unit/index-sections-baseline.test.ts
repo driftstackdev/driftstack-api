@@ -7,9 +7,11 @@
 //     prior framing — the brand-line use survives in the hero h1)
 //   • "Apple's engine" stack positioning (replaces "Real WebKit")
 //   • "One metric. Concurrent sessions." pricing positioning
-//   • "EU-only by default." data plane section header
+//   • "EU-hosted by default." data plane section header
 //     (M.3 simplify; "Customer data stays in the EU." was the prior
-//     framing — replaced for inviting / scan-friendly tone)
+//     framing — replaced for inviting / scan-friendly tone.
+//     S30 2026-07-07 founder decision: soften — "EU-only" dropped
+//     because R2-held file objects replicate EU + US)
 //   • "Drive it by hand, or drive it from code." audience split
 //   • Two ladders + free tier
 //   • Self-hosted as a parallel offering
@@ -27,7 +29,7 @@ const REQUIRED_PHRASES = [
   'One iPhone among millions',
   "Apple's engine",
   'One metric. Concurrent sessions',
-  'EU-only by default',
+  'EU-hosted by default',
   'Drive it by hand, or drive it from code',
   'Two ladders',
   'Run Driftstack on your own infrastructure',
