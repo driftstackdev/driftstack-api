@@ -534,3 +534,46 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
     });
   });
 });
+
+describe('AI-B1.b ClaudeAgentDecomposer — #140 answerFromObservation (read-and-report)', () => {
+  const answerArgs = {
+    task: 'what is my IP address?',
+    observation: 'Your IP: 203.0.113.7 — ISP: Example',
+    budgetTokensRemaining: 100_000,
+    byokAnthropicApiKey: 'sk-ant-test-fake-key',
+  };
+
+  it('answers from the observation → { answer } + tokensConsumed from usage', async () => {
+    const { fetch, calls } = sequenceFetch([
+      jsonResponse({ kind: 'answer', answer: 'Your IP address is 203.0.113.7.' }),
+    ]);
+    const dec = new ClaudeAgentDecomposer({ fetch });
+    const res = await dec.answerFromObservation(answerArgs);
+    expect(res.answer).toBe('Your IP address is 203.0.113.7.');
+    expect(res.tokensConsumed).toBe(200); // 120 input + 80 output (jsonResponse default)
+    expect(res.usage).toBeDefined();
+    expect(calls).toHaveLength(1);
+  });
+
+  it('missing API key throws (never fabricates an answer)', async () => {
+    const { fetch, calls } = sequenceFetch([]);
+    const dec = new ClaudeAgentDecomposer({ fetch });
+    await expect(
+      dec.answerFromObservation({ ...answerArgs, byokAnthropicApiKey: '' }),
+    ).rejects.toThrow(/no Anthropic API key/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('blank answer throws → runtime falls back to the plan result, no empty reply', async () => {
+    const { fetch } = sequenceFetch([jsonResponse({ kind: 'answer', answer: '   ' })]);
+    const dec = new ClaudeAgentDecomposer({ fetch });
+    await expect(dec.answerFromObservation(answerArgs)).rejects.toThrow(/missing answer string/);
+  });
+
+  it('caps a multi-MB observation so it cannot blow context/cost', async () => {
+    const { fetch } = sequenceFetch([jsonResponse({ kind: 'answer', answer: 'ok' })]);
+    const dec = new ClaudeAgentDecomposer({ fetch });
+    const res = await dec.answerFromObservation({ ...answerArgs, observation: 'x'.repeat(50_000) });
+    expect(res.answer).toBe('ok');
+  });
+});

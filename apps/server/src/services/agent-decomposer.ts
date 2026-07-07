@@ -200,6 +200,37 @@ export interface DecomposeArgs {
 }
 
 /**
+ * #140 perceive-then-act (read-and-report) — the READ-BACK pass. After the
+ * plan runs and page content is observed, the agent answers the customer's
+ * original question FROM that content (e.g. "get the IP" → "Your IP is 1.2.3.4").
+ */
+export interface AnswerArgs {
+  /** The customer's original question/task (the same NL string decompose saw). */
+  task: string;
+  /** Observed page content the answer is drawn from. This is UNTRUSTED,
+   *  page-derived DATA — the impl frames it as data, never as instructions. */
+  observation: string;
+  /** Remaining per-session token budget; the caller gates on this. */
+  budgetTokensRemaining: number;
+  /** BYOK/fallback Anthropic key — same resolution + secrecy rules as
+   *  DecomposeArgs.byokAnthropicApiKey. NEVER logged/echoed/persisted. */
+  byokAnthropicApiKey?: string;
+  /** Claude model for this call (per-model cost rate); defaults to
+   *  DEFAULT_AGENT_MODEL. */
+  model?: AgentModel;
+}
+
+export interface AnswerResult {
+  /** Concise NL answer to the task, drawn ONLY from the observation. States
+   *  plainly when the asked-for info is not present (never invents a value). */
+  answer: string;
+  /** Total tokens (input+output) for the read-back call — the caller debits +
+   *  records these, exactly like a decompose turn. */
+  tokensConsumed: number;
+  usage?: DecomposeUsage;
+}
+
+/**
  * Service interface; impl lands in B1 (Anthropic Claude Opus 4.7
  * wire) per the design doc. Bootstrap wires the concrete instance
  * once the Anthropic credentials path is configured.
@@ -216,4 +247,14 @@ export interface AgentDecomposer {
    * credential decryption failure) escape as exceptions.
    */
   decompose(args: DecomposeArgs): Promise<DecomposeResult>;
+
+  /**
+   * #140 read-and-report — answer the customer's question from observed page
+   * content. OPTIONAL: only the Claude-wired impl provides it (an LLM call);
+   * the DeterministicAgentDecomposer omits it and the runtime feature-detects
+   * (`if (decomposer.answerFromObservation)`) before use. Same never-log-the-key
+   * + upstream-5xx-throws contract as decompose(); the observation is treated as
+   * untrusted data by the impl's prompt frame.
+   */
+  answerFromObservation?(args: AnswerArgs): Promise<AnswerResult>;
 }
