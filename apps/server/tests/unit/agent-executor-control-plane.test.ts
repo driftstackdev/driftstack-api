@@ -117,6 +117,43 @@ describe('ControlPlaneAgentExecutor', () => {
     expect(got).toHaveLength(2); // 3rd intent never dispatched
   });
 
+  it('#139 a failed `wait` does NOT halt the plan — later intents (screenshot) still run', async () => {
+    // wait is best-effort synchronization; a wait timeout must not abort the plan
+    // and lose the customer's screenshot. Any OTHER failure still halts.
+    const { got, dispatcher } = mockDispatcher((d) =>
+      d.intentName === 'wait_for'
+        ? failResult(d.intentId, 'intent_webdriver_failed') // → condition_not_met for a wait
+        : okResult(d.intentId),
+    );
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), { maxRetries: 0 });
+    const res = await exec.execute(
+      planArgs([
+        { kind: 'navigate', url: 'https://x' },
+        { kind: 'wait', condition: 'idle' },
+        { kind: 'capture', capture: 'screenshot' },
+      ]),
+    );
+    // navigate ✅, wait ❌ (non-halting), screenshot ✅ — all three dispatched.
+    expect(res.results).toHaveLength(3);
+    expect(res.results[0]!.kind).toBe('success');
+    expect(res.results[1]!.kind).toBe('failure'); // the wait
+    expect(res.results[2]!.kind).toBe('success'); // the screenshot STILL ran
+    expect(got.map((d) => d.intentName)).toEqual(['navigate', 'wait_for', 'screenshot']);
+  });
+
+  it('#139 a timed-out `wait` is single-shot (condition_not_met is not retried — no redundant re-wait)', async () => {
+    const { got, dispatcher } = mockDispatcher((d) =>
+      failResult(d.intentId, 'intent_webdriver_failed'),
+    );
+    // maxRetries:3 would normally retry a retryable failure; a wait timeout must
+    // NOT (sleep is never reached since shouldRetry is false → no delay needed).
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), { maxRetries: 3 });
+    const res = await exec.execute(planArgs([{ kind: 'wait', condition: 'idle' }]));
+    expect(res.results).toHaveLength(1);
+    expect(res.results[0]!.kind).toBe('failure');
+    expect(got.filter((d) => d.intentName === 'wait_for')).toHaveLength(1); // NOT 4 — single-shot
+  });
+
   it('an unsupported intent fails WITHOUT dispatching + halts the plan', async () => {
     const { got, dispatcher } = mockDispatcher((d) => okResult(d.intentId));
     const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());

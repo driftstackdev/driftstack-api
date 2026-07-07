@@ -111,7 +111,13 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         mapped.params,
       );
       results.push(result);
-      if (result.kind === 'failure') break; // halt-on-first-failure
+      // #139 — halt-on-first-failure, EXCEPT a `wait`: a wait is a best-effort
+      // synchronization hint (the decomposer inserts idle-settles that a navigate
+      // already covers). A wait timing out must NOT abort the plan and lose the
+      // steps after it (e.g. the customer's screenshot) — if a later action truly
+      // depends on the awaited state, that action fails on its own with a clearer
+      // reason. Any non-wait failure still halts.
+      if (result.kind === 'failure' && intent.kind !== 'wait') break;
     }
 
     return { results, ok: results.every((r) => r.kind === 'success') };
@@ -186,10 +192,20 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         result.kind === 'failure' &&
         result.diagnosis?.category === 'session_error' &&
         intent.kind === 'interact';
+      // #139 — a `wait_for` already has its OWN internal timeout (timeout_seconds);
+      // retrying a timed-out wait just re-waits the same duration for the same
+      // still-false condition — pure latency (3×5s), never a different outcome. So
+      // a wait is single-shot (except a genuine transport session_error, which is a
+      // dispatch problem, not a condition timeout — that still retries here).
+      const isRedundantWaitRetry =
+        result.kind === 'failure' &&
+        intent.kind === 'wait' &&
+        result.diagnosis?.category === 'condition_not_met';
       const shouldRetry =
         result.kind === 'failure' &&
         result.diagnosis?.retryable === true &&
         !maybeAlreadyApplied &&
+        !isRedundantWaitRetry &&
         attempt < this.maxRetries;
       if (!shouldRetry) return result;
       await this.sleep(this.retryDelayMs);
