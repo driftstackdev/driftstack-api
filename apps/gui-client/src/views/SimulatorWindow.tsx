@@ -2079,8 +2079,11 @@ function CookiesPane({
         </div>
       )}
 
-      {/* Body — inert states, then the per-domain expandable jar. */}
-      <div className="max-h-56 overflow-y-auto px-2 py-2">
+      {/* Body — inert states, then the per-domain expandable jar. Grows to use
+          most of the simulator height (founder: the box was "only a small part of
+          the height") — responsive cap so a long jar is browsable, short jars stay
+          compact, and it never overflows the window. */}
+      <div className="max-h-[55vh] overflow-y-auto px-2 py-2">
         {cookies === null ? (
           <div className="px-1 py-1 font-mono text-[10px] text-white/40">
             {cookiesNote ?? 'loading…'}
