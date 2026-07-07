@@ -118,7 +118,7 @@ describe('agentIntentToDispatch — wait:selector_visible → wait_for', () => {
     expect(r).toEqual({
       ok: true,
       intentName: 'wait_for',
-      params: { predicate: '!!document.querySelector(".ready")' },
+      params: { predicate: 'return !!document.querySelector(".ready");' },
     });
   });
 
@@ -156,7 +156,7 @@ describe('agentIntentToDispatch — wait:selector_visible → wait_for', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error('narrow');
     // The selector must appear ONLY as a JSON string literal argument.
-    expect(r.params.predicate).toBe(`!!document.querySelector(${JSON.stringify(evil)})`);
+    expect(r.params.predicate).toBe(`return !!document.querySelector(${JSON.stringify(evil)});`);
     // No raw break-out: the fetch payload is inside the quoted literal.
     expect(r.params.predicate).not.toMatch(/querySelector\(""\)\);/);
   });
@@ -192,7 +192,7 @@ describe('agentIntentToDispatch — typed unsupported', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error('narrow');
     expect(r.intentName).toBe('wait_for');
-    expect(r.params).toEqual({ predicate: "document.readyState === 'complete'" });
+    expect(r.params).toEqual({ predicate: "return document.readyState === 'complete';" });
   });
 
   it('#139 wait:idle carries timeout_seconds when timeoutMs ≥ 1s', () => {
@@ -200,7 +200,7 @@ describe('agentIntentToDispatch — typed unsupported', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error('narrow');
     expect(r.params).toEqual({
-      predicate: "document.readyState === 'complete'",
+      predicate: "return document.readyState === 'complete';",
       timeout_seconds: 5,
     });
   });

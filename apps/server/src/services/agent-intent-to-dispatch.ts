@@ -188,7 +188,11 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
       }
       // Build a truthy JS predicate. JSON.stringify makes the selector a
       // safe JS string literal (no predicate injection from the selector).
-      const predicate = `!!document.querySelector(${JSON.stringify(intent.selector)})`;
+      // #139 — the box's waitFor runs the predicate as a WebDriver FUNCTION BODY
+      // (execute/sync wraps it in `function(){ … }`), so it needs an explicit
+      // `return` to yield a value — a bare expression returns undefined → the
+      // condition is never met → a full 5s timeout. Emit a return-statement.
+      const predicate = `return !!document.querySelector(${JSON.stringify(intent.selector)});`;
       const params: Record<string, unknown> = { predicate };
       if (intent.timeoutMs !== undefined) {
         const seconds = Math.ceil(intent.timeoutMs / 1000);
@@ -208,7 +212,13 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
       // after a navigate it's usually already true, so it resolves near-instantly.
       // Previously this returned ok:false → the executor HALTED the whole plan on
       // the settle step, so a "navigate then screenshot" plan lost its screenshot.
-      const params: Record<string, unknown> = { predicate: "document.readyState === 'complete'" };
+      // `return …;` — the box waitFor evaluates the predicate as a function body
+      // (see selector_visible above); a bare expression yields undefined → 5s
+      // timeout. On a loaded page readyState==='complete' resolves on the first
+      // 250ms poll → ~instant.
+      const params: Record<string, unknown> = {
+        predicate: "return document.readyState === 'complete';",
+      };
       if (intent.timeoutMs !== undefined) {
         const seconds = Math.ceil(intent.timeoutMs / 1000);
         if (seconds >= 1) params.timeout_seconds = seconds;
