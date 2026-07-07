@@ -40,9 +40,9 @@ export type AgentIntentDispatch =
  *
  * Clean 1:1 mappings (navigate / tap→click / type→send_keys /
  * scroll→scroll / wait:selector_visible→wait_for / screenshot /
- * dom_snapshot→get_page_source) return `{ ok: true, ... }`. Verbs with no
- * faithful harness target (swipe, wait:idle, pdf) and intents missing a
- * required field return `{ ok: false, reason }`.
+ * dom_snapshot→get_page_source, wait:idle→wait_for[readyState==='complete'])
+ * return `{ ok: true, ... }`. Verbs with no faithful harness target (swipe, pdf)
+ * and intents missing a required field return `{ ok: false, reason }`.
  *
  * The produced params are validated against the canonical harness param
  * schema for the chosen intentName; a validation miss returns `ok:false`
@@ -199,13 +199,22 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
       return { ok: true, intentName: 'wait_for', params };
     }
 
-    case 'idle':
-      // No harness predicate maps to "network/page idle"; the harness
-      // wait_for needs a concrete JS predicate. Don't fabricate one.
-      return {
-        ok: false,
-        reason: 'wait:idle has no harness predicate; pending vocab reconciliation',
-      };
+    case 'idle': {
+      // #139 — the decomposer reliably inserts a `wait{condition:idle}` settle
+      // step after a navigate ("let the page finish loading"). Map it to the
+      // canonical page-settled predicate `document.readyState === 'complete'`
+      // (the same wait_for mechanism selector_visible uses). This is what
+      // "idle" means for automation in practice — the document finished loading;
+      // after a navigate it's usually already true, so it resolves near-instantly.
+      // Previously this returned ok:false → the executor HALTED the whole plan on
+      // the settle step, so a "navigate then screenshot" plan lost its screenshot.
+      const params: Record<string, unknown> = { predicate: "document.readyState === 'complete'" };
+      if (intent.timeoutMs !== undefined) {
+        const seconds = Math.ceil(intent.timeoutMs / 1000);
+        if (seconds >= 1) params.timeout_seconds = seconds;
+      }
+      return { ok: true, intentName: 'wait_for', params };
+    }
   }
 }
 

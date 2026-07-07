@@ -185,11 +185,24 @@ describe('agentIntentToDispatch — typed unsupported', () => {
     expect(r.reason).toMatch(/requires a value/);
   });
 
-  it('wait:idle → unsupported (no harness predicate)', () => {
+  it("#139 wait:idle → wait_for with the page-settled predicate (document.readyState === 'complete')", () => {
+    // The decomposer inserts an idle-settle after navigate; it must map to a real
+    // wait_for predicate, not halt the plan (which lost the following screenshot).
     const r = agentIntentToDispatch({ kind: 'wait', condition: 'idle' });
-    expect(r.ok).toBe(false);
-    if (r.ok) throw new Error('narrow');
-    expect(r.reason).toMatch(/idle has no harness predicate/);
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('narrow');
+    expect(r.intentName).toBe('wait_for');
+    expect(r.params).toEqual({ predicate: "document.readyState === 'complete'" });
+  });
+
+  it('#139 wait:idle carries timeout_seconds when timeoutMs ≥ 1s', () => {
+    const r = agentIntentToDispatch({ kind: 'wait', condition: 'idle', timeoutMs: 5000 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('narrow');
+    expect(r.params).toEqual({
+      predicate: "document.readyState === 'complete'",
+      timeout_seconds: 5,
+    });
   });
 
   it('capture:pdf → unsupported (no harness pdf intent)', () => {
