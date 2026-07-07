@@ -437,9 +437,12 @@ export function AgentChatView({
         className="flex h-full min-w-0 flex-1 flex-col"
         data-component="ai-automation-chat-column"
       >
-        {/* Header */}
-        <header className="flex items-center justify-between gap-3 border-b border-surface-divider px-4 py-2.5">
-          <div className="flex items-center gap-2">
+        {/* Header — #139: flex-wrap + min-w-0 so the dense control cluster (live
+            toggle, budget, profile, model, save, new chat) WRAPS to a second row
+            at narrow widths instead of pushing the rightmost buttons off the
+            panel edge (founder: "buttons cut off / run outside the panel"). */}
+        <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-surface-divider px-4 py-2.5">
+          <div className="flex min-w-0 items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded bg-accent-subtle text-accent">
               <IconSparkle />
             </span>
@@ -465,7 +468,7 @@ export function AgentChatView({
               {aiReady ? 'AI ready' : 'Not connected'}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {/* Below lg the live-view pane is hidden; this button reveals it as a
                 slide-over (hidden at lg+, where the pane is always inline). */}
             <button
@@ -732,7 +735,7 @@ export function AgentChatView({
                 type="button"
                 onClick={() => chat.cancel()}
                 title="Stop waiting for this reply"
-                className="rounded border border-surface-divider px-3 py-2 text-sm hover:bg-surface-elevated"
+                className="shrink-0 rounded border border-surface-divider px-3 py-2 text-sm hover:bg-surface-elevated"
               >
                 Stop
               </button>

@@ -1456,7 +1456,7 @@ function BrowserBar({
               strokeLinecap="round"
               strokeLinejoin="round"
               aria-hidden="true"
-              className="text-emerald-400"
+              className="text-accent"
             >
               <path d="M20 6 9 17l-5-5" />
             </svg>
@@ -1823,9 +1823,9 @@ function CookieFlag({
   label: string;
 }): JSX.Element {
   const cls = {
-    secure: 'bg-emerald-400/15 text-emerald-300',
-    http: 'bg-sky-400/15 text-sky-300',
-    ss: 'bg-violet-400/15 text-violet-300',
+    secure: 'bg-surface-inset text-ink-secondary',
+    http: 'bg-surface-inset text-ink-secondary',
+    ss: 'bg-surface-inset text-ink-secondary',
     exp: 'bg-white/10 text-white/45',
   }[kind];
   return (
@@ -2007,12 +2007,9 @@ function CookiesPane({
         {cookies !== null && (
           <span
             data-component="simulator-cookies-live"
-            className="inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-300"
+            className="inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-ink-secondary"
           >
-            <span
-              aria-hidden="true"
-              className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.8)]"
-            />
+            <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
             live
           </span>
         )}
@@ -2147,7 +2144,9 @@ function CookiesPane({
                           className="rounded-md bg-white/[0.025] px-2 py-1.5 transition-colors hover:bg-white/5"
                         >
                           <div className="flex items-center gap-1.5 font-mono text-[10.5px]">
-                            <span className="shrink-0 font-semibold text-sky-300">{c.name}</span>
+                            <span className="shrink-0 font-semibold text-ink-secondary">
+                              {c.name}
+                            </span>
                             <span className="min-w-0 flex-1 truncate text-white/40">{c.value}</span>
                           </div>
                           <div className="mt-1 flex flex-wrap gap-1">
@@ -5483,7 +5482,7 @@ export function SimulatorWindow(): JSX.Element {
                     data-component="page-error-overlay"
                     className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/75 px-6 text-center"
                   >
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-rose-300">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-status-error">
                       Page failed to load
                     </span>
                     <span className="max-w-xs text-sm text-white">{pageErrorCopy(pageError)}</span>
@@ -5510,7 +5509,7 @@ export function SimulatorWindow(): JSX.Element {
                     role="status"
                     data-component="transport-fallback-badge"
                     title="The video is going through a TCP/TURN relay because direct UDP is blocked (firewall / NAT / ISP). Real-time video over TCP head-of-line-blocks, which feels very slow. Fix: open the box UDP port range to your network, or use a closer (EU) box."
-                    className="absolute left-1/2 top-32 z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-rose-600/90 px-3 py-1 text-[10px] font-semibold text-white shadow"
+                    className="absolute left-1/2 top-32 z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-status-error px-3 py-1 text-[10px] font-semibold text-white shadow"
                   >
                     ⚠ Slow link — video{' '}
                     {conn.relayed === true ? 'relayed' : `over ${conn.transport?.toUpperCase()}`}{' '}
@@ -5777,8 +5776,8 @@ export function SimulatorWindow(): JSX.Element {
                             <span
                               className={
                                 conn.transport === 'udp' && conn.relayed !== true
-                                  ? 'text-emerald-300'
-                                  : 'text-rose-300'
+                                  ? 'text-ink-secondary'
+                                  : 'text-status-error'
                               }
                             >
                               {conn.transport}
@@ -5793,14 +5792,14 @@ export function SimulatorWindow(): JSX.Element {
                           {latency.rttMs !== null ? (
                             <span
                               className={
-                                latency.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'
+                                latency.rttMs < 150 ? 'text-ink-secondary' : 'text-amber-300'
                               }
                             >
                               {latency.rttMs}ms
                             </span>
                           ) : conn.rttMs !== null ? (
                             <span
-                              className={conn.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'}
+                              className={conn.rttMs < 150 ? 'text-ink-secondary' : 'text-amber-300'}
                             >
                               {conn.rttMs}ms
                             </span>
@@ -5942,7 +5941,8 @@ export function SimulatorWindow(): JSX.Element {
                     {activePane === 'diagnostics' &&
                       (() => {
                         // The latency value the strip/Copy report, with its
-                        // health color preserved (emerald < 150ms, else amber).
+                        // health color (#139 sweep: neutral ink < 150ms, else the
+                        // kept amber "warn" cue — good stays quiet, slow warns).
                         const rttMs = latency.rttMs !== null ? latency.rttMs : conn.rttMs;
                         const rttFromLink = latency.rttMs === null && conn.rttMs !== null;
                         const rttHealthy = rttMs !== null && rttMs < 150;
@@ -5999,7 +5999,7 @@ export function SimulatorWindow(): JSX.Element {
                                   <>
                                     <div
                                       className={`mt-0.5 text-[16px] font-bold leading-none ${
-                                        rttHealthy ? 'text-emerald-300' : 'text-amber-300'
+                                        rttHealthy ? 'text-ink-secondary' : 'text-amber-300'
                                       }`}
                                     >
                                       {rttMs}
@@ -6037,8 +6037,8 @@ export function SimulatorWindow(): JSX.Element {
                                   <span
                                     className={
                                       conn.transport === 'udp' && conn.relayed !== true
-                                        ? 'text-emerald-300'
-                                        : 'text-rose-300'
+                                        ? 'text-ink-secondary'
+                                        : 'text-status-error'
                                     }
                                   >
                                     {conn.transport}
@@ -6099,7 +6099,7 @@ export function SimulatorWindow(): JSX.Element {
                               </div>
                               <div className="mt-0.5 truncate">
                                 {info ? wsHost(info.ws_url) : 'not connected'}
-                                {info && <span className="text-emerald-300"> · ws ✓</span>}
+                                {info && <span className="text-ink-secondary"> · ws ✓</span>}
                               </div>
                             </div>
                             {proxyLabel !== '' && (
@@ -6296,10 +6296,10 @@ export function SimulatorWindow(): JSX.Element {
                             <span className="text-white/40">· {downloads.length}</span>
                           )}
                           {downloads !== null && (
-                            <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold text-emerald-300">
+                            <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold text-ink-secondary">
                               <span
                                 aria-hidden="true"
-                                className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.8)]"
+                                className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent"
                               />
                               live
                             </span>
@@ -6469,7 +6469,7 @@ export function SimulatorWindow(): JSX.Element {
                                     >
                                       <span
                                         aria-hidden="true"
-                                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-400/15 text-emerald-300"
+                                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-surface-inset text-ink-secondary"
                                       >
                                         <svg
                                           width="13"

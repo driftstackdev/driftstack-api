@@ -17,7 +17,7 @@ import {
 const LEVEL_COLOR: Record<LogLevel, string> = {
   error: 'text-red-400',
   warn: 'text-amber-400',
-  info: 'text-sky-300',
+  info: 'text-ink-secondary',
   debug: 'text-white/40',
   log: 'text-white/70',
 };
