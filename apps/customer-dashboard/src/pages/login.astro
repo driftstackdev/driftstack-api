@@ -118,7 +118,14 @@ const apiBaseUrl = resolveApiBaseUrl();
            as a plain login. Pre-W528 this branch dead-ended with a banner
            telling the customer to use the API instead — an MFA-enrolled
            customer could not sign in to the dashboard at all. -->
-      <form data-form="mfa" class="hidden space-y-5" aria-label="Two-factor verification">
+      <!-- novalidate: this form has TWO inputs (authenticator code + recovery
+           code), only one visible at a time via the toggle. Native HTML5
+           constraint validation runs on the HIDDEN input too, so a partial code
+           left in the display:none field would silently block Verify (the browser
+           can't focus/report on a hidden field). The submit handler already
+           validates the ACTIVE method in JS with a friendly inline message, so
+           native validation is redundant here. (audit 2026-07-07) -->
+      <form data-form="mfa" novalidate class="hidden space-y-5" aria-label="Two-factor verification">
         <p class="text-sm text-tk-ink-2">
           Enter the 6-digit code from your authenticator app.
         </p>

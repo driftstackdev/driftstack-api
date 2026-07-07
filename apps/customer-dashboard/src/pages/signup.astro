@@ -12,6 +12,25 @@ const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <DashboardLayout title="Sign up" withSidebar={false}>
+  <script is:inline>
+    // Audit 2026-07-07 (same class as the /login authed-redirect fix): an
+    // already-authenticated visitor (session token in localStorage) must NOT see
+    // the Create-account form — bounce them to the dashboard (or same-origin
+    // ?next=). DashboardLayout's pre-paint auth gate is gated on withSidebar, so it
+    // never runs on this withSidebar={false} page. Loop-safe: the dashboard
+    // re-validates the token and bounces a stale one back to /login (clearing it).
+    (function () {
+      try {
+        var t = localStorage.getItem('ds_web_session_token');
+        if (!t || t.length === 0) return;
+        var raw = new URLSearchParams(location.search).get('next') || '/';
+        var dest = raw.charAt(0) === '/' && raw.charAt(1) !== '/' ? raw : '/';
+        location.replace(dest);
+      } catch (_) {
+        /* localStorage blocked → fall through and show the form */
+      }
+    })();
+  </script>
   {/* 2026-05-22 — hero-glow atmosphere on signup surface matches the
       marketing site + login page. */}
   <div class="relative overflow-hidden">
