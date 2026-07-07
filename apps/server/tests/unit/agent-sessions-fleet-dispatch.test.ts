@@ -902,9 +902,9 @@ describe('dispatchSessionAssignOnCreate', () => {
       quic_ok: true,
     });
     // probed_at is a valid ISO string the panel can show.
-    expect(
-      Number.isNaN(Date.parse((frame.exit_identity as Record<string, string>).probed_at)),
-    ).toBe(false);
+    expect(Number.isNaN(Date.parse((frame.exit_identity as { probed_at: string }).probed_at))).toBe(
+      false,
+    );
   });
 
   it('quic_ok=false when the resolved socks5 proxy was NOT UDP-verified (udp_associate is a wish, not proof)', async () => {
