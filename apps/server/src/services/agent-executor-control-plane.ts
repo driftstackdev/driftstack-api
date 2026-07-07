@@ -100,6 +100,11 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       const mapped = agentIntentToDispatch(intent);
       if (!mapped.ok) {
         results.push({ kind: 'failure', intent, reason: mapped.reason });
+        // #139 — a best-effort `wait` that can't even be MAPPED (e.g. the model
+        // emits `selector_visible` with no selector) must NOT abort the plan and
+        // lose the steps after it (the customer's screenshot), mirroring the
+        // dispatch-failure exemption below. Any OTHER unmappable intent still halts.
+        if (intent.kind === 'wait') continue;
         break;
       }
 

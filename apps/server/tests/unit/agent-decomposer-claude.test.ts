@@ -191,6 +191,33 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       ]);
     });
 
+    it('#139 BARE-STRING verb-keyed intents keep their param (not dropped) — {capture:"screenshot"} etc.', async () => {
+      // Review finding: a primitive verb value ({navigate:"url"}, {capture:"screenshot"},
+      // {scroll:"down"}) was normalized to {kind:verb} with the param discarded, so
+      // parseIntents silently dropped it = "AI does nothing" via a new shape. The
+      // primitive must route to the verb's primary param.
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'plan',
+          intents: [
+            { navigate: 'https://x.test' },
+            { scroll: 'down' },
+            { interact: 'tap' },
+            { capture: 'screenshot' },
+          ],
+        }),
+      ]);
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      expect(res.kind).toBe('plan');
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toEqual([
+        { kind: 'navigate', url: 'https://x.test' },
+        { kind: 'scroll', direction: 'down' },
+        { kind: 'interact', action: 'tap' },
+        { kind: 'capture', capture: 'screenshot' },
+      ]);
+    });
+
     it('#139 canonical kind-keyed AND verb-keyed intents coexist in one plan', async () => {
       const { fetch } = sequenceFetch([
         jsonResponse({

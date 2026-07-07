@@ -99,14 +99,21 @@ describe('services/agent-executor content parity', () => {
     expect(body).toMatch(/case 'capture':\s*\n?\s*return `stub captured \$\{intent\.capture\}`;/);
   });
 
-  it("runResultToTranscriptEntry serialization helper framing pinned: 'render an ExecutorRunResult as a TranscriptEntry the agent's next turn can read. Keeps the serialization rule in one place — every consumer that wants to append executor results to a transcript must use this so the decomposer sees consistent output formatting in history.' + ✓/✗ glyph + '(plan halted on failure)' suffix on ok=false — pinned so the single-source-of-truth-serialization contract + the consistent-history-format-for-decomposer rationale + the glyph-encoding (✓ success / ✗ failure) survive", () => {
+  it("runResultToTranscriptEntry serialization helper framing pinned: 'render an ExecutorRunResult as a TranscriptEntry the agent's next turn can read. Keeps the serialization rule in one place — every consumer that wants to append executor results to a transcript must use this so the decomposer sees consistent output formatting in history.' + ✓/✗ glyph + '(plan halted on failure)' suffix ONLY on a NON-wait failure (#139: a best-effort wait failure no longer halts, so the suffix must NOT key on !ok) — pinned so the single-source-of-truth-serialization contract + the consistent-history-format-for-decomposer rationale + the glyph-encoding (✓ success / ✗ failure) survive", () => {
     expect(body).toMatch(
       /\* Helper for the dashboard chat-UI: render an ExecutorRunResult as a\s*\n?\s*\*\s+TranscriptEntry the agent's next turn can read\. Keeps the\s*\n?\s*\*\s+serialization rule in one place — every consumer that wants to\s*\n?\s*\*\s+append executor results to a transcript must use this so the\s*\n?\s*\*\s+decomposer sees consistent output formatting in `history`\./,
     );
     expect(body).toMatch(/lines\.push\(`✓ \$\{r\.summary\}`\);/);
     expect(body).toMatch(/lines\.push\(`✗ \$\{r\.intent\.kind\} — \$\{r\.reason\}`\);/);
+    // #139 — the "(plan halted on failure)" suffix keys on a NON-wait failure
+    // (an actual halt), NOT on !ok (which is true even when a best-effort wait
+    // failed but later steps completed). Guard against a regression back to !ok.
     expect(body).toMatch(
-      /if \(!runResult\.ok\) \{\s*\n?\s*lines\.push\('\(plan halted on failure\)'\);\s*\n?\s*\}/,
+      /runResult\.results\.some\(\(r\) => r\.kind === 'failure' && r\.intent\.kind !== 'wait'\)/,
+    );
+    expect(body).toMatch(/lines\.push\('\(plan halted on failure\)'\);/);
+    expect(body).not.toMatch(
+      /if \(!runResult\.ok\) \{\s*\n?\s*lines\.push\('\(plan halted on failure\)'\)/,
     );
     expect(body).toMatch(/role: 'agent',/);
   });

@@ -386,6 +386,20 @@ const KNOWN_INTENT_VERBS: ReadonlySet<string> = new Set([
   'behavioral_pause',
 ]);
 
+/** #139 — for a verb-keyed intent whose value is a bare PRIMITIVE (the model
+ *  inlining the sole param, e.g. `{ "capture": "screenshot" }`, `{ "navigate":
+ *  "https://…" }`), the param key to route that primitive under. Verbs with no
+ *  single primary param (behavioral_pause) are omitted → stay a bare `{kind}`.
+ *  Without this the primitive is discarded and parseIntents silently drops the
+ *  whole intent — the "AI does nothing" symptom, re-introduced via a new shape. */
+const VERB_PRIMARY_PARAM: Readonly<Record<string, string>> = {
+  navigate: 'url',
+  capture: 'capture',
+  scroll: 'direction',
+  interact: 'action',
+  wait: 'condition',
+};
+
 /**
  * Normalize a raw model intent object to the canonical `{ kind, ...params }`
  * shape the switch below expects. Opus 4.x reliably emits intents VERB-KEYED —
@@ -405,9 +419,13 @@ function normalizeIntentShape(i: Record<string, unknown>): Record<string, unknow
   if (keys.length === 1 && KNOWN_INTENT_VERBS.has(keys[0]!)) {
     const verb = keys[0]!;
     const params = i[verb];
-    return typeof params === 'object' && params !== null
-      ? { kind: verb, ...(params as Record<string, unknown>) }
-      : { kind: verb };
+    if (typeof params === 'object' && params !== null) {
+      return { kind: verb, ...(params as Record<string, unknown>) };
+    }
+    // A bare PRIMITIVE value ({ "capture": "screenshot" }) → route it to the
+    // verb's primary param so parseIntents keeps the intent instead of dropping it.
+    const primary = VERB_PRIMARY_PARAM[verb];
+    return primary !== undefined ? { kind: verb, [primary]: params } : { kind: verb };
   }
   return i;
 }

@@ -124,6 +124,36 @@ describe('AI-B2 runResultToTranscriptEntry', () => {
     expect(entry.body).toContain('(plan halted on failure)');
   });
 
+  it('#139 does NOT append "(plan halted on failure)" when only a best-effort wait failed but a later step ran', () => {
+    // A wait failure no longer halts the plan (later steps run), so ok=false does
+    // NOT mean the plan halted — the misleading suffix must be suppressed.
+    const runResult: ExecutorRunResult = {
+      results: [
+        {
+          kind: 'success',
+          intent: { kind: 'navigate', url: 'https://x' },
+          summary: 'navigated to https://x',
+        },
+        {
+          kind: 'failure',
+          intent: { kind: 'wait', condition: 'idle' },
+          reason: 'the wait condition was never met',
+        },
+        {
+          kind: 'success',
+          intent: { kind: 'capture', capture: 'screenshot' },
+          summary: 'captured screenshot',
+        },
+      ],
+      ok: false, // every()===false because the wait failed — but nothing HALTED
+    };
+    const entry = runResultToTranscriptEntry(runResult, '2026-05-16T00:00:00Z');
+    expect(entry.body).toContain('✓ navigated to https://x');
+    expect(entry.body).toContain('✗ wait — the wait condition was never met');
+    expect(entry.body).toContain('✓ captured screenshot');
+    expect(entry.body).not.toContain('plan halted'); // the plan completed
+  });
+
   it('uses agent role on transcript entries (so the decomposer sees them as its own prior turns)', () => {
     const runResult: ExecutorRunResult = { results: [], ok: true };
     const entry = runResultToTranscriptEntry(runResult, '2026-05-16T00:00:00Z');

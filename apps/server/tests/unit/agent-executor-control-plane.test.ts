@@ -154,6 +154,41 @@ describe('ControlPlaneAgentExecutor', () => {
     expect(got.filter((d) => d.intentName === 'wait_for')).toHaveLength(1); // NOT 4 — single-shot
   });
 
+  it('#139 an UNMAPPABLE `wait` (selector_visible w/ no selector) is non-halting — later steps still run', async () => {
+    // A wait that fails at the MAPPING stage (not dispatch) must also not abort the
+    // plan + lose the screenshot. Regression for the review finding: the non-halting
+    // guarantee originally only covered dispatch-stage wait failures.
+    const { got, dispatcher } = mockDispatcher((d) => okResult(d.intentId));
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), { maxRetries: 0 });
+    const res = await exec.execute(
+      planArgs([
+        { kind: 'navigate', url: 'https://x' },
+        { kind: 'wait', condition: 'selector_visible' }, // no selector → mapWait ok:false
+        { kind: 'capture', capture: 'screenshot' },
+      ]),
+    );
+    expect(res.results).toHaveLength(3);
+    expect(res.results[0]!.kind).toBe('success'); // navigate
+    expect(res.results[1]!.kind).toBe('failure'); // the unmappable wait
+    expect(res.results[2]!.kind).toBe('success'); // screenshot STILL ran
+    // The wait never dispatched (mapping failed); navigate + screenshot did.
+    expect(got.map((d) => d.intentName)).toEqual(['navigate', 'screenshot']);
+  });
+
+  it('#139 an unmappable NON-wait intent still halts the plan', async () => {
+    const { got, dispatcher } = mockDispatcher((d) => okResult(d.intentId));
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const res = await exec.execute(
+      planArgs([
+        { kind: 'interact', action: 'swipe' }, // no harness intent → unmappable, halts
+        { kind: 'capture', capture: 'screenshot' }, // must NOT run
+      ]),
+    );
+    expect(res.results).toHaveLength(1);
+    expect(res.results[0]!.kind).toBe('failure');
+    expect(got).toHaveLength(0);
+  });
+
   it('an unsupported intent fails WITHOUT dispatching + halts the plan', async () => {
     const { got, dispatcher } = mockDispatcher((d) => okResult(d.intentId));
     const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());

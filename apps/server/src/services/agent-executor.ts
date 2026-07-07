@@ -471,7 +471,12 @@ export function runResultToTranscriptEntry(
   }
   if (runResult.awaitingConfirmation) {
     lines.push('(plan paused — awaiting your confirmation of a consequential action)');
-  } else if (!runResult.ok) {
+  } else if (runResult.results.some((r) => r.kind === 'failure' && r.intent.kind !== 'wait')) {
+    // #139 — a best-effort `wait` failure no longer halts the plan (later steps
+    // still run), so `!ok` alone no longer implies a halt. Only a NON-wait failure
+    // actually breaks the run; a wait-only failure means the plan ran to completion
+    // (its own ✗ line above already records the wait fault). Claiming "halted" when
+    // a later step succeeded would contradict the transcript + mislead the next turn.
     lines.push('(plan halted on failure)');
   }
   return {
