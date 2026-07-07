@@ -362,12 +362,39 @@ const nextItem =
           setOpen(false);
         }
       });
-      /* S22.2 — with all 50 routes in the tree the active item can sit
-         below the fold of the sidebar's own scroll pane; nudge it into
-         view (block: nearest = no page jump, only the nearest scrollable
-         ancestor moves). */
+      /* S48 2026-07-07 (founder UX report) — every docs navigation is a full page load,
+         so the sidebar used to re-render scrolled to the top ("it auto
+         scrolls the navigation back up"). Persist the pane's scrollTop
+         across navigations (sessionStorage, saved on pagehide + on nav
+         clicks), restore it before paint-adjacent work, and only nudge
+         the active item into view when it is genuinely outside the
+         restored viewport (the S22.2 nudge is now conditional). */
+      var navPane = document.querySelector('aside[data-doc-mobile-nav] nav');
+      if (navPane) {
+        try {
+          var savedScroll = sessionStorage.getItem('ds_docs_nav_scroll');
+          if (savedScroll !== null) navPane.scrollTop = parseInt(savedScroll, 10) || 0;
+        } catch (_) {
+          /* storage unavailable — fresh pane each load, as before */
+        }
+        function saveNavScroll() {
+          try {
+            sessionStorage.setItem('ds_docs_nav_scroll', String(navPane.scrollTop));
+          } catch (_) {
+            /* best-effort */
+          }
+        }
+        window.addEventListener('pagehide', saveNavScroll);
+        navPane.addEventListener('click', saveNavScroll);
+      }
       var current = document.querySelector('aside[data-doc-mobile-nav] a[aria-current="page"]');
-      if (current && current.scrollIntoView) current.scrollIntoView({ block: 'nearest' });
+      if (current && navPane && current.scrollIntoView) {
+        var paneRect = navPane.getBoundingClientRect();
+        var itemRect = current.getBoundingClientRect();
+        if (itemRect.top < paneRect.top || itemRect.bottom > paneRect.bottom) {
+          current.scrollIntoView({ block: 'nearest' });
+        }
+      }
     })();
   </script>
   <script is:inline>
