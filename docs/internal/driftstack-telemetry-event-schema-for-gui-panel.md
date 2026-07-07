@@ -65,7 +65,7 @@ type NotificationEvent =
       kind: 'incident.broadcast';
       accountId: string;
       incidentId: string;
-      severity: 'minor' | 'major' | 'critical';
+      severity: 'minor' | 'major' | 'outage'; // matches IncidentSeverity (S45 doc fix: was 'critical' — the shipped union has always used 'outage')
       title: string;
       at: string;
     }
@@ -124,9 +124,16 @@ on the production journal independent of the customer-facing channel.
 
 ## Future publishers (catalogue)
 
-- `incident-broadcast.ts` — duplicate the V-295e `IncidentEventBus`
+- ~~`incident-broadcast.ts` — duplicate the V-295e `IncidentEventBus`
   publish into the per-affected-account notification stream when an
-  incident's `customer_visible` flag flips true.
+  incident's `customer_visible` flag flips true.~~ **SHIPPED S45
+  2026-07-07** — implemented in `lib/bootstrap.ts` (not
+  incident-broadcast.ts, which stays Slack/outbound-only): every
+  public-incident lifecycle hook (created / updated / resolved) calls
+  `notificationEventBus.publishBroadcast` with the
+  `'incident.broadcast'` frame, fanning out to every account with a
+  live subscriber (per-subscriber `accountId` stamping — see
+  `publishBroadcast` in notification-event-bus.ts).
 - `account-audit.ts` — selective republish for audit actions whose
   catalog entry has `severity >= 'high'` (e.g. `api_key.revoked`,
   `byok_anthropic.key_set`, `team.member_removed`). Most low-severity

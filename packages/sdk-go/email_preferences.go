@@ -7,8 +7,8 @@ import (
 // EmailPreferencesResource handles /v1/account/email-preferences (V-204).
 //
 // Per-event opt-in/opt-out for non-critical emails. Critical emails
-// (verification / password-reset / billing-failure / subscription-
-// cancellation / support-ack) are not opt-outable by design.
+// (verification / password-reset / billing-failure) are
+// not opt-outable by design.
 type EmailPreferencesResource struct {
 	client *Client
 }

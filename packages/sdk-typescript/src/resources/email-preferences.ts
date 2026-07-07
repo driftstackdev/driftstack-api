@@ -3,9 +3,9 @@
 // Per-event opt-in/opt-out toggles for non-critical customer emails
 // (signup-welcome, session-failed-first, billing-receipt, etc).
 // Critical emails — signup-verification, password-reset,
-// billing-failure, subscription-cancellation, support-ack — are
-// never opt-outable; they're absent from the OptOutableEmailEvent
-// enum on purpose so the API surface matches the policy.
+// billing-failure — are never opt-outable; they're absent from the
+// OptOutableEmailEvent enum on purpose so the API surface matches
+// the policy.
 
 import type {
   ListEmailPreferencesResponse,

@@ -122,8 +122,9 @@ customers will also bump into.
 
 After 7 days the customer is no longer "new." Move them off
 this playbook into normal customer-support operations
-(`docs/runbooks/incidents.md` for any further issues; standard
-support-ack template at `apps/server/src/services/email.ts`).
+(`docs/runbooks/incidents.md` for any further issues; support
+replies are personal, from `info@driftstack.dev` — the auto-ack
+template was trimmed S44 2026-07-07, founder-approved).
 Schedule a 30-day check-in: "How's it going? Any rough edges
 since week 1?"
 
@@ -138,7 +139,8 @@ since week 1?"
 - `docs/deployment/dr-runbook.md` — disaster recovery procedures
 - `apps/server/src/services/email.ts` — V-486 + V-304 email
   templates (signup-welcome, session-success-first,
-  tier-changed, support-ack)
+  tier-changed; the support-ack template was trimmed S44
+  2026-07-07)
 - `apps/marketing-site/src/data/sub-processors.ts` — V-308a +
   V-478 sub-processor change-log (notify the customer of any
   amendments during their first week)

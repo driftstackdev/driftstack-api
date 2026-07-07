@@ -1,9 +1,8 @@
 """Email preferences resource — /v1/account/email-preferences (V-204 / V-449).
 
 Per-event opt-in/opt-out toggles for non-critical customer emails.
-Critical emails (verification / password-reset / billing-failure /
-subscription-cancellation / support-ack) are not opt-outable; they
-aren't in the OptOutableEmailEvent enum on purpose.
+Critical emails (verification / password-reset / billing-failure)
+are not opt-outable; they aren't in the OptOutableEmailEvent enum on purpose.
 """
 
 from __future__ import annotations

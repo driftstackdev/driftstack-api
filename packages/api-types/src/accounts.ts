@@ -22,9 +22,11 @@ export type Account = z.infer<typeof AccountSchema>;
 
 /**
  * Event types the customer can opt out of. Security + financial emails
- * (signup-verification, password-reset, billing-failure, subscription-
- * cancellation, support-ack) are never opt-outable; they're absent
- * from this enum on purpose so the API surface matches the policy.
+ * (signup-verification, password-reset, billing-failure)
+ * are never opt-outable; they're absent from this enum on purpose so
+ * the API surface matches the policy. (S44 2026-07-07 deleted the
+ * never-wired subscription-cancellation + support-ack templates
+ * outright.)
  */
 export const OptOutableEmailEventSchema = z.enum([
   'signup-welcome',

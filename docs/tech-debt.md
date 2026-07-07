@@ -16,11 +16,22 @@ revisiting, and implementation notes for whoever picks it up.
 
 ---
 
-## TD-001 — Driftstack-branded billing receipts
+## TD-001 — Driftstack-branded billing receipts — RESOLVED 2026-07-07
 
 **Source:** V-202b (founder verdict 2026-05-05).
+**Resolution:** Landed as S44 2026-07-07 (founder-approved wire-in).
+`invoice.payment_succeeded` / `invoice.payment_failed` now dispatch
+`billing.payment_succeeded` / `billing.payment_failed` lifecycle events
+through `AccountLifecycleService` → `sendBillingReceipt` /
+`sendBillingFailure`. Per the founder-approved S44 spec the receipt uses
+the standard V-204 `billing-receipt` opt-OUT preference (superseding the
+Phase-1 opt-IN toggle sketched below); the failure notice is never
+opt-outable. Stripe's own processor receipts remain enabled (augment
+posture — the Phase-2 flip below stays a future option). Dedup rides the
+`processed_stripe_events` ledger; zero-amount invoices are skipped. The
+original entry is retained below for the record.
 
-**Current state:** Stripe's own infrastructure fires billing receipts
+**Current state (historical):** Stripe's own infrastructure fires billing receipts
 (`payment_succeeded` / `payment_failed`) directly to the customer's email
 on file. Driftstack templates exist (`sendBillingReceipt`,
 `sendBillingFailure`) and are listed in the V-204 opt-out preference
