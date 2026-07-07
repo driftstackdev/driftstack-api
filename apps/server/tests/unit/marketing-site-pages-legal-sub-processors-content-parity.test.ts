@@ -114,12 +114,12 @@ describe('W505.A apps/marketing-site/src/pages/legal/sub-processors.md content p
     expect(body).toMatch(/We reply\s*\n?\s*within one business day\./);
   });
 
-  it('Related-docs cross-link 4-set: dpa.md + privacy.md + /docs/security-overview + /docs/data-residency — pinned so the 4-doc reference cluster (binding contract + privacy policy + security architecture + region-pinning) stays complete (drift to dropping /docs/data-residency would orphan the no-cross-region-copy commitment from the register)', () => {
+  it('Related-docs cross-link 4-set: dpa.md + privacy.md + /docs/security-overview + the docs data-residency page (S49: redirected successor) — pinned so the 4-doc reference cluster (binding contract + privacy policy + security architecture + region-pinning) stays complete (drift to dropping /docs/data-residency would orphan the no-cross-region-copy commitment from the register)', () => {
     expect(body).toMatch(/\[Data Processing Addendum\]\(dpa\.md\)/);
     expect(body).toMatch(/\[Privacy Policy\]\(privacy\.md\)/);
     expect(body).toMatch(/\[\/docs\/security-overview\]\(\/docs\/security-overview\)/);
     expect(body).toMatch(
-      /\[\/docs\/data-residency\]\(\/docs\/data-residency\) — region-pinning \+ the\s*\n?\s*no-cross-region-copy guarantee\./,
+      /\[docs\.driftstack\.dev\/reference\/data-residency\]\(https:\/\/docs\.driftstack\.dev\/reference\/data-residency\/\) — region-pinning \+ the\s*\n?\s*no-cross-region-copy guarantee\./,
     );
   });
 

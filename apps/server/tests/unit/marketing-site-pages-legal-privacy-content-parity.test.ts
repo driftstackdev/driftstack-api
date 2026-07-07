@@ -118,7 +118,12 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
     expect(body).toMatch(
       /\*\*Upstash, Inc\.\*\* \(US, Delaware\) — _data resident in EU Frankfurt_/,
     );
-    expect(body).toMatch(/\*\*Cloudflare, Inc\.\*\* \(US, Delaware\) — _EU jurisdiction selected_/);
+    // S49 2026-07-07 (founder-approved; mirrors the S43 register correction) — the EU-jurisdiction-selected claim was not
+    // verifiable and is withdrawn; the row now states the default
+    // jurisdiction + real R2 objects.
+    expect(body).toMatch(/\*\*Cloudflare, Inc\.\*\* \(US, Delaware\)/);
+    expect(body).toMatch(/R2 default jurisdiction \(data replicated EU \+ US\)/);
+    expect(body).not.toMatch(/EU jurisdiction selected/);
     expect(body).toMatch(
       /\*\*Postmark \/ ActiveCampaign LLC\*\* \(US, Delaware\) — _EU sending region_/,
     );

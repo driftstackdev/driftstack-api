@@ -111,8 +111,16 @@ describe('W577.B /docs/legal/privacy-policy.md (part 2) content parity', () => {
     expect(body).toMatch(
       /Managed Redis for caches, rate-limit buckets, and ephemeral session state\./,
     );
-    expect(body).toMatch(/\*\*Cloudflare, Inc\.\*\* \(US, Delaware\) — _EU jurisdiction selected_/);
-    expect(body).toMatch(/DNS, CDN, edge routing, R2 object storage for Recordings/);
+    // S49 2026-07-07 (founder-approved; mirrors the S43 register correction) — the EU-jurisdiction-selected claim was not
+    // verifiable and is withdrawn; the row now states the default
+    // jurisdiction + real R2 objects.
+    expect(body).toMatch(/\*\*Cloudflare, Inc\.\*\* \(US, Delaware\)/);
+    expect(body).toMatch(/R2 default jurisdiction \(data replicated EU \+ US\)/);
+    expect(body).not.toMatch(/EU jurisdiction selected/);
+    expect(body).toMatch(
+      /R2 object storage for customer-uploaded avatars, encrypted profile blobs/,
+    );
+    expect(body).not.toMatch(/R2 object storage for Recordings/);
     expect(body).toMatch(
       /\*\*Postmark \/ ActiveCampaign LLC\*\* \(US, Delaware\) — _EU sending region_/,
     );

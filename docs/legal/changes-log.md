@@ -280,3 +280,13 @@ handleRenewalReminder` (mirror of `handleTierChanged`'s pattern)
     case; the lifecycle event carries amount/currency/renewalDate +
     the source `invoice.upcoming` event id. Mirrored to
     `apps/marketing-site/src/pages/legal/privacy.md`.
+
+- 2026-07-07 (S49) — Privacy Policy §7 sub-processor table: Cloudflare
+  row corrected to match the S43 register correction (same processing,
+  corrected description): R2 stores customer-uploaded avatars,
+  encrypted profile blobs, and public status snapshots (not
+  "Recordings" — never shipped); location is the R2 default
+  jurisdiction with EU + US replication (the account-level "EU
+  jurisdiction selected" claim was not verifiable and is withdrawn);
+  transfer mechanism unchanged (2021 SCCs Module 2 + EU-US DPF).
+  Mirrored to `apps/marketing-site/src/pages/legal/privacy.md`.

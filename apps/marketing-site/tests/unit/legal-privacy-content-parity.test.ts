@@ -77,7 +77,10 @@ describe('W377.B marketing-site /legal/privacy.md content parity', () => {
       /Approximately seven \(7\) days before each\s+recurring subscription invoice is generated, Stripe fires an\s+`invoice\.upcoming` webhook/,
     );
     expect(body).toMatch(/opt out of this email at any time/);
-    expect(body).toMatch(/\[Emails reference page\]\(\/docs\/emails-reference\)/);
+    // S49 2026-07-07 — the mirror page 301s; link goes straight to docs.
+    expect(body).toMatch(
+      /\[Emails reference page\]\(https:\/\/docs\.driftstack\.dev\/reference\/emails\/\)/,
+    );
   });
 
   it('§3.8 marketing-site cookies: strictly-necessary only, no first-party analytics', () => {
@@ -132,7 +135,12 @@ describe('W377.B marketing-site /legal/privacy.md content parity', () => {
   it('§7 Neon + Upstash + Cloudflare data-residency = EU (Frankfurt / EU jurisdiction)', () => {
     expect(body).toMatch(/Neon, Inc\.\*\* \(US, Delaware\) — _data resident in EU Frankfurt_/);
     expect(body).toMatch(/Upstash, Inc\.\*\* \(US, Delaware\) — _data resident in EU Frankfurt_/);
-    expect(body).toMatch(/Cloudflare, Inc\.\*\* \(US, Delaware\) — _EU jurisdiction selected_/);
+    // S49 2026-07-07 (founder-approved; mirrors the S43 register correction) — the EU-jurisdiction-selected claim was not
+    // verifiable and is withdrawn; the row now states the default
+    // jurisdiction + real R2 objects.
+    expect(body).toMatch(/\*\*Cloudflare, Inc\.\*\* \(US, Delaware\)/);
+    expect(body).toMatch(/R2 default jurisdiction \(data replicated EU \+ US\)/);
+    expect(body).not.toMatch(/EU jurisdiction selected/);
   });
 
   it('§8 Customer-Connected Services list: proxies / captcha / IMAP-Gmail / SMS — NOT sub-processors', () => {

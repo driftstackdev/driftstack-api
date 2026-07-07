@@ -23,7 +23,7 @@
 //   • 2 substantive change-list entries (NowPayments added /
 //     LiveKit added).
 //   • Cross-links: dpa.md + privacy.md + /docs/security-overview
-//     + /docs/data-residency.
+//     + the docs data-residency page (S49: redirected successor).
 //   • security@driftstack.dev + 1-business-day reply.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -181,11 +181,13 @@ describe('W379.A marketing-site /legal/sub-processors.md content parity', () => 
     expect(body).not.toMatch(/consolidated onto AWS/);
   });
 
-  it('cross-links: dpa.md + privacy.md + /docs/security-overview + /docs/data-residency', () => {
+  it('cross-links: dpa.md + privacy.md + /docs/security-overview + the docs data-residency page (S49: redirected successor)', () => {
     expect(body).toMatch(/\[Data Processing Addendum\]\(dpa\.md\)/);
     expect(body).toMatch(/\[Privacy Policy\]\(privacy\.md\)/);
     expect(body).toMatch(/\[\/docs\/security-overview\]\(\/docs\/security-overview\)/);
-    expect(body).toMatch(/\[\/docs\/data-residency\]\(\/docs\/data-residency\)/);
+    expect(body).toMatch(
+      /\[docs\.driftstack\.dev\/reference\/data-residency\]\(https:\/\/docs\.driftstack\.dev\/reference\/data-residency\/\)/,
+    );
     const dir = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal');
     expect(existsSync(resolve(dir, 'dpa.md'))).toBe(true);
     expect(existsSync(resolve(dir, 'privacy.md'))).toBe(true);
