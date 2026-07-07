@@ -94,10 +94,12 @@ describe('W870 V-353 MFA cross-source invariant', () => {
 
   // ─── Dashboard settings.astro MFA form attrs ─────────────────
 
-  it('CRITICAL apps/customer-dashboard/src/pages/security.astro MFA enroll-confirm input has pattern="\\d{6}" + maxlength="6" + inputmode="numeric". The HTML5 attrs match the api-types Zod regex — drift would let the form accept invalid input.', () => {
+  it('CRITICAL apps/customer-dashboard/src/pages/security.astro MFA enroll-confirm input has pattern="[0-9]{6}" + maxlength="6" + inputmode="numeric". The HTML5 attrs match the api-types Zod regex — drift would let the form accept invalid input. NOTE: pattern MUST use the [0-9] char class, NOT \\d — Astro strips the backslash from a `pattern="\\d{6}"` attribute at build so the rendered HTML becomes pattern="d{6}" (matches six literal "d", not digits) → every valid code fails "please match the requested format" (founder-reported 2026-07-07). [0-9] has no backslash to strip.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/security.astro'));
     expect(p).toMatch(/inputmode="numeric"/);
-    expect(p).toMatch(/pattern="\\d\{6\}"/);
+    expect(p).toMatch(/pattern="\[0-9\]\{6\}"/);
+    // A raw \d MUST NOT reappear (build-strip regression guard).
+    expect(p).not.toMatch(/pattern="\\d/);
     expect(p).toMatch(/maxlength="6"/);
   });
 

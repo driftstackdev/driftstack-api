@@ -19,6 +19,28 @@ const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <DashboardLayout title="Sign in" withSidebar={false}>
+  <script is:inline>
+    // Bug fix (founder 2026-07-07): "shows login page when it already has a
+    // session". An already-authenticated visitor (session token in localStorage)
+    // must NOT see the sign-in form — bounce them to the dashboard (or ?next=).
+    // The DashboardLayout pre-paint auth block is gated on `withSidebar`, so it
+    // never runs on this withSidebar={false} page; this login-local guard fills
+    // that gap. Loop-safe: the dashboard re-validates the token and bounces a
+    // stale one back to /login (clearing it), so a bad token can't ping-pong.
+    // Same-origin ?next only (open-redirect guard: reject //host and absolute
+    // URLs). Runs pre-paint (first node in the body) so the form never flashes.
+    (function () {
+      try {
+        var t = localStorage.getItem('ds_web_session_token');
+        if (!t || t.length === 0) return;
+        var raw = new URLSearchParams(location.search).get('next') || '/';
+        var dest = raw.charAt(0) === '/' && raw.charAt(1) !== '/' ? raw : '/';
+        location.replace(dest);
+      } catch (_) {
+        /* localStorage blocked → fall through and show the form */
+      }
+    })();
+  </script>
   {/* 2026-05-22 — hero-glow atmosphere on the login surface so the
       sign-in moment shares the same visual family as the marketing
       site (customers arriving from the marketing CTA shouldn't feel
@@ -108,7 +130,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             type="text"
             inputmode="numeric"
             autocomplete="one-time-code"
-            pattern="\d{6}"
+            pattern="[0-9]{6}"
             maxlength="6"
             class="form-input font-mono tracking-widest"
             placeholder="123456"
