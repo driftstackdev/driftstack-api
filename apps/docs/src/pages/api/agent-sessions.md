@@ -572,6 +572,183 @@ if the session is in a terminal state (resume requires an active
 session). Available when the fleet control plane is enabled on the
 deployment.
 
+The seven endpoints below operate on the **live, running session**
+(they are what the desktop GUI's page overlay, Cookies drawer,
+back/forward buttons, file picker, and download bar call). Reads
+accept any bearer with the `read` scope; writes gate on the broad
+`write` scope (see the scope note at the top of this page). Apart
+from the page-state poll, each returns a **discriminated `200` body**
+in every case — `status` is one of `ok`, `unavailable` (the session
+is not live on a node, the fleet control plane is not enabled, or
+the session's node is offline), `timeout` (the node did not reply),
+or `error` (the node reported a failure; `reason` says why) — so
+expected-inert states surface as data, not HTTP errors. A
+malformed body or query is a `400`; an unknown or cross-account
+session id is a `404`.
+
+## Page state
+
+`GET /v1/agent-sessions/{id}/page-state`
+
+The latest page state the session's harness reported — polled by the
+GUI's loading bar and error overlay, and available to your own UIs
+the same way.
+
+Response (200):
+
+```json
+{
+  "page_state": {
+    "state": "loading | loaded | errored | stalled",
+    "url": "https://example.com | null",
+    "title": "Example Domain | null",
+    "tabId": "<tab id> | null",
+    "error": { "kind": "net", "message": "<human-readable>" }
+  }
+}
+```
+
+`state: "stalled"` means the harness detected a frozen-but-alive
+renderer (hung JS / compositor deadlock) — distinct from `errored`
+(a hard page error) and `loading` (a navigation in flight). `error`
+is `null` except on `errored` states. `page_state` is `null` when
+nothing has been reported yet, the last report is older than the
+freshness bound, the session is closed, or the fleet control plane
+is not wired.
+
+## Read the cookie jar
+
+`GET /v1/agent-sessions/{id}/cookies`
+
+Pulls the running session's **full live cookie jar** — including
+`httpOnly` cookies — from the device.
+
+Response (200), discriminated:
+
+```json
+{
+  "cookies": [
+    {
+      "domain": "example.com",
+      "name": "session",
+      "value": "…",
+      "path": "/",
+      "expires": 1780000000000,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    }
+  ],
+  "status": "ok"
+}
+```
+
+`domain`, `name`, and `value` are always present; `path`, `expires`
+(unix milliseconds; `null` or omitted for session cookies),
+`httpOnly`, `secure`,
+and `sameSite` (`Strict | Lax | None`) appear when the store reports
+them. On `unavailable` / `timeout` / `error`, `cookies` is `null`.
+The jar shape round-trips 1:1 into [Import cookies](#import-cookies)
+below — you can save the `cookies` array to a file and re-import it
+into a later session.
+
+## Import cookies
+
+`POST /v1/agent-sessions/{id}/cookies/set`
+
+```json
+{ "cookies": [{ "domain": "example.com", "name": "session", "value": "…" }] }
+```
+
+The write-twin of the read above: relays a cookie jar (the exact
+shape the read emits, 1 to 2000 cookies per request) into the
+running session's cookie store. Response (200) is the discriminated
+`{ "status": …, "reason"?: … }` shape — `ok` means the write was
+applied; on any other status nothing was written.
+
+## Step browser history
+
+`POST /v1/agent-sessions/{id}/history`
+
+```json
+{ "direction": "back" }
+```
+
+Steps the running session's back-forward list one entry in
+`direction` (`"back"` or `"forward"`) — what the GUI's back/forward
+buttons call. The optional `tabId` targets a specific tab's
+back-forward list; omitted, the session's current tab is stepped.
+Response (200) is the discriminated `{ "status": …, "reason"?: … }`
+shape.
+
+## Upload a file
+
+`POST /v1/agent-sessions/{id}/files`
+
+```json
+{ "name": "invoice.pdf", "mime": "application/pdf", "dataB64": "<base64 bytes>" }
+```
+
+Uploads a file into the running session's **isolated upload area**
+so it can be attached to a page's `<input type="file">`. The decoded
+size is capped at **64 MiB** per file (larger, or an empty file, is
+a `400`); per-account concurrent upload volume (512 MB) and
+per-session lifetime totals (2 GiB) are also capped — an over-cap
+request returns `status: "error"` with the cap named in `reason`.
+
+Response (200), discriminated:
+
+```json
+{
+  "handle": { "id": "<opaque>", "name": "invoice.pdf", "mime": "application/pdf", "size": 182044 },
+  "status": "ok"
+}
+```
+
+`handle` is an **opaque reference** — the mapping to an on-device
+path stays inside the harness, so a worker filesystem path is never
+exposed. On any non-`ok` status, `handle` is `null`.
+
+## List downloads
+
+`GET /v1/agent-sessions/{id}/downloads`
+
+Lists the files pages have downloaded inside the running session
+(downloads land in a per-session isolated area on the device, never
+a shared folder). Response (200), discriminated:
+
+```json
+{
+  "files": [{ "name": "report.csv", "size": 51234, "mime": "text/csv" }],
+  "status": "ok"
+}
+```
+
+`files: []` with `status: "ok"` means no downloads yet. `name` is
+always a bare basename, never a path; `mime` appears when the device
+reports one. On any non-`ok` status, `files` is `null`.
+
+## Fetch a download
+
+`GET /v1/agent-sessions/{id}/downloads/content?name=report.csv`
+
+Fetches one downloaded file's bytes by `name` (a basename from the
+list above; the server re-sanitizes it and confines the read to the
+session's download area). Fetches are capped at 64 MiB. Response
+(200), discriminated:
+
+```json
+{
+  "file": { "name": "report.csv", "mime": "text/csv", "dataB64": "<base64 bytes>" },
+  "status": "ok"
+}
+```
+
+`mime` falls back to `application/octet-stream` when the device did
+not report one. A missing or too-large file is `status: "error"`
+with the cause in `reason`; on any non-`ok` status, `file` is
+`null`.
+
 ## Audit log
 
 Six actions land on the customer audit log across the agent-session

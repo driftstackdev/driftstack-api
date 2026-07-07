@@ -451,6 +451,45 @@ Team RBAC: `X-Driftstack-Account` is honored for both reads and
 writes — member roles cannot write on the owner's account; admin
 members can.
 
+## Trim cached site data
+
+`POST /v1/profiles/:id/trim`
+
+Reclaims storage by clearing a profile's **re-fetchable caches**
+(HTTP/media cache and per-origin CacheStorage / service-worker
+registrations) while **keeping the identity state** — cookies,
+`localStorage`, `IndexedDB`, and open tabs. Use it when an account
+is near its storage cap and you want space back without losing the
+profile's logins. No request body; write scope (`write:profiles`),
+admin-only on a team workspace, same as the other mutating routes.
+
+The trim runs out-of-session on the fleet against the profile's
+last-saved encrypted state, so the response is a **discriminated
+`200` body** in every case:
+
+```json
+// "ok" — trimmed; the smaller size is persisted immediately
+{ "status": "ok", "size_bytes": 18874368, "bytes_reclaimed": 41943040 }
+
+// "unavailable" — nothing ran; reason says why
+{ "status": "unavailable", "reason": "profile is currently in use — stop its running session before clearing the cache" }
+
+// "timeout" — the node didn't reply
+{ "status": "timeout" }
+
+// "error" — the node reported a failure; the stored state is untouched
+{ "status": "error", "reason": "<node-reported failure>" }
+```
+
+`unavailable` covers the expected-inert states: the profile is bound
+to a **still-running session** (stop it first — a live session would
+save its full un-trimmed state back over the trimmed result), the
+profile has **no saved state yet** (a fresh profile has nothing to
+trim), or the deployment's profile storage / fleet control plane
+isn't enabled. On `"ok"`, `size_bytes` (the new stored size) updates
+the storage meter and launch-quota checks immediately. Returns `404`
+if the profile isn't found or isn't owned by the calling account.
+
 ## Lifecycle interaction
 
 A session is bound to a profile at creation time

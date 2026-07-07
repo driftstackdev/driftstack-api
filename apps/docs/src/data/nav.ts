@@ -55,6 +55,14 @@
 // 50 → 55. Endpoint children census unchanged (the new pages are
 // guides, not API-reference resources — the children-integrity suite
 // only extracts from the API reference + Webhooks sections).
+//
+// S33 2026-07-07 (fable-truth-audit) — 9 live-but-undocumented
+// endpoints registered in openapi.ts + documented: agent-sessions
+// gains the 7 live-session control sub-nodes (page-state / cookie
+// read+import / history step / file upload / downloads list+fetch),
+// profiles gains trim, auth gains resend-verification. Children
+// census 130 → 139 (131 API + 8 webhooks); top-level routes
+// unchanged at 55.
 
 export interface DocNavItem {
   href: string;
@@ -183,6 +191,25 @@ export const DOC_NAV: DocNavSection[] = [
             label: 'Resume a challenge-paused session',
             method: 'POST',
           },
+          { href: '/api/agent-sessions/#page-state', label: 'Page state', method: 'GET' },
+          {
+            href: '/api/agent-sessions/#read-the-cookie-jar',
+            label: 'Read the cookie jar',
+            method: 'GET',
+          },
+          { href: '/api/agent-sessions/#import-cookies', label: 'Import cookies', method: 'POST' },
+          {
+            href: '/api/agent-sessions/#step-browser-history',
+            label: 'Step browser history',
+            method: 'POST',
+          },
+          { href: '/api/agent-sessions/#upload-a-file', label: 'Upload a file', method: 'POST' },
+          { href: '/api/agent-sessions/#list-downloads', label: 'List downloads', method: 'GET' },
+          {
+            href: '/api/agent-sessions/#fetch-a-download',
+            label: 'Fetch a download',
+            method: 'GET',
+          },
         ],
       },
       {
@@ -229,6 +256,11 @@ export const DOC_NAV: DocNavSection[] = [
             href: '/api/profiles/#purge-permanent-delete',
             label: 'Purge (permanent delete)',
             method: 'DELETE',
+          },
+          {
+            href: '/api/profiles/#trim-cached-site-data',
+            label: 'Trim cached site data',
+            method: 'POST',
           },
         ],
       },
@@ -303,6 +335,11 @@ export const DOC_NAV: DocNavSection[] = [
         children: [
           { href: '/api/auth/#sign-up', label: 'Sign up', method: 'POST' },
           { href: '/api/auth/#verify-email', label: 'Verify email', method: 'POST' },
+          {
+            href: '/api/auth/#resend-verification-email',
+            label: 'Resend verification email',
+            method: 'POST',
+          },
           { href: '/api/auth/#log-in', label: 'Log in', method: 'POST' },
           { href: '/api/auth/#mfa-challenge', label: 'MFA challenge', method: 'POST' },
           { href: '/api/auth/#mfa-step-up', label: 'MFA step-up', method: 'POST' },

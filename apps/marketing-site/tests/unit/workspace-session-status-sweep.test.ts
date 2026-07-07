@@ -52,6 +52,16 @@ const statusRe = /["']status["']\s*:\s*["']([a-z][a-z_-]+)["']/g;
 
 // Statuses that are valid in adjacent docs domains but not session.
 const ALLOWED_NON_SESSION_STATUS = new Set([
+  // S33 2026-07-07 (fable-truth-audit) — the agent-session harness
+  // sub-resources (cookies/history/files/downloads: harness-control-
+  // protocol discriminated responses) and profile trim (TrimResult)
+  // cite their own status vocabulary in docs examples; every value is
+  // schema-traced, not a session status.
+  'ok',
+  'unavailable',
+  'timeout',
+  'error',
+  'resume_requested',
   'delivered',
   'failed',
   'failed_permanently',

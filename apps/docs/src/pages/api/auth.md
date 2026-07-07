@@ -62,6 +62,30 @@ as the bearer for every subsequent `/v1/*` request. Verifying email
 also marks the account `active` so the customer can sign in
 directly afterward.
 
+## Resend verification email
+
+`POST /v1/auth/resend-verification`
+
+```json
+{ "email": "you@example.com" }
+```
+
+Self-service re-send of the signup verification email, for when the
+original expired or never arrived. Returns `200` with the new
+token's `expires_at`:
+
+```json
+{ "sent": true, "expires_at": "2026-05-23T22:00:00.000Z" }
+```
+
+The response shape is **identical** whether the email matched an
+unverified account, an already-verified account, or no account at
+all — the server silently no-ops in the latter two cases, so the
+wire never leaks account existence (same no-enumeration posture as
+magic-link and password-reset). Because each call can trigger an
+email send, the endpoint is tightly rate-limited per IP (the same
+budget as password-reset requests).
+
 ## Log in
 
 `POST /v1/auth/login`

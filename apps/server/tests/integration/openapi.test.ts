@@ -171,6 +171,8 @@ describe('OpenAPI spec generation', () => {
         '/v1/auth/refresh',
         '/v1/auth/signup',
         '/v1/auth/verify-email',
+        // S33 2026-07-07 (fable-truth-audit) — #187 verification re-send
+        '/v1/auth/resend-verification',
         // V-402 — magic-link + password-reset
         '/v1/auth/magic-link/consume',
         '/v1/auth/magic-link/request',
@@ -192,6 +194,8 @@ describe('OpenAPI spec generation', () => {
         '/v1/profiles/import',
         // V-666 profile ownership transfer
         '/v1/profiles/{id}/transfer',
+        // S33 2026-07-07 (fable-truth-audit) — doc-150 §8 storage trim
+        '/v1/profiles/{id}/trim',
         // L4b recycle bin (soft delete → trash → restore / purge)
         '/v1/profiles/trash',
         '/v1/profiles/{id}/restore',
@@ -224,6 +228,17 @@ describe('OpenAPI spec generation', () => {
         '/v1/agent-sessions/{id}/recipe-suggestion',
         '/v1/agent-sessions/{id}/resume',
         '/v1/agent-sessions/{id}/takeover',
+        // S33 2026-07-07 (fable-truth-audit) — live-session control surface
+        // (page-state poll / cookies read+import / history step / file
+        // upload / downloads list+fetch), live routes previously absent
+        // from the spec.
+        '/v1/agent-sessions/{id}/page-state',
+        '/v1/agent-sessions/{id}/cookies',
+        '/v1/agent-sessions/{id}/cookies/set',
+        '/v1/agent-sessions/{id}/history',
+        '/v1/agent-sessions/{id}/files',
+        '/v1/agent-sessions/{id}/downloads',
+        '/v1/agent-sessions/{id}/downloads/content',
         // LK arc — per-Mac LiveKit credentials registration
         '/v1/mac-nodes/register',
         // AI-B4 + V-530.I/.J — recipe library: create + list + get/delete

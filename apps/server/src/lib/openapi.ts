@@ -74,6 +74,8 @@ import {
   PasswordResetRequestResponseSchema,
   RefreshSessionRequestSchema,
   RefreshSessionResponseSchema,
+  ResendVerificationRequestSchema,
+  ResendVerificationResponseSchema,
   SignupRequestSchema,
   SignupResponseSchema,
   UpdateAccountMeRequestSchema,
@@ -135,6 +137,11 @@ import {
   RecipeSchema,
   RecipeDetailSchema,
 } from '@driftstack/api-types';
+// S33 2026-07-07 (fable-truth-audit) — the cookie shape the agent-session
+// cookie read/import routes emit + validate. Imported from the harness
+// control protocol (the routes' own single source of truth) rather than
+// re-declared here, so a wire-shape change flows into the spec.
+import { CookieSchema } from '../schemas/harness-control-protocol.js';
 
 const PaginatedSessionsSchema = z.object({
   data: z.array(SessionSchema),
@@ -2926,6 +2933,37 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
     },
   });
+  // S33 2026-07-07 (fable-truth-audit) — #187 self-service verification
+  // re-send: live route that was previously absent from the spec.
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/resend-verification',
+    summary: 'Re-send the signup verification email; response never confirms account existence',
+    tags: ['auth'],
+    request: {
+      body: {
+        content: {
+          'application/json': {
+            schema: ResendVerificationRequestSchema,
+            example: { email: 'you@example.com' },
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description:
+          'Accepted. The response shape is identical whether the email matched an unverified account, an already-verified account, or no account at all (the server silently no-ops in the latter two cases — no account-enumeration signal). expires_at is the verification-token expiry.',
+        content: {
+          'application/json': {
+            schema: ResendVerificationResponseSchema,
+            example: { sent: true, expires_at: '2026-06-01T12:00:00Z' },
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
   registerRoute(r, {
     method: 'post',
     path: '/v1/auth/login',
@@ -3543,6 +3581,305 @@ function buildRegistry(): OpenAPIRegistry {
         content: problemContent,
       },
       ...errors4xx,
+    },
+  });
+
+  // ── S33 2026-07-07 (fable-truth-audit) — live-session control surface ──
+  //
+  // Seven live-but-previously-unregistered agent-session endpoints: the
+  // page-state poll, the cookie-jar read + import pair, the history step,
+  // the file upload, and the download list + fetch pair. Each accepts the
+  // account bearer (read scope on GETs, broad write on POSTs — same floor
+  // the handlers enforce); they additionally accept the per-session
+  // gui_control_key the GUI/Simulator holds, which is a GUI-internal
+  // channel and not part of the published bearer contract. Apart from
+  // page-state, every route returns a DISCRIMINATED 200 body in each
+  // relay case (ok / unavailable / timeout / error) so expected-inert
+  // states — control plane not wired, session not live on a node, node
+  // offline — render as data, not HTTP errors.
+  const agentRelayStatus = z.enum(['ok', 'unavailable', 'timeout', 'error']);
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/agent-sessions/{id}/page-state',
+    summary:
+      "Poll the agent session's last-reported page state (loading / loaded / errored / stalled)",
+    tags: ['agent-chat'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      200: {
+        description:
+          'The latest page state the session harness reported (the GUI loading bar / error overlay polls this). `page_state` is null when nothing has been reported yet, the cached entry is older than the freshness bound, the session is closed, or the fleet control plane is not wired.',
+        content: {
+          'application/json': {
+            schema: z.object({
+              page_state: z
+                .object({
+                  state: z.enum(['loading', 'loaded', 'errored', 'stalled']),
+                  url: z.string().nullable(),
+                  title: z.string().nullable(),
+                  tabId: z.string().nullable(),
+                  error: z.object({ kind: z.string(), message: z.string() }).nullable(),
+                })
+                .nullable(),
+            }),
+          },
+        },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      ...errors4xx,
+      503: {
+        description: 'AI chat agent not enabled on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/agent-sessions/{id}/cookies',
+    summary: "Read the running session's live cookie jar (includes httpOnly cookies)",
+    tags: ['agent-chat'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      200: {
+        description:
+          "Discriminated body: status 'ok' → `cookies` is the live jar pulled from the running session; 'unavailable' (not live on a node / control plane not wired / node offline), 'timeout' (node did not reply), or 'error' → `cookies` is null and `reason`, when set, says why. The jar shape round-trips 1:1 into POST /v1/agent-sessions/{id}/cookies/set.",
+        content: {
+          'application/json': {
+            schema: z.object({
+              cookies: z.array(CookieSchema).nullable(),
+              status: agentRelayStatus,
+              reason: z.string().optional(),
+            }),
+          },
+        },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      ...errors4xx,
+      503: {
+        description: 'AI chat agent not enabled on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/agent-sessions/{id}/cookies/set',
+    summary: "Import a cookie jar into the running session's cookie store",
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: z.object({
+              // Same Cookie shape the read emits — an exported cookies.json
+              // round-trips 1:1. Bounded count per request.
+              cookies: z.array(CookieSchema).min(1).max(2000),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description:
+          "Discriminated body: status 'ok' → the write was applied to the live session's cookie store; 'unavailable' / 'timeout' / 'error' → nothing was written and `reason`, when set, says why.",
+        content: {
+          'application/json': {
+            schema: z.object({ status: agentRelayStatus, reason: z.string().optional() }),
+          },
+        },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      ...errors4xx,
+      503: {
+        description: 'AI chat agent not enabled on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/agent-sessions/{id}/history',
+    summary: "Step the running session's browser history one entry back or forward",
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: z.object({
+              direction: z.enum(['back', 'forward']),
+              // Optional (multi-tab): which tab's back-forward list to step.
+              // Omitted → the session's current tab.
+              tabId: z.string().optional(),
+            }),
+            example: { direction: 'back' },
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description:
+          "Discriminated body: status 'ok' → the history step was applied; 'unavailable' / 'timeout' / 'error' → the step did not run and `reason`, when set, says why.",
+        content: {
+          'application/json': {
+            schema: z.object({ status: agentRelayStatus, reason: z.string().optional() }),
+          },
+        },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      ...errors4xx,
+      503: {
+        description: 'AI chat agent not enabled on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/agent-sessions/{id}/files',
+    summary:
+      "Upload a file into the running session's isolated upload area (for driving file inputs)",
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: z.object({
+              name: z.string().min(1).max(255),
+              mime: z.string().min(1).max(255),
+              // Base64-encoded file bytes; decoded size capped at 64 MiB
+              // (larger → 400). Per-account concurrent and per-session
+              // lifetime volume caps apply (over-cap → status 'error').
+              dataB64: z.string().min(1),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description:
+          "Discriminated body: status 'ok' → `handle` is the opaque { id, name, mime, size } reference used to drive a page's <input type=file> (no worker filesystem path is ever exposed); 'unavailable' / 'timeout' / 'error' → `handle` is null and `reason`, when set, says why (including the per-account concurrent and per-session lifetime upload caps).",
+        content: {
+          'application/json': {
+            schema: z.object({
+              handle: z
+                .object({
+                  id: z.string(),
+                  name: z.string(),
+                  mime: z.string(),
+                  size: z.number(),
+                })
+                .nullable(),
+              status: agentRelayStatus,
+              reason: z.string().optional(),
+            }),
+          },
+        },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      ...errors4xx,
+      // Override the generic errors4xx 400 with the upload-specific causes
+      // (declared after the spread so this description wins).
+      400: {
+        description: 'Validation failed (malformed body, empty file, or decoded size over 64 MiB).',
+        content: problemContent,
+      },
+      503: {
+        description: 'AI chat agent not enabled on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/agent-sessions/{id}/downloads',
+    summary: 'List the files pages have downloaded inside the running session',
+    tags: ['agent-chat'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      200: {
+        description:
+          "Discriminated body: status 'ok' → `files` lists the session's downloads (empty array = no downloads yet; `name` is always a bare basename, never a path); 'unavailable' / 'timeout' / 'error' → `files` is null and `reason`, when set, says why.",
+        content: {
+          'application/json': {
+            schema: z.object({
+              files: z
+                .array(
+                  z.object({
+                    name: z.string(),
+                    size: z.number(),
+                    mime: z.string().optional(),
+                  }),
+                )
+                .nullable(),
+              status: agentRelayStatus,
+              reason: z.string().optional(),
+            }),
+          },
+        },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      ...errors4xx,
+      503: {
+        description: 'AI chat agent not enabled on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/agent-sessions/{id}/downloads/content',
+    summary: "Fetch one downloaded file's bytes (base64) by basename",
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      query: z.object({
+        // A basename from a prior downloads list; re-sanitized + confined
+        // to the session's download area server-side (defense in depth).
+        name: z.string().min(1).max(255),
+      }),
+    },
+    responses: {
+      200: {
+        description:
+          "Discriminated body: status 'ok' → `file` carries { name, mime, dataB64 } (base64 bytes, 64 MiB cap; mime falls back to application/octet-stream); 'unavailable' / 'timeout' / 'error' (including file not found or too large) → `file` is null and `reason`, when set, says why.",
+        content: {
+          'application/json': {
+            schema: z.object({
+              file: z
+                .object({
+                  name: z.string(),
+                  mime: z.string(),
+                  dataB64: z.string(),
+                })
+                .nullable(),
+              status: agentRelayStatus,
+              reason: z.string().optional(),
+            }),
+          },
+        },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      ...errors4xx,
+      503: {
+        description: 'AI chat agent not enabled on this deployment.',
+        content: problemContent,
+      },
     },
   });
 
@@ -5487,6 +5824,47 @@ function buildRegistry(): OpenAPIRegistry {
       },
       404: {
         description: 'Profile not found, or recipient account does not exist.',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+
+  // ── S33 2026-07-07 (fable-truth-audit) — profile storage trim ──────────
+  // doc-150 §8 storage cleanup: live route (write:profiles) that was
+  // previously absent from the spec. Discriminated 200 body in every
+  // case, mirroring the agent-session relay routes.
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/profiles/{id}/trim',
+    operationId: 'trimProfile',
+    summary:
+      "Trim a profile's re-fetchable caches to reclaim storage (cookies / localStorage / IndexedDB / tabs are kept)",
+    tags: ['profiles'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      200: {
+        description:
+          "Discriminated body: status 'ok' → the trim ran and the smaller size was persisted ({ size_bytes, bytes_reclaimed }); 'unavailable' → nothing ran (profile in use by a running session, no saved state to trim yet, storage/fleet not enabled, or no node connected — `reason` says which); 'timeout' → the node did not reply; 'error' → the node reported a failure (`reason` set) and the stored state is untouched.",
+        content: {
+          'application/json': {
+            schema: z.union([
+              z.object({
+                status: z.literal('ok'),
+                size_bytes: z.number().int().nonnegative(),
+                bytes_reclaimed: z.number().int().nonnegative(),
+              }),
+              z.object({
+                status: z.enum(['unavailable', 'timeout', 'error']),
+                reason: z.string().optional(),
+              }),
+            ]),
+          },
+        },
+      },
+      404: {
+        description: 'Profile not found (or owned by another account).',
         content: problemContent,
       },
       ...errors4xx,

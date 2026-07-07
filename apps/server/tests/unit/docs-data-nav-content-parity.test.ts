@@ -69,6 +69,13 @@
 // and children extraction only covers the API reference + Webhooks
 // sections. The superseded "exactly 5 Guides entries / exactly 2 Get
 // started entries / 50 routes" pins below were re-pinned in lockstep.
+//
+// S33 SUPERSESSION 2026-07-07 (fable-truth-audit) — children census
+// 130 → 139 (131 API + 8 webhooks): 9 live-but-undocumented endpoints
+// were registered in openapi.ts + documented, so agent-sessions gains
+// 7 sub-nodes (page-state / cookie read+import / history step / file
+// upload / downloads list+fetch), profiles gains trim, and auth gains
+// resend-verification. Top-level census unchanged at 55.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -285,17 +292,17 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     );
   });
 
-  it('total tree size (S29 census): 55 top-level route hrefs (S22.2 pinned 50; S29 content-enrichment batch 1 added quickstart-curl + 4 guides — a drop below 55 means a page went orphaned again) + 130 children anchor hrefs (122 API + 8 webhooks — unchanged by S29; md lockstep enforced by docs-nav-endpoint-children-integrity)', () => {
+  it('total tree size (S33 census): 55 top-level route hrefs (S22.2 pinned 50; S29 content-enrichment batch 1 added quickstart-curl + 4 guides — a drop below 55 means a page went orphaned again) + 139 children anchor hrefs (131 API + 8 webhooks — S33 2026-07-07 fable-truth-audit added the 9 previously-undocumented live endpoints; md lockstep enforced by docs-nav-endpoint-children-integrity)', () => {
     const hrefs = [...body.matchAll(/href: '([^']+)',/g)].map((m) => m[1]!);
     const topLevel = hrefs.filter((h) => !h.includes('#'));
     const anchors = hrefs.filter((h) => h.includes('#'));
     expect(topLevel).toHaveLength(55);
-    expect(anchors).toHaveLength(130);
+    expect(anchors).toHaveLength(139);
     // No duplicate hrefs at either level (the apps/docs
     // doc-nav-section-label-baseline suite enforces the top-level rule at
     // runtime too; mirrored here so a server-only run still catches it).
     expect(new Set(topLevel).size).toBe(55);
-    expect(new Set(anchors).size).toBe(130);
+    expect(new Set(anchors).size).toBe(139);
   });
 
   it('the 22 previously-orphaned routes are all present (6 reference + 5 sdk/api spillover checks kept explicit for the highest-traffic ones)', () => {
