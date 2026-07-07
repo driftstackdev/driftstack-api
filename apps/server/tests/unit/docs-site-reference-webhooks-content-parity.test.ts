@@ -144,7 +144,9 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(body).toMatch(/^# Replaying webhook deliveries$/m);
     expect(body).toMatch(/Driftstack retries failed webhook deliveries 5 times with exponential/);
     expect(body).toMatch(/backoff before parking them in the DLQ\./);
-    expect(body).toMatch(/^## Endpoint$/m);
+    // S27 (2026-07-07) — the h2 was the literal "Endpoint" (rendered as a
+    // meaningless "POST Endpoint" sub-node in the docs tree); renamed.
+    expect(body).toMatch(/^## Replay a delivery$/m);
     expect(body).toMatch(/`POST \/v1\/webhook-deliveries\/:deliveryId\/replay`/);
     expect(body).toMatch(/Resets the delivery to `pending` so the worker re-fires it on the next/);
     expect(body).toMatch(/cycle \(within ~30 seconds\)\./);

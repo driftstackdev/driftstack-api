@@ -11,7 +11,7 @@ backoff before parking them in the DLQ. When your endpoint goes down
 for a brief outage and you fix it, you can re-fire any delivery
 yourself rather than emailing support.
 
-## Endpoint
+## Replay a delivery
 
 `POST /v1/webhook-deliveries/:deliveryId/replay`
 

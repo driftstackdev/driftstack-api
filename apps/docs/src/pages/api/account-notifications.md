@@ -14,7 +14,7 @@ The stream is a v0 surface (2026-05-20) and is read-only — it doesn't
 replace the durable audit log or the email channel. It's an
 additive, low-latency notification path.
 
-## Endpoint
+## Stream notifications
 
 `GET /v1/account/me/notifications`
 

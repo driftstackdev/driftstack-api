@@ -232,37 +232,53 @@ or every-other.
 ## CLI / GUI activation flow
 
 Browser-OAuth-style activation lets CLI and GUI tools obtain an API
-key without asking the user to copy/paste from the dashboard.
+key without asking the user to copy/paste from the dashboard. The
+dance is three steps — [Initiate](#initiate-activation),
+[Bind](#bind-activation-dashboard), then
+[Exchange](#exchange-for-the-api-key) — each backed by one endpoint
+below.
 
-### Three steps
+## Initiate activation
 
-1. **Initiate** — the CLI/GUI generates a CSRF nonce + optional
-   client label, calls `POST /v1/auth/cli-authorize/initiate`, and
-   gets back a one-shot `code` + a `browser_url` that opens the
-   dashboard's Authorize page.
-2. **Bind** — the user signs in to the dashboard (if not already),
-   sees a confirmation screen ("Driftstack desktop on John's
-   MacBook"), and clicks Authorize. The dashboard hits
-   `POST /v1/auth/cli-authorize/bind` with the user's web-session
-   bearer; the server mints a scoped API key on the calling account
-   and stores the plaintext keyed by `code` (Redis, 5-minute TTL).
-3. **Exchange** — the CLI/GUI polls
-   `POST /v1/auth/cli-authorize/exchange` until the response
-   transitions from `{ status: "pending" }` to
-   `{ status: "bound", api_key, account_id }`. Bound is one-shot: the
-   server deletes the code as it hands back the key, so a subsequent
-   poll returns `{ status: "expired" }` (HTTP `200`). The same
-   `{ status: "expired" }` is returned if the user takes too long;
-   either way the CLI/GUI restarts the flow.
+`POST /v1/auth/cli-authorize/initiate`
 
-### CSRF state
+Step 1 — **Initiate** — the CLI/GUI generates a CSRF nonce + optional
+client label, calls `POST /v1/auth/cli-authorize/initiate`, and
+gets back a one-shot `code` + a `browser_url` that opens the
+dashboard's Authorize page.
+
+## Bind activation (dashboard)
+
+`POST /v1/auth/cli-authorize/bind`
+
+Step 2 — **Bind** — the user signs in to the dashboard (if not already),
+sees a confirmation screen ("Driftstack desktop on John's
+MacBook"), and clicks Authorize. The dashboard hits
+`POST /v1/auth/cli-authorize/bind` with the user's web-session
+bearer; the server mints a scoped API key on the calling account
+and stores the plaintext keyed by `code` (Redis, 5-minute TTL).
+
+## Exchange for the API key
+
+`POST /v1/auth/cli-authorize/exchange`
+
+Step 3 — **Exchange** — the CLI/GUI polls
+`POST /v1/auth/cli-authorize/exchange` until the response
+transitions from `{ status: "pending" }` to
+`{ status: "bound", api_key, account_id }`. Bound is one-shot: the
+server deletes the code as it hands back the key, so a subsequent
+poll returns `{ status: "expired" }` (HTTP `200`). The same
+`{ status: "expired" }` is returned if the user takes too long;
+either way the CLI/GUI restarts the flow.
+
+## CSRF state
 
 The `state` parameter is a client-supplied 16-128 character random
 nonce. The dashboard echoes it back; the server verifies it matches
 on `bind` — defends against the dashboard being tricked into binding
 a code that wasn't issued in the same session.
 
-### SDK example
+## SDK example
 
 ```ts
 const { code, browser_url } = await client.auth.cliAuthorizeInitiate({
@@ -325,7 +341,7 @@ for {
 }
 ```
 
-### Default scopes
+## Default scopes
 
 The minted key carries `["account_owner"]` scope by default. CLI tools
 that only need read access should pass `scopes: ["read"]` on the

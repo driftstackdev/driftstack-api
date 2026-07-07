@@ -87,7 +87,7 @@ via support.
    │ ────────────────────────────────────────────────► │
 ```
 
-### 1 — Stage authorization
+## 1 — Stage authorization
 
 `GET /v1/oauth/authorize`
 
@@ -113,7 +113,7 @@ endpoint. The dashboard renders the consent screen using the
 `authorization_id`, then posts to `/authorize/complete` (step 2) on
 the customer's behalf once they approve.
 
-### 2 — Customer approves (dashboard-internal)
+## 2 — Customer approves (dashboard-internal)
 
 `POST /v1/oauth/authorize/complete` (dashboard auth required)
 
@@ -145,7 +145,7 @@ browser there.
 You shouldn't call this endpoint directly — the customer-dashboard
 does. Your job is to receive the redirect at step 3.
 
-### 3 — You receive the code at your redirect URI
+## 3 — You receive the code at your redirect URI
 
 The browser lands on `<redirect_uri>?code=<opaque>&state=<your-state>`.
 Verify the `state` matches what you stored client-side (CSRF
@@ -153,7 +153,7 @@ protection per OAuth spec), then proceed to step 4.
 
 Codes expire **5 minutes** after issue and are single-use.
 
-### 4 — Exchange the code for a token
+## 4 — Exchange the code for a token
 
 `POST /v1/oauth/token`
 
@@ -195,7 +195,7 @@ Errors (problem+json, `4xx`):
 - `invalid_request` — the body failed validation (missing field,
   `redirect_uri` mismatch)
 
-### 5 — Use the access token
+## 5 — Use the access token
 
 ```http
 GET /v1/sessions HTTP/1.1

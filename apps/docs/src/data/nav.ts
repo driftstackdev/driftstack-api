@@ -21,19 +21,30 @@
 //
 // S22.4 (2026-07-06, Stoplight reference furniture) — per-endpoint
 // anchor SUB-NODES: every API-reference resource entry now carries
-// `children` — one `{ href, label, method }` per documented endpoint
-// (108 across 24 resource pages), in PAGE order, extracted from the
-// resource's .md h2 sections (an h2 is an endpoint iff its direct
-// content opens with a paragraph-start `METHOD /path` inline-code
-// declaration, or the h2 itself embeds "… — METHOD /path" as on
-// api/status). Anchor slugs are github-slugger output (what
+// `children` — one `{ href, label, method }` per documented endpoint,
+// in PAGE order, extracted from the resource's .md h2 sections (an h2
+// is an endpoint iff its direct content opens with a paragraph-start
+// `METHOD /path` inline-code declaration, or the h2 itself embeds
+// "… — METHOD /path" — a format retired from api/status in S27).
+// Anchor slugs are github-slugger output (what
 // rehype-slug renders) — the docs-nav-endpoint-children-integrity
 // suite re-derives all of this from the .md sources, so a heading or
 // endpoint edit fails the test until nav.ts is regenerated. Concept
-// h2s (Resource shape / Concurrency / Errors / multi-step h3 flows
-// like oauth's "The flow") get NO sub-node; children render only for
+// h2s (Resource shape / Concurrency / Errors / prose flow intros like
+// oauth's "The flow") get NO sub-node; children render only for
 // the ACTIVE resource page (Stoplight behavior) with a colored
 // method chip (base.css .method-chip recipes, AA-verified).
+//
+// S27 (2026-07-07, docs reference hygiene) — md defect sweep +
+// webhooks extension: api/status heading-embedded methods normalized
+// to declaration lines; flow-step endpoints promoted to h2 sections
+// (oauth authorize/complete/token, mfa enroll/verify, auth
+// cli-authorize initiate/bind/exchange, agent-sessions
+// takeover/handback/resume); profiles Export / Import split; the
+// literal "Endpoint" h2s renamed (account-notifications, webhooks
+// replay). Children extraction now ALSO covers the Webhooks section
+// (endpoints + replay carry children; events is a catalog with none).
+// Census: 122 API + 8 webhooks = 130 endpoint sub-nodes.
 
 export interface DocNavItem {
   href: string;
@@ -142,6 +153,21 @@ export const DOC_NAV: DocNavSection[] = [
             label: 'Live input event (manual / pair mode)',
             method: 'POST',
           },
+          {
+            href: '/api/agent-sessions/#request-takeover',
+            label: 'Request takeover',
+            method: 'POST',
+          },
+          {
+            href: '/api/agent-sessions/#request-handback',
+            label: 'Request handback',
+            method: 'POST',
+          },
+          {
+            href: '/api/agent-sessions/#resume-a-challenge-paused-session',
+            label: 'Resume a challenge-paused session',
+            method: 'POST',
+          },
         ],
       },
       {
@@ -174,7 +200,8 @@ export const DOC_NAV: DocNavSection[] = [
           { href: '/api/profiles/#launch', label: 'Launch', method: 'POST' },
           { href: '/api/profiles/#clone', label: 'Clone', method: 'POST' },
           { href: '/api/profiles/#transfer', label: 'Transfer', method: 'POST' },
-          { href: '/api/profiles/#export--import', label: 'Export / Import', method: 'GET' },
+          { href: '/api/profiles/#export', label: 'Export', method: 'GET' },
+          { href: '/api/profiles/#import', label: 'Import', method: 'POST' },
           { href: '/api/profiles/#snapshots', label: 'Snapshots', method: 'POST' },
           {
             href: '/api/profiles/#delete-recycle-bin',
@@ -268,12 +295,29 @@ export const DOC_NAV: DocNavSection[] = [
           { href: '/api/auth/#password-reset', label: 'Password reset', method: 'POST' },
           { href: '/api/auth/#refresh', label: 'Refresh', method: 'POST' },
           { href: '/api/auth/#logout', label: 'Logout', method: 'POST' },
+          { href: '/api/auth/#initiate-activation', label: 'Initiate activation', method: 'POST' },
+          {
+            href: '/api/auth/#bind-activation-dashboard',
+            label: 'Bind activation (dashboard)',
+            method: 'POST',
+          },
+          {
+            href: '/api/auth/#exchange-for-the-api-key',
+            label: 'Exchange for the API key',
+            method: 'POST',
+          },
         ],
       },
       {
         href: '/api/mfa/',
         label: 'Two-factor auth (MFA)',
         children: [
+          { href: '/api/mfa/#start-enrollment', label: 'Start enrollment', method: 'POST' },
+          {
+            href: '/api/mfa/#confirm--receive-recovery-codes',
+            label: 'Confirm + receive recovery codes',
+            method: 'POST',
+          },
           { href: '/api/mfa/#status', label: 'Status', method: 'GET' },
           { href: '/api/mfa/#login-challenge', label: 'Login challenge', method: 'POST' },
           { href: '/api/mfa/#step-up-reauth', label: 'Step-up reauth', method: 'POST' },
@@ -289,6 +333,21 @@ export const DOC_NAV: DocNavSection[] = [
         href: '/api/oauth/',
         label: 'OAuth (third-party clients)',
         children: [
+          {
+            href: '/api/oauth/#1--stage-authorization',
+            label: '1 — Stage authorization',
+            method: 'GET',
+          },
+          {
+            href: '/api/oauth/#2--customer-approves-dashboard-internal',
+            label: '2 — Customer approves (dashboard-internal)',
+            method: 'POST',
+          },
+          {
+            href: '/api/oauth/#4--exchange-the-code-for-a-token',
+            label: '4 — Exchange the code for a token',
+            method: 'POST',
+          },
           {
             href: '/api/oauth/#validating-tokens-introspection',
             label: 'Validating tokens (introspection)',
@@ -428,7 +487,11 @@ export const DOC_NAV: DocNavSection[] = [
         href: '/api/account-notifications/',
         label: 'Account notifications (SSE)',
         children: [
-          { href: '/api/account-notifications/#endpoint', label: 'Endpoint', method: 'GET' },
+          {
+            href: '/api/account-notifications/#stream-notifications',
+            label: 'Stream notifications',
+            method: 'GET',
+          },
         ],
       },
       {
@@ -462,28 +525,18 @@ export const DOC_NAV: DocNavSection[] = [
         href: '/api/status/',
         label: 'Status page API',
         children: [
-          { href: '/api/status/#snapshot--get-v1status', label: 'Snapshot', method: 'GET' },
+          { href: '/api/status/#snapshot', label: 'Snapshot', method: 'GET' },
+          { href: '/api/status/#incident-feed', label: 'Incident feed', method: 'GET' },
+          { href: '/api/status/#incident-detail', label: 'Incident detail', method: 'GET' },
+          { href: '/api/status/#live-stream', label: 'Live stream', method: 'GET' },
+          { href: '/api/status/#sla-report', label: 'SLA report', method: 'GET' },
+          { href: '/api/status/#start-subscription', label: 'Start subscription', method: 'POST' },
           {
-            href: '/api/status/#incident-feed--get-v1statusincidents',
-            label: 'Incident feed',
+            href: '/api/status/#confirm-subscription',
+            label: 'Confirm subscription',
             method: 'GET',
           },
-          {
-            href: '/api/status/#incident-detail--get-v1statusincidentsid',
-            label: 'Incident detail',
-            method: 'GET',
-          },
-          {
-            href: '/api/status/#live-stream--get-v1statusstream',
-            label: 'Live stream',
-            method: 'GET',
-          },
-          { href: '/api/status/#sla-report--get-v1statussla', label: 'SLA report', method: 'GET' },
-          {
-            href: '/api/status/#email-subscriptions--post-v1statussubscribe',
-            label: 'Email subscriptions',
-            method: 'POST',
-          },
+          { href: '/api/status/#unsubscribe', label: 'Unsubscribe', method: 'GET' },
         ],
       },
       {
@@ -504,9 +557,43 @@ export const DOC_NAV: DocNavSection[] = [
   {
     label: 'Webhooks',
     items: [
-      { href: '/webhooks/endpoints/', label: 'Endpoints (CRUD + rotate + test)' },
+      {
+        href: '/webhooks/endpoints/',
+        label: 'Endpoints (CRUD + rotate + test)',
+        children: [
+          {
+            href: '/webhooks/endpoints/#subscribe-create',
+            label: 'Subscribe (create)',
+            method: 'POST',
+          },
+          { href: '/webhooks/endpoints/#list--get', label: 'List + get', method: 'GET' },
+          { href: '/webhooks/endpoints/#update', label: 'Update', method: 'PATCH' },
+          { href: '/webhooks/endpoints/#delete', label: 'Delete', method: 'DELETE' },
+          { href: '/webhooks/endpoints/#send-test', label: 'Send test', method: 'POST' },
+          {
+            href: '/webhooks/endpoints/#rotate-signing-secret',
+            label: 'Rotate signing secret',
+            method: 'POST',
+          },
+          {
+            href: '/webhooks/endpoints/#delivery-introspection',
+            label: 'Delivery introspection',
+            method: 'GET',
+          },
+        ],
+      },
       { href: '/webhooks/events/', label: 'Event catalog' },
-      { href: '/webhooks/replay/', label: 'Replay deliveries' },
+      {
+        href: '/webhooks/replay/',
+        label: 'Replay deliveries',
+        children: [
+          {
+            href: '/webhooks/replay/#replay-a-delivery',
+            label: 'Replay a delivery',
+            method: 'POST',
+          },
+        ],
+      },
     ],
   },
   {

@@ -44,6 +44,17 @@
 //     hrefs all carry a '#' and are excluded).
 //   • Total-count pin split: 50 top-level route hrefs + 108 children
 //     anchor hrefs.
+//
+// S27 SUPERSESSION (2026-07-07, docs reference hygiene) — the children
+// census rose 108 → 130 (122 API + 8 webhooks): api/status's
+// heading-embedded "… — METHOD /path" h2 format was normalized to
+// declaration-line sections (clean anchors — the '#snapshot--get-v1status'
+// style slugs are retired), flow-step endpoints were promoted to h2
+// sections (oauth 1/2/4, mfa enroll/verify, auth cli-authorize
+// initiate/bind/exchange, agent-sessions takeover/handback/resume),
+// profiles Export / Import split into two sections, and the Webhooks
+// section now carries children too (endpoints + replay; events is a
+// catalog with none). Top-level slugs stay FROZEN at 50.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -236,15 +247,21 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     expect(body).toMatch(
       /\{ href: '\/api\/sessions\/#login', label: 'Login', method: 'POST' \},\s*\n?\s*\{ href: '\/api\/sessions\/#destroy', label: 'Destroy', method: 'DELETE' \},\s*\n?\s*\],/,
     );
-    // status.md's heading-embedded format lands as clean labels.
+    // S27 (2026-07-07) — status.md's heading-embedded method format was
+    // normalized to declaration lines, so the anchor is the clean slug
+    // (was '#snapshot--get-v1status' under the retired S22.4 format).
     expect(body).toMatch(
-      /\{ href: '\/api\/status\/#snapshot--get-v1status', label: 'Snapshot', method: 'GET' \},/,
+      /\{ href: '\/api\/status\/#snapshot', label: 'Snapshot', method: 'GET' \},/,
     );
   });
 
-  it('Webhooks section: 3 entries (endpoints + events + replay)', () => {
+  it('Webhooks section: 3 entries (endpoints + events + replay); S27 — endpoints + replay carry children (webhooks extraction sweep), events is a catalog with none', () => {
     expect(body).toMatch(
-      /\{\s*\n?\s*label: 'Webhooks',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/webhooks\/endpoints\/', label: 'Endpoints \(CRUD \+ rotate \+ test\)' \},\s*\n?\s*\{ href: '\/webhooks\/events\/', label: 'Event catalog' \},\s*\n?\s*\{ href: '\/webhooks\/replay\/', label: 'Replay deliveries' \},/,
+      /\{\s*\n?\s*label: 'Webhooks',\s*\n?\s*items: \[\s*\n?\s*\{\s*\n?\s*href: '\/webhooks\/endpoints\/',\s*\n?\s*label: 'Endpoints \(CRUD \+ rotate \+ test\)',\s*\n?\s*children: \[/,
+    );
+    expect(body).toMatch(/\{ href: '\/webhooks\/events\/', label: 'Event catalog' \},/);
+    expect(body).toMatch(
+      /\{\s*\n?\s*href: '\/webhooks\/replay\/',\s*\n?\s*label: 'Replay deliveries',\s*\n?\s*children: \[\s*\n?\s*\{\s*\n?\s*href: '\/webhooks\/replay\/#replay-a-delivery',\s*\n?\s*label: 'Replay a delivery',\s*\n?\s*method: 'POST',/,
     );
   });
 
@@ -254,17 +271,17 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     );
   });
 
-  it('total tree size (S22.4 split): 50 top-level route hrefs (a drop below 50 means a page went orphaned again) + 108 children anchor hrefs (the endpoint census; md lockstep enforced by docs-nav-endpoint-children-integrity)', () => {
+  it('total tree size (S27 census): 50 top-level route hrefs (a drop below 50 means a page went orphaned again) + 130 children anchor hrefs (122 API + 8 webhooks — S27 flow-step promotions, Export/Import split, and the webhooks extraction sweep raised the S22.4 census of 108; md lockstep enforced by docs-nav-endpoint-children-integrity)', () => {
     const hrefs = [...body.matchAll(/href: '([^']+)',/g)].map((m) => m[1]!);
     const topLevel = hrefs.filter((h) => !h.includes('#'));
     const anchors = hrefs.filter((h) => h.includes('#'));
     expect(topLevel).toHaveLength(50);
-    expect(anchors).toHaveLength(108);
+    expect(anchors).toHaveLength(130);
     // No duplicate hrefs at either level (the apps/docs
     // doc-nav-section-label-baseline suite enforces the top-level rule at
     // runtime too; mirrored here so a server-only run still catches it).
     expect(new Set(topLevel).size).toBe(50);
-    expect(new Set(anchors).size).toBe(108);
+    expect(new Set(anchors).size).toBe(130);
   });
 
   it('the 22 previously-orphaned routes are all present (6 reference + 5 sdk/api spillover checks kept explicit for the highest-traffic ones)', () => {

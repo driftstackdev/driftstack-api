@@ -9,19 +9,32 @@
 // section, or a hand-typo'd anchor fails here until nav.ts is
 // regenerated in lockstep.
 //
+// S27 (2026-07-07, docs reference hygiene) — the sweep is extended to
+// the WEBHOOKS section pages (webhooks/*.md; endpoints + replay carry
+// children, events is a catalog with zero endpoint h2s), and the md
+// defects the S22.4 extraction had to special-case are fixed at the
+// source: api/status's heading-embedded methods are normalized to
+// declaration lines (rule B is now a vestigial guard — no page uses
+// the format), and the flow-step endpoints that used to hide under h3
+// steps (oauth authorize/complete/token, mfa enroll/verify, auth
+// cli-authorize initiate/bind/exchange, agent-sessions
+// takeover/handback/resume) are promoted to h2 sections, so they get
+// real sub-nodes.
+//
 // Extraction rules (shared with the S22.4 generator):
 //  A) an h2 is an ENDPOINT section iff its DIRECT content (between the
 //     h2 and the first h3 / next h2, fenced code stripped) contains a
 //     paragraph-start `METHOD /path` inline-code declaration line
 //     (previous line blank or the heading itself). Paragraph-start
 //     excludes wrapped mid-sentence continuation lines; the h3 cutoff
-//     excludes multi-step flow sections (oauth "The flow", mfa
-//     "Enrollment", agent-sessions "Pair-mode takeover + handback")
-//     whose declarations belong to h3 steps — those h2s are not ONE
-//     endpoint and get no sub-node.
+//     keeps any future multi-step flow section (declarations under h3
+//     steps) from being mislabeled as ONE endpoint — as of S27 no
+//     api/webhooks page has such a section, prose flow INTROS (oauth
+//     "The flow", mfa "Enrollment") simply have no declaration line.
 //  B) OR the h2 heading itself embeds the method as "<label> — METHOD
-//     /path" (the api/status page format; the tail is stripped from the
-//     sub-node label).
+//     /path" (retired from api/status in S27; kept so a reintroduction
+//     still yields a sub-node and fails the deep-equal until nav.ts
+//     regen).
 // Anchor slugs are computed with github-slugger over ALL headings in
 // page order (stateful, so dedup suffixes match) — the same slugger
 // rehype-slug uses to render heading ids, mirroring
@@ -38,6 +51,7 @@ import type { DocNavChild } from '../../src/data/nav';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const API_DIR = resolve(REPO_ROOT, 'apps/docs/src/pages/api');
+const WEBHOOKS_DIR = resolve(REPO_ROOT, 'apps/docs/src/pages/webhooks');
 
 // Strip the inline markdown rehype removes before slugging (mirrors
 // docs-anchor-link-integrity.test.ts).
@@ -106,33 +120,44 @@ function extractEndpoints(mdFile: string, hrefBase: string): DocNavChild[] {
 }
 
 const apiSection = DOC_NAV.find((s) => s.label === 'API reference');
+const webhooksSection = DOC_NAV.find((s) => s.label === 'Webhooks');
 
-describe('S22.4 DOC_NAV endpoint children ↔ api/*.md integrity', () => {
-  it('the API reference section exists', () => {
+// S27 — the two swept (dir ↔ section) pairs. Extraction rules are
+// identical for both; only the href base differs.
+const SWEPT: { dir: string; hrefPrefix: string; section: typeof apiSection }[] = [
+  { dir: API_DIR, hrefPrefix: '/api/', section: apiSection },
+  { dir: WEBHOOKS_DIR, hrefPrefix: '/webhooks/', section: webhooksSection },
+];
+
+describe('S22.4/S27 DOC_NAV endpoint children ↔ api/*.md + webhooks/*.md integrity', () => {
+  it('the API reference + Webhooks sections exist', () => {
     expect(apiSection).toBeDefined();
+    expect(webhooksSection).toBeDefined();
   });
 
-  it('every api/*.md endpoint set matches its nav children EXACTLY (href = page + # + rehype slug, label = h2 text, method = declared method, page order)', () => {
+  it('every api/*.md + webhooks/*.md endpoint set matches its nav children EXACTLY (href = page + # + rehype slug, label = h2 text, method = declared method, page order)', () => {
     const mismatches: { page: string; expected: DocNavChild[]; actual: DocNavChild[] }[] = [];
-    for (const file of readdirSync(API_DIR)
-      .filter((f) => f.endsWith('.md'))
-      .sort()) {
-      const hrefBase = `/api/${file.replace(/\.md$/, '')}/`;
-      const expected = extractEndpoints(resolve(API_DIR, file), hrefBase);
-      const item = apiSection?.items.find((i) => i.href === hrefBase);
-      const actual = item?.children ?? [];
-      if (JSON.stringify(expected) !== JSON.stringify(actual)) {
-        mismatches.push({ page: hrefBase, expected, actual });
+    for (const { dir, hrefPrefix, section } of SWEPT) {
+      for (const file of readdirSync(dir)
+        .filter((f) => f.endsWith('.md'))
+        .sort()) {
+        const hrefBase = `${hrefPrefix}${file.replace(/\.md$/, '')}/`;
+        const expected = extractEndpoints(resolve(dir, file), hrefBase);
+        const item = section?.items.find((i) => i.href === hrefBase);
+        const actual = item?.children ?? [];
+        if (JSON.stringify(expected) !== JSON.stringify(actual)) {
+          mismatches.push({ page: hrefBase, expected, actual });
+        }
       }
     }
     expect(mismatches).toEqual([]);
   });
 
-  it('zero-endpoint api pages (api overview + versioning) and every NON-API item carry NO children — sub-nodes are an API-reference-resource affordance only', () => {
+  it('zero-endpoint pages (api overview + versioning + the webhooks event catalog) and every NON-swept-section item carry NO children — sub-nodes are an endpoint-page affordance only', () => {
     const offenders: string[] = [];
     for (const section of DOC_NAV) {
       for (const item of section.items) {
-        if (section.label === 'API reference') continue;
+        if (section.label === 'API reference' || section.label === 'Webhooks') continue;
         if (item.children !== undefined) offenders.push(`${section.label} → ${item.href}`);
       }
     }
@@ -140,6 +165,11 @@ describe('S22.4 DOC_NAV endpoint children ↔ api/*.md integrity', () => {
       const item = apiSection?.items.find((i) => i.href === href);
       if (item?.children !== undefined) offenders.push(`API reference → ${href}`);
     }
+    // webhooks/events.md is a payload catalog — its two method mentions
+    // are wrapped mid-sentence continuations, not declaration lines, so
+    // it must extract zero endpoints and carry no children key at all.
+    const events = webhooksSection?.items.find((i) => i.href === '/webhooks/events/');
+    if (events?.children !== undefined) offenders.push('Webhooks → /webhooks/events/');
     expect(offenders).toEqual([]);
   });
 
@@ -155,8 +185,13 @@ describe('S22.4 DOC_NAV endpoint children ↔ api/*.md integrity', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('the tree carries a substantial endpoint census (108 as of S22.4 — drops mean endpoint sections went missing from the md or nav)', () => {
-    const total = (apiSection?.items ?? []).reduce((n, i) => n + (i.children?.length ?? 0), 0);
-    expect(total).toBe(108);
+  it('the tree carries a substantial endpoint census (S27: 122 API + 8 webhooks = 130 — drops mean endpoint sections went missing from the md or nav)', () => {
+    const apiTotal = (apiSection?.items ?? []).reduce((n, i) => n + (i.children?.length ?? 0), 0);
+    const webhooksTotal = (webhooksSection?.items ?? []).reduce(
+      (n, i) => n + (i.children?.length ?? 0),
+      0,
+    );
+    expect(apiTotal).toBe(122);
+    expect(webhooksTotal).toBe(8);
   });
 });

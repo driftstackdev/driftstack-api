@@ -488,10 +488,10 @@ Errors:
 
 ## Pair-mode takeover + handback
 
-For `mode: 'pair'` sessions only — these endpoints return 409 on
-non-pair sessions.
+The takeover + handback endpoints below are for `mode: 'pair'`
+sessions only — they return 409 on non-pair sessions.
 
-### Request takeover
+## Request takeover
 
 `POST /v1/agent-sessions/{id}/takeover`
 
@@ -523,7 +523,7 @@ in-flight takeover. (Distinct from `PairModeStateInvalidTransitionError`,
 which fires when the state machine refuses a transition — e.g. a
 `handback` from `ai-driving` — and carries `from` + `transition`.)
 
-### Request handback
+## Request handback
 
 `POST /v1/agent-sessions/{id}/handback`
 
@@ -538,13 +538,13 @@ Response (200):
 { "pair_mode_state": { "kind": "handback-pending", "requestedAt": "<ISO-8601>" } }
 ```
 
-### Heartbeat-timeout auto-handback
+## Heartbeat-timeout auto-handback
 
 If a `human-driving` session goes 30s without a client heartbeat,
 the harness auto-handbacks the session to `ai-driving`. The
 transition emits an `agent_session.pair_mode.timeout` audit row.
 
-### Resume a challenge-paused session
+## Resume a challenge-paused session
 
 `POST /v1/agent-sessions/{id}/resume`
 

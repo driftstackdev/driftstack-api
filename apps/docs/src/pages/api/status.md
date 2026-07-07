@@ -16,7 +16,9 @@ Distinct from `/health`, `/healthz`, and `/ready`, which are
 infrastructure-facing liveness / readiness probes consumed by the
 orchestrator. `/v1/status` is what HUMANS see.
 
-## Snapshot — `GET /v1/status`
+## Snapshot
+
+`GET /v1/status`
 
 Returns the current health snapshot — overall status, per-component
 breakdown, and the last 5 public incidents from the past 30 days.
@@ -59,7 +61,9 @@ any `degraded` → overall `degraded`; otherwise `operational`.
 on every request, but the CDN coalesces requests within the 30s
 window.
 
-## Incident feed — `GET /v1/status/incidents`
+## Incident feed
+
+`GET /v1/status/incidents`
 
 Lists public incidents from the last 30 days (default), most-recent
 first. The status site renders this as the incident timeline.
@@ -95,7 +99,9 @@ Response (`200`):
 
 `Cache-Control: public, max-age=30`.
 
-## Incident detail — `GET /v1/status/incidents/{id}`
+## Incident detail
+
+`GET /v1/status/incidents/{id}`
 
 Returns the incident plus the full update timeline (investigation
 posted → identified → monitoring → resolved).
@@ -123,7 +129,9 @@ Non-public incidents return `404` — the route deliberately returns the
 same shape as "incident doesn't exist" so probes can't enumerate
 private incidents.
 
-## Live stream — `GET /v1/status/stream`
+## Live stream
+
+`GET /v1/status/stream`
 
 Server-Sent Events stream. Visitors with the status page open receive
 every `incident.created` and `incident.resolved` event in real time
@@ -162,7 +170,9 @@ stream.addEventListener('incident.resolved', (ev) => {
 });
 ```
 
-## SLA report — `GET /v1/status/sla`
+## SLA report
+
+`GET /v1/status/sla`
 
 Rolling 30-day uptime per probe target, computed from the
 system_health_probes table.
@@ -187,7 +197,7 @@ Each probe target runs every 60 seconds, so the 30-day window holds
 ~43,200 checks. `uptime_pct` is `(total - failed) / total * 100`
 rounded to three decimal places.
 
-## Email subscriptions — `POST /v1/status/subscribe`
+## Email subscriptions
 
 Visitors can subscribe to email notifications for every public
 incident. Double-opt-in — a confirmation email is sent before the
@@ -196,7 +206,7 @@ address is recorded as subscribed.
 IP rate-limit: 3 requests per minute per IP on all three subscription
 routes (subscribe / confirm / unsubscribe).
 
-### Start subscription
+## Start subscription
 
 `POST /v1/status/subscribe`
 
@@ -215,7 +225,7 @@ Response (`202`):
 A token-bearing link is emailed to the address. The token is opaque
 and expires after 24 hours.
 
-### Confirm
+## Confirm subscription
 
 `GET /v1/status/subscribe/confirm?token=<opaque>`
 
@@ -228,7 +238,7 @@ Response (`200`):
 After confirmation, the address receives an email for every
 `incident.created` and `incident.resolved` event going forward.
 
-### Unsubscribe
+## Unsubscribe
 
 `GET /v1/status/subscribe/unsubscribe?token=<opaque>`
 

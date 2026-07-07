@@ -18,7 +18,11 @@ never need to call directly.
 
 ## Enrollment
 
-### 1. Start enrollment
+Enrollment is a two-step flow: start enrollment to mint a fresh TOTP
+secret, then verify a code from the authenticator app to activate it
+and receive recovery codes.
+
+## Start enrollment
 
 `POST /v1/account/mfa/enroll`
 
@@ -45,7 +49,7 @@ Re-calling `/enroll` while still pending (no `/verify` yet) is OK —
 each call returns a fresh secret. The customer's authenticator app
 should be re-scanned each time.
 
-### 2. Confirm + receive recovery codes
+## Confirm + receive recovery codes
 
 `POST /v1/account/mfa/verify`
 
@@ -229,7 +233,10 @@ refresh).
 
 ## Disabling
 
-`DELETE /v1/account/mfa` (or `POST /v1/account/mfa/disable`)
+`DELETE /v1/account/mfa`
+
+The same operation is also exposed as `POST /v1/account/mfa/disable`
+— an alias route with the same body, gates, and semantics.
 
 ```json
 { "confirm": "disable-mfa" }

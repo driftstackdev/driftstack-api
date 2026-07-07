@@ -180,27 +180,30 @@ describe('W764 docs /api/auth content parity', () => {
     );
   });
 
-  it('CRITICAL CLI activation 3-step flow pinned — initiate / bind / exchange. The numbered steps match the V-266/V-267 dashboard /cli/authorize page contract.', () => {
+  it('CRITICAL CLI activation 3-step flow pinned — initiate / bind / exchange. The steps match the V-266/V-267 dashboard /cli/authorize page contract. S27 (2026-07-07) re-pin: the "Three steps" numbered list became three h2 endpoint sections (Initiate activation / Bind activation (dashboard) / Exchange for the API key) so the endpoints surface in the docs nav tree; the step wording is otherwise verbatim.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/1\. \*\*Initiate\*\* — the CLI\/GUI generates a CSRF nonce/);
-    expect(p).toMatch(/2\. \*\*Bind\*\* — the user signs in to the dashboard/);
-    expect(p).toMatch(/3\. \*\*Exchange\*\* — the CLI\/GUI polls/);
+    expect(p).toMatch(/^## Initiate activation$/m);
+    expect(p).toMatch(/^## Bind activation \(dashboard\)$/m);
+    expect(p).toMatch(/^## Exchange for the API key$/m);
+    expect(p).toMatch(/Step 1 — \*\*Initiate\*\* — the CLI\/GUI generates a CSRF nonce/);
+    expect(p).toMatch(/Step 2 — \*\*Bind\*\* — the user signs in to the dashboard/);
+    expect(p).toMatch(/Step 3 — \*\*Exchange\*\* — the CLI\/GUI polls/);
   });
 
-  it("CRITICAL CLI bind stores plaintext keyed by code in Redis with 5-min TTL pinned. The '(Redis, 5-minute TTL)' wording is the load-bearing security framing — exchange is one-shot.", () => {
+  it("CRITICAL CLI bind stores plaintext keyed by code in Redis with 5-min TTL pinned. The '(Redis, 5-minute TTL)' wording is the load-bearing security framing — exchange is one-shot. (S27 re-pin: same sentence, unindented paragraph instead of list-item continuation.)", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /the server mints a scoped API key on the calling account\s*\n?\s+and stores the plaintext keyed by `code` \(Redis, 5-minute TTL\)\./,
+      /the server mints a scoped API key on the calling account\s*\n?\s*and stores the plaintext keyed by `code` \(Redis, 5-minute TTL\)\./,
     );
   });
 
-  it('CRITICAL CLI exchange status state-machine pinned — pending / bound / expired. The 3-state transition is what the polling-poll-poll SDK loop drives off.', () => {
+  it('CRITICAL CLI exchange status state-machine pinned — pending / bound / expired. The 3-state transition is what the polling-poll-poll SDK loop drives off. (S27 re-pin: same sentence, unindented paragraph instead of list-item continuation.)', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`\{ status: "pending" \}` to\s*\n?\s+`\{ status: "bound", api_key, account_id \}`/,
+      /`\{ status: "pending" \}` to\s*\n?\s*`\{ status: "bound", api_key, account_id \}`/,
     );
     expect(p).toMatch(/`\{ status: "expired" \}`/);
     // The code is deleted on delivery, so a re-poll returns expired

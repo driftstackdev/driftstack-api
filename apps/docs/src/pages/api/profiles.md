@@ -275,7 +275,7 @@ the source profile is left intact, and you move the JSON yourself
 travels — `name`, `archetype`, `description`. Underlying browser
 state is not in the envelope.
 
-**Export**
+## Export
 
 `GET /v1/profiles/:id/export`
 
@@ -299,7 +299,7 @@ id, into whatever account holds the calling key. The envelope is
 versioned so a future v2 (extending to driver state) stays
 back-compat.
 
-**Import**
+## Import
 
 `POST /v1/profiles/import`
 
