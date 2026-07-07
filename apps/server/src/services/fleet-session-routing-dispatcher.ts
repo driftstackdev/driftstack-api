@@ -101,9 +101,18 @@ export class FleetSessionRoutingDispatcher implements IntentDispatcher {
     if (nodeId === null) {
       // Session never dispatched to a node (node_id NULL) — e.g. no live box at
       // create time, or a legacy row. Honest failure, not a fake success.
+      //
+      // errorCode `intent_dispatch_error`, NOT `intent_session_not_established`:
+      // the latter is RESERVED for the box's fork still cold-starting its
+      // WebDriver (the correlator synthesizes it from `intent_dispatch_no_session`),
+      // and the executor gives THAT a long 12s patient retry to cover the warmup.
+      // These three routing failures (no node / CP down / node disconnected) are
+      // NOT a warming session — there is no box to reach at all, so they will not
+      // recover inside that window; they must fail fast, not hang 12s. Same
+      // session_error diagnosis + retryable hint, so the customer story is unchanged.
       return routeFailure(
         d,
-        'intent_session_not_established',
+        'intent_dispatch_error',
         'no automation device is currently running this session',
       );
     }
@@ -113,7 +122,7 @@ export class FleetSessionRoutingDispatcher implements IntentDispatcher {
     if (registry === undefined) {
       return routeFailure(
         d,
-        'intent_session_not_established',
+        'intent_dispatch_error',
         'the automation control plane is not available',
       );
     }
@@ -125,7 +134,7 @@ export class FleetSessionRoutingDispatcher implements IntentDispatcher {
       );
       return routeFailure(
         d,
-        'intent_session_not_established',
+        'intent_dispatch_error',
         'the automation device for this session is not connected',
       );
     }

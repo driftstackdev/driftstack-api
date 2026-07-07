@@ -99,7 +99,7 @@ describe('FleetSessionRoutingDispatcher', () => {
     expect((rB.outputData as { url: string }).url).toContain('#B');
   });
 
-  it('no assigned node (node_id NULL) → honest session_error failure, never dispatched', async () => {
+  it('no assigned node (node_id NULL) → dispatch_error (fast-fail, NOT the warming session_not_established), never dispatched', async () => {
     const nodeA = nodeConn('A');
     const registry: NodeConnectionRegistry = { get: () => nodeA };
     const disp = new FleetSessionRoutingDispatcher(() => registry, sessionsWith({ ses_1: null }));
@@ -107,7 +107,11 @@ describe('FleetSessionRoutingDispatcher', () => {
     const result = await disp.dispatch(dispatchFor('ses_1'));
 
     expect(result.success).toBe(false);
-    expect(result.errorCode).toBe('intent_session_not_established');
+    // NOT `intent_session_not_established`: that code is reserved for the box fork's
+    // cold-starting WebDriver (correlator), which the executor patiently retries for
+    // ~12s. A routing failure has no box to warm up — it must fail fast, so it uses
+    // `intent_dispatch_error` (same session_error diagnosis, no patient retry).
+    expect(result.errorCode).toBe('intent_dispatch_error');
     expect(nodeA.got).toHaveLength(0); // never reached any correlator
   });
 
@@ -118,7 +122,7 @@ describe('FleetSessionRoutingDispatcher', () => {
     const result = await disp.dispatch(dispatchFor('ses_missing'));
 
     expect(result.success).toBe(false);
-    expect(result.errorCode).toBe('intent_session_not_established');
+    expect(result.errorCode).toBe('intent_dispatch_error');
   });
 
   it('fleet control plane not up (registry resolver returns undefined) → session_error', async () => {
@@ -130,7 +134,7 @@ describe('FleetSessionRoutingDispatcher', () => {
     const result = await disp.dispatch(dispatchFor('ses_1'));
 
     expect(result.success).toBe(false);
-    expect(result.errorCode).toBe('intent_session_not_established');
+    expect(result.errorCode).toBe('intent_dispatch_error');
   });
 
   it('owning node has no live connection (offline box) → session_error', async () => {
@@ -143,7 +147,7 @@ describe('FleetSessionRoutingDispatcher', () => {
     const result = await disp.dispatch(dispatchFor('ses_1'));
 
     expect(result.success).toBe(false);
-    expect(result.errorCode).toBe('intent_session_not_established');
+    expect(result.errorCode).toBe('intent_dispatch_error');
   });
 
   it('sessions lookup THROWS → dispatch_error failure (retryable, side-effect-free), never rejects', async () => {

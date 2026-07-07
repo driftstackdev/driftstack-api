@@ -398,6 +398,28 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
     expect(got).toHaveLength(3); // retried through the transient dispatch errors
   });
 
+  it('a persistent intent_dispatch_error (routing failure — no box to reach) fails FAST, never the 12s cold-start patient retry', async () => {
+    // Regression guard for the #7/#8 over-fire: the fleet dispatcher now emits
+    // intent_dispatch_error (NOT intent_session_not_established) for no-node /
+    // CP-down / node-disconnected. Those have no warming box, so even with the long
+    // patient budget available the executor must bound them by the SHORT maxRetries,
+    // not wait 8×1500ms for a warmup that will never come.
+    const { got, dispatcher } = mockDispatcher((d) =>
+      failResult(d.intentId, 'intent_dispatch_error'),
+    );
+    const { sleep } = instantSleep();
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
+      maxRetries: 2,
+      retryDelayMs: 0,
+      sessionEstablishMaxRetries: 8, // patient budget present — must NOT engage here
+      sessionEstablishRetryDelayMs: 0,
+      sleep,
+    });
+    const res = await exec.execute(planArgs([{ kind: 'navigate', url: 'https://x' }]));
+    expect(res.ok).toBe(false);
+    expect(got).toHaveLength(3); // 1 + maxRetries(2), NOT 1 + 8 patient retries
+  });
+
   it('a WEBDRIVER failure on an interact STILL retries — the atomic command errored WITHOUT tapping (proven not applied)', async () => {
     let n = 0;
     const { got, dispatcher } = mockDispatcher((d) =>
