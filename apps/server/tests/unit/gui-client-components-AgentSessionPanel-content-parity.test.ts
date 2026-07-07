@@ -134,7 +134,14 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).toMatch(/if \(noPublisherTimer !== null\) clearTimeout\(noPublisherTimer\);/);
     expect(body).toMatch(/data-overlay="publisher-state"/);
     expect(body).toMatch(/data-action="open-polling-viewer"/);
-    expect(body).toMatch(/the proxy or connection may be down/);
+    // The no-publisher overlay is scoped HONESTLY to the live-view/video failure
+    // (not "couldn't start the session" — the task may have run; the founder read
+    // the old copy as "nothing happened") and drops the false "proxy may be down"
+    // cause-assertion (the common real cause is the device's screen-capture grant).
+    expect(body).toMatch(/Couldn.t show the live view/);
+    expect(body).toMatch(/The task itself may still have run/);
+    expect(body).toMatch(/screen capture may need attention/);
+    expect(body).not.toMatch(/the proxy or connection may be down/);
     expect(body).toMatch(/data-action="retry-launch"/);
   });
 

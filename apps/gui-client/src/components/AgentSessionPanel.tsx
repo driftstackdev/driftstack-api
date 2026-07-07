@@ -878,8 +878,9 @@ export function AgentSessionPanel({
           ) : (
             <>
               <span>
-                Couldn’t start the session — the proxy or connection may be down. The stream room
-                connected, but no live video arrived.
+                Couldn’t show the live view — the stream connected, but no video arrived from the
+                automation device. The task itself may still have run; this is usually temporary, so
+                press Retry. If it keeps happening, the device’s screen capture may need attention.
               </span>
               <div className="flex flex-wrap items-center justify-center gap-2">
                 {/* #59 — a no-stream launch can recover on a fresh connect (the worker
