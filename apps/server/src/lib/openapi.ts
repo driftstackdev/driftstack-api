@@ -3532,6 +3532,14 @@ function buildRegistry(): OpenAPIRegistry {
         content: problemContent,
       },
       ...errors4xx,
+      // S42 follow-up 2026-07-07 — the /mode flip carries the same aiAgent
+      // tier gate as create (a manual session must not become LLM-driven
+      // on a tier without the feature).
+      403: {
+        description:
+          "Flipping INTO 'ai'/'pair' requires the AI-agent feature on the session owner's tier — same gate as create. Flips to 'manual' are never tier-refused.",
+        content: problemContent,
+      },
     },
   });
 

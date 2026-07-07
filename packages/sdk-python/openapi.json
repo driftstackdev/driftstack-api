@@ -18337,7 +18337,7 @@
             }
           },
           "403": {
-            "description": "Caller not permitted.",
+            "description": "Flipping INTO 'ai'/'pair' requires the AI-agent feature on the session owner's tier — same gate as create. Flips to 'manual' are never tier-refused.",
             "content": {
               "application/problem+json": {
                 "schema": {

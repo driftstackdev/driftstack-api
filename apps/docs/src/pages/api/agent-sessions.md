@@ -114,7 +114,9 @@ Response `201 Created` returns the resource above.
 > tier with the AI-agent feature: Team, Agency, and every API-ladder
 > tier (API Starter and up). On Free and Personal the create is
 > refused with a 403 `forbidden` tier error. `mode: "manual"`
-> sessions are available on every tier. Team-scoped creates
+> sessions are available on every tier. The same rule applies to
+> [`POST /{id}/mode`](#set-mode): flipping an existing session into
+> `ai` or `pair` requires the AI-agent tier too. Team-scoped creates
 > (`X-Driftstack-Account`) gate on the **owner** account's tier —
 > the account the session runs and bills against.
 
@@ -406,6 +408,9 @@ Errors:
 
 - `409 conflict` — session is not `active` (closed/paused sessions
   reject the transition).
+- `403 forbidden` — flipping into `ai` or `pair` on a tier without
+  the AI-agent feature (Free / Personal). The same tier rule as
+  session create; switching to `manual` is never tier-refused.
 - `400 validation-failed` — body `mode` isn't one of `'manual' |
 'ai' | 'pair'`.
 - `404 not-found` — session unknown or cross-account.
@@ -783,19 +788,19 @@ Filter via
 
 ## Errors
 
-| Status | Type                         | When                                                                                   |
-| -----: | ---------------------------- | -------------------------------------------------------------------------------------- |
-|    400 | validation                   | body fails schema (missing `user_message`, etc.)                                       |
-|    403 | forbidden                    | create with `mode: ai`/`pair` on a tier without the AI-agent feature (Free / Personal) |
-|    404 | not-found                    | session id unknown to the calling account                                              |
-|    409 | conflict                     | mode mismatch (e.g. takeover on `mode: 'ai'`)                                          |
-|    409 | profile-in-use               | create's `profile_id` already has a live session (carries `active_session_id`)         |
-|    409 | pair-mode-invalid-transition | state-machine refused the transition (carries `from` + `transition`)                   |
-|    409 | pair-mode-conflict           | concurrent takeover lost the lock race (carries `winner_client_id`)                    |
-|    402 | bundled-llm-budget-exhausted | bundled-LLM monthly cap reached                                                        |
-|    402 | bundled-llm-consent-required | deployment has bundled-LLM but customer hasn't opted in                                |
-|    502 | byok-anthropic-required      | no BYOK + no consent + no fallback                                                     |
-|    503 | feature-unavailable          | deployment activation gate is off (no LLM key path wired)                              |
+| Status | Type                         | When                                                                                                         |
+| -----: | ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
+|    400 | validation                   | body fails schema (missing `user_message`, etc.)                                                             |
+|    403 | forbidden                    | create with — or mode-flip into — `mode: ai`/`pair` on a tier without the AI-agent feature (Free / Personal) |
+|    404 | not-found                    | session id unknown to the calling account                                                                    |
+|    409 | conflict                     | mode mismatch (e.g. takeover on `mode: 'ai'`)                                                                |
+|    409 | profile-in-use               | create's `profile_id` already has a live session (carries `active_session_id`)                               |
+|    409 | pair-mode-invalid-transition | state-machine refused the transition (carries `from` + `transition`)                                         |
+|    409 | pair-mode-conflict           | concurrent takeover lost the lock race (carries `winner_client_id`)                                          |
+|    402 | bundled-llm-budget-exhausted | bundled-LLM monthly cap reached                                                                              |
+|    402 | bundled-llm-consent-required | deployment has bundled-LLM but customer hasn't opted in                                                      |
+|    502 | byok-anthropic-required      | no BYOK + no consent + no fallback                                                                           |
+|    503 | feature-unavailable          | deployment activation gate is off (no LLM key path wired)                                                    |
 
 The pair-mode state-machine transition errors are typed in all
 three SDKs: `PairModeStateInvalidTransitionError`. Branch on

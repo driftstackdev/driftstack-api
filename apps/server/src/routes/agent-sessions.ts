@@ -3269,6 +3269,30 @@ export function registerAgentSessionsRoutes(
         // the session is already in pair mode mid-takeover.
         return publicAgentSession(rec, undefined, sessionLivenessStore);
       }
+      // S42 follow-up 2026-07-07 — the /mode flip is the OTHER ordering of
+      // the create-edge aiAgent gate: without this, a free/personal account
+      // creates a mode:'manual' session (open on every tier) and flips it
+      // LLM-driven here, bypassing the tier matrix entirely. Same rule as
+      // create: entering 'ai'/'pair' requires aiAgent on the tier of the
+      // account the session runs and bills against (rec.accountId — covers
+      // both the account-auth and gui_control_key auth paths; a control key
+      // proves session access, never tier). Manual-ward flips stay open on
+      // every tier: handing back to a human must never be tier-refused,
+      // even after a mid-session downgrade.
+      if (target !== 'manual') {
+        if (req.guiControlKeyAuthorized !== true && requireCtx(req).account.id === rec.accountId) {
+          requireTierFeature(requireCtx(req).account.tier, 'aiAgent');
+        } else {
+          if (authRepo === undefined) {
+            throw new ForbiddenError('Owner account tier is unavailable.');
+          }
+          const owner = await authRepo.getAccount(rec.accountId);
+          if (!owner) {
+            throw new ForbiddenError('Owner account no longer exists.');
+          }
+          requireTierFeature(owner.tier, 'aiAgent');
+        }
+      }
       const nextPairModeState: PairModeState | null =
         target === 'pair' ? initialPairModeState() : null;
       const updated = await sessions.setMode(req.params.id, target, nextPairModeState);

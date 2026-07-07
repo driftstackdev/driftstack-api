@@ -80,7 +80,9 @@ describe('services/notification-event-bus.ts content parity', () => {
   it('S45 publishBroadcast pinned: distributive-omit param type, per-subscriber accountId stamping via the existing publish path, and key-set snapshot before iteration (handlers may unsubscribe mid-fan-out)', () => {
     expect(body).toMatch(/publishBroadcast\(event: BroadcastNotificationEvent\): void \{/);
     expect(body).toMatch(
-      /for \(const accountId of Array\.from\(this\.subscribers\.keys\(\)\)\) \{\s*\n?\s*this\.publish\(\{ \.\.\.event, accountId \} as NotificationEvent\);/,
+      // (the spread already narrows to NotificationEvent — no assertion;
+      // lint's no-unnecessary-type-assertion strips one if added back)
+      /for \(const accountId of Array\.from\(this\.subscribers\.keys\(\)\)\) \{\s*\n?\s*this\.publish\(\{ \.\.\.event, accountId \}\);/,
     );
     expect(body).toMatch(
       /export type BroadcastNotificationEvent = DistributiveOmit<NotificationEvent, 'accountId'>;/,
