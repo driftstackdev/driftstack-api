@@ -689,17 +689,22 @@ export function AgentChatView({
           <div className="mx-auto flex max-w-3xl items-end gap-2">
             <textarea
               aria-label="Message Driftstack AI"
-              rows={1}
+              rows={3}
               value={draft}
-              placeholder="Describe a task — e.g. “open example.com and take a screenshot”"
-              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Describe a task in plain English — e.g. “Go to example.com, accept the cookie banner, then search for ‘pricing’ and screenshot the result.”  ⏎ to send · ⇧⏎ for a new line"
+              onChange={(e) => {
+                setDraft(e.target.value);
+                // #139 — LLM-composer feel: grow with the content up to a cap.
+                e.target.style.height = 'auto';
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 288)}px`;
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   submit();
                 }
               }}
-              className="form-input max-h-40 min-h-[2.25rem] flex-1 resize-none"
+              className="form-input max-h-72 min-h-[5.5rem] flex-1 resize-none text-sm leading-relaxed"
             />
             {chat.sending ? (
               <button
