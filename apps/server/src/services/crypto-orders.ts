@@ -321,6 +321,22 @@ export interface CryptoOrdersServiceOpts {
    */
   paidEmailNotifier?: CryptoOrderPaidEmailNotifier;
   /**
+   * S41 2026-07-07 (founder-approved: wire crypto activation) — optional
+   * account-tier activator. When supplied, applyIpnStatus invokes it on
+   * the same pending|confirming|partial → paid transition where the
+   * webhook + receipt email fire, and the activator upgrades the
+   * account's tier to the order's purchased `product` (upgrade-only —
+   * see CryptoTierActivationService for the no-downgrade precedence
+   * rule). Same thin-seam decoupling as `webhooks`/`paidEmailNotifier`:
+   * production wiring passes CryptoTierActivationService (backed by the
+   * Stripe account-tier repo machinery); unit tests can pass a local
+   * mock. UNLIKE the two best-effort emitters, a failure here is a paid
+   * customer without their entitlement, so it is logged as a loud
+   * integrity alarm (never silently swallowed) while still acking the
+   * IPN 200.
+   */
+  tierActivator?: CryptoOrderTierActivator;
+  /**
    * Billing-integrity — optional logger for integrity alarms (e.g. an IPN
    * payment_id that doesn't match the order's stored payment_id). When
    * omitted the alarm is silently dropped (tests without a logger).
@@ -381,6 +397,29 @@ export interface CryptoOrderPaidEmail {
 
 export interface CryptoOrderPaidEmailNotifier {
   notifyOrderPaid: (intent: CryptoOrderPaidEmail) => Promise<void>;
+}
+
+/**
+ * S41 2026-07-07 (founder-approved: wire crypto activation) — local
+ * activator contract for "upgrade the account tier on paid". Same
+ * decoupling rationale as {@link CryptoOrderWebhookEmitter}: this
+ * service emits the activation intent at the exactly-once paid
+ * transition; the production CryptoTierActivationService consumes it
+ * (Stripe-parity tier write + audit + tier-changed email + auth-cache
+ * invalidation). Tests can pass a mock to observe the intent without
+ * standing up the account machinery.
+ */
+export interface CryptoOrderTierActivationIntent {
+  account_id: string;
+  order_id: string;
+  /** The purchased tier — the order's `product` (a paid AccountTier slug). */
+  product: string;
+  payment_id: string | null;
+  paid_at: string;
+}
+
+export interface CryptoOrderTierActivator {
+  activateTierForPaidOrder: (intent: CryptoOrderTierActivationIntent) => Promise<void>;
 }
 
 export class CryptoOrdersService {
@@ -1469,6 +1508,44 @@ export class CryptoOrdersService {
     // Best-effort: emission failures are swallowed so the IPN ack stays 200.
     if (outcome.firePaid && outcome.order.account_id !== null) {
       const paidAtIso = new Date(outcome.order.updated_at).toISOString();
+      // S41 2026-07-07 (founder-approved: wire crypto activation) — account-tier
+      // activation fires FIRST among the paid side-effects: the tier grant is
+      // the entitlement the customer paid for; the webhook + receipt email
+      // below are informational. Idempotency: `firePaid` is computed against
+      // the LOCKED committed row (order.status !== 'paid' && mapped === 'paid'),
+      // so a replayed / duplicate / out-of-order IPN — which finds the order
+      // already paid — never re-invokes the activator: no re-apply, no tier
+      // flip-flop. The no-downgrade / stale-order precedence rule lives in the
+      // activator itself (CryptoTierActivationService), decided atomically
+      // against the account row. UNLIKE the best-effort webhook/email catches
+      // below, a failure here is NOT silent: the customer paid and did not
+      // receive their tier, so it logs a loud integrity alarm naming the
+      // remediation path (admin change-tier), while the IPN still acks 200
+      // (a NowPayments retry would find the order already paid and cannot
+      // re-drive activation — ops must remediate from the alarm).
+      if (this.opts.tierActivator !== undefined) {
+        try {
+          await this.opts.tierActivator.activateTierForPaidOrder({
+            account_id: outcome.order.account_id,
+            order_id: outcome.order.order_id,
+            product: outcome.order.product,
+            payment_id: outcome.order.payment_id,
+            paid_at: paidAtIso,
+          });
+        } catch (err) {
+          this.opts.logger?.error(
+            {
+              component: 'crypto-orders',
+              event: 'crypto_paid_tier_activation_failed',
+              order_id: outcome.order.order_id,
+              account_id: outcome.order.account_id,
+              product: outcome.order.product,
+              err: err instanceof Error ? err.message : String(err),
+            },
+            'crypto order reached paid but tier activation FAILED — customer paid without receiving their tier; remediate via admin change-tier (integrity alarm)',
+          );
+        }
+      }
       if (this.opts.webhooks !== undefined) {
         try {
           await this.opts.webhooks.enqueueEvent(outcome.order.account_id, 'crypto.order.paid', {

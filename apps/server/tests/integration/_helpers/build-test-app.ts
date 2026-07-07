@@ -15,6 +15,7 @@ import {
   CryptoOrdersService,
   InMemoryCryptoOrdersRepo,
 } from '../../../src/services/crypto-orders.js';
+import { CryptoTierActivationService } from '../../../src/services/crypto-tier-activation.js';
 import type { UsageInputs } from '../../../src/lib/cost-estimator.js';
 import { MemoryRateLimitStore } from '../../../src/lib/memory-rate-limit-store.js';
 import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../../../src/lib/api-keys.js';
@@ -1332,7 +1333,22 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // /v1/billing/crypto-checkout route. Tests that exercise the IPN
   // pipeline can read back the resulting CryptoOrder by id.
   const cryptoOrdersRepo = new InMemoryCryptoOrdersRepo();
-  const cryptoOrdersService = new CryptoOrdersService({ repo: cryptoOrdersRepo });
+  // S41 2026-07-07 (founder-approved: wire crypto activation) — tier
+  // activation on the paid transition, wired against the SAME in-memory
+  // Stripe-webhooks repo account facet the Stripe tests mutate, so crypto +
+  // Stripe tier changes observe each other exactly like prod (both write
+  // accounts.tier), and against the same lifecycle/auth-cache fan-out.
+  const cryptoTierActivation = new CryptoTierActivationService(
+    stripeWebhooksRepo,
+    testLogger,
+    accountLifecycleService,
+    authCache,
+  );
+  const cryptoOrdersService = new CryptoOrdersService({
+    repo: cryptoOrdersRepo,
+    tierActivator: cryptoTierActivation,
+    logger: testLogger,
+  });
 
   // V-667.C — OAuth-client service. Only constructed when the test
   // opts in via opts.oauthClient; matches the prod app.ts gate

@@ -172,6 +172,7 @@ import { DrizzleProfileSnapshotsRepo } from '../db/profile-snapshots-repo.js';
 import type { AccountTier } from '@driftstack/api-types';
 import { BillingService, type BillingProvider } from '../services/billing.js';
 import { CryptoOrdersService } from '../services/crypto-orders.js';
+import { CryptoTierActivationService } from '../services/crypto-tier-activation.js';
 import { DrizzleCryptoOrdersRepo } from '../db/crypto-orders-repo.js';
 import { NowPaymentsApiClient } from './nowpayments-api.js';
 import { CostMonitoringService } from '../services/cost-monitoring.js';
@@ -1288,12 +1289,26 @@ export async function createProductionDeps(
     // 22P02 invalid-input error that previously kept this
     // deferred. Customers subscribed to either event get a real
     // webhook delivery on every applyIpnStatus terminal transition.
+    // S41 2026-07-07 (founder-approved: wire crypto activation) — paid crypto
+    // orders now activate the purchased tier. Reuses the Stripe account-tier
+    // mechanism (stripeWebhooksRepo.setAccountTierIfUpgrade — same accounts
+    // row-lock as setAccountTier) + the same fan-out (auth-cache
+    // invalidation, subscription.tier_changed lifecycle event → audit row +
+    // tier-changed email). Upgrade-only: the activator enforces the
+    // no-downgrade precedence rule (see CryptoTierActivationService).
+    const cryptoTierActivation = new CryptoTierActivationService(
+      stripeWebhooksRepo,
+      logger,
+      accountLifecycleService,
+      authCache,
+    );
     cryptoOrdersService = new CryptoOrdersService({
       repo: cryptoRepo,
       webhooks: {
         enqueueEvent: (accountId, eventType, data) =>
           webhooksService.enqueueEvent(accountId, eventType, data),
       },
+      tierActivator: cryptoTierActivation,
       // Billing-integrity — surface the payment_id-mismatch alarm to the logs.
       logger,
     });

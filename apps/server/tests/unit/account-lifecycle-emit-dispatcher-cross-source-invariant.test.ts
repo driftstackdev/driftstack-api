@@ -199,14 +199,24 @@ describe('W916 V-202b/c AccountLifecycle emit dispatcher cross-source invariant'
     );
   });
 
-  // ─── tier_changed 6-field event ──────────────────────────────
+  // ─── tier_changed event (dual-source since S41) ─────────────
 
-  it("CRITICAL tier_changed event has 6 fields — fromTier (nullable; 'null when previous tier could not be resolved') + toTier + effectiveAt + stripeEventType + stripeEventId. The fromTier-nullable handles 'account row missing' resolution failures gracefully.", () => {
+  it("CRITICAL tier_changed event — fromTier (nullable; 'null when previous tier could not be resolved') + toTier + effectiveAt + dual-source cross-reference metadata: OPTIONAL stripeEventType/stripeEventId (Stripe-driven) or OPTIONAL cryptoOrderId/cryptoPaymentId (S41 crypto-paid-order-driven; exactly one source's metadata is set). The fromTier-nullable handles 'account row missing' resolution failures gracefully.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/account-lifecycle.ts'));
     expect(p).toMatch(/null when the previous tier could not be resolved \(account row missing\)/);
     expect(p).toMatch(/fromTier: AccountTier \| null;/);
     expect(p).toMatch(/toTier: AccountTier;/);
     expect(p).toMatch(/Stripe event metadata for cross-reference; passed through to audit payload/);
+    // S41 2026-07-07 (founder-approved: wire crypto activation) — the Stripe
+    // fields are OPTIONAL and the crypto-order fields exist, so a paid crypto
+    // order can drive the same audit-row + tier-changed-email fan-out without
+    // mislabelling its cross-reference metadata as stripe_*.
+    expect(p).toMatch(/stripeEventType\?: string;/);
+    expect(p).toMatch(/stripeEventId\?: string;/);
+    expect(p).toMatch(/cryptoOrderId\?: string;/);
+    expect(p).toMatch(/cryptoPaymentId\?: string \| null;/);
+    expect(p).toMatch(/crypto_order_id: event\.cryptoOrderId,/);
+    expect(p).toMatch(/crypto_payment_id: event\.cryptoPaymentId \?\? null,/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

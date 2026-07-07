@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AccountTier } from '@driftstack/api-types';
 import type { StripeWebhooksRepo } from '../../../src/services/stripe-webhooks.js';
+import { isCryptoTierUpgrade } from '../../../src/services/crypto-tier-activation.js';
 
 interface LedgerRow {
   eventId: string;
@@ -165,6 +166,24 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     const previousTier = a.tier;
     this.accounts.set(args.accountId, { ...a, tier: args.tier });
     return Promise.resolve({ previousTier });
+  }
+
+  setAccountTierIfUpgrade(args: {
+    accountId: string;
+    tier: AccountTier;
+    at: Date;
+  }): Promise<{ previousTier: AccountTier | null; applied: boolean }> {
+    // S41 — mirrors DrizzleStripeWebhooksRepo.setAccountTierIfUpgrade:
+    // decide-and-write against the current row via the SHARED
+    // isCryptoTierUpgrade rule (single source; the rule can't fork).
+    const a = this.accounts.get(args.accountId);
+    if (!a) return Promise.resolve({ previousTier: null, applied: false });
+    const previousTier = a.tier;
+    if (!isCryptoTierUpgrade(previousTier, args.tier)) {
+      return Promise.resolve({ previousTier, applied: false });
+    }
+    this.accounts.set(args.accountId, { ...a, tier: args.tier });
+    return Promise.resolve({ previousTier, applied: true });
   }
 
   downgradeAccountTierToBestRemaining(args: {

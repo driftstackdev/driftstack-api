@@ -67,9 +67,16 @@ export type LifecycleEvent =
       fromTier: AccountTier | null;
       toTier: AccountTier;
       effectiveAt: Date;
-      /** Stripe event metadata for cross-reference; passed through to audit payload. */
-      stripeEventType: string;
-      stripeEventId: string;
+      /** Stripe event metadata for cross-reference; passed through to audit payload.
+       *  Optional since S41 2026-07-07 (founder-approved: wire crypto activation):
+       *  a tier change can also be driven by a paid crypto order, which carries
+       *  the crypto* fields below instead — exactly one source's metadata is set. */
+      stripeEventType?: string;
+      stripeEventId?: string;
+      /** S41 — crypto-order metadata for cross-reference when the change was
+       *  driven by a paid NowPayments order; passed through to audit payload. */
+      cryptoOrderId?: string;
+      cryptoPaymentId?: string | null;
     }
   | {
       // V-327 — fires when Stripe's `invoice.upcoming` webhook arrives
@@ -223,8 +230,10 @@ export class AccountLifecycleService {
       fromTier: AccountTier | null;
       toTier: AccountTier;
       effectiveAt: Date;
-      stripeEventType: string;
-      stripeEventId: string;
+      stripeEventType?: string;
+      stripeEventId?: string;
+      cryptoOrderId?: string;
+      cryptoPaymentId?: string | null;
     },
   ): Promise<void> {
     // Short-circuit no-op transitions — Stripe sends customer.subscription.updated
@@ -234,6 +243,7 @@ export class AccountLifecycleService {
 
     // Audit emit first (always wanted when wired). System actor because
     // the trigger is Stripe's webhook, not a customer action.
+    // (S41: same rationale when the trigger is a paid crypto order's IPN.)
     if (this.accountAudit !== null) {
       try {
         await this.accountAudit.record({
@@ -246,8 +256,20 @@ export class AccountLifecycleService {
           payload: {
             from: event.fromTier,
             to: event.toTier,
-            stripe_event_type: event.stripeEventType,
-            stripe_event_id: event.stripeEventId,
+            // Exactly one source's cross-reference metadata is present:
+            // the Stripe webhook fields, or (S41) the paid crypto order's ids.
+            ...(event.stripeEventType !== undefined
+              ? {
+                  stripe_event_type: event.stripeEventType,
+                  stripe_event_id: event.stripeEventId,
+                }
+              : {}),
+            ...(event.cryptoOrderId !== undefined
+              ? {
+                  crypto_order_id: event.cryptoOrderId,
+                  crypto_payment_id: event.cryptoPaymentId ?? null,
+                }
+              : {}),
           },
         });
       } catch (err) {

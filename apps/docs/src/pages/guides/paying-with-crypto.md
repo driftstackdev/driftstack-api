@@ -151,6 +151,16 @@ never on `partial` (under-paid; not credited). Driftstack applies the
 same rule: the tier purchase is activated on the `paid` transition,
 not before.
 
+Activation applies your account's tier automatically on that `paid`
+transition, and it is **upgrade-only**: if your account already sits
+on a higher tier by the time the order settles (say a card
+subscription started after you minted the order), the paid order
+never downgrades you — the payment is still recorded on the order and
+support reconciles it with you. Paying for the tier you already hold
+changes nothing (no duplicate emails). Each activation is written to
+your [audit log](/api/audit-log/) as a `subscription.tier_changed`
+entry carrying the `order_id`.
+
 ## The order lifecycle
 
 | Status       | What it means                                                                                             | What you can do                                                                            |

@@ -112,6 +112,27 @@ export interface StripeWebhooksRepo {
     at: Date;
   }): Promise<{ previousTier: AccountTier | null }>;
   /**
+   * S41 2026-07-07 (founder-approved: wire crypto activation) — conditional
+   * variant of setAccountTier, shared with the crypto paid-order activation
+   * path (CryptoTierActivationService reuses this repo's account-tier
+   * machinery instead of inventing its own). Applies `tier` ONLY when it is
+   * a strict upgrade over the account's current tier per isCryptoTierUpgrade
+   * (price-rank strict-greater: `free` ranks lowest so a free account always
+   * upgrades; `enterprise`/unpriced tiers rank highest so a custom contract
+   * is never overwritten; the same tier is a no-op). The compare runs INSIDE
+   * the same FOR UPDATE row-lock transaction as the write, so a concurrent
+   * Stripe-driven tier change and a crypto activation serialize — a stale
+   * crypto order can never clobber a tier a fresher event just granted.
+   * Returns `{ previousTier, applied }`; on applied=false nothing was
+   * written and previousTier disambiguates why (null = account missing,
+   * === tier = already held, otherwise = would-downgrade skip).
+   */
+  setAccountTierIfUpgrade(args: {
+    accountId: string;
+    tier: AccountTier;
+    at: Date;
+  }): Promise<{ previousTier: AccountTier | null; applied: boolean }>;
+  /**
    * After a subscription goes terminal (`canceled`) or past_due/unpaid, set the
    * account's tier from its BEST remaining active/trialing subscription — or
    * `fallbackTier` if none remain — in ONE locked transaction (mirrors

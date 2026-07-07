@@ -5,6 +5,7 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { AccountTier } from '@driftstack/api-types';
 import type { StripeWebhooksRepo } from '../services/stripe-webhooks.js';
+import { isCryptoTierUpgrade } from '../services/crypto-tier-activation.js';
 import type { Database } from './client.js';
 import { accounts, processedStripeEvents, subscriptions } from './schema.js';
 
@@ -158,6 +159,40 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
         .set({ tier: args.tier, updatedAt: args.at })
         .where(eq(accounts.id, args.accountId));
       return { previousTier };
+    });
+  }
+
+  async setAccountTierIfUpgrade(args: {
+    accountId: string;
+    tier: AccountTier;
+    at: Date;
+  }): Promise<{ previousTier: AccountTier | null; applied: boolean }> {
+    // S41 2026-07-07 (founder-approved: wire crypto activation) — same FOR
+    // UPDATE row-lock transaction as setAccountTier above (the Stripe
+    // account-tier mechanism this reuses). The upgrade-only decision
+    // (isCryptoTierUpgrade — the single shared rule, also used by the
+    // in-memory test twin) is evaluated against the LOCKED committed tier,
+    // so a concurrent Stripe subscription event and a crypto activation
+    // serialize: a stale crypto order can never downgrade a tier a fresher
+    // event just granted, and two racing activations can't double-apply.
+    return this.database.db.transaction(async (tx) => {
+      const before = await tx
+        .select({ tier: accounts.tier })
+        .from(accounts)
+        .where(eq(accounts.id, args.accountId))
+        .for('update')
+        .limit(1);
+      const previousTier = before[0]?.tier ?? null;
+      if (previousTier === null || !isCryptoTierUpgrade(previousTier, args.tier)) {
+        // Account missing, same tier already held, or would-downgrade —
+        // write nothing; the caller logs/derives the exact outcome.
+        return { previousTier, applied: false };
+      }
+      await tx
+        .update(accounts)
+        .set({ tier: args.tier, updatedAt: args.at })
+        .where(eq(accounts.id, args.accountId));
+      return { previousTier, applied: true };
     });
   }
 
