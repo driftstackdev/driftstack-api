@@ -112,7 +112,9 @@ member acting as the owner reads the OWNER's subscription state
 portal-session, billing-portal) do NOT honor the header — only the
 owner manages the owner's billing.
 
-Reading billing state (`GET /v1/billing`) requires no specific
-API-key scope beyond a valid bearer; mutation endpoints (checkout,
+Reading billing state (`GET /v1/billing`) requires the
+`read:billing` scope — a broad `read` or `account_owner` key
+(the dashboard's web-session scope set) also satisfies it, but a
+write-only key is refused with 403; mutation endpoints (checkout,
 manage-portal) require the `admin:billing` scope (a broad `admin`
 or `account_owner` key also satisfies it).

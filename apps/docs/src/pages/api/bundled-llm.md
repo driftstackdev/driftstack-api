@@ -107,6 +107,16 @@ Constraints:
 - `monthly_cap_usd_cents` — integer; 0 to 1,000,000 ($10,000 ceiling).
   Negative values rejected with `400`.
 
+> **Tier availability.** Opting **in** (`consent: true`) requires a
+> tier that offers bundled-LLM billing: API Builder, API Scale, or
+> Enterprise. On BYOK-only tiers (Team, Agency, API Starter) — and
+> on tiers without the AI agent at all — the opt-in is refused with
+> a 403 `forbidden` tier error. Opting **out** (`consent: false`)
+> and cap-only updates are accepted on every tier, so a downgraded
+> account can always switch bundled billing off. BYOK key management
+> (`/v1/account/me/byok-anthropic`) is not tier-gated beyond the
+> AI-agent tiers themselves.
+
 Response (200) is the post-update settings record:
 
 ```json
@@ -169,12 +179,13 @@ extension fields).
 
 ## Errors
 
-| Status | Type                         | When                                                         |
-| -----: | ---------------------------- | ------------------------------------------------------------ |
-|    400 | validation                   | body fails schema (negative cap, > 1_000_000 cap)            |
-|    401 | unauthorized                 | missing or invalid bearer token                              |
-|    402 | bundled-llm-budget-exhausted | spend reached the cap; recover via PATCH / BYOK / next month |
-|    402 | bundled-llm-consent-required | deployment has bundled-LLM but the customer hasn't opted in  |
+| Status | Type                         | When                                                                      |
+| -----: | ---------------------------- | ------------------------------------------------------------------------- |
+|    400 | validation                   | body fails schema (negative cap, > 1_000_000 cap)                         |
+|    401 | unauthorized                 | missing or invalid bearer token                                           |
+|    403 | forbidden                    | `consent: true` on a tier without bundled-LLM billing (below API Builder) |
+|    402 | bundled-llm-budget-exhausted | spend reached the cap; recover via PATCH / BYOK / next month              |
+|    402 | bundled-llm-consent-required | deployment has bundled-LLM but the customer hasn't opted in               |
 
 The settings + status routes above do not return a `503`. A `503`
 for an unwired bundled-LLM service is returned on the **agent-session

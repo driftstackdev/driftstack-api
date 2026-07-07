@@ -339,6 +339,18 @@ describe('OpenAPI spec generation', () => {
     }
   });
 
+  it('S46 2026-07-07: POST /v1/profiles/{id}/snapshots documents 201 (capture is a create; route replies code(201))', () => {
+    _clearSpecCache();
+    const spec = generateOpenApiSpec();
+    const paths = (spec.paths ?? {}) as Record<
+      string,
+      Record<string, { responses?: Record<string, unknown> }>
+    >;
+    const capture = paths['/v1/profiles/{id}/snapshots'];
+    expect(capture?.post?.responses?.['201']).toBeDefined();
+    expect(capture?.post?.responses?.['200']).toBeUndefined();
+  });
+
   it('POST /v1/auth/logout documents 200 with a body (the route returns 200 { ok }, not 204 no-content)', () => {
     _clearSpecCache();
     const spec = generateOpenApiSpec();

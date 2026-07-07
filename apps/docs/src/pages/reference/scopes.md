@@ -10,8 +10,8 @@ Every Driftstack API key carries a set of
 scopes. Endpoints that declare a required scope allow the
 request only if the key's scope set satisfies it. A few
 endpoints require no specific scope beyond a valid key — their
-docs pages say so explicitly (`GET /v1/billing` and the
-`GET /v1/legal/*` reads are examples).
+docs pages say so explicitly (the `GET /v1/legal/*` reads are
+examples).
 
 ## Scope categories
 
@@ -50,7 +50,7 @@ There are three categories of scopes, in order of breadth:
 | `admin:webhooks`            | granular        | Reserved. Webhook endpoint management is account-control-level and requires `account_owner`, not this granular scope.                                                                        |
 | `read:api-keys`             | granular        | Read API keys list / metadata only.                                                                                                                                                          |
 | `admin:api-keys`            | granular        | Reserved. API-key management (mint / rotate / revoke) is account-control-level and requires `account_owner`, not this granular scope.                                                        |
-| `read:billing`              | granular        | Declared but enforced on no route today — `GET /v1/billing` requires no scope beyond a valid key, so this scope does not restrict billing reads. Grantable for forward-compat.               |
+| `read:billing`              | granular        | Read billing state. Enforced on `GET /v1/billing` — a broad `read` or `account_owner` key also satisfies it; a write-only key is refused.                                                    |
 | `admin:billing`             | granular        | All admin operations on billing (start trial, change subscription, manage portal).                                                                                                           |
 | `read:audit`                | granular        | Read account audit log only.                                                                                                                                                                 |
 

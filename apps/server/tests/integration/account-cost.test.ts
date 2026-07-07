@@ -44,7 +44,9 @@ describe('V-541.D GET /v1/account/cost', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = res.json<CostResponse>();
-    expect(body.account_id).toBe(fx.accountId);
+    // S46 2026-07-07 (founder-approved) — canonical acc_ prefix, matching
+    // GET /v1/account/me (was the bare internal uuid).
+    expect(body.account_id).toBe(`acc_${fx.accountId}`);
     expect(body.billing_cycle).toBe('2026-05');
     expect(body.breakdown.totalCents).toBe(0);
     expect(body.breakdown.thresholdState).toBe('under-soft');
@@ -67,6 +69,8 @@ describe('V-541.D GET /v1/account/cost', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = res.json<CostResponse>();
+    // S46 2026-07-07 — the populated (service-summary) branch prefixes too.
+    expect(body.account_id).toBe(`acc_${fx.accountId}`);
     expect(body.breakdown.computeCents).toBe(120);
     expect(body.breakdown.totalCents).toBeGreaterThan(0);
   });

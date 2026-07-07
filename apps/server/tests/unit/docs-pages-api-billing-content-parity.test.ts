@@ -163,11 +163,14 @@ describe('W765 docs /api/billing content parity', () => {
     expect(p).toMatch(
       /The mutation endpoints \(checkout-session,\s*\n?portal-session, billing-portal\) do NOT honor the header — only the\s*\n?owner manages the owner's billing\./,
     );
-    // GET /v1/billing has no requireScope preHandler (V-481 residual —
-    // read:billing exists in the schema enum but is enforced nowhere).
+    // S46 2026-07-07 (founder-approved) — GET /v1/billing now enforces the
+    // read:billing scope floor (was the V-481 residual: declared in the enum,
+    // enforced nowhere). Broad read / account_owner satisfy per V-481.
     expect(p).toMatch(
-      /Reading billing state \(`GET \/v1\/billing`\) requires no specific\s*\n?API-key scope beyond a valid bearer/,
+      /Reading billing state \(`GET \/v1\/billing`\) requires the\s*\n?`read:billing` scope — a broad `read` or `account_owner` key\s*\n?\(the dashboard's web-session scope set\) also satisfies it, but a\s*\n?write-only key is refused with 403/,
     );
+    // Negative pin — the pre-S46 "no scope" claim must not come back.
+    expect(p).not.toMatch(/requires no specific\s*\n?API-key scope/);
     // Mutation endpoints require admin:billing (broad admin / account_owner satisfy).
     expect(p).toMatch(
       /mutation endpoints \(checkout,\s*\n?manage-portal\) require the `admin:billing` scope \(a broad `admin`\s*\n?or `account_owner` key also satisfies it\)\./,

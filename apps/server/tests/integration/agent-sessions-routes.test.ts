@@ -682,8 +682,30 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
   const TEAM_OWNER_ID = '00000000-0000-4000-8000-000000000b01';
   const TEAM_MEMBERSHIP_ID = '00000000-0000-4000-8000-000000000b02';
 
+  // S42 2026-07-07 (founder-approved) — the aiAgent tier gate resolves the
+  // OWNER's tier via authRepo on team-scoped creates, so the owner account
+  // must actually EXIST (the fabricated-membership-only setup used to skate
+  // through because nothing read the owner row on a profileless create).
+  // Seed a real owner on team_manual (the lowest aiAgent tier).
+  function seedTeamOwnerAccount(fixture: TestAppFixture): void {
+    fixture.authRepo.upsertAccount({
+      id: TEAM_OWNER_ID,
+      email: 'team-owner@driftstack.local',
+      name: 'Team Owner',
+      tier: 'team_manual',
+      status: 'active',
+      timezone: null,
+      avatarR2Key: null,
+      slug: null,
+      region: null,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    });
+  }
+
   it('Teams member-launch: an ADMIN team member launching under the owner (X-Driftstack-Account=owner) → 201 (session scoped to the owner)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
+    seedTeamOwnerAccount(fx);
     fx.authRepo.setTeamMemberships(fx.accountId, [
       { membershipId: TEAM_MEMBERSHIP_ID, ownerAccountId: TEAM_OWNER_ID, role: 'admin' },
     ]);
@@ -748,6 +770,8 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
   // anti-enumeration message) and the auth-cache defeats mid-test role-switching.
   it('Teams #4: an ADMIN member can READ + DELETE the session they launched under the owner (was 404-locked-out)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
+    // S42 — the tier gate reads the owner's account row; see seedTeamOwnerAccount.
+    seedTeamOwnerAccount(fx);
     fx.authRepo.setTeamMemberships(fx.accountId, [
       { membershipId: TEAM_MEMBERSHIP_ID, ownerAccountId: TEAM_OWNER_ID, role: 'admin' },
     ]);
@@ -2180,6 +2204,11 @@ describe('POST /v1/agent-sessions storage quota (doc-150 item 6)', () => {
     return prefixed;
   }
 
+  // S42 2026-07-07 (founder-approved) — these quota tests run on solo_manual
+  // (small tier cap) and now create with mode:'manual': the aiAgent tier gate
+  // refuses ai/pair on solo_manual before the quota gate is ever reached, and
+  // manual launches are exactly what this tier CAN run (the GUI profile-launch
+  // path). The quota gate itself is mode-independent.
   it('409 storage_quota_exceeded when the account is at its hard cap + a profile is bound', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true, tier: 'solo_manual' });
     const profileId = await createProfileWithSize(
@@ -2191,7 +2220,7 @@ describe('POST /v1/agent-sessions storage quota (doc-150 item 6)', () => {
       method: 'POST',
       url: '/v1/agent-sessions',
       headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: { token_budget: 50_000, profile_id: profileId },
+      payload: { token_budget: 50_000, profile_id: profileId, mode: 'manual' },
     });
     expect(res.statusCode).toBe(409);
     const body = res.json<Record<string, unknown>>();
@@ -2207,7 +2236,7 @@ describe('POST /v1/agent-sessions storage quota (doc-150 item 6)', () => {
       method: 'POST',
       url: '/v1/agent-sessions',
       headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: { token_budget: 50_000, profile_id: profileId },
+      payload: { token_budget: 50_000, profile_id: profileId, mode: 'manual' },
     });
     expect(res.statusCode).toBe(201);
   });
@@ -2237,7 +2266,7 @@ describe('POST /v1/agent-sessions storage quota (doc-150 item 6)', () => {
       method: 'POST',
       url: '/v1/agent-sessions',
       headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: { token_budget: 50_000 },
+      payload: { token_budget: 50_000, mode: 'manual' },
     });
     expect(res.statusCode).toBe(201);
   });
@@ -2262,7 +2291,7 @@ describe('POST /v1/agent-sessions storage quota (doc-150 item 6)', () => {
       method: 'POST',
       url: '/v1/agent-sessions',
       headers: { authorization: `Bearer ${fx.plaintext}`, 'idempotency-key': key },
-      payload: { token_budget: 50_000, profile_id: profileId },
+      payload: { token_budget: 50_000, profile_id: profileId, mode: 'manual' },
     });
     expect(first.statusCode).toBe(201);
     const firstId = first.json<{ id: string }>().id;
@@ -2283,7 +2312,7 @@ describe('POST /v1/agent-sessions storage quota (doc-150 item 6)', () => {
       method: 'POST',
       url: '/v1/agent-sessions',
       headers: { authorization: `Bearer ${fx.plaintext}`, 'idempotency-key': key },
-      payload: { token_budget: 50_000, profile_id: profileId },
+      payload: { token_budget: 50_000, profile_id: profileId, mode: 'manual' },
     });
     expect(replay.statusCode).toBe(201);
     expect(replay.json<{ id: string }>().id).toBe(firstId);
@@ -2299,7 +2328,7 @@ describe('POST /v1/agent-sessions storage quota (doc-150 item 6)', () => {
         authorization: `Bearer ${fx.plaintext}`,
         'idempotency-key': 'idem-key-quota-replay-2-fresh',
       },
-      payload: { token_budget: 50_000, profile_id: profileId },
+      payload: { token_budget: 50_000, profile_id: profileId, mode: 'manual' },
     });
     expect(fresh.statusCode).toBe(409);
     expect(fresh.json<{ type: string }>().type).toBe(PROBLEM_TYPES.StorageQuotaExceeded);

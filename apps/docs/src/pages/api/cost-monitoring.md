@@ -41,7 +41,7 @@ Returns:
 
 ```json
 {
-  "account_id": "a1b2c3d4-...",
+  "account_id": "acc_a1b2c3d4-...",
   "billing_cycle": "2026-05",
   "tier": "api_builder",
   "breakdown": {
@@ -56,9 +56,9 @@ Returns:
 }
 ```
 
-`account_id` is the **bare** account UUID — unlike
-`GET /v1/account/me`, this endpoint does not apply the `acc_`
-prefix. Don't string-compare the two without normalizing.
+`account_id` carries the canonical `acc_` prefix, matching the
+`id` returned by `GET /v1/account/me` — the two are directly
+string-comparable.
 
 All amounts are in USD cents. `totalCents` is the sum of the
 five dimensions; rounding is per-dimension (the cost engine rounds
@@ -88,7 +88,7 @@ synthesizes a zero breakdown instead of 404:
 
 ```json
 {
-  "account_id": "<bare-uuid>",
+  "account_id": "acc_<uuid>",
   "billing_cycle": "2026-05",
   "tier": "solo_manual",
   "breakdown": {

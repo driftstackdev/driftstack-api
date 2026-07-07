@@ -97,9 +97,12 @@ describe('W1025 routes/account-cost V-541.D cross-source invariant', () => {
     expect(p).toMatch(/\/\/ numeric caps to customers — they see only their actual spend\)\./);
   });
 
-  it('CRITICAL customer response 4 fields — account_id + billing_cycle + tier + breakdown.', () => {
+  it('CRITICAL customer response 4 fields — account_id (acc_-prefixed, S46 2026-07-07) + billing_cycle + tier + breakdown.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-cost.ts'));
-    expect(p).toMatch(/account_id: summary\.account_id,/);
+    // S46 2026-07-07 (founder-approved) — canonical acc_ prefix, mirroring
+    // GET /v1/account/me. Was the bare internal uuid.
+    expect(p).toMatch(/account_id: `acc_\$\{summary\.account_id\}`,/);
+    expect(p).not.toMatch(/account_id: summary\.account_id,/);
     expect(p).toMatch(/billing_cycle: summary\.billing_cycle,/);
     expect(p).toMatch(/tier: summary\.tier,/);
     expect(p).toMatch(/breakdown: summary\.breakdown,/);

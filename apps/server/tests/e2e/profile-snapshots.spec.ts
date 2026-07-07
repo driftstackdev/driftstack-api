@@ -74,9 +74,10 @@ test('POST /v1/profiles/:id/snapshots captures a snapshot', async ({ request }) 
     headers: authHeader(seed.plaintext),
     data: { label: 'before-experiment-A', description: 'baseline' },
   });
-  // 2026-05-21 — POST snapshot returns 200 (route doesn't set 201 explicitly;
-  // matches the rest of the /v1/profiles* family).
-  expect(res.status()).toBe(200);
+  // S46 2026-07-07 (founder-approved) — capture is a create: the route now
+  // replies 201, matching sibling create-POSTs + the docs/openapi contract.
+  // (Superseded 2026-05-21 note: it returned an implicit 200 before S46.)
+  expect(res.status()).toBe(201);
   const snap = (await res.json()) as SnapshotResponse;
   expect(snap.id).toMatch(/^psnap_/);
   expect(snap.parent_profile_id).toBe(profile.id);

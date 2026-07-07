@@ -53,7 +53,7 @@ Request:
 }
 ```
 
-Response (200):
+Response (201):
 
 ```json
 {

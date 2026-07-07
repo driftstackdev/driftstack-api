@@ -75,8 +75,11 @@ describe('W414.B apps/server/src/routes/account-cost.ts content parity', () => {
     expect(body).toMatch(
       /if \(summary === null\) \{\s*\n?\s*\/\/ Not 404 — for a fresh account with no usage in the cycle the\s*\n?\s*\/\/ customer should see "you've spent €0 this cycle", not "not\s*\n?\s*\/\/ found"\. Synthesize a zero breakdown response\./,
     );
+    // S46 2026-07-07 (founder-approved) — account_id now carries the canonical
+    // acc_ prefix (mirrors GET /v1/account/me); the S46 comment lines sit
+    // between reply.send({ and the field, hence the comment-skipping group.
     expect(body).toMatch(
-      /return reply\.send\(\{\s*\n?\s*account_id: ctx\.account\.id,\s*\n?\s*billing_cycle: query\.billing_cycle \?\? billingCycleFromDate\(new Date\(now\(\)\)\),\s*\n?\s*tier: ctx\.account\.tier,\s*\n?\s*breakdown: \{\s*\n?\s*computeCents: 0,\s*\n?\s*storageCents: 0,\s*\n?\s*egressCents: 0,\s*\n?\s*emailCents: 0,\s*\n?\s*llmCents: 0,\s*\n?\s*totalCents: 0,\s*\n?\s*thresholdState: 'under-soft' as const,\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /return reply\.send\(\{\s*\n(?:\s*\/\/[^\n]*\n)*\s*account_id: `acc_\$\{ctx\.account\.id\}`,\s*\n?\s*billing_cycle: query\.billing_cycle \?\? billingCycleFromDate\(new Date\(now\(\)\)\),\s*\n?\s*tier: ctx\.account\.tier,\s*\n?\s*breakdown: \{\s*\n?\s*computeCents: 0,\s*\n?\s*storageCents: 0,\s*\n?\s*egressCents: 0,\s*\n?\s*emailCents: 0,\s*\n?\s*llmCents: 0,\s*\n?\s*totalCents: 0,\s*\n?\s*thresholdState: 'under-soft' as const,\s*\n?\s*\},\s*\n?\s*\}\);/,
     );
   });
 
@@ -84,8 +87,9 @@ describe('W414.B apps/server/src/routes/account-cost.ts content parity', () => {
     expect(body).toMatch(
       /\/\/ Customer surface omits the operator-tuned threshold values\s*\n?\s*\/\/ \(those are admin-only configuration; we don't surface the\s*\n?\s*\/\/ numeric caps to customers — they see only their actual spend\)\./,
     );
+    // S46 2026-07-07 — acc_ prefix on the populated branch too.
     expect(body).toMatch(
-      /return reply\.send\(\{\s*\n?\s*account_id: summary\.account_id,\s*\n?\s*billing_cycle: summary\.billing_cycle,\s*\n?\s*tier: summary\.tier,\s*\n?\s*breakdown: summary\.breakdown,\s*\n?\s*\}\);/,
+      /return reply\.send\(\{\s*\n(?:\s*\/\/[^\n]*\n)*\s*account_id: `acc_\$\{summary\.account_id\}`,\s*\n?\s*billing_cycle: summary\.billing_cycle,\s*\n?\s*tier: summary\.tier,\s*\n?\s*breakdown: summary\.breakdown,\s*\n?\s*\}\);/,
     );
   });
 

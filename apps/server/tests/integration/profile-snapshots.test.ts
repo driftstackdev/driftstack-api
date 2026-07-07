@@ -46,7 +46,9 @@ async function mintProfile(
 }
 
 describe('POST /v1/profiles/:id/snapshots (V-312)', () => {
-  it('200 captures a snapshot carrying parent metadata', async () => {
+  // S46 2026-07-07 (founder-approved) — capture is a create: 201, matching
+  // the docs/openapi contract and sibling create-POSTs (sessions, webhooks).
+  it('201 captures a snapshot carrying parent metadata', async () => {
     fx = await buildTestApp();
     const profile = await mintProfile(fx, 'src-prof');
     const cap = await fx.app.inject({
@@ -55,7 +57,7 @@ describe('POST /v1/profiles/:id/snapshots (V-312)', () => {
       headers: { ...auth(fx), 'content-type': 'application/json' },
       payload: { label: 'before-migration', description: 'pre-iOS-18 reference' },
     });
-    expect(cap.statusCode).toBe(200);
+    expect(cap.statusCode).toBe(201);
     const body = cap.json<SnapshotResponse>();
     expect(body.id).toMatch(/^psnap_[0-9a-f-]{36}$/);
     expect(body.parent_profile_id).toBe(profile.id);
@@ -514,6 +516,7 @@ describe('profile-snapshot write ops require write:profiles scope', () => {
       headers: { ...auth(fx), 'content-type': 'application/json' },
       payload: { label: 'ok' },
     });
-    expect(res.statusCode).toBe(200);
+    // S46 2026-07-07 — capture now returns 201 Created.
+    expect(res.statusCode).toBe(201);
   });
 });

@@ -141,7 +141,14 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
 
   app.get(
     '/v1/billing',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    // S46 2026-07-07 (founder-approved) — read:billing scope floor (S36 flag 2 /
+    // V-481 #122 residual: this route previously had NO scope gate, so a
+    // write-only key could read billing state). Broad `read` and web-session
+    // `account_owner` bearers satisfy the granular scope per the V-481
+    // broad-satisfies-granular rule in lib/errors-helpers.ts, so the dashboard
+    // Billing page and existing broad-read keys are unaffected; write-only
+    // keys now get the 403 scope error.
+    { preHandler: [app.requireAuth, app.requireScope('read:billing'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       // V-326c — honor the X-Driftstack-Account act-as header like

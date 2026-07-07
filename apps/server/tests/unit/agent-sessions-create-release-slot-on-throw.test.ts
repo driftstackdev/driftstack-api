@@ -48,7 +48,7 @@ async function buildApp(repo: InMemoryAgentSessionsRepo) {
   app.decorateRequest('account', null);
   app.addHook('onRequest', (req: FastifyRequest, _reply, done) => {
     (req as { account: unknown }).account = {
-      account: { id: ACC, tier: 'starter', region: 'eu' },
+      account: { id: ACC, tier: 'api_starter', region: 'eu' },
       apiKey: { id: 'key_slot', scopes: ['read', 'write'] },
     };
     done();

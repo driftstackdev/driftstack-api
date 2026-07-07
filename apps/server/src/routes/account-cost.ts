@@ -45,7 +45,10 @@ export function registerAccountCostRoutes(
         // customer should see "you've spent €0 this cycle", not "not
         // found". Synthesize a zero breakdown response.
         return reply.send({
-          account_id: ctx.account.id,
+          // S46 2026-07-07 (founder-approved) — canonical acc_ prefix, mirroring
+          // GET /v1/account/me (routes/account-me.ts). Was the bare uuid — the
+          // one customer surface leaking the unprefixed internal id.
+          account_id: `acc_${ctx.account.id}`,
           billing_cycle: query.billing_cycle ?? billingCycleFromDate(new Date(now())),
           tier: ctx.account.tier,
           breakdown: {
@@ -63,7 +66,9 @@ export function registerAccountCostRoutes(
       // (those are admin-only configuration; we don't surface the
       // numeric caps to customers — they see only their actual spend).
       return reply.send({
-        account_id: summary.account_id,
+        // S46 2026-07-07 (founder-approved) — acc_ prefix (see the zero-usage
+        // branch above). The service echoes the bare uuid it was queried with.
+        account_id: `acc_${summary.account_id}`,
         billing_cycle: summary.billing_cycle,
         tier: summary.tier,
         breakdown: summary.breakdown,

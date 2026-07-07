@@ -103,7 +103,7 @@ export function registerProfileSnapshotsRoutes(
   app.post<{ Params: { id: string } }>(
     '/v1/profiles/:id/snapshots',
     { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
-    async (req) => {
+    async (req, reply) => {
       const ctx = requireCtx(req);
       const profileId = uuidFromPrefixedId(req.params.id, 'prof');
       const parsed = CaptureSnapshotRequestSchema.safeParse(req.body);
@@ -118,7 +118,10 @@ export function registerProfileSnapshotsRoutes(
         label: parsed.data.label,
         ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
       });
-      return publicSnapshot(snapshot);
+      // S46 2026-07-07 (founder-approved) — 201 Created, matching every sibling
+      // create-POST (profiles, sessions, agent-sessions, webhooks) and the
+      // docs/openapi contract. Was an implicit 200.
+      return reply.code(201).send(publicSnapshot(snapshot));
     },
   );
 

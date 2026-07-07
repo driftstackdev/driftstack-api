@@ -24,6 +24,8 @@ import { z } from 'zod';
 import type { BundledLlmService } from '../services/bundled-llm.js';
 import type { AccountAuditService } from '../services/account-audit.js';
 import { BadRequestError, ValidationError } from '../lib/errors.js';
+// S42 2026-07-07 (founder-approved) — bundled-LLM consent tier gate.
+import { requireBundledLlmTier } from '../lib/errors-helpers.js';
 import { readClientIp } from '../lib/client-ip.js';
 
 const PatchBodySchema = z
@@ -114,6 +116,17 @@ export function registerAccountBundledLlmRoutes(
       if (!ctx) throw new Error('account context missing after requireAuth');
       const parsed = PatchBodySchema.safeParse(request.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // S42 2026-07-07 (founder-approved) — gate the bundled-billing OPT-IN to
+      // the tiers whose TIER_FEATURES.llmBilling is byok_or_bundled(_custom):
+      // api_builder / api_scale / enterprise. Only consent=true is gated —
+      // consent=false (opting OUT) and cap-only PATCHes stay open on every
+      // tier, so a downgraded account can always switch bundled billing off.
+      // BYOK settings (routes/account-byok-anthropic.ts) stay open to every
+      // aiAgent tier; this route is account_owner-scoped, so ctx.account IS
+      // the tier that gets billed.
+      if (parsed.data.consent === true) {
+        requireBundledLlmTier(ctx.account.tier);
+      }
       // Capture prior consent state so we can detect a true toggle
       // (not just a no-op re-write) before emitting the audit row.
       const prior = await service.findSettings(ctx.account.id);

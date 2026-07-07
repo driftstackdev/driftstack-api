@@ -104,4 +104,24 @@ export function requireTierFeature(tier: AccountTier, feature: TierBooleanFeatur
   );
 }
 
+/**
+ * S42 2026-07-07 (founder-approved) — bundled-LLM billing tier gate.
+ *
+ * `llmBilling` is the one non-boolean feature in TIER_FEATURES, so it
+ * can't ride {@link requireTierFeature}. Bundled billing (Driftstack
+ * pays Anthropic, customer pays Driftstack) is only offered on the
+ * tiers whose `llmBilling` is `byok_or_bundled` / `byok_or_bundled_custom`
+ * — api_builder, api_scale, enterprise. Every other aiAgent tier is
+ * BYOK-only: the byok-anthropic settings routes stay ungated.
+ * Error shape mirrors requireTierFeature (403 ForbiddenError).
+ */
+export function requireBundledLlmTier(tier: AccountTier): void {
+  const llmBilling = TIER_FEATURES[tier].llmBilling;
+  if (llmBilling === 'byok_or_bundled' || llmBilling === 'byok_or_bundled_custom') return;
+  throw new ForbiddenError(
+    `Bundled-LLM billing is not available on the "${tier}" tier. ` +
+      `Upgrade to a tier that includes this feature.`,
+  );
+}
+
 export { NotFoundError };

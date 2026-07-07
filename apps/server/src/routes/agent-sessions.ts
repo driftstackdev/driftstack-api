@@ -107,6 +107,8 @@ import {
   ProxyValidationFailedError,
   ValidationError,
 } from '../lib/errors.js';
+// S42 2026-07-07 (founder-approved) — V-485 aiAgent tier gate (create path).
+import { requireTierFeature } from '../lib/errors-helpers.js';
 import { resolveEffectiveAccount, type EffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
@@ -1762,6 +1764,20 @@ export function registerAgentSessionsRoutes(
           );
           return reply.code(201).send(publicAgentSession(existing, livekit, sessionLivenessStore));
         }
+      }
+
+      // S42 2026-07-07 (founder-approved) — V-485 aiAgent tier gate; the first
+      // requireTierFeature call site. LLM-driven modes ('ai' — also the repo
+      // default when mode is omitted — and 'pair') require the aiAgent feature
+      // on the OWNER's tier, so free/solo_manual get the 403 tier error instead
+      // of a session. mode:'manual' stays ungated: the GUI profile-launch path
+      // creates manual sessions and manual driving IS the free/personal product.
+      // Sits with the other create-time gates AFTER the idempotency replay
+      // (replaying an already-succeeded 201 must never newly 403). Self-scoped
+      // reads the tier already loaded on ctx (no extra lookup); team-scoped
+      // resolves the owner tier via authRepo like the storage-quota gate below.
+      if ((parsed.data.mode ?? 'ai') !== 'manual') {
+        requireTierFeature(await resolveOwnerTier(ctx, effective), 'aiAgent');
       }
 
       // Founder directive #63 — TEST THE PROXY LIVE before we create a session row

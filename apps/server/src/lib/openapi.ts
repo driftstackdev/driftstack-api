@@ -1662,6 +1662,14 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: BundledLlmSettingsOpenApi } },
       },
       ...errors4xx,
+      // S42 2026-07-07 (founder-approved) — bundled-LLM consent tier gate:
+      // consent:true only on tiers with bundled billing (API Builder+).
+      // consent:false + cap-only updates stay open on every tier.
+      403: {
+        description:
+          'Key lacks the account_owner scope, or consent:true was requested on a tier without bundled-LLM billing (below API Builder).',
+        content: problemContent,
+      },
     },
   });
   // Per-account organization taxonomy (2026-06-16) — empty folders (+icons) +
@@ -3090,6 +3098,13 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: GetBillingStateResponseSchema } },
       },
       ...errors4xx,
+      // S46 2026-07-07 (founder-approved) — read:billing scope floor (the
+      // route had no scope gate before; V-481 #122 residual closed).
+      403: {
+        description:
+          'Key lacks the read:billing scope (a broad read or account_owner key satisfies it).',
+        content: problemContent,
+      },
     },
   });
 
@@ -3226,6 +3241,14 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: AgentSessionSchema } },
       },
       ...errors4xx,
+      // S42 2026-07-07 (founder-approved) — V-485 aiAgent tier gate: mode
+      // ai (the default) / pair requires the AI-agent feature on the owner
+      // tier; mode manual is available on every tier.
+      403: {
+        description:
+          'Caller not permitted — key lacks the write scope, or mode ai/pair was requested on a tier without the AI-agent feature (Free / Personal).',
+        content: problemContent,
+      },
       503: {
         description: 'AI chat agent not enabled on this deployment.',
         content: problemContent,
@@ -5916,7 +5939,10 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
-      200: {
+      // S46 2026-07-07 (founder-approved) — 201 Created, matching the route
+      // (reply.code(201)) and every sibling create-POST. The spec said 200
+      // while the route also returned 200; both moved together.
+      201: {
         description: 'Snapshot captured.',
         content: { 'application/json': { schema: SnapshotResponseOpenApi } },
       },

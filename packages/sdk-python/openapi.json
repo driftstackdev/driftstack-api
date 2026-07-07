@@ -10298,7 +10298,7 @@
             }
           },
           "403": {
-            "description": "Caller not permitted.",
+            "description": "Key lacks the account_owner scope, or consent:true was requested on a tier without bundled-LLM billing (below API Builder).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -15796,7 +15796,7 @@
             }
           },
           "403": {
-            "description": "Caller not permitted.",
+            "description": "Key lacks the read:billing scope (a broad read or account_owner key satisfies it).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16399,7 +16399,7 @@
             }
           },
           "403": {
-            "description": "Caller not permitted.",
+            "description": "Caller not permitted — key lacks the write scope, or mode ai/pair was requested on a tier without the AI-agent feature (Free / Personal).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -28629,7 +28629,7 @@
           }
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "Snapshot captured.",
             "content": {
               "application/json": {

@@ -73,7 +73,7 @@ async function buildApp(opts: { createError: Error; winner: AgentSessionRecord |
   app.decorateRequest('account', null);
   app.addHook('onRequest', (req: FastifyRequest, _reply, done) => {
     (req as { account: unknown }).account = {
-      account: { id: ACC, tier: 'starter' },
+      account: { id: ACC, tier: 'api_starter' },
       apiKey: { id: 'key_idem', scopes: ['read', 'write'] },
     };
     done();

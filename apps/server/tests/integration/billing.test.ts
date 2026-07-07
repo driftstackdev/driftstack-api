@@ -297,6 +297,52 @@ describe('GET /v1/billing', () => {
     expect(res.headers['cache-control']).toBe('no-store, private');
   });
 
+  // S46 2026-07-07 (founder-approved) — read:billing scope floor. The route
+  // previously had NO scope gate (any authenticated key could read billing
+  // state). Per V-481, broad `read` and `account_owner` (the web-session /
+  // dashboard scope set) satisfy the granular requirement; a write-only key
+  // does not.
+  it('S46: 403 for a write-only key (read:billing scope floor)', async () => {
+    fx = await buildTestApp({ scopes: ['write'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/billing',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toContain('read:billing');
+  });
+
+  it('S46: 200 for a granular read:billing key (exact scope)', async () => {
+    fx = await buildTestApp({ scopes: ['read:billing'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/billing',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('S46: 200 for a broad read-only key (V-481 broad-satisfies-granular)', async () => {
+    fx = await buildTestApp({ scopes: ['read'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/billing',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('S46: 200 for an account_owner key (the dashboard web-session scope set carries read+write+account_owner)', async () => {
+    fx = await buildTestApp({ scopes: ['account_owner'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/billing',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
   it('reflects a subscription mirror row', async () => {
     fx = await buildTestApp();
     seedActiveSubscription(fx, { tier: 'api_builder' });
