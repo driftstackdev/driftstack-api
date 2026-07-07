@@ -187,6 +187,14 @@ export interface AgentRuntimeDeps {
 const SPEND_RECORD_MAX_ATTEMPTS = 3;
 const SPEND_RECORD_RETRY_BASE_MS = 50;
 
+// #140 read-and-report — only read BACK for information-SEEKING tasks. A read-back
+// is a 2nd LLM call (+ a bundled cost row), so gate it to tasks that actually want
+// an answer ("get the IP", "what's the price"), not pure action/screenshot tasks.
+// Conservative keyword match; the decomposer-signalled variant is the robust
+// follow-up (a `wantsAnswer` flag on the plan, prompt-eval-gated).
+const READ_INTENT_RE =
+  /\b(get|find|read|extract|scrape|fetch|show|tell|list|report|look\s?up|lookup|what|whats|which|when|where|who|how\s+(?:many|much|long|old|far|big))\b/i;
+
 function delay(ms: number): Promise<void> {
   if (ms <= 0) return Promise.resolve();
   return new Promise((resolve) => {
@@ -496,11 +504,81 @@ export class AgentRuntime {
       entry: planEntry,
     });
 
+    // #140 read-and-report — if the model chose to CAPTURE (it wanted to observe
+    // the result) and the plan ran, read the page text and answer the customer's
+    // original question from it, appended as a follow-up agent turn (so "get the
+    // IP" returns the actual IP, not just a screenshot). Best-effort + feature-
+    // gated: skipped unless the executor can observe + the decomposer can answer +
+    // there is an LLM key + remaining budget. Wrapped so the read-back can NEVER
+    // fail the turn (the plan already succeeded + is recorded). The observed page
+    // text is framed UNTRUSTED inside answerFromObservation and NEVER enters the
+    // transcript — only the model's own answer does (correctly agent-framed).
+    let sessionAfter = updated;
+    const observe = this.deps.executor.observe?.bind(this.deps.executor);
+    const answerFromObservation = this.deps.decomposer.answerFromObservation?.bind(
+      this.deps.decomposer,
+    );
+    if (
+      executorResult.ok &&
+      observe !== undefined &&
+      answerFromObservation !== undefined &&
+      args.byokApiKey !== undefined &&
+      updated.tokenBudgetRemaining > 0 &&
+      decomposed.intents.some((i) => i.kind === 'capture') &&
+      READ_INTENT_RE.test(args.userMessage)
+    ) {
+      try {
+        const observation = await observe(session.id);
+        if (observation !== null && observation.trim().length > 0) {
+          const answer = await answerFromObservation({
+            task: args.userMessage,
+            observation,
+            budgetTokensRemaining: sessionAfter.tokenBudgetRemaining,
+            byokAnthropicApiKey: args.byokApiKey,
+            model: sessionAfter.model,
+          });
+          // Debit the read-back tokens (a real 2nd LLM call) so reads stay bounded.
+          if (answer.tokensConsumed > 0) {
+            sessionAfter = await this.deps.sessions.debitTokens(session.id, answer.tokensConsumed);
+          }
+          // Record the read-back cost row (soft-cap input; best-effort single
+          // attempt — the read-back never fails the turn).
+          if (this.deps.usageRecorder !== undefined && answer.usage !== undefined) {
+            try {
+              await this.deps.usageRecorder.record({
+                accountId: session.accountId,
+                driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
+                agentSessionId: session.id,
+                decomposeResultKind: 'plan',
+                usage: answer.usage,
+                tokensConsumed: answer.tokensConsumed,
+                now: args.now ?? new Date(),
+                ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
+              });
+            } catch {
+              /* best-effort read-back cost row — a rare drop only undercounts the cap */
+            }
+          }
+          // Append the answer as a follow-up agent turn — flows to the GUI via the
+          // existing transcript + SSE (no new response field / SDK change).
+          const answerEntry = { at, role: 'agent' as const, body: answer.answer };
+          sessionAfter = await this.deps.sessions.appendTranscript(session.id, answerEntry);
+          this.deps.eventBus?.publish({
+            agentSessionId: session.id,
+            index: sessionAfter.transcript.length - 1,
+            entry: answerEntry,
+          });
+        }
+      } catch {
+        // Read-back is additive — never fail the turn on it.
+      }
+    }
+
     return {
       kind: 'plan-executed',
       decomposer: decomposed,
       executor: executorResult,
-      session: updated,
+      session: sessionAfter,
     };
   }
 }

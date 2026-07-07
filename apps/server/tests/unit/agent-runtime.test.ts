@@ -66,6 +66,82 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     expect(final?.tokenBudgetRemaining).toBeLessThan(100_000);
   });
 
+  // #140 read-and-report — a capturing plan gets a follow-up "answer" turn read
+  // back from the page text, so "get the IP" returns the actual IP.
+  async function makeReadbackRuntime(opts: { observe?: () => Promise<string | null> } = {}) {
+    const sessions = new InMemoryAgentSessionsRepo(() => new Date('2026-05-16T00:00:00Z'));
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const base = new DeterministicAgentDecomposer();
+    const stub = new StubAgentExecutor();
+    const decomposer = {
+      decompose: (a: DecomposeArgs) => base.decompose(a),
+      answerFromObservation: () =>
+        Promise.resolve({ answer: 'Your IP address is 203.0.113.7.', tokensConsumed: 40 }),
+    };
+    const executor = {
+      execute: (a: Parameters<StubAgentExecutor['execute']>[0]) => stub.execute(a),
+      observe: opts.observe ?? (() => Promise.resolve('Your IP: 203.0.113.7\nISP: Example')),
+    };
+    const runtime = new AgentRuntime({
+      decomposer,
+      executor,
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    return { runtime, sessions, seedId: seed.id };
+  }
+
+  it('#140 read-and-report: a capturing plan appends a read-back ANSWER turn (the actual IP) + debits the answer tokens', async () => {
+    const { runtime, sessions, seedId } = await makeReadbackRuntime();
+    const result = await runtime.runTurn({
+      agentSessionId: seedId,
+      userMessage: 'get the IP from https://browserleaks.com/ip and capture the page',
+      byokApiKey: 'sk-ant-test-fake-key',
+    });
+    expect(result.kind).toBe('plan-executed');
+    const final = await sessions.get(seedId);
+    // user + plan-run + the read-back answer = 3 entries.
+    expect(final?.transcript).toHaveLength(3);
+    expect(final?.transcript[2]?.role).toBe('agent');
+    expect(final?.transcript[2]?.body).toBe('Your IP address is 203.0.113.7.');
+    expect(final?.transcript[2]?.intents).toBeUndefined(); // answer turn is not a plan
+  });
+
+  it('#140 read-and-report: NO read-back without a BYOK key (feature-gated) — only user + plan turns', async () => {
+    const { runtime, sessions, seedId } = await makeReadbackRuntime();
+    await runtime.runTurn({
+      agentSessionId: seedId,
+      userMessage: 'get the IP from https://browserleaks.com/ip and capture the page',
+      // no byokApiKey → the answer pass is gated off
+    });
+    const final = await sessions.get(seedId);
+    expect(final?.transcript).toHaveLength(2);
+  });
+
+  it('#140 read-and-report: an empty/failed observe does NOT append an answer turn (best-effort, never a blank reply)', async () => {
+    const { runtime, sessions, seedId } = await makeReadbackRuntime({
+      observe: () => Promise.resolve(null),
+    });
+    await runtime.runTurn({
+      agentSessionId: seedId,
+      userMessage: 'get the IP from https://browserleaks.com/ip and capture the page',
+      byokApiKey: 'sk-ant-test-fake-key',
+    });
+    const final = await sessions.get(seedId);
+    expect(final?.transcript).toHaveLength(2); // no answer turn on a null observation
+  });
+
+  it('#140 read-and-report: a NON-read-intent task (scroll/click, no get/find/what…) does NOT trigger a read-back — cost-gated', async () => {
+    const { runtime, sessions, seedId } = await makeReadbackRuntime();
+    await runtime.runTurn({
+      agentSessionId: seedId,
+      userMessage: 'scroll down on https://example.com and capture the page',
+      byokApiKey: 'sk-ant-test-fake-key',
+    });
+    const final = await sessions.get(seedId);
+    expect(final?.transcript).toHaveLength(2); // not information-seeking → no 2nd LLM call
+  });
+
   it('Q.5.c clarify + refuse turns do NOT carry an intents field (only plan-executed turns do)', async () => {
     const { runtime, sessions, seedId } = await makeRuntime();
     // Clarify turn

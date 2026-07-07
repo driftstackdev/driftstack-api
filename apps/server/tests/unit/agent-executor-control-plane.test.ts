@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ControlPlaneAgentExecutor,
+  extractPageText,
   type IntentDispatcher,
 } from '../../src/services/agent-executor-control-plane.js';
 import type { ExecuteArgs } from '../../src/services/agent-executor.js';
@@ -488,5 +489,35 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
       expect(res.awaitingConfirmation).toBeUndefined();
       expect(got.map((d) => d.intentName)).toEqual(['click']); // the approved tap WAS dispatched
     });
+  });
+});
+
+describe('ControlPlaneAgentExecutor — #140 observe() + extractPageText (read-and-report)', () => {
+  it('observe() dispatches get_page_source + returns the source text', async () => {
+    const { got, dispatcher } = mockDispatcher((d) =>
+      okResult(d.intentId, d.sessionId, { source: '<html>Your IP 203.0.113.7</html>' }),
+    );
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const text = await exec.observe('agt_1');
+    expect(text).toContain('203.0.113.7');
+    expect(got).toHaveLength(1);
+  });
+
+  it('observe() returns null on a failed get_page_source (best-effort — never throws)', async () => {
+    const { dispatcher } = mockDispatcher((d) => failResult(d.intentId, 'result_too_large'));
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    expect(await exec.observe('agt_1')).toBeNull();
+  });
+
+  it('extractPageText handles the raw string + the common object shapes + empties', () => {
+    expect(extractPageText('raw source')).toBe('raw source');
+    expect(extractPageText({ source: 'via source' })).toBe('via source');
+    expect(extractPageText({ pageSource: 'via pageSource' })).toBe('via pageSource');
+    expect(extractPageText({ html: 'via html' })).toBe('via html');
+    expect(extractPageText({ content: 'via content' })).toBe('via content');
+    expect(extractPageText('')).toBeNull();
+    expect(extractPageText({})).toBeNull();
+    expect(extractPageText(null)).toBeNull();
+    expect(extractPageText(42)).toBeNull();
   });
 });

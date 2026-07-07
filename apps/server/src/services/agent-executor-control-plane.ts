@@ -154,6 +154,30 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   }
 
   /**
+   * #140 read-and-report — dispatch a `get_page_source` against the live session
+   * and return its text for the answer pass. Best-effort: any failure (no
+   * session, dispatch error, over-cap `result_too_large`, empty source) returns
+   * null so the runtime falls back to the plan result — the read-back never fails
+   * a turn. Uses the same dispatcher + fresh intentId as a normal intent.
+   */
+  async observe(sessionId: string): Promise<string | null> {
+    let dispatch: IntentDispatch;
+    try {
+      dispatch = serializeIntentDispatch({
+        sessionId,
+        intentId: this.genIntentId(),
+        intentName: 'get_page_source',
+        params: {},
+      });
+    } catch {
+      return null;
+    }
+    const parsed = await this.dispatcher.dispatch(dispatch);
+    if (!parsed.success) return null;
+    return extractPageText(parsed.outputData);
+  }
+
+  /**
    * One intent, with bounded auto-retry of RETRYABLE transient failures
    * (doc-132 §5.3). Most `retryable` diagnoses prove the intent did NOT take
    * effect, so re-dispatching cannot double-apply a side effect:
@@ -262,4 +286,22 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       await this.sleep(this.retryDelayMs);
     }
   }
+}
+
+/**
+ * #140 — defensive extraction of the page-source text from a `get_page_source`
+ * result's outputData. The exact key is A3-confirmed pending (bus 2026-07-07) —
+ * handle the raw-string form + the common object shapes so the wiring works
+ * regardless of the final key. Returns null for an empty/absent source.
+ */
+export function extractPageText(outputData: unknown): string | null {
+  if (typeof outputData === 'string') return outputData.length > 0 ? outputData : null;
+  if (typeof outputData === 'object' && outputData !== null) {
+    const o = outputData as Record<string, unknown>;
+    for (const key of ['source', 'pageSource', 'html', 'content', 'text']) {
+      const v = o[key];
+      if (typeof v === 'string' && v.length > 0) return v;
+    }
+  }
+  return null;
 }

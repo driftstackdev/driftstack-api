@@ -158,6 +158,16 @@ export interface AgentExecutor {
    * propagate it to the underlying SessionsService dispatch.
    */
   execute(args: ExecuteArgs): Promise<ExecutorRunResult>;
+
+  /**
+   * #140 read-and-report — read the current page's text for the answer pass.
+   * Dispatches a `get_page_source` against the live session and returns the
+   * source text (or null if unavailable / the session can't be read). OPTIONAL:
+   * only the control-plane executor implements it; the runtime feature-detects
+   * (`if (executor.observe)`) before use. Best-effort — never throws (returns
+   * null on any failure); the read-back is additive, it must never fail a turn.
+   */
+  observe?(sessionId: string): Promise<string | null>;
 }
 
 /**
