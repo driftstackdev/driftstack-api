@@ -116,13 +116,19 @@ describe('W519.B apps/marketing-site/src/pages/docs/data-residency.astro content
     );
   });
 
-  it('Does-leave-EU 4-list framing pinned: Recordings via R2 (Cloudflare replicates across regions to minimise playback latency; single-region opt-in via contact) + Stripe billing data (Stripe Payments Europe Ltd Ireland, customer_id linkage, SCCs + EU-US DPF) + Anthropic bundled-LLM only (opt-in; prompts + completions traverse Anthropic US under SCCs + EU-US DPF; BYOK accounts bypass entirely) + MacStadium (iPhone Safari driver fleet on MacStadium US, Driftstack-managed VPN tunnels, SCCs + EU-US DPF) — pinned so the 4-list does-leave-EU + 3-SCCs+EU-US-DPF-transfers + BYOK-bypasses-Anthropic + single-region-EU-recordings-via-contact commitment survives', () => {
+  it('Does-leave-EU 4-list framing pinned: Uploaded files via R2 (avatars + encrypted profile blobs; no single-region offer — S39: recordings fiction retired) + Stripe billing data (Stripe Payments Europe Ltd Ireland, customer_id linkage, SCCs + EU-US DPF) + Anthropic bundled-LLM only (opt-in; prompts + completions traverse Anthropic US under SCCs + EU-US DPF; BYOK accounts bypass entirely) + MacStadium (iPhone Safari driver fleet on MacStadium US, Driftstack-managed VPN tunnels, SCCs + EU-US DPF) — pinned so the 4-list does-leave-EU + 3-SCCs+EU-US-DPF-transfers + BYOK-bypasses-Anthropic + honest no-single-region-offer wording survives', () => {
+    // S39 2026-07-07 (fable-truth-audit follow-on) — the recordings bullet + the per-account
+    // single-region R2 offer were fictions (feature never shipped; no
+    // such configuration exists). The bullet now names the real R2
+    // objects and points at self-hosting for strict residency.
     expect(body).toMatch(
-      /<strong>Recordings via R2:<\/strong> Cloudflare replicates\s*\n?\s*across regions to minimise playback latency\./,
+      /<strong>Uploaded files via R2:<\/strong> avatars and\s*\n?\s*encrypted profile blobs sit on Cloudflare R2/,
     );
     expect(body).toMatch(
-      /If you require\s*\n?\s*strict EU-only storage for recordings, contact us — we can\s*\n?\s*configure your account with single-region \(EU-only\) R2\./,
+      /Strict single-region storage is not\s*\n?\s*currently offered — self-hosting is the path if you need\s*\n?\s*it\./,
     );
+    expect(body).not.toMatch(/Recordings via R2/);
+    expect(body).not.toMatch(/single-region \(EU-only\) R2/);
     expect(body).toMatch(
       /<strong>Stripe billing data:<\/strong> Stripe Payments\s*\n?\s*Europe Ltd \(Ireland\) is the contracted entity\./,
     );
@@ -137,7 +143,7 @@ describe('W519.B apps/marketing-site/src/pages/docs/data-residency.astro content
     );
   });
 
-  it("V-298b region account preference framing pinned: PATCH /v1/account/me with {region: 'eu'} + 'Accepted values: us, eu, apac, or null (unset).' + 'Today: the field is informational. We surface it on the account-me response and use it as a tag in our observability stack so we can prioritise where to add PoPs.' + 'Roadmap: once additional PoPs exist (planned for US + APAC in 2026), API routing will land sessions for region: us accounts on US infrastructure, and region: apac on APAC. The account row will still live in the EU primary; sessions + recordings will live in the preferred region.' — pinned so the V-298b 4-value-enum (us/eu/apac/null) + informational-today + observability-tag + 2026-PoP-roadmap + account-row-stays-EU-primary commitment survives. The previous skip pinned `<h2>...account preference (V-298b)</h2>` with the inline anchor that was removed from the customer-facing copy as a UX cleanup (internal V-anchors should not bleed into marketing-rendered headings); the framing itself survives without it.", () => {
+  it("V-298b region account preference framing pinned: PATCH /v1/account/me with {region: 'eu'} + 'Accepted values: us, eu, apac, or null (unset).' + 'Today: the field is informational. We surface it on the account-me response and use it as a tag in our observability stack so we can prioritise where to add PoPs.' + 'Roadmap: once additional PoPs exist (planned for US + APAC in 2026), API routing will land sessions for region: us accounts on US infrastructure, and region: apac on APAC. The account row will still live in the EU primary; sessions will run in the preferred region.' (S39: recordings dropped) — pinned so the V-298b 4-value-enum (us/eu/apac/null) + informational-today + observability-tag + 2026-PoP-roadmap + account-row-stays-EU-primary commitment survives. The previous skip pinned `<h2>...account preference (V-298b)</h2>` with the inline anchor that was removed from the customer-facing copy as a UX cleanup (internal V-anchors should not bleed into marketing-rendered headings); the framing itself survives without it.", () => {
     expect(body).toMatch(/<h2>The <code>region<\/code> account preference\s*<\/h2>/);
     expect(body).toMatch(/PATCH \/v1\/account\/me/);
     expect(body).toMatch(/\{ "region": "eu" \}/);
@@ -148,7 +154,7 @@ describe('W519.B apps/marketing-site/src/pages/docs/data-residency.astro content
       /<strong>Today:<\/strong> the field is informational\. We surface\s*\n?\s*it on the account-me response and use it as a tag in our\s*\n?\s*observability stack so we can prioritise where to add PoPs\./,
     );
     expect(body).toMatch(
-      /<strong>Roadmap:<\/strong> once additional PoPs exist \(planned\s*\n?\s*for US \+ APAC in 2026\), API routing will land sessions for\s*\n?\s*<code>region: us<\/code> accounts on US infrastructure, and\s*\n?\s*<code>region: apac<\/code> on APAC\. The account row will still\s*\n?\s*live in the EU primary; sessions \+ recordings will live in the\s*\n?\s*preferred region\./,
+      /<strong>Roadmap:<\/strong> once additional PoPs exist \(planned\s*\n?\s*for US \+ APAC in 2026\), API routing will land sessions for\s*\n?\s*<code>region: us<\/code> accounts on US infrastructure, and\s*\n?\s*<code>region: apac<\/code> on APAC\. The account row will still\s*\n?\s*live in the EU primary; sessions will run in the preferred\s*\n?\s*region\./,
     );
     // Internal V-anchor must NOT bleed into customer-facing <h2> copy.
     expect(body).not.toMatch(/<h2>[^<]*\(V-298b\)[^<]*<\/h2>/);

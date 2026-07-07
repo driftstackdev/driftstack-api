@@ -131,10 +131,15 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     <h2 id="what-does-leave-the-eu">What does leave the EU</h2>
     <ul>
-      <li><strong>Recordings via R2:</strong> Cloudflare replicates
-        across regions to minimise playback latency. If you require
-        strict EU-only storage for recordings, contact us — we can
-        configure your account with single-region (EU-only) R2.</li>
+      {/* S39 2026-07-07 (fable-truth-audit follow-on) — this bullet promised recordings (never
+          shipped) and a per-account single-region R2 configuration
+          that does not exist. State the real R2 objects and drop the
+          unbacked offer. */}
+      <li><strong>Uploaded files via R2:</strong> avatars and
+        encrypted profile blobs sit on Cloudflare R2, which can
+        replicate across regions. Strict single-region storage is not
+        currently offered — self-hosting is the path if you need
+        it.</li>
       <li><strong>Stripe billing data:</strong> Stripe Payments
         Europe Ltd (Ireland) is the contracted entity. The PCI-DSS
         compliance contract is between you and Stripe; we only hold
@@ -175,8 +180,8 @@ Authorization: Bearer ds_live_…
       for US + APAC in 2026), API routing will land sessions for
       <code>region: us</code> accounts on US infrastructure, and
       <code>region: apac</code> on APAC. The account row will still
-      live in the EU primary; sessions + recordings will live in the
-      preferred region.
+      live in the EU primary; sessions will run in the preferred
+      region.
     </p>
 
     <h2>GDPR / DSAR / right-to-erasure</h2>
