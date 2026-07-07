@@ -3772,15 +3772,20 @@ export function SimulatorWindow(): JSX.Element {
           // it targets the ACTIVE tab and could carry the PRIOR tab's url for ~2s
           // after a switch/navigate (the box hasn't re-reported the new page yet) →
           // the founder's "2nd switch stays on the same url" clobber. So within the
-          // grace window suppress the URL but STILL apply the title (titles self-heal
-          // even if a data-channel frame dropped; a wrong title is far less jarring
-          // and the next non-grace tick corrects it). With a tabId the box change
-          // makes this fully precise automatically.
+          // grace window suppress BOTH the URL and the TITLE (founder 2026-07-07:
+          // "title/url not accurate at all times"). A tabId-less in-grace frame
+          // carries the PRIOR tab's page, so applying its title routes the WRONG
+          // tab's title onto the just-switched tab — the persistent inaccuracy. The
+          // earlier design let the title through ("self-heals") but that assumption
+          // fails when the box keeps re-asserting the tabId-less prior title; keeping
+          // the tab's own last-known title (null ⇒ writeTabPageState skips it) until a
+          // genuine frame arrives is strictly more accurate. Tag tabId box-side to
+          // make this fully precise (A3 #116).
           const hasTabId = typeof ps.tabId === 'string' && ps.tabId !== '';
           const inGrace =
             Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS ||
             Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS;
-          const suppressUrl = !hasTabId && inGrace;
+          const suppress = !hasTabId && inGrace;
           // Authoritative for the SWITCH iff it routes by tabId OR it arrived outside
           // the post-switch grace window — a tabId-less in-grace poll still carries the
           // PRIOR tab's page, so it must NOT resolve the switch (keep the retry net up).
@@ -3788,8 +3793,8 @@ export function SimulatorWindow(): JSX.Element {
           writeTabPageState(
             {
               tabId: ps.tabId,
-              url: suppressUrl ? null : ps.url,
-              title: ps.title,
+              url: suppress ? null : ps.url,
+              title: suppress ? null : ps.title,
             },
             hasTabId || !inSwitchGrace,
           );
@@ -4797,7 +4802,10 @@ export function SimulatorWindow(): JSX.Element {
       const inGrace =
         Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS ||
         Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS;
-      const suppressUrl = !hasTabId && inGrace;
+      // #139-followup — suppress BOTH url + title for a tabId-less in-grace frame
+      // (it carries the PRIOR tab's page); mirrors the poll path so a wrong title
+      // can't leak onto the just-switched tab.
+      const suppress = !hasTabId && inGrace;
       // Same switch-resolution gating as the poll: a tabId-less reconcile result that
       // lands inside the switch grace window reflects the PRIOR page and must NOT
       // resolve the switch (the box hasn't re-reported the switched page yet).
@@ -4805,8 +4813,8 @@ export function SimulatorWindow(): JSX.Element {
       writeTabPageState(
         {
           tabId: ps.tabId,
-          url: suppressUrl ? null : ps.url,
-          title: ps.title,
+          url: suppress ? null : ps.url,
+          title: suppress ? null : ps.title,
         },
         hasTabId || !inSwitchGrace,
       );
