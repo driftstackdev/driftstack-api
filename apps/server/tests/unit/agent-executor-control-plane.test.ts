@@ -210,7 +210,12 @@ describe('ControlPlaneAgentExecutor', () => {
     const { dispatcher } = mockDispatcher((d) =>
       failResult(d.intentId, 'intent_session_not_established'),
     );
-    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), { maxRetries: 0 });
+    // Disable BOTH retry budgets so this reason-mapping test fails fast (the
+    // session-establish patient retry is exercised in its own tests below).
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
+      maxRetries: 0,
+      sessionEstablishMaxRetries: 0,
+    });
     const res = await exec.execute(planArgs([{ kind: 'navigate', url: 'https://x' }]));
     expect(res.ok).toBe(false);
     expect(res.results[0]!.kind).toBe('failure');
@@ -337,9 +342,31 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
     expect(calls).toHaveLength(0);
   });
 
-  it('intent_session_not_established on an interact is also NOT auto-retried (same session_error class — fail safe)', async () => {
+  it('intent_session_not_established on an interact IS retried patiently — the DEFINITELY-not-executed cold-start case (no session existed), safe for any kind', async () => {
+    // The box fork WebDriver is still warming up (~7-10s). Unlike a dispatch
+    // TIMEOUT (intent_dispatch_error, maybe-executed), session_not_established
+    // means the interact never ran, so retrying a side-effecting type through the
+    // cold-start window can't double-apply. Succeeds once the fork is up.
+    let n = 0;
     const { got, dispatcher } = mockDispatcher((d) =>
-      failResult(d.intentId, 'intent_session_not_established'),
+      n++ < 3
+        ? failResult(d.intentId, 'intent_session_not_established')
+        : okResult(d.intentId, d.sessionId),
+    );
+    const { sleep } = instantSleep();
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), { sleep });
+    const res = await exec.execute(
+      planArgs([{ kind: 'interact', action: 'type', selector: '#q', value: 'hi' }]),
+    );
+    expect(res.ok).toBe(true); // retried through the cold-start → succeeded
+    expect(got).toHaveLength(4); // 3 not-established + 1 success
+  });
+
+  it('a dispatch TIMEOUT/DROP (intent_dispatch_error = maybe-executed) on an interact is NOT auto-retried (double-apply fail-safe)', async () => {
+    // The transmitted-but-unacked case: the type MAY have landed, so a fresh-
+    // intentId retry would double-submit. Single-shot for a side-effecting interact.
+    const { got, dispatcher } = mockDispatcher((d) =>
+      failResult(d.intentId, 'intent_dispatch_error'),
     );
     const { sleep } = instantSleep();
     const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), { maxRetries: 2, sleep });

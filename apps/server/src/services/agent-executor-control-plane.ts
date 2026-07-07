@@ -52,17 +52,34 @@ export interface AutoRetryOptions {
   maxRetries?: number;
   /** Backoff between attempts (ms). Default 400. */
   retryDelayMs?: number;
+  /** Retries reserved for a `intent_session_not_established` failure — the box
+   *  fork is still COLD-STARTING its WebDriver (~7-10s). Longer + patient so the
+   *  first intent after a just-created session doesn't give up before the
+   *  browser is ready. Default 8. */
+  sessionEstablishMaxRetries?: number;
+  /** Backoff between session-establish retries (ms). Default 1500 → 8×1500 = 12s
+   *  covers the cold start. */
+  sessionEstablishRetryDelayMs?: number;
   /** Injectable sleep so tests run instantly. Default: real setTimeout. */
   sleep?: (ms: number) => Promise<void>;
 }
 
 const DEFAULT_MAX_RETRIES = 2;
 const DEFAULT_RETRY_DELAY_MS = 400;
+// Browser cold-start: the box fork takes ~7-10s to spawn + establish its
+// per-session WebDriver server. The FIRST intent after a just-created session
+// (e.g. the founder immediately sends "go to X") can beat it →
+// `intent_session_not_established`. 8 × 1500ms = 12s patiently covers the warmup
+// without hanging a genuinely dead session too long.
+const DEFAULT_SESSION_ESTABLISH_MAX_RETRIES = 8;
+const DEFAULT_SESSION_ESTABLISH_RETRY_DELAY_MS = 1500;
 const EMPTY_APPROVED: ReadonlySet<string> = new Set<string>();
 
 export class ControlPlaneAgentExecutor implements AgentExecutor {
   private readonly maxRetries: number;
   private readonly retryDelayMs: number;
+  private readonly sessionEstablishMaxRetries: number;
+  private readonly sessionEstablishRetryDelayMs: number;
   private readonly sleep: (ms: number) => Promise<void>;
 
   constructor(
@@ -73,6 +90,14 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   ) {
     this.maxRetries = Math.max(0, opts.maxRetries ?? DEFAULT_MAX_RETRIES);
     this.retryDelayMs = Math.max(0, opts.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS);
+    this.sessionEstablishMaxRetries = Math.max(
+      0,
+      opts.sessionEstablishMaxRetries ?? DEFAULT_SESSION_ESTABLISH_MAX_RETRIES,
+    );
+    this.sessionEstablishRetryDelayMs = Math.max(
+      0,
+      opts.sessionEstablishRetryDelayMs ?? DEFAULT_SESSION_ESTABLISH_RETRY_DELAY_MS,
+    );
     this.sleep = opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
@@ -163,7 +188,11 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     params: Record<string, unknown>,
   ): Promise<IntentResult> {
     let result: IntentResult = { kind: 'failure', intent, reason: 'no dispatch attempt made' };
-    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+    // Two independent budgets: the short general retryable-failure budget, and a
+    // longer PATIENT budget reserved for a cold-starting session (see below).
+    let retryAttempt = 0;
+    let establishAttempt = 0;
+    for (;;) {
       // Serialize to the base64 wire envelope (fresh intentId per attempt).
       // Re-validates params; should not fail (agentIntentToDispatch already
       // validated), but the executor must never throw — a guard converts any
@@ -188,33 +217,49 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       // → a failure ParsedIntentResult).
       const parsed = await this.dispatcher.dispatch(dispatch);
       result = intentResultToCustomer(intent, parsed);
+      if (result.kind !== 'failure') return result;
+
+      // BROWSER COLD-START — `intent_session_not_established` means the box fork's
+      // per-session WebDriver isn't up yet (~7-10s spawn). Unlike a dispatch-timeout
+      // session_error (transmitted-but-unacked → MAY have executed), a
+      // not-established result means NO session existed to run the command →
+      // DEFINITELY side-effect-free → safe to retry patiently for ANY intent kind
+      // (including a side-effecting interact). Give it the long establish budget so
+      // the FIRST intent after a just-created session waits for the warmup instead
+      // of giving up (founder: "it gave up because the browser takes a while to
+      // launch"). Read the raw errorCode (not the coarser diagnosis category, which
+      // lumps this with dispatch_error).
+      if (
+        parsed.errorCode === 'intent_session_not_established' &&
+        establishAttempt < this.sessionEstablishMaxRetries
+      ) {
+        establishAttempt++;
+        await this.sleep(this.sessionEstablishRetryDelayMs);
+        continue;
+      }
 
       // A session_error on a side-effecting interact MAY have already executed
       // (dispatch-timeout / connection-drop are transmitted-but-unacked), and a
       // retry uses a fresh intentId with no harness dedup → would double-apply.
       // Fail safe: don't auto-retry that one class. See the method doc above.
+      // (session_not_established is handled ABOVE — it's the not-executed subset.)
       const maybeAlreadyApplied =
-        result.kind === 'failure' &&
-        result.diagnosis?.category === 'session_error' &&
-        intent.kind === 'interact';
+        result.diagnosis?.category === 'session_error' && intent.kind === 'interact';
       // #139 — a `wait_for` already has its OWN internal timeout (timeout_seconds);
       // retrying a timed-out wait just re-waits the same duration for the same
       // still-false condition — pure latency (3×5s), never a different outcome. So
       // a wait is single-shot (except a genuine transport session_error, which is a
       // dispatch problem, not a condition timeout — that still retries here).
       const isRedundantWaitRetry =
-        result.kind === 'failure' &&
-        intent.kind === 'wait' &&
-        result.diagnosis?.category === 'condition_not_met';
+        intent.kind === 'wait' && result.diagnosis?.category === 'condition_not_met';
       const shouldRetry =
-        result.kind === 'failure' &&
         result.diagnosis?.retryable === true &&
         !maybeAlreadyApplied &&
         !isRedundantWaitRetry &&
-        attempt < this.maxRetries;
+        retryAttempt < this.maxRetries;
       if (!shouldRetry) return result;
+      retryAttempt++;
       await this.sleep(this.retryDelayMs);
     }
-    return result;
   }
 }
