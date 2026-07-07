@@ -5428,7 +5428,7 @@ export function SimulatorWindow(): JSX.Element {
                 {notice !== null && (
                   <div
                     role="status"
-                    className="absolute left-1/2 top-12 z-20 -translate-x-1/2 rounded-full bg-black/80 px-3 py-1 font-mono text-[10px] text-white/90 backdrop-blur"
+                    className="absolute left-1/2 top-12 z-20 max-w-[min(90%,26rem)] -translate-x-1/2 rounded-lg bg-black/90 px-3.5 py-2 text-center text-[13px] font-medium leading-snug text-white shadow-lg ring-1 ring-white/20 backdrop-blur"
                   >
                     {notice}
                   </div>
